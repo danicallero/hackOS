@@ -750,17 +750,18 @@ WITH viewer AS (
      JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
      JOIN repos r ON r.id = qe.repo_id
     WHERE r.is_test_account = c.is_test_account
+ ), room_graphs AS (
+   SELECT room_id FROM room_enterprises
+   UNION
+   SELECT room_id FROM room_queue_groups
  ), room_scopes AS (
    SELECT r.id AS room_id,
-          EXISTS (
-            SELECT 1 FROM room_enterprises re WHERE re.room_id = r.id
-            UNION ALL
-            SELECT 1 FROM room_queue_groups rqg WHERE rqg.room_id = r.id
-          ) AS has_graph,
+          COUNT(rg.room_id) > 0 AS has_graph,
           COUNT(rm.marker) > 0 AS has_marker,
           COALESCE(bool_or(rm.marker IS TRUE), false) AS has_synthetic,
           COALESCE(bool_or(rm.marker IS FALSE), false) AS has_real
      FROM rooms r
+     LEFT JOIN room_graphs rg ON rg.room_id = r.id
      LEFT JOIN room_markers rm ON rm.room_id = r.id
     GROUP BY r.id
  ), visible_rooms AS (

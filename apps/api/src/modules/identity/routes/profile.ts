@@ -834,6 +834,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 visibleRoleName: z.string().nullable(),
                 language: z.string(),
                 shirtSize: z.string().nullable(),
+                foodIntolerances: z.array(z.number()),
+                foodIntoleranceNotes: z.string().nullable(),
                 applicationStatus: z.string().nullable(),
                 confirmedSpot: z.boolean(),
                 isTestAccount: z.boolean(),
@@ -871,7 +873,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       // and scanner-sync.ts use.
       const { rows } = await pool.query<UserRow & { role: string | null }>(
         `SELECT u.id, u.email, u.email_verified, u.name, u.surname, u.badge_id, u.language,
-                u.shirt_size, u.is_test_account, u.created_at,
+                u.shirt_size, u.food_intolerances, u.food_intolerance_notes,
+                u.is_test_account, u.created_at,
                 uern.role_name AS role
            FROM users u
            LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
@@ -920,6 +923,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         visibleRoleName: r.role,
         language: r.language,
         shirtSize: r.shirt_size,
+        foodIntolerances: r.food_intolerances,
+        foodIntoleranceNotes: r.food_intolerance_notes,
         applicationStatus: statusByUser.get(r.id) ?? null,
         confirmedSpot: statusByUser.get(r.id) === "confirmed",
         isTestAccount: r.is_test_account,
@@ -1386,7 +1391,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       await fetchUser(pool, userId);
 
       const { rows: responseRows } = await pool.query(
-        `SELECT r.*, a.name AS app_name,
+        `SELECT r.*, u.notes AS staff_notes, a.name AS app_name,
                 (SELECT ro.name
                    FROM application_grants_roles agr
                    JOIN roles ro ON ro.id = agr.role_id AND ro.deleted_at IS NULL
@@ -1405,9 +1410,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 ) AS reviews
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
+         JOIN users u ON u.id = r.user_id
          LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
          WHERE r.user_id = $1
-         GROUP BY r.id, a.id
+         GROUP BY r.id, a.id, u.notes
          ORDER BY r.id DESC`,
         [userId],
       );

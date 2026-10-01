@@ -19,7 +19,6 @@ import {
   SettingsIcon,
   ShieldCheckIcon,
   SoupIcon,
-  TicketIcon,
   TrophyIcon,
   TvIcon,
   UserIcon,
@@ -144,24 +143,13 @@ export const PERSONAL_NAV: NavItem[] = [
   { title: "schedule", href: "/timetable", icon: CalendarDaysIcon },
   // Participant-facing: everyone can apply (H12-H15). No capability gate.
   { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
-  // Participant project self-view (H20) + policy-gated creation (H19). Hidden
-  // without role-derived event access, and hidden for anyone (participant, sponsor
-  // rep, judge) who doesn't actually have a project yet — issue #424.
+  // Project and pre-event work-group planning are available to every admitted
+  // participant; a planned group deliberately exists before any project (#852).
   {
     title: "myProject",
     href: "/my-project",
     icon: FolderGitIcon,
     hideForPureApplicant: true,
-    hideIfNoProject: true,
-  },
-  // Participant-facing queue status (H38). Hidden without role-derived event access,
-  // and hidden for anyone with no queue entry of their own — issue #424.
-  {
-    title: "myQueue",
-    href: "/my-queue",
-    icon: TicketIcon,
-    hideForPureApplicant: true,
-    hideIfNoQueueItems: true,
   },
   // Entrance ticket is exposed only while a role grants current event access
   // (the historical tickets row remains for audit/idempotency).

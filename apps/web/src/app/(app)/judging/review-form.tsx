@@ -27,19 +27,27 @@ import { useLocale } from "@/lib/i18n";
 import { collaborationState } from "@/lib/judging-workspace";
 import {
   type AttemptReviewVersion,
+  acquireReviewFieldLease,
   closeSession,
   getReview,
+  getReviewFieldLeases,
   getReviewVersions,
   getSessions,
   type JudgingSession,
   openSession,
   type QueueEntry,
+  type ReviewFieldLease,
+  releaseReviewFieldLease,
   saveReview,
 } from "@/lib/queue";
 import { toast } from "@/lib/toast";
 import type { Challenge } from "../challenges/shared";
 import { EMPTY_PANEL, errorMessage } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
+
+function isTextQuestion(question: Question): boolean {
+  return question.kind === "short_text" || question.kind === "long_text";
+}
 
 export function ReviewForm({
   entry,
@@ -68,6 +76,9 @@ export function ReviewForm({
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<string>("draft");
   const [sessions, setSessions] = useState<JudgingSession[]>([]);
+  const [leases, setLeases] = useState<ReviewFieldLease[]>([]);
+  const [ownedFields, setOwnedFields] = useState<Set<string>>(() => new Set());
+  const [focusedField, setFocusedField] = useState<string | null>(null);
   const [versions, setVersions] = useState<AttemptReviewVersion[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -96,13 +107,15 @@ export function ReviewForm({
   const loadRemote = useCallback(
     async (external = false) => {
       if (!entry) return;
-      const [review, activeSessions, reviewVersions] = await Promise.all([
+      const [review, activeSessions, reviewVersions, activeLeases] = await Promise.all([
         getReview(entry.id),
         getSessions(entry.id),
         getReviewVersions(entry.id),
+        getReviewFieldLeases(entry.id),
       ]);
       setSessions(activeSessions);
       setVersions(reviewVersions);
+      setLeases(activeLeases);
       const remoteStamp = review.updated_at ?? review.created_at ?? JSON.stringify(review);
       if (external && (savingRef.current || remoteStamp === reviewStampRef.current)) return;
       if (external && dirtyRef.current) {
@@ -132,6 +145,8 @@ export function ReviewForm({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Data-fetch-on-mount.
     setLoading(true);
     setSaveError(null);
+    setOwnedFields(new Set());
+    setFocusedField(null);
     void Promise.all([
       loadRemote(),
       canJudge
@@ -148,6 +163,56 @@ export function ReviewForm({
     };
   }, [entry, canJudge, loadRemote, roomId, t]);
 
+  const acquireField = useCallback(
+    async (field: string) => {
+      if (!entry || !canJudge) return;
+      setFocusedField(field);
+      try {
+        const lease = await acquireReviewFieldLease(entry.id, field);
+        setLeases((current) => [...current.filter((item) => item.field !== field), lease]);
+        setOwnedFields((current) => new Set(current).add(field));
+      } catch {
+        setOwnedFields((current) => {
+          const next = new Set(current);
+          next.delete(field);
+          return next;
+        });
+        void getReviewFieldLeases(entry.id)
+          .then(setLeases)
+          .catch(() => undefined);
+      }
+    },
+    [canJudge, entry],
+  );
+
+  const releaseField = useCallback(
+    async (field: string) => {
+      if (!entry) return;
+      setFocusedField((current) => (current === field ? null : current));
+      setOwnedFields((current) => {
+        const next = new Set(current);
+        next.delete(field);
+        return next;
+      });
+      try {
+        await releaseReviewFieldLease(entry.id, field);
+      } finally {
+        void getReviewFieldLeases(entry.id)
+          .then(setLeases)
+          .catch(() => undefined);
+      }
+    },
+    [entry],
+  );
+
+  // Refresh only the focused lease. PostgreSQL owns expiry, so this stops on
+  // an abandoned tab and another judge can acquire the field within 30s.
+  useEffect(() => {
+    if (!entry || !focusedField || !ownedFields.has(focusedField)) return;
+    const timer = window.setInterval(() => void acquireField(focusedField), 10_000);
+    return () => window.clearInterval(timer);
+  }, [acquireField, entry, focusedField, ownedFields]);
+
   useEventSource(entry ? `/api/queue/entries/${entry.id}/stream` : "", {
     events: [EVENTS.QUEUE_REVIEW_CHANGED],
     enabled: entry != null,
@@ -161,13 +226,19 @@ export function ReviewForm({
       setSaving(true);
       setSaveError(null);
       try {
-        const review = await saveReview(entry.id, { scores, notes, submit });
+        const review = await saveReview(entry.id, {
+          scores,
+          notes,
+          submit,
+          releaseLeases: announce,
+        });
         setStatus(review.status);
         reviewStampRef.current = review.updated_at ?? review.created_at ?? JSON.stringify(review);
         dirtyRef.current = false;
         setDirty(false);
         setConflict(false);
         setVersions(await getReviewVersions(entry.id));
+        if (announce && focusedField) await releaseField(focusedField);
         if (announce) toast.success(submit ? t("reviewSubmitted") : t("draftSaved"));
       } catch (err) {
         const fallback = t("couldNotSaveReview");
@@ -181,7 +252,7 @@ export function ReviewForm({
         setSaving(false);
       }
     },
-    [entry, scores, notes, online, t],
+    [entry, focusedField, notes, online, releaseField, scores, t],
   );
 
   useEffect(() => {
@@ -201,6 +272,14 @@ export function ReviewForm({
   const cardClassName = "relative flex min-h-0 flex-1 flex-col";
   const bodyClassName =
     "min-h-0 flex-1 overflow-y-auto scrollbar-none [&::-webkit-scrollbar]:hidden";
+  const lockedMessage = (field: string) => {
+    if (ownedFields.has(field)) return null;
+    const lease = leases.find((item) => item.field === field);
+    if (!lease) return null;
+    const name = `${lease.name ?? t("judgeFallback")} ${lease.surname ?? ""}`.trim();
+    return t("reviewFieldEditingBy", { judge: name });
+  };
+  const textFieldReadOnly = (field: string) => canJudge && !ownedFields.has(field);
 
   if (!entry) {
     return (
@@ -341,6 +420,20 @@ export function ReviewForm({
               question={question}
               value={scores[question.key]}
               disabled={!canJudge}
+              readOnly={isTextQuestion(question) && textFieldReadOnly(`scores.${question.key}`)}
+              lockedMessage={
+                isTextQuestion(question) ? lockedMessage(`scores.${question.key}`) : null
+              }
+              onFocus={
+                isTextQuestion(question)
+                  ? () => void acquireField(`scores.${question.key}`)
+                  : undefined
+              }
+              onBlur={
+                isTextQuestion(question)
+                  ? () => void releaseField(`scores.${question.key}`)
+                  : undefined
+              }
               onChange={(value) => {
                 setScores((current) => ({ ...current, [question.key]: value }));
                 dirtyRef.current = true;
@@ -354,6 +447,9 @@ export function ReviewForm({
             <Textarea
               id="review-notes"
               value={notes}
+              readOnly={textFieldReadOnly("notes")}
+              onFocus={() => void acquireField("notes")}
+              onBlur={() => void releaseField("notes")}
               onChange={(event) => {
                 setNotes(event.target.value);
                 dirtyRef.current = true;
@@ -362,6 +458,11 @@ export function ReviewForm({
               disabled={!canJudge}
               placeholder={t("privateJudgingNotes")}
             />
+            {lockedMessage("notes") && (
+              <p role="status" className="text-muted-foreground text-sm">
+                {lockedMessage("notes")}
+              </p>
+            )}
           </div>
           {versions.length > 0 && (
             <details className="rounded-md border p-3">

@@ -197,6 +197,30 @@ function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, un
     },
   });
 
+  addAuthOperation(paths, "/api/auth/change-password", "post", {
+    tags: ["auth"],
+    summary: "Change password",
+    description:
+      "Change the authenticated user's password after verifying the current password. Revokes every other session and replaces the current session.",
+    security: [{ sessionToken: [] }, { bearerToken: [] }],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["currentPassword", "newPassword", "revokeOtherSessions"],
+            properties: {
+              currentPassword: { type: "string" },
+              newPassword: { type: "string", minLength: 8 },
+              revokeOtherSessions: { type: "boolean", enum: [true] },
+            },
+          },
+        },
+      },
+    },
+  });
+
   addAuthOperation(paths, "/api/auth/verify-email", "get", {
     tags: ["auth"],
     summary: "Verify email",
@@ -234,13 +258,13 @@ export async function buildApp(): Promise<App> {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
-  // In production, restrict CORS to the configured origins (credentials are
-  // sent, so reflecting arbitrary origins would be unsafe). In dev, reflect
-  // any origin for convenience.
+  // Public catalogue routes are deliberately embeddable: they expose no
+  // session-bound data, so any origin may read them without credentials.
+  // Every other route keeps the configured credentialed-origin boundary.
   const corsOrigins = config.CORS_ORIGINS.split(",")
     .map((o) => o.trim())
     .filter(Boolean);
-  await app.register(cors, {
+  const privateCors = {
     origin: config.isProd ? (corsOrigins.length > 0 ? corsOrigins : false) : true,
     credentials: true,
     // @fastify/cors defaults to GET,HEAD,POST only — the web app also uses
@@ -253,6 +277,22 @@ export async function buildApp(): Promise<App> {
     // limit backoff (H3), idempotent-replay signalling, and per-file export
     // failures (H56) the web client surfaces so staff can act on them.
     exposedHeaders: ["retry-after", "idempotency-replayed", "x-export-file-failures"],
+  };
+  await app.register(cors, {
+    delegator: (req, done) => {
+      const path = req.url.split("?", 1)[0] ?? req.url;
+      const requestedMethod = req.headers["access-control-request-method"]?.toUpperCase();
+      const method = req.method === "OPTIONS" ? requestedMethod : req.method;
+      if (path.startsWith("/api/public/") && (method === "GET" || method === "HEAD")) {
+        done(null, {
+          origin: "*",
+          credentials: false,
+          methods: ["GET", "HEAD", "OPTIONS"],
+        });
+        return;
+      }
+      done(null, privateCors);
+    },
   });
   // File uploads (H44 sponsor logos) proxied through the API so the browser
   // never needs to reach the object store directly. 5 MB cap on a logo.

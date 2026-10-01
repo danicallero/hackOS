@@ -44,6 +44,10 @@ export const applicationsCsvQuery = z.object({
   applicationId: z.coerce.number().int().positive().optional(),
 });
 
+export const applicationExportCatalogQuery = z.object({
+  application_id: z.coerce.number().int().positive().optional(),
+});
+
 /** H56: every persisted response status that can be included in a batch export. */
 export const APPLICATION_EXPORT_STATUSES = [
   "draft",
@@ -72,6 +76,7 @@ export const applicationExportBody = z
       .min(1)
       .max(APPLICATION_EXPORT_STATUSES.length),
     fields: z.array(applicationExportFieldSchema).min(1).max(200),
+    application_ids: z.array(z.coerce.number().int().positive()).min(1).max(200).optional(),
     documents: z.enum(["none", "all", "shared"]).default("none"),
     language: z.enum(["es", "gl", "en"]).default("es"),
   })

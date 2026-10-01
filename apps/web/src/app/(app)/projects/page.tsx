@@ -11,12 +11,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
+import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
+import { PresentationStatus } from "@/components/projects/presentation-status";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
-import { listRepos } from "@/lib/projects";
+import { listRepos, type ParticipationEstimate, workGroupEstimates } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { ProjectFormDialog } from "./project-form-dialog";
@@ -54,14 +56,29 @@ function buildColumns(t: Translate): Column<ProjectRepo>[] {
         r.challenges.length === 0 ? (
           <span className="text-muted-foreground text-sm">—</span>
         ) : (
-          <div className="flex flex-wrap gap-1">
+          <div className="space-y-1 text-sm">
             {r.challenges.map((c) => (
-              <StatusBadge key={c.id} tone="brand" dot={false}>
-                {c.title}
-              </StatusBadge>
+              <p key={c.id}>{c.title}</p>
             ))}
           </div>
         ),
+    },
+    {
+      id: "presentations",
+      header: t("projectPresentations"),
+      cell: (repo) => (
+        <div className="space-y-3">
+          {repo.challenges
+            .filter((challenge) => challenge.status)
+            .map((challenge) => (
+              <div key={challenge.id} className="space-y-1">
+                <p className="text-xs text-muted-foreground">{challenge.title}</p>
+                <PresentationStatus {...challenge} />
+              </div>
+            ))}
+          {!repo.challenges.some((challenge) => challenge.status) && "—"}
+        </div>
+      ),
     },
     {
       id: "prizes",
@@ -117,6 +134,8 @@ export default function ProjectsPage() {
     Boolean(me?.isEnterpriseJudge) ||
     Boolean(me?.isSponsorRep);
   const [repos, setRepos] = useState<ProjectRepo[]>([]);
+  const [estimates, setEstimates] = useState<ParticipationEstimate[]>([]);
+  const canEstimate = can(CAPABILITIES.PROJECTS_READ) || Boolean(me?.isSponsorRep);
   const [loading, setLoading] = useState(true);
   const hasLoadedRef = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -129,9 +148,13 @@ export default function ProjectsPage() {
     if (!hasLoadedRef.current) setLoading(true);
     setLoadError(null);
     try {
-      const res = await listRepos();
+      const [res, planned] = await Promise.all([
+        listRepos(),
+        canEstimate ? workGroupEstimates() : Promise.resolve({ estimates: [] }),
+      ]);
       hasLoadedRef.current = true;
       setRepos(res.repos.map(toProjectRepo));
+      setEstimates(planned.estimates);
     } catch (err) {
       setRepos([]);
       const message = err instanceof ApiError ? err.message : t("couldNotLoadProjects");
@@ -140,17 +163,21 @@ export default function ProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, t]);
+  }, [canView, canEstimate, t]);
 
   // Soft, in-place refresh instead of a hard reload when a project changes
   // elsewhere.
   const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
+  const challengeRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [
+    EVENTS.DOMAIN_CHANGED,
+  ]);
+  const queueRefresh = useAutoRefresh("/api/tv/stream", [EVENTS.DATA_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching from API is a legitimate external-system sync
     void load();
-  }, [load, liveRefresh]);
+  }, [load, liveRefresh, queueRefresh, challengeRefresh]);
 
   if (!canView) {
     return <AccessDenied ask={t("projectAccessDeniedDesc")} />;
@@ -184,6 +211,32 @@ export default function ProjectsPage() {
         }
       />
 
+      {canEstimate && (
+        <SectionCard variant="plain" title={t("projectParticipationForecast")}>
+          <DataTable
+            data={estimates}
+            getRowId={(item) => String(item.challengeId)}
+            loading={loading}
+            columns={[
+              { id: "challenge", header: t("challenges"), cell: (item) => item.title },
+              {
+                id: "expected",
+                header: t("projectExpectedCount"),
+                align: "right",
+                cell: (item) => (
+                  <span className="tabular-nums font-medium">{item.expectedCount}</span>
+                ),
+              },
+              {
+                id: "imported",
+                header: t("projectSubmittedCount"),
+                align: "right",
+                cell: (item) => <span className="tabular-nums">{item.projectCount}</span>,
+              },
+            ]}
+          />
+        </SectionCard>
+      )}
       <DataTable
         columns={columns}
         data={repos}

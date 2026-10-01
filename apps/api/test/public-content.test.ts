@@ -26,6 +26,44 @@ async function getApp(): Promise<App> {
 }
 
 describe("public content catalog (H48, H49)", () => {
+  it("allows any origin to read /api/public without credentialed CORS", async () => {
+    const server = await getApp();
+    const publicResponse = await server.inject({
+      method: "GET",
+      url: "/api/public/event",
+      headers: { origin: "https://external-grid.example" },
+    });
+    expect(publicResponse.statusCode).toBe(200);
+    expect(publicResponse.headers["access-control-allow-origin"]).toBe("*");
+    expect(publicResponse.headers["access-control-allow-credentials"]).toBeUndefined();
+
+    const privateResponse = await server.inject({
+      method: "GET",
+      url: "/api/event",
+      headers: { origin: "https://external-grid.example" },
+    });
+    expect(privateResponse.statusCode).toBe(401);
+    expect(privateResponse.headers["access-control-allow-origin"]).toBe(
+      "https://external-grid.example",
+    );
+    expect(privateResponse.headers["access-control-allow-credentials"]).toBe("true");
+
+    const authenticatedPublicPreflight = await server.inject({
+      method: "OPTIONS",
+      url: "/api/public/universities/propose",
+      headers: {
+        origin: "https://external-grid.example",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    });
+    expect(authenticatedPublicPreflight.statusCode).toBe(204);
+    expect(authenticatedPublicPreflight.headers["access-control-allow-origin"]).toBe(
+      "https://external-grid.example",
+    );
+    expect(authenticatedPublicPreflight.headers["access-control-allow-credentials"]).toBe("true");
+  });
+
   it("lists only visible/published activities, challenges and sponsors without auth", async () => {
     const { pool } = await import("../src/db/pool.js");
 

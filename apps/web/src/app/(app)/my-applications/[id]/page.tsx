@@ -35,7 +35,7 @@ import { Section } from "@/components/ui/surface";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
-import { validateFieldOnBlur, validationErrorSummary } from "@/lib/application-validation";
+import { validationErrorSummary } from "@/lib/application-validation";
 import { pickText, useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
 import type { SaveState } from "@/lib/save-state";
@@ -54,7 +54,6 @@ import {
   isNotFoundError,
   type MutationKey,
   type MyResponseDetail,
-  missingRequiredFields,
   type PublicForm,
   statusLabel,
   statusTone,
@@ -63,6 +62,7 @@ import {
 import { ApplicationTimeline, ReadOnlyAnswers } from "./application-sections";
 import { ApplicationStatusActions } from "./application-status-actions";
 import { useApplicationDraft } from "./use-application-draft";
+import { useApplicationFieldValidation } from "./use-application-field-validation";
 
 export default function MyApplicationDetailPage() {
   const { t, language } = useLocale();
@@ -75,7 +75,7 @@ export default function MyApplicationDetailPage() {
   const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
   const shirtSizes = useShirtSizes();
   const [values, setValues] = useState<Record<string, unknown>>({});
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [answerRevision, setAnswerRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -91,6 +91,8 @@ export default function MyApplicationDetailPage() {
   const [confirmationExpired, setConfirmationExpired] = useState(false);
   const confirmKeyRef = useRef<MutationKey | null>(null);
   const declineKeyRef = useRef<MutationKey | null>(null);
+  const latestAnswerRevision = useRef(0);
+  const hasLocalEditsRef = useRef(false);
 
   // A background live-refresh shouldn't flash the whole page away — only
   // the very first load (before there's anything to show) should.
@@ -102,6 +104,28 @@ export default function MyApplicationDetailPage() {
   useEffect(() => {
     tRef.current = t;
   }, [t]);
+
+  // Mirror the API's enrichment so shirt-size + dietary fields render in the form
+  // (participant/mentor) rather than being pulled silently from the profile (H12).
+  const responseTemplate = response?.template ?? form?.template;
+  const template =
+    form && responseTemplate
+      ? enrichTemplate(
+          form.ask_shirt_size,
+          form.ask_food_intolerances,
+          responseTemplate,
+          intolerances,
+          shirtSizes,
+        )
+      : [];
+  const { checkRequired, fieldErrors, setFieldErrors, validateOnBlur } =
+    useApplicationFieldValidation({
+      applicationId: id,
+      template,
+      values,
+      t,
+      language: lang,
+    });
 
   const load = useCallback(async () => {
     if (!hasLoadedRef.current) setLoading(true);
@@ -183,8 +207,12 @@ export default function MyApplicationDetailPage() {
     if (dniField && seeded[dniField.key] == null && me?.dni) {
       seeded[dniField.key] = me.dni;
     }
-    setValues(seeded);
-    setSaveState("saved");
+    // A reload can race with typing (for example, after a session refresh).
+    // Keep local answers and their save state until their autosave catches up.
+    if (!hasLocalEditsRef.current) {
+      setValues(seeded);
+      setSaveState("saved");
+    }
     setFieldErrors({});
     hasLoadedRef.current =
       hasLoadedRef.current ||
@@ -192,7 +220,7 @@ export default function MyApplicationDetailPage() {
       respRes.status === "fulfilled" ||
       intolRes.status === "fulfilled";
     setLoading(false);
-  }, [id, me]);
+  }, [id, me, setFieldErrors]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching application data from API (external-system sync)
@@ -219,19 +247,6 @@ export default function MyApplicationDetailPage() {
     void load();
   }, [liveRefresh, load]);
 
-  // Mirror the API's enrichment so shirt-size + dietary fields render in the form
-  // (participant/mentor) rather than being pulled silently from the profile (H12).
-  const responseTemplate = response?.template ?? form?.template;
-  const template =
-    form && responseTemplate
-      ? enrichTemplate(
-          form.ask_shirt_size,
-          form.ask_food_intolerances,
-          responseTemplate,
-          intolerances,
-          shirtSizes,
-        )
-      : [];
   const status = confirmationExpired ? "expired" : response?.status; // already masked by the API
   const timelineResponse =
     confirmationExpired && response ? { ...response, status: "expired" } : response;
@@ -248,32 +263,12 @@ export default function MyApplicationDetailPage() {
   const canConfirm = status === "accepted" && !responseError;
 
   function setValue(key: string, value: FieldValue) {
+    hasLocalEditsRef.current = true;
+    latestAnswerRevision.current += 1;
+    setAnswerRevision(latestAnswerRevision.current);
     setSaveState("unsaved");
     setActionError(null);
     setValues((prev) => ({ ...prev, [key]: value }));
-  }
-
-  function validateOnBlur(field: (typeof template)[number]) {
-    const message = validateFieldOnBlur(field, values[field.key], t, lang);
-    setFieldErrors((current) => {
-      const next = { ...current };
-      if (message) next[field.key] = message;
-      else delete next[field.key];
-      return next;
-    });
-  }
-
-  function checkRequired(): boolean {
-    const missing = missingRequiredFields(template, values);
-    const errors = Object.fromEntries(missing.map((key) => [key, t("fieldRequired")]));
-    setFieldErrors(errors);
-    const firstInvalid = template.find((field) => errors[field.key]);
-    if (firstInvalid) {
-      requestAnimationFrame(() => {
-        document.getElementById(templateFieldId(firstInvalid.key, id))?.focus();
-      });
-    }
-    return missing.length === 0;
   }
 
   const handleSaveDraft = useApplicationDraft({
@@ -283,7 +278,11 @@ export default function MyApplicationDetailPage() {
     responseError,
     editable,
     values,
+    answerRevision,
+    latestAnswerRevision,
+    hasLocalEdits: hasLocalEditsRef,
     saveState,
+    saving,
     t,
     setResponse,
     setValues,
@@ -325,6 +324,7 @@ export default function MyApplicationDetailPage() {
         },
       );
       setResponse(res.response);
+      hasLocalEditsRef.current = false;
       setValues(res.response.responses ?? {});
       await refresh();
       setPrivacyNotice(res.privacy_notice);

@@ -5,7 +5,7 @@ import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assertWithinHackingWindow } from "../../lib/hacking-window.js";
 import { broadcast } from "../../lib/sse.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
@@ -26,7 +26,9 @@ import { assertQueueChallengeScope, assertQueueRepoScope } from "../queue/fixtur
 import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged, repoMemberIds } from "../queue/notify.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
+import { linkDevpostImports } from "../work-groups/service.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
+import { resolveDevpostUrls } from "./devpost-url.js";
 import { buildImportPlan, type ImportPlan } from "./plan.js";
 import { reconcileDevpostParticipantsForUser } from "./reconciliation.js";
 
@@ -64,15 +66,33 @@ export async function confirmImport(
   actorId: number,
   projectsCsv: string,
   participantsCsv: string,
+  tagMappings: Array<{ tag: string; challengeId: number }> = [],
 ): Promise<ConfirmImportResult> {
-  return withTransaction(async (client) => {
+  const preview = await buildImportPlan(pool, projectsCsv, participantsCsv);
+  const groups = await pool.query<{ devpost_url: string | null }>(
+    `SELECT devpost_url FROM planned_work_groups WHERE linked_repo_id IS NULL AND devpost_canonical_url IS NULL`,
+  );
+  const identities = await resolveDevpostUrls([
+    ...preview.repos.map((repo) => repo.url),
+    ...groups.rows.map((group) => group.devpost_url),
+  ]);
+  const result = await withTransaction(async (client) => {
     if (await isSyntheticOperator(client, actorId)) {
       throw new ForbiddenError("Review-fixture operators cannot run real Devpost imports", {
         code: "review_fixture_scope",
       });
     }
     const plan = await buildImportPlan(client, projectsCsv, participantsCsv);
+    for (const [url, canonical] of identities) {
+      if (canonical)
+        await client.query(
+          `UPDATE planned_work_groups SET devpost_canonical_url = $2 WHERE devpost_url = $1`,
+          [url, canonical],
+        );
+    }
     const batchId = `dp_${randomUUID()}`;
+
+    await persistPreviewTagMappings(client, actorId, plan, tagMappings);
 
     let reposCreated = 0;
     let reposUpdated = 0;
@@ -87,15 +107,16 @@ export async function confirmImport(
       const { rows } = await client.query(
         `WITH incoming AS (
            SELECT * FROM jsonb_to_recordset($1::jsonb)
-             AS v(ordinal int, name text, description text, devpost_url text, demo_url text, github_url text)
+             AS v(ordinal int, name text, description text, devpost_url text, demo_url text, github_url text, devpost_canonical_url text)
          )
-         INSERT INTO repos (name, description, devpost_url, demo_url, github_url)
-         SELECT name, description, devpost_url, demo_url, github_url FROM incoming
+         INSERT INTO repos (name, description, devpost_url, demo_url, github_url, devpost_canonical_url)
+         SELECT name, description, devpost_url, demo_url, github_url, devpost_canonical_url FROM incoming
          ON CONFLICT (devpost_url) WHERE devpost_url IS NOT NULL DO UPDATE
            SET name = EXCLUDED.name,
                description = EXCLUDED.description,
                demo_url = EXCLUDED.demo_url,
                github_url = COALESCE(EXCLUDED.github_url, repos.github_url),
+               devpost_canonical_url = COALESCE(EXCLUDED.devpost_canonical_url, repos.devpost_canonical_url),
                updated_at = now()
            WHERE repos.is_test_account = false
          RETURNING id, devpost_url, (xmax = 0) AS was_insert`,
@@ -108,6 +129,7 @@ export async function confirmImport(
               devpost_url: repo.url,
               demo_url: repo.demoUrl,
               github_url: repo.githubUrl,
+              devpost_canonical_url: identities.get(repo.url as string) ?? null,
             })),
           ),
         ],
@@ -260,6 +282,15 @@ export async function confirmImport(
       participantsUnmatched = rows[0].unmatched;
     }
 
+    // #854 runs after both the roster and prize-to-challenge data are durable.
+    // The matcher itself accepts only exact valid URLs or one unambiguous,
+    // complete roster plus intended-challenge match.
+    await linkDevpostImports(
+      client,
+      actorId,
+      repoResults.map((repo) => repo.id),
+    );
+
     // H17: surface how many of the prizes this import saw still have no
     // reto mapping, so the "done" screen can point back at the resolution
     // screen even when every participant matched.
@@ -284,6 +315,11 @@ export async function confirmImport(
       prizesSeen: prizeNamesSeen.size,
       prizesUnmapped,
     };
+    const mandatoryOutcomes = await enrollReposInMandatoryChallenges(
+      client,
+      actorId,
+      repoResults.map((repo) => repo.id),
+    );
 
     await audit(client, {
       actorId,
@@ -294,8 +330,61 @@ export async function confirmImport(
       source: "admin",
     });
 
-    return { batchId, counts, repos: repoResults };
+    return { batchId, counts, repos: repoResults, mandatoryOutcomes };
   });
+  await announceQueueOutcomes(result.mandatoryOutcomes);
+  return { batchId: result.batchId, counts: result.counts, repos: result.repos };
+}
+
+/**
+ * Persists only choices made against the current preview. This is deliberately
+ * part of the import transaction: #854 may later consume the saved tag
+ * relation to create queue entries, but importing/mapping itself never does.
+ */
+async function persistPreviewTagMappings(
+  client: Queryable,
+  actorId: number,
+  plan: ImportPlan,
+  tagMappings: Array<{ tag: string; challengeId: number }>,
+): Promise<void> {
+  const detectedTags = new Set(plan.prizes.map((prize) => prize.name));
+  const mappingByTag = new Map<string, number>();
+  for (const mapping of tagMappings) {
+    if (!detectedTags.has(mapping.tag)) {
+      throw new BadRequestError(`Tag ${mapping.tag} was not detected in this import`);
+    }
+    const prior = mappingByTag.get(mapping.tag);
+    if (prior !== undefined && prior !== mapping.challengeId) {
+      throw new BadRequestError(`Tag ${mapping.tag} has conflicting challenge mappings`);
+    }
+    mappingByTag.set(mapping.tag, mapping.challengeId);
+  }
+  if (mappingByTag.size === 0) return;
+
+  for (const [tag, challengeId] of mappingByTag) {
+    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
+    const { rows } = await client.query(
+      `SELECT id, devpost_tags FROM challenges
+        WHERE id = $1 AND is_test_account = false FOR UPDATE`,
+      [challengeId],
+    );
+    const challenge = rows[0] as { id: number; devpost_tags: string[] } | undefined;
+    if (!challenge) throw new NotFoundError(`Challenge ${challengeId} not found`);
+    if (!challenge.devpost_tags.includes(tag)) {
+      await client.query(
+        `UPDATE challenges SET devpost_tags = devpost_tags || $2::jsonb WHERE id = $1`,
+        [challengeId, JSON.stringify([tag])],
+      );
+      await audit(client, {
+        actorId,
+        entityType: "challenge",
+        entityId: challengeId,
+        action: "map_devpost_prize",
+        after: { prize: tag, source: "import_preview" },
+        source: "admin",
+      });
+    }
+  }
 }
 
 export interface UnmatchedParticipant {
@@ -698,6 +787,7 @@ interface RepoRow {
   devpost_url: string | null;
   demo_url: string | null;
   source: "devpost" | "native";
+  presentation_timing_preference: string;
 }
 
 interface RepoMember {
@@ -714,10 +804,13 @@ interface RepoMember {
 interface RepoChallenge {
   id: number;
   title: string;
+  mandatory: boolean;
   status: string | null;
   position: number | null;
   assignedRoomId: number | null;
   assignedRoomName: string | null;
+  etaMinutes: number | null;
+  rooms: { id: number; name: string; location: string | null }[];
   mappedPrizes: string[];
   source: "queue" | "prize" | "queue_and_prize";
   /** H36 evaluation status — null both when unevaluated AND when the caller
@@ -805,39 +898,79 @@ async function attachMembersAndPrizes(
   const prizeNames = [...new Set(prizesRes.rows.map((r: { prize: string }) => r.prize))];
   const challengesRes = prizeNames.length
     ? await pool.query(
-        `SELECT id, title, devpost_tags FROM challenges
+        `SELECT id, title, mandatory, devpost_tags FROM challenges
           WHERE devpost_tags ?| $1::text[] AND is_test_account = $2`,
         [prizeNames, fixtureMarker],
       )
     : { rows: [] as Array<{ id: number; title: string; devpost_tags: string[] }> };
 
-  const challengesByPrize = new Map<string, Array<{ id: number; title: string }>>();
+  const challengesByPrize = new Map<
+    string,
+    Array<{ id: number; title: string; mandatory: boolean }>
+  >();
   const mappedPrizes = new Set<string>();
   for (const c of challengesRes.rows as Array<{
     id: number;
     title: string;
     devpost_tags: string[];
+    mandatory: boolean;
   }>) {
     for (const tag of c.devpost_tags) {
       if (!prizeNames.includes(tag)) continue;
       const arr = challengesByPrize.get(tag) ?? [];
-      arr.push({ id: c.id, title: c.title });
+      arr.push({ id: c.id, title: c.title, mandatory: c.mandatory });
       challengesByPrize.set(tag, arr);
       mappedPrizes.add(tag);
     }
   }
 
   const queueRes = await pool.query(
-    `SELECT qe.repo_id, qe.challenge_id AS id, c.title, qe.status, qe.position,
+    `WITH waiting AS (
+       SELECT DISTINCT ON (qgc.queue_group_id, e.repo_id)
+              qgc.queue_group_id, e.repo_id, e.position, e.id
+         FROM queue_entries e
+         JOIN queue_group_challenges qgc ON qgc.challenge_id = e.challenge_id
+         JOIN challenges ch ON ch.id = e.challenge_id AND ch.is_test_account = $2
+         JOIN repos repo ON repo.id = e.repo_id AND repo.is_test_account = $2
+        WHERE e.status = 'waiting'
+        ORDER BY qgc.queue_group_id, e.repo_id, e.position ASC NULLS LAST, e.id
+     ), ranked AS (
+       SELECT *, row_number() OVER (PARTITION BY queue_group_id ORDER BY position ASC NULLS LAST, id)::int AS rank
+         FROM waiting
+     )
+     SELECT qe.repo_id, qe.challenge_id AS id, c.title, c.mandatory, qe.status,
+            CASE WHEN qe.status = 'waiting' THEN ranked.rank ELSE NULL END AS position,
+            CASE WHEN qe.status = 'waiting' THEN round(ranked.rank * COALESCE(pace.minutes, 8))::int ELSE NULL END AS eta_minutes,
+            COALESCE(pace.rooms, '[]'::jsonb) AS possible_rooms,
             qe.assigned_room_id, r.name AS assigned_room_name,
             c.judging_panel_criteria, ar.status AS review_status, ar.scores AS review_scores
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
        JOIN repos repo ON repo.id = qe.repo_id AND repo.is_test_account = $2
+       JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+       LEFT JOIN ranked ON ranked.queue_group_id = qgc.queue_group_id AND ranked.repo_id = qe.repo_id
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(jsonb_build_object('id', rm.id, 'name', rm.name, 'location', rm.location) ORDER BY rm.name) AS rooms,
+                COALESCE(avg(rqs.desired_minutes_per_team) FILTER (WHERE NOT rqs.is_paused), 8) /
+                  greatest(1, count(rqs.room_id) FILTER (WHERE NOT rqs.is_paused)) AS minutes
+           FROM room_queue_groups rqg
+           JOIN rooms rm ON rm.id = rqg.room_id
+           LEFT JOIN room_queue_state rqs ON rqs.room_id = rm.id
+          WHERE rqg.queue_group_id = qgc.queue_group_id
+            AND NOT EXISTS (
+              SELECT 1 FROM room_queue_groups other
+              JOIN queue_group_challenges sibling ON sibling.queue_group_id=other.queue_group_id
+              JOIN challenges ch ON ch.id=sibling.challenge_id
+              WHERE other.room_id=rm.id AND ch.is_test_account IS DISTINCT FROM $2
+            )
+       ) pace ON true
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
       WHERE qe.repo_id = ANY($1::int[])
-        AND qe.status NOT IN ('cancelled', 'disqualified')
+        AND NOT EXISTS (
+          SELECT 1 FROM queue_group_challenges sibling JOIN challenges ch ON ch.id=sibling.challenge_id
+          WHERE sibling.queue_group_id=qgc.queue_group_id AND ch.is_test_account IS DISTINCT FROM $2
+        )
       ORDER BY qe.repo_id, qe.position ASC NULLS LAST, qe.id ASC`,
     [ids, fixtureMarker],
   );
@@ -893,6 +1026,7 @@ async function attachMembersAndPrizes(
   }
 
   const queueChallengesByRepo = new Map<number, RepoChallenge[]>();
+  const withdrawnChallenges = new Set<string>();
   for (const row of queueRes.rows as Array<{
     repo_id: number;
     id: number;
@@ -901,10 +1035,17 @@ async function attachMembersAndPrizes(
     position: number | null;
     assigned_room_id: number | null;
     assigned_room_name: string | null;
+    eta_minutes: number | null;
+    possible_rooms: RepoChallenge["rooms"];
+    mandatory: boolean;
     judging_panel_criteria: unknown;
     review_status: "draft" | "submitted" | null;
     review_scores: Record<string, unknown> | null;
   }>) {
+    if (["cancelled", "disqualified"].includes(row.status)) {
+      withdrawnChallenges.add(`${row.repo_id}:${row.id}`);
+      continue;
+    }
     const canSeeReview = visibleSet === null || visibleSet.has(row.id);
     let nota: number | null = null;
     if (canSeeReview && row.review_scores && Array.isArray(row.judging_panel_criteria)) {
@@ -916,10 +1057,13 @@ async function attachMembersAndPrizes(
     arr.push({
       id: row.id,
       title: row.title,
+      mandatory: row.mandatory,
       status: row.status,
       position: row.position,
       assignedRoomId: row.assigned_room_id,
       assignedRoomName: row.assigned_room_name,
+      etaMinutes: row.eta_minutes,
+      rooms: row.possible_rooms,
       mappedPrizes: [],
       source: "queue",
       reviewStatus: canSeeReview ? (row.review_status ?? null) : null,
@@ -933,6 +1077,7 @@ async function attachMembersAndPrizes(
     const challengesSeen = new Map<number, RepoChallenge>();
     for (const prize of prizes) {
       for (const c of challengesByPrize.get(prize) ?? []) {
+        if (withdrawnChallenges.has(`${repo.id}:${c.id}`)) continue;
         const existing = challengesSeen.get(c.id);
         if (existing) {
           existing.mappedPrizes.push(prize);
@@ -941,10 +1086,13 @@ async function attachMembersAndPrizes(
         challengesSeen.set(c.id, {
           id: c.id,
           title: c.title,
+          mandatory: c.mandatory,
           status: null,
           position: null,
           assignedRoomId: null,
           assignedRoomName: null,
+          etaMinutes: null,
+          rooms: [],
           mappedPrizes: [prize],
           source: "prize",
           reviewStatus: null,
@@ -961,6 +1109,8 @@ async function attachMembersAndPrizes(
           position: c.position,
           assignedRoomId: c.assignedRoomId,
           assignedRoomName: c.assignedRoomName,
+          etaMinutes: c.etaMinutes,
+          rooms: c.rooms,
           source: "queue_and_prize",
           reviewStatus: c.reviewStatus,
           nota: c.nota,
@@ -979,7 +1129,7 @@ async function attachMembersAndPrizes(
   });
 }
 
-const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url, source FROM repos`;
+const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url, source, presentation_timing_preference FROM repos`;
 
 /** PROJECTS_READ: repos with members, prizes, and mapped challenges. */
 export async function listRepos(fixtureMarker = false): Promise<RepoWithExtras[]> {
@@ -1077,7 +1227,8 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
   );
   const fixtureMarker = userRows[0]?.is_test_account === true;
   const { rows } = await pool.query(
-    `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url, r.source
+    `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url, r.source,
+            r.presentation_timing_preference
      FROM repos r
      WHERE r.is_test_account = $2 AND r.id IN (
        -- H19/H20: a project the caller was merely invited to (status='invited')
@@ -1477,6 +1628,55 @@ export async function addRepoChallenge(actorId: number, repoId: number, challeng
   return result;
 }
 
+/** Participant self-service enrollment closes when judging begins. Unlike the
+ * hacking window, this deadline is specifically about changing the judging
+ * lineup and applies equally to imported and native projects. */
+async function assertJudgingHasNotStarted(client: Queryable) {
+  const { rows } = await client.query<{ started: boolean }>(
+    `SELECT COALESCE(schedule_start_at <= now(), false) AS started
+       FROM queue_settings WHERE id = 1 FOR UPDATE`,
+  );
+  if (rows[0]?.started)
+    throw new ForbiddenError("Challenges can no longer be changed after judging starts");
+}
+
+/** H20 participant counterpart to the operator's H21 enrollment action. */
+export async function addMyProjectChallenge(userId: number, repoId: number, challengeId: number) {
+  const result = await withTransaction(async (client) => {
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
+    if (!(await isActiveProjectMember(client, repoId, userId))) {
+      throw new ForbiddenError("Not a member of this project");
+    }
+    await assertJudgingHasNotStarted(client);
+    const challenge = await client.query(
+      `SELECT id FROM challenges WHERE id = $1 AND visibility = 'visible'`,
+      [challengeId],
+    );
+    if (!challenge.rows[0]) throw new NotFoundError("Challenge not found");
+    const outcome = await enqueueRepoOnChallenge(
+      client,
+      userId,
+      repoId,
+      challengeId,
+      "participant",
+    );
+    if (!outcome) return { repoId, challengeId, entry: null, inserted: false, revived: false };
+    return { repoId, challengeId, ...outcome };
+  });
+  if (result.entry) {
+    await broadcastQueueEvent(
+      pool,
+      "entry",
+      result.entry.id,
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      result.entry,
+    );
+    await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
+  }
+  return result;
+}
+
 /**
  * Transitions one queue entry out of a challenge (waiting/called -> cancelled,
  * anything further along -> disqualified), writing the matching history row
@@ -1486,7 +1686,7 @@ async function terminateQueueEntry(
   client: Queryable,
   entry: { id: number; repo_id: number; status: string },
   actorId: number,
-  options: { challengeId: number; reason: string },
+  options: { challengeId: number; reason: string; source?: "admin" | "participant" },
 ): Promise<Record<string, unknown>> {
   const nextStatus = ["waiting", "called"].includes(entry.status) ? "cancelled" : "disqualified";
   const updated = await client.query(
@@ -1513,13 +1713,24 @@ async function terminateQueueEntry(
     before: { status: entry.status, challengeId: options.challengeId, repoId: entry.repo_id },
     after: { status: nextStatus },
     reason: options.reason,
-    source: "admin",
+    source: options.source ?? "admin",
   });
   return updated.rows[0];
 }
 
-export async function removeRepoChallenge(actorId: number, repoId: number, challengeId: number) {
+export async function removeRepoChallenge(
+  actorId: number,
+  repoId: number,
+  challengeId: number,
+  participant = false,
+) {
   const result = await withTransaction(async (client) => {
+    if (participant) {
+      await client.query(`SELECT id FROM repos WHERE id=$1 FOR UPDATE`, [repoId]);
+      if (!(await isActiveProjectMember(client, repoId, actorId)))
+        throw new ForbiddenError("Not a member of this project");
+      await assertJudgingHasNotStarted(client);
+    }
     const repoMarker = await assertQueueRepoScope(client, actorId, repoId);
     const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
     if (repoMarker !== challengeMarker) {
@@ -1529,30 +1740,59 @@ export async function removeRepoChallenge(actorId: number, repoId: number, chall
         challengeId,
       });
     }
+    await assertChallengeIsOptional(client, challengeId);
     const entryRes = await client.query(
       `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
       [repoId, challengeId],
     );
     const entry = entryRes.rows[0];
+    if (!entry && participant) {
+      const withdrawn = await client.query(
+        `DELETE FROM repo_devpost_prizes rp USING challenges c
+          WHERE rp.repo_id=$1 AND c.id=$2 AND c.devpost_tags ? rp.prize RETURNING rp.prize`,
+        [repoId, challengeId],
+      );
+      if (!withdrawn.rowCount) throw new NotFoundError("Project is not entered in this challenge");
+      await audit(client, {
+        actorId,
+        entityType: "repo",
+        entityId: repoId,
+        action: "challenge.withdraw",
+        before: { challengeId, prizes: withdrawn.rows },
+        source: "participant",
+      });
+      return { repoId, challengeId, entry: null, removed: true };
+    }
     if (!entry)
       throw new NotFoundError(`Repo ${repoId} is not assigned to challenge ${challengeId}`);
 
     const updatedEntry = await terminateQueueEntry(client, entry, actorId, {
       challengeId,
       reason: "Removed from challenge",
+      source: participant ? "participant" : "admin",
     });
     await compactQueueGroupPositions(client, challengeId);
     return { repoId, challengeId, entry: updatedEntry, removed: true };
   });
-  await broadcastQueueEvent(
-    pool,
-    "entry",
-    Number(result.entry.id),
-    EVENTS.QUEUE_ENTRY_CHANGED,
-    result.entry,
-  );
-  await notifyChallengeQueueChanged(pool, result.challengeId);
+  if (result.entry)
+    await broadcastQueueEvent(
+      pool,
+      "entry",
+      Number(result.entry.id),
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      result.entry,
+    );
+  if (result.entry) await notifyChallengeQueueChanged(pool, result.challengeId);
   return result;
+}
+
+/** H20: participant withdrawal uses the same audited queue transition as H21. */
+export async function removeMyProjectChallenge(
+  userId: number,
+  repoId: number,
+  challengeId: number,
+) {
+  return removeRepoChallenge(userId, repoId, challengeId, true);
 }
 
 export interface BulkAddResult {
@@ -1644,6 +1884,7 @@ export async function bulkRemoveRepoChallenge(
     await assertQueueChallengeScope(client, actorId, challengeId);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
+    await assertChallengeIsOptional(client, challengeId);
 
     const entriesRes = await client.query(
       `SELECT * FROM queue_entries WHERE challenge_id = $1 FOR UPDATE`,
@@ -1682,6 +1923,17 @@ export async function bulkRemoveRepoChallenge(
   return { total, removed: updatedEntries.length, alreadySkipped: total - updatedEntries.length };
 }
 
+async function assertChallengeIsOptional(client: Queryable, challengeId: number): Promise<void> {
+  const { rows } = await client.query(`SELECT mandatory FROM challenges WHERE id = $1`, [
+    challengeId,
+  ]);
+  if (rows[0]?.mandatory === true) {
+    throw new ConflictError("Projects cannot be removed from a mandatory challenge", {
+      challengeId,
+    });
+  }
+}
+
 // ── native project lifecycle (H18-H19) ─────────────────────────────────────
 
 export interface NativeRepoInput {
@@ -1707,7 +1959,7 @@ function toEnqueuedChallenge(outcome: EnqueueOutcome): EnqueuedChallenge {
 }
 
 /** Enqueued entries a caller must announce (SSE + notify) after commit. */
-async function announceQueueOutcomes(outcomes: EnqueueOutcome[]): Promise<void> {
+export async function announceQueueOutcomes(outcomes: EnqueueOutcome[]): Promise<void> {
   await Promise.all(
     outcomes.map((outcome) =>
       broadcastQueueEvent(
@@ -1747,6 +1999,50 @@ async function assertChallengesExist(
   if (missing.length > 0) throw new NotFoundError(`Challenge ${missing.join(", ")} not found`);
 }
 
+/**
+ * Issue #851: mandatory participation is materialized as ordinary queue
+ * entries, so queue generation, participant notifications and operational
+ * participant counts retain one authoritative source. The enqueue primitive
+ * preserves the unique (challenge, repo) entry and revives terminal entries.
+ */
+export async function enrollReposInMandatoryChallenges(
+  client: Queryable,
+  actorId: number,
+  repoIds: number[],
+  onlyChallengeIds?: number[],
+): Promise<EnqueueOutcome[]> {
+  const uniqueRepoIds = [...new Set(repoIds)];
+  if (uniqueRepoIds.length === 0) return [];
+  const fixtureMarker = await isSyntheticOperator(client, actorId);
+  const { rows } = await client.query(
+    `SELECT id, mandatory FROM challenges
+      WHERE is_test_account = $1
+        ${onlyChallengeIds ? "AND id = ANY($2::int[])" : ""}
+      ORDER BY id FOR SHARE`,
+    onlyChallengeIds ? [fixtureMarker, onlyChallengeIds] : [fixtureMarker],
+  );
+  const outcomes: EnqueueOutcome[] = [];
+  for (const row of rows as Array<{ id: number; mandatory: boolean }>) {
+    if (row.mandatory !== true) continue;
+    const challengeId = Number(row.id);
+    let nextPosition = await nextBottomPosition(client, challengeId);
+    const allocatePosition = async () => nextPosition++;
+    for (const repoId of uniqueRepoIds) {
+      const outcome = await enqueueRepoOnChallenge(
+        client,
+        actorId,
+        repoId,
+        challengeId,
+        "mandatory_challenge",
+        fixtureMarker,
+        allocatePosition,
+      );
+      if (outcome) outcomes.push(outcome);
+    }
+  }
+  return outcomes;
+}
+
 async function insertNativeRepo(
   client: Queryable,
   input: NativeRepoInput,
@@ -1756,7 +2052,7 @@ async function insertNativeRepo(
   const { rows } = await client.query(
     `INSERT INTO repos (name, description, github_url, demo_url, source, created_by, is_test_account)
      VALUES ($1, $2, $3, $4, 'native', $5, $6)
-     RETURNING id, name, description, github_url, devpost_url, demo_url, source`,
+     RETURNING id, name, description, github_url, devpost_url, demo_url, source, presentation_timing_preference`,
     [input.name, input.description, input.githubUrl, input.demoUrl, createdBy, fixtureMarker],
   );
   return rows[0];
@@ -1813,6 +2109,7 @@ export async function createRepoNative(
       );
       if (outcome) enqueued.push(outcome);
     }
+    enqueued.push(...(await enrollReposInMandatoryChallenges(client, actorId, [created.id])));
     await audit(client, {
       actorId,
       entityType: "repo",
@@ -1836,6 +2133,8 @@ export interface UpdateRepoPatch {
   description?: string;
   githubUrl?: string | null;
   demoUrl?: string | null;
+  devpostUrl?: string | null;
+  presentationTimingPreference?: string;
 }
 
 /**
@@ -1852,18 +2151,40 @@ async function applyRepoUpdate(
   const existing = await client.query(`${REPO_SELECT} WHERE id = $1 FOR UPDATE`, [repoId]);
   const before = existing.rows[0] as RepoRow | undefined;
   if (!before) throw new NotFoundError(`Repo ${repoId} not found`);
+  if (
+    patch.presentationTimingPreference !== undefined &&
+    patch.presentationTimingPreference !== before.presentation_timing_preference
+  ) {
+    const generated = await client.query(`SELECT 1 FROM queue_entries WHERE repo_id = $1 LIMIT 1`, [
+      repoId,
+    ]);
+    if (generated.rows[0])
+      throw new ConflictError("Presentation timing cannot be changed after queues are generated");
+  }
 
   const next = {
     name: patch.name ?? before.name,
     description: patch.description ?? before.description,
     github_url: patch.githubUrl === undefined ? before.github_url : patch.githubUrl,
     demo_url: patch.demoUrl === undefined ? before.demo_url : patch.demoUrl,
+    devpost_url: patch.devpostUrl === undefined ? before.devpost_url : patch.devpostUrl,
+    presentation_timing_preference:
+      patch.presentationTimingPreference ?? before.presentation_timing_preference,
   };
   const { rows } = await client.query(
-    `UPDATE repos SET name = $2, description = $3, github_url = $4, demo_url = $5
+    `UPDATE repos SET name = $2, description = $3, github_url = $4, demo_url = $5, devpost_url=$6, presentation_timing_preference=$7,
+      devpost_canonical_url = CASE WHEN devpost_url IS DISTINCT FROM $6 THEN NULL ELSE devpost_canonical_url END
       WHERE id = $1
-      RETURNING id, name, description, github_url, devpost_url, demo_url, source`,
-    [repoId, next.name, next.description, next.github_url, next.demo_url],
+      RETURNING id, name, description, github_url, devpost_url, demo_url, source, presentation_timing_preference`,
+    [
+      repoId,
+      next.name,
+      next.description,
+      next.github_url,
+      next.demo_url,
+      next.devpost_url,
+      next.presentation_timing_preference,
+    ],
   );
   return { before, after: rows[0] as RepoRow };
 }
@@ -1874,7 +2195,29 @@ function repoAuditFields(repo: RepoRow) {
     description: repo.description,
     githubUrl: repo.github_url,
     demoUrl: repo.demo_url,
+    devpostUrl: repo.devpost_url,
+    presentationTimingPreference: repo.presentation_timing_preference,
   };
+}
+
+/** H20/#854: linked planning edits use the project metadata core and its roster boundary. */
+export async function updateLinkedWorkGroupProject(
+  client: Queryable,
+  userId: number,
+  repoId: number,
+  patch: UpdateRepoPatch,
+) {
+  if (!(await isActiveProjectMember(client, repoId, userId))) return;
+  const { before, after } = await applyRepoUpdate(client, repoId, patch);
+  await audit(client, {
+    actorId: userId,
+    entityType: "repo",
+    entityId: repoId,
+    action: "update_from_work_group",
+    before: repoAuditFields(before),
+    after: repoAuditFields(after),
+    source: "participant",
+  });
 }
 
 /** H18: edit a project's own metadata (title, description, links). Audited. */
@@ -1954,9 +2297,10 @@ export async function canCreateMyProject(userId: number, db: Queryable = pool): 
   const { rows } = await db.query<{ allowed: boolean }>(
     `SELECT (
        ec.participants_can_create_projects IS TRUE
-       AND ec.hacking_starts_at IS NOT NULL
-       AND ec.hacking_ends_at IS NOT NULL
-       AND now() BETWEEN ec.hacking_starts_at AND ec.hacking_ends_at
+       AND COALESCE(ec.participant_self_service_starts_at, ec.hacking_starts_at) IS NOT NULL
+       AND COALESCE(ec.participant_self_service_ends_at, ec.hacking_ends_at) IS NOT NULL
+       AND now() BETWEEN COALESCE(ec.participant_self_service_starts_at, ec.hacking_starts_at)
+                     AND COALESCE(ec.participant_self_service_ends_at, ec.hacking_ends_at)
        AND EXISTS (
          SELECT 1
            FROM users u
@@ -2027,6 +2371,7 @@ export async function createMyProject(
       const outcome = await enqueueRepoOnChallenge(client, userId, created.id, challengeId, "web");
       if (outcome) enqueued.push(outcome);
     }
+    enqueued.push(...(await enrollReposInMandatoryChallenges(client, userId, [created.id])));
     await audit(client, {
       actorId: userId,
       entityType: "repo",
@@ -2433,6 +2778,7 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
     await assertFixtureSubjectScope(client, userId, userId);
     await assertQueueRepoScope(client, userId, repoId);
     await assertWithinHackingWindow(client);
+    await assertJudgingHasNotStarted(client);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
     }
@@ -2497,6 +2843,59 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
     await notifyChallengeQueueChanged(pool, challengeId);
   }
 
+  return { deleted: true };
+}
+
+/** H18/H21: project editors can remove any project, even after judging has
+ * started. The cascade and subsequent queue invalidations intentionally match
+ * the participant delete path, but no membership/window rule applies. */
+export async function deleteRepo(actorId: number, repoId: number): Promise<{ deleted: true }> {
+  const { queueEntries, memberIds } = await withTransaction(async (client) => {
+    const fixtureMarker = await assertQueueRepoScope(client, actorId, repoId);
+    const repoRes = await client.query(
+      `SELECT id, name, is_test_account FROM repos WHERE id = $1 FOR UPDATE`,
+      [repoId],
+    );
+    const repo = repoRes.rows[0] as
+      | { id: number; name: string; is_test_account: boolean }
+      | undefined;
+    if (!repo) throw new NotFoundError(`Repo ${repoId} not found`);
+    if (fixtureMarker !== (repo.is_test_account === true)) {
+      throw new ConflictError("Queue fixture markers must match", {
+        code: "review_fixture_scope",
+        repoId,
+      });
+    }
+    const deleted = await deleteRepoCascade(client, repoId, repo.is_test_account === true);
+    await audit(client, {
+      actorId,
+      entityType: "repo",
+      entityId: repoId,
+      action: "delete",
+      before: { name: repo.name },
+      source: "admin",
+    });
+    return deleted;
+  });
+  for (const entry of queueEntries) {
+    await broadcastQueueEventWithMarker(entry.fixtureMarker, EVENTS.QUEUE_ENTRY_CHANGED, {
+      id: entry.id,
+      challenge_id: entry.challenge_id,
+      repo_id: entry.repo_id,
+      deleted: true,
+    });
+  }
+  const challengeIds = [...new Set(queueEntries.map((entry) => entry.challenge_id))];
+  await Promise.all(
+    challengeIds.flatMap((challengeId) =>
+      memberIds.map((memberId) =>
+        broadcast(`${SSE_TOPICS.USER_PREFIX}${memberId}`, EVENTS.USER_QUEUE_CHANGED, {
+          challengeId,
+        }),
+      ),
+    ),
+  );
+  for (const challengeId of challengeIds) await notifyChallengeQueueChanged(pool, challengeId);
   return { deleted: true };
 }
 

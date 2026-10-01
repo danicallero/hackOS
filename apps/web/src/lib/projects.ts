@@ -32,6 +32,11 @@ export interface PlannedPrize {
   [k: string]: unknown;
 }
 
+export interface PlannedChallenge {
+  id: number;
+  title: string;
+}
+
 export interface DevpostPrize {
   name: string;
   lastBatch: string | null;
@@ -44,6 +49,7 @@ export interface DevpostPrize {
 export interface ImportPlan {
   repos: PlannedRepo[];
   prizes: PlannedPrize[];
+  challenges: PlannedChallenge[];
   unassignedParticipants: Array<Record<string, unknown>>;
   totals: {
     repos: number;
@@ -84,10 +90,13 @@ export interface RepoWithExtras {
   challenges?: Array<{
     id: number;
     title: string;
+    mandatory: boolean;
     status: string | null;
     position: number | null;
     assignedRoomId: number | null;
     assignedRoomName: string | null;
+    etaMinutes: number | null;
+    rooms: { id: number; name: string; location: string | null }[];
     mappedPrizes: string[];
     source: "queue" | "prize" | "queue_and_prize";
     reviewStatus: "draft" | "submitted" | null;
@@ -104,11 +113,12 @@ export const previewImport = (projectsCsv: string, participantsCsv: string) =>
 export const confirmImport = (
   projectsCsv: string,
   participantsCsv: string,
+  tagMappings: Array<{ tag: string; challengeId: number }>,
   idempotencyKey?: string,
 ) =>
   api.post<ImportPlan & { created?: unknown }>(
     "/api/devpost/imports/confirm",
-    { projectsCsv, participantsCsv },
+    { projectsCsv, participantsCsv, tagMappings },
     idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined,
   );
 
@@ -173,6 +183,18 @@ export const updateMyProject = (
   patch: Partial<Pick<NativeProjectInput, "name" | "description" | "githubUrl" | "demoUrl">>,
 ) => api.patch<RepoWithExtras>(`/api/me/projects/${repoId}`, patch);
 
+/** Participant enrollment stays available only until judging starts. */
+export const addMyProjectChallenge = (
+  repoId: number,
+  challengeId: number,
+  idempotencyKey?: string,
+) => api.post(`/api/me/projects/${repoId}/challenges`, { challengeId }, idem(idempotencyKey));
+export const removeMyProjectChallenge = (
+  repoId: number,
+  challengeId: number,
+  idempotencyKey?: string,
+) => api.delete(`/api/me/projects/${repoId}/challenges/${challengeId}`, idem(idempotencyKey));
+
 /** POST /api/me/projects/:id/invites — invite a teammate by email. */
 export const inviteProjectMember = (repoId: number, email: string, idempotencyKey?: string) =>
   api.post(`/api/me/projects/${repoId}/invites`, { email }, idem(idempotencyKey));
@@ -197,6 +219,86 @@ export const leaveMyProject = (repoId: number, idempotencyKey?: string) =>
   api.delete(`/api/me/projects/${repoId}/leave`, idem(idempotencyKey));
 export const deleteMyProject = (repoId: number, idempotencyKey?: string) =>
   api.delete(`/api/me/projects/${repoId}`, idem(idempotencyKey));
+
+export interface PlannedWorkGroup {
+  id: number;
+  name: string;
+  description: string;
+  github_url: string | null;
+  demo_url: string | null;
+  devpost_url: string | null;
+  presentation_timing_preference: "no_preference" | "early" | "middle" | "late";
+  presentation_timing_editable: boolean;
+  linked_repo_id: number | null;
+  linkedProject: { id: number; name: string; devpostUrl: string | null } | null;
+  members: Array<{
+    userId: number;
+    name: string | null;
+    surname: string | null;
+    status: "active" | "invited" | "declined";
+  }>;
+  challenges: Array<{ id: number; title: string; mandatory: boolean }>;
+}
+export const myWorkGroups = () =>
+  api.get<{ groups: PlannedWorkGroup[]; canCreate: boolean }>("/api/me/work-groups");
+export interface ParticipationEstimate {
+  challengeId: number;
+  title: string;
+  groupCount: number;
+  projectCount: number;
+  expectedCount: number;
+  participantCount: number;
+}
+export const workGroupEstimates = () =>
+  api.get<{ estimates: ParticipationEstimate[] }>("/api/work-groups/estimates");
+export const getMyWorkGroup = (id: number) =>
+  api.get<PlannedWorkGroup>(`/api/me/work-groups/${id}`);
+export const createWorkGroup = (
+  name: string,
+  challengeIds: number[] = [],
+  idempotencyKey?: string,
+) =>
+  api.post<PlannedWorkGroup>("/api/me/work-groups", { name, challengeIds }, idem(idempotencyKey));
+export const updateWorkGroup = (
+  id: number,
+  patch: Partial<
+    Pick<
+      PlannedWorkGroup,
+      | "name"
+      | "description"
+      | "github_url"
+      | "demo_url"
+      | "devpost_url"
+      | "presentation_timing_preference"
+    >
+  >,
+) =>
+  api.patch<PlannedWorkGroup>(`/api/me/work-groups/${id}`, {
+    name: patch.name,
+    description: patch.description,
+    githubUrl: patch.github_url,
+    demoUrl: patch.demo_url,
+    devpostUrl: patch.devpost_url,
+    presentationTimingPreference: patch.presentation_timing_preference,
+  });
+export const inviteWorkGroupMember = (id: number, email: string, idempotencyKey?: string) =>
+  api.post(`/api/me/work-groups/${id}/invites`, { email }, idem(idempotencyKey));
+export const respondWorkGroupInvite = (
+  id: number,
+  action: "accept" | "decline",
+  idempotencyKey?: string,
+) => api.post(`/api/me/work-groups/${id}/invites/${action}`, {}, idem(idempotencyKey));
+export const removeWorkGroupMember = (id: number, userId: number, idempotencyKey?: string) =>
+  api.delete(`/api/me/work-groups/${id}/members/${userId}`, idem(idempotencyKey));
+export const addWorkGroupChallenge = (id: number, challengeId: number, idempotencyKey?: string) =>
+  api.post(`/api/me/work-groups/${id}/challenges`, { challengeId }, idem(idempotencyKey));
+export const removeWorkGroupChallenge = (
+  id: number,
+  challengeId: number,
+  idempotencyKey?: string,
+) => api.delete(`/api/me/work-groups/${id}/challenges/${challengeId}`, idem(idempotencyKey));
+export const deleteWorkGroup = (id: number, idempotencyKey?: string) =>
+  api.delete(`/api/me/work-groups/${id}`, idem(idempotencyKey));
 
 export const addRepoMember = (repoId: number, userId: number, idempotencyKey?: string) =>
   api.post(`/api/repos/${repoId}/members`, { userId }, idem(idempotencyKey));

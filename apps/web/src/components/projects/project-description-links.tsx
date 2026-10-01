@@ -1,7 +1,6 @@
 "use client";
 
 import { ExternalLinkIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
 import { ProjectDescription } from "./project-description";
 
@@ -34,14 +33,18 @@ export function ProjectDescriptionLinks({
         </div>
       )}
       {externalLinks.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-x-6 gap-y-3">
           {externalLinks.map((link) => (
-            <Button key={link.label} variant="outline" size="sm" asChild>
-              <a href={link.href} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon className="size-4" />
-                {link.label}
-              </a>
-            </Button>
+            <a
+              key={link.label}
+              href={link.href}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm underline underline-offset-4 decoration-muted-foreground/50 hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4"
+            >
+              {link.label}
+              <ExternalLinkIcon aria-hidden="true" className="size-3.5" />
+            </a>
           ))}
         </div>
       ) : (

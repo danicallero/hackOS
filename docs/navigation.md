@@ -47,12 +47,12 @@ neither path depends on a role name.
 ### Stable personal area (`PERSONAL_NAV`)
 
 Visible to any authenticated account, no capability required: Schedule, My
-applications, My project, My queue, Wallet, Inbox, My profile — except for a
+applications, My projects, Wallet, Inbox, My profile — except for a
 **pure applicant**: an account with no role-derived event access (`GET
 /api/me`'s `hasEventAccess`, `apps/api/src/modules/identity/role.ts#hasEventAccess`),
 no operational capability, and no room-judge/sponsor-rep association
 (`isPureApplicant` in `apps/web/src/lib/session.tsx`). That account has
-nothing to do yet on My project, My queue, Wallet, or Inbox, so those four
+nothing to do yet on My projects, Wallet, or Inbox, so those three
 hide (`NavItem.hideForPureApplicant` in `nav.ts`) — Schedule, My applications,
 and My profile stay, since applying (or checking an application's status) is
 exactly what they still need.
@@ -61,18 +61,12 @@ There is deliberately no dashboard/home page: `/timetable` (Schedule) is the
 landing destination after sign-in and email verification
 (`apps/web/src/lib/invite-destination.ts`, `apps/web/src/lib/return-path.ts`),
 and every other destination a dashboard would have surfaced (applications,
-queue, project, wallet) already has its own stable nav entry above.
+project, wallet) already has its own stable nav entry above.
 
-My project and My queue also hide independently of `isPureApplicant` for
-**any** account — participant, judge, or sponsor rep — that currently has no
-project/queue data of its own: `GET /api/me`'s `hasProject`/`hasQueueItems`
-booleans (`apps/api/src/modules/projects/service.ts#hasMyProject`,
-`apps/api/src/modules/queue/reads.ts#hasMyQueueItems`) back
-`NavItem.hideIfNoProject`/`hideIfNoQueueItems` in `nav.ts`. My project stays
-visible without a project yet when `canCreateProject` is true (H19
-self-creation open to the caller) — otherwise hiding the link would remove
-their only entry point to create one. Sponsor reps have no H19 self-creation
-path, so for them My project hides exactly when they have no project.
+My projects stays visible to every admitted participant because work groups
+can be planned before an operational project exists. Live queue status appears
+inside the relevant project record, rather than as a separate destination.
+`/my-queue` remains a compatibility redirect for saved links.
 
 ### Work workspaces (`WORKSPACES`)
 

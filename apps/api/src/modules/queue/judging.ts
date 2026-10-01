@@ -12,6 +12,11 @@ import { GROUP_SIBLING_CHALLENGE_IDS_SQL } from "./groups.js";
 import { writeQueueHistory } from "./history.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 import { notifyChallengeQueueChanged } from "./notify.js";
+import {
+  assertTextFieldLeases,
+  releaseReviewFieldLeases,
+  textReviewFields,
+} from "./review-leases.js";
 import type { QueueEntryRow } from "./types.js";
 
 /**
@@ -63,6 +68,7 @@ export interface AttemptReviewPatch {
   scores?: Record<string, unknown>;
   notes?: string;
   submit?: boolean;
+  releaseLeases?: boolean;
 }
 
 export async function getAttemptReview(entryId: number) {
@@ -91,7 +97,7 @@ export async function upsertAttemptReview(
    * judging panel itself doesn't: it autosaves every 800ms while a judge
    * types, and attempt_review_versions is already its operational trail.
    */
-  opts: { audit?: boolean } = {},
+  opts: { audit?: boolean; enforceFieldLeases?: boolean } = {},
 ) {
   const { review, completedEntry, changed } = await withTransaction(async (client) => {
     // A submitted review is the first-evaluation boundary for queue-group
@@ -195,6 +201,12 @@ export async function upsertAttemptReview(
 
     if (changedFields.length === 0)
       return { review: current, completedEntry: null, changed: false }; // no-op save
+
+    if (opts.enforceFieldLeases) {
+      const textFields = changedFields.filter((field) => textReviewFields(typed).has(field));
+      await assertTextFieldLeases(client, entryId, actorId, textFields);
+      if (patch.releaseLeases) await releaseReviewFieldLeases(client, entryId, actorId, textFields);
+    }
 
     const { rows: updatedRows } = await client.query(
       `UPDATE attempt_review SET scores = $1, notes = $2, status = $3 WHERE attempt_id = $4 RETURNING *`,

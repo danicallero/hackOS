@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { type MutableRefObject, useCallback, useEffect } from "react";
 import { ApiError, api } from "@/lib/api";
 import type { Translate } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
@@ -14,7 +14,11 @@ interface Options {
   responseError: string | null;
   editable: boolean;
   values: Record<string, unknown>;
+  answerRevision: number;
+  latestAnswerRevision: MutableRefObject<number>;
+  hasLocalEdits: MutableRefObject<boolean>;
   saveState: SaveState;
+  saving: boolean;
   t: Translate;
   setResponse: React.Dispatch<React.SetStateAction<MyResponseDetail | null>>;
   setValues: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
@@ -32,7 +36,11 @@ export function useApplicationDraft({
   responseError,
   editable,
   values,
+  answerRevision,
+  latestAnswerRevision,
+  hasLocalEdits,
   saveState,
+  saving,
   t,
   setResponse,
   setValues,
@@ -41,6 +49,10 @@ export function useApplicationDraft({
   setActionError,
 }: Options) {
   const saveDraft = useCallback(async () => {
+    // Each request owns the answer revision that it serializes. Controls stay
+    // editable while it is in flight, so its response is only authoritative
+    // when no later local edit exists (#844).
+    const savedRevision = answerRevision;
     setSaving(true);
     setSaveState("saving");
     setActionError(null);
@@ -48,6 +60,10 @@ export function useApplicationDraft({
       const saved = await api.put<MyResponseDetail>(`/api/applications/${applicationId}/response`, {
         responses: values,
       });
+      if (latestAnswerRevision.current !== savedRevision) {
+        setSaveState("unsaved");
+        return;
+      }
       // PUT returns the response row only; retain the immutable template
       // resolved by GET so an autosave cannot make the page fall back to a
       // newer public form version.
@@ -56,10 +72,15 @@ export function useApplicationDraft({
           ? { ...saved, template: previous.template, sections: previous.sections }
           : saved,
       );
+      hasLocalEdits.current = false;
       setValues(saved.responses ?? {});
       setSaveState("saved");
       toast.success(t("draftSaved"));
     } catch (error) {
+      if (latestAnswerRevision.current !== savedRevision) {
+        setSaveState("unsaved");
+        return;
+      }
       setSaveState("error");
       const message = error instanceof ApiError ? error.message : t("couldNotSaveDraft");
       setActionError({ action: "save", message });
@@ -67,7 +88,19 @@ export function useApplicationDraft({
     } finally {
       setSaving(false);
     }
-  }, [applicationId, setActionError, setResponse, setSaveState, setSaving, setValues, t, values]);
+  }, [
+    answerRevision,
+    applicationId,
+    hasLocalEdits,
+    latestAnswerRevision,
+    setActionError,
+    setResponse,
+    setSaveState,
+    setSaving,
+    setValues,
+    t,
+    values,
+  ]);
 
   useEffect(() => {
     if (!formOpen || response || responseError) return;
@@ -91,10 +124,10 @@ export function useApplicationDraft({
   }, [applicationId, formOpen, response, responseError, setActionError, setResponse, t]);
 
   useEffect(() => {
-    if (!editable || !response || saveState !== "unsaved") return;
+    if (!editable || !response || saving || saveState !== "unsaved") return;
     const timer = window.setTimeout(() => void saveDraft(), 700);
     return () => window.clearTimeout(timer);
-  }, [editable, response, saveDraft, saveState]);
+  }, [editable, response, saveDraft, saveState, saving]);
 
   return saveDraft;
 }

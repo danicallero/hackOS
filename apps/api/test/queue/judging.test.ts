@@ -76,6 +76,12 @@ describe("collaborative review (H36)", () => {
     expect(first.json().status).toBe("draft");
 
     // judge B raises the same score: field-level last-write-wins
+    await app.inject({
+      method: "PUT",
+      url: `/api/queue/entries/${entryId}/review/leases`,
+      headers: asUser(judgeB),
+      payload: { field: "notes" },
+    });
     const second = await app.inject({
       method: "PATCH",
       url: `/api/queue/entries/${entryId}/review`,
@@ -336,6 +342,105 @@ describe("collaborative review (H36)", () => {
       payload: { scores: { innovation: 7 } },
     });
     expect(outside.statusCode).toBe(403);
+  });
+});
+
+describe("review text-field leases (issue #850)", () => {
+  const TEXT_CRITERIA = [
+    {
+      key: "feedback",
+      kind: "long_text",
+      label: { en: "Feedback", es: "Comentario", gl: "Comentario" },
+    },
+  ];
+
+  async function setupTextEntry() {
+    const challengeId = await createChallenge({ judgingPanelCriteria: TEXT_CRITERIA });
+    const { repoId } = await createRepoWithTeam();
+    return enqueueRepo(challengeId, repoId, 1);
+  }
+
+  const lease = (entryId: number, judgeId: number, field: string) =>
+    app.inject({
+      method: "PUT",
+      url: `/api/queue/entries/${entryId}/review/leases`,
+      headers: asUser(judgeId),
+      payload: { field },
+    });
+
+  it("admits exactly one concurrent owner and rejects an unleased text write", async () => {
+    const entryId = await setupTextEntry();
+    const [first, second] = await Promise.all([
+      lease(entryId, judgeA, "scores.feedback"),
+      lease(entryId, judgeB, "scores.feedback"),
+    ]);
+    const winners = [first, second].filter((response) => response.statusCode === 200);
+    const losers = [first, second].filter((response) => response.statusCode === 409);
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(1);
+    expect(losers[0]?.json().error.details).toMatchObject({ code: "review_field_locked" });
+
+    const owner = winners[0] === first ? judgeA : judgeB;
+    const other = owner === judgeA ? judgeB : judgeA;
+    const denied = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/entries/${entryId}/review`,
+      headers: asUser(other),
+      payload: { scores: { feedback: "simultaneous edit" } },
+    });
+    expect(denied.statusCode).toBe(409);
+    expect(denied.json().error.details).toMatchObject({ code: "review_field_lease_required" });
+
+    const saved = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/entries/${entryId}/review`,
+      headers: asUser(owner),
+      payload: { scores: { feedback: "owner edit" } },
+    });
+    expect(saved.statusCode).toBe(200);
+  });
+
+  it("releases a lease on save, blur, session exit and expiry recovery", async () => {
+    const entryId = await setupTextEntry();
+    await lease(entryId, judgeA, "notes");
+    const saved = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/entries/${entryId}/review`,
+      headers: asUser(judgeA),
+      payload: { notes: "saved", releaseLeases: true },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect((await lease(entryId, judgeB, "notes")).statusCode).toBe(200);
+
+    const blurred = await app.inject({
+      method: "DELETE",
+      url: `/api/queue/entries/${entryId}/review/leases`,
+      headers: asUser(judgeB),
+      payload: { field: "notes" },
+    });
+    expect(blurred.statusCode).toBe(200);
+    expect((await lease(entryId, judgeA, "notes")).statusCode).toBe(200);
+
+    await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${entryId}/session`,
+      headers: asUser(judgeA),
+      payload: {},
+    });
+    await app.inject({
+      method: "DELETE",
+      url: `/api/queue/entries/${entryId}/session`,
+      headers: asUser(judgeA),
+    });
+    expect((await lease(entryId, judgeB, "notes")).statusCode).toBe(200);
+
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE judging_field_leases SET expires_at = now() - interval '1 second'
+        WHERE queue_entry_id = $1 AND field_key = 'notes'`,
+      [entryId],
+    );
+    expect((await lease(entryId, judgeA, "notes")).statusCode).toBe(200);
   });
 });
 
@@ -643,6 +748,13 @@ describe("CSV export (H40)", () => {
     const entryId = await enqueueRepo(challengeId, repoId, 1);
     const { repoId: r2 } = await createRepoWithTeam(undefined, "Pending Team");
     await enqueueRepo(challengeId, r2, 2);
+
+    await app.inject({
+      method: "PUT",
+      url: `/api/queue/entries/${entryId}/review/leases`,
+      headers: asUser(judgeA),
+      payload: { field: "notes" },
+    });
 
     await app.inject({
       method: "PATCH",

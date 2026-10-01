@@ -112,7 +112,10 @@
   --success: oklch(0.696 0.17 162.48);
   --success-foreground: oklch(0.141 0.005 285.823);
   --warning: oklch(0.828 0.189 84.429);
-  --warning-foreground: oklch(0.141 0.005 285.823);
+  /* Warning washes sit on the dark shell and cards, so their normal-size
+     labels need the light semantic foreground, not the foreground intended
+     for a solid light warning fill. */
+  --warning-foreground: oklch(0.985 0 0);
 
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);

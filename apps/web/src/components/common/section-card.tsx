@@ -20,6 +20,7 @@ export function SectionCard({
   footerClassName,
   className,
   bodyClassName,
+  variant = "surface",
   children,
 }: {
   /**
@@ -46,6 +47,8 @@ export function SectionCard({
   className?: string;
   /** className for the body wrapper specifically, separate from the section's own. */
   bodyClassName?: string;
+  /** Open page section; hierarchy comes from spacing rather than a container. */
+  variant?: "surface" | "plain";
   children: React.ReactNode;
 }) {
   const titleId = useId();
@@ -55,16 +58,27 @@ export function SectionCard({
     <Section
       padding="none"
       aria-labelledby={title !== undefined ? titleId : undefined}
-      className={cn("overflow-hidden", className)}
+      className={cn(
+        variant === "surface" ? "overflow-hidden" : "overflow-visible",
+        variant === "plain" && "rounded-none border-0 bg-transparent text-foreground",
+        className,
+      )}
     >
       {(hasHeaderText || Icon || leading || state || action) && (
         <div
           className={cn(
             "flex flex-col gap-(--space-within-section) p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5",
+            variant === "plain" &&
+              "border-b border-border/60 p-0 pb-3 sm:items-center sm:p-0 sm:pb-3",
             headerClassName,
           )}
         >
-          <div className="flex min-w-0 items-start gap-3">
+          <div
+            className={cn(
+              "flex min-w-0 items-start gap-3",
+              variant === "plain" && "min-h-(--control-height-compact) items-center",
+            )}
+          >
             {leading ?? (Icon && <Icon className="text-muted-foreground mt-0.5 size-5 shrink-0" />)}
             <div className="min-w-0 space-y-1">
               {title !== undefined && (
@@ -85,12 +99,25 @@ export function SectionCard({
           {action && <ActionGroup className="sm:shrink-0">{action}</ActionGroup>}
         </div>
       )}
-      <div className="border-border border-t" />
-      <div className={cn("space-y-(--space-within-section) p-4 sm:p-5", bodyClassName)}>
+      {variant === "surface" && <div className="border-border border-t" />}
+      <div
+        className={cn(
+          "space-y-(--space-within-section)",
+          variant === "plain" && "pt-4",
+          variant === "surface" && "p-4 sm:p-5",
+          bodyClassName,
+        )}
+      >
         {children}
       </div>
       {footer && (
-        <ActionGroup className={cn("justify-end px-4 pb-4 sm:px-5 sm:pb-5", footerClassName)}>
+        <ActionGroup
+          className={cn(
+            "justify-end",
+            variant === "surface" ? "px-4 pb-4 sm:px-5 sm:pb-5" : "pt-4",
+            footerClassName,
+          )}
+        >
           {footer}
         </ActionGroup>
       )}

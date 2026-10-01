@@ -69,6 +69,11 @@ Style only with semantic tokens (`bg-background`, `text-muted-foreground`,
 `apps/web/src/lib/tones.ts`) — badges, meters, and charts all take a `tone`,
 so a colour means the same thing everywhere.
 
+Status washes are translucent, not solid fills. Text on a warning wash uses
+the foreground appropriate to the rendered surface: dark text in light mode
+and light text in dark mode. Verify normal text against its composited surface
+at WCAG AA (4.5:1 or higher), including nested controls such as banner buttons.
+
 Each row: value → intent → boundary.
 
 | Token group | Value | Intent & boundary |
@@ -150,6 +155,18 @@ title/description/action out of `CardHeader` also re-invents the spacing and
 re-introduces the description-restates-the-title pattern.
 Public marketing cards may use more whitespace but keep the same radius and
 colour tokens.
+
+Use `SectionCard variant="plain"` for open page sections: it retains the
+heading, actions and semantic section without a border, background, inset
+padding. A quiet heading hairline anchors the section; lists may use
+hairlines between rows where separate states need clear boundaries.
+The title row reserves the compact-control height, so adjacent plain sections
+align their hairlines even when only one has an action. A multi-record project
+list uses one surface per project to clarify ownership, not nested row cards.
+Choose layout and spacing first; a card needs a
+bounded unit to justify it. Never put a bordered card around every member or
+challenge inside another section. Names, preferences and mandatory flags are
+ordinary text, not status pills; reserve badges for meaningful changing state.
 
 ### Authenticated navigation
 
