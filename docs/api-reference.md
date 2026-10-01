@@ -140,7 +140,12 @@ records remain a deliberate deletion boundary. The confirmation-window expirer (
 is a background tick, not a request path.
 
 The form catalogue also supports curated university-degree IDs and public city
-suggestions (Photon/OpenStreetMap); city labels are stored as text while degree
+suggestions (Photon/OpenStreetMap). The city picker uses `en` for English and
+`default` for Spanish/Galician, since the public server rejects `es`/`gl`.
+It exposes loading, empty and failure states, limits searches to eight seconds,
+cancels stale requests, supports
+keyboard selection, and allows manual city/province/country entry when suggestions
+are unavailable or incomplete (H12). City labels are stored as text while degree
 answers retain the catalogue ID. The degree catalogue follows the university
 catalogue's authenticated-proposal and staff-curation boundary. Staff can merge
 duplicate degree rows transactionally: every answer using the source catalogue
