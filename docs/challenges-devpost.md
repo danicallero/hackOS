@@ -254,6 +254,10 @@ Planning (`plan.ts::buildImportPlan`) is **pure and read-only** so `preview` and
 4. Compute the repo action (`create`/`update`) using the *same* key as the
    `repos_devpost_url_key` partial unique index, so planning and the
    `ON CONFLICT (devpost_url)` upsert always agree on the same row.
+   Before confirmation opens its transaction, Devpost-only redirects resolve
+   event `/submissions/` URLs to public `/software/` identities for planning-group
+   linkage. The original export URL remains the import deduplication key.
+   Successful identities are cached; failures leave matching best-effort.
 5. For each distinct prize name, look up challenges whose `devpost_tags`
    contains it (`devpost_tags ?| $1::text[]`) and attach the mapped challenge to
    the plan, alongside the internal challenge choices. The operator may choose a

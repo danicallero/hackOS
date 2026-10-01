@@ -27,8 +27,9 @@ open planning behavior for events that have not configured a schedule; a
 custom bound can close or reopen that editing window.
 
 The stored `presentation_timing_preference` (`no_preference | early | middle |
-late`) is consumed as a soft ordering input when a queue group is first
-generated: linked repos preferring early, middle, or late are placed near that
+late`) is inherited by the project on linkage and consumed as a soft ordering
+input when a queue group is first generated: projects preferring early, middle,
+or late are placed near that
 part of the initial logical queue. It never overrides an existing queue's
 operational order, manual moves, or queue safety rules; a shared queue still
 shows and calls one logical entry per repo. The nullable `devpost_url` and
@@ -84,13 +85,19 @@ import can still reconcile the planned group after that point.
 
 A valid Devpost project URL is the authoritative signal. On import, an
 otherwise-unlinked group links only when its URL and the imported
-`repos.devpost_url` agree after case and trailing-slash normalization; a valid
+resolved Devpost identity agree. Public `/software/` and exported event
+`/submissions/` URLs are supported, including query strings and trailing slashes.
+Event URLs are resolved through bounded, Devpost-only redirects before opening
+the database transaction; successful identities are cached on both records.
+Unavailable or unsafe redirects never block an import or trigger a guessed link. A valid
 stored URL never falls back to inference.
 
 When an exact URL link is established, active work-group members who are not
-already project members are copied to the imported project as pending
-invitations and notified. Acceptance remains explicit; linking never silently
-adds them as active project members.
+already project members are copied as active members: they already accepted
+membership in the planning group. Imported primary/verified-secondary email
+matches are preserved without duplicates; pending planning invitations are not
+copied. Imported name and description win when linking. Saving a group URL also
+reconciles existing imports, including records imported before identity caching.
 
 Without a valid URL, the importer may link only when one and only one planned
 group has the complete resolved Devpost roster **and** the exact same non-empty
@@ -98,7 +105,8 @@ set of intended challenges as the imported project's mapped prize challenges.
 Both sides must have exactly one candidate. Missing identities, unmatched
 participants, a challenge mismatch, or any candidate tie leave every group
 unlinked for manual review. Names, titles, partial rosters, and fuzzy URL/slug
-matches are never link signals. These links and invitations are audited in the
-same import transaction. The project's presentation timing is read from the
-linked group and remains editable until the first queue entries for that
+matches are never link signals. Links, roster additions and preference inheritance
+are audited in the same transaction. Projects store their own presentation
+preference, defaulting to `no_preference` and inheriting the group's on linking.
+It remains editable until the first queue entries for that
 project are generated; then it is locked.

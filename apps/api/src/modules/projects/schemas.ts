@@ -95,6 +95,7 @@ export const updateRepoBodySchema = z
     description: z.string().max(10000).optional(),
     githubUrl: repoUrl.nullable().optional(),
     demoUrl: repoUrl.nullable().optional(),
+    presentationTimingPreference: z.enum(["no_preference", "early", "middle", "late"]).optional(),
   })
   .refine((body) => Object.values(body).some((value) => value !== undefined), {
     message: "At least one field is required",
