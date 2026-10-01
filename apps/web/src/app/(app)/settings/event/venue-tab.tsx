@@ -189,6 +189,8 @@ export function VenueTab({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <SectionCard
+          variant="plain"
+          footerClassName="justify-start"
           icon={icon}
           title={t("venueSectionTitle")}
           state={<SaveStatus state={saveState} />}
@@ -253,6 +255,8 @@ export function VenueTab({
           <VenuePreview name={(values.venueName ?? "").trim()} lat={previewLat} lon={previewLon} />
         </SectionCard>
         <SectionCard
+          variant="plain"
+          footerClassName="justify-start"
           className="mt-6"
           icon={WifiIcon}
           title={t("venueWifiSectionTitle")}

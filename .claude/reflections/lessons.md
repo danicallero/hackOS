@@ -8,7 +8,7 @@ format, classification flow, and promotion path.
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-09-30
+Date: 2026-10-01
 
 ### Trigger
 Composing detail pages, lists, or participant workflows.
@@ -25,7 +25,9 @@ Optimize the primary layout for the common case without removing exceptions.
 ### Action
 Use open sections for related page content, with quiet hairlines where spacing
 alone leaves row ownership ambiguous. Removing cards does not mean removing
-all boundaries. Keep static metadata as text and secondary multi-record
+all boundaries. Repeated inbox/list rows still need clear ownership: use quiet
+hairlines, restrained neutral washes and distinct subject/meta/body hierarchy.
+Validate with several adjacent records, not just one isolated item. Keep static metadata as text and secondary multi-record
 navigation available without making it the default.
 
 ### Validation

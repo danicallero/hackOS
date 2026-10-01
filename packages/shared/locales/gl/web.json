@@ -3258,5 +3258,9 @@
   "workGroupTimingLate": "Tarde",
   "deleteWorkGroupCta": "Eliminar proxecto",
   "deleteWorkGroupTitle": "Eliminar este proxecto",
-  "deleteWorkGroupDesc": "Elimina permanentemente o proxecto, as súas invitacións e os retos seleccionados."
+  "deleteWorkGroupDesc": "Elimina permanentemente o proxecto, as súas invitacións e os retos seleccionados.",
+  "notificationsOff": "Desactivadas",
+  "notificationChannelsFor": "Canles de notificación para {label}",
+  "activityLabelShort": "Actividade",
+  "activityKindLabel": "Tipo de actividade"
 }

@@ -29,18 +29,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { EntityCombobox } from "@/components/common/entity-combobox";
+import { IconButton } from "@/components/common/icon-button";
+import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { notifyNotificationsRead } from "@/hooks/use-unread-count";
@@ -245,7 +246,7 @@ export function MessagesTab() {
           description={t("messagesWillShowUp")}
         />
       ) : (
-        <ul className="divide-border divide-y rounded-lg border">
+        <ul className="border-y border-border/60 divide-y divide-border/60">
           {items.map((item) => {
             const unread = !item.read_at;
             const subject = payloadField(item.payload, "subject") ?? item.category;
@@ -253,32 +254,34 @@ export function MessagesTab() {
             const details = payloadDetails(item.payload);
             const isOpen = expanded.has(item.id);
             return (
-              <li key={item.id} className={unread ? "bg-primary/5" : ""}>
+              <li key={item.id} className="even:bg-muted/20">
                 <button
                   type="button"
                   onClick={() => toggleExpanded(item)}
                   aria-expanded={isOpen}
-                  className="hover:bg-muted/50 flex w-full items-start gap-3 p-4 text-left"
+                  aria-controls={`message-${item.id}`}
+                  className="flex w-full items-start gap-3 px-4 py-5 text-left transition-colors hover:bg-muted/30 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px]"
                 >
                   <span
                     className={`mt-1.5 size-2 shrink-0 rounded-full ${unread ? "bg-primary" : "bg-transparent"}`}
                     aria-hidden
                   />
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className={`text-sm ${unread ? "font-semibold" : "font-medium"}`}>
-                        {subject}
-                      </p>
-                      <span className="text-muted-foreground text-xs">
-                        {formatScheduledDateTime(item.created_at)}
-                      </span>
-                    </div>
-                    {body && (
-                      <p
-                        className={`text-muted-foreground text-sm ${isOpen ? "whitespace-pre-line" : "line-clamp-2"}`}
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                      <h2
+                        className={`min-w-0 wrap-break-word text-sm ${unread ? "font-semibold" : "font-medium"}`}
                       >
-                        {body}
-                      </p>
+                        {subject}
+                      </h2>
+                      <time
+                        dateTime={item.created_at}
+                        className="shrink-0 text-muted-foreground text-xs tabular-nums"
+                      >
+                        {formatScheduledDateTime(item.created_at)}
+                      </time>
+                    </div>
+                    {body && !isOpen && (
+                      <p className="line-clamp-2 text-muted-foreground text-sm">{body}</p>
                     )}
                   </div>
                   <ChevronDownIcon
@@ -288,9 +291,17 @@ export function MessagesTab() {
                 </button>
 
                 {isOpen && (
-                  <div className="border-border space-y-3 border-t px-4 py-3 pl-10">
-                    {details.length > 0 ? (
-                      <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-sm">
+                  <div
+                    id={`message-${item.id}`}
+                    className="mx-4 border-t border-border/50 pb-4 pt-4 ps-5 space-y-5"
+                  >
+                    {body && (
+                      <p className="whitespace-pre-line wrap-break-word text-sm leading-relaxed">
+                        {body}
+                      </p>
+                    )}
+                    {details.length > 0 && (
+                      <dl className="grid max-w-xl gap-x-6 gap-y-2 border-t border-border/40 pt-4 text-xs sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
                         {details.map((d) => (
                           <div key={d.key} className="contents">
                             <dt className="text-muted-foreground">{d.key}</dt>
@@ -298,22 +309,19 @@ export function MessagesTab() {
                           </div>
                         ))}
                       </dl>
-                    ) : (
-                      <p className="text-muted-foreground text-sm">{t("noAdditionalDetails")}</p>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
+                    <IconButton
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground hover:text-destructive"
                       onClick={() => {
                         setDeleteError(null);
                         setDeleting(item);
                       }}
-                      aria-label={t("deleteNotificationAria")}
+                      label={t("deleteNotificationAria")}
                     >
-                      <Trash2Icon className="size-4" />
-                      {t("deleteAction")}
-                    </Button>
+                      <Trash2Icon className="size-4" aria-hidden="true" />
+                    </IconButton>
                   </div>
                 )}
               </li>
@@ -378,8 +386,7 @@ export function PreferencesTab() {
   const [prefs, setPrefs] = useState<PreferencesResponse | null>(null);
   const [scheduleItems, setScheduleItems] = useState<PublicScheduleItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [addingActivity, setAddingActivity] = useState("");
-  const [addingKind, setAddingKind] = useState("");
+  const [reminderPickerOpen, setReminderPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [removalStates, setRemovalStates] = useState<
     Record<string, "queued" | "removing" | "failed">
@@ -445,7 +452,7 @@ export function PreferencesTab() {
       }));
       const next = await notificationsApi.setPreferences(items);
       setPrefs(next);
-      setAddingActivity("");
+      setReminderPickerOpen(false);
       toast.success(t("reminderAdded"), { compactTitle: t("addReminder") });
     } catch (err) {
       toast.error(
@@ -467,7 +474,7 @@ export function PreferencesTab() {
       }));
       const next = await notificationsApi.setPreferences(items);
       setPrefs(next);
-      setAddingKind("");
+      setReminderPickerOpen(false);
       toast.success(t("reminderAdded"), { compactTitle: t("addReminder") });
     } catch (err) {
       toast.error(
@@ -583,77 +590,138 @@ export function PreferencesTab() {
   ];
 
   return (
-    <div className="space-y-6">
-      <SectionCard
-        icon={SlidersHorizontalIcon}
-        title={t("notificationChannels")}
-        bodyClassName="overflow-x-auto p-0"
-      >
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-border border-b">
-              <th className="px-4 py-3 text-left font-medium">{t("category")}</th>
-              {prefs.channels.map((channel) => (
-                <th key={channel} className="px-4 py-3 text-center font-medium">
-                  {channelLabels[channel]}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.category} className="border-border border-b last:border-b-0">
-                <td className="px-4 py-3">
-                  {row.label}
+    <div className="space-y-12">
+      <SectionCard variant="plain" title={t("notificationChannels")}>
+        <div className="divide-y divide-border/60">
+          {rows.map((row) => {
+            const enabledChannels = prefs.channels.filter(
+              (channel) => row.mandatory || (overrideFor(row.category, channel)?.enabled ?? true),
+            );
+            return (
+              <div
+                key={row.category}
+                className="flex flex-wrap items-center justify-between gap-3 py-4"
+              >
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm font-medium">{row.label}</p>
                   {row.mandatory && (
-                    <span className="text-muted-foreground ml-2 inline-flex items-center gap-1 text-xs">
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                       <LockIcon className="size-3" aria-hidden="true" />
                       {t("alwaysOn")}
                     </span>
                   )}
-                </td>
-                {prefs.channels.map((channel) => {
-                  if (row.mandatory) {
-                    return (
-                      <td key={channel} className="px-4 py-3 text-center">
-                        <span
-                          className="text-muted-foreground inline-flex items-center justify-center"
-                          title={t("mandatoryChannelTitle")}
-                          role="img"
-                          aria-label={t("mandatoryChannelAria", {
-                            channel: channelLabels[channel],
-                            label: row.label,
-                          })}
-                        >
-                          <LockIcon className="size-4" aria-hidden="true" />
-                        </span>
-                      </td>
-                    );
-                  }
-                  const enabled = overrideFor(row.category, channel)?.enabled ?? true;
-                  return (
-                    <td key={channel} className="px-4 py-3 text-center">
-                      <Checkbox
-                        checked={enabled}
+                </div>
+                {row.mandatory ? (
+                  <span className="text-sm text-muted-foreground">
+                    {enabledChannels.map((channel) => channelLabels[channel]).join(", ")}
+                  </span>
+                ) : (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
                         disabled={busy || pendingRemovalCount > 0}
-                        onCheckedChange={(checked) =>
-                          toggle(row.category, channel, checked === true)
-                        }
-                        aria-label={t("channelForRow", {
-                          channel: channelLabels[channel],
-                          label: row.label,
-                        })}
-                      />
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                        className="max-w-full justify-between text-muted-foreground"
+                        aria-label={t("notificationChannelsFor", { label: row.label })}
+                      >
+                        <span className="min-w-0 whitespace-normal text-end">
+                          {enabledChannels.length > 0
+                            ? enabledChannels.map((channel) => channelLabels[channel]).join(", ")
+                            : t("notificationsOff")}
+                        </span>
+                        <ChevronDownIcon className="size-4 shrink-0" aria-hidden="true" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {prefs.channels.map((channel) => (
+                        <DropdownMenuCheckboxItem
+                          key={channel}
+                          checked={overrideFor(row.category, channel)?.enabled ?? true}
+                          disabled={busy || pendingRemovalCount > 0}
+                          onSelect={(event) => event.preventDefault()}
+                          onCheckedChange={(enabled) => toggle(row.category, channel, enabled)}
+                        >
+                          {channelLabels[channel]}
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </SectionCard>
 
-      <SectionCard icon={CalendarClockIcon} title={t("activityReminders")}>
+      <SectionCard
+        variant="plain"
+        icon={CalendarClockIcon}
+        title={t("activityReminders")}
+        action={
+          <Modal
+            trigger={
+              <Button variant="outline" disabled={busy || pendingRemovalCount > 0}>
+                <PlusIcon className="size-4" aria-hidden="true" />
+                {t("addReminder")}
+              </Button>
+            }
+            open={reminderPickerOpen}
+            onOpenChange={(open) => {
+              if (!busy) setReminderPickerOpen(open);
+            }}
+            title={t("addReminder")}
+            icon={CalendarClockIcon}
+          >
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Label id="reminder-activity-label">{t("activityLabelShort")}</Label>
+                {addableActivities.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t("noUpcomingActivities")}</p>
+                ) : (
+                  <EntityCombobox
+                    options={addableActivities}
+                    value=""
+                    getId={(item) => item.id}
+                    getLabel={(item) => `${item.title} — ${formatScheduledDateTime(item.startsAt)}`}
+                    onChange={(id) => void addReminder(id)}
+                    disabled={busy || pendingRemovalCount > 0}
+                    inDialog
+                    aria-labelledby="reminder-activity-label"
+                    placeholder={t("chooseActivity")}
+                  />
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label id="reminder-kind-label">{t("activityKindLabel")}</Label>
+                {addableKinds.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t("noUpcomingActivityKinds")}</p>
+                ) : (
+                  <EntityCombobox
+                    options={addableKinds}
+                    value=""
+                    getId={(kind) => kind}
+                    getLabel={(kind) => kindLabel(kind, t)}
+                    onChange={(kind) => void addKindReminder(kind)}
+                    disabled={busy || pendingRemovalCount > 0}
+                    inDialog
+                    aria-labelledby="reminder-kind-label"
+                    placeholder={t("chooseActivityKind")}
+                  />
+                )}
+              </div>
+              {busy && (
+                <div
+                  role="status"
+                  className="flex items-center gap-2 text-sm text-muted-foreground"
+                >
+                  <Spinner className="size-4" />
+                  {t("loading")}
+                </div>
+              )}
+            </div>
+          </Modal>
+        }
+      >
         <div className="space-y-4">
           {pendingRemovalCount > 0 && (
             <div
@@ -672,14 +740,14 @@ export function PreferencesTab() {
             {enabledReminderCategories.length === 0 ? (
               <p className="text-muted-foreground text-sm">{t("noActiveReminders")}</p>
             ) : (
-              <ul className="divide-border divide-y rounded-lg border">
+              <ul className="divide-border divide-y">
                 {enabledReminderCategories.map((category) => {
                   const label = categoryLabel(category, scheduleItems, t);
                   const removalState = removalStates[category];
                   return (
                     <li
                       key={category}
-                      className="flex items-start justify-between gap-3 px-4 py-2 text-sm"
+                      className="flex flex-wrap items-center justify-between gap-3 py-4 text-sm"
                     >
                       <div className="min-w-0 flex-1">
                         <span className="block wrap-break-word text-pretty">{label}</span>
@@ -712,62 +780,6 @@ export function PreferencesTab() {
                   );
                 })}
               </ul>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-end gap-2">
-            {addableActivities.length === 0 ? (
-              <p className="text-muted-foreground text-sm">{t("noUpcomingActivities")}</p>
-            ) : (
-              <>
-                <Select value={addingActivity} onValueChange={setAddingActivity}>
-                  <SelectTrigger className="w-64">
-                    <SelectValue placeholder={t("chooseActivity")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {addableActivities.map((item) => (
-                      <SelectItem key={item.id} value={String(item.id)}>
-                        {item.title} — {formatScheduledDateTime(item.startsAt)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  disabled={!addingActivity || busy || pendingRemovalCount > 0}
-                  onClick={() => addingActivity && addReminder(addingActivity)}
-                >
-                  <PlusIcon className="size-4" />
-                  {t("addReminder")}
-                </Button>
-              </>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-end gap-2">
-            {addableKinds.length === 0 ? (
-              <p className="text-muted-foreground text-sm">{t("noUpcomingActivityKinds")}</p>
-            ) : (
-              <>
-                <Select value={addingKind} onValueChange={setAddingKind}>
-                  <SelectTrigger className="w-64">
-                    <SelectValue placeholder={t("chooseActivityKind")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {addableKinds.map((kind) => (
-                      <SelectItem key={kind} value={kind}>
-                        {kindLabel(kind, t)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  disabled={!addingKind || busy || pendingRemovalCount > 0}
-                  onClick={() => addingKind && addKindReminder(addingKind)}
-                >
-                  <PlusIcon className="size-4" />
-                  {t("addReminder")}
-                </Button>
-              </>
             )}
           </div>
         </div>

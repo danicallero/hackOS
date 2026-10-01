@@ -89,7 +89,7 @@ export function EventConfigLoadState({ icon, title }: { icon: LucideIcon; title:
   if (status === "ready") return null;
 
   return (
-    <SectionCard icon={icon} title={title}>
+    <SectionCard variant="plain" footerClassName="justify-start" icon={icon} title={title}>
       {status === "error" ? (
         <ContextualError message={error ?? t("couldNotLoadEventSettings")} onRetry={retry} />
       ) : (
