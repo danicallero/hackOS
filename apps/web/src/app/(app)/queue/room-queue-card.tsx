@@ -79,7 +79,7 @@ export function RoomQueueCard({
         if (!cancelled) setResults(hits);
       } catch (err) {
         if (!cancelled) {
-          showErrorToast(err, t("teamSearchFailed"));
+          showErrorToast(err, t("teamSearchFailed"), { compactTitle: t("toastFindTeam") });
         }
       } finally {
         if (!cancelled) setSearching(false);
@@ -92,15 +92,28 @@ export function RoomQueueCard({
   }, [challengeId, query, t]);
 
   const mutate = async (key: string, action: () => Promise<unknown>, success: string) => {
+    const compactTitle = t(
+      key.startsWith("notify-")
+        ? "toastNotifyEntry"
+        : key.startsWith("bring-")
+          ? "bringIn"
+          : key.startsWith("requeue-")
+            ? "toastRequeueTeam"
+            : key.startsWith("noshow-")
+              ? "toastMarkAbsent"
+              : key.startsWith("top-")
+                ? "toastPrioritizeTeam"
+                : "toastCallTeam",
+    );
     setBusy(key);
     try {
       await action();
-      toast.success(success);
+      toast.success(success, { compactTitle });
       setQuery("");
       setResults([]);
       onChanged();
     } catch (err) {
-      showErrorToast(err, t("queueActionFailed"));
+      showErrorToast(err, t("queueActionFailed"), { compactTitle });
     } finally {
       setBusy(null);
     }

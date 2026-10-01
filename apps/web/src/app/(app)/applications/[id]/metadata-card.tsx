@@ -181,10 +181,13 @@ export function MetadataCard({
       await onSaved();
       rhf.reset(values);
       setSaveState("saved");
-      toast.success(t("formUpdated"));
+      toast.success(t("formUpdated"), { compactTitle: t("toastSaveForm") });
     } catch (err) {
       setSaveState("error");
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveForm"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveForm"),
+        t("toastSaveForm"),
+      );
     }
   }
 

@@ -96,9 +96,12 @@ export default function SponsorFaqPage() {
       const r = await api.put<SponsorFaqResponse>("/api/sponsor-faq", { items: draft });
       setItems(r.items);
       setDraft(r.items);
-      toast.success(t("saved"));
+      toast.success(t("saved"), { compactTitle: t("toastSaveFaq") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveSponsorFaq"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveSponsorFaq"),
+        t("toastSaveFaq"),
+      );
     } finally {
       setSaving(false);
     }

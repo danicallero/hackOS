@@ -121,7 +121,7 @@ describe("UniversityPicker proposals", () => {
     expect(mockPost).toHaveBeenCalledWith("/api/public/universities/propose", {
       name: "New University",
     });
-    expect(toastError).toHaveBeenCalledWith("signIn");
+    expect(toastError).toHaveBeenCalledWith("signIn", "toastSaveUniversity");
   });
 
   it("replaces an incorrect selection with an existing university without proposing a row", async () => {

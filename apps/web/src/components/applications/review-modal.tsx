@@ -1100,7 +1100,7 @@ export function ReviewModal({
       await api.put(`/api/responses/${response.id}`, { responses: editValues });
       await onChanged();
       setEditing(false);
-      toast.success(t("answersUpdated"));
+      toast.success(t("answersUpdated"), { compactTitle: t("saveAnswers") });
     } catch (err) {
       const nextErrors = fieldErrorsFromApi(err, t, answerFields, lang);
       setEditErrors(nextErrors);
@@ -1112,16 +1112,15 @@ export function ReviewModal({
       }
       const summary = validationErrorSummary(nextErrors, answerFields, lang);
       const serverMessage = err instanceof ApiError ? err.message : "";
-      showErrorToast(
-        err,
-        t("couldNotSaveAnswers"),
-        summary || serverMessage
+      showErrorToast(err, t("couldNotSaveAnswers"), {
+        ...(summary || serverMessage
           ? {
               description: [serverMessage, summary].filter(Boolean).join("\n"),
               ...(summary ? { duration: 12_000, autopilot: { expand: 0, collapse: 0 } } : {}),
             }
-          : undefined,
-      );
+          : undefined),
+        compactTitle: t("saveAnswers"),
+      });
     } finally {
       setSavingEdit(false);
     }
@@ -1135,9 +1134,9 @@ export function ReviewModal({
       if (options.nextStatus) updateModalStatus(options.nextStatus);
       if (options.refresh !== false) await onChanged();
       if (options.notify) options.notify();
-      else toast.success(label);
+      else toast.success(label, { compactTitle: t("toastDecisions") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("actionFailed"));
+      toast.error(err instanceof ApiError ? err.message : t("actionFailed"), t("toastDecisions"));
     } finally {
       setBusy(false);
     }
@@ -1151,9 +1150,9 @@ export function ReviewModal({
         staff_notes: staffNotes.trim() || null,
       });
       await onChanged();
-      toast.success(t("staffNotesSaved"));
+      toast.success(t("staffNotesSaved"), { compactTitle: t("saveNotes") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveNotes"));
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveNotes"), t("saveNotes"));
     } finally {
       setSavingNotes(false);
     }
@@ -1238,7 +1237,7 @@ export function ReviewModal({
       popup.focus();
       popup.addEventListener("unload", () => setInlineReviewHidden(false));
       if (options.hideInline) setInlineReviewHidden(true);
-    } else toast.error(t("reviewWindowBlocked"));
+    } else toast.error(t("reviewWindowBlocked"), t("toastOpenReview"));
   }
 
   function handleAnswerLinkClick() {
@@ -1249,6 +1248,7 @@ export function ReviewModal({
 
   function showApplicantAcceptedToast() {
     toast.action(t("applicantAccepted"), {
+      compactTitle: t("toastAcceptApplicant"),
       duration: 8_000,
       action: {
         label: t("undo"),
@@ -1263,9 +1263,12 @@ export function ReviewModal({
     try {
       await api.post(`/api/responses/${response.id}/revert-decision`, { decision: "review" });
       if (mountedRef.current) updateModalStatus("review");
-      toast.success(t("acceptanceUndone"));
+      toast.success(t("acceptanceUndone"), { compactTitle: t("toastUndoAcceptance") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("actionFailed"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("actionFailed"),
+        t("toastUndoAcceptance"),
+      );
     } finally {
       if (mountedRef.current) setBusy(false);
     }

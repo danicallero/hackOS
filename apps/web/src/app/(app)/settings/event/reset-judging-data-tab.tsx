@@ -72,10 +72,13 @@ export function ResetJudgingDataTab({ icon: Icon }: { icon: LucideIcon }) {
       setPending(false);
       setStage(0);
       setResetComplete(true);
-      toast.success(t("judgingDataReset"));
+      toast.success(t("judgingDataReset"), { compactTitle: t("toastResetJudging") });
     } catch (err) {
       setPending(false);
-      toast.error(err instanceof ApiError ? err.message : t("couldNotResetJudgingData"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotResetJudgingData"),
+        t("toastResetJudging"),
+      );
     }
   }
 

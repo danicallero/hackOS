@@ -105,13 +105,17 @@ export default function MyQueuePage() {
           const room = p.roomName
             ? formatRoom({ id: p.roomId, name: p.roomName, location: p.roomLocation })
             : t("yourRoom");
-          toast.success(t("queueGoToDoor", { room }), { duration: 7_000 });
+          toast.success(t("queueGoToDoor", { room }), {
+            compactTitle: t("toastTeamCalled"),
+            duration: 7_000,
+          });
         }
       } else if (env.type === EVENTS.USER_QUEUE_PRECALL) {
         const p = env.data as PrecallPayload;
         setPrecalled((prev) => new Set(prev).add(p.entryId));
         const eta = formatEta(p.etaMinutes, t);
         toast.info(t("getReady"), {
+          compactTitle: t("toastGetReady"),
           description: eta ?? undefined,
           duration: 5_000,
         });

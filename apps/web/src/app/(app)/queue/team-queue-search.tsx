@@ -162,7 +162,7 @@ export function TeamQueueSearch({
           },
           crypto.randomUUID(),
         );
-        toast.success(t("teamAddedWaiting"));
+        toast.success(t("teamAddedWaiting"), { compactTitle: t("toastCallTeam") });
       } else if (action === "move-top") {
         await entryAction(
           entry.entry_id,
@@ -170,7 +170,7 @@ export function TeamQueueSearch({
           { reason: "Queue operations: moved team to top from team search" },
           crypto.randomUUID(),
         );
-        toast.success(t("teamMovedTop"));
+        toast.success(t("teamMovedTop"), { compactTitle: t("toastPrioritizeTeam") });
       } else if (action === "move-end") {
         if (entry.status === "waiting") {
           await moveQueueEntryToPosition(
@@ -190,7 +190,7 @@ export function TeamQueueSearch({
             crypto.randomUUID(),
           );
         }
-        toast.success(t("teamRequeued"));
+        toast.success(t("teamRequeued"), { compactTitle: t("toastRequeueTeam") });
       } else {
         await entryAction(
           entry.entry_id,
@@ -198,7 +198,7 @@ export function TeamQueueSearch({
           { reason: "Queue operations: disqualified from team search" },
           crypto.randomUUID(),
         );
-        toast.success(t("queueTeamDisqualified"));
+        toast.success(t("queueTeamDisqualified"), { compactTitle: t("toastDisqualifyTeam") });
       }
       await loadMemberships(entry.repo_id);
       onChanged();
@@ -206,6 +206,17 @@ export function TeamQueueSearch({
       showErrorToast(
         err,
         action === "disqualify" ? t("queueTeamDisqualifyFailed") : t("queueTeamMoveFailed"),
+        {
+          compactTitle: t(
+            action === "disqualify"
+              ? "toastDisqualifyTeam"
+              : action === "manual-call"
+                ? "toastCallTeam"
+                : action === "move-top"
+                  ? "toastPrioritizeTeam"
+                  : "toastRequeueTeam",
+          ),
+        },
       );
     } finally {
       setBusyEntryId(null);

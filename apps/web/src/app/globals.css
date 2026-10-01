@@ -367,6 +367,7 @@ html[data-locale-ready="false"] body {
   line-height: var(--line-height-body);
   font-weight: 500;
   white-space: pre-line;
+  overflow-wrap: anywhere;
   text-wrap: pretty;
 }
 
@@ -392,6 +393,12 @@ html[data-locale-ready="false"] body {
 
 [data-sileo-viewport][data-position] [data-sileo-header] {
   padding-inline-end: calc(0.5rem + var(--control-height-compact));
+}
+
+[data-sileo-viewport][data-position] [data-sileo-title] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 [data-sileo-viewport][data-position] {
@@ -467,6 +474,27 @@ html[data-locale-ready="false"] body {
 @media (max-width: 24rem) {
   [data-sileo-viewport][data-position] [data-sileo-svg] {
     width: 100%;
+  }
+
+  [data-hackos-toast-boundary] [data-sileo-viewport][data-position] [data-sileo-header] {
+    left: auto;
+    right: 0;
+    padding-inline-end: calc((0.5rem + var(--control-height-compact)) * 350px / (100vw - 2rem));
+    transform-origin: top right;
+    /* biome-ignore lint/complexity/noImportantStyles: match Sileo's fixed 350px SVG coordinates on narrow screens */
+    transform: scaleX(calc((100vw - 2rem) / 350px)) !important;
+  }
+
+  [data-hackos-toast-boundary] [data-sileo-viewport][data-position$="left"] [data-sileo-header] {
+    left: 0;
+    right: auto;
+    transform-origin: top left;
+  }
+
+  [data-hackos-toast-boundary] [data-sileo-viewport][data-position$="center"] [data-sileo-header] {
+    left: calc(50% - var(--_pw) / 2);
+    right: auto;
+    transform-origin: top center;
   }
 }
 

@@ -121,11 +121,15 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
             : eligibility.action === "delete"
               ? t("accountDeleted")
               : t("accountAnonymized");
-      if (result.status !== "completed") toast.info(message);
-      else toast.success(message);
+      if (result.status !== "completed")
+        toast.info(message, { compactTitle: t("toastCloseAccount") });
+      else toast.success(message, { compactTitle: t("toastCloseAccount") });
       router.push("/users");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveAccount"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveAccount"),
+        t("toastCloseAccount"),
+      );
       setPending(false);
     }
   }

@@ -234,8 +234,9 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
         });
         return r.users.filter((u) => !memberUserIds.has(u.id));
       } catch (err) {
-        if (err instanceof ApiError && err.status === 403) toast.error(t("needUsersReadSearch"));
-        else toast.error(t("searchFailed"));
+        if (err instanceof ApiError && err.status === 403)
+          toast.error(t("needUsersReadSearch"), t("toastFindUsers"));
+        else toast.error(t("searchFailed"), t("toastFindUsers"));
         return [];
       }
     },
@@ -248,9 +249,12 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
       await api.post(`/api/enterprises/${enterpriseId}/members`, { userId });
       setSelectedUserId("");
       await loadMembers();
-      toast.success(t("userAffiliated"));
+      toast.success(t("userAffiliated"), { compactTitle: t("addMemberLabel") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddUser"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotAddUser"),
+        t("addMemberLabel"),
+      );
     } finally {
       setBusy(false);
     }
@@ -261,9 +265,12 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
     try {
       await api.delete(`/api/enterprises/${enterpriseId}/members/${userId}`);
       await loadMembers();
-      toast.success(t("affiliationRemoved"));
+      toast.success(t("affiliationRemoved"), { compactTitle: t("toastRemoveMember") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveUser"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveUser"),
+        t("toastRemoveMember"),
+      );
     } finally {
       setBusy(false);
     }
@@ -343,7 +350,7 @@ export function LogoCard({
     if (!file) return;
 
     if (!LOGO_CONTENT_TYPES.includes(file.type as (typeof LOGO_CONTENT_TYPES)[number])) {
-      toast.error(t("unsupportedFileType"));
+      toast.error(t("unsupportedFileType"), t("uploadLogo"));
       return;
     }
 
@@ -355,9 +362,11 @@ export function LogoCard({
       fd.append("file", file);
       await apiUpload(`/api/enterprises/${enterprise.id}/logo?variant=${variant}`, fd);
       await onChanged();
-      toast.success(variant === "negative" ? t("darkLogoUpdated") : t("logoUpdated"));
+      toast.success(variant === "negative" ? t("darkLogoUpdated") : t("logoUpdated"), {
+        compactTitle: t("uploadLogo"),
+      });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("couldNotUploadLogo"));
+      toast.error(err instanceof Error ? err.message : t("couldNotUploadLogo"), t("uploadLogo"));
     } finally {
       setUploading(false);
     }
@@ -470,9 +479,12 @@ export function EditCard({
           : ownerPatch,
       );
       await onSaved();
-      toast.success(t("enterpriseUpdated"));
+      toast.success(t("enterpriseUpdated"), { compactTitle: t("toastSaveCompany") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEnterprise"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveEnterprise"),
+        t("toastSaveCompany"),
+      );
     }
   }
 

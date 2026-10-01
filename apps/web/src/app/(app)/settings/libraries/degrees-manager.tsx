@@ -64,11 +64,14 @@ export function DegreesManager() {
     try {
       if (editing) await api.patch(`/api/degrees/${editing.id}`, { name });
       else await api.post("/api/degrees", { name });
-      toast.success(t("degreeSaved"));
+      toast.success(t("degreeSaved"), { compactTitle: t("toastSaveDegree") });
       setEditing(undefined);
       await load();
     } catch (cause) {
-      toast.error(cause instanceof ApiError ? cause.message : t("couldNotSaveDegree"));
+      toast.error(
+        cause instanceof ApiError ? cause.message : t("couldNotSaveDegree"),
+        t("toastSaveDegree"),
+      );
     } finally {
       setSaving(false);
     }
@@ -78,11 +81,14 @@ export function DegreesManager() {
     setSaving(true);
     try {
       await api.delete(`/api/degrees/${deleting.id}`);
-      toast.success(t("degreeDeleted"));
+      toast.success(t("degreeDeleted"), { compactTitle: t("toastDeleteDegree") });
       setDeleting(null);
       await load();
     } catch (cause) {
-      toast.error(cause instanceof ApiError ? cause.message : t("couldNotDeleteDegree"));
+      toast.error(
+        cause instanceof ApiError ? cause.message : t("couldNotDeleteDegree"),
+        t("toastDeleteDegree"),
+      );
     } finally {
       setSaving(false);
     }

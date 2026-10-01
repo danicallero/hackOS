@@ -59,7 +59,7 @@ function CsvInput({
       setFileName(file.name);
       onChange(text, file.name);
     } catch {
-      toast.error(t("couldNotReadFile", { file: file.name }));
+      toast.error(t("couldNotReadFile", { file: file.name }), t("toastReadFile"));
     }
   }
 
@@ -213,12 +213,13 @@ export default function ImportProjectsPage() {
 
   const runPreview = useCallback(async () => {
     if (!projectsCsv.trim() || !participantsCsv.trim()) {
-      toast.warning(t("provideBothCsvExports"));
+      toast.warning(t("provideBothCsvExports"), { compactTitle: t("toastPreviewImport") });
       return;
     }
     setPreviewing(true);
     try {
       const p = await toast.promise(previewImport(projectsCsv, participantsCsv), {
+        compactTitle: t("toastPreviewImport"),
         loading: { title: t("previewImport") },
         success: { title: t("reviewImport") },
         error: { title: t("couldNotPreviewImport") },
@@ -240,6 +241,7 @@ export default function ImportProjectsPage() {
       const res = await toast.promise(
         confirmImport(projectsCsv, participantsCsv, idemKey.current),
         {
+          compactTitle: t("toastApplyImport"),
           loading: { title: t("confirmImport") },
           success: { title: t("importApplied") },
           error: { title: t("couldNotApplyImport") },

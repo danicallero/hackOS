@@ -40,13 +40,29 @@ layer: API reads remain the authoritative Postgres projection.
 Use `@/lib/toast` rather than importing Sileo directly. Toasts live in the
 top-right and are compact by default; a `description` or `action` expands only
 when the user hovers or focuses it, keeping feedback from covering the current
-workspace. One exception: a `toast.error`/`toast.warning` whose sole message is
-longer than ~80 chars (typically a server error detail) is automatically spilled
-into the expandable description behind a short generic title and auto-expands,
-so long error text is never clipped with no way to read the rest. Their surface
+workspace. Any title that exceeds the available header width (measured with the
+app font and current viewport) becomes a description beneath a short localized
+action/event title defined at the call site. It expands on arrival and stays open
+while temporary feedback is visible, with eight seconds to read it. Existing descriptions and actions
+are preserved, and explicit duration/autopilot options take precedence. This also
+applies to loading, custom-icon, and promise feedback. Descriptions wrap long
+words and links so the full explanation stays inside the surface. Their surface
 is intentionally inverted (light toast on dark UI, dark toast on light UI), with
-state colors tuned for that surface. The adapter also exposes Sileo's richer
-flows:
+state colors tuned for that surface.
+
+Define a concise localized heading for every toast (usually two or three words).
+Errors use `toast.error(message, t("addChallengeLabel"))`, or `{ title: … }`
+alongside extra options only for an explanation that needs a separate heading.
+The string shorthand defines the compact heading used if the error is long;
+brief errors remain a single line. Success/info/warning feedback likewise
+uses `{ compactTitle: … }`: short confirmations remain compact, while long text
+expands under that contextual heading. `toast.promise` accepts `compactTitle` at
+the operation level; failed promises retain the actual server error, expanding
+under that heading only when the message is long.
+`showErrorToast` accepts the same heading in its options. Avoid generic titles
+such as “Action failed” and long titles that combine the action with its reason.
+
+The adapter also exposes Sileo's richer flows:
 
 - `toast.promise(...)` for operations with loading, success and error states.
 - `toast.loading(...)` for a long-running operation that must remain visible.

@@ -136,7 +136,7 @@ export default function ProjectsPage() {
       setRepos([]);
       const message = err instanceof ApiError ? err.message : t("couldNotLoadProjects");
       setLoadError(message);
-      toast.error(message);
+      toast.error(message, t("projects"));
     } finally {
       setLoading(false);
     }

@@ -169,7 +169,7 @@ export function EditCard({
     const canEditGeneral = canAdmin || challenge.visibility !== "visible";
     const title = titleI18n.en.trim();
     if (!title) {
-      toast.error(t("englishTitleRequired"));
+      toast.error(t("englishTitleRequired"), t("toastSaveChallenge"));
       return;
     }
     const descriptionEn = descriptionI18n.en.trim();
@@ -208,10 +208,13 @@ export function EditCard({
           : {}),
       });
       await onSaved();
-      toast.success(t("challengeUpdated"));
+      toast.success(t("challengeUpdated"), { compactTitle: t("toastSaveChallenge") });
     } catch (err) {
       setSaveError(true);
-      toast.error(err instanceof Error ? err.message : t("checkBuilderFields"));
+      toast.error(
+        err instanceof Error ? err.message : t("checkBuilderFields"),
+        t("toastSaveChallenge"),
+      );
     }
   }
 
@@ -441,11 +444,14 @@ export function EditCard({
                       setDeleting(true);
                       try {
                         await api.delete(`/api/challenges/${challenge.id}`);
-                        toast.success(t("challengeDeleted"));
+                        toast.success(t("challengeDeleted"), {
+                          compactTitle: t("deleteChallenge"),
+                        });
                         router.push("/challenges");
                       } catch (err) {
                         toast.error(
                           err instanceof ApiError ? err.message : t("couldNotDeleteChallenge"),
+                          t("deleteChallenge"),
                         );
                       } finally {
                         setDeleting(false);
@@ -509,9 +515,13 @@ function BulkEnrollmentCard({ challengeId }: { challengeId: number }) {
         kind === "add"
           ? t("bulkAddResult", { added: result.added ?? 0, total: result.total })
           : t("bulkRemoveResult", { removed: result.removed ?? 0, total: result.total }),
+        { compactTitle: t("toastChallengeEntries") },
       );
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("bulkActionFailed"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("bulkActionFailed"),
+        t("toastChallengeEntries"),
+      );
     } finally {
       setBusy(null);
       setConfirming(null);
@@ -610,7 +620,10 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
       setWinners(list);
       setEligible(repos);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadWinners"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLoadWinners"),
+        t("winnersTabLabel"),
+      );
     } finally {
       setLoading(false);
     }
@@ -632,11 +645,14 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
     setBusy(true);
     try {
       await api.put(`/api/challenges/${challengeId}/winners/${rank}`, { repoId });
-      toast.success(t("winnerSaved"));
+      toast.success(t("winnerSaved"), { compactTitle: t("toastAddWinner") });
       setNewRepoId("");
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveWinner"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveWinner"),
+        t("toastAddWinner"),
+      );
     } finally {
       setBusy(false);
     }
@@ -646,10 +662,13 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
     setBusy(true);
     try {
       await api.delete(`/api/challenges/${challengeId}/winners/${rank}`);
-      toast.success(t("winnerRemoved"));
+      toast.success(t("winnerRemoved"), { compactTitle: t("toastRemoveWinner") });
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveWinner"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveWinner"),
+        t("toastRemoveWinner"),
+      );
     } finally {
       setBusy(false);
     }

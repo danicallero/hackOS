@@ -60,7 +60,10 @@ export default function MyProjectPage() {
       setCanCreate(projectsRes.canCreate);
       setInvites(invitesRes.invites);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadProject"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLoadProject"),
+        t("projectLabel"),
+      );
     } finally {
       setLoading(false);
     }
@@ -121,10 +124,10 @@ function PendingInvitesCard({
     try {
       if (action === "accept") {
         await acceptProjectInvite(repoId, crypto.randomUUID());
-        toast.success(t("inviteAccepted"));
+        toast.success(t("inviteAccepted"), { compactTitle: t("toastAcceptInvite") });
       } else {
         await declineProjectInvite(repoId, crypto.randomUUID());
-        toast.success(t("inviteDeclined"));
+        toast.success(t("inviteDeclined"), { compactTitle: t("toastDeclineInvite") });
       }
       await onChanged();
     } catch (err) {
@@ -132,6 +135,7 @@ function PendingInvitesCard({
         err instanceof ApiError
           ? err.message
           : t(action === "accept" ? "couldNotAcceptInvite" : "couldNotDeclineInvite"),
+        t("toastReplyInvite"),
       );
     } finally {
       setBusy(null);
@@ -186,12 +190,15 @@ function InviteMemberDialog({ repoId, onInvited }: { repoId: number; onInvited: 
     setPending(true);
     try {
       await inviteProjectMember(repoId, email.trim(), crypto.randomUUID());
-      toast.success(t("inviteSentMsg"));
+      toast.success(t("inviteSentMsg"), { compactTitle: t("toastSendInvite") });
       setOpen(false);
       setEmail("");
       onInvited();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSendInvite"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSendInvite"),
+        t("toastSendInvite"),
+      );
     } finally {
       setPending(false);
     }
@@ -243,10 +250,13 @@ function MyProjectCard({ repo, onChanged }: { repo: ProjectRepo; onChanged: () =
     setBusy("leave");
     try {
       await leaveMyProject(repo.id, crypto.randomUUID());
-      toast.success(t("leftProjectMsg"));
+      toast.success(t("leftProjectMsg"), { compactTitle: t("leaveProjectCta") });
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLeaveProject"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLeaveProject"),
+        t("leaveProjectCta"),
+      );
     } finally {
       setBusy(null);
     }
@@ -256,10 +266,13 @@ function MyProjectCard({ repo, onChanged }: { repo: ProjectRepo; onChanged: () =
     setBusy("delete");
     try {
       await deleteMyProject(repo.id, crypto.randomUUID());
-      toast.success(t("projectDeletedMsg"));
+      toast.success(t("projectDeletedMsg"), { compactTitle: t("deleteProjectCta") });
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteProject"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotDeleteProject"),
+        t("deleteProjectCta"),
+      );
     } finally {
       setBusy(null);
     }

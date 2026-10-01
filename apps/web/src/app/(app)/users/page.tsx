@@ -388,7 +388,7 @@ export default function UsersPage() {
           setTotal(0);
           const message = err instanceof ApiError ? err.message : t("couldNotLoadUsers");
           setLoadError(message);
-          toast.error(message);
+          toast.error(message, t("columnPeople"));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);

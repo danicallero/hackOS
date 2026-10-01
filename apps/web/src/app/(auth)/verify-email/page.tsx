@@ -111,7 +111,7 @@ function VerifyEmailInner() {
           ? { callbackURL: `/verify-email?verified=1&next=${encodeURIComponent(next)}` }
           : {}),
       });
-      toast.success(t("verificationEmailSent"));
+      toast.success(t("verificationEmailSent"), { compactTitle: t("toastVerifyEmail") });
       setCooldown(60); // H3: 60s between attempts
     } catch (err) {
       if (err instanceof ApiError) {

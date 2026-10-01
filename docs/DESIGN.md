@@ -476,6 +476,12 @@ Writing rules:
 2. Buttons use a verb + concrete object where ambiguity exists.
 3. Descriptions explain only risk, consequence, policy, or an unfamiliar
    state.
+   Toast headings name the action/event in two or three words (for example,
+   “Añadir reto”). Use a single line for simple actions, confirmations and brief
+   errors. Reserve title + expanded body for long messages or specific failures
+   needing an explanation, and define a contextual heading for long
+   feedback in all three languages. Never use a generic failure as a substitute
+   for reviewing the operation's copy.
 4. Placeholders contain examples, not instructions.
 5. Avoid "below", "navigate", "manage", "seamlessly", "get started", and
    enumerations of visible content.
