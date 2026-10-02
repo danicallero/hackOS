@@ -198,6 +198,7 @@ export function QuestionsCard({
 }) {
   const { t, language } = useLocale();
   const [fields, setFields] = useState<EditableField[]>(() => withIds(form.template));
+  const originalFieldsRef = useRef(new Map<string, { key: string; kind: string }>());
   const [sections, setSections] = useState<EditableSection[]>(() => withIds(form.sections));
   // Only the question you're editing expands into the full editor; every
   // other question just shows its live preview.
@@ -224,7 +225,11 @@ export function QuestionsCard({
   useEffect(() => {
     if (saveState !== "saved") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- resyncing local editable state to the just-saved server snapshot
-    setFields(withIds(form.template));
+    const seededFields = withIds(form.template);
+    originalFieldsRef.current = new Map(
+      seededFields.map((field) => [field._id, { key: field.key, kind: field.kind }]),
+    );
+    setFields(seededFields);
     setSections(withIds(form.sections));
   }, [form.template, form.sections, saveState]);
 
@@ -504,6 +509,12 @@ export function QuestionsCard({
       // keys, option kinds, every field.section_key resolves to a section).
       await api.patch<ApplicationForm>(`/api/applications/${form.id}`, {
         template: fields.map(serializeApplicationField),
+        field_renames: fields.flatMap((field) => {
+          const previous = originalFieldsRef.current.get(field._id);
+          return previous && previous.key !== field.key && previous.kind === field.kind
+            ? [{ from: previous.key, to: field.key }]
+            : [];
+        }),
         sections: sections.map((s) => ({
           key: s.key.trim(),
           title: s.title,

@@ -127,7 +127,12 @@ replaces newer local answers), staff review + scoring, batch
 and per-response accept/reject decisions, the three confirm/decline paths
 (email link, authenticated web, admin override — H15), file uploads for
 template `file` fields proxied through an owner-or-staff check (never a
-presigned URL), and the pre-event stats panel (H27). Draft preparation and
+presigned URL). Staff response correction can upload a replacement file under
+the applicant's identity with `APPLICATIONS_EDIT_RESPONSE`; the uploaded key
+is saved with the corrected answers. Form field key renames explicitly map
+old and new keys during the form update, copying existing answers (and sponsor
+sharing consent) only when the field kind matches. Old keys remain for
+responses' immutable historical form versions. Draft preparation and
 uploads remain available before verification; submitting or confirming a
 place does not. Decision-makers can return a response to its owner as a draft.
 A confirmed response keeps its application-granted role and live ticket access

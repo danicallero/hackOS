@@ -219,6 +219,8 @@ export const updateApplicationSchema = z
     // Omitted = leave the form's role grants unchanged; explicit [] clears
     // every grant; a non-empty array replaces the full set (H8/H11).
     grants_role_ids: z.array(z.number().int().positive()).nullish(),
+    /** Explicit builder key renames, used to carry existing answers forward (H11, H12). */
+    field_renames: z.array(z.object({ from: z.string().min(1), to: z.string().min(1) })).optional(),
   })
   .strict()
   .refine(
@@ -233,6 +235,10 @@ export const updateApplicationSchema = z
   );
 
 export const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
+export const uploadQuerySchema = z.object({
+  /** Present only when staff correct an existing response. */
+  responseId: z.coerce.number().int().positive().optional(),
+});
 export const responseIdParamSchema = z.object({
   responseId: z.coerce.number().int().positive(),
 });
