@@ -2,7 +2,9 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { GlobeIcon, MonitorUpIcon, RadioIcon } from "lucide-react";
+import { GlobeIcon } from "@phosphor-icons/react/dist/csr/Globe";
+import { MonitorArrowUpIcon } from "@phosphor-icons/react/dist/csr/MonitorArrowUp";
+import { RadioIcon } from "@phosphor-icons/react/dist/csr/Radio";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -90,7 +92,7 @@ export default function TvControlPage() {
       // the ref (not `current`, which would make `load` itself unstable and
       // re-trigger the effect that calls it) keeps this a one-shot decision.
       if (!initializedRef.current) setLoadError(message);
-      else toast.error(message);
+      else toast.error(message, t("toastTvScreens"));
     }
   }, [t]);
 
@@ -114,9 +116,12 @@ export default function TvControlPage() {
     try {
       const venue = await setTvLanguage(next);
       setTvLanguageState(venue.language);
-      toast.success(t("tvLanguageUpdated"));
+      toast.success(t("tvLanguageUpdated"), { compactTitle: t("toastTvLanguage") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateTvLanguage"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotUpdateTvLanguage"),
+        t("toastTvLanguage"),
+      );
     } finally {
       setLanguageBusy(false);
     }
@@ -128,9 +133,12 @@ export default function TvControlPage() {
     try {
       const next = await setTvMode(mode, payload);
       setCurrent(next);
-      toast.success(t("tvDisplaysUpdated"));
+      toast.success(t("tvDisplaysUpdated"), { compactTitle: t("toastTvContent") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateTvDisplays"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotUpdateTvDisplays"),
+        t("toastTvContent"),
+      );
     } finally {
       setBusy(false);
     }
@@ -146,9 +154,12 @@ export default function TvControlPage() {
       const next = await clearTvMode();
       setCurrent(next);
       if (isTvControlMode(next.mode)) setMode(next.mode);
-      toast.success(t("tvDisplayReset"));
+      toast.success(t("tvDisplayReset"), { compactTitle: t("toastTvReset") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateTvDisplays"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotUpdateTvDisplays"),
+        t("toastTvReset"),
+      );
     } finally {
       setBusy(false);
     }
@@ -242,7 +253,7 @@ export default function TvControlPage() {
       </SectionCard>
 
       <SectionCard
-        icon={MonitorUpIcon}
+        icon={MonitorArrowUpIcon}
         title={t("displayMode")}
         description={isDraftUnbroadcast ? t("draftNotYetBroadcastDesc") : t("draftMatchesLiveDesc")}
         footer={

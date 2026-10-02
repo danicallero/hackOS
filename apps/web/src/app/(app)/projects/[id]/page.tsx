@@ -4,7 +4,10 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ArrowLeftIcon, FolderGitIcon, TrophyIcon, UsersIcon } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -96,7 +99,10 @@ export default function ProjectDetailPage() {
         }
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadProject"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLoadProject"),
+        t("projectLabel"),
+      );
       setRepo(null);
     } finally {
       setLoading(false);
@@ -149,13 +155,13 @@ export default function ProjectDetailPage() {
           actions={
             <Button variant="outline" asChild>
               <Link href="/projects">
-                <ArrowLeftIcon className="size-4" />
+                <ArrowLeftIcon aria-hidden="true" className="size-4" />
                 {t("projects")}
               </Link>
             </Button>
           }
         />
-        <EmptyState icon={FolderGitIcon} title={t("projectNotFoundTitle")} />
+        <EmptyState icon={FolderSimpleIcon} title={t("projectNotFoundTitle")} />
       </div>
     );
   }
@@ -310,13 +316,16 @@ export default function ProjectDetailPage() {
                             onClick={async () => {
                               try {
                                 await removeRepoChallenge(repo.id, entry.challenge.id);
-                                toast.success(t("challengeRemoved"));
+                                toast.success(t("challengeRemoved"), {
+                                  compactTitle: t("toastWithdrawChallenge"),
+                                });
                                 await load();
                               } catch (err) {
                                 toast.error(
                                   err instanceof ApiError
                                     ? err.message
                                     : t("couldNotRemoveChallenge"),
+                                  t("toastWithdrawChallenge"),
                                 );
                               }
                             }}
@@ -344,11 +353,14 @@ export default function ProjectDetailPage() {
                             onClick={async () => {
                               try {
                                 await removeRepoPrize(repo.id, entry.prize);
-                                toast.success(t("prizeRemoved"));
+                                toast.success(t("prizeRemoved"), {
+                                  compactTitle: t("toastRemovePrize"),
+                                });
                                 await load();
                               } catch (err) {
                                 toast.error(
                                   err instanceof ApiError ? err.message : t("couldNotRemovePrize"),
+                                  t("toastRemovePrize"),
                                 );
                               }
                             }}

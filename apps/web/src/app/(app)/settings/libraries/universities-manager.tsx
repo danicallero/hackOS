@@ -8,7 +8,11 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { GraduationCapIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
+import { GraduationCapIcon } from "@phosphor-icons/react/dist/csr/GraduationCap";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -80,7 +84,7 @@ export function UniversitiesManager() {
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadDirectory");
       setLoadError(message);
-      toast.error(message);
+      toast.error(message, t("universitiesTab"));
     } finally {
       setLoading(false);
     }
@@ -108,15 +112,18 @@ export function UniversitiesManager() {
     try {
       if (editing) {
         await api.patch<University>(`/api/universities/${editing.id}`, { name });
-        toast.success(t("universityRenamed"));
+        toast.success(t("universityRenamed"), { compactTitle: t("toastSaveUniversity") });
       } else {
         await api.post<University>("/api/universities", { name });
-        toast.success(t("universityAdded"));
+        toast.success(t("universityAdded"), { compactTitle: t("toastSaveUniversity") });
       }
       setEditing(undefined);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveUniversity"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveUniversity"),
+        t("toastSaveUniversity"),
+      );
     }
   }
 
@@ -125,11 +132,14 @@ export function UniversitiesManager() {
     setDeleting(true);
     try {
       await api.delete(`/api/universities/${deleteTarget.id}`);
-      toast.success(t("universityDeleted"));
+      toast.success(t("universityDeleted"), { compactTitle: t("deleteUniversityTitle") });
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteUniversity"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotDeleteUniversity"),
+        t("deleteUniversityTitle"),
+      );
     } finally {
       setDeleting(false);
     }
@@ -150,7 +160,7 @@ export function UniversitiesManager() {
       await api.post(`/api/universities/${normalizationSource.id}/normalize`, {
         targetId: Number(normalizationTargetId),
       });
-      toast.success(t("universitiesNormalized"));
+      toast.success(t("universitiesNormalized"), { compactTitle: t("normalizeUniversityTitle") });
       setNormalizationSource(null);
       setNormalizationTargetId("");
       await load();
@@ -177,7 +187,7 @@ export function UniversitiesManager() {
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground text-sm">{t("sharedDirectoryDesc")}</p>
         <Button onClick={() => setEditing(null)}>
-          <PlusIcon />
+          <PlusIcon aria-hidden="true" />
           {t("newAction")}
         </Button>
       </div>
@@ -187,7 +197,7 @@ export function UniversitiesManager() {
           <label htmlFor="university-search" className="sr-only">
             {t("searchUniversities")}
           </label>
-          <SearchIcon
+          <MagnifyingGlassIcon
             className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
             aria-hidden="true"
           />
@@ -245,7 +255,7 @@ export function UniversitiesManager() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm">
-                <MoreHorizontalIcon />
+                <DotsThreeIcon aria-hidden="true" />
                 <span className="sr-only">{t("openMenuAria")}</span>
               </Button>
             </DropdownMenuTrigger>

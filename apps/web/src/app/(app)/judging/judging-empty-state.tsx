@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 
 export function JudgingEmptyState({
@@ -8,7 +8,7 @@ export function JudgingEmptyState({
   action,
   className,
 }: {
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   title: string;
   description?: string;
   action?: React.ReactNode;

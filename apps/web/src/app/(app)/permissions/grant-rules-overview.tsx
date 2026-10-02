@@ -1,6 +1,7 @@
 "use client";
 
-import { SearchIcon, ZapIcon } from "lucide-react";
+import { LightningIcon } from "@phosphor-icons/react/dist/csr/Lightning";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -52,7 +53,10 @@ export function GrantRulesOverviewModal({
     try {
       setRules(await api.get<RoleGrantRule[]>("/api/role-grant-rules"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadGrantRules"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLoadGrantRules"),
+        t("toastGrantRules"),
+      );
     } finally {
       setLoading(false);
     }
@@ -80,13 +84,16 @@ export function GrantRulesOverviewModal({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      icon={ZapIcon}
+      icon={LightningIcon}
       title={t("allGrantRulesTitle")}
       size="lg"
     >
       <div className="space-y-4">
         <div className="relative">
-          <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+          <MagnifyingGlassIcon
+            aria-hidden="true"
+            className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
+          />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -100,7 +107,7 @@ export function GrantRulesOverviewModal({
             <Spinner className="size-6" />
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState icon={ZapIcon} title={t("noGrantRulesYetTitle")} />
+          <EmptyState icon={LightningIcon} title={t("noGrantRulesYetTitle")} />
         ) : (
           <ul className="divide-border max-h-[60vh] divide-y overflow-y-auto rounded-md border">
             {filtered.map((rule) => (

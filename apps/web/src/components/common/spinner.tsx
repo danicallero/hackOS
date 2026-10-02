@@ -1,7 +1,7 @@
-import { Loader2Icon } from "lucide-react";
+import { SpinnerGapIcon } from "@phosphor-icons/react/dist/ssr/SpinnerGap";
 import { cn } from "@/lib/utils";
 
-/** Consistent loading spinner. Reuse instead of ad-hoc <Loader2 /> usages. */
+/** Consistent Phosphor loading spinner with the shared size and spin animation. */
 export function Spinner({ className }: { className?: string }) {
-  return <Loader2Icon className={cn("size-4 animate-spin", className)} aria-hidden />;
+  return <SpinnerGapIcon className={cn("size-4 animate-spin", className)} aria-hidden />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardCheckIcon } from "lucide-react";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { createElement } from "react";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
@@ -13,10 +13,11 @@ export function useCopyToClipboard() {
     try {
       await navigator.clipboard.writeText(value);
       toast.icon(t("copied"), {
-        icon: createElement(ClipboardCheckIcon, { "aria-hidden": true }),
+        compactTitle: t("toastCopyLink"),
+        icon: createElement(ClipboardTextIcon, { "aria-hidden": true }),
       });
     } catch {
-      toast.error(t("couldNotCopyLink"));
+      toast.error(t("couldNotCopyLink"), t("toastCopyLink"));
     }
   };
 }

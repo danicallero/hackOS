@@ -4,7 +4,8 @@
 // eligibility decision; this component only explains and confirms that
 // decision, then clears browser-held data after the authenticated operation.
 
-import { ChevronDownIcon, TriangleAlertIcon } from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -87,6 +88,7 @@ export function DangerZoneCard() {
       toast.info(
         message ??
           t(localCleanupFailed ? "accountRemovalDeviceCleanupPending" : "accountRemovalPending"),
+        { compactTitle: t("toastCloseAccount") },
       );
     }
     try {
@@ -130,14 +132,16 @@ export function DangerZoneCard() {
         if (pinResult.status === "static") {
           setPinSent(true);
           setPinMode("static");
-          toast.info(t("accountRemovalPinStaticSent"));
+          toast.info(t("accountRemovalPinStaticSent"), {
+            compactTitle: t("accountRemovalPinLabel"),
+          });
           setPending(false);
           return;
         }
         if (pinResult.status === "sent") {
           setPinSent(true);
           setPinMode("email");
-          toast.info(t("accountRemovalPinSent"));
+          toast.info(t("accountRemovalPinSent"), { compactTitle: t("accountRemovalPinLabel") });
           setPending(false);
           return;
         }
@@ -173,7 +177,9 @@ export function DangerZoneCard() {
       const progress =
         result.status === "completed" ? undefined : { action, status: result.status };
       if (result.status === "completed") {
-        toast.success(action === "delete" ? t("accountDeleted") : t("accountAnonymized"));
+        toast.success(action === "delete" ? t("accountDeleted") : t("accountAnonymized"), {
+          compactTitle: t("toastCloseAccount"),
+        });
       }
       await finishLocalAccountClosure(
         action,
@@ -217,7 +223,10 @@ export function DangerZoneCard() {
       } else if (error instanceof ApiError && error.code === "removal_reauthentication_invalid") {
         setReauthenticationError(t("accountRemovalPasswordInvalid"));
       } else {
-        toast.error(error instanceof ApiError ? error.message : t("couldNotRemoveAccount"));
+        toast.error(
+          error instanceof ApiError ? error.message : t("couldNotRemoveAccount"),
+          t("toastCloseAccount"),
+        );
       }
       setPending(false);
     }
@@ -226,11 +235,16 @@ export function DangerZoneCard() {
   const canConfirm = eligibility !== null;
 
   return (
-    <SectionCard icon={TriangleAlertIcon} title={t("dangerZone")}>
+    <SectionCard
+      variant="plain"
+      footerClassName="justify-start"
+      icon={WarningIcon}
+      title={t("dangerZone")}
+    >
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
-            <ChevronDownIcon aria-hidden className={open ? "size-4 rotate-180" : "size-4"} />
+            <CaretDownIcon aria-hidden className={open ? "size-4 rotate-180" : "size-4"} />
             {open ? t("hideDangerZone") : t("showDangerZone")}
           </Button>
         </CollapsibleTrigger>

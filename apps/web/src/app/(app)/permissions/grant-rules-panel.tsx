@@ -1,7 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { LightningIcon } from "@phosphor-icons/react/dist/csr/Lightning";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -144,7 +146,7 @@ export function GrantRulesPanel({
       ),
     ]);
     if (rulesResult.status === "fulfilled") setRules(rulesResult.value);
-    else toast.error(t("couldNotLoadGrantRules"));
+    else toast.error(t("couldNotLoadGrantRules"), t("toastGrantRules"));
     // Enterprise scoping is optional; an actor without sponsor-facing access
     // simply doesn't get the enterprise picker populated.
     if (enterprisesResult.status === "fulfilled")
@@ -193,10 +195,10 @@ export function GrantRulesPanel({
     try {
       if (editing) {
         await api.patch<RoleGrantRule>(`/api/role-grant-rules/${editing.id}`, payload);
-        toast.success(t("grantRuleUpdated"));
+        toast.success(t("grantRuleUpdated"), { compactTitle: t("toastSaveGrantRule") });
       } else {
         await api.post<RoleGrantRule>("/api/role-grant-rules", payload);
-        toast.success(t("grantRuleCreated"));
+        toast.success(t("grantRuleCreated"), { compactTitle: t("toastSaveGrantRule") });
       }
       setModalOpen(false);
       await load();
@@ -205,6 +207,7 @@ export function GrantRulesPanel({
         err instanceof ApiError
           ? err.message
           : t(editing ? "couldNotSaveGrantRule" : "couldNotCreateGrantRule"),
+        t("toastSaveGrantRule"),
       );
     }
   }
@@ -216,7 +219,10 @@ export function GrantRulesPanel({
       await api.patch<RoleGrantRule>(`/api/role-grant-rules/${rule.id}`, { enabled });
     } catch (err) {
       setRules(before);
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveGrantRule"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveGrantRule"),
+        t("toastSaveGrantRule"),
+      );
     }
   }
 
@@ -225,11 +231,14 @@ export function GrantRulesPanel({
     setDeleting(true);
     try {
       await api.delete(`/api/role-grant-rules/${deleteTarget.id}`);
-      toast.success(t("grantRuleDeleted"));
+      toast.success(t("grantRuleDeleted"), { compactTitle: t("deleteGrantRule") });
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteGrantRule"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotDeleteGrantRule"),
+        t("deleteGrantRule"),
+      );
     } finally {
       setDeleting(false);
     }
@@ -240,13 +249,13 @@ export function GrantRulesPanel({
       {!disabled && (
         <div className="flex justify-end">
           <Button onClick={openCreate}>
-            <PlusIcon /> {t("newGrantRule")}
+            <PlusIcon aria-hidden="true" /> {t("newGrantRule")}
           </Button>
         </div>
       )}
 
       <SectionCard
-        icon={scopedRole ? undefined : ZapIcon}
+        icon={scopedRole ? undefined : LightningIcon}
         title={scopedRole ? undefined : t("grantRulesTitle")}
         description={disabled ? t("superadminLockedDesc") : undefined}
         bodyClassName="p-0"
@@ -256,7 +265,7 @@ export function GrantRulesPanel({
             <Spinner className="size-6" />
           </div>
         ) : rules.length === 0 ? (
-          <EmptyState icon={ZapIcon} title={t("noGrantRulesYetTitle")} />
+          <EmptyState icon={LightningIcon} title={t("noGrantRulesYetTitle")} />
         ) : (
           <ul className="divide-border divide-y">
             {rules.map((rule) => (
@@ -291,7 +300,7 @@ export function GrantRulesPanel({
                       className="text-muted-foreground hover:text-destructive"
                       onClick={() => setDeleteTarget(rule)}
                     >
-                      <Trash2Icon />
+                      <TrashIcon aria-hidden="true" />
                     </Button>
                   </div>
                 )}
@@ -304,7 +313,7 @@ export function GrantRulesPanel({
       <Modal
         open={modalOpen}
         onOpenChange={setModalOpen}
-        icon={ZapIcon}
+        icon={LightningIcon}
         title={editing ? t("grantRulesTitle") : t("newGrantRule")}
         footer={
           <>

@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLinkIcon } from "lucide-react";
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { useLocale } from "@/lib/i18n";
 import { ProjectDescription } from "./project-description";
 
@@ -43,7 +43,7 @@ export function ProjectDescriptionLinks({
               className="inline-flex items-center gap-1.5 text-sm underline underline-offset-4 decoration-muted-foreground/50 hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4"
             >
               {link.label}
-              <ExternalLinkIcon aria-hidden="true" className="size-3.5" />
+              <ArrowSquareOutIcon aria-hidden="true" className="size-3.5" />
             </a>
           ))}
         </div>

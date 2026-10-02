@@ -7,7 +7,7 @@ import {
   DEFAULT_ACTIVITY_KIND,
   toActivityKind,
 } from "@hackos/shared/activity-kinds";
-import { ListFilterIcon } from "lucide-react";
+import { FunnelSimpleIcon } from "@phosphor-icons/react/dist/csr/FunnelSimple";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -69,7 +69,7 @@ export function ScheduleKindFilterPopover({
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm">
-          <ListFilterIcon className="size-4" />
+          <FunnelSimpleIcon aria-hidden="true" className="size-4" />
           {t("kindFilterAction")}
           {selected.size > 0 && (
             <span className="bg-primary text-primary-foreground ml-0.5 flex size-4 items-center justify-center rounded-full text-[10px]">

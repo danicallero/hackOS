@@ -1,35 +1,33 @@
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
-import {
-  ActivityIcon,
-  BadgeCheckIcon,
-  Building2Icon,
-  CalendarDaysIcon,
-  ChartColumnIcon,
-  ClipboardListIcon,
-  FileTextIcon,
-  FolderGitIcon,
-  GavelIcon,
-  HandshakeIcon,
-  InboxIcon,
-  LibraryBigIcon,
-  ListOrderedIcon,
-  type LucideIcon,
-  MegaphoneIcon,
-  ScrollTextIcon,
-  SettingsIcon,
-  ShieldCheckIcon,
-  SoupIcon,
-  TrophyIcon,
-  TvIcon,
-  UserIcon,
-  UsersIcon,
-  WalletCardsIcon,
-} from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { BooksIcon } from "@phosphor-icons/react/dist/ssr/Books";
+import { BowlFoodIcon } from "@phosphor-icons/react/dist/ssr/BowlFood";
+import { BuildingsIcon } from "@phosphor-icons/react/dist/ssr/Buildings";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/ssr/CalendarDots";
+import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
+import { FileTextIcon } from "@phosphor-icons/react/dist/ssr/FileText";
+import { FolderSimpleIcon } from "@phosphor-icons/react/dist/ssr/FolderSimple";
+import { GavelIcon } from "@phosphor-icons/react/dist/ssr/Gavel";
+import { GearIcon } from "@phosphor-icons/react/dist/ssr/Gear";
+import { HandshakeIcon } from "@phosphor-icons/react/dist/ssr/Handshake";
+import { ListNumbersIcon } from "@phosphor-icons/react/dist/ssr/ListNumbers";
+import { MegaphoneIcon } from "@phosphor-icons/react/dist/ssr/Megaphone";
+import { PulseIcon } from "@phosphor-icons/react/dist/ssr/Pulse";
+import { ScrollIcon } from "@phosphor-icons/react/dist/ssr/Scroll";
+import { SealCheckIcon } from "@phosphor-icons/react/dist/ssr/SealCheck";
+import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { TelevisionSimpleIcon } from "@phosphor-icons/react/dist/ssr/TelevisionSimple";
+import { TrayIcon } from "@phosphor-icons/react/dist/ssr/Tray";
+import { TrophyIcon } from "@phosphor-icons/react/dist/ssr/Trophy";
+import { UserIcon } from "@phosphor-icons/react/dist/ssr/User";
+import { UsersIcon } from "@phosphor-icons/react/dist/ssr/Users";
+import { WalletIcon } from "@phosphor-icons/react/dist/ssr/Wallet";
 
 export interface NavItem {
   title: import("./i18n").MessageKey;
   href: string;
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   /** Required capability to see the item (H8/H55). Omit = visible to all. */
   capability?: Capability;
   /** Visible to any of these capabilities. */
@@ -60,7 +58,7 @@ export interface NavItem {
 export interface Workspace {
   id: string;
   label: import("./i18n").MessageKey;
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   items: NavItem[];
 }
 
@@ -140,7 +138,7 @@ export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): bool
  * first, configuration-ish personal items last.
  */
 export const PERSONAL_NAV: NavItem[] = [
-  { title: "schedule", href: "/timetable", icon: CalendarDaysIcon },
+  { title: "schedule", href: "/timetable", icon: CalendarDotsIcon },
   // Participant-facing: everyone can apply (H12-H15). No capability gate.
   { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
   // Project and pre-event work-group planning are available to every admitted
@@ -148,14 +146,14 @@ export const PERSONAL_NAV: NavItem[] = [
   {
     title: "myProject",
     href: "/my-project",
-    icon: FolderGitIcon,
+    icon: FolderSimpleIcon,
     hideForPureApplicant: true,
   },
   // Entrance ticket is exposed only while a role grants current event access
   // (the historical tickets row remains for audit/idempotency).
-  { title: "wallet", href: "/wallet", icon: WalletCardsIcon, hideForPureApplicant: true },
+  { title: "wallet", href: "/wallet", icon: WalletIcon, hideForPureApplicant: true },
   // Hidden for pure applicants — decision emails go out regardless (H50/H51).
-  { title: "inbox", href: "/inbox", icon: InboxIcon, hideForPureApplicant: true },
+  { title: "inbox", href: "/inbox", icon: TrayIcon, hideForPureApplicant: true },
   { title: "myProfile", href: "/settings/profile", icon: UserIcon },
 ];
 
@@ -168,12 +166,12 @@ export const WORKSPACES: Workspace[] = [
   {
     id: "applications",
     label: "workspaceApplications",
-    icon: ClipboardListIcon,
+    icon: ClipboardTextIcon,
     items: [
       {
         title: "applications",
         href: "/applications",
-        icon: ClipboardListIcon,
+        icon: ClipboardTextIcon,
         anyCapability: [
           CAPABILITIES.APPLICATIONS_REVIEW,
           CAPABILITIES.APPLICATIONS_MANAGE,
@@ -185,14 +183,14 @@ export const WORKSPACES: Workspace[] = [
   {
     id: "projects",
     label: "workspaceProjects",
-    icon: FolderGitIcon,
+    icon: FolderSimpleIcon,
     items: [
       {
         // H8/H55: judges + sponsor reps get a scoped projects view (backend
         // scopes GET /api/repos by their challenges); full access via projects:*.
         title: "projects",
         href: "/projects",
-        icon: FolderGitIcon,
+        icon: FolderSimpleIcon,
         anyCapability: [
           CAPABILITIES.PROJECTS_READ,
           CAPABILITIES.PROJECTS_IMPORT,
@@ -221,7 +219,7 @@ export const WORKSPACES: Workspace[] = [
       {
         title: "queueOperations",
         href: "/queue",
-        icon: ListOrderedIcon,
+        icon: ListNumbersIcon,
         anyCapability: [
           CAPABILITIES.QUEUE_OPERATE,
           CAPABILITIES.QUEUE_ADMIN,
@@ -248,13 +246,13 @@ export const WORKSPACES: Workspace[] = [
         // enterprise or edits the judging window in the first place.
         title: "judgingSettingsTitle",
         href: "/queue/rooms",
-        icon: Building2Icon,
+        icon: BuildingsIcon,
         anyCapability: [CAPABILITIES.QUEUE_ADMIN],
       },
       {
         title: "reviewsOverview",
         href: "/queue/reviews",
-        icon: ClipboardListIcon,
+        icon: ClipboardTextIcon,
         anyCapability: [CAPABILITIES.QUEUE_ADMIN],
         sponsorVisible: true,
       },
@@ -263,7 +261,7 @@ export const WORKSPACES: Workspace[] = [
   {
     id: "logistics",
     label: "workspaceLogistics",
-    icon: SoupIcon,
+    icon: BowlFoodIcon,
     items: [
       // Logistics is split per physical station (H22-H27); each entry shows
       // only for operators who hold that station's capability (H55).
@@ -272,7 +270,7 @@ export const WORKSPACES: Workspace[] = [
       {
         title: "accreditationAndPresence",
         href: "/logistics/presence",
-        icon: BadgeCheckIcon,
+        icon: SealCheckIcon,
         anyCapability: [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.PRESENCE_SCAN],
       },
       {
@@ -280,13 +278,13 @@ export const WORKSPACES: Workspace[] = [
         // a meal/activity tab), so this single entry covers both (H22-H27).
         title: "mealsAndActivities",
         href: "/logistics/activities",
-        icon: ActivityIcon,
+        icon: PulseIcon,
         capability: CAPABILITIES.ACTIVITY_SCAN,
       },
       {
         title: "logisticsStats",
         href: "/logistics/stats",
-        icon: ChartColumnIcon,
+        icon: ChartBarIcon,
         anyCapability: [CAPABILITIES.LOGISTICS_STATS, CAPABILITIES.STATISTICS_MANAGE],
         statisticsVisible: true,
       },
@@ -295,12 +293,12 @@ export const WORKSPACES: Workspace[] = [
   {
     id: "programme",
     label: "workspaceProgramme",
-    icon: CalendarDaysIcon,
+    icon: CalendarDotsIcon,
     items: [
       {
         title: "manageSchedule",
         href: "/schedule",
-        icon: ListOrderedIcon,
+        icon: ListNumbersIcon,
         capability: CAPABILITIES.SCHEDULE_MANAGE,
       },
       {
@@ -312,7 +310,7 @@ export const WORKSPACES: Workspace[] = [
       {
         title: "tvControl",
         href: "/tv/control",
-        icon: TvIcon,
+        icon: TelevisionSimpleIcon,
         capability: CAPABILITIES.TV_CONTROL,
       },
     ],
@@ -348,12 +346,12 @@ export const WORKSPACES: Workspace[] = [
   {
     id: "eventSetup",
     label: "workspaceEventSetup",
-    icon: SettingsIcon,
+    icon: GearIcon,
     items: [
       {
         title: "eventSettings",
         href: "/settings/event",
-        icon: SettingsIcon,
+        icon: GearIcon,
         anyCapability: [
           CAPABILITIES.EVENT_MANAGE,
           CAPABILITIES.VENUE_MANAGE,
@@ -365,7 +363,7 @@ export const WORKSPACES: Workspace[] = [
       {
         title: "libraries",
         href: "/settings/libraries",
-        icon: LibraryBigIcon,
+        icon: BooksIcon,
         capability: CAPABILITIES.INTOLERANCES_MANAGE,
       },
     ],
@@ -390,7 +388,7 @@ export const WORKSPACES: Workspace[] = [
       {
         title: "auditLog",
         href: "/audit",
-        icon: ScrollTextIcon,
+        icon: ScrollIcon,
         capability: CAPABILITIES.AUDIT_READ,
       },
     ],

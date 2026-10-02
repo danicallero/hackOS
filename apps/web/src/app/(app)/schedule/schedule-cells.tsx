@@ -1,5 +1,5 @@
 "use client";
-import { XIcon } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useId, useRef, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -105,7 +105,10 @@ export function EditableStatusCell({
       const result = await onSave(next);
       if (result !== false) setOpen(false);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityVisibility"),
+      );
     } finally {
       setSaving(false);
     }
@@ -195,7 +198,10 @@ export function EditableTextCell({
       if (saved) setEditing(false);
       return saved;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityText"),
+      );
       return false;
     } finally {
       setSaving(false);
@@ -299,7 +305,10 @@ export function EditableTimeCell({
       if (saved) setEditing(false);
       return saved;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityTime"),
+      );
       return false;
     } finally {
       setSaving(false);
@@ -384,7 +393,10 @@ export function EditableSelectCell({
       const result = await onSave(next === EMPTY_SCHEDULE_TYPE ? null : next);
       if (result !== false) setOpen(false);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivitySelect"),
+      );
     } finally {
       setSaving(false);
     }
@@ -470,7 +482,10 @@ export function EditableAudienceCell({
       const result = await onSave(draft);
       if (result !== false) setOpen(false);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityAudience"),
+      );
     } finally {
       setSaving(false);
     }
@@ -540,7 +555,10 @@ export function EditableScannableCell({
     try {
       await onSave(next);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityScanning"),
+      );
     } finally {
       setSaving(false);
     }
@@ -602,7 +620,10 @@ export function EditablePublishDateCell({
       if (saved) setEditing(false);
       return saved;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastPublishSchedule"),
+      );
       return false;
     } finally {
       setSaving(false);
@@ -685,8 +706,9 @@ export function EditableOwnersCell({
       const r = await logisticsApi.scheduleOwnerCandidates(query);
       return r.users.filter((u) => !ownerUserIds.has(u.id));
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) toast.error(t("needScheduleManageSearch"));
-      else toast.error(t("searchFailed"));
+      if (err instanceof ApiError && err.status === 403)
+        toast.error(t("needScheduleManageSearch"), t("toastFindUsers"));
+      else toast.error(t("searchFailed"), t("toastFindUsers"));
       return [];
     }
   }
@@ -787,7 +809,7 @@ export function EditableOwnersCell({
                   disabled={busy}
                   onClick={() => remove(owner.id)}
                 >
-                  <XIcon className="size-3.5" />
+                  <XIcon aria-hidden="true" className="size-3.5" />
                 </Button>
               </li>
             ))}

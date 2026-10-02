@@ -1,6 +1,6 @@
 "use client";
 
-import { XIcon } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useId, useRef } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -203,7 +203,7 @@ export function DateTimeInput({
             className="text-muted-foreground absolute top-1/2 right-1 -translate-y-1/2"
             label={t("clearDate")}
           >
-            <XIcon className="size-4" />
+            <XIcon aria-hidden="true" className="size-4" />
           </IconButton>
         )}
       </div>

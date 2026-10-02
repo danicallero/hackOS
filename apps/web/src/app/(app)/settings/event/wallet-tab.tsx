@@ -16,7 +16,9 @@ import {
   resolvePassFieldLabels,
   resolvePassFieldVisibility,
 } from "@hackos/shared/wallet-pass-labels";
-import { ChevronDownIcon, type LucideIcon, Trash2Icon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useCallback, useEffect, useState } from "react";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
@@ -82,7 +84,7 @@ function PassFrontFieldsEditor({
       {FRONT_FIELDS.map(({ key, titleKey, fillKey }) => {
         const shown = visibility[key] !== false;
         return (
-          <div key={key} className="space-y-3 rounded-md border p-3">
+          <div key={key} className="space-y-3 border-b border-border/60 py-4 last:border-b-0">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <Label htmlFor={`pass-visible-${key}`}>{t(titleKey)}</Label>
@@ -212,7 +214,7 @@ function BackFieldBuilder({
             aria-label={t("removeBackFieldAria", { index: index + 1 })}
             onClick={() => remove(index)}
           >
-            <Trash2Icon className="size-4" />
+            <TrashIcon aria-hidden="true" className="size-4" />
           </Button>
         </div>
       ))}
@@ -318,7 +320,7 @@ export function WalletTab({
   icon,
   onDirtyChange,
 }: {
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { t } = useLocale();
@@ -365,7 +367,10 @@ export function WalletTab({
       setSaveState("saved");
     } catch (err) {
       setSaveState("error");
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
+        t("toastWalletSettings"),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -385,6 +390,8 @@ export function WalletTab({
       }}
     >
       <SectionCard
+        variant="plain"
+        footerClassName="justify-start"
         icon={icon}
         title={t("walletPassSectionTitle")}
         state={<SaveStatus state={saveState} />}
@@ -412,7 +419,7 @@ export function WalletTab({
         <Collapsible>
           <CollapsibleTrigger asChild>
             <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
-              <ChevronDownIcon className="size-4" />
+              <CaretDownIcon aria-hidden="true" className="size-4" />
               {t("walletAdvancedFieldsToggle")}
             </Button>
           </CollapsibleTrigger>

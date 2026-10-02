@@ -5,19 +5,18 @@
 // Access is scoped server-side — admins see everything, a sponsor rep only
 // ever sees their own enterprise's challenges (see api reviews.ts).
 
-import { ClipboardListIcon, DownloadIcon } from "lucide-react";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
+import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { FilterMenu } from "@/components/common/filter-menu";
 import { PageHeader } from "@/components/common/page-header";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
@@ -182,55 +181,67 @@ export default function ReviewsOverviewPage() {
         description={t("reviewsOverviewDesc")}
         actions={
           <Button asChild variant="outline">
-            <a href={exportHref} onClick={() => toast.success(t("exportStarted"))}>
-              <DownloadIcon className="size-4" />
+            <a
+              href={exportHref}
+              onClick={() =>
+                toast.success(t("exportStarted"), { compactTitle: t("toastExportReviews") })
+              }
+            >
+              <DownloadSimpleIcon className="size-4" />
               {t("exportCsv")}
             </a>
           </Button>
         }
       />
 
-      <div className="flex flex-wrap gap-3">
-        <Select value={challengeFilter} onValueChange={setChallengeFilter}>
-          <SelectTrigger className="w-56">
-            <SelectValue placeholder={t("filterByChallenge")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{t("allChallenges")}</SelectItem>
-            {allChallenges.map((c) => (
-              <SelectItem key={c.id} value={String(c.id)}>
-                {c.title}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={roomFilter} onValueChange={setRoomFilter}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder={t("filterByRoom")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{t("allRooms")}</SelectItem>
-            {allRooms.map((room) => (
-              <SelectItem key={room.id} value={String(room.id)}>
-                {room.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder={t("filterByStatus")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{t("allStatuses")}</SelectItem>
-            <SelectItem value="submitted">{t("challengeReviewSubmitted")}</SelectItem>
-            <SelectItem value="draft">{t("challengeReviewDraft")}</SelectItem>
-            <SelectItem value="none">{t("challengeReviewNotStarted")}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <FilterMenu
+        filters={[
+          {
+            id: "challenge",
+            label: t("colChallenge"),
+            icon: TrophyIcon,
+            type: "single",
+            value: challengeFilter,
+            resetValue: ALL,
+            onChange: setChallengeFilter,
+            options: [
+              { value: ALL, label: t("allChallenges") },
+              ...allChallenges.map((challenge) => ({
+                value: String(challenge.id),
+                label: challenge.title,
+              })),
+            ],
+          },
+          {
+            id: "room",
+            label: t("colRoom"),
+            icon: DoorOpenIcon,
+            type: "single",
+            value: roomFilter,
+            resetValue: ALL,
+            onChange: setRoomFilter,
+            options: [
+              { value: ALL, label: t("allRooms") },
+              ...allRooms.map((room) => ({ value: String(room.id), label: room.name })),
+            ],
+          },
+          {
+            id: "status",
+            label: t("statusColumn"),
+            icon: SealCheckIcon,
+            type: "single",
+            value: statusFilter,
+            resetValue: ALL,
+            onChange: setStatusFilter,
+            options: [
+              { value: ALL, label: t("allStatuses") },
+              { value: "submitted", label: t("challengeReviewSubmitted") },
+              { value: "draft", label: t("challengeReviewDraft") },
+              { value: "none", label: t("challengeReviewNotStarted") },
+            ],
+          },
+        ]}
+      />
 
       <DataTable
         columns={columns}
@@ -244,7 +255,7 @@ export default function ReviewsOverviewPage() {
         }
         searchPlaceholder={t("searchReviewsPlaceholder")}
         pageSize={20}
-        empty={{ icon: ClipboardListIcon, title: t("noReviewsYet") }}
+        empty={{ icon: ClipboardTextIcon, title: t("noReviewsYet") }}
       />
     </div>
   );

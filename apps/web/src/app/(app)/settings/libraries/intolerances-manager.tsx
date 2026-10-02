@@ -8,7 +8,9 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { MoreHorizontalIcon, PlusIcon, UtensilsCrossedIcon } from "lucide-react";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
+import { ForkKnifeIcon } from "@phosphor-icons/react/dist/csr/ForkKnife";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -105,7 +107,7 @@ export function IntolerancesManager() {
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadDictionary");
       setLoadError(message);
-      toast.error(message);
+      toast.error(message, t("toastDietaryNeeds"));
     } finally {
       setLoading(false);
     }
@@ -150,15 +152,18 @@ export function IntolerancesManager() {
     try {
       if (editing) {
         await api.patch<Intolerance>(`/api/food-intolerances/${editing.id}`, payload);
-        toast.success(t("intoleranceUpdated"));
+        toast.success(t("intoleranceUpdated"), { compactTitle: t("toastSaveDietaryNeed") });
       } else {
         await api.post<Intolerance>("/api/food-intolerances", payload);
-        toast.success(t("intoleranceAdded"));
+        toast.success(t("intoleranceAdded"), { compactTitle: t("toastSaveDietaryNeed") });
       }
       setEditing(undefined);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEntry"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveEntry"),
+        t("toastSaveDietaryNeed"),
+      );
     }
   }
 
@@ -167,11 +172,14 @@ export function IntolerancesManager() {
     setDeleting(true);
     try {
       await api.delete(`/api/food-intolerances/${deleteTarget.id}`);
-      toast.success(t("intoleranceDeleted"));
+      toast.success(t("intoleranceDeleted"), { compactTitle: t("toastDeleteDietaryNeed") });
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteEntry"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotDeleteEntry"),
+        t("toastDeleteDietaryNeed"),
+      );
     } finally {
       setDeleting(false);
     }
@@ -207,7 +215,7 @@ export function IntolerancesManager() {
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground text-sm">{t("sharedCatalogueDesc")}</p>
         <Button onClick={() => setEditing(null)}>
-          <PlusIcon />
+          <PlusIcon aria-hidden="true" />
           {t("newAction")}
         </Button>
       </div>
@@ -221,14 +229,14 @@ export function IntolerancesManager() {
         searchable={(row) => `${pickText(row.label, "es")} ${row.label.en} ${row.label.gl}`}
         searchPlaceholder={t("searchIntolerances")}
         empty={{
-          icon: UtensilsCrossedIcon,
+          icon: ForkKnifeIcon,
           title: t("noIntolerancesYetTitle"),
         }}
         rowActions={(row) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm">
-                <MoreHorizontalIcon />
+                <DotsThreeIcon aria-hidden="true" />
                 <span className="sr-only">{t("openMenuAria")}</span>
               </Button>
             </DropdownMenuTrigger>
@@ -246,7 +254,7 @@ export function IntolerancesManager() {
       <SidePanelEditor
         open={formOpen}
         onOpenChange={(o) => !o && setEditing(undefined)}
-        icon={UtensilsCrossedIcon}
+        icon={ForkKnifeIcon}
         title={editing ? t("editIntoleranceTitle") : t("newIntoleranceTitle")}
         description={t("provideLabelEveryLocaleDesc")}
         footer={

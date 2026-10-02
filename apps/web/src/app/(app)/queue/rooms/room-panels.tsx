@@ -86,10 +86,13 @@ export function AssignmentsEditor({
                   setBusy("enterprise");
                   try {
                     await onSetEnterprise(Number(enterpriseId));
-                    toast.success(t("enterpriseAssigned"));
+                    toast.success(t("enterpriseAssigned"), {
+                      compactTitle: t("toastAssignCompany"),
+                    });
                   } catch (err) {
                     toast.error(
                       err instanceof ApiError ? err.message : t("couldNotAssignEnterprise"),
+                      t("toastAssignCompany"),
                     );
                   } finally {
                     setBusy(null);
@@ -109,10 +112,13 @@ export function AssignmentsEditor({
                 setBusy("clear");
                 try {
                   await onClearEnterprise();
-                  toast.success(t("enterpriseCleared"));
+                  toast.success(t("enterpriseCleared"), {
+                    compactTitle: t("toastUnassignCompany"),
+                  });
                 } catch (err) {
                   toast.error(
                     err instanceof ApiError ? err.message : t("couldNotAssignEnterprise"),
+                    t("toastUnassignCompany"),
                   );
                 } finally {
                   setBusy(null);

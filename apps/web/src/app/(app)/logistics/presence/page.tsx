@@ -2,7 +2,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { BadgeCheckIcon } from "lucide-react";
+import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -122,7 +122,7 @@ export default function PresencePage() {
           <StatCard
             label={t("checkedInSession")}
             value={sessionCount}
-            icon={BadgeCheckIcon}
+            icon={SealCheckIcon}
             hint={t("onThisDevice")}
           />
           {roleCounts.map((item) => (
@@ -130,7 +130,7 @@ export default function PresencePage() {
               key={item.role ?? "unassigned"}
               label={item.role ?? t("roleUnassigned")}
               value={item.count}
-              icon={BadgeCheckIcon}
+              icon={SealCheckIcon}
               hint={t("accredited")}
             />
           ))}

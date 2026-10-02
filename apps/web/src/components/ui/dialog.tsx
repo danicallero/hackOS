@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { XIcon } from "lucide-react"
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
@@ -46,7 +46,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:transition-none",
+        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:transition-none",
         className
       )}
       {...props}
@@ -123,7 +123,7 @@ function DialogContent({
             className={cn(dialogIconButtonClass, "absolute top-3 right-3 z-10")}
             title={t("close")}
           >
-            <XIcon />
+            <XIcon aria-hidden="true" />
             <span className="sr-only">{t("close")}</span>
           </DialogPrimitive.Close>
         )}

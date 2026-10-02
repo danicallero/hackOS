@@ -9,7 +9,7 @@
 // profiles — this tab only owns the two invite-claim requirement toggles.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -54,7 +54,7 @@ export function InvitesTab({
   icon,
   onDirtyChange,
 }: {
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { t } = useLocale();
@@ -84,7 +84,10 @@ export function InvitesTab({
       setSaveState("saved");
     } catch (err) {
       setSaveState("error");
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
+        t("toastInviteSettings"),
+      );
     }
   }
 
@@ -96,6 +99,8 @@ export function InvitesTab({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <SectionCard
+          variant="plain"
+          footerClassName="justify-start"
           icon={icon}
           title={t("invitesSectionTitle")}
           state={<SaveStatus state={saveState} />}
@@ -107,7 +112,7 @@ export function InvitesTab({
             name="requireSponsorShirtSize"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-4 py-3">
                   <div>
                     <FormLabel className="font-normal">
                       {t("requireSponsorShirtSizeLabel")}
@@ -126,7 +131,7 @@ export function InvitesTab({
             name="requireSponsorDietary"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-4 py-3">
                   <div>
                     <FormLabel className="font-normal">{t("requireSponsorDietaryLabel")}</FormLabel>
                     <FormDescription>{t("requireSponsorDietaryDesc")}</FormDescription>
@@ -146,7 +151,7 @@ export function InvitesTab({
             name="requireStaffShirtSize"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-4 py-3">
                   <div>
                     <FormLabel className="font-normal">{t("requireStaffShirtSizeLabel")}</FormLabel>
                     <FormDescription>{t("requireStaffShirtSizeDesc")}</FormDescription>
@@ -163,7 +168,7 @@ export function InvitesTab({
             name="requireStaffDietary"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-4 py-3">
                   <div>
                     <FormLabel className="font-normal">{t("requireStaffDietaryLabel")}</FormLabel>
                     <FormDescription>{t("requireStaffDietaryDesc")}</FormDescription>

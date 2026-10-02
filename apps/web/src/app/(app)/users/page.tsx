@@ -2,17 +2,19 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import {
-  ChevronRightIcon,
-  SearchIcon,
-  SlidersHorizontalIcon,
-  UsersIcon,
-  XIcon,
-} from "lucide-react";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
+import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
+import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CapabilityGate } from "@/components/common/capability-gate";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { FilterMenu } from "@/components/common/filter-menu";
 import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -27,13 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { ApiError, api } from "@/lib/api";
@@ -293,7 +289,7 @@ function UserMobileRow({ user, t }: { user: UserListItem; t: Translate }) {
           {applicationLabel(user.applicationStatus, t)}
         </StatusBadge>
       </div>
-      <ChevronRightIcon className="text-muted-foreground mt-1 size-4 shrink-0" aria-hidden="true" />
+      <CaretRightIcon className="text-muted-foreground mt-1 size-4 shrink-0" aria-hidden="true" />
     </Link>
   );
 }
@@ -388,7 +384,7 @@ export default function UsersPage() {
           setTotal(0);
           const message = err instanceof ApiError ? err.message : t("couldNotLoadUsers");
           setLoadError(message);
-          toast.error(message);
+          toast.error(message, t("columnPeople"));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -494,12 +490,12 @@ export default function UsersPage() {
       />
 
       <div className="space-y-6">
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-          <div className="relative col-span-2 min-w-0 w-full sm:min-w-[12rem] sm:flex-[1_1_18rem] sm:max-w-[28rem]">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-0 w-full sm:w-auto sm:min-w-[12rem] sm:flex-[1_1_18rem] sm:max-w-[28rem]">
             <label htmlFor="user-search" className="sr-only">
               {t("searchUsers")}
             </label>
-            <SearchIcon
+            <MagnifyingGlassIcon
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
               aria-hidden="true"
             />
@@ -527,45 +523,57 @@ export default function UsersPage() {
               </IconButton>
             )}
           </div>
-          <Select value={emailFilter} onValueChange={setEmailFilter}>
-            <SelectTrigger className="w-full sm:w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("anyEmail")}</SelectItem>
-              <SelectItem value="verified">{t("verified")}</SelectItem>
-              <SelectItem value="unverified">{t("unverified")}</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="w-full sm:w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("anyRole")}</SelectItem>
-              {roleFilterOptions.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={spotFilter} onValueChange={setSpotFilter}>
-            <SelectTrigger className="w-full sm:w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("anySpot")}</SelectItem>
-              <SelectItem value="confirmed">{t("confirmed")}</SelectItem>
-              <SelectItem value="accepted_pending">{t("acceptedPending")}</SelectItem>
-              <SelectItem value="declined">{t("declined")}</SelectItem>
-              <SelectItem value="not_confirmed">{t("notConfirmed")}</SelectItem>
-            </SelectContent>
-          </Select>
+          <FilterMenu
+            filters={[
+              {
+                id: "email",
+                label: t("email"),
+                icon: EnvelopeSimpleIcon,
+                type: "single",
+                value: emailFilter,
+                resetValue: "all",
+                onChange: setEmailFilter,
+                options: [
+                  { value: "all", label: t("anyEmail") },
+                  { value: "verified", label: t("verified") },
+                  { value: "unverified", label: t("unverified") },
+                ],
+              },
+              {
+                id: "role",
+                label: t("colRole"),
+                icon: ShieldIcon,
+                type: "single",
+                value: roleFilter,
+                resetValue: "all",
+                onChange: setRoleFilter,
+                options: [
+                  { value: "all", label: t("anyRole") },
+                  ...roleFilterOptions.map((name) => ({ value: name, label: name })),
+                ],
+              },
+              {
+                id: "spot",
+                label: t("colApplication"),
+                icon: TicketIcon,
+                type: "single",
+                value: spotFilter,
+                resetValue: "all",
+                onChange: setSpotFilter,
+                options: [
+                  { value: "all", label: t("anySpot") },
+                  { value: "confirmed", label: t("confirmed") },
+                  { value: "accepted_pending", label: t("acceptedPending") },
+                  { value: "declined", label: t("declined") },
+                  { value: "not_confirmed", label: t("notConfirmed") },
+                ],
+              },
+            ]}
+          />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full sm:w-auto">
-                <SlidersHorizontalIcon />
+              <Button variant="outline" className="shrink-0">
+                <SlidersHorizontalIcon aria-hidden="true" />
                 {t("columnsLabel")}
               </Button>
             </DropdownMenuTrigger>
@@ -587,7 +595,7 @@ export default function UsersPage() {
           <span
             role="status"
             aria-live="polite"
-            className="text-muted-foreground col-span-2 justify-self-end text-xs tabular-nums sm:ml-auto sm:col-span-1"
+            className="text-muted-foreground ml-auto text-xs tabular-nums"
           >
             {t("tableResultCount", { count: filteredUsers.length })}
           </span>

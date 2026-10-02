@@ -6,7 +6,9 @@
 // stored value is the university id as a string, keyed by the field in the
 // response object; only the id is persisted, never a free-text name.
 
-import { CheckIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
+import { CaretUpDownIcon } from "@phosphor-icons/react/dist/csr/CaretUpDown";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -152,7 +154,9 @@ export function UniversityPicker({
     setProposing(true);
     try {
       const created = await api.post<University>("/api/public/universities/propose", { name });
-      toast.success(t("addedUniversityInline", { name: created.name }));
+      toast.success(t("addedUniversityInline", { name: created.name }), {
+        compactTitle: t("toastSaveUniversity"),
+      });
       select(created);
       setQuery("");
     } catch (err) {
@@ -165,6 +169,7 @@ export function UniversityPicker({
           : err instanceof ApiError
             ? err.message
             : t("couldNotAddUniversity"),
+        t("toastSaveUniversity"),
       );
     } finally {
       setProposing(false);
@@ -272,10 +277,7 @@ export function UniversityPicker({
           <span className={cn("flex-1 truncate text-left", !label && "text-muted-foreground")}>
             {label ?? t("selectYourUniversityPlaceholder")}
           </span>
-          <ChevronsUpDownIcon
-            aria-hidden="true"
-            className="text-muted-foreground size-4 shrink-0"
-          />
+          <CaretUpDownIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
         </Button>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal {...portalProps}>{content}</PopoverPrimitive.Portal>

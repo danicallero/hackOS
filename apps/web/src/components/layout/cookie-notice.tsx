@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Image from "next/image";
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
@@ -77,7 +77,7 @@ export function CookieNotice() {
           type="button"
           variant="ghost"
         >
-          <X className="size-4" aria-hidden="true" />
+          <XIcon className="size-4" aria-hidden="true" />
         </IconButton>
 
         <Image

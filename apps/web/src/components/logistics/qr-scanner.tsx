@@ -1,7 +1,8 @@
 "use client";
 
+import { CameraIcon } from "@phosphor-icons/react/dist/csr/Camera";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import jsQR from "jsqr";
-import { CameraIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/common/modal";
 import { Button } from "@/components/ui/button";
@@ -88,7 +89,7 @@ export function QrScanButton({ onDecode }: { onDecode: (value: string) => void }
   return (
     <>
       <Button type="button" variant="outline" onClick={() => setOpen(true)}>
-        <CameraIcon className="size-4" />
+        <CameraIcon aria-hidden="true" className="size-4" />
         {t("openCamera")}
       </Button>
       <Modal
@@ -115,7 +116,7 @@ export function QrScanButton({ onDecode }: { onDecode: (value: string) => void }
           )}
           <canvas ref={canvasRef} className="hidden" />
           <Button type="button" variant="outline" className="w-full" onClick={() => setOpen(false)}>
-            <XIcon className="size-4" />
+            <XIcon aria-hidden="true" className="size-4" />
             {t("cancel")}
           </Button>
         </div>

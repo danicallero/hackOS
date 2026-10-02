@@ -1,8 +1,11 @@
 "use client";
 
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 // Curated degree directory: same self-service proposal limits as universities,
 // with staff create, rename and deletion controls in the shared Libraries area.
-import { GraduationCapIcon, MoreHorizontalIcon, PlusIcon, SearchIcon } from "lucide-react";
+import { GraduationCapIcon } from "@phosphor-icons/react/dist/csr/GraduationCap";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useCallback, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import type { Column } from "@/components/common/data-table";
@@ -69,11 +72,14 @@ export function DegreesManager() {
     try {
       if (editing) await api.patch(`/api/degrees/${editing.id}`, { name });
       else await api.post("/api/degrees", { name });
-      toast.success(t("degreeSaved"));
+      toast.success(t("degreeSaved"), { compactTitle: t("toastSaveDegree") });
       setEditing(undefined);
       await load();
     } catch (cause) {
-      toast.error(cause instanceof ApiError ? cause.message : t("couldNotSaveDegree"));
+      toast.error(
+        cause instanceof ApiError ? cause.message : t("couldNotSaveDegree"),
+        t("toastSaveDegree"),
+      );
     } finally {
       setSaving(false);
     }
@@ -83,11 +89,14 @@ export function DegreesManager() {
     setSaving(true);
     try {
       await api.delete(`/api/degrees/${deleting.id}`);
-      toast.success(t("degreeDeleted"));
+      toast.success(t("degreeDeleted"), { compactTitle: t("toastDeleteDegree") });
       setDeleting(null);
       await load();
     } catch (cause) {
-      toast.error(cause instanceof ApiError ? cause.message : t("couldNotDeleteDegree"));
+      toast.error(
+        cause instanceof ApiError ? cause.message : t("couldNotDeleteDegree"),
+        t("toastDeleteDegree"),
+      );
     } finally {
       setSaving(false);
     }
@@ -107,7 +116,7 @@ export function DegreesManager() {
       await api.post(`/api/degrees/${normalizationSource.id}/normalize`, {
         targetId: Number(normalizationTargetId),
       });
-      toast.success(t("degreesNormalized"));
+      toast.success(t("degreesNormalized"), { compactTitle: t("toastSaveDegree") });
       setNormalizationSource(null);
       setNormalizationTargetId("");
       await load();
@@ -132,12 +141,15 @@ export function DegreesManager() {
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground text-sm">{t("degreesDirectoryDesc")}</p>
         <Button onClick={() => openEditor(null)}>
-          <PlusIcon />
+          <PlusIcon aria-hidden="true" />
           {t("newAction")}
         </Button>
       </div>
       <div className="relative max-w-xs">
-        <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+        <MagnifyingGlassIcon
+          aria-hidden="true"
+          className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+        />
         <Input
           type="search"
           value={search}
@@ -157,7 +169,7 @@ export function DegreesManager() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm">
-                <MoreHorizontalIcon />
+                <DotsThreeIcon aria-hidden="true" />
                 <span className="sr-only">{t("openMenuAria")}</span>
               </Button>
             </DropdownMenuTrigger>

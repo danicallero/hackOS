@@ -8,7 +8,7 @@ format, classification flow, and promotion path.
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-09-30
+Date: 2026-10-01
 
 ### Trigger
 Composing detail pages, lists, or participant workflows.
@@ -25,7 +25,9 @@ Optimize the primary layout for the common case without removing exceptions.
 ### Action
 Use open sections for related page content, with quiet hairlines where spacing
 alone leaves row ownership ambiguous. Removing cards does not mean removing
-all boundaries. Keep static metadata as text and secondary multi-record
+all boundaries. Repeated inbox/list rows still need clear ownership: use quiet
+hairlines, restrained neutral washes and distinct subject/meta/body hierarchy.
+Validate with several adjacent records, not just one isolated item. Keep static metadata as text and secondary multi-record
 navigation available without making it the default.
 
 ### Validation
@@ -202,3 +204,33 @@ and ensure the agent has a disjoint task and does not overwrite unrelated work.
 ### Exceptions
 If the requested model is unavailable, report that blocker rather than
 silently substituting the default model.
+
+## [R006] Review feedback copy at its call sites
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-10-01
+
+### Trigger
+When changing shared feedback to separate a compact heading from expanded detail.
+
+### Mistake
+The shared toast handled overflow, but its generic headings did not identify
+the action that produced the message.
+
+### Lesson
+A layout fix does not complete a semantic copy change. Each caller must name
+its own action or event, with room for all supported translations.
+
+### Action
+Inventory callers, reuse concise localized action labels, and retain the full
+explanation in the body. Check dynamic messages and helpers with several actions.
+
+### Validation
+Audit caller coverage and render representative feedback at narrow widths in
+every supported language, confirming that headings fit and reasons remain visible.
+
+### Exceptions
+A generic fallback may protect unknown callers, but does not replace reviewing
+the callers within the requested scope.

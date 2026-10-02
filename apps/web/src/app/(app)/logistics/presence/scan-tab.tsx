@@ -1,18 +1,16 @@
 "use client";
 
-import {
-  AlertTriangleIcon,
-  BadgeCheckIcon,
-  CheckCircle2Icon,
-  CheckIcon,
-  ClockIcon,
-  DoorOpenIcon,
-  LogInIcon,
-  LogOutIcon,
-  RotateCcwIcon,
-  ScanLineIcon,
-  SearchIcon,
-} from "lucide-react";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
+import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { ScanIcon } from "@phosphor-icons/react/dist/csr/Scan";
+import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
+import { SignInIcon } from "@phosphor-icons/react/dist/csr/SignIn";
+import { SignOutIcon } from "@phosphor-icons/react/dist/csr/SignOut";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -185,7 +183,9 @@ export function ScanTab({
         badgeId: assignBadgeId.trim(),
         method,
       });
-      toast.success(t("badgeAssigned", { badgeId: result.badgeId, name: personName(result) }));
+      toast.success(t("badgeAssigned", { badgeId: result.badgeId, name: personName(result) }), {
+        compactTitle: t("assignBadgeAction"),
+      });
       onAccredited();
       setAccCard({ ...accCard, alreadyAccredited: true, currentBadge: result.badgeId });
       setAssignBadgeId("");
@@ -207,7 +207,9 @@ export function ScanTab({
         newBadgeId: newBadgeId.trim(),
         reason: reason.trim(),
       });
-      toast.success(t("badgeRotatedTo", { badge: result.newBadge }));
+      toast.success(t("badgeRotatedTo", { badge: result.newBadge }), {
+        compactTitle: t("toastReplaceBadge"),
+      });
       setAccCard({ ...accCard, alreadyAccredited: true, currentBadge: result.newBadge });
       setNewBadgeId("");
       setReason("");
@@ -226,7 +228,9 @@ export function ScanTab({
     try {
       const result = await logisticsApi.presenceScan({ badgeId: presCard.badgeId, kind });
       setRecentScan({ kind, person: personName(presCard), at: result.scannedAt });
-      toast.success(kind === "in" ? t("entryRecorded") : t("exitRecorded"));
+      toast.success(kind === "in" ? t("entryRecorded") : t("exitRecorded"), {
+        compactTitle: t("toastRecordPresence"),
+      });
       reset();
       onPresenceScanned();
     } catch (err) {
@@ -248,7 +252,7 @@ export function ScanTab({
         scannedAt: new Date(manualScannedAt).toISOString(),
       });
       setRecentScan({ kind, person: personName(presCard), at: result.scannedAt });
-      toast.success(t("manualRecordAdded"));
+      toast.success(t("manualRecordAdded"), { compactTitle: t("toastRecordPresence") });
       reset();
       onPresenceScanned();
     } catch (err) {
@@ -265,7 +269,7 @@ export function ScanTab({
       <SectionCard
         title={t("personSearchTitle")}
         description={t("personSearchDesc")}
-        icon={SearchIcon}
+        icon={MagnifyingGlassIcon}
         bodyClassName="space-y-4"
       >
         <form
@@ -288,7 +292,7 @@ export function ScanTab({
           </div>
           <div className="flex items-end">
             <Button type="submit" className="w-full md:w-auto" disabled={busy || !query.trim()}>
-              {busy ? <Spinner /> : <ScanLineIcon className="size-4" />}
+              {busy ? <Spinner /> : <ScanIcon aria-hidden="true" className="size-4" />}
               {t("search")}
             </Button>
           </div>
@@ -315,7 +319,7 @@ export function ScanTab({
           role="status"
           aria-live="polite"
         >
-          <CheckCircle2Icon className="text-success mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <CheckCircleIcon className="text-success mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div className="min-w-0">
             <p className="font-medium">
               {recentScan.kind === "in" ? t("entryRecorded") : t("exitRecorded")}
@@ -336,7 +340,7 @@ export function ScanTab({
             <PersonCardView card={card} />
             {presCard?.openSince && (
               <div className="border-warning/40 bg-warning/10 text-warning-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
-                <AlertTriangleIcon className="size-4 shrink-0" />
+                <WarningIcon aria-hidden="true" className="size-4 shrink-0" />
                 {t("alreadyOpenSession", {
                   time: timeFmt.format(new Date(presCard.openSince)),
                   hours: hoursSince(presCard.openSince, t),
@@ -351,7 +355,7 @@ export function ScanTab({
                 <SectionCard
                   title={t("rotateBadge")}
                   description={t("changeBadgeDesc")}
-                  icon={RotateCcwIcon}
+                  icon={ArrowCounterClockwiseIcon}
                   bodyClassName="space-y-4"
                 >
                   <div className="space-y-2">
@@ -386,7 +390,7 @@ export function ScanTab({
                     onClick={doRotate}
                     disabled={busy || !newBadgeId.trim() || !reason.trim()}
                   >
-                    <RotateCcwIcon className="size-4" />
+                    <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
                     {t("rotateBadge")}
                   </Button>
                 </SectionCard>
@@ -394,7 +398,7 @@ export function ScanTab({
                 <SectionCard
                   title={t("assignBadgeAction")}
                   description={t("ticketCheckInDesc")}
-                  icon={BadgeCheckIcon}
+                  icon={SealCheckIcon}
                   bodyClassName="space-y-4"
                 >
                   <div className="space-y-2">
@@ -421,7 +425,7 @@ export function ScanTab({
                     </Select>
                   </div>
                   <Button onClick={doAssign} disabled={busy || !assignBadgeId.trim()}>
-                    <CheckIcon className="size-4" />
+                    <CheckIcon aria-hidden="true" className="size-4" />
                     {t("checkIn")}
                   </Button>
                 </SectionCard>
@@ -446,7 +450,7 @@ export function ScanTab({
                     onClick={() => doPresenceScan("in")}
                     disabled={busy || !!presCard.openSince || presCard.pendingExit === true}
                   >
-                    <LogInIcon className="size-4" />
+                    <SignInIcon aria-hidden="true" className="size-4" />
                     {t("registerEntry")}
                   </Button>
                   <Button
@@ -454,14 +458,14 @@ export function ScanTab({
                     onClick={() => doPresenceScan("out")}
                     disabled={busy || !presCard.openSince}
                   >
-                    <LogOutIcon className="size-4" />
+                    <SignOutIcon aria-hidden="true" className="size-4" />
                     {t("registerExit")}
                   </Button>
                 </div>
 
                 <div className="border-t pt-4">
                   <Button variant="link" size="sm" onClick={() => setManualOpen((v) => !v)}>
-                    <ClockIcon className="size-4" />
+                    <ClockIcon aria-hidden="true" className="size-4" />
                     {manualOpen ? t("cancelManualRecord") : t("addManualRecord")}
                   </Button>
                 </div>

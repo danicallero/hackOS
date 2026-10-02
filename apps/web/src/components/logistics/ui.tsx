@@ -1,4 +1,4 @@
-import { XIcon } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api";
 

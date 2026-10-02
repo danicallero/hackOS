@@ -12,7 +12,9 @@
 // challenge-directory access) — see requireSponsorPortalAccess.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { CalendarClockIcon, PlusIcon, XIcon } from "lucide-react";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -96,9 +98,12 @@ export default function SponsorFaqPage() {
       const r = await api.put<SponsorFaqResponse>("/api/sponsor-faq", { items: draft });
       setItems(r.items);
       setDraft(r.items);
-      toast.success(t("saved"));
+      toast.success(t("saved"), { compactTitle: t("toastSaveFaq") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveSponsorFaq"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveSponsorFaq"),
+        t("toastSaveFaq"),
+      );
     } finally {
       setSaving(false);
     }
@@ -165,7 +170,7 @@ function FaqItemBuilder({
               aria-label={t("remove")}
               onClick={() => onChange(items.filter((_, i) => i !== index))}
             >
-              <XIcon className="size-4" />
+              <XIcon aria-hidden="true" className="size-4" />
             </Button>
           </div>
           <MultilingualInput
@@ -183,7 +188,7 @@ function FaqItemBuilder({
       ))}
       <div className="flex items-center justify-between gap-2">
         <Button type="button" variant="outline" onClick={() => onChange([...items, emptyItem()])}>
-          <PlusIcon className="size-4" />
+          <PlusIcon aria-hidden="true" className="size-4" />
           {t("addFaqItem")}
         </Button>
         <SubmitButton pending={saving} onClick={onSave}>
@@ -264,7 +269,7 @@ function SponsorScheduleCard() {
   const sponsorItems = items?.filter((item) => item.audiences?.includes("sponsor")) ?? null;
 
   return (
-    <SectionCard icon={CalendarClockIcon} title={t("whatsHappeningTitle")}>
+    <SectionCard icon={CalendarDotsIcon} title={t("whatsHappeningTitle")}>
       {error ? (
         <ContextualError message={error} onRetry={load} />
       ) : sponsorItems === null || !event ? (

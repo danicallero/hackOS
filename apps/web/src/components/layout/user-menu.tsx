@@ -1,6 +1,11 @@
 "use client";
 
-import { LanguagesIcon, LogOutIcon, MonitorIcon, MoonIcon, SunIcon, UserIcon } from "lucide-react";
+import { MonitorIcon } from "@phosphor-icons/react/dist/csr/Monitor";
+import { MoonIcon } from "@phosphor-icons/react/dist/csr/Moon";
+import { SignOutIcon } from "@phosphor-icons/react/dist/csr/SignOut";
+import { SunIcon } from "@phosphor-icons/react/dist/csr/Sun";
+import { TranslateIcon } from "@phosphor-icons/react/dist/csr/Translate";
+import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -50,7 +55,10 @@ export function UserMenu({ className }: { className?: string }) {
             className,
           )}
         >
-          <UserIcon className="hidden size-4 group-data-[collapsible=icon]:block" />
+          <UserIcon
+            aria-hidden="true"
+            className="hidden size-4 group-data-[collapsible=icon]:block"
+          />
           <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
             <span className="block truncate text-sm font-medium">{me.name ?? me.email}</span>
             <span className="text-muted-foreground block truncate text-xs">{me.email}</span>
@@ -70,12 +78,12 @@ export function UserMenu({ className }: { className?: string }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/settings/profile">
-            <UserIcon className="size-4" /> {t("profile")}
+            <UserIcon aria-hidden="true" className="size-4" /> {t("profile")}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
-            <LanguagesIcon className="size-4" /> {t("language")}
+            <TranslateIcon aria-hidden="true" className="size-4" /> {t("language")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <DropdownMenuRadioGroup
@@ -94,30 +102,30 @@ export function UserMenu({ className }: { className?: string }) {
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               {theme === "dark" ? (
-                <MoonIcon className="size-4" />
+                <MoonIcon aria-hidden="true" className="size-4" />
               ) : theme === "light" ? (
-                <SunIcon className="size-4" />
+                <SunIcon aria-hidden="true" className="size-4" />
               ) : (
-                <MonitorIcon className="size-4" />
+                <MonitorIcon aria-hidden="true" className="size-4" />
               )}
               {t("toggleTheme")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               <DropdownMenuItem onClick={() => setTheme("light")}>
-                <SunIcon className="size-4" /> {t("light")}
+                <SunIcon aria-hidden="true" className="size-4" /> {t("light")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("dark")}>
-                <MoonIcon className="size-4" /> {t("dark")}
+                <MoonIcon aria-hidden="true" className="size-4" /> {t("dark")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("system")}>
-                <MonitorIcon className="size-4" /> {t("system")}
+                <MonitorIcon aria-hidden="true" className="size-4" /> {t("system")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
-          <LogOutIcon className="size-4" /> {t("signOut")}
+          <SignOutIcon aria-hidden="true" className="size-4" /> {t("signOut")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

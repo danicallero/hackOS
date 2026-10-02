@@ -18,7 +18,7 @@ declare one on the side.
    hike: { icon: "footprints", symbol: "figure.walk", scan: "activity" },
    ```
 
-   - `icon` — a [lucide](https://lucide.dev) icon name for the web.
+   - `icon` — a stable web icon key mapped to a Phosphor component.
    - `symbol` — an SF Symbol name for the mobile app.
    - `scan` — `"meal"` gives the category meal semantics (always scannable,
      everyone entitled, repeats counted); anything else is `"activity"`.
@@ -46,7 +46,7 @@ kinds, the mobile schedule/filter/notification screens, the API's validation of
 | Guardrail | Catches |
 | --- | --- |
 | `activityKindLabelKey` / `activityKindPluralKey` return template-literal types (`` `type${Capitalize<ActivityKind>}` ``) checked against each app's `MessageKey` | a category shipped before its `common`/`web` labels exist — web **and** mobile fail to typecheck |
-| `KIND_ICONS: Record<ActivityKindIconName, LucideIcon>` | a new lucide icon name with no component mapped — web fails to typecheck |
+| `KIND_ICONS: Record<ActivityKindIconName, PhosphorIcon>` | a new web icon key with no component mapped — web fails to typecheck |
 | `ANDROID_SYMBOL_NAMES … satisfies Record<string, string> & Record<ActivityKindSymbolName, string>` | a new SF Symbol with no Android alias (it would render blank on Android) — mobile fails to typecheck |
 | `pnpm check:copy` cross-checks every registry id against `common/type*` and `web/kind*` | a missing **locale** (es/gl/en) for a category, without needing a typecheck |
 

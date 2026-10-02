@@ -1,6 +1,6 @@
 "use client";
 
-import { WifiIcon } from "lucide-react";
+import { WifiHighIcon } from "@phosphor-icons/react/dist/csr/WifiHigh";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   PublicAnnouncement,
@@ -356,7 +356,7 @@ function WifiBlock({
       {showQr ? (
         <WifiQr wifi={wifi} size="5em" className="shrink-0 p-[0.45em]" />
       ) : (
-        <WifiIcon className="size-[1.75em] shrink-0" aria-hidden="true" />
+        <WifiHighIcon className="size-[1.75em] shrink-0" aria-hidden="true" />
       )}
       {/* Network above password, values aligned on a fixed label column — the
           value is what someone is copying off the wall. Deliberately rows of

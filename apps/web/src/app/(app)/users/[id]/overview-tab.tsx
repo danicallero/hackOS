@@ -5,7 +5,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { UserIcon } from "lucide-react";
+import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -204,9 +204,12 @@ export function StaffEditForm({
         notes: values.notes || null,
       });
       await onUpdated();
-      toast.success(t("profileUpdated"));
+      toast.success(t("profileUpdated"), { compactTitle: t("toastSaveProfile") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveProfile"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveProfile"),
+        t("toastSaveProfile"),
+      );
     }
   }
 
@@ -216,11 +219,14 @@ export function StaffEditForm({
       await api.patch(`/api/users/${user.id}/email`, {
         email: primaryEmail.trim().toLowerCase(),
       });
-      toast.success(t("primaryEmailChanged"));
+      toast.success(t("primaryEmailChanged"), { compactTitle: t("toastChangeEmail") });
       setPrimaryEmail("");
       await onUpdated();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotChangePrimaryEmail"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotChangePrimaryEmail"),
+        t("toastChangeEmail"),
+      );
     } finally {
       setPrimarySending(false);
     }
@@ -232,11 +238,14 @@ export function StaffEditForm({
       await api.post(`/api/users/${user.id}/secondary-email`, {
         email: secEmail.trim().toLowerCase(),
       });
-      toast.success(t("secondaryEmailSetNeedsVerify"));
+      toast.success(t("secondaryEmailSetNeedsVerify"), { compactTitle: t("toastAddEmail") });
       setSecEmail("");
       await onUpdated();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSetSecondaryEmail"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSetSecondaryEmail"),
+        t("toastAddEmail"),
+      );
     } finally {
       setSecSending(false);
     }
@@ -246,10 +255,13 @@ export function StaffEditForm({
     setSecSending(true);
     try {
       await api.delete(`/api/users/${user.id}/secondary-email`);
-      toast.success(t("secondaryEmailRemoved"));
+      toast.success(t("secondaryEmailRemoved"), { compactTitle: t("toastRemoveEmail") });
       await onUpdated();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveSecondaryEmail"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveSecondaryEmail"),
+        t("toastRemoveEmail"),
+      );
     } finally {
       setSecSending(false);
     }

@@ -6,7 +6,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ClipboardListIcon } from "lucide-react";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { useForm } from "react-hook-form";
@@ -75,10 +75,10 @@ export default function NewApplicationFormPage() {
         open_at: fromLocalInput(values.open_at),
         close_at: fromLocalInput(values.close_at),
       });
-      toast.success(t("formCreated"));
+      toast.success(t("formCreated"), { compactTitle: t("createForm") });
       router.push(`/applications/${created.id}`);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateForm"));
+      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateForm"), t("createForm"));
     }
   }
 
@@ -93,7 +93,7 @@ export default function NewApplicationFormPage() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onCreate)}>
           <SectionCard
-            icon={ClipboardListIcon}
+            icon={ClipboardTextIcon}
             footer={
               <SubmitButton pending={form.formState.isSubmitting}>{t("createForm")}</SubmitButton>
             }

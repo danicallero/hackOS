@@ -4,7 +4,11 @@
 // memberships (H43).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { Building2Icon, KeyRoundIcon, ShieldIcon, UsersIcon, XIcon } from "lucide-react";
+import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
+import { KeyIcon } from "@phosphor-icons/react/dist/csr/Key";
+import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { EntityCombobox } from "@/components/common/entity-combobox";
@@ -46,10 +50,13 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
         await api.post(`/api/roles/${roleId}/users/${user.id}`, {});
         added.push(roleId);
       }
-      toast.success(t("rolesAdded"));
+      toast.success(t("rolesAdded"), { compactTitle: t("toastAssignRole") });
       setRoleIdsToAdd([]);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddRole"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotAddRole"),
+        t("toastAssignRole"),
+      );
     } finally {
       if (added.length > 0) {
         setRoleIdsToAdd((current) => current.filter((roleId) => !added.includes(roleId)));
@@ -63,10 +70,13 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
     setBusy(true);
     try {
       await api.delete(`/api/roles/${roleId}/users/${user.id}`);
-      toast.success(t("roleRemoved"));
+      toast.success(t("roleRemoved"), { compactTitle: t("toastRemoveRole") });
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveRole"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveRole"),
+        t("toastRemoveRole"),
+      );
     } finally {
       setBusy(false);
     }
@@ -108,7 +118,7 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
                   href={`/permissions/${r.id}`}
                   className="inline-flex items-center gap-1.5 hover:underline"
                 >
-                  <ShieldIcon className="size-3" />
+                  <ShieldIcon aria-hidden="true" className="size-3" />
                   {r.name}
                 </Link>
                 {canManage && (
@@ -119,7 +129,7 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
                     className="hover:bg-muted text-muted-foreground hover:text-foreground rounded p-0.5"
                     aria-label={t("removeRoleAria", { name: r.name })}
                   >
-                    <XIcon className="size-3" />
+                    <XIcon aria-hidden="true" className="size-3" />
                   </button>
                 )}
               </Badge>
@@ -128,7 +138,7 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
         )}
       </SectionCard>
 
-      <SectionCard icon={KeyRoundIcon} title={t("effectiveCapabilities")}>
+      <SectionCard icon={KeyIcon} title={t("effectiveCapabilities")}>
         {user.capabilities.length === 0 ? (
           <p className="text-muted-foreground text-sm">{t("noCapabilities")}</p>
         ) : (
@@ -191,11 +201,14 @@ export function EnterpriseMemberships({
     setBusy(true);
     try {
       await api.post(`/api/enterprises/${enterpriseId}/members`, { userId });
-      toast.success(t("enterpriseAdded"));
+      toast.success(t("enterpriseAdded"), { compactTitle: t("toastJoinCompany") });
       loadMemberships();
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddEnterprise"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotAddEnterprise"),
+        t("toastJoinCompany"),
+      );
     } finally {
       setBusy(false);
     }
@@ -203,7 +216,7 @@ export function EnterpriseMemberships({
 
   return (
     <SectionCard
-      icon={Building2Icon}
+      icon={BuildingsIcon}
       title={t("enterprises")}
       action={
         canManage ? (

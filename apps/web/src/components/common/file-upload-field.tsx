@@ -5,7 +5,10 @@
 // (apps/api/src/modules/applications/upload.routes.ts). On success the
 // returned object URL is stored as the field's value in the response object.
 
-import { FileIcon, PaperclipIcon, UploadIcon, XIcon } from "lucide-react";
+import { FileIcon } from "@phosphor-icons/react/dist/csr/File";
+import { PaperclipIcon } from "@phosphor-icons/react/dist/csr/Paperclip";
+import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useId, useRef, useState } from "react";
 import { FileLink } from "@/components/common/file-link";
 import { IconButton } from "@/components/common/icon-button";
@@ -67,13 +70,13 @@ export function FileUploadField({
     if (allowedTypes?.length && !allowedTypes.includes(ext)) {
       const message = t("fileTypeNotAllowed", { ext, allowed: allowedTypes.join(", ") });
       setUploadError(message);
-      toast.error(message);
+      toast.error(message, t("toastUploadFile"));
       return;
     }
     if (file.size > maxMb * 1024 * 1024) {
       const message = t("fileTooLarge", { maxMb });
       setUploadError(message);
-      toast.error(message);
+      toast.error(message, t("toastUploadFile"));
       return;
     }
     setUploading(true);
@@ -88,6 +91,7 @@ export function FileUploadField({
           body,
         ),
         {
+          compactTitle: t("toastUploadFile"),
           loading: { title: t("uploading"), description: file.name },
           success: { title: t("fileUploaded"), description: file.name },
           error: (error) => ({
@@ -163,7 +167,7 @@ export function FileUploadField({
           aria-invalid={invalid}
           onClick={() => inputRef.current?.click()}
         >
-          {uploading ? <Spinner /> : <UploadIcon aria-hidden="true" />}
+          {uploading ? <Spinner /> : <UploadSimpleIcon aria-hidden="true" />}
           {uploading ? t("uploading") : t("chooseFile")}
         </Button>
       )}

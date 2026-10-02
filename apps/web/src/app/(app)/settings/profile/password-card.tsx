@@ -1,13 +1,15 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { KeyRoundIcon } from "lucide-react";
-import { useMemo } from "react";
+import { KeyIcon } from "@phosphor-icons/react/dist/csr/Key";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { Modal } from "@/components/common/modal";
 import { PasswordInput } from "@/components/common/password-input";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -39,6 +41,7 @@ type Values = z.infer<ReturnType<typeof passwordSchema>>;
 
 export function PasswordCard() {
   const { t } = useLocale();
+  const [open, setOpen] = useState(false);
   const schema = useMemo(() => passwordSchema(t), [t]);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -65,67 +68,82 @@ export function PasswordCard() {
     }
 
     form.reset();
-    toast.success(t("passwordChanged"));
+    setOpen(false);
+    toast.success(t("passwordChanged"), { compactTitle: t("toastChangePassword") });
   }
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)}>
-        <SectionCard
-          icon={KeyRoundIcon}
-          title={t("changePassword")}
-          footer={
+    <SectionCard
+      variant="plain"
+      title={t("changePassword")}
+      action={
+        <Button variant="outline" onClick={() => setOpen(true)}>
+          {t("updatePassword")}
+        </Button>
+      }
+    >
+      <Modal
+        open={open}
+        onOpenChange={(next) => {
+          if (form.formState.isSubmitting) return;
+          setOpen(next);
+          if (!next) form.reset();
+        }}
+        title={t("changePassword")}
+        icon={KeyIcon}
+      >
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="currentPassword"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <FormLabel>{t("currentPassword")}</FormLabel>
+                    <FormControl>
+                      <PasswordInput autoComplete="current-password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="newPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("newPassword")}</FormLabel>
+                    <FormControl>
+                      <PasswordInput autoComplete="new-password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("confirmPassword")}</FormLabel>
+                    <FormControl>
+                      <PasswordInput autoComplete="new-password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            {form.formState.errors.root && (
+              <p className="text-destructive text-sm" role="alert">
+                {form.formState.errors.root.message}
+              </p>
+            )}
             <SubmitButton pending={form.formState.isSubmitting}>{t("updatePassword")}</SubmitButton>
-          }
-        >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField
-              control={form.control}
-              name="currentPassword"
-              render={({ field }) => (
-                <FormItem className="sm:col-span-2">
-                  <FormLabel>{t("currentPassword")}</FormLabel>
-                  <FormControl>
-                    <PasswordInput autoComplete="current-password" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="newPassword"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("newPassword")}</FormLabel>
-                  <FormControl>
-                    <PasswordInput autoComplete="new-password" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="confirmPassword"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("confirmPassword")}</FormLabel>
-                  <FormControl>
-                    <PasswordInput autoComplete="new-password" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-          {form.formState.errors.root && (
-            <p className="text-destructive text-sm" role="alert">
-              {form.formState.errors.root.message}
-            </p>
-          )}
-        </SectionCard>
-      </form>
-    </Form>
+          </form>
+        </Form>
+      </Modal>
+    </SectionCard>
   );
 }

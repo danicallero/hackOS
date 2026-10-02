@@ -128,7 +128,10 @@ jobs:
           exit 1
 
       - name: Create S3 test bucket
-        run: curl --fail --silent --show-error --request PUT http://127.0.0.1:9000/hackos/
+        run: |
+          for shard in 0 1 2 3; do
+            curl --fail --silent --show-error --request PUT "http://127.0.0.1:9000/hackos-shard-${shard}/"
+          done
 
       - name: Run API integration tests
         run: pnpm --filter @hackos/api test

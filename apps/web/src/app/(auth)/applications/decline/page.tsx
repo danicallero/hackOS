@@ -5,7 +5,8 @@
 // applicant who can't make it frees their spot in one click — no sign-in
 // required. A second click is idempotent (already_declined).
 
-import { CalendarXIcon, TriangleAlertIcon } from "lucide-react";
+import { CalendarXIcon } from "@phosphor-icons/react/dist/csr/CalendarX";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -55,7 +56,7 @@ function DeclineInner() {
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
           <div className="bg-warning/10 text-warning mb-2 grid size-12 place-items-center rounded-full">
-            <TriangleAlertIcon aria-hidden="true" className="size-6" />
+            <WarningIcon aria-hidden="true" className="size-6" />
           </div>
           <CardTitle>{t("confirmationExpiredTitle")}</CardTitle>
           <CardDescription role="alert">{t("confirmationExpiredDesc")}</CardDescription>
@@ -74,7 +75,7 @@ function DeclineInner() {
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
           <div className="bg-destructive/10 text-destructive mb-2 grid size-12 place-items-center rounded-full">
-            <TriangleAlertIcon aria-hidden="true" className="size-6" />
+            <WarningIcon aria-hidden="true" className="size-6" />
           </div>
           <CardTitle>
             {linkInvalid ? t("confirmationLinkInvalidTitle") : t("declineFailed")}

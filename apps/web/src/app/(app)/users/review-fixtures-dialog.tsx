@@ -1,6 +1,7 @@
 "use client";
 
-import { RefreshCwIcon, ShieldCheckIcon } from "lucide-react";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowsClockwise";
+import { ShieldCheckIcon } from "@phosphor-icons/react/dist/csr/ShieldCheck";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Modal } from "@/components/common/modal";
@@ -109,9 +110,12 @@ export function ReviewFixturesDialog() {
         })),
       });
       setConfirmOpen(false);
-      toast.success(t("reviewFixturesRegenerated"));
+      toast.success(t("reviewFixturesRegenerated"), { compactTitle: t("toastReviewAccounts") });
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("reviewFixturesRegenerateFailed"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("reviewFixturesRegenerateFailed"),
+        t("toastReviewAccounts"),
+      );
     } finally {
       setPending(false);
     }
@@ -140,7 +144,7 @@ export function ReviewFixturesDialog() {
               {t("cancel")}
             </Button>
             <Button type="button" onClick={() => setConfirmOpen(true)} disabled={pending}>
-              <RefreshCwIcon aria-hidden="true" />
+              <ArrowsClockwiseIcon aria-hidden="true" />
               {t("reviewFixturesRegenerate")}
             </Button>
           </>

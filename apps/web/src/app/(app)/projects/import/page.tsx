@@ -7,7 +7,11 @@
 // H18-H21 (create/edit projects in hackOS) are not backed by the API.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { ArrowLeftIcon, CheckCircle2Icon, FileTextIcon, UploadIcon, UsersIcon } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
+import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import Link from "next/link";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -66,7 +70,7 @@ function CsvInput({
       setFileName(file.name);
       onChange(text, file.name);
     } catch {
-      toast.error(t("couldNotReadFile", { file: file.name }));
+      toast.error(t("couldNotReadFile", { file: file.name }), t("toastReadFile"));
     }
   }
 
@@ -103,7 +107,7 @@ function CsvInput({
           disabled={disabled}
           onClick={() => inputRef.current?.click()}
         >
-          <UploadIcon className="size-4" />
+          <UploadSimpleIcon aria-hidden="true" className="size-4" />
           {t("chooseCsv")}
         </Button>
         {value && (
@@ -167,7 +171,7 @@ function buildRepoColumns(t: Translate): Column<PlanRepo>[] {
       sortValue: (r) => r.members.length,
       cell: (r) => (
         <span className="text-muted-foreground inline-flex items-center gap-1 text-sm">
-          <UsersIcon className="size-3.5" />
+          <UsersIcon aria-hidden="true" className="size-3.5" />
           {r.members.length}
         </span>
       ),
@@ -221,12 +225,13 @@ export default function ImportProjectsPage() {
 
   const runPreview = useCallback(async () => {
     if (!projectsCsv.trim() || !participantsCsv.trim()) {
-      toast.warning(t("provideBothCsvExports"));
+      toast.warning(t("provideBothCsvExports"), { compactTitle: t("toastPreviewImport") });
       return;
     }
     setPreviewing(true);
     try {
       const p = await toast.promise(previewImport(projectsCsv, participantsCsv), {
+        compactTitle: t("toastPreviewImport"),
         loading: { title: t("previewImport") },
         success: { title: t("reviewImport") },
         error: { title: t("couldNotPreviewImport") },
@@ -262,6 +267,7 @@ export default function ImportProjectsPage() {
           idemKey.current,
         ),
         {
+          compactTitle: t("toastApplyImport"),
           loading: { title: t("confirmImport") },
           success: { title: t("importApplied") },
           error: { title: t("couldNotApplyImport") },
@@ -302,7 +308,7 @@ export default function ImportProjectsPage() {
         <SectionCard
           title={t("importAppliedTitle")}
           description={t("devpostWrittenDesc")}
-          icon={CheckCircle2Icon}
+          icon={CheckCircleIcon}
         >
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <StatCard label={t("colProjectsCreated")} value={c.reposCreated} />
@@ -355,7 +361,7 @@ export default function ImportProjectsPage() {
           actions={
             <>
               <Button variant="outline" onClick={reset} disabled={confirming}>
-                <ArrowLeftIcon className="size-4" />
+                <ArrowLeftIcon aria-hidden="true" className="size-4" />
                 {t("back")}
               </Button>
               <SubmitButton type="button" pending={confirming} onClick={runConfirm}>
@@ -513,7 +519,7 @@ export default function ImportProjectsPage() {
         actions={
           <Button variant="outline" asChild>
             <Link href="/projects">
-              <ArrowLeftIcon className="size-4" />
+              <ArrowLeftIcon aria-hidden="true" className="size-4" />
               {t("projects")}
             </Link>
           </Button>
