@@ -384,6 +384,9 @@ never fork. Decide *whether* something is a dialog before deciding *which*
 dialog. Inventory: `apps/web/README.md`; representative live examples in
 `/design-system`.**
 
+Shared dialogs (H55) place the backdrop at `z-index: 50` and the content at
+`z-index: 51`, explicitly keeping the modal above its blurred backdrop.
+
 ### Is it a dialog at all?
 
 A dialog is an **interruption**: it steals focus, hides the page behind it,
