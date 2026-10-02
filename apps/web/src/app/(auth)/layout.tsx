@@ -14,11 +14,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const { t } = useLocale();
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden">
-      {/* Decorative glow, purely cosmetic — echoes the landing page hero. */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
-        <div className="bg-primary/10 absolute -top-32 -left-32 size-112 rounded-full blur-3xl" />
-        <div className="bg-chart-2/10 absolute -right-32 bottom-0 size-96 rounded-full blur-3xl" />
-      </div>
       <header className="flex items-center justify-between px-6 py-4">
         <Link href="/">
           <Brand />

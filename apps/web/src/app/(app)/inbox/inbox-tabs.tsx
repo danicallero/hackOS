@@ -16,15 +16,13 @@ import {
   toActivityKind,
 } from "@hackos/shared/activity-kinds";
 import { EVENTS } from "@hackos/shared/events";
-import {
-  CalendarClockIcon,
-  ChevronDownIcon,
-  InboxIcon,
-  LockIcon,
-  PlusIcon,
-  SlidersHorizontalIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+import { TrayIcon } from "@phosphor-icons/react/dist/csr/Tray";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -235,13 +233,13 @@ export function MessagesTab() {
         </div>
       ) : error ? (
         <EmptyState
-          icon={InboxIcon}
+          icon={TrayIcon}
           title={t("couldNotLoadInboxTitle")}
           description={t("couldNotLoadInboxDesc")}
         />
       ) : items.length === 0 ? (
         <EmptyState
-          icon={InboxIcon}
+          icon={TrayIcon}
           title={unreadOnly ? t("noUnreadMessages") : t("noMessagesYet")}
           description={t("messagesWillShowUp")}
         />
@@ -284,7 +282,7 @@ export function MessagesTab() {
                       <p className="line-clamp-2 text-muted-foreground text-sm">{body}</p>
                     )}
                   </div>
-                  <ChevronDownIcon
+                  <CaretDownIcon
                     className={`text-muted-foreground mt-1 size-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
                     aria-hidden
                   />
@@ -320,7 +318,7 @@ export function MessagesTab() {
                       }}
                       label={t("deleteNotificationAria")}
                     >
-                      <Trash2Icon className="size-4" aria-hidden="true" />
+                      <TrashIcon className="size-4" aria-hidden="true" />
                     </IconButton>
                   </div>
                 )}
@@ -629,7 +627,7 @@ export function PreferencesTab() {
                             ? enabledChannels.map((channel) => channelLabels[channel]).join(", ")
                             : t("notificationsOff")}
                         </span>
-                        <ChevronDownIcon className="size-4 shrink-0" aria-hidden="true" />
+                        <CaretDownIcon className="size-4 shrink-0" aria-hidden="true" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -655,7 +653,7 @@ export function PreferencesTab() {
 
       <SectionCard
         variant="plain"
-        icon={CalendarClockIcon}
+        icon={CalendarDotsIcon}
         title={t("activityReminders")}
         action={
           <Modal
@@ -670,7 +668,7 @@ export function PreferencesTab() {
               if (!busy) setReminderPickerOpen(open);
             }}
             title={t("addReminder")}
-            icon={CalendarClockIcon}
+            icon={CalendarDotsIcon}
           >
             <div className="space-y-6">
               <div className="space-y-2">

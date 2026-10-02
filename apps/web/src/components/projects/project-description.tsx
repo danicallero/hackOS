@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { CaretUpIcon } from "@phosphor-icons/react/dist/csr/CaretUp";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
@@ -46,12 +47,12 @@ export function ProjectDescription({ text }: { text: string }) {
         >
           {expanded ? (
             <>
-              <ChevronUpIcon className="size-3.5" />
+              <CaretUpIcon aria-hidden="true" className="size-3.5" />
               {t("showLess")}
             </>
           ) : (
             <>
-              <ChevronDownIcon className="size-3.5" />
+              <CaretDownIcon aria-hidden="true" className="size-3.5" />
               {t("showMore")}
             </>
           )}

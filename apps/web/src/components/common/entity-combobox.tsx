@@ -6,7 +6,8 @@
 // Filters client-side via cmdk's built-in fuzzy match. For a picker backed by
 // a paginated/server-searched endpoint instead, use UserPicker's pattern.
 
-import { CheckIcon, ChevronsUpDownIcon } from "lucide-react";
+import { CaretUpDownIcon } from "@phosphor-icons/react/dist/csr/CaretUpDown";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -122,10 +123,7 @@ export function EntityCombobox<T>({
           <span className={cn("flex-1 truncate text-left", !label && "text-muted-foreground")}>
             {label ?? placeholder ?? t("typeToFilterEllipsis")}
           </span>
-          <ChevronsUpDownIcon
-            aria-hidden="true"
-            className="text-muted-foreground size-4 shrink-0"
-          />
+          <CaretUpDownIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
         </Button>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal {...portalProps}>{content}</PopoverPrimitive.Portal>

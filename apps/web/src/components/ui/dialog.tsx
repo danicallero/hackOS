@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { XIcon } from "lucide-react"
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
@@ -123,7 +123,7 @@ function DialogContent({
             className={cn(dialogIconButtonClass, "absolute top-3 right-3 z-10")}
             title={t("close")}
           >
-            <XIcon />
+            <XIcon aria-hidden="true" />
             <span className="sr-only">{t("close")}</span>
           </DialogPrimitive.Close>
         )}

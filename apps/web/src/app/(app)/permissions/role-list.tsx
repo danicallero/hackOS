@@ -15,7 +15,9 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { ChevronRightIcon, LockIcon, SearchIcon } from "lucide-react";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { useMemo, useState } from "react";
 import { DragHandle, SortableItem } from "@/components/common/drag-handle";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -83,7 +85,10 @@ export function RoleList({
   return (
     <div className="flex flex-col">
       <div className="relative border-b p-2">
-        <SearchIcon className="text-muted-foreground absolute top-1/2 left-5 size-4 -translate-y-1/2" />
+        <MagnifyingGlassIcon
+          aria-hidden="true"
+          className="text-muted-foreground absolute top-1/2 left-5 size-4 -translate-y-1/2"
+        />
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -171,7 +176,7 @@ function RoleRow({
           <span className="truncate text-sm font-medium">{role.name}</span>
           {locked && (
             <StatusBadge tone="neutral" dot={false} className="shrink-0">
-              <LockIcon className="size-3" /> {t("systemRoleBadge")}
+              <LockIcon aria-hidden="true" className="size-3" /> {t("systemRoleBadge")}
             </StatusBadge>
           )}
         </span>
@@ -179,9 +184,7 @@ function RoleRow({
           <span className="text-muted-foreground text-xs tabular-nums">
             {role.memberIds.length}
           </span>
-          {mobile && (
-            <ChevronRightIcon aria-hidden="true" className="text-muted-foreground size-4" />
-          )}
+          {mobile && <CaretRightIcon aria-hidden="true" className="text-muted-foreground size-4" />}
         </span>
       </button>
     </li>

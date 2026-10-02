@@ -1,6 +1,9 @@
 "use client";
 
-import { BanIcon, CopyIcon, LinkIcon, MailIcon } from "lucide-react";
+import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import { LinkIcon } from "@phosphor-icons/react/dist/csr/Link";
+import { ProhibitIcon } from "@phosphor-icons/react/dist/csr/Prohibit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -351,12 +354,12 @@ export function InvitationsScreen() {
         error={error ? { message: error, onRetry: load } : undefined}
         searchable={(row) => `${row.label} ${row.enterprise ?? ""}`}
         searchPlaceholder={t("searchByEmailType")}
-        empty={{ icon: MailIcon, title: t("noActiveInvitations") }}
+        empty={{ icon: EnvelopeSimpleIcon, title: t("noActiveInvitations") }}
       />
       <SidePanelEditor
         open={selected !== null}
         onOpenChange={(open) => !open && setSelected(null)}
-        icon={selected?.source === "email" ? MailIcon : LinkIcon}
+        icon={selected?.source === "email" ? EnvelopeSimpleIcon : LinkIcon}
         title={selected?.source === "email" ? selected.label : t("inviteLink")}
         className="w-[min(40rem,calc(100vw-1rem))] sm:w-[min(40rem,calc(100vw-2rem))]"
         footer={
@@ -381,7 +384,7 @@ export function InvitationsScreen() {
                 <AlertModal
                   trigger={
                     <Button variant="destructive">
-                      <BanIcon className="size-4" aria-hidden="true" /> {t("expire")}
+                      <ProhibitIcon className="size-4" aria-hidden="true" /> {t("expire")}
                     </Button>
                   }
                   title={t("withdrawLinkTitle")}

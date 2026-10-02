@@ -4,7 +4,9 @@
 // self-creation (H19). Metadata + optional challenge lineup on create;
 // team membership stays on the detail page (H21 surfaces).
 
-import { FolderPlusIcon, type LucideIcon, PencilIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { FolderPlusIcon } from "@phosphor-icons/react/dist/csr/FolderPlus";
+import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import { useEffect, useState } from "react";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/multi-select";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -112,7 +114,7 @@ export function ProjectFormDialog({
     label: challengeTitleText(c.title),
   }));
 
-  const TriggerIcon: LucideIcon = isEdit ? PencilIcon : FolderPlusIcon;
+  const TriggerIcon: PhosphorIcon = isEdit ? PencilIcon : FolderPlusIcon;
   const triggerLabel = isEdit
     ? t("editProject")
     : mode.kind === "self"

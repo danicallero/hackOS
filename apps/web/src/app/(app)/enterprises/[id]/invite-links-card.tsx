@@ -1,7 +1,9 @@
 "use client";
 
 import { EVENTS } from "@hackos/shared/events";
-import { LinkIcon, PlusIcon, UserRoundIcon } from "lucide-react";
+import { LinkIcon } from "@phosphor-icons/react/dist/csr/Link";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { SectionCard } from "@/components/common/section-card";
@@ -319,7 +321,7 @@ export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
                 </dl>
                 <div className="border-t pt-3">
                   <h3 className="mb-2 flex items-center gap-2 text-sm font-medium">
-                    <UserRoundIcon aria-hidden="true" className="size-4" /> {t("redemptionsLabel")}
+                    <UserIcon aria-hidden="true" className="size-4" /> {t("redemptionsLabel")}
                   </h3>
                   {link.redemptions.length === 0 ? (
                     <p className="text-muted-foreground text-sm">{t("noRedemptionsYet")}</p>

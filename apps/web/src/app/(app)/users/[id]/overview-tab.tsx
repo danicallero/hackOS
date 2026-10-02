@@ -5,7 +5,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { UserIcon } from "lucide-react";
+import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";

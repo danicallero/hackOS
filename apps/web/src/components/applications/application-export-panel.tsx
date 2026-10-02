@@ -1,6 +1,6 @@
 "use client";
 
-import { DownloadIcon } from "lucide-react";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { type FormEvent, type ReactNode, useCallback, useMemo, useState } from "react";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -322,7 +322,7 @@ export function ApplicationExportPanel({
 
   const defaultTrigger = (
     <Button variant="outline">
-      <DownloadIcon aria-hidden="true" />
+      <DownloadSimpleIcon aria-hidden="true" />
       {t("exportApplicationData")}
     </Button>
   );
@@ -333,7 +333,7 @@ export function ApplicationExportPanel({
       onOpenChange={onOpenChange}
       trigger={trigger ?? defaultTrigger}
       title={t("applicationExportTitle")}
-      icon={DownloadIcon}
+      icon={DownloadSimpleIcon}
       className="sm:max-w-2xl"
       footer={
         <>
@@ -345,7 +345,7 @@ export function ApplicationExportPanel({
             pending={exporting}
             disabled={catalogLoading || !catalog}
           >
-            <DownloadIcon aria-hidden="true" />
+            <DownloadSimpleIcon aria-hidden="true" />
             {t("export")}
           </SubmitButton>
         </>

@@ -1,6 +1,7 @@
 "use client";
 
-import { EyeIcon, EyeOffIcon } from "lucide-react";
+import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
+import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 import { useState } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +28,7 @@ export function PasswordInput({ className, ...props }: React.ComponentProps<type
         aria-pressed={visible}
       >
         {visible ? (
-          <EyeOffIcon className="size-4" aria-hidden="true" />
+          <EyeSlashIcon className="size-4" aria-hidden="true" />
         ) : (
           <EyeIcon className="size-4" aria-hidden="true" />
         )}

@@ -1,7 +1,10 @@
 "use client";
 
 import { EVENTS } from "@hackos/shared/events";
-import { CalendarDaysIcon, MegaphoneIcon, UsersRoundIcon, WifiIcon } from "lucide-react";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
+import { WifiHighIcon } from "@phosphor-icons/react/dist/csr/WifiHigh";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Spinner } from "@/components/common/spinner";
 import type {
@@ -666,12 +669,7 @@ function RoomsView({
         }}
         className="flex min-h-full flex-col"
       >
-        <TvHeader
-          compact
-          title={t("judgingRoomsTitle")}
-          icon={UsersRoundIcon}
-          eventName={event.name}
-        />
+        <TvHeader compact title={t("judgingRoomsTitle")} icon={UsersIcon} eventName={event.name} />
         <div className="min-h-0 flex-1 p-8">
           {groups.length ? (
             <div
@@ -731,7 +729,7 @@ function ScheduleView({
   const { t } = useLocale();
   return (
     <TvScreen>
-      <TvHeader title={t("schedule")} icon={CalendarDaysIcon} eventName={event.name} />
+      <TvHeader title={t("schedule")} icon={CalendarDotsIcon} eventName={event.name} />
       <TvBody className="gap-[1em]">
         {announcement && <EmbeddedAnnouncement announcement={announcement} compact />}
         <ScheduleBlock
@@ -821,7 +819,7 @@ function WifiView({
     <TvScreen>
       {({ portrait }) => (
         <>
-          <TvHeader title={t("modeWifi")} icon={WifiIcon} eventName={event.name} />
+          <TvHeader title={t("modeWifi")} icon={WifiHighIcon} eventName={event.name} />
           <TvBody className="items-center justify-center">
             {/* Two equal ways in — scan it, or read it — set side by side and
                 centred as one block, rather than a small card adrift in a

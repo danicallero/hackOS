@@ -7,7 +7,10 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2Icon, ImageIcon, TrophyIcon, UploadIcon } from "lucide-react";
+import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
+import { ImageIcon } from "@phosphor-icons/react/dist/csr/Image";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
+import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -277,7 +280,7 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
   }
 
   return (
-    <SectionCard icon={Building2Icon} title={t("affiliatedUsersTitle")}>
+    <SectionCard icon={BuildingsIcon} title={t("affiliatedUsersTitle")}>
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor={`enterprise-member-${enterpriseId}`}>{t("addMemberLabel")}</Label>
@@ -305,7 +308,7 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
           </div>
         ) : members.length === 0 ? (
           <EmptyState
-            icon={Building2Icon}
+            icon={BuildingsIcon}
             title={t("noAffiliatedUsersTitle")}
             description={t("searchAboveToAffiliate")}
           />
@@ -394,7 +397,7 @@ export function LogoCard({
             onClick={() => defaultInputRef.current?.click()}
             disabled={uploading}
           >
-            {uploading ? <Spinner /> : <UploadIcon className="size-4" />}
+            {uploading ? <Spinner /> : <UploadSimpleIcon aria-hidden="true" className="size-4" />}
             {enterprise.logo_url ? t("replaceLogo") : t("uploadLogo")}
           </Button>
           <Button
@@ -403,7 +406,7 @@ export function LogoCard({
             onClick={() => negativeInputRef.current?.click()}
             disabled={uploading}
           >
-            {uploading ? <Spinner /> : <UploadIcon className="size-4" />}
+            {uploading ? <Spinner /> : <UploadSimpleIcon aria-hidden="true" className="size-4" />}
             {enterprise.logo_negative_url === enterprise.logo_url
               ? t("uploadDarkLogo")
               : t("replaceDarkLogo")}
@@ -492,7 +495,7 @@ export function EditCard({
     <Form {...form}>
       <form id="profile-edit" onSubmit={form.handleSubmit(onSubmit)} className="scroll-mt-6">
         <SectionCard
-          icon={Building2Icon}
+          icon={BuildingsIcon}
           title={t("profileTitle")}
           footer={
             <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>

@@ -6,13 +6,11 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import type { Question } from "@hackos/shared/questions";
-import {
-  AlertTriangleIcon,
-  CheckCircle2Icon,
-  DoorOpenIcon,
-  ListChecksIcon,
-  WifiOffIcon,
-} from "lucide-react";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
+import { WifiSlashIcon } from "@phosphor-icons/react/dist/csr/WifiSlash";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
@@ -341,14 +339,16 @@ export function ReviewForm({
   return (
     <SectionCard
       title={t("scoring")}
-      icon={CheckCircle2Icon}
+      icon={CheckCircleIcon}
       className={cardClassName}
       headerClassName="p-3 sm:p-4"
       bodyClassName={`${bodyClassName} flex flex-col pb-24 sm:pb-24`}
       action={
         <div className="flex flex-wrap items-center gap-2">
           <span role="status" aria-live="polite" className="text-muted-foreground text-sm">
-            {syncState === "offline" && <WifiOffIcon className="mr-1 inline size-4" />}
+            {syncState === "offline" && (
+              <WifiSlashIcon aria-hidden="true" className="mr-1 inline size-4" />
+            )}
             {syncLabel}
           </span>
           <ReviewStatusBadge status={status === "submitted" ? "submitted" : "draft"} />
@@ -377,7 +377,7 @@ export function ReviewForm({
               disabled={!canJudge || !online || saving || loading || requiredUnansweredCount > 0}
               onClick={() => save(true)}
             >
-              <CheckCircle2Icon className="size-4" />
+              <CheckCircleIcon aria-hidden="true" className="size-4" />
               {t("submitReview")}
             </Button>
           )}
@@ -434,7 +434,7 @@ export function ReviewForm({
           )}
           {requiredUnansweredCount > 0 && (
             <div className="border-warning/40 bg-warning/10 text-warning-foreground flex items-center gap-2 rounded-md border p-3 text-sm">
-              <AlertTriangleIcon className="size-4 shrink-0" />
+              <WarningIcon aria-hidden="true" className="size-4 shrink-0" />
               {requiredUnansweredCount === 1
                 ? t("requiredFieldUnansweredOne", { count: requiredUnansweredCount })
                 : t("requiredFieldUnansweredOther", { count: requiredUnansweredCount })}

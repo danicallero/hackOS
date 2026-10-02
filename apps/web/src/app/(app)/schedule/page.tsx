@@ -16,7 +16,11 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import type { ActivityKind } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { CalendarClockIcon, EyeIcon, EyeOffIcon, PlusIcon, SearchIcon } from "lucide-react";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
+import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -42,12 +46,7 @@ import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { ActivityRow } from "./schedule-activity-row";
-import {
-  AudienceFilterPopover,
-  BulkSchedulePopover,
-  KindFilterPopover,
-  MoveToDateModal,
-} from "./schedule-dialogs";
+import { BulkSchedulePopover, MoveToDateModal, ScheduleFilterMenu } from "./schedule-dialogs";
 import {
   cleanScheduleForm,
   EMPTY_SCHEDULE_FORM,
@@ -363,7 +362,7 @@ export default function SchedulePage() {
       <Surface padding="none" className="overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 p-4">
           <div className="relative w-full max-w-xs">
-            <SearchIcon
+            <MagnifyingGlassIcon
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
               aria-hidden="true"
             />
@@ -388,7 +387,7 @@ export default function SchedulePage() {
                   disabled={busy}
                   onClick={() => bulkVisibility("shown")}
                 >
-                  <EyeIcon className="size-4" />
+                  <EyeIcon aria-hidden="true" className="size-4" />
                   {t("show")}
                 </Button>
                 <Button
@@ -397,23 +396,24 @@ export default function SchedulePage() {
                   disabled={busy}
                   onClick={() => bulkVisibility("hidden")}
                 >
-                  <EyeOffIcon className="size-4" />
+                  <EyeSlashIcon aria-hidden="true" className="size-4" />
                   {t("hide")}
                 </Button>
                 <BulkSchedulePopover disabled={busy} onApply={bulkSchedule} />
               </>
             )}
             {canEdit && (
-              <AudienceFilterPopover
-                selected={audienceFilter}
+              <ScheduleFilterMenu
+                audiences={audienceFilter}
+                kinds={kindFilter}
+                onKindChange={setKindFilter}
                 staffOnly={staffOnlyFilter}
-                onChange={(selected, staffOnly) => {
+                onAudienceChange={(selected, staffOnly) => {
                   setAudienceFilter(selected);
                   setStaffOnlyFilter(staffOnly);
                 }}
               />
             )}
-            {canEdit && <KindFilterPopover selected={kindFilter} onChange={setKindFilter} />}
             <ColumnConfigPopover config={tableConfig} onChange={setTableConfig} />
           </div>
         </div>
@@ -483,7 +483,7 @@ export default function SchedulePage() {
                 ) : groups.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
                     <TableCell colSpan={visibleColumns.length + 2} className="p-0">
-                      <EmptyState icon={CalendarClockIcon} title={t("noScheduleItemsYet")} />
+                      <EmptyState icon={CalendarDotsIcon} title={t("noScheduleItemsYet")} />
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -654,7 +654,7 @@ export default function SchedulePage() {
             className="pointer-events-auto shadow-floating"
             onClick={() => setCreateOpen(true)}
           >
-            <PlusIcon className="size-4" />
+            <PlusIcon aria-hidden="true" className="size-4" />
             {t("newItem")}
           </Button>
         </div>

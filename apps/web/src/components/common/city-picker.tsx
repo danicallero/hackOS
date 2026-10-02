@@ -2,7 +2,7 @@
 
 // Photon is a public OpenStreetMap geocoder. We only request suggestions after
 // two characters and persist its display label, never a third-party identifier.
-import { MapPinIcon } from "lucide-react";
+import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -149,7 +149,10 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
   return (
     <div className="relative">
       <div className="relative">
-        <MapPinIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+        <MapPinIcon
+          aria-hidden="true"
+          className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+        />
         <Input
           id={id}
           value={query}

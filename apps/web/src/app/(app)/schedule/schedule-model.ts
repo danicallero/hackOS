@@ -6,15 +6,13 @@ import {
   DEFAULT_ACTIVITY_KIND,
   toActivityKind,
 } from "@hackos/shared/activity-kinds";
-import {
-  CalendarDaysIcon,
-  FlagIcon,
-  type LucideIcon,
-  MicIcon,
-  PartyPopperIcon,
-  SparklesIcon,
-  UtensilsIcon,
-} from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/ssr/CalendarDots";
+import { ConfettiIcon } from "@phosphor-icons/react/dist/ssr/Confetti";
+import { FlagIcon } from "@phosphor-icons/react/dist/ssr/Flag";
+import { ForkKnifeIcon } from "@phosphor-icons/react/dist/ssr/ForkKnife";
+import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
+import { SparkleIcon } from "@phosphor-icons/react/dist/ssr/Sparkle";
 import { LOCALE_CODES, type Translate } from "@/lib/i18n";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import type { Tone } from "@/lib/tones";
@@ -22,17 +20,17 @@ import type { Tone } from "@/lib/tones";
 export type ScheduleStatus = "draft" | "scheduled" | "public" | "staffOnly";
 
 /**
- * lucide components for the icon names the shared kind registry references.
+ * Phosphor components for the stable icon keys the shared kind registry references.
  * Exhaustive by type: a kind added with a new icon name doesn't compile until
  * its component is mapped here — that's the whole point of the registry.
  */
-const KIND_ICONS: Record<ActivityKindIconName, LucideIcon> = {
-  "calendar-days": CalendarDaysIcon,
+const KIND_ICONS: Record<ActivityKindIconName, PhosphorIcon> = {
+  "calendar-days": CalendarDotsIcon,
   flag: FlagIcon,
-  mic: MicIcon,
-  "party-popper": PartyPopperIcon,
-  sparkles: SparklesIcon,
-  utensils: UtensilsIcon,
+  mic: MicrophoneIcon,
+  "party-popper": ConfettiIcon,
+  sparkles: SparkleIcon,
+  utensils: ForkKnifeIcon,
 };
 
 export const SCHEDULE_STATUS_TONES: Record<ScheduleStatus, Tone> = {
@@ -46,9 +44,9 @@ export function scheduleTypeLabel(type: string | null | undefined, t: Translate)
   return t(activityKindLabelKey(toActivityKind(type) ?? DEFAULT_ACTIVITY_KIND));
 }
 
-export function scheduleTypeIcon(type: string | null | undefined): LucideIcon {
+export function scheduleTypeIcon(type: string | null | undefined): PhosphorIcon {
   const kind = toActivityKind(type);
-  return kind ? KIND_ICONS[activityKind(kind).icon] : CalendarDaysIcon;
+  return kind ? KIND_ICONS[activityKind(kind).icon] : CalendarDotsIcon;
 }
 
 /**

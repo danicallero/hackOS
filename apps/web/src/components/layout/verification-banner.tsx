@@ -1,6 +1,6 @@
 "use client";
 
-import { MailWarningIcon } from "lucide-react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useVerificationResend } from "@/hooks/use-verification-resend";
@@ -25,7 +25,7 @@ export function VerificationBanner() {
 
   return (
     <div className="border-warning/40 bg-warning/10 text-warning-foreground flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-sm sm:px-6">
-      <MailWarningIcon className="text-warning size-4 shrink-0" />
+      <EnvelopeSimpleIcon aria-hidden="true" className="text-warning size-4 shrink-0" />
       <span className="text-foreground">{t("emailNotVerified")}</span>
       <Button
         size="sm"

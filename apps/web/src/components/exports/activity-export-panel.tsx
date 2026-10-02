@@ -1,6 +1,8 @@
 "use client";
 
-import { CalendarCheckIcon, DownloadIcon, RefreshCwIcon } from "lucide-react";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowsClockwise";
+import { CalendarCheckIcon } from "@phosphor-icons/react/dist/csr/CalendarCheck";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -144,14 +146,14 @@ export function ActivityExportPanel({ trigger }: { trigger?: ReactNode }) {
           onClick={() => void exportData()}
           disabled={loading || exporting || selectedIds.length === 0}
         >
-          <DownloadIcon aria-hidden="true" />
+          <DownloadSimpleIcon aria-hidden="true" />
           {exporting ? t("loading") : t("export")}
         </Button>
       }
     >
       <div className="flex justify-end">
         <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
-          <RefreshCwIcon aria-hidden="true" />
+          <ArrowsClockwiseIcon aria-hidden="true" />
           {t("refresh")}
         </Button>
       </div>

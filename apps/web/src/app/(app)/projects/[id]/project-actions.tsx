@@ -1,5 +1,7 @@
 "use client";
-import { LinkIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
+import { LinkIcon } from "@phosphor-icons/react/dist/csr/Link";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useEffect, useMemo, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
@@ -150,7 +152,7 @@ export function DevpostParticipantActions({
             aria-controls={dialogId}
             onClick={() => setOpen((current) => !current)}
           >
-            <UserPlusIcon className="size-4" />
+            <UserPlusIcon aria-hidden="true" className="size-4" />
             {t("linkParticipantToUser")}
           </Button>
           {open && (
@@ -171,7 +173,7 @@ export function DevpostParticipantActions({
                 disabled={!selectedUserId || busy === "link"}
                 onClick={linkParticipant}
               >
-                <LinkIcon className="size-4" />
+                <LinkIcon aria-hidden="true" className="size-4" />
                 {t("link")}
               </Button>
             </div>
@@ -188,7 +190,7 @@ export function DevpostParticipantActions({
           pending={busy === "delete"}
           trigger={
             <Button type="button" variant="outline" size="sm" disabled={busy !== null}>
-              <Trash2Icon className="size-4" />
+              <TrashIcon aria-hidden="true" className="size-4" />
               {t("deleteAction")}
             </Button>
           }

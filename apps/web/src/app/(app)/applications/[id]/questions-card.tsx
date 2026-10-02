@@ -23,29 +23,27 @@ import {
 } from "@dnd-kit/sortable";
 import { RESERVED_FIELD_KEYS } from "@hackos/shared/applications";
 import type { I18nText } from "@hackos/shared/questions";
-import {
-  AlignLeftIcon,
-  ArrowDownIcon,
-  ArrowUpIcon,
-  CalendarIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  CircleDotIcon,
-  CopyIcon,
-  EyeIcon,
-  GraduationCapIcon,
-  HashIcon,
-  ListChecksIcon,
-  type LucideIcon,
-  MapPinIcon,
-  MoreVerticalIcon,
-  PaperclipIcon,
-  PlusIcon,
-  SquareCheckIcon,
-  Trash2Icon,
-  TypeIcon,
-  XIcon,
-} from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { ArrowDownIcon } from "@phosphor-icons/react/dist/csr/ArrowDown";
+import { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
+import { CalendarIcon } from "@phosphor-icons/react/dist/csr/Calendar";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { CaretUpIcon } from "@phosphor-icons/react/dist/csr/CaretUp";
+import { CheckSquareIcon } from "@phosphor-icons/react/dist/csr/CheckSquare";
+import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
+import { DotsThreeVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsThreeVertical";
+import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
+import { GraduationCapIcon } from "@phosphor-icons/react/dist/csr/GraduationCap";
+import { HashIcon } from "@phosphor-icons/react/dist/csr/Hash";
+import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
+import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
+import { PaperclipIcon } from "@phosphor-icons/react/dist/csr/Paperclip";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { RadioButtonIcon } from "@phosphor-icons/react/dist/csr/RadioButton";
+import { TextAlignLeftIcon } from "@phosphor-icons/react/dist/csr/TextAlignLeft";
+import { TextTIcon } from "@phosphor-icons/react/dist/csr/TextT";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -539,11 +537,11 @@ export function QuestionsCard({
             onClick={() => setPreview(true)}
             disabled={previewFields.length === 0}
           >
-            <EyeIcon />
+            <EyeIcon aria-hidden="true" />
             {t("preview")}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={addSection}>
-            <PlusIcon />
+            <PlusIcon aria-hidden="true" />
             {t("addSection")}
           </Button>
           <AddFieldMenu onSelect={add} size="sm" />
@@ -568,7 +566,7 @@ export function QuestionsCard({
       <Collapsible>
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
-            <ChevronDownIcon className="size-4" />
+            <CaretDownIcon aria-hidden="true" className="size-4" />
             {t("reservedKeysToggle")}
           </Button>
         </CollapsibleTrigger>
@@ -744,7 +742,7 @@ export function QuestionsCard({
               <div className="flex flex-wrap gap-2">
                 <AddFieldMenu onSelect={add} className="flex-1" />
                 <Button type="button" variant="outline" onClick={addSection} className="flex-1">
-                  <PlusIcon />
+                  <PlusIcon aria-hidden="true" />
                   {t("addSection")}
                 </Button>
               </div>
@@ -801,12 +799,12 @@ export function fieldKindLabel(kind: FieldKind, t: Translate): string {
   return map[kind];
 }
 
-const FIELD_KIND_ICON: Record<FieldKind, LucideIcon> = {
-  text: TypeIcon,
-  textarea: AlignLeftIcon,
-  select: CircleDotIcon,
+const FIELD_KIND_ICON: Record<FieldKind, PhosphorIcon> = {
+  text: TextTIcon,
+  textarea: TextAlignLeftIcon,
+  select: RadioButtonIcon,
   multiselect: ListChecksIcon,
-  checkbox: SquareCheckIcon,
+  checkbox: CheckSquareIcon,
   birth_year: CalendarIcon,
   date: CalendarIcon,
   number: HashIcon,
@@ -883,9 +881,9 @@ function AddFieldMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" size={size} variant={variant} className={className}>
-          <PlusIcon />
+          <PlusIcon aria-hidden="true" />
           {t("addField")}
-          <ChevronDownIcon className="size-3.5" aria-hidden="true" />
+          <CaretDownIcon className="size-3.5" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -996,7 +994,7 @@ export function FieldEditor({
             changeActivePreservingPosition(onDeactivate, expandedHeaderRef.current);
           }}
         >
-          <ChevronUpIcon className="size-4" aria-hidden="true" />
+          <CaretUpIcon className="size-4" aria-hidden="true" />
         </IconButton>
       )}
     </div>
@@ -1393,7 +1391,7 @@ export function FieldEditor({
           className="text-destructive"
           onClick={onRemove}
         >
-          <Trash2Icon className="size-4" aria-hidden="true" />
+          <TrashIcon className="size-4" aria-hidden="true" />
         </IconButton>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -1404,7 +1402,7 @@ export function FieldEditor({
               label={t("moreOptions")}
               className="ml-auto"
             >
-              <MoreVerticalIcon className="size-4" aria-hidden="true" />
+              <DotsThreeVerticalIcon className="size-4" aria-hidden="true" />
             </IconButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -1751,7 +1749,7 @@ export function SectionEditor({
             className="text-destructive"
             onClick={onRemove}
           >
-            <Trash2Icon className="size-4" aria-hidden="true" />
+            <TrashIcon className="size-4" aria-hidden="true" />
           </IconButton>
         </div>
       </div>
@@ -1910,7 +1908,7 @@ export function OptionsEditor({
         onClick={add}
         className="text-muted-foreground"
       >
-        <PlusIcon className="size-3.5" />
+        <PlusIcon aria-hidden="true" className="size-3.5" />
         {t("addOption")}
       </Button>
     </div>

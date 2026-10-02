@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useId } from "react";
 import { ActionGroup } from "@/components/common/action-group";
 import { Section } from "@/components/ui/surface";
@@ -31,7 +31,7 @@ export function SectionCard({
   title?: React.ReactNode;
   /** Exceptional policy/risk copy only — see the header's own writing rules. */
   description?: string;
-  icon?: LucideIcon;
+  icon?: PhosphorIcon;
   /** Visual identity for the section header, in the same slot as `icon`. */
   leading?: React.ReactNode;
   /** Status indicator next to the title, e.g. a `<StatusBadge>`. */

@@ -109,7 +109,8 @@ Frontend (web & mobile):
 
 - [Design system, UI & UX](./DESIGN.md) — the consolidated design rulebook,
   indexed and summarized per section: principles, tokens (with intent and
-  boundaries), container and component decision logic, page/action hierarchy,
+  boundaries), the landing-derived edition theme and `/design-system` preview,
+  container and component decision logic, page/action hierarchy,
   accessibility, the domain state models that must stay visually distinct,
   the copy rules `pnpm check:copy` enforces, web- and mobile-specific
   constraints, and an explicit don'ts list. Read before building or styling

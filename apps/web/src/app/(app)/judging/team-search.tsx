@@ -1,6 +1,8 @@
 "use client";
 
-import { ArrowUpToLineIcon, DoorOpenIcon, SearchIcon } from "lucide-react";
+import { ArrowLineUpIcon } from "@phosphor-icons/react/dist/csr/ArrowLineUp";
+import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { Spinner } from "@/components/common/spinner";
@@ -52,7 +54,10 @@ export function TeamSearch({
         <Label htmlFor="judging-team-search" className="sr-only">
           {t("searchTeamsAria")}
         </Label>
-        <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+        <MagnifyingGlassIcon
+          aria-hidden="true"
+          className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
+        />
         <Input
           id="judging-team-search"
           value={query}
@@ -123,7 +128,7 @@ export function TeamSearch({
                     disabled={busy != null || !canOperate || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onAddTop(entry)}
                   >
-                    <ArrowUpToLineIcon className="size-4" />
+                    <ArrowLineUpIcon aria-hidden="true" className="size-4" />
                     {t("topOfQueue")}
                   </Button>
                   <Button
@@ -131,7 +136,7 @@ export function TeamSearch({
                     disabled={busy != null || !canOperate || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onAddWaiting(entry)}
                   >
-                    <DoorOpenIcon className="size-4" />
+                    <DoorOpenIcon aria-hidden="true" className="size-4" />
                     {t("waitingRoomButton")}
                   </Button>
                   <Button
@@ -140,7 +145,7 @@ export function TeamSearch({
                     disabled={busy != null || !canJudge || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onBringIn(entry)}
                   >
-                    <DoorOpenIcon className="size-4" />
+                    <DoorOpenIcon aria-hidden="true" className="size-4" />
                     {t("bringInDirectly")}
                   </Button>
                 </div>

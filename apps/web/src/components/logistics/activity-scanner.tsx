@@ -1,17 +1,15 @@
 "use client";
 
 import { EVENTS } from "@hackos/shared/events";
-import {
-  ActivityIcon,
-  CheckCircleIcon,
-  HardDriveIcon,
-  RepeatIcon,
-  ScanLineIcon,
-  SearchIcon,
-  SoupIcon,
-  TriangleAlertIcon,
-  UsersIcon,
-} from "lucide-react";
+import { BowlFoodIcon } from "@phosphor-icons/react/dist/csr/BowlFood";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { HardDriveIcon } from "@phosphor-icons/react/dist/csr/HardDrive";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { PulseIcon } from "@phosphor-icons/react/dist/csr/Pulse";
+import { RepeatIcon } from "@phosphor-icons/react/dist/csr/Repeat";
+import { ScanIcon } from "@phosphor-icons/react/dist/csr/Scan";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
@@ -356,7 +354,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
         <StatCard
           label={isMeal ? t("servingsLabel") : t("columnScans")}
           value={selected ? selected.count : "—"}
-          icon={isMeal ? SoupIcon : ActivityIcon}
+          icon={isMeal ? BowlFoodIcon : PulseIcon}
           hint={selected ? selected.name : t("selectToSeeCounts")}
         />
         <StatCard
@@ -376,7 +374,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
       <SectionCard
         title={isMeal ? t("mealLineTitle") : t("activityDoorTitle")}
         description={isMeal ? t("scanEachBadgeDesc") : t("scanBadgesEntranceDesc")}
-        icon={ScanLineIcon}
+        icon={ScanIcon}
         bodyClassName="space-y-5"
       >
         {activities.loading ? (
@@ -385,7 +383,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
           </div>
         ) : items.length === 0 ? (
           <EmptyState
-            icon={isMeal ? SoupIcon : ActivityIcon}
+            icon={isMeal ? BowlFoodIcon : PulseIcon}
             title={isMeal ? t("noMealsDefinedTitle") : t("noRegistrableActivitiesTitle")}
             description={
               isMeal ? t("mealsCreatedInScheduleDesc") : t("markActivitiesRequiresScanDesc")
@@ -401,11 +399,11 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
               {transactionState === "confirmed" ? (
                 <CheckCircleIcon aria-hidden className="text-success size-5 shrink-0" />
               ) : transactionState === "attention" ? (
-                <TriangleAlertIcon aria-hidden className="text-destructive size-5 shrink-0" />
+                <WarningIcon aria-hidden className="text-destructive size-5 shrink-0" />
               ) : transactionState === "saved" ? (
                 <HardDriveIcon aria-hidden className="text-warning size-5 shrink-0" />
               ) : (
-                <ScanLineIcon aria-hidden className="text-primary size-5 shrink-0" />
+                <ScanIcon aria-hidden className="text-primary size-5 shrink-0" />
               )}
               <div className="min-w-0">
                 <p className="text-sm font-medium">
@@ -460,7 +458,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                     aria-label={t("personSearchTitle")}
                     onClick={() => setFindOpen(true)}
                   >
-                    <UsersIcon className="size-4" />
+                    <UsersIcon aria-hidden="true" className="size-4" />
                   </Button>
                 </div>
               </Field>
@@ -470,7 +468,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                   onClick={() => void scanNow()}
                   disabled={busy || !activityId || !badgeId.trim()}
                 >
-                  <ScanLineIcon className="size-4" />
+                  <ScanIcon aria-hidden="true" className="size-4" />
                   {t("scan")}
                 </Button>
               </div>
@@ -514,7 +512,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                   setFindError("");
                 }
               }}
-              icon={SearchIcon}
+              icon={MagnifyingGlassIcon}
               title={t("personSearchTitle")}
               description={t("personSearchDesc")}
             >
@@ -538,7 +536,11 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                     autoFocus
                   />
                   <Button type="submit" disabled={findBusy || !findQuery.trim()}>
-                    {findBusy ? <Spinner /> : <SearchIcon className="size-4" />}
+                    {findBusy ? (
+                      <Spinner />
+                    ) : (
+                      <MagnifyingGlassIcon aria-hidden="true" className="size-4" />
+                    )}
                     {t("search")}
                   </Button>
                 </form>

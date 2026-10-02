@@ -15,15 +15,13 @@
 // admin does not have to know which enterprise to open first.
 
 import type { Question } from "@hackos/shared/questions";
-import {
-  ArrowUpRightIcon,
-  LayersIcon,
-  MoreHorizontalIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  Trash2Icon,
-  TrophyIcon,
-} from "lucide-react";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowsClockwise";
+import { ArrowUpRightIcon } from "@phosphor-icons/react/dist/csr/ArrowUpRight";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { StackIcon } from "@phosphor-icons/react/dist/csr/Stack";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -121,7 +119,7 @@ export function QueuesPanel() {
   }
 
   if (groups.length === 0) {
-    return <EmptyState icon={LayersIcon} title={t("noQueuesYet")} />;
+    return <EmptyState icon={StackIcon} title={t("noQueuesYet")} />;
   }
 
   return (
@@ -250,7 +248,7 @@ function EnterpriseQueuesCard({
             />
           </span>
         ) : (
-          <LayersIcon className="text-muted-foreground mt-0.5 size-5 shrink-0" aria-hidden="true" />
+          <StackIcon className="text-muted-foreground mt-0.5 size-5 shrink-0" aria-hidden="true" />
         )
       }
       bodyClassName="space-y-4"
@@ -262,7 +260,7 @@ function EnterpriseQueuesCard({
             onClick={startConfiguring}
             disabled={busy || queueActionBusyId !== null}
           >
-            <PlusIcon className="size-4" />
+            <PlusIcon aria-hidden="true" className="size-4" />
             {t("addSharedQueue")}
           </Button>
         ) : undefined
@@ -281,7 +279,7 @@ function EnterpriseQueuesCard({
               >
                 <span className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-md">
                   {queue.shared ? (
-                    <LayersIcon className="size-4" aria-hidden="true" />
+                    <StackIcon className="size-4" aria-hidden="true" />
                   ) : (
                     <TrophyIcon className="size-4" aria-hidden="true" />
                   )}
@@ -332,12 +330,12 @@ function EnterpriseQueuesCard({
                       disabled={busy || queueActionBusyId !== null}
                       aria-label={t("queueActions")}
                     >
-                      <MoreHorizontalIcon className="size-4" aria-hidden="true" />
+                      <DotsThreeIcon className="size-4" aria-hidden="true" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onSelect={() => void generateOneQueue(queue.id)}>
-                      <RefreshCwIcon className="size-4" aria-hidden="true" />
+                      <ArrowsClockwiseIcon className="size-4" aria-hidden="true" />
                       {t("generateQueue")}
                     </DropdownMenuItem>
                     {!queue.evaluationStarted && (
@@ -345,7 +343,7 @@ function EnterpriseQueuesCard({
                         variant="destructive"
                         onSelect={() => setClearQueueId(queue.id)}
                       >
-                        <Trash2Icon className="size-4" aria-hidden="true" />
+                        <TrashIcon className="size-4" aria-hidden="true" />
                         {t("clearQueue")}
                       </DropdownMenuItem>
                     )}

@@ -1,6 +1,7 @@
 "use client";
 
-import { DownloadIcon, UsersIcon } from "lucide-react";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useMemo, useState } from "react";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -104,7 +105,7 @@ export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
       icon={UsersIcon}
       footer={
         <Button onClick={() => void exportRoster()} disabled={exporting}>
-          <DownloadIcon aria-hidden="true" />
+          <DownloadSimpleIcon aria-hidden="true" />
           {t("export")}
         </Button>
       }

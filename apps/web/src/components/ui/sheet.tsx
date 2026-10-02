@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { XIcon } from "lucide-react"
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { Dialog as SheetPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
@@ -104,7 +104,7 @@ function SheetContent({
         {children}
         {showCloseButton && (
           <SheetPrimitive.Close className={cn(dialogIconButtonClass, "absolute top-3 right-3 z-10")} title={t("close")}>
-            <XIcon className="size-4" />
+            <XIcon aria-hidden="true" className="size-4" />
             <span className="sr-only">{t("close")}</span>
           </SheetPrimitive.Close>
         )}

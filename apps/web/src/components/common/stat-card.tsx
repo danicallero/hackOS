@@ -1,4 +1,6 @@
-import { ArrowDownRightIcon, ArrowUpRightIcon, type LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { ArrowDownRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowDownRight";
+import { ArrowUpRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowUpRight";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +33,7 @@ export function StatCard({
   label: string;
   value: React.ReactNode;
   hint?: string;
-  icon?: LucideIcon;
+  icon?: PhosphorIcon;
   /** Signed change, e.g. { value: "+12%", direction: "up" }. */
   delta?: { value: string; direction: "up" | "down" };
   /** Slot under the value — e.g. a <UsageMeter> or sparkline. */
@@ -68,9 +70,9 @@ export function StatCard({
             )}
           >
             {delta.direction === "up" ? (
-              <ArrowUpRightIcon className="size-3" />
+              <ArrowUpRightIcon aria-hidden="true" className="size-3" />
             ) : (
-              <ArrowDownRightIcon className="size-3" />
+              <ArrowDownRightIcon aria-hidden="true" className="size-3" />
             )}
             {delta.value}
           </span>

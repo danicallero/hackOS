@@ -1,4 +1,4 @@
-import { CopyIcon } from "lucide-react";
+import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
@@ -54,7 +54,7 @@ export function QrCode({
               void copyToClipboard(value);
             }}
           >
-            <CopyIcon className="size-4" />
+            <CopyIcon aria-hidden="true" className="size-4" />
             {t("copy")}
           </Button>
         </div>

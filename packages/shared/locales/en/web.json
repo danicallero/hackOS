@@ -3262,5 +3262,17 @@
   "notificationsOff": "Off",
   "notificationChannelsFor": "Notification channels for {label}",
   "activityLabelShort": "Activity",
-  "activityKindLabel": "Activity kind"
+  "activityKindLabel": "Activity kind",
+  "filtersLabel": "Filters",
+  "designSystemTitle": "Design system",
+  "designSystemActions": "Actions",
+  "designSystemPrimary": "Primary",
+  "designSystemSecondary": "Secondary",
+  "designSystemOutline": "Outline",
+  "designSystemGhost": "Ghost",
+  "designSystemDestructive": "Destructive",
+  "designSystemFields": "Fields",
+  "designSystemStates": "States",
+  "designSystemTable": "Table",
+  "designSystemOverlay": "Dialog"
 }

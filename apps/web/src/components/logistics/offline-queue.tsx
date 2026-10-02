@@ -1,4 +1,7 @@
-import { AlertTriangleIcon, CloudOffIcon, HardDriveIcon, LoaderCircleIcon } from "lucide-react";
+import { CloudSlashIcon } from "@phosphor-icons/react/dist/ssr/CloudSlash";
+import { HardDriveIcon } from "@phosphor-icons/react/dist/ssr/HardDrive";
+import { SpinnerGapIcon } from "@phosphor-icons/react/dist/ssr/SpinnerGap";
+import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
 import { StatusBadge } from "@/components/common/status-badge";
 import { useLocale } from "@/lib/i18n";
 
@@ -404,11 +407,11 @@ export function OfflineQueue({ items }: { items: OfflineScan[] }) {
                 }
               >
                 {item.status === "failed" ? (
-                  <AlertTriangleIcon aria-hidden className="size-3" />
+                  <WarningIcon aria-hidden className="size-3" />
                 ) : item.failureKind === "offline" ? (
-                  <CloudOffIcon aria-hidden className="size-3" />
+                  <CloudSlashIcon aria-hidden className="size-3" />
                 ) : item.status === "syncing" ? (
-                  <LoaderCircleIcon aria-hidden className="size-3" />
+                  <SpinnerGapIcon aria-hidden className="size-3" />
                 ) : (
                   <HardDriveIcon aria-hidden className="size-3" />
                 )}

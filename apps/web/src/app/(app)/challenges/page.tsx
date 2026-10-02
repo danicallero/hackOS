@@ -2,7 +2,10 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { EyeIcon, EyeOffIcon, PlusIcon, TrophyIcon } from "lucide-react";
+import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
+import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -173,7 +176,7 @@ export default function ChallengesPage() {
         primaryAction={
           canAdmin ? (
             <Button onClick={() => router.push("/challenges/new")}>
-              <PlusIcon className="size-4" />
+              <PlusIcon aria-hidden="true" className="size-4" />
               {t("newChallenge")}
             </Button>
           ) : undefined
@@ -209,7 +212,7 @@ export default function ChallengesPage() {
                 disabled={bulkBusy}
                 onClick={() => bulkVisibility(true)}
               >
-                <EyeIcon className="size-4" />
+                <EyeIcon aria-hidden="true" className="size-4" />
                 {t("makeVisible")}
               </Button>
               <Button
@@ -218,7 +221,7 @@ export default function ChallengesPage() {
                 disabled={bulkBusy}
                 onClick={() => bulkVisibility(false)}
               >
-                <EyeOffIcon className="size-4" />
+                <EyeSlashIcon aria-hidden="true" className="size-4" />
                 {t("hide")}
               </Button>
             </>

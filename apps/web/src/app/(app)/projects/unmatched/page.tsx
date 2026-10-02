@@ -4,14 +4,12 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import {
-  ArrowLeftIcon,
-  CheckCircle2Icon,
-  LinkIcon,
-  MailIcon,
-  TrophyIcon,
-  UserPlusIcon,
-} from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import { LinkIcon } from "@phosphor-icons/react/dist/csr/Link";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
+import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -146,7 +144,7 @@ export default function UnmatchedProjectsPage() {
         actions={
           <Button variant="outline" asChild>
             <Link href="/projects">
-              <ArrowLeftIcon className="size-4" />
+              <ArrowLeftIcon aria-hidden="true" className="size-4" />
               {t("projects")}
             </Link>
           </Button>
@@ -157,7 +155,7 @@ export default function UnmatchedProjectsPage() {
         <SectionCard title={t("unresolvedConflictsTitle")}>
           {rows.length === 0 && unmappedPrizes.length === 0 ? (
             <EmptyState
-              icon={CheckCircle2Icon}
+              icon={CheckCircleIcon}
               title={t("noConflictsTitle")}
               description={t("noConflictsDesc")}
             />
@@ -223,7 +221,7 @@ export default function UnmatchedProjectsPage() {
                         )
                       }
                     >
-                      <LinkIcon className="size-4" />
+                      <LinkIcon aria-hidden="true" className="size-4" />
                       {t("linkDirectlyButton")}
                     </Button>
                     {/* H6: link by adding this email as the account's secondary and
@@ -242,7 +240,7 @@ export default function UnmatchedProjectsPage() {
                         )
                       }
                     >
-                      <UserPlusIcon className="size-4" />
+                      <UserPlusIcon aria-hidden="true" className="size-4" />
                       {t("requestConfirmationButton")}
                     </Button>
                     <Button
@@ -256,7 +254,7 @@ export default function UnmatchedProjectsPage() {
                         )
                       }
                     >
-                      <MailIcon className="size-4" />
+                      <EnvelopeSimpleIcon aria-hidden="true" className="size-4" />
                       {t("claimEmail")}
                     </Button>
                   </div>
@@ -314,7 +312,7 @@ export default function UnmatchedProjectsPage() {
                         mutate(key, () => mapPrize(prize.name, Number(selected)), t("prizeMapped"))
                       }
                     >
-                      <LinkIcon className="size-4" />
+                      <LinkIcon aria-hidden="true" className="size-4" />
                       {t("mapPrize")}
                     </Button>
                   </div>
@@ -340,7 +338,7 @@ export default function UnmatchedProjectsPage() {
               )
             }
           >
-            <LinkIcon className="size-4" />
+            <LinkIcon aria-hidden="true" className="size-4" />
             {t("mapPrize")}
           </Button>
         }
@@ -426,7 +424,7 @@ export default function UnmatchedProjectsPage() {
                         )
                       }
                     >
-                      <LinkIcon className="size-4" />
+                      <LinkIcon aria-hidden="true" className="size-4" />
                       {t("linkDirectlyButton")}
                     </Button>
                     {/* H6: link by adding this email as the account's secondary and
@@ -445,7 +443,7 @@ export default function UnmatchedProjectsPage() {
                         )
                       }
                     >
-                      <UserPlusIcon className="size-4" />
+                      <UserPlusIcon aria-hidden="true" className="size-4" />
                       {t("requestConfirmationButton")}
                     </Button>
                     <Button
@@ -459,7 +457,7 @@ export default function UnmatchedProjectsPage() {
                         )
                       }
                     >
-                      <MailIcon className="size-4" />
+                      <EnvelopeSimpleIcon aria-hidden="true" className="size-4" />
                       {t("claimEmail")}
                     </Button>
                   </div>

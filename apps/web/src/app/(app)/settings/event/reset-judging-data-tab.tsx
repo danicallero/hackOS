@@ -1,7 +1,7 @@
 "use client";
 
-import type { LucideIcon } from "lucide-react";
-import { TriangleAlertIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useId, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Modal } from "@/components/common/modal";
@@ -18,7 +18,7 @@ const SERVER_CONFIRMATION_PHRASE = "WIPE_Q_DATA";
 type ResetStage = 0 | 1 | 2 | 3;
 
 /** H16-H40/H53: the event-wide project/import/queue/judging recovery control. */
-export function ResetJudgingDataTab({ icon: Icon }: { icon: LucideIcon }) {
+export function ResetJudgingDataTab({ icon: Icon }: { icon: PhosphorIcon }) {
   const { t } = useLocale();
   const [stage, setStage] = useState<ResetStage>(0);
   const [phrase, setPhrase] = useState("");
@@ -105,7 +105,7 @@ export function ResetJudgingDataTab({ icon: Icon }: { icon: LucideIcon }) {
             </p>
           )}
           <Button type="button" variant="destructive" onClick={openReview}>
-            <TriangleAlertIcon />
+            <WarningIcon aria-hidden="true" />
             {t("reviewJudgingDataReset")}
           </Button>
         </div>
@@ -138,7 +138,7 @@ export function ResetJudgingDataTab({ icon: Icon }: { icon: LucideIcon }) {
         onOpenChange={(open) => !open && closeFlow()}
         title={t("resetJudgingDataSecondConfirmTitle")}
         description={t("resetJudgingDataSecondConfirmDescription")}
-        icon={TriangleAlertIcon}
+        icon={WarningIcon}
         footer={
           <>
             <Button type="button" variant="outline" onClick={closeFlow}>

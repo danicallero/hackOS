@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 type Rgb = readonly [number, number, number];
 
-const styles = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
+const styles = readFileSync(resolve(process.cwd(), "src/styles/theme.css"), "utf8");
 
 function themeBlock(selector: string) {
   const match = styles.match(new RegExp(`${selector}\\s*\\{([\\s\\S]*?)\\n\\}`));
@@ -12,33 +12,31 @@ function themeBlock(selector: string) {
   return match[1];
 }
 
-function token(block: string, name: string) {
-  const match = block.match(new RegExp(`${name}:\\s*(oklch\\([^;]+\\))`));
-  if (!match) throw new Error(`Missing ${name}`);
-  return match[1];
+function themeTokens(selector: string) {
+  const declarations = `${themeBlock(":root")}\n${selector === ":root" ? "" : themeBlock(selector)}`;
+  return Object.fromEntries(
+    [...declarations.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((match) => [match[1], match[2]]),
+  );
 }
 
-function oklchToRgb(value: string): Rgb {
-  const match = value.match(/oklch\(([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
-  if (!match) throw new Error(`Unsupported color: ${value}`);
-
-  const [lightness, chroma, hue] = match.slice(1).map(Number);
-  const angle = (hue * Math.PI) / 180;
-  const a = chroma * Math.cos(angle);
-  const b = chroma * Math.sin(angle);
-  const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
-
-  const [red, green, blue] = [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ].map((channel) => {
-    const linear = Math.min(1, Math.max(0, channel));
-    return linear <= 0.0031308 ? 12.92 * linear : 1.055 * linear ** (1 / 2.4) - 0.055;
-  });
-  return [red, green, blue];
+function tokenColor(tokens: Record<string, string>, name: string): Rgb {
+  const resolveColor = (value: string): Rgb => {
+    if (/^#[\da-f]{6}$/i.test(value)) {
+      const channel = (offset: number) =>
+        Number.parseInt(value.slice(offset, offset + 2), 16) / 255;
+      return [channel(1), channel(3), channel(5)];
+    }
+    const reference = value.match(/^var\((--[\w-]+)\)$/);
+    if (reference) return tokenColor(tokens, reference[1]);
+    const mix = value.match(
+      /^color-mix\(in srgb, (var\(--[\w-]+\)) ([\d.]+)%, (var\(--[\w-]+\))\)$/,
+    );
+    if (mix) return blend(resolveColor(mix[1]), resolveColor(mix[3]), Number(mix[2]) / 100);
+    throw new Error(`Unsupported color: ${value}`);
+  };
+  const value = tokens[name];
+  if (!value) throw new Error(`Missing ${name}`);
+  return resolveColor(value);
 }
 
 function blend(overlay: Rgb, background: Rgb, alpha: number): Rgb {
@@ -69,12 +67,12 @@ function expectAa(foreground: Rgb, background: Rgb) {
 describe("warning text contrast", () => {
   it("keeps badges, alerts, statistic cards and nested banner buttons at WCAG AA in both themes", () => {
     for (const selector of [":root", "\\.dark"]) {
-      const theme = themeBlock(selector);
-      const warning = oklchToRgb(token(theme, "--warning"));
-      const warningForeground = oklchToRgb(token(theme, "--warning-foreground"));
-      const foreground = oklchToRgb(token(theme, "--foreground"));
-      const card = oklchToRgb(token(theme, "--card"));
-      const shell = selector === ":root" ? card : oklchToRgb(token(theme, "--hackos-shell"));
+      const theme = themeTokens(selector);
+      const warning = tokenColor(theme, "--warning");
+      const warningForeground = tokenColor(theme, "--warning-foreground");
+      const foreground = tokenColor(theme, "--foreground");
+      const card = tokenColor(theme, "--card");
+      const shell = selector === ":root" ? card : tokenColor(theme, "--hackos-shell");
 
       // StatCard's 5% wash, alerts/banner's 10% wash, and StatusBadge's 10% wash.
       expectAa(warningForeground, blend(warning, card, 0.05));
@@ -82,6 +80,45 @@ describe("warning text contrast", () => {
       expectAa(foreground, blend(warning, card, 0.1));
       // The verification button's 10% wash is nested in its banner's 10% wash.
       expectAa(warningForeground, blend(warning, blend(warning, shell, 0.1), 0.1));
+    }
+  });
+});
+
+describe("edition theme contrast", () => {
+  it("keeps action labels, muted text, status text and field outlines legible in both themes", () => {
+    for (const selector of [":root", "\\.dark"]) {
+      const theme = themeTokens(selector);
+      for (const surface of [
+        "background",
+        "card",
+        "popover",
+        "primary",
+        "secondary",
+        "accent",
+        "destructive",
+        "success",
+        "sidebar",
+        "sidebar-primary",
+        "sidebar-accent",
+      ]) {
+        expectAa(
+          tokenColor(
+            theme,
+            `--${surface}-foreground`.replace("--background-foreground", "--foreground"),
+          ),
+          tokenColor(theme, `--${surface}`),
+        );
+      }
+      for (const surface of ["--background", "--card", "--hackos-shell", "--secondary"]) {
+        const background = tokenColor(theme, surface);
+        expectAa(tokenColor(theme, "--muted-foreground"), background);
+        expect(contrast(tokenColor(theme, "--input"), background)).toBeGreaterThanOrEqual(3);
+        for (const tone of ["--success", "--destructive", "--info"]) {
+          const color = tokenColor(theme, tone);
+          expectAa(color, blend(color, background, 0.05));
+          expectAa(tokenColor(theme, "--foreground"), blend(color, background, 0.1));
+        }
+      }
     }
   });
 });

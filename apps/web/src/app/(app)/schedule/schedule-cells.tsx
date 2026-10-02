@@ -1,5 +1,5 @@
 "use client";
-import { XIcon } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useId, useRef, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -809,7 +809,7 @@ export function EditableOwnersCell({
                   disabled={busy}
                   onClick={() => remove(owner.id)}
                 >
-                  <XIcon className="size-3.5" />
+                  <XIcon aria-hidden="true" className="size-3.5" />
                 </Button>
               </li>
             ))}

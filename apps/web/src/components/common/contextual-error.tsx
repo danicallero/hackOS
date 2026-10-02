@@ -1,4 +1,4 @@
-import { AlertCircleIcon } from "lucide-react";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,7 @@ export function ContextualError({
         className,
       )}
     >
-      <AlertCircleIcon className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+      <WarningCircleIcon className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
       <div className="min-w-0 flex-1 space-y-3">
         <p className="text-pretty text-sm">{message}</p>
         {onRetry && (

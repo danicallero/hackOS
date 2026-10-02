@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontalIcon } from "lucide-react";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import Link from "next/link";
 import { IconButton } from "@/components/common/icon-button";
 import {
@@ -19,7 +19,7 @@ export function ProjectNavigation({ onDelete }: { onDelete?: () => void }) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <IconButton label={t("moreActions")} variant="ghost">
-          <MoreHorizontalIcon aria-hidden="true" />
+          <DotsThreeIcon aria-hidden="true" />
         </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

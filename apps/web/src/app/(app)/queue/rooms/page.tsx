@@ -4,7 +4,8 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { PlusIcon, SearchIcon } from "lucide-react";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
@@ -317,7 +318,7 @@ export default function QueueRoomsPage() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="relative w-full max-w-md">
-              <SearchIcon
+              <MagnifyingGlassIcon
                 className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
                 aria-hidden="true"
               />

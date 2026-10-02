@@ -1,6 +1,8 @@
 "use client";
 
-import { ChevronDownIcon, MegaphoneIcon, XIcon } from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { MultiSelect } from "@/components/common/multi-select";
@@ -405,7 +407,8 @@ export function AnnouncementFormModal({
                     className="justify-start px-0 text-sm font-medium"
                     aria-label={t("translationsAndSettings")}
                   >
-                    <ChevronDownIcon
+                    <CaretDownIcon
+                      aria-hidden="true"
                       className={cn(
                         "size-4 transition-transform",
                         translationsOpen && "rotate-180",
@@ -659,7 +662,7 @@ export function AnnouncementFormModal({
                               aria-label={t("remove")}
                               onClick={() => removeRecipient(user.id)}
                             >
-                              <XIcon className="size-4" />
+                              <XIcon aria-hidden="true" className="size-4" />
                             </Button>
                           </li>
                         ))}

@@ -7,7 +7,8 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ChevronRightIcon, ScrollTextIcon } from "lucide-react";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { ScrollIcon } from "@phosphor-icons/react/dist/csr/Scroll";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -58,10 +59,7 @@ function AuditMobileRow({ row, t }: { row: AuditRow; t: Translate }) {
           </time>
           <Badge variant="secondary">{getActionLabel(row.action, t)}</Badge>
         </div>
-        <ChevronRightIcon
-          className="text-muted-foreground mt-1 size-4 shrink-0"
-          aria-hidden="true"
-        />
+        <CaretRightIcon className="text-muted-foreground mt-1 size-4 shrink-0" aria-hidden="true" />
       </div>
       <dl className="mt-3 grid min-w-0 gap-2 text-sm sm:grid-cols-2">
         <div className="min-w-0">
@@ -376,7 +374,7 @@ export default function AuditPage() {
         getRowLabel={(r) => `${getActionLabel(r.action, t)} ${r.entity_type} ${r.entity_id}`}
         renderMobileRow={(r) => <AuditMobileRow row={r} t={t} />}
         empty={{
-          icon: ScrollTextIcon,
+          icon: ScrollIcon,
           title: t("noAuditEntriesTitle"),
           description: hasFilters ? t("noEntriesMatchFilters") : t("sensitiveActionsAppearDesc"),
         }}

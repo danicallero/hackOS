@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCwIcon } from "lucide-react";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowsClockwise";
 import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
@@ -25,7 +25,7 @@ export function GenerateQueuesAction({
         aria-busy={busy}
         aria-describedby={busy ? statusId : undefined}
       >
-        <RefreshCwIcon
+        <ArrowsClockwiseIcon
           aria-hidden="true"
           className={cn("size-4", busy && "motion-safe:animate-spin")}
         />

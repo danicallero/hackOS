@@ -1,8 +1,8 @@
 # @hackos/web
 
-The hackOS web frontend — Next.js (App Router) + shadcn/ui, styled in the same
-dark-first family as the rest of hackOS. It consumes the Fastify API (Better Auth
-included) and follows the same user stories (`plan/historias-hackos.md`) as the
+The hackOS web frontend — Next.js (App Router) + shadcn/ui, styled with the
+HackUDC landing identity through a shared edition theme. It consumes the Fastify
+API (Better Auth included) and follows the same user stories (`plan/historias-hackos.md`) as the
 backend, one workstream at a time.
 
 > **The web app is its own deployable service behind Caddy.** It is never
@@ -13,15 +13,42 @@ backend, one workstream at a time.
 
 - **Next.js 16** (App Router, RSC, Turbopack), **React 19**, TypeScript.
 - **Tailwind CSS v4** with CSS-variable theme tokens.
-- **shadcn/ui** (new-york style, zinc base) as the primitive layer.
+- **shadcn/ui** (new-york structure, edition CSS-variable theme) as the primitive layer.
 - **Better Auth** browser client (`better-auth/react`) against the API's
   `/api/auth/*`.
 - **react-hook-form + zod** for forms, **Sileo** for toasts,
-  **next-themes** for light/dark, **lucide-react** for icons,
+  **next-themes** for light/dark, **@phosphor-icons/react** for icons,
  **qrcode.react** for locally-rendered QR codes, so QR payloads never need to
   travel to a third-party image service.
 - `@hackos/shared` for the capability catalogue and SSE event contract — the
   same single source the API uses.
+
+## Edition theme
+
+`src/styles/theme.css` is the visual source of truth: the HackUDC 2027 palette,
+Inter/Rockwell font roles, semantic light/dark colors, control/surface geometry,
+and title scale. `src/app/globals.css` imports it and exposes the standard
+shadcn/Tailwind utilities; every management page inherits it through the root
+layout. Buttons use `rounded-button`, fields use `rounded-control`, navigation
+uses `rounded-frame`, and shared headings use `font-display` via the type classes.
+Light is the default for new visitors; saved light/dark/system preferences survive.
+
+For the next edition, update the theme and font assets/loaders rather than
+restyling pages. The source landing, token mapping and step-by-step edition
+workflow are in [`docs/DESIGN.md` §2](../../docs/DESIGN.md#edition-standard-hackudc-2027).
+`/design-system` previews real controls, status tones, a searchable/sortable
+sample table and a focus-managed dialog without requiring a signed-in account.
+Use its language/theme controls to check both schemes and all three locales.
+The shadcn CLI's zinc scaffolding preset in `components.json` does not own the
+active edition; preserve the shared token contract when installing primitives.
+
+Icons use Phosphor's native `*Icon` exports. Import individual modules from
+`@phosphor-icons/react/dist/csr/<Name>` in client files or `/dist/ssr/<Name>` in
+server-compatible files, preserving `size-*` and semantic color utilities.
+`Providers` sets client defaults to `regular`, 24 px and `currentColor`; server
+icons use the library's regular weight without React context. `components.json`
+also selects `phosphor`, so new shadcn primitives follow the same convention.
+See the [web icon standard](../../docs/DESIGN.md#web-icon-standard) for details.
 
 ## Browser server state
 
@@ -197,8 +224,8 @@ composition or behavior variant, wrap it in `components/common/`.
 
 App-level building blocks used across every screen. Reuse these instead of
 re-implementing. Each is a **single canonical component configured by props**
-— never fork a second version. Full inventory with variations:
-`/components` in the running app.
+— never fork a second version. Representative primitives and widgets with
+variations are previewed at `/design-system` in the running app.
 
 Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `EmptyState`, `DataTable`, `TabBar`, `Modal`, `AlertModal`, `ContextualError`,
@@ -253,9 +280,15 @@ function, it debounces and renders results in a `Command` popover.
 `EntityCombobox` is the client-side-filtered counterpart for a list you've
 already fetched in full (enterprises, activities): pass `options`, `getId`,
 `getLabel`. Reach for a plain `Select` only for small, fixed, non-growing
-option sets (enums, status filters); anything backed by a table that a staff
+option sets in forms (enums, statuses); anything backed by a table that a staff
 member could plausibly type into a search box should use one of these two
 instead — a flat `<Select>` over dozens/hundreds of rows is unusable.
+
+Management toolbars with several categorical filters use `FilterMenu` from
+`components/common/filter-menu.tsx`: one category menu, desktop submenus,
+mobile back navigation, and removable chips for active values. Values and
+filtering remain controlled by the page. See the
+[list filter standard](../../docs/DESIGN.md#list-filter-standard).
 
 A capability-denied page is `<AccessDenied ask={t("…")} />` and nothing else —
 one heading for every page, one per-page ask naming the access to request. It
@@ -390,8 +423,8 @@ list turns into a dumping ground and the guard stops meaning anything.
   password reset go through `lib/auth-client.ts`, then `refresh()` the session.
 - **Theme tokens only.** Style with semantic tokens (`bg-background`,
   `text-muted-foreground`, `border`, `text-destructive`, …) defined in
-  `app/globals.css`. Never hardcode hex/oklch in a component. Spacing, type
-  scale, control sizes, and the `Surface`/`Section`/`Overlay` container
+  `styles/theme.css` and mapped to Tailwind in `app/globals.css`. Never hardcode
+  hex/oklch in a component. Spacing, type scale, control sizes, and the `Surface`/`Section`/`Overlay` container
   contract are specified in [`docs/DESIGN.md`](../../docs/DESIGN.md) — the
   consolidated design/UX rulebook; read it before building screens.
 - **All copy through `lib/i18n.ts`'s `t()` (i18next), in all three locales.**

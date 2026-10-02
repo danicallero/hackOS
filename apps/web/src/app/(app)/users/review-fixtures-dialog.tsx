@@ -1,6 +1,7 @@
 "use client";
 
-import { RefreshCwIcon, ShieldCheckIcon } from "lucide-react";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowsClockwise";
+import { ShieldCheckIcon } from "@phosphor-icons/react/dist/csr/ShieldCheck";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Modal } from "@/components/common/modal";
@@ -143,7 +144,7 @@ export function ReviewFixturesDialog() {
               {t("cancel")}
             </Button>
             <Button type="button" onClick={() => setConfirmOpen(true)} disabled={pending}>
-              <RefreshCwIcon aria-hidden="true" />
+              <ArrowsClockwiseIcon aria-hidden="true" />
               {t("reviewFixturesRegenerate")}
             </Button>
           </>

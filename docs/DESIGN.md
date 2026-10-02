@@ -61,7 +61,8 @@ layout explains, text is the exception.**
 ## 2. Foundation tokens
 
 **Summary: everything on a 4px grid, semantic tokens only, one accent per
-view; canonical values in `apps/web/src/app/globals.css`.**
+view; edition values in `apps/web/src/styles/theme.css`, Tailwind mappings in
+`apps/web/src/app/globals.css`.**
 
 Style only with semantic tokens (`bg-background`, `text-muted-foreground`,
 `border`, `text-destructive`, …). Colour meaning comes from semantic tones
@@ -81,20 +82,137 @@ Each row: value → intent → boundary.
 | Spacing scale | 4, 8, 12, 16, 24, 32, 48 px | 8px between tightly related controls, 16px within a section, 24px between sections. Never off-grid values. |
 | Accent | one interactive accent | CTAs and active states only. Never decorative, never a background wash. One per view. |
 | Status colours | via `tones.ts` | Reserved for actual state (queue, decision, sync). Never used to make neutral UI "more colorful". |
-| Page title | 24/32 semibold (`type-page-title`) | One per page, in `PageHeader`. Never inside cards. |
-| Section title | 18/24 semibold (`type-section-title`) | Titles a `Section`/`SectionCard`. Not a substitute for the page title. |
+| Page title | 24/32 Rockwell regular (`type-page-title`) | One per page, in `PageHeader`. Never inside cards. |
+| Section title | 18/24 Rockwell regular (`type-section-title`) | Titles a `Section`/`SectionCard`. Not a substitute for the page title. |
 | Body | 14/20 regular | Default text. |
 | Label | 13/18 medium (`type-label`) | Form labels and control captions. |
 | Meta | 12/16 muted (`type-meta`) | Timestamps, counts, secondary facts. **No artificial tracking** — never add `tracking-*` to shared headings or metadata. |
 | Data | `tabular-nums` | Any column of numbers. Monospace only for identifiers and timers — never for prose. |
-| Controls | 24 px tiny/icon-xs, 32 px compact, 36 px default, 40 px prominent; 6 px radius | Tiny is for icon-only remove/inline affordances; compact is for dense staff tables; prominent is for mobile-friendly/primary flows. Use component `size` variants, never one-off height utilities. Multiline `Textarea` uses a separate 64 px minimum token. |
+| Controls | 24 px tiny/icon-xs, 32 px compact, 36 px default, 40 px prominent; 6 px field radius, pill buttons | Tiny is for icon-only remove/inline affordances; compact is for dense staff tables; prominent is for mobile-friendly/primary flows. Use component `size` variants, never one-off height utilities. Multiline `Textarea` uses a separate 64 px minimum token. |
 | Surfaces | 8 px radius, semantic border + background | **No shadow for inline grouping** — border-only. |
 | App frame | 12 px radius, subtle border + small shadow | Desktop navigation is the one floating panel; the main content stays on the shared shell canvas without an outer card. |
 | Overlays | 8 px radius; small shadow (menus/popovers), large shadow (modals) | Elevation communicates "floating above the page" and nothing else. |
-| Full radius | pills, avatars | Nowhere else. |
+| Full radius | buttons, status pills, avatars | Not for fields or content surfaces. |
 
 Uppercase/letter-spacing is not a hierarchy tool — use scale, weight, and
 colour; reserve uppercase for real codes (badge IDs, room codes).
+
+### Edition standard: HackUDC 2027
+
+The web UI follows the [HackUDC 2027 landing](https://github.com/gpul-org/hackudc-2027).
+Its [brand guidelines](https://github.com/gpul-org/hackudc-2027/blob/9d51fe26600238fceeebab43e1ca6f902e181bce/BRAND_GUIDELINES.md)
+and [CSS palette](https://github.com/gpul-org/hackudc-2027/blob/9d51fe26600238fceeebab43e1ca6f902e181bce/src/styles/global.css)
+at commit `9d51fe26600238fceeebab43e1ca6f902e181bce` define this edition.
+The landing is an independent Astro application: this repo implements its
+identity through the existing shadcn contract, rather than copying its layout.
+Changes here do not automatically update that repository or the native app.
+
+There are three layers, with one owner per concern:
+
+| Layer | Owner | Change here for |
+| --- | --- | --- |
+| Edition | `apps/web/src/styles/theme.css` | Palette, light/dark semantic aliases, typefaces, title weights/sizes, spacing, control sizes, radii, elevation |
+| Tailwind/shadcn contract | `apps/web/src/app/globals.css` | Semantic utility mappings (`bg-primary`, `rounded-button`, `font-display`, etc.) and shared type classes |
+| Components | `components/ui/*` + `components/common/*` | Accessible structure, behavior, variants and composition; no edition-specific colors |
+
+`components.json` keeps shadcn's `cssVariables: true` and points at
+`globals.css`, which imports the edition. Its `baseColor: zinc` is the CLI's
+scaffolding preset, not the active product palette. Keep existing components
+and Radix behavior; do not regenerate the library to change an edition.
+When adding/updating a primitive, preserve this token-backed visual contract.
+
+| Landing foundation | Edition token | Web application |
+| --- | --- | --- |
+| Ink `#030846` | `--brand-ink` | Text in light mode, primary actions, outlines; dark canvas |
+| Cream `#fafafa` | `--brand-cream` | Light canvas/surfaces; dark text |
+| Blue `#a3d5ff` | `--brand-blue` | Secondary and active surfaces; dark primary actions |
+| Red `#bf2100` | `--brand-red` | Light focus rings and destructive actions; lighter derived destructive color on ink |
+| Yellow `#f5dc8f` | `--brand-yellow` | Warning marker/wash, paired with normal foreground text |
+| Inter | `--brand-sans` | Body, labels, navigation and dense data; loaded by `next/font` in the root layout |
+| Rockwell | `--brand-display` | Page/section/dialog titles and public headlines; supplied regular/bold WOFF2 files in `public/fonts/hackudc-2027/` |
+
+The edition defaults to **light** for new visitors. `next-themes` retains an
+existing light/dark/system preference. Dark mode derives its surfaces from ink
+and blue, rather than falling back to an unrelated neutral palette. Semantic
+status roles remain distinct: green is success, red is danger, yellow is
+warning, blue is information. Components request `tone`/semantic utilities,
+never raw brand swatches or chart-series tokens for status.
+
+Primary buttons use ink/cream in light mode and blue/ink in dark mode.
+Secondary/outline interactions use blue-tinted surfaces. Buttons are pills;
+inputs/selects retain the compact control radius, inline surfaces remain lightly
+framed, and navigation consumes `rounded-frame`/`shadow-floating`. All geometry
+comes from the edition, with no changes to staff density. Use flat color blocks;
+no decorative gradients, glows or glass on auth/public page surfaces. Keep the
+hackOS product wordmark: an event's logo belongs to its configured event identity.
+
+### List filter standard
+
+Use `components/common/filter-menu.tsx` (`FilterMenu`) for management toolbars
+with several categorical filters. Users, review history and the schedule use
+this shared control instead of one dropdown per property. Keep text search
+separate, and keep filtering, persistence and API parameters owned by the page.
+
+- One **Filters** button opens the category menu; desktop categories open
+  adjacent submenus. Below 768px, options replace the category list in the
+  same panel, with a **Back** action and focus moved into the new panel.
+- Single-choice filters declare a `resetValue` and use radio items. Multiple
+  choices use checkboxes and keep the menu open while selecting.
+- Show selected values as removable chips next to the button. Removing a chip
+  clears only that value and returns focus to the trigger. The trigger count
+  represents active categories; **Clear filters** resets all categories.
+- Use localized category/option labels, Phosphor category icons, and the shared
+  shadcn dropdown, button and semantic theme tokens. Menus support keyboard
+  navigation and scroll when options exceed the available space.
+
+Form fields still use their appropriate `Select` or searchable entity picker.
+
+### Web icon standard
+
+Use [Phosphor](https://github.com/phosphor-icons/react) via `@phosphor-icons/react`
+for navigation, actions, statuses and shadcn primitives. `components.json` sets
+`iconLibrary: phosphor` for future generated components. Use native `*Icon` names
+and Phosphor's `Icon` type (aliased as `PhosphorIcon` where needed).
+
+Import individual icons from `@phosphor-icons/react/dist/csr/<Name>` inside
+client modules and `@phosphor-icons/react/dist/ssr/<Name>` in server-compatible
+modules. These direct imports avoid compiling the entire catalogue in Next.js.
+Server variants do not read React context; their default weight is `regular`.
+Client defaults live in `components/providers.tsx`'s `IconContext`: `regular`,
+24 px, `currentColor`. Keep existing `size-*` utilities for contextual sizing:
+usually 16 px in controls/navigation, 14 px beside compact metadata, 20–24 px
+for prominent states. Use `weight="fill"` for selected dots; preserve `animate-spin`
+on `SpinnerGapIcon`. Use `weight`, not Lucide's `strokeWidth`, to change the style.
+
+Icons inherit semantic text colors. Keep decorative icons `aria-hidden` and
+give icon-only controls localized accessible labels. Activity registry icon
+keys remain stable and map to Phosphor components in `schedule-model.ts`.
+
+### Changing the next edition
+
+1. Read the new landing's brand guidelines. Update the palette and font stacks
+   at the top of `styles/theme.css`; add supplied font files and update its
+   `@font-face` declarations. A different interface font also needs its loader
+   changed in `app/layout.tsx`.
+2. Adjust semantic aliases and geometry in that same file when the new brand
+   needs a different action/surface hierarchy. Keep the semantic names stable.
+   Do not restyle individual management pages or replace shadcn primitives.
+3. Preview `/design-system`: it uses real `Button`, `Input`, `Textarea`,
+   `TabBar`, `StatusBadge`, `SectionCard`, `DataTable` and `Modal` components,
+   with synthetic data and no operational mutations. Check light/dark,
+   es/gl/en, narrow/wide layouts, keyboard focus and disabled controls. Also
+   inspect real auth, table/form and judging screens for content-specific fit.
+4. Run `pnpm lint`, web typecheck/tests and the Chromium UI smoke suite.
+   `src/lib/warning-contrast.test.ts` checks WCAG AA text on semantic surfaces,
+   status washes and field-outline contrast against the active edition.
+   Capture screenshots outside the source branch per `docs/ui-testing.md`.
+5. Update this edition section's reference and the web README in the same change.
+   Keep event names, dates, logos and copy in their existing configuration/i18n
+   owners; a visual refresh is not a reason to hardcode event content.
+
+The theme is a single **local** source of truth for the web. Synchronizing it
+with another repo or native tokens still requires an explicit update; there is
+no remote theme fetch or new theme-provider abstraction.
 
 ### Authenticated shell aesthetic
 
@@ -118,8 +236,8 @@ surfaces — never from stacking rounded rectangles around every region.
   12px top inset so the title line starts beside the button. Vertical
   separation is earned below the component, not by an arbitrary offset above
   it.
-- **Curvature follows ownership.** Controls use the 6 px control radius;
-  inline `Surface`/`SectionCard` groupings use 8 px; the floating sidebar uses
+- **Curvature follows ownership.** Fields use the 6 px control radius and
+  buttons use the pill radius; inline `Surface`/`SectionCard` groupings use 8 px; the floating sidebar uses
   12 px; overlays use their token-backed 8 px radius. A rounded edge signals a
   bounded, movable or elevated thing — it is not decorative chrome for the
   page canvas.
@@ -263,8 +381,8 @@ id) → one `primaryAction` + optional `secondaryActions`.
 
 **Summary: the shared library is canonical — pick by job, extend by props,
 never fork. Decide *whether* something is a dialog before deciding *which*
-dialog. Full inventory: `apps/web/README.md` + the `/components` gallery in
-the running app.**
+dialog. Inventory: `apps/web/README.md`; representative live examples in
+`/design-system`.**
 
 ### Is it a dialog at all?
 
@@ -432,6 +550,10 @@ capability→workspace mapping: [`navigation.md`](./navigation.md).**
   *and* gains Live judging.
 - Keep the last workspace per device; order time-critical work above
   configuration during the event.
+- Sidebar workspaces share one list with 4 px between destinations, matching
+  the personal menu. Keep section spacing outside that list; do not add top
+  margins to individual workspace headers. Expanded child links have a 4 px
+  gap below their header.
 - Counts and state communicate attention — not "Soon" badges.
 
 ## 8. Domain state models that must stay visually distinct
@@ -530,7 +652,7 @@ workspaces with per-device persistence; conventions in
 - File organisation: when a route outgrows a single `page.tsx`, follow the
   "Page structure" rule in `apps/web/README.md` — split by independently
   meaningful parts (tabs, modals, decision logic), never by line count alone.
-- Dark-first operational visual identity; light and dark both fully supported
+- Landing-derived, light-first edition identity; light and dark both fully supported
   via `next-themes` — every screen must read correctly in both.
 - Navigation: `lib/nav.ts` (`PERSONAL_NAV` + `WORKSPACES`) rendered by
   `AppSidebar`. Workspaces are collapsible groups; the expanded workspace
@@ -543,8 +665,8 @@ workspaces with per-device persistence; conventions in
   behavior/structure vendored; token-backed visual defaults may be maintained
   there as part of the shared control contract. Wrap project variants in
   `components/common/`.
-- The `/components` route in the running app is the live gallery of every
-  shared widget with variations — check it before building UI.
+- The `/design-system` route previews the shared theme on representative
+  primitives and widgets — check it before building UI.
 - Errors from the API surface `ApiError.message` verbatim (already
   human-readable and localized server-side).
 - Domain models/pure logic live in `lib/<domain>.ts` with colocated
@@ -715,7 +837,9 @@ Every UI change, web or mobile:
 
 | Concern | Where |
 | --- | --- |
-| Colour/radius/type tokens | `apps/web/src/app/globals.css` |
+| Edition colour/radius/type tokens | `apps/web/src/styles/theme.css` |
+| Tailwind token mapping and type classes | `apps/web/src/app/globals.css` |
+| Interactive component preview | `apps/web/src/app/(public)/design-system/page.tsx` |
 | Tones | `apps/web/src/lib/tones.ts` |
 | Page hierarchy | `apps/web/src/components/common/page-header.tsx` |
 | Sections/surfaces | `apps/web/src/components/common/section-card.tsx` |

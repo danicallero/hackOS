@@ -1,6 +1,7 @@
 "use client";
 
-import { ClockIcon, MapPinIcon } from "lucide-react";
+import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
+import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { useLocale } from "@/lib/i18n";
 

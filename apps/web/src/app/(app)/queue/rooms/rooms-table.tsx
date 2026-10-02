@@ -3,7 +3,9 @@
 // The room administration grid (H29, H46): the small, high-frequency fields
 // stay editable in place while enterprise routing remains in the room editor.
 
-import { Building2Icon, PencilIcon, PlusIcon } from "lucide-react";
+import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
+import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import {
@@ -278,7 +280,7 @@ export function RoomsTable({
             <TableRow className="hover:bg-transparent">
               <TableCell colSpan={5} className="p-0">
                 <EmptyState
-                  icon={Building2Icon}
+                  icon={BuildingsIcon}
                   title={emptyTitle}
                   description={emptyDescription}
                   action={emptyAction}

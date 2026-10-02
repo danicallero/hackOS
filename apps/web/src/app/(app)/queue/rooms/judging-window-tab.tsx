@@ -11,7 +11,7 @@
 // gate itself stays in the parent page, this component assumes access.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { GavelIcon } from "lucide-react";
+import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";

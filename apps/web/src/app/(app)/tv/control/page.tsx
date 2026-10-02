@@ -2,7 +2,9 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { GlobeIcon, MonitorUpIcon, RadioIcon } from "lucide-react";
+import { GlobeIcon } from "@phosphor-icons/react/dist/csr/Globe";
+import { MonitorArrowUpIcon } from "@phosphor-icons/react/dist/csr/MonitorArrowUp";
+import { RadioIcon } from "@phosphor-icons/react/dist/csr/Radio";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -251,7 +253,7 @@ export default function TvControlPage() {
       </SectionCard>
 
       <SectionCard
-        icon={MonitorUpIcon}
+        icon={MonitorArrowUpIcon}
         title={t("displayMode")}
         description={isDraftUnbroadcast ? t("draftNotYetBroadcastDesc") : t("draftMatchesLiveDesc")}
         footer={

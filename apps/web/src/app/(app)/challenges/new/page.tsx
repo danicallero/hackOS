@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { TrophyIcon } from "lucide-react";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useRouter } from "next/navigation";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";

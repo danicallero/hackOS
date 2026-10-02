@@ -1,6 +1,8 @@
 "use client";
 
-import { CheckCircle2Icon, InfoIcon, TriangleAlertIcon } from "lucide-react";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -100,7 +102,7 @@ function ConfirmInner() {
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
           <div className="bg-warning/10 text-warning mb-2 grid size-12 place-items-center rounded-full">
-            <TriangleAlertIcon aria-hidden="true" className="size-6" />
+            <WarningIcon aria-hidden="true" className="size-6" />
           </div>
           <CardTitle>{t("confirmationExpiredTitle")}</CardTitle>
           <CardDescription role="alert">{t("confirmationExpiredDesc")}</CardDescription>
@@ -129,7 +131,7 @@ function ConfirmInner() {
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
           <div className="bg-destructive/10 text-destructive mb-2 grid size-12 place-items-center rounded-full">
-            <TriangleAlertIcon aria-hidden="true" className="size-6" />
+            <WarningIcon aria-hidden="true" className="size-6" />
           </div>
           <CardTitle>
             {linkInvalid ? t("confirmationLinkInvalidTitle") : t("confirmationFailed")}
@@ -150,7 +152,7 @@ function ConfirmInner() {
     <Card>
       <CardHeader className="items-center justify-items-center text-center">
         <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-          <CheckCircle2Icon aria-hidden="true" className="size-6" />
+          <CheckCircleIcon aria-hidden="true" className="size-6" />
         </div>
         <CardTitle>{alreadyDone ? t("alreadyConfirmed") : t("placeConfirmed")}</CardTitle>
         <CardDescription>{t("ticketWalletFirstDesc")}</CardDescription>

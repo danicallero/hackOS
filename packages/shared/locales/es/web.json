@@ -3262,5 +3262,17 @@
   "notificationsOff": "Desactivadas",
   "notificationChannelsFor": "Canales de notificación para {label}",
   "activityLabelShort": "Actividad",
-  "activityKindLabel": "Tipo de actividad"
+  "activityKindLabel": "Tipo de actividad",
+  "filtersLabel": "Filtros",
+  "designSystemTitle": "Sistema de diseño",
+  "designSystemActions": "Acciones",
+  "designSystemPrimary": "Principal",
+  "designSystemSecondary": "Secundaria",
+  "designSystemOutline": "Contorno",
+  "designSystemGhost": "Sin fondo",
+  "designSystemDestructive": "Destructiva",
+  "designSystemFields": "Campos",
+  "designSystemStates": "Estados",
+  "designSystemTable": "Tabla",
+  "designSystemOverlay": "Diálogo"
 }

@@ -1,8 +1,10 @@
 "use client";
 
+import { CaretUpDownIcon } from "@phosphor-icons/react/dist/csr/CaretUpDown";
 // Curated degree autocomplete. It mirrors the university directory's proposal
 // limits on the API and stores only the stable catalogue id in a response.
-import { CheckIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -122,7 +124,7 @@ export function DegreePicker({
           className="w-full justify-between font-normal"
         >
           <span className="truncate">{currentLabel ?? t("selectDegreePlaceholder")}</span>
-          <ChevronsUpDownIcon className="text-muted-foreground size-4 shrink-0" />
+          <CaretUpDownIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
         </Button>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal {...portalProps}>
@@ -152,6 +154,7 @@ export function DegreePicker({
                     onSelect={() => select(degree)}
                   >
                     <CheckIcon
+                      aria-hidden="true"
                       className={cn(
                         "size-4",
                         String(degree.id) === value ? "opacity-100" : "opacity-0",
@@ -162,7 +165,7 @@ export function DegreePicker({
                 ))}
                 {canPropose && (
                   <CommandItem value={`propose-${query}`} onSelect={() => void propose()}>
-                    <PlusIcon className="size-4" />
+                    <PlusIcon aria-hidden="true" className="size-4" />
                     {t("addQuotedInline", { query: query.trim() })}
                   </CommandItem>
                 )}

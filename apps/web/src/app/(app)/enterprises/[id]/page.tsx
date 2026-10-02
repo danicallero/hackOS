@@ -7,7 +7,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { Building2Icon } from "lucide-react";
+import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
@@ -81,7 +81,7 @@ export default function EnterpriseDetailPage() {
     return (
       <div className="space-y-6">
         <EmptyState
-          icon={Building2Icon}
+          icon={BuildingsIcon}
           title={t("enterpriseNotFoundTitle")}
           description={errorMsg || t("enterpriseNotLoadedDesc")}
         />
