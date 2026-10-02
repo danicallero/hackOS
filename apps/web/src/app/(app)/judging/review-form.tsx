@@ -276,7 +276,10 @@ export function ReviewForm({
           if (field !== focusedField) await releaseField(field);
         }
         setVersions(await getReviewVersions(entryId));
-        if (announce) toast.success(submit ? t("reviewSubmitted") : t("draftSaved"));
+        if (announce)
+          toast.success(submit ? t("reviewSubmitted") : t("draftSaved"), {
+            compactTitle: t("saveReview"),
+          });
       } catch (err) {
         const fallback = t("couldNotSaveReview");
         const message = errorMessage(err, fallback);

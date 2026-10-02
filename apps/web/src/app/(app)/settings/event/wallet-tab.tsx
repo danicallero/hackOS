@@ -82,7 +82,7 @@ function PassFrontFieldsEditor({
       {FRONT_FIELDS.map(({ key, titleKey, fillKey }) => {
         const shown = visibility[key] !== false;
         return (
-          <div key={key} className="space-y-3 rounded-md border p-3">
+          <div key={key} className="space-y-3 border-b border-border/60 py-4 last:border-b-0">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <Label htmlFor={`pass-visible-${key}`}>{t(titleKey)}</Label>
@@ -365,7 +365,10 @@ export function WalletTab({
       setSaveState("saved");
     } catch (err) {
       setSaveState("error");
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
+        t("toastWalletSettings"),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -385,6 +388,8 @@ export function WalletTab({
       }}
     >
       <SectionCard
+        variant="plain"
+        footerClassName="justify-start"
         icon={icon}
         title={t("walletPassSectionTitle")}
         state={<SaveStatus state={saveState} />}

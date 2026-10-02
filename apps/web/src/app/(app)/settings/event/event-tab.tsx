@@ -161,7 +161,10 @@ export function EventTab({
       setSaveState("saved");
     } catch (err) {
       setSaveState("error");
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
+        t("toastEventSettings"),
+      );
     }
   }
 
@@ -174,6 +177,8 @@ export function EventTab({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <SectionCard
+          variant="plain"
+          footerClassName="justify-start"
           icon={icon}
           title={t("eventTitle")}
           state={<SaveStatus state={saveState} />}
@@ -224,7 +229,7 @@ export function EventTab({
             name="participantsCanCreateProjects"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-4 py-3">
                   <FormLabel className="font-normal">
                     {t("participantsCanCreateProjectsLabel")}
                   </FormLabel>
@@ -338,7 +343,7 @@ export function EventTab({
             name="showStartCountdown"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-4 py-3">
                   <div>
                     <FormLabel className="font-normal">{t("countdownToStartLabel")}</FormLabel>
                     <FormDescription>{t("countdownDesc")}</FormDescription>

@@ -14,17 +14,17 @@ export default function InboxPage() {
     defaultValue: "messages",
   });
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-4xl space-y-8">
       <PageHeader title={t("inbox")} />
       <Tabs value={tab} onValueChange={setTab}>
-        <TabBar>
+        <TabBar variant="line" className="w-full justify-start border-b">
           <TabsTrigger value="messages">{t("messages")}</TabsTrigger>
           <TabsTrigger value="preferences">{t("preferences")}</TabsTrigger>
         </TabBar>
-        <TabsContent value="messages" className="pt-4">
+        <TabsContent value="messages" className="pt-6">
           <MessagesTab />
         </TabsContent>
-        <TabsContent value="preferences" className="pt-4">
+        <TabsContent value="preferences" className="pt-6">
           <PreferencesTab />
         </TabsContent>
       </Tabs>

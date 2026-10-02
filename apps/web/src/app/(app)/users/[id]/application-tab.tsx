@@ -111,7 +111,10 @@ export function ApplicationTab({ userId }: { userId: number }) {
         askFoodIntolerances: detail.application.ask_food_intolerances,
       });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotOpenApplication"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotOpenApplication"),
+        t("toastOpenApplication"),
+      );
     } finally {
       setOpeningId(null);
     }

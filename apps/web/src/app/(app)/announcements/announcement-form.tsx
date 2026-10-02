@@ -162,7 +162,8 @@ export function AnnouncementFormModal({
         setIntolerances(dictionary.intolerances);
       })
       .catch(() => {
-        if (!cancelled) toast.error(t("couldNotLoadAnnouncementTargeting"));
+        if (!cancelled)
+          toast.error(t("couldNotLoadAnnouncementTargeting"), t("announcementTargetingLabel"));
       });
     return () => {
       cancelled = true;
@@ -204,7 +205,10 @@ export function AnnouncementFormModal({
         };
       });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotTranslate"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotTranslate"),
+        t("toastTranslate"),
+      );
     } finally {
       setTranslating(false);
     }
@@ -250,7 +254,7 @@ export function AnnouncementFormModal({
       const existing = new Set(values.recipientUserIds);
       return result.users.filter((u) => !existing.has(u.id));
     } catch {
-      toast.error(t("searchFailed"));
+      toast.error(t("searchFailed"), t("toastFindRecipients"));
       return [];
     }
   }
@@ -273,7 +277,7 @@ export function AnnouncementFormModal({
     const publishAt = values.publishAt ? fromDatetimeLocal(values.publishAt) : null;
     const expiresAt = values.expiresAt ? fromDatetimeLocal(values.expiresAt) : null;
     if ((values.publishAt && !publishAt) || (values.expiresAt && !expiresAt)) {
-      toast.error(t("enterValidDatesTimes"));
+      toast.error(t("enterValidDatesTimes"), t("toastAnnouncementDates"));
       return;
     }
     if (invalidWindow) {
@@ -324,7 +328,10 @@ export function AnnouncementFormModal({
         expiresAt: values.screenPlacement === "none" ? null : expiresAt,
       });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveAnnouncement"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveAnnouncement"),
+        t("publishAnnouncement"),
+      );
     } finally {
       setPending(false);
     }

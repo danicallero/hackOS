@@ -103,7 +103,7 @@ export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
       });
       setCreateOpen(false);
       resetForm();
-      toast.success(t("linkCreated"));
+      toast.success(t("linkCreated"), { compactTitle: t("toastCreateInvite") });
       await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : t("couldNotCreateEnterpriseInviteLink"));
@@ -118,10 +118,13 @@ export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
     try {
       await api.post(`/api/invites/enterprise-links/${withdrawId}/withdraw`);
       setWithdrawId(null);
-      toast.success(t("linkWithdrawn"));
+      toast.success(t("linkWithdrawn"), { compactTitle: t("toastWithdrawInvite") });
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotWithdrawLink"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotWithdrawLink"),
+        t("toastWithdrawInvite"),
+      );
     } finally {
       setWithdrawPending(false);
     }

@@ -62,7 +62,7 @@ export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
         : await logisticsApi.googleWalletSaveUrl(purpose);
       window.open(saveUrl, "_blank", "noopener,noreferrer");
     } catch {
-      toast.error(t("walletGoogleSaveFailed"));
+      toast.error(t("walletGoogleSaveFailed"), t("toastWalletSettings"));
     } finally {
       setGoogleLoading(false);
     }

@@ -109,9 +109,12 @@ export function ReviewFixturesDialog() {
         })),
       });
       setConfirmOpen(false);
-      toast.success(t("reviewFixturesRegenerated"));
+      toast.success(t("reviewFixturesRegenerated"), { compactTitle: t("toastReviewAccounts") });
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("reviewFixturesRegenerateFailed"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("reviewFixturesRegenerateFailed"),
+        t("toastReviewAccounts"),
+      );
     } finally {
       setPending(false);
     }

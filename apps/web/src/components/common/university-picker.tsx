@@ -152,7 +152,9 @@ export function UniversityPicker({
     setProposing(true);
     try {
       const created = await api.post<University>("/api/public/universities/propose", { name });
-      toast.success(t("addedUniversityInline", { name: created.name }));
+      toast.success(t("addedUniversityInline", { name: created.name }), {
+        compactTitle: t("toastSaveUniversity"),
+      });
       select(created);
       setQuery("");
     } catch (err) {
@@ -165,6 +167,7 @@ export function UniversityPicker({
           : err instanceof ApiError
             ? err.message
             : t("couldNotAddUniversity"),
+        t("toastSaveUniversity"),
       );
     } finally {
       setProposing(false);

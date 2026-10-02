@@ -1,14 +1,8 @@
 "use client";
 
-// Manage Schedule (H48/H59): the full run-of-show, grouped by day — status,
-// start, end, duration, location, item, who's responsible, observations —
-// for SCHEDULE_MANAGE holders, with inline edits, bulk
-// visibility/scheduling actions, and delete. Participant-facing schedule data
-// belongs only to /timetable and /api/public/activities; this route must not
-// fetch that feed as a fallback. Replaces the old DataTable-based /schedule
-// editor entirely — this table already covers everything that editor did.
-// Column visibility/order is user-configurable and persisted both in
-// localStorage (instant) and on the account (cross-device) via /api/me/ui-prefs.
+// H48/H59: day-grouped schedule management with inline edits and bulk publishing.
+// Participants use /timetable; never fall back to its public feed here.
+// Column preferences persist locally and across devices via /api/me/ui-prefs.
 
 import {
   closestCenter,
@@ -159,12 +153,8 @@ export default function SchedulePage() {
 
   const [moveToDateItem, setMoveToDateItem] = useState<PublicScheduleItem | null>(null);
 
-  // Shifts an item's startsAt/endsAt to a new calendar date, keeping the
-  // item's own duration and time-of-day (H59 drag-to-reschedule). Both ends
-  // must move together in one PATCH — the API's window check compares
-  // whichever one isn't sent against the *current* value, so sending only
-  // startsAt would spuriously fail once its shifted date lands after the
-  // still-old endsAt.
+  // H59: shift both ends in one PATCH, preserving duration and time-of-day;
+  // sending only startsAt would validate it against the old endsAt.
   const moveItemToDate = useCallback(
     async (item: PublicScheduleItem, targetDate: string) => {
       const nextStartsAt = withDate(item.startsAt, targetDate);
@@ -182,7 +172,10 @@ export default function SchedulePage() {
         });
         updateItem(item.id, updated);
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : t("couldNotMoveScheduleItem"));
+        toast.error(
+          err instanceof ApiError ? err.message : t("couldNotMoveScheduleItem"),
+          t("toastMoveActivity"),
+        );
       }
     },
     [t, updateItem],
@@ -270,11 +263,14 @@ export default function SchedulePage() {
             endsAt: draft.endsAt,
           }),
         );
-        toast.success(t("scheduleItemCreated"));
+        toast.success(t("scheduleItemCreated"), { compactTitle: t("toastCreateActivity") });
         setDraft(null);
         load();
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+        toast.error(
+          err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+          t("toastSaveActivity"),
+        );
       } finally {
         setBusy(false);
       }
@@ -307,11 +303,14 @@ export default function SchedulePage() {
     setBusy(true);
     try {
       await logisticsApi.deleteSchedule(item.id);
-      toast.success(t("scheduleItemDeleted"));
+      toast.success(t("scheduleItemDeleted"), { compactTitle: t("toastDeleteActivity") });
       setDeletingItem(null);
       load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotDeleteScheduleItem"),
+        t("toastDeleteActivity"),
+      );
     } finally {
       setBusy(false);
     }
@@ -322,10 +321,15 @@ export default function SchedulePage() {
     setBusy(true);
     try {
       await logisticsApi.setScheduleVisibility([...selectedIds], visibility);
-      toast.success(visibility === "shown" ? t("itemsShown") : t("itemsHidden"));
+      toast.success(visibility === "shown" ? t("itemsShown") : t("itemsHidden"), {
+        compactTitle: t("toastActivityVisibility"),
+      });
       load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"),
+        t("toastActivityVisibility"),
+      );
     } finally {
       setBusy(false);
     }
@@ -336,10 +340,13 @@ export default function SchedulePage() {
     setBusy(true);
     try {
       await logisticsApi.setScheduleBulkPublishAt([...selectedIds], publishAt);
-      toast.success(t("bulkScheduleSet"));
+      toast.success(t("bulkScheduleSet"), { compactTitle: t("toastPublishSchedule") });
       load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"),
+        t("toastPublishSchedule"),
+      );
     } finally {
       setBusy(false);
     }
@@ -565,7 +572,7 @@ export default function SchedulePage() {
               logisticsApi.addScheduleOwner(created.id, pendingOwnerToInput(owner)),
             ),
           );
-          toast.success(t("scheduleItemCreated"));
+          toast.success(t("scheduleItemCreated"), { compactTitle: t("toastCreateActivity") });
           setCreateOpen(false);
           load();
           return created;
@@ -587,7 +594,7 @@ export default function SchedulePage() {
               editingItem.id,
               cleanScheduleForm(values),
             );
-            toast.success(t("scheduleItemUpdated"));
+            toast.success(t("scheduleItemUpdated"), { compactTitle: t("toastSaveActivity") });
             setEditingItem(null);
             // A full edit can move the item to a different day/audience, so
             // a full reload (not a local patch) keeps grouping/filtering correct.
@@ -612,7 +619,9 @@ export default function SchedulePage() {
                 logisticsApi.addScheduleOwner(created.id, pendingOwnerToInput(owner)),
               ),
             );
-            toast.success(t("scheduleItemDuplicated"));
+            toast.success(t("scheduleItemDuplicated"), {
+              compactTitle: t("toastDuplicateActivity"),
+            });
             setDuplicatingItem(null);
             load();
             return created;

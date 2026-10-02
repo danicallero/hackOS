@@ -79,7 +79,10 @@ export function PresenceTab({
       setSaveState("saved");
     } catch (err) {
       setSaveState("error");
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
+        t("attendanceTab"),
+      );
     }
   }
 
@@ -91,6 +94,8 @@ export function PresenceTab({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <SectionCard
+          variant="plain"
+          footerClassName="justify-start"
           icon={icon}
           title={t("presencePolicyTitle")}
           state={<SaveStatus state={saveState} />}

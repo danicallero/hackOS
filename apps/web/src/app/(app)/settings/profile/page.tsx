@@ -114,9 +114,12 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
         foodIntoleranceNotes: values.foodIntoleranceNotes || null,
       });
       await refresh();
-      toast.success(t("profileUpdated"));
+      toast.success(t("profileUpdated"), { compactTitle: t("toastSaveProfile") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveProfile"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveProfile"),
+        t("toastSaveProfile"),
+      );
     }
   }
 
@@ -127,10 +130,15 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
   }));
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-3xl space-y-12">
       <PageHeader title={t("myProfile")} />
       {me.roles.length > 0 && (
-        <SectionCard icon={ShieldIcon} title={t("rolesTitle")}>
+        <SectionCard
+          variant="plain"
+          footerClassName="justify-start"
+          icon={ShieldIcon}
+          title={t("rolesTitle")}
+        >
           <div className="flex flex-wrap gap-2">
             {me.roles.map((r) => (
               <Badge key={r.id} variant="outline">
@@ -143,6 +151,8 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <SectionCard
+            variant="plain"
+            footerClassName="justify-start"
             icon={UserIcon}
             title={t("personalDetails")}
             description={locked ? t("profileLockedNotice") : undefined}

@@ -21,7 +21,7 @@ const sileoMock = vi.hoisted(() => {
 
 vi.mock("sileo", () => ({ sileo: sileoMock }));
 
-import { toast } from "./toast";
+import { showErrorToast, toast } from "./toast";
 
 describe("toast adapter", () => {
   beforeEach(() => {
@@ -89,6 +89,98 @@ describe("toast adapter", () => {
     expect(sileoMock.error).toHaveBeenCalledWith(expect.objectContaining({ duration: 5_000 }));
   });
 
+  it("keeps a brief error compact even when an action heading is defined", () => {
+    toast.error("Judging has started.", "Añadir reto");
+    expect(sileoMock.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Judging has started.",
+        duration: 5_000,
+      }),
+    );
+    expect(sileoMock.error).toHaveBeenCalledWith(
+      expect.not.objectContaining({ description: expect.anything() }),
+    );
+  });
+
+  it("keeps short confirmations compact and uses their action heading for longer feedback", () => {
+    toast.success("Guardado", { compactTitle: "Guardar perfil" });
+    expect(sileoMock.success).toHaveBeenLastCalledWith(
+      expect.objectContaining({ title: "Guardado", duration: 2_400 }),
+    );
+    const message = "Your profile was saved and your secondary email still needs verification.";
+    toast.success(message, { compactTitle: "Guardar perfil" });
+    expect(sileoMock.success).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        title: "Guardar perfil",
+        description: message,
+        autopilot: { expand: 150, collapse: 60_000 },
+      }),
+    );
+  });
+
+  it("shows the server explanation beneath the concise error helper heading", () => {
+    const message = "Challenges can no longer be changed after judging starts.";
+    showErrorToast(new Error(message), "Could not add challenge", {
+      compactTitle: "Añadir reto",
+    });
+    expect(sileoMock.error).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Añadir reto", description: message }),
+    );
+  });
+
+  it("does not repeat the heading as its own description", () => {
+    toast.error("Añadir reto", "Añadir reto");
+    expect(sileoMock.error).toHaveBeenCalledWith(
+      expect.not.objectContaining({ description: expect.anything() }),
+    );
+  });
+
+  it("keeps short server failures compact through the error helper", () => {
+    showErrorToast(new Error("Try again."), "Could not save profile", {
+      compactTitle: "Guardar perfil",
+    });
+    expect(sileoMock.error).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Try again.", duration: 5_000 }),
+    );
+    expect(sileoMock.error).toHaveBeenCalledWith(
+      expect.not.objectContaining({ description: expect.anything() }),
+    );
+  });
+
+  it("opens an explicitly requested validation explanation under its action heading", () => {
+    showErrorToast(new Error("Validation failed."), "Could not submit application", {
+      compactTitle: "Enviar solicitud",
+      description: "Add your email address and select a shirt size.",
+    });
+    expect(sileoMock.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Enviar solicitud",
+        description: "Add your email address and select a shirt size.",
+        autopilot: { expand: 150, collapse: 60_000 },
+      }),
+    );
+  });
+
+  it("keeps promise errors contextual and preserves their server detail and timing overrides", async () => {
+    await toast.promise(Promise.resolve("done"), {
+      compactTitle: "Subir archivo",
+      loading: { title: "Uploading" },
+      success: { title: "Uploaded" },
+      error: { title: "Upload failed", duration: 12_000, autopilot: false },
+    });
+    const native = sileoMock.promise.mock.calls[0]?.[1] as unknown as {
+      error: (error: Error) => object;
+    };
+    const message =
+      "This file exceeds the upload limit. Choose a smaller file before trying again.";
+    expect(native.error(new Error(message))).toMatchObject({
+      title: "Subir archivo",
+      description: message,
+      duration: 12_000,
+      autopilot: false,
+    });
+  });
+
   it("spills an over-long error title into an auto-expanded description", () => {
     const longMessage = "D".repeat(120);
     toast.error(longMessage);
@@ -100,9 +192,9 @@ describe("toast adapter", () => {
       }),
     );
     const options = sileoMock.error.mock.calls[0]?.[0] as
-      | { autopilot?: boolean; button?: unknown }
+      | { autopilot?: unknown; button?: unknown }
       | undefined;
-    expect(options?.autopilot).toBeUndefined();
+    expect(options?.autopilot).toEqual({ expand: 150, collapse: 60_000 });
     expect(options?.button).toBeUndefined();
   });
 
@@ -111,20 +203,56 @@ describe("toast adapter", () => {
 
     expect(sileoMock.warning).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: "La acción ha fallado.",
+        title: "Resultado de la acción",
         description: "W".repeat(100),
       }),
     );
   });
 
   it("leaves intentional short error titles as compact single-line toasts", () => {
-    toast.error("Pide a un administrador acceso al horario para buscar usuarios.");
+    toast.error("No se pudo guardar");
 
     const options = sileoMock.error.mock.calls[0]?.[0] as
       | { title?: string; description?: unknown }
       | undefined;
-    expect(options?.title).toBe("Pide a un administrador acceso al horario para buscar usuarios.");
+    expect(options?.title).toBe("No se pudo guardar");
     expect(options?.description).toBeUndefined();
+  });
+
+  it.each([
+    "success",
+    "info",
+    "action",
+    "loading",
+  ] as const)("expands long %s feedback and preserves the full message", (state) => {
+    const message = "Challenges can no longer be changed after judging starts";
+    toast[state](message);
+    const mock = state === "loading" ? sileoMock.show : sileoMock[state];
+    expect(mock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: message,
+        autopilot: { expand: 150, collapse: 60_000 },
+      }),
+    );
+  });
+
+  it("preserves descriptions, actions and explicit timing when a title overflows", () => {
+    const message = "Challenges can no longer be changed after judging starts";
+    const onClick = vi.fn();
+    toast.error(message, {
+      description: "Contact the organizers.",
+      action: { label: "Help", onClick },
+      duration: 12_000,
+      autopilot: false,
+    });
+    expect(sileoMock.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: `${message}\n\nContact the organizers.`,
+        button: { title: "Help", onClick },
+        duration: 12_000,
+        autopilot: false,
+      }),
+    );
   });
 
   it("keeps the full review-fixtures server error readable", () => {

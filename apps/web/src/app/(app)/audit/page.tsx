@@ -188,7 +188,7 @@ export default function AuditPage() {
         setTotal(0);
         const message = err instanceof ApiError ? err.message : t("couldNotLoadAuditLog");
         setLoadError(message);
-        toast.error(message);
+        toast.error(message, t("toastAudit"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

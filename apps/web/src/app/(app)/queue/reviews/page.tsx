@@ -182,7 +182,12 @@ export default function ReviewsOverviewPage() {
         description={t("reviewsOverviewDesc")}
         actions={
           <Button asChild variant="outline">
-            <a href={exportHref} onClick={() => toast.success(t("exportStarted"))}>
+            <a
+              href={exportHref}
+              onClick={() =>
+                toast.success(t("exportStarted"), { compactTitle: t("toastExportReviews") })
+              }
+            >
               <DownloadIcon className="size-4" />
               {t("exportCsv")}
             </a>

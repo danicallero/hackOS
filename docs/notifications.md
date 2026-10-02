@@ -275,6 +275,21 @@ through `resolveActivityText` (`lib/scanner-types.ts`, mirroring
 `resolveScheduleText`'s fallback: preferred language, else English, else
 `primaryLanguage`'s canonical `name`) before rendering.
 
+## Web participant UI
+
+The inbox uses message rows separated by quiet hairlines and an alternating
+neutral wash. Subjects lead each row, timestamps sit beside them on desktop
+and below on narrow screens, and previews stay muted. Unread dots and subject
+weight distinguish unread messages. Opening a row
+marks it read and reveals selectable body text, optional payload details and a
+delete action with confirmation. Preferences use one row per category with
+a checkbox menu for the existing in-app, email and push channels. Queue calls
+remain read-only and always enabled (H51). Activity and kind reminders share a
+separate open section. Its Add reminder action opens a dialog with searchable
+activity and activity-kind comboboxes; selecting an option subscribes immediately
+on the existing default channels and closes the dialog after success. Active
+reminders retain their queued removal and retry flow.
+
 ## Web admin UI
 
 `apps/web/src/app/(app)/announcements/` — a list page

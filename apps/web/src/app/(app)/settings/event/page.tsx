@@ -102,11 +102,11 @@ export default function EventSettingsPage() {
 
   return (
     <EventConfigProvider>
-      <div className="space-y-6">
+      <div className="mx-auto w-full max-w-4xl space-y-8">
         <PageHeader title={t("eventSettings")} />
 
         <Tabs value={tab} onValueChange={changeTab}>
-          <TabBar className="w-full">
+          <TabBar variant="line" className="w-full justify-start border-b">
             {canEvent && <TabsTrigger value="event">{t("eventTitle")}</TabsTrigger>}
             {canVenue && <TabsTrigger value="venue">{t("venueSectionTitle")}</TabsTrigger>}
             {canWallet && <TabsTrigger value="wallet">{t("walletPassSectionTitle")}</TabsTrigger>}
@@ -116,17 +116,17 @@ export default function EventSettingsPage() {
           </TabBar>
 
           {canEvent && (
-            <TabsContent value="event" className="pt-4">
+            <TabsContent value="event" className="pt-6">
               <EventTab icon={TagIcon} onDirtyChange={(dirty) => setDirty("event", dirty)} />
             </TabsContent>
           )}
           {canVenue && (
-            <TabsContent value="venue" className="pt-4">
+            <TabsContent value="venue" className="pt-6">
               <VenueTab icon={MapPinIcon} onDirtyChange={(dirty) => setDirty("venue", dirty)} />
             </TabsContent>
           )}
           {canWallet && (
-            <TabsContent value="wallet" className="pt-4">
+            <TabsContent value="wallet" className="pt-6">
               <WalletTab
                 icon={WalletCardsIcon}
                 onDirtyChange={(dirty) => setDirty("wallet", dirty)}
@@ -134,7 +134,7 @@ export default function EventSettingsPage() {
             </TabsContent>
           )}
           {canPresence && (
-            <TabsContent value="presence" className="pt-4">
+            <TabsContent value="presence" className="pt-6">
               <PresenceTab
                 icon={UserCheckIcon}
                 onDirtyChange={(dirty) => setDirty("presence", dirty)}
@@ -142,7 +142,7 @@ export default function EventSettingsPage() {
             </TabsContent>
           )}
           {canInvites && (
-            <TabsContent value="invites" className="pt-4">
+            <TabsContent value="invites" className="pt-6">
               <InvitesTab
                 icon={MailPlusIcon}
                 onDirtyChange={(dirty) => setDirty("invites", dirty)}
@@ -150,7 +150,7 @@ export default function EventSettingsPage() {
             </TabsContent>
           )}
           {canDanger && (
-            <TabsContent value="danger" className="pt-4">
+            <TabsContent value="danger" className="pt-6">
               <ResetJudgingDataTab icon={TriangleAlertIcon} />
             </TabsContent>
           )}

@@ -155,7 +155,7 @@ export function ResponsesTab({
       } catch (err) {
         const message = err instanceof ApiError ? err.message : t("couldNotLoadResponses");
         setLoadError(message);
-        toast.error(message);
+        toast.error(message, t("workspaceApplications"));
       } finally {
         setLoading(false);
       }
@@ -314,12 +314,12 @@ export function ResponsesTab({
           total: parsed.total,
           items: parsed.items,
         });
-        toast.error(t("exportFilesFailedToast", { count: parsed.total }));
+        toast.error(t("exportFilesFailedToast", { count: parsed.total }), t("exportFiles"));
       } else {
-        toast.success(t("exportFilesDownloaded"));
+        toast.success(t("exportFilesDownloaded"), { compactTitle: t("exportFiles") });
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("exportFailed"));
+      toast.error(err instanceof Error ? err.message : t("exportFailed"), t("exportFiles"));
     } finally {
       setExportingKey(null);
     }
@@ -345,9 +345,12 @@ export function ResponsesTab({
         skipped,
       });
       await load();
-      if (skipped.length === 0) toast.success(label);
+      if (skipped.length === 0) toast.success(label, { compactTitle: t("toastDecisions") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("batchActionFailed"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("batchActionFailed"),
+        t("toastDecisions"),
+      );
     } finally {
       setBatchBusy(false);
     }

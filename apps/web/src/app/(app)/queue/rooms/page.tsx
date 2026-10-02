@@ -91,7 +91,7 @@ export default function QueueRoomsPage() {
       } else {
         const message = err instanceof ApiError ? err.message : t("couldNotLoadRoomAdminData");
         setLoadError(message);
-        toast.error(message);
+        toast.error(message, t("rooms"));
       }
     } finally {
       setLoading(false);
@@ -107,7 +107,7 @@ export default function QueueRoomsPage() {
       } catch (err) {
         const message = err instanceof ApiError ? err.message : t("couldNotLoadRoomDetails");
         setRoomDetailsError(message);
-        toast.error(message);
+        toast.error(message, t("rooms"));
       }
     },
     [t],
@@ -167,7 +167,7 @@ export default function QueueRoomsPage() {
   const saveInlineRoom = useCallback(
     async (room: Room, patch: RoomPatch): Promise<boolean> => {
       if (patch.name !== undefined && !patch.name.trim()) {
-        toast.error(t("roomNameRequired"));
+        toast.error(t("roomNameRequired"), t("saveRoom"));
         return false;
       }
       try {
@@ -179,7 +179,7 @@ export default function QueueRoomsPage() {
         );
         return true;
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateRoom"));
+        toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateRoom"), t("saveRoom"));
         return false;
       }
     },
@@ -190,13 +190,13 @@ export default function QueueRoomsPage() {
     setDraftSaving(true);
     try {
       const created = await createRoom({ name, location: location || null }, crypto.randomUUID());
-      toast.success(t("roomCreated"));
+      toast.success(t("roomCreated"), { compactTitle: t("createRoom") });
       setDraftOpen(false);
       await load();
       setSelectedRoomId(created.id);
       setPanelMode("edit");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateRoom"));
+      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateRoom"), t("createRoom"));
     } finally {
       setDraftSaving(false);
     }
@@ -216,10 +216,10 @@ export default function QueueRoomsPage() {
           assignmentError = err instanceof ApiError ? err.message : t("couldNotAssignEnterprise");
         }
       }
-      toast.success(t("roomCreated"));
+      toast.success(t("roomCreated"), { compactTitle: t("createRoom") });
       closePanel();
       await load();
-      if (assignmentError) toast.error(assignmentError);
+      if (assignmentError) toast.error(assignmentError, t("toastAssignCompany"));
       return;
     }
 
@@ -231,7 +231,7 @@ export default function QueueRoomsPage() {
     setRooms((current) =>
       current.map((room) => (room.id === selectedRoom.id ? { ...room, ...updated } : room)),
     );
-    toast.success(t("roomUpdated"));
+    toast.success(t("roomUpdated"), { compactTitle: t("saveRoom") });
     closePanel();
   };
 

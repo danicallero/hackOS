@@ -75,10 +75,10 @@ export default function NewApplicationFormPage() {
         open_at: fromLocalInput(values.open_at),
         close_at: fromLocalInput(values.close_at),
       });
-      toast.success(t("formCreated"));
+      toast.success(t("formCreated"), { compactTitle: t("createForm") });
       router.push(`/applications/${created.id}`);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateForm"));
+      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateForm"), t("createForm"));
     }
   }
 

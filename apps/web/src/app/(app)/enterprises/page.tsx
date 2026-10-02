@@ -177,7 +177,7 @@ export default function EnterprisesPage() {
       setEnterprises([]);
       const message = err instanceof ApiError ? err.message : t("couldNotLoadEnterprises");
       setLoadError(message);
-      toast.error(message);
+      toast.error(message, t("toastCompanies"));
     } finally {
       setLoading(false);
     }
@@ -198,10 +198,14 @@ export default function EnterprisesPage() {
             : ids.length === 1
               ? t("hidEnterpriseOne", { count: ids.length })
               : t("hidEnterpriseOther", { count: ids.length }),
+          { compactTitle: t("toastCompanyVisibility") },
         );
         await load();
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"));
+        toast.error(
+          err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"),
+          t("toastCompanyVisibility"),
+        );
       } finally {
         setBulkBusy(false);
       }
@@ -236,7 +240,7 @@ export default function EnterprisesPage() {
         if (!alive) return;
         const message = err instanceof ApiError ? err.message : t("couldNotLoadYourEnterprise");
         setLoadError(message);
-        toast.error(message);
+        toast.error(message, t("toastDeleteCompany"));
         setLoading(false);
       });
     return () => {
@@ -408,7 +412,7 @@ function CreateEnterpriseModal({
   function selectLogo(file: File | undefined, variant: "default" | "negative") {
     if (!file) return;
     if (!LOGO_CONTENT_TYPES.includes(file.type as (typeof LOGO_CONTENT_TYPES)[number])) {
-      toast.error(t("unsupportedFileType"));
+      toast.error(t("unsupportedFileType"), t("uploadLogo"));
       return;
     }
     if (variant === "default") setDefaultLogo(file);
@@ -439,12 +443,18 @@ function CreateEnterpriseModal({
         if (defaultLogo) await uploadLogo(created.id, defaultLogo, "default");
         if (darkLogo) await uploadLogo(created.id, darkLogo, "negative");
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : t("couldNotUploadLogo"));
+        toast.error(
+          err instanceof ApiError ? err.message : t("couldNotUploadLogo"),
+          t("uploadLogo"),
+        );
       }
-      toast.success(t("enterpriseCreated"));
+      toast.success(t("enterpriseCreated"), { compactTitle: t("toastCreateCompany") });
       await onCreated(created);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateEnterprise"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotCreateEnterprise"),
+        t("toastCreateCompany"),
+      );
     }
   }
 

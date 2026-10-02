@@ -105,7 +105,7 @@ export function IntolerancesManager() {
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadDictionary");
       setLoadError(message);
-      toast.error(message);
+      toast.error(message, t("toastDietaryNeeds"));
     } finally {
       setLoading(false);
     }
@@ -150,15 +150,18 @@ export function IntolerancesManager() {
     try {
       if (editing) {
         await api.patch<Intolerance>(`/api/food-intolerances/${editing.id}`, payload);
-        toast.success(t("intoleranceUpdated"));
+        toast.success(t("intoleranceUpdated"), { compactTitle: t("toastSaveDietaryNeed") });
       } else {
         await api.post<Intolerance>("/api/food-intolerances", payload);
-        toast.success(t("intoleranceAdded"));
+        toast.success(t("intoleranceAdded"), { compactTitle: t("toastSaveDietaryNeed") });
       }
       setEditing(undefined);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEntry"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveEntry"),
+        t("toastSaveDietaryNeed"),
+      );
     }
   }
 
@@ -167,11 +170,14 @@ export function IntolerancesManager() {
     setDeleting(true);
     try {
       await api.delete(`/api/food-intolerances/${deleteTarget.id}`);
-      toast.success(t("intoleranceDeleted"));
+      toast.success(t("intoleranceDeleted"), { compactTitle: t("toastDeleteDietaryNeed") });
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteEntry"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotDeleteEntry"),
+        t("toastDeleteDietaryNeed"),
+      );
     } finally {
       setDeleting(false);
     }

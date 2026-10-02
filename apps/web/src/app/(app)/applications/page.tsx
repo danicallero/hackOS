@@ -44,7 +44,7 @@ export default function ApplicationsPage() {
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadApplicationForms");
       setLoadError(message);
-      toast.error(message);
+      toast.error(message, t("workspaceApplications"));
     } finally {
       setLoading(false);
     }

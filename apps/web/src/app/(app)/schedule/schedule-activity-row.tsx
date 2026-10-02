@@ -85,7 +85,10 @@ export function ActivityRow({
     const next = withTimeOfDayAcrossMidnight(item.startsAt, item.endsAt, field, hhmm);
     if (!next.ok) {
       if (next.reason === "rolledWindowTooLong") {
-        toast.error(t("inlineTimeRollTooLong", { hours: MAX_INLINE_ROLLED_HOURS }));
+        toast.error(
+          t("inlineTimeRollTooLong", { hours: MAX_INLINE_ROLLED_HOURS }),
+          t("toastActivityTime"),
+        );
         return false;
       }
       return true;
@@ -99,7 +102,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityTime"),
+      );
       return false;
     }
   }
@@ -112,7 +118,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityLocation"),
+      );
       return false;
     }
   }
@@ -125,7 +134,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("saveNotes"),
+      );
       return false;
     }
   }
@@ -133,7 +145,7 @@ export function ActivityRow({
   async function saveType(next: string | null): Promise<boolean> {
     if (next === (item.type ?? null)) return true;
     if (isMealActivityKind(next) && !(item.audiences ?? []).includes("participant")) {
-      toast.error(t("mealNeedsParticipantAudience"));
+      toast.error(t("mealNeedsParticipantAudience"), t("toastActivityType"));
       return false;
     }
     try {
@@ -141,14 +153,17 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityType"),
+      );
       return false;
     }
   }
 
   async function saveAudiences(next: ScheduleAudience[]): Promise<boolean> {
     if (isMealActivityKind(item.type) && !next.includes("participant")) {
-      toast.error(t("mealNeedsParticipantAudience"));
+      toast.error(t("mealNeedsParticipantAudience"), t("toastActivityAudience"));
       return false;
     }
     const requiresScan = next.includes("participant") ? item.requiresScan === true : false;
@@ -160,7 +175,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityAudience"),
+      );
       return false;
     }
   }
@@ -171,7 +189,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityScanning"),
+      );
       return false;
     }
   }
@@ -183,7 +204,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityVisibility"),
+      );
       return false;
     }
   }
@@ -195,7 +219,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastPublishSchedule"),
+      );
       return false;
     }
   }

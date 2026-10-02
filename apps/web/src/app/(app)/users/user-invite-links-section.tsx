@@ -150,10 +150,13 @@ export function UserInviteLinksSection({
     try {
       await api.post(`/api/invites/user-links/${link.id}/withdraw`);
       setWithdrawLinkId(null);
-      toast.success(t("linkWithdrawn"));
+      toast.success(t("linkWithdrawn"), { compactTitle: t("toastWithdrawInvite") });
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotWithdrawLink"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotWithdrawLink"),
+        t("toastWithdrawInvite"),
+      );
     } finally {
       setBusy((current) => {
         const next = new Set(current);
@@ -197,7 +200,7 @@ export function UserInviteLinksSection({
       });
       setCreateOpen(false);
       resetForm();
-      toast.success(t("userInviteLinkCreated"));
+      toast.success(t("userInviteLinkCreated"), { compactTitle: t("toastCreateInvite") });
       await onChanged();
     } catch (err) {
       setCreateError(err instanceof ApiError ? err.message : t("couldNotCreateUserInviteLink"));

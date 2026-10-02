@@ -31,11 +31,14 @@ export function EmailCard() {
     setSaving(true);
     try {
       await api.post("/api/me/secondary-email", { email });
-      toast.success(t("verificationEmailSentCheck"));
+      toast.success(t("verificationEmailSentCheck"), { compactTitle: t("toastVerifyEmail") });
       setSecondary("");
       await refresh();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSendVerificationEmail"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSendVerificationEmail"),
+        t("toastVerifyEmail"),
+      );
     } finally {
       setSaving(false);
     }
@@ -45,10 +48,13 @@ export function EmailCard() {
     setSaving(true);
     try {
       await api.delete("/api/me/secondary-email");
-      toast.success(t("secondaryEmailRemoved"));
+      toast.success(t("secondaryEmailRemoved"), { compactTitle: t("toastRemoveEmail") });
       await refresh();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveSecondaryEmail"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveSecondaryEmail"),
+        t("toastRemoveEmail"),
+      );
     } finally {
       setSaving(false);
     }
@@ -57,7 +63,12 @@ export function EmailCard() {
   const hasPendingSecondary = me.secondaryEmail && !me.secondaryEmailVerified;
 
   return (
-    <SectionCard icon={MailIcon} title={t("emailAddressesTitle")}>
+    <SectionCard
+      variant="plain"
+      footerClassName="justify-start"
+      icon={MailIcon}
+      title={t("emailAddressesTitle")}
+    >
       {/* Primary */}
       <div className="space-y-2">
         <Label htmlFor="primary-email">{t("primaryEmailLabel")}</Label>

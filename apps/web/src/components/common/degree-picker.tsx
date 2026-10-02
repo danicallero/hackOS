@@ -90,7 +90,7 @@ export function DegreePicker({
     const name = query.trim();
     if (!name || status !== "authenticated") return;
     const degree = await api.post<Degree>("/api/public/degrees/propose", { name });
-    toast.success(t("degreeAdded"));
+    toast.success(t("degreeAdded"), { compactTitle: t("toastAddDegree") });
     select(degree);
   };
   const currentLabel = options.find((item) => String(item.id) === value)?.name ?? label;

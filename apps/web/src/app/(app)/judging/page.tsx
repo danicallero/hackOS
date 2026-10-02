@@ -75,15 +75,10 @@ function showQueueError(t: Translate, err: unknown, fallbackTitle: string) {
     t("couldNotCallTeam"),
     t("teamCallBlockedDescription"),
   );
-  toast.error(
-    copy.title,
-    copy.description
-      ? {
-          description: copy.description,
-          ...(copy.isBusyTeam ? { autopilot: { expand: 0, collapse: 0 } } : {}),
-        }
-      : undefined,
-  );
+  toast.error(copy.description ?? copy.title, {
+    compactTitle: t("judging"),
+    ...(copy.isBusyTeam ? { autopilot: { expand: 0, collapse: 0 } } : {}),
+  });
   return copy.message;
 }
 
@@ -214,7 +209,7 @@ export default function QueuePage() {
       setActionError(null);
       try {
         await action();
-        toast.success(success);
+        toast.success(success, { compactTitle: t("judging") });
         await refreshLive();
       } catch (err) {
         showQueueError(t, err, t("queueActionFailed"));

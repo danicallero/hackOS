@@ -43,7 +43,7 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
       setJudges(roster.judges);
       setCandidates(pool.users);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("searchFailed"));
+      toast.error(err instanceof ApiError ? err.message : t("searchFailed"), t("judges"));
       setJudges([]);
     }
   }, [enterpriseId, t]);
@@ -80,9 +80,12 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
       await api.post(`/api/enterprises/${enterpriseId}/judges`, { userId });
       setSelectedUserId("");
       await load();
-      toast.success(t("judgeAssigned"));
+      toast.success(t("judgeAssigned"), { compactTitle: t("assignJudgeLabel") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAssignJudge"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotAssignJudge"),
+        t("assignJudgeLabel"),
+      );
     } finally {
       setBusy(false);
     }
@@ -93,9 +96,12 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
     try {
       await api.delete(`/api/enterprises/${enterpriseId}/judges/${userId}`);
       await load();
-      toast.success(t("judgeRemoved"));
+      toast.success(t("judgeRemoved"), { compactTitle: t("toastRemoveJudge") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveJudge"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveJudge"),
+        t("toastRemoveJudge"),
+      );
     } finally {
       setBusy(false);
     }

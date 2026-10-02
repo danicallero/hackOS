@@ -54,14 +54,26 @@ export function QueueOperatorConsole({
     roomId?: number,
   ): Promise<void> => {
     const key = `${action}-${entry.id}`;
+    const compactTitle = t(
+      (
+        {
+          "notify-enter": "toastNotifyEntry",
+          "remind-waiting": "toastRemindTeam",
+          "manual-call": "toastCallTeam",
+          requeue: "toastRequeueTeam",
+          absent: "toastMarkAbsent",
+          top: "toastPrioritizeTeam",
+        } as const
+      )[action],
+    );
     setBusy(key);
     try {
       if (action === "notify-enter") {
         await entryAction(entry.id, "notify-enter", undefined, crypto.randomUUID());
-        toast.success(t("entranceNoticeSent"));
+        toast.success(t("entranceNoticeSent"), { compactTitle: t("toastNotifyEntry") });
       } else if (action === "remind-waiting") {
         await entryAction(entry.id, "remind-waiting", undefined, crypto.randomUUID());
-        toast.success(t("queueWaitingRoomReminderSent"));
+        toast.success(t("queueWaitingRoomReminderSent"), { compactTitle: t("toastRemindTeam") });
       } else if (action === "manual-call") {
         if (!roomId) return;
         await entryAction(
@@ -74,7 +86,7 @@ export function QueueOperatorConsole({
           },
           crypto.randomUUID(),
         );
-        toast.success(t("teamAddedWaiting"));
+        toast.success(t("teamAddedWaiting"), { compactTitle: t("toastCallTeam") });
       } else if (action === "requeue") {
         if (entry.status === "waiting") {
           await moveQueueEntryToPosition(
@@ -91,7 +103,7 @@ export function QueueOperatorConsole({
             crypto.randomUUID(),
           );
         }
-        toast.success(t("teamRequeued"));
+        toast.success(t("teamRequeued"), { compactTitle: t("toastRequeueTeam") });
       } else if (action === "absent") {
         await entryAction(
           entry.id,
@@ -99,7 +111,7 @@ export function QueueOperatorConsole({
           { reason: "Queue operations: absent" },
           crypto.randomUUID(),
         );
-        toast.success(t("teamMarkedAbsent"));
+        toast.success(t("teamMarkedAbsent"), { compactTitle: t("toastMarkAbsent") });
       } else {
         await entryAction(
           entry.id,
@@ -107,11 +119,11 @@ export function QueueOperatorConsole({
           { reason: "Queue operations: prioritised" },
           crypto.randomUUID(),
         );
-        toast.success(t("teamMovedTop"));
+        toast.success(t("teamMovedTop"), { compactTitle: t("toastPrioritizeTeam") });
       }
       onChanged();
     } catch (err) {
-      showErrorToast(err, t("queueActionFailed"));
+      showErrorToast(err, t("queueActionFailed"), { compactTitle });
     } finally {
       setBusy(null);
     }

@@ -47,7 +47,7 @@ export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
         intolerances.map((intolerance) => [intolerance.id, pickText(intolerance.label, language)]),
       );
     } catch {
-      toast.error(t("exportFailed"));
+      toast.error(t("exportFailed"), t("export"));
       setExporting(false);
       return;
     }
