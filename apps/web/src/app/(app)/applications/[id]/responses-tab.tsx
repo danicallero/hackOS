@@ -172,7 +172,7 @@ export function ResponsesTab({
   // Debounce so server-side search/filter doesn't fire on every keystroke.
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
-    const handle = setTimeout(() => void load(), 250);
+    const handle = setTimeout(() => void load(true), 250);
     return () => clearTimeout(handle);
   }, [load, liveRefresh]);
 
@@ -816,7 +816,7 @@ export function ResponsesTab({
             setDecisionStatusOverrides({});
             void load(true);
           }}
-          onChanged={load}
+          onChanged={() => load(true)}
           workspace={workspace}
           onDecisionStatusChange={(status) => {
             setDecisionStatusOverrides((current) => ({

@@ -832,6 +832,8 @@ export function ReviewModal({
   const canExport = useCan(CAPABILITIES.EXPORTS_RUN);
   const me = useMe();
   const lang = (me?.language ?? "es") as Language;
+  const onChangedRef = useRef(onChanged);
+  onChangedRef.current = onChanged;
 
   const [staffNotes, setStaffNotes] = useState(response.staff_notes ?? "");
   const [savingNotes, setSavingNotes] = useState(false);
@@ -1105,6 +1107,7 @@ export function ReviewModal({
         }
         setReviewSaveState("saved");
         setReviewDirty(false);
+        void onChangedRef.current();
       } catch {
         setReviewSaveState("error");
       }
@@ -1131,6 +1134,7 @@ export function ReviewModal({
       setMyScore(message.score);
       setMyNotes(message.notes);
       setReviewSaveState(message.saveState);
+      if (message.saveState === "saved") void onChangedRef.current();
     },
   );
 
@@ -1708,6 +1712,7 @@ function AnswersSection({
                       key={f.key}
                       field={f}
                       applicationId={fieldEditing ? applicationId : undefined}
+                      responseId={fieldEditing ? response.id : undefined}
                       value={value}
                       disabled={!fieldEditing}
                       error={fieldEditing ? editErrors[f.key] : undefined}

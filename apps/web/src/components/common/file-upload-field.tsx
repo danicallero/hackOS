@@ -17,6 +17,7 @@ import { toast } from "@/lib/toast";
 
 export function FileUploadField({
   applicationId,
+  responseId,
   fieldKey,
   value,
   onChange,
@@ -32,6 +33,8 @@ export function FileUploadField({
 }: {
   /** Owning application; the upload route stores the file under this id. */
   applicationId: number;
+  /** Existing response being corrected by staff; absent for applicant-owned uploads. */
+  responseId?: number;
   /** Template field key the upload is attached to, used in the upload route path. */
   fieldKey: string;
   /** The stored object URL, or "" when nothing is uploaded yet. */
@@ -79,7 +82,9 @@ export function FileUploadField({
       body.append("file", file);
       const payload = await toast.promise(
         apiUpload<{ key: string }>(
-          `/api/applications/${applicationId}/upload/${encodeURIComponent(fieldKey)}`,
+          `/api/applications/${applicationId}/upload/${encodeURIComponent(fieldKey)}${
+            responseId === undefined ? "" : `?responseId=${responseId}`
+          }`,
           body,
         ),
         {

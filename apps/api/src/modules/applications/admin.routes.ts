@@ -1,3 +1,4 @@
+import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
@@ -13,6 +14,7 @@ import {
   requireCapabilityPossessionForAssignment,
   requireRoleMutationAuthority,
 } from "../identity/role-authority.js";
+import type { TemplateField } from "./schemas.js";
 import { createApplicationSchema, idParamSchema, updateApplicationSchema } from "./schemas.js";
 import {
   anonymousRetentionConfiguration,
@@ -316,7 +318,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update an application form",
         description:
-          "Partial update of a form's template, named sections grouping template fields, window, capacity, shirt-size/dietary-restriction toggles (H11, H12), or the roles granted on confirmation (`grants_role_ids`, H8). Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
+          "Partial update of a form's template, named sections grouping template fields, window, capacity, shirt-size/dietary-restriction toggles (H11, H12), or the roles granted on confirmation (`grants_role_ids`, H8). When a template field key changes, `field_renames` can explicitly map the old key to the new key; existing response values and file-sharing consent are copied to the new key only when the field kind is unchanged, while the old keys remain available to historical form versions. Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
         params: idParamSchema,
         body: updateApplicationSchema,
       },
@@ -332,6 +334,9 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         if (!current) throw new NotFoundError("Application not found");
 
         const schemaChanged = b.template !== undefined || b.sections !== undefined;
+        if (!schemaChanged && b.field_renames?.length) {
+          throw new ConflictError("Field renames require a template update");
+        }
         const nextTemplate = schemaChanged
           ? normalizeTemplateForStorage(b.template ?? current.template)
           : current.template;
@@ -387,6 +392,53 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         if (grantsChanged) await replaceGrantedRoles(client, req.params.id, nextRoleIds);
 
         if (schemaChanged) {
+          const renames = b.field_renames ?? [];
+          if (renames.length > 0) {
+            const previousFields = new Map(
+              (current.template as TemplateField[]).map((field) => [field.key, field.kind]),
+            );
+            const nextFields = new Map(
+              (nextTemplate as TemplateField[]).map((field) => [field.key, field.kind]),
+            );
+            const seenSources = new Set<string>();
+            const seenTargets = new Set<string>();
+            for (const rename of renames) {
+              if (
+                rename.from === rename.to ||
+                seenSources.has(rename.from) ||
+                seenTargets.has(rename.to) ||
+                !previousFields.has(rename.from) ||
+                nextFields.has(rename.from) ||
+                previousFields.get(rename.from) !== nextFields.get(rename.to)
+              ) {
+                throw new ConflictError("Field rename is not compatible with the existing form", {
+                  from: rename.from,
+                  to: rename.to,
+                });
+              }
+              seenSources.add(rename.from);
+              seenTargets.add(rename.to);
+            }
+            for (const rename of renames) {
+              await client.query(
+                `UPDATE application_responses
+                    SET responses = responses ||
+                      CASE WHEN responses ? $3 THEN '{}'::jsonb
+                           ELSE jsonb_build_object($3, responses -> $2) END ||
+                      CASE WHEN responses ? $5 THEN '{}'::jsonb
+                           ELSE jsonb_build_object($5, responses -> $4) END
+                  WHERE application_id = $1
+                    AND (responses ? $2 OR responses ? $4)`,
+                [
+                  req.params.id,
+                  rename.from,
+                  rename.to,
+                  sponsorShareKey(rename.from),
+                  sponsorShareKey(rename.to),
+                ],
+              );
+            }
+          }
           const { rows: versionRows } = await client.query<{ id: number }>(
             `INSERT INTO application_form_versions
                (application_id, version, template, sections, created_by)
@@ -430,6 +482,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
             ? {
                 formVersion: nextVersion,
                 anonymousRetention: anonymousRetentionConfiguration(nextTemplate),
+                ...(b.field_renames?.length ? { fieldRenames: b.field_renames } : {}),
                 ...(grantsChanged ? { grantsRoleIds: nextRoleIds } : {}),
               }
             : { ...b, ...(grantsChanged ? { grants_role_ids: nextRoleIds } : {}) },
