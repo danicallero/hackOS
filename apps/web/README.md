@@ -229,6 +229,7 @@ variations are previewed at `/design-system` in the running app.
 
 Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `EmptyState`, `DataTable`, `TabBar`, `Modal`, `AlertModal`, `ContextualError`,
+`FullPageError`,
 `CapabilityGate`, `AccessDenied`, `Spinner`, `SubmitButton`, `PasswordInput`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
 `EntityCombobox`, `ActionGroup`, `IconButton`.

@@ -81,6 +81,7 @@ Each row: value → intent → boundary.
 | --- | --- | --- |
 | Spacing scale | 4, 8, 12, 16, 24, 32, 48 px | 8px between tightly related controls, 16px within a section, 24px between sections. Never off-grid values. |
 | Accent | one interactive accent | CTAs and active states only. Never decorative, never a background wash. One per view. |
+| Error recovery | Brand blue, ink and red | The branded full-page error illustration uses the active edition palette. Do not reuse it for regular warnings or inline errors. |
 | Status colours | via `tones.ts` | Reserved for actual state (queue, decision, sync). Never used to make neutral UI "more colorful". |
 | Page title | 24/32 Rockwell regular (`type-page-title`) | One per page, in `PageHeader`. Never inside cards. |
 | Section title | 18/24 Rockwell regular (`type-section-title`) | Titles a `Section`/`SectionCard`. Not a substitute for the page title. |
