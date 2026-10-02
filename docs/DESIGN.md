@@ -123,7 +123,7 @@ When adding/updating a primitive, preserve this token-backed visual contract.
 
 | Landing foundation | Edition token | Web application |
 | --- | --- | --- |
-| Ink `#030846` | `--brand-ink` | Text in light mode, primary actions, outlines; dark canvas |
+| Ink `#030846` | `--brand-ink` | Text in light mode, primary actions and light outlines; brand accent |
 | Cream `#fafafa` | `--brand-cream` | Light canvas/surfaces; dark text |
 | Blue `#a3d5ff` | `--brand-blue` | Secondary and active surfaces; dark primary actions |
 | Red `#bf2100` | `--brand-red` | Light focus rings and destructive actions; lighter derived destructive color on ink |
@@ -132,9 +132,13 @@ When adding/updating a primitive, preserve this token-backed visual contract.
 | Rockwell | `--brand-display` | Page/section/dialog titles and public headlines; supplied regular/bold WOFF2 files in `public/fonts/hackudc-2027/` |
 
 The edition defaults to **light** for new visitors. `next-themes` retains an
-existing light/dark/system preference. Dark mode derives its surfaces from ink
-and blue, rather than falling back to an unrelated neutral palette. Semantic
-status roles remain distinct: green is success, red is danger, yellow is
+existing light/dark/system preference. Dark mode uses a near-black canvas,
+charcoal surfaces and gray borders with a subtle blue tint; edition blue is
+reserved for interactive accents. Light mode retains its edition
+palette. Shared `Input` and `Textarea` controls use `--field-foreground`: neutral
+black text in light mode and the foreground token in dark mode. Native date/time
+values also consume this token so Safari follows the same field palette across
+all screens (H55). Semantic status roles remain distinct: green is success, red is danger, yellow is
 warning, blue is information. Components request `tone`/semantic utilities,
 never raw brand swatches or chart-series tokens for status.
 

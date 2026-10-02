@@ -66,6 +66,7 @@
   /* shadcn contract: light edition, matching the landing's cream canvas. */
   --background: var(--brand-cream);
   --foreground: var(--brand-ink);
+  --field-foreground: #171717;
   --card: var(--brand-cream);
   --card-foreground: var(--foreground);
   --popover: var(--brand-cream);
@@ -106,25 +107,26 @@
 }
 
 .dark {
-  /* The same edition on ink, with blue interactive states and cream text. */
-  --background: var(--brand-ink);
+  /* Near-black blue-tinted surfaces keep saturated blue for interactive accents. */
+  --background: #0b0d14;
   --foreground: var(--brand-cream);
-  --card: color-mix(in srgb, var(--brand-ink) 94%, var(--brand-blue));
+  --field-foreground: var(--foreground);
+  --card: #171a23;
   --card-foreground: var(--foreground);
   --popover: var(--card);
   --popover-foreground: var(--foreground);
   --primary: var(--brand-blue);
-  --primary-foreground: var(--brand-ink);
-  --secondary: color-mix(in srgb, var(--brand-ink) 82%, var(--brand-blue));
+  --primary-foreground: #171717;
+  --secondary: #242833;
   --secondary-foreground: var(--brand-cream);
   --muted: var(--secondary);
-  --muted-foreground: color-mix(in srgb, var(--brand-cream) 72%, var(--brand-ink));
-  --accent: var(--secondary);
+  --muted-foreground: #a3aab8;
+  --accent: color-mix(in srgb, var(--brand-blue) 18%, var(--card));
   --accent-foreground: var(--brand-cream);
   --destructive: color-mix(in srgb, var(--brand-red) 45%, var(--brand-cream));
   --destructive-foreground: var(--brand-ink);
-  --border: color-mix(in srgb, var(--brand-blue) 24%, var(--brand-ink));
-  --input: color-mix(in srgb, var(--brand-blue) 65%, var(--brand-ink));
+  --border: #3d4350;
+  --input: #737b8c;
   --ring: var(--brand-blue);
   --info: var(--brand-blue);
   --success: #7dd9ae;
@@ -141,7 +143,7 @@
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--secondary);
+  --sidebar-accent: var(--accent);
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
