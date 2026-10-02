@@ -6,7 +6,7 @@
 // enterprises may bring outside judges — and adding one is silent.
 
 import { EVENTS } from "@hackos/shared/events";
-import { GavelIcon } from "lucide-react";
+import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";

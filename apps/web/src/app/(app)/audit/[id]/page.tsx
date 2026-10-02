@@ -5,7 +5,7 @@
 // shared, and opened from the row itself instead of trapped behind a click.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { ScrollTextIcon } from "lucide-react";
+import { ScrollIcon } from "@phosphor-icons/react/dist/csr/Scroll";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -66,7 +66,7 @@ export default function AuditEntryPage() {
   if (state === "error" || !row) {
     return (
       <div className="space-y-6">
-        <EmptyState icon={ScrollTextIcon} title={t("auditEntryNotFound")} description={errorMsg} />
+        <EmptyState icon={ScrollIcon} title={t("auditEntryNotFound")} description={errorMsg} />
       </div>
     );
   }

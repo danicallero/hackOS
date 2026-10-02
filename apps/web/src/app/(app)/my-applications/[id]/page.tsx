@@ -10,10 +10,10 @@
 //   POST /api/applications/:id/response/submit   → submit (returns privacy_notice)
 //   POST /api/me/responses/:responseId/confirm   → confirm my place (H15)
 //   POST /api/me/responses/:responseId/decline   → decline my place (H15)
-
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { EVENTS } from "@hackos/shared/events";
-import { ClipboardListIcon, ShieldAlertIcon } from "lucide-react";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
+import { ShieldWarningIcon } from "@phosphor-icons/react/dist/csr/ShieldWarning";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -481,7 +481,7 @@ export default function MyApplicationDetailPage() {
             className="overflow-hidden"
           >
             <EmptyState
-              icon={ClipboardListIcon}
+              icon={ClipboardTextIcon}
               title={t("applicationNotOpenTitle")}
               description={t("applicationNotOpenDesc")}
               action={
@@ -529,7 +529,7 @@ export default function MyApplicationDetailPage() {
       />
 
       <SectionCard
-        icon={ClipboardListIcon}
+        icon={ClipboardTextIcon}
         title={editable ? t("yourAnswers") : t("yourSubmittedAnswers")}
         description={editable ? undefined : t("applicationLockedDesc")}
         footer={
@@ -567,7 +567,7 @@ export default function MyApplicationDetailPage() {
         )}
         {editable && me && !me.emailVerified && (
           <Alert id={`verify-email-to-submit-${id}`} variant="destructive">
-            <ShieldAlertIcon aria-hidden="true" />
+            <ShieldWarningIcon aria-hidden="true" />
             <AlertTitle>{t("verifyEmailToSubmitTitle")}</AlertTitle>
             <AlertDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {t("verifyEmailToSubmitDesc")}

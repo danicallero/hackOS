@@ -1,6 +1,6 @@
 "use client";
 
-import type { LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import {
   Sheet,
   SheetContent,
@@ -33,7 +33,7 @@ export function SidePanelEditor({
   trigger?: React.ReactNode;
   title: string;
   description?: string;
-  icon?: LucideIcon;
+  icon?: PhosphorIcon;
   footer?: React.ReactNode;
   className?: string;
   children: React.ReactNode;

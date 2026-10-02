@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { MailCheckIcon } from "lucide-react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
@@ -65,7 +65,7 @@ function ForgotPasswordForm() {
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-            <MailCheckIcon aria-hidden="true" className="size-6" />
+            <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
           </div>
           <CardTitle>{t("checkEmail")}</CardTitle>
           <CardDescription>{t("resetEmailSent")}</CardDescription>

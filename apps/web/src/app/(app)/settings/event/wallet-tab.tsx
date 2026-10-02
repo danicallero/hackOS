@@ -16,7 +16,9 @@ import {
   resolvePassFieldLabels,
   resolvePassFieldVisibility,
 } from "@hackos/shared/wallet-pass-labels";
-import { ChevronDownIcon, type LucideIcon, Trash2Icon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useCallback, useEffect, useState } from "react";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
@@ -212,7 +214,7 @@ function BackFieldBuilder({
             aria-label={t("removeBackFieldAria", { index: index + 1 })}
             onClick={() => remove(index)}
           >
-            <Trash2Icon className="size-4" />
+            <TrashIcon aria-hidden="true" className="size-4" />
           </Button>
         </div>
       ))}
@@ -318,7 +320,7 @@ export function WalletTab({
   icon,
   onDirtyChange,
 }: {
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { t } = useLocale();
@@ -417,7 +419,7 @@ export function WalletTab({
         <Collapsible>
           <CollapsibleTrigger asChild>
             <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
-              <ChevronDownIcon className="size-4" />
+              <CaretDownIcon aria-hidden="true" className="size-4" />
               {t("walletAdvancedFieldsToggle")}
             </Button>
           </CollapsibleTrigger>

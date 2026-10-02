@@ -23,21 +23,19 @@ import {
   type QuestionKind,
   questionnaireSchema,
 } from "@hackos/shared/questions";
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  CheckSquareIcon,
-  CircleDotIcon,
-  CircleHelpIcon,
-  CopyIcon,
-  HashIcon,
-  ListChecksIcon,
-  PlusIcon,
-  SlidersHorizontalIcon,
-  ToggleLeftIcon,
-  Trash2Icon,
-  TypeIcon,
-} from "lucide-react";
+import { ArrowDownIcon } from "@phosphor-icons/react/dist/csr/ArrowDown";
+import { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
+import { CheckSquareIcon } from "@phosphor-icons/react/dist/csr/CheckSquare";
+import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
+import { HashIcon } from "@phosphor-icons/react/dist/csr/Hash";
+import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { QuestionIcon as QuestionMarkIcon } from "@phosphor-icons/react/dist/csr/Question";
+import { RadioButtonIcon } from "@phosphor-icons/react/dist/csr/RadioButton";
+import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
+import { TextTIcon } from "@phosphor-icons/react/dist/csr/TextT";
+import { ToggleLeftIcon } from "@phosphor-icons/react/dist/csr/ToggleLeft";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useMemo, useRef, useState } from "react";
 import { i18nWithEnglishFallback, type Prize } from "@/app/(app)/challenges/shared";
 import {
@@ -207,12 +205,12 @@ export function PrizeBuilder({
             label={t("removePrizeAria", { index: index + 1 })}
             onClick={() => remove(index)}
           >
-            <Trash2Icon className="size-4" />
+            <TrashIcon aria-hidden="true" className="size-4" />
           </IconButton>
         </div>
       ))}
       <Button type="button" variant="outline" size="sm" onClick={add}>
-        <PlusIcon className="size-4" />
+        <PlusIcon aria-hidden="true" className="size-4" />
         {value.length === 0 ? t("addPrize") : t("addAnotherPrize")}
       </Button>
     </div>
@@ -295,7 +293,7 @@ export function JudgingPanelBuilder({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="outline" size="sm" disabled={disabled}>
-          <PlusIcon className="size-4" />
+          <PlusIcon aria-hidden="true" className="size-4" />
           {t("addField")}
         </Button>
       </DropdownMenuTrigger>
@@ -430,7 +428,7 @@ function JudgingQuestionRow({
         disabled={disabled || index === 0}
         onClick={() => onMove(-1)}
       >
-        <ArrowUpIcon className="size-3.5" />
+        <ArrowUpIcon aria-hidden="true" className="size-3.5" />
       </IconButton>
       <IconButton
         label={t("moveFieldDown")}
@@ -438,7 +436,7 @@ function JudgingQuestionRow({
         disabled={disabled || index === count - 1}
         onClick={() => onMove(1)}
       >
-        <ArrowDownIcon className="size-3.5" />
+        <ArrowDownIcon aria-hidden="true" className="size-3.5" />
       </IconButton>
     </div>
   );
@@ -582,7 +580,7 @@ function JudgingQuestionRow({
           onClick={onRemove}
           disabled={disabled}
         >
-          <Trash2Icon className="size-4" aria-hidden="true" />
+          <TrashIcon className="size-4" aria-hidden="true" />
         </IconButton>
         <Separator orientation="vertical" className="mx-1 h-[var(--control-height-tiny)]" />
         <Switch
@@ -705,7 +703,7 @@ function OptionsBuilder({
             })
           }
         >
-          <PlusIcon className="size-4" />
+          <PlusIcon aria-hidden="true" className="size-4" />
           {t("addOption")}
         </Button>
       </div>
@@ -738,7 +736,7 @@ function OptionsBuilder({
                     })
                   }
                 >
-                  <Trash2Icon className="size-4" />
+                  <TrashIcon aria-hidden="true" className="size-4" />
                 </IconButton>
               </div>
             </div>
@@ -921,7 +919,7 @@ function FieldHint({ text }: { text: string }) {
             aria-label={t("moreInformationAria")}
             className="text-muted-foreground hover:text-foreground focus-visible:text-foreground inline-flex"
           >
-            <CircleHelpIcon className="size-3.5" aria-hidden="true" />
+            <QuestionMarkIcon className="size-3.5" aria-hidden="true" />
           </button>
         </TooltipTrigger>
         <TooltipContent className="max-w-60 text-pretty">{text}</TooltipContent>
@@ -932,13 +930,14 @@ function FieldHint({ text }: { text: string }) {
 
 function QuestionIcon({ kind }: { kind: string }) {
   const className = "text-muted-foreground size-4";
-  if (kind === "scale") return <SlidersHorizontalIcon className={className} />;
-  if (kind === "integer" || kind === "float") return <HashIcon className={className} />;
-  if (kind === "boolean") return <ToggleLeftIcon className={className} />;
-  if (kind === "single_choice") return <CircleDotIcon className={className} />;
-  if (kind === "multi_choice") return <CheckSquareIcon className={className} />;
-  if (kind === "long_text") return <ListChecksIcon className={className} />;
-  return <TypeIcon className={className} />;
+  if (kind === "scale") return <SlidersHorizontalIcon aria-hidden="true" className={className} />;
+  if (kind === "integer" || kind === "float")
+    return <HashIcon aria-hidden="true" className={className} />;
+  if (kind === "boolean") return <ToggleLeftIcon aria-hidden="true" className={className} />;
+  if (kind === "single_choice") return <RadioButtonIcon aria-hidden="true" className={className} />;
+  if (kind === "multi_choice") return <CheckSquareIcon aria-hidden="true" className={className} />;
+  if (kind === "long_text") return <ListChecksIcon aria-hidden="true" className={className} />;
+  return <TextTIcon aria-hidden="true" className={className} />;
 }
 
 function retargetQuestion(question: Question, kind: BuilderKind, t: Translate): Question {

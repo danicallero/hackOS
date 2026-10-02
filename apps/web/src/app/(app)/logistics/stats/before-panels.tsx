@@ -17,25 +17,23 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  ArrowDownIcon,
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  ArrowUpIcon,
-  BadgeCheckIcon,
-  BarChart3Icon,
-  Clock3Icon,
-  EyeIcon,
-  EyeOffIcon,
-  FileTextIcon,
-  HourglassIcon,
-  LayoutDashboardIcon,
-  LineChartIcon,
-  PieChartIcon,
-  RotateCcwIcon,
-  ShieldXIcon,
-  TimerOffIcon,
-} from "lucide-react";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
+import { ArrowDownIcon } from "@phosphor-icons/react/dist/csr/ArrowDown";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
+import { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
+import { ChartBarIcon } from "@phosphor-icons/react/dist/csr/ChartBar";
+import { ChartLineIcon } from "@phosphor-icons/react/dist/csr/ChartLine";
+import { ChartPieIcon } from "@phosphor-icons/react/dist/csr/ChartPie";
+import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
+import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
+import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
+import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
+import { HourglassIcon } from "@phosphor-icons/react/dist/csr/Hourglass";
+import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
+import { ShieldSlashIcon } from "@phosphor-icons/react/dist/csr/ShieldSlash";
+import { SquaresFourIcon } from "@phosphor-icons/react/dist/csr/SquaresFour";
+import { TimerIcon } from "@phosphor-icons/react/dist/csr/Timer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DragHandle } from "@/components/common/drag-handle";
 import { EmptyState } from "@/components/common/empty-state";
@@ -328,7 +326,7 @@ export function BeforePanels({
             size="sm"
             onClick={() => saveLayout(sanitizeStatsLayout(null, availablePanelKeys))}
           >
-            <RotateCcwIcon aria-hidden="true" />
+            <ArrowCounterClockwiseIcon aria-hidden="true" />
             {t("resetStatisticsLayout")}
           </Button>
         </div>
@@ -417,7 +415,7 @@ function SortablePanel({
             size="icon-sm"
             onClick={onToggleVisibility}
           >
-            {hidden ? <EyeIcon aria-hidden="true" /> : <EyeOffIcon aria-hidden="true" />}
+            {hidden ? <EyeIcon aria-hidden="true" /> : <EyeSlashIcon aria-hidden="true" />}
           </IconButton>
           <IconButton
             label={t("decreasePanelWidth")}
@@ -729,7 +727,7 @@ function OverviewPanel({
       <StatCard
         label={t("confirmed")}
         value={confirmed ?? "—"}
-        icon={BadgeCheckIcon}
+        icon={SealCheckIcon}
         tone={kpiTones["overview:kpi:confirmed"] ?? DEFAULT_OVERVIEW_TONES.confirmed}
         action={cardAction(
           "confirmed",
@@ -744,7 +742,7 @@ function OverviewPanel({
       <StatCard
         label={t("rejected")}
         value={overview?.rejected ?? "—"}
-        icon={ShieldXIcon}
+        icon={ShieldSlashIcon}
         tone={kpiTones["overview:kpi:rejected"] ?? DEFAULT_OVERVIEW_TONES.rejected}
         action={cardAction("rejected", t("rejected"), DEFAULT_OVERVIEW_TONES.rejected, dragHandle)}
         className="h-full"
@@ -754,7 +752,7 @@ function OverviewPanel({
       <StatCard
         label={t("confirmationRate")}
         value={rate === null ? "—" : `${rate}%`}
-        icon={BadgeCheckIcon}
+        icon={SealCheckIcon}
         tone={kpiTones["overview:kpi:rate"] ?? DEFAULT_OVERVIEW_TONES.rate}
         action={cardAction("rate", t("confirmationRate"), DEFAULT_OVERVIEW_TONES.rate, dragHandle)}
         className="h-full"
@@ -764,7 +762,7 @@ function OverviewPanel({
       <StatCard
         label={t("expiredConfirmations")}
         value={overview?.expired_confirmations ?? "—"}
-        icon={TimerOffIcon}
+        icon={TimerIcon}
         tone={kpiTones["overview:kpi:expired"] ?? DEFAULT_OVERVIEW_TONES.expired}
         action={cardAction(
           "expired",
@@ -798,7 +796,7 @@ function OverviewPanel({
           t,
         )}
         hint={`${t("medianConfirmationTime")}: ${hours(stats?.time_to_confirm_hours?.median, t)}`}
-        icon={Clock3Icon}
+        icon={ClockIcon}
         tone={kpiTones["overview:kpi:time"] ?? DEFAULT_OVERVIEW_TONES.time}
         action={cardAction(
           "time",
@@ -813,7 +811,7 @@ function OverviewPanel({
   return (
     <SectionCard
       title={t("statisticsOverviewPanel")}
-      icon={LayoutDashboardIcon}
+      icon={SquaresFourIcon}
       className={cn("h-full", statToneSurfaceClass[tone])}
     >
       {loading && !stats ? (
@@ -837,7 +835,7 @@ function OverviewPanel({
         </div>
       ) : !stats ? (
         <EmptyState
-          icon={LayoutDashboardIcon}
+          icon={SquaresFourIcon}
           title={t("noApplicationStatistics")}
           action={
             <Button variant="outline" size="sm" onClick={onRetry}>
@@ -937,19 +935,19 @@ function Distribution({
           <SelectContent>
             <SelectItem value="bar">
               <span className="flex items-center gap-2">
-                <BarChart3Icon aria-hidden="true" />
+                <ChartBarIcon aria-hidden="true" />
                 {t("chartTypeBar")}
               </span>
             </SelectItem>
             <SelectItem value="pie">
               <span className="flex items-center gap-2">
-                <PieChartIcon aria-hidden="true" />
+                <ChartPieIcon aria-hidden="true" />
                 {t("chartTypePie")}
               </span>
             </SelectItem>
             <SelectItem value="line">
               <span className="flex items-center gap-2">
-                <LineChartIcon aria-hidden="true" />
+                <ChartLineIcon aria-hidden="true" />
                 {t("chartTypeLine")}
               </span>
             </SelectItem>

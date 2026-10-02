@@ -1,7 +1,8 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { DownloadIcon, UsersIcon } from "lucide-react";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useMemo, useState } from "react";
 import { ActionGroup } from "@/components/common/action-group";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -87,13 +88,13 @@ export function HoursTab({
             <>
               <Button asChild variant="outline">
                 <a href={exportHref("reduced")}>
-                  <DownloadIcon className="size-4" aria-hidden="true" />
+                  <DownloadSimpleIcon className="size-4" aria-hidden="true" />
                   {t("exportHoursReduced")}
                 </a>
               </Button>
               <Button asChild variant="outline">
                 <a href={exportHref("full")}>
-                  <DownloadIcon className="size-4" aria-hidden="true" />
+                  <DownloadSimpleIcon className="size-4" aria-hidden="true" />
                   {t("exportHoursDetailed")}
                 </a>
               </Button>

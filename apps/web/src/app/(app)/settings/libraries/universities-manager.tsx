@@ -8,7 +8,11 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { GraduationCapIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
+import { GraduationCapIcon } from "@phosphor-icons/react/dist/csr/GraduationCap";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -183,7 +187,7 @@ export function UniversitiesManager() {
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground text-sm">{t("sharedDirectoryDesc")}</p>
         <Button onClick={() => setEditing(null)}>
-          <PlusIcon />
+          <PlusIcon aria-hidden="true" />
           {t("newAction")}
         </Button>
       </div>
@@ -193,7 +197,7 @@ export function UniversitiesManager() {
           <label htmlFor="university-search" className="sr-only">
             {t("searchUniversities")}
           </label>
-          <SearchIcon
+          <MagnifyingGlassIcon
             className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
             aria-hidden="true"
           />
@@ -251,7 +255,7 @@ export function UniversitiesManager() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm">
-                <MoreHorizontalIcon />
+                <DotsThreeIcon aria-hidden="true" />
                 <span className="sr-only">{t("openMenuAria")}</span>
               </Button>
             </DropdownMenuTrigger>

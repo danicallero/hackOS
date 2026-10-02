@@ -1,6 +1,6 @@
 "use client";
 
-import { MegaphoneIcon } from "lucide-react";
+import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -76,7 +76,7 @@ export function ChallengeAlertDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <Button variant="outline" onClick={() => setOpen(true)}>
-        <MegaphoneIcon className="size-4" />
+        <MegaphoneIcon aria-hidden="true" className="size-4" />
         {t("sendChallengeAlert")}
       </Button>
       <DialogContent>

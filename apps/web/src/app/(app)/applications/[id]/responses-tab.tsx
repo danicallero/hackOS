@@ -4,16 +4,14 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import {
-  AlertCircleIcon,
-  CheckCheckIcon,
-  CircleCheckIcon,
-  DownloadIcon,
-  FileTextIcon,
-  RotateCcwIcon,
-  SendIcon,
-  XIcon,
-} from "lucide-react";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { ChecksIcon } from "@phosphor-icons/react/dist/csr/Checks";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
+import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/csr/WarningCircle";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApplicationExportPanel } from "@/components/applications/application-export-panel";
@@ -232,7 +230,7 @@ export function ResponsesTab({
       cell: (r) => (
         <span className="inline-flex items-center gap-1.5 text-sm">
           {r.reviews.some((review) => review.author_id === me?.id && review.score != null) && (
-            <CircleCheckIcon className="text-success size-3.5" aria-label={t("reviewedByYou")} />
+            <CheckCircleIcon className="text-success size-3.5" aria-label={t("reviewedByYou")} />
           )}
           {fmtScore(r.avg_score)}
           {r.review_count > 0 && (
@@ -418,7 +416,7 @@ export function ResponsesTab({
               applicationId={id}
               trigger={
                 <Button variant="outline" size="sm">
-                  <DownloadIcon aria-hidden="true" />
+                  <DownloadSimpleIcon aria-hidden="true" />
                   {t("export")}
                 </Button>
               }
@@ -428,7 +426,7 @@ export function ResponsesTab({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
-                  <DownloadIcon />
+                  <DownloadSimpleIcon aria-hidden="true" />
                   {t("exportFiles")}
                 </Button>
               </DropdownMenuTrigger>
@@ -460,7 +458,7 @@ export function ResponsesTab({
           )}
           {canDecide && workspace === "outbox" && (
             <Button variant="outline" onClick={() => setSendOpen(true)}>
-              <SendIcon />
+              <PaperPlaneTiltIcon aria-hidden="true" />
               {t("sendDecisions")}
             </Button>
           )}
@@ -479,7 +477,7 @@ export function ResponsesTab({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" disabled={batchBusy}>
-                    <CheckCheckIcon />
+                    <ChecksIcon aria-hidden="true" />
                     {t("decide")}
                   </Button>
                 </DropdownMenuTrigger>
@@ -524,7 +522,7 @@ export function ResponsesTab({
                   )
                 }
               >
-                <SendIcon />
+                <PaperPlaneTiltIcon aria-hidden="true" />
                 {t("send")}
               </Button>
             )}
@@ -541,7 +539,7 @@ export function ResponsesTab({
                   )
                 }
               >
-                <SendIcon />
+                <PaperPlaneTiltIcon aria-hidden="true" />
                 {t("resend")}
               </Button>
             )}
@@ -549,7 +547,7 @@ export function ResponsesTab({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" disabled={batchBusy}>
-                    <RotateCcwIcon />
+                    <ArrowCounterClockwiseIcon aria-hidden="true" />
                     {t("more")}
                   </Button>
                 </DropdownMenuTrigger>
@@ -598,7 +596,7 @@ export function ResponsesTab({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" disabled={batchBusy}>
-                    <RotateCcwIcon />
+                    <ArrowCounterClockwiseIcon aria-hidden="true" />
                     {t("more")}
                   </Button>
                 </DropdownMenuTrigger>
@@ -673,7 +671,7 @@ export function ResponsesTab({
               disabled={batchBusy}
               onClick={() => setSelectedIds(new Set())}
             >
-              <XIcon />
+              <XIcon aria-hidden="true" />
               {t("clear")}
             </Button>
           </div>
@@ -682,7 +680,7 @@ export function ResponsesTab({
 
       {exportFailures && (
         <Alert variant="destructive">
-          <AlertCircleIcon aria-hidden="true" />
+          <WarningCircleIcon aria-hidden="true" />
           <AlertTitle>{t("exportFailuresTitle", { field: exportFailures.fieldLabel })}</AlertTitle>
           <AlertDescription>
             <p>{t("exportFailuresDesc", { count: exportFailures.total })}</p>
@@ -720,7 +718,7 @@ export function ResponsesTab({
 
       {batchResult && (
         <Alert variant={batchResult.skipped.length > 0 ? "destructive" : "default"}>
-          <AlertCircleIcon aria-hidden="true" />
+          <WarningCircleIcon aria-hidden="true" />
           <AlertTitle>
             {t("batchResultTitle")}: {batchResult.label}
           </AlertTitle>

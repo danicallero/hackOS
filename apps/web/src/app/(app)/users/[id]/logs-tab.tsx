@@ -3,7 +3,7 @@
 // Audit trail for this person (H53).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { FileTextIcon } from "lucide-react";
+import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { useEffect, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";

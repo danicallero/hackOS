@@ -1,6 +1,6 @@
 "use client";
 
-import type { LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import {
   Dialog,
   DialogContent,
@@ -45,7 +45,7 @@ export function Modal({
   trigger?: React.ReactNode;
   title: string;
   description?: string;
-  icon?: LucideIcon;
+  icon?: PhosphorIcon;
   size?: keyof typeof SIZES;
   footer?: React.ReactNode;
   /** Rendered in the top-right control row on desktop and in normal header

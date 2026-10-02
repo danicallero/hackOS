@@ -5,7 +5,10 @@
 // is caught before saving instead of at the venue.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ExternalLinkIcon, type LucideIcon, MapPinIcon, WifiIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
+import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
+import { WifiHighIcon } from "@phosphor-icons/react/dist/csr/WifiHigh";
 import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
@@ -71,7 +74,7 @@ function VenuePreview({
       <p className="text-muted-foreground mb-2 text-xs uppercase">{t("venuePreviewLabel")}</p>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2">
-          <MapPinIcon className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+          <MapPinIcon aria-hidden="true" className="text-muted-foreground mt-0.5 size-4 shrink-0" />
           <div>
             <p className="font-medium">{name || t("venueNameUnset")}</p>
             <p className="text-muted-foreground text-sm tabular-nums">
@@ -87,7 +90,7 @@ function VenuePreview({
             className="text-primary inline-flex shrink-0 items-center gap-1 text-sm hover:underline"
           >
             {t("openInMap")}
-            <ExternalLinkIcon className="size-3.5" />
+            <ArrowSquareOutIcon aria-hidden="true" className="size-3.5" />
           </a>
         )}
       </div>
@@ -99,7 +102,7 @@ export function VenueTab({
   icon,
   onDirtyChange,
 }: {
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { t } = useLocale();
@@ -258,7 +261,7 @@ export function VenueTab({
           variant="plain"
           footerClassName="justify-start"
           className="mt-6"
-          icon={WifiIcon}
+          icon={WifiHighIcon}
           title={t("venueWifiSectionTitle")}
           description={t("venueWifiSectionDesc")}
           state={<SaveStatus state={saveState} />}

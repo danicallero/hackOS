@@ -7,7 +7,10 @@
 
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { ACTIVITY_KINDS, isMealActivityKind } from "@hackos/shared/activity-kinds";
-import { CopyIcon, GripVerticalIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
+import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
+import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useCallback } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -456,7 +459,7 @@ export function ActivityRow({
               {...attributes}
               {...listeners}
             >
-              <GripVerticalIcon className="size-4" aria-hidden="true" />
+              <DotsSixVerticalIcon className="size-4" aria-hidden="true" />
             </IconButton>
             <Checkbox
               checked={selected}
@@ -513,7 +516,7 @@ export function ActivityRow({
               className="text-destructive"
               onClick={onDelete}
             >
-              <Trash2Icon className="size-3.5" aria-hidden="true" />
+              <TrashIcon className="size-3.5" aria-hidden="true" />
             </IconButton>
           </div>
         </TableCell>

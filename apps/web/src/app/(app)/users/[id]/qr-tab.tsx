@@ -2,7 +2,7 @@
 
 // Accreditation QR / badge (H22-H23, H28).
 
-import { QrCodeIcon } from "lucide-react";
+import { QrCodeIcon } from "@phosphor-icons/react/dist/csr/QrCode";
 import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { QrCode } from "@/components/common/qr-code";

@@ -13,14 +13,12 @@
 // Settings → Libraries, next to the other shared reference lists.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import {
-  MailPlusIcon,
-  MapPinIcon,
-  TagIcon,
-  TriangleAlertIcon,
-  UserCheckIcon,
-  WalletCardsIcon,
-} from "lucide-react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
+import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
+import { UserCheckIcon } from "@phosphor-icons/react/dist/csr/UserCheck";
+import { WalletIcon } from "@phosphor-icons/react/dist/csr/Wallet";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useCallback, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
@@ -127,10 +125,7 @@ export default function EventSettingsPage() {
           )}
           {canWallet && (
             <TabsContent value="wallet" className="pt-6">
-              <WalletTab
-                icon={WalletCardsIcon}
-                onDirtyChange={(dirty) => setDirty("wallet", dirty)}
-              />
+              <WalletTab icon={WalletIcon} onDirtyChange={(dirty) => setDirty("wallet", dirty)} />
             </TabsContent>
           )}
           {canPresence && (
@@ -144,14 +139,14 @@ export default function EventSettingsPage() {
           {canInvites && (
             <TabsContent value="invites" className="pt-6">
               <InvitesTab
-                icon={MailPlusIcon}
+                icon={EnvelopeSimpleIcon}
                 onDirtyChange={(dirty) => setDirty("invites", dirty)}
               />
             </TabsContent>
           )}
           {canDanger && (
             <TabsContent value="danger" className="pt-6">
-              <ResetJudgingDataTab icon={TriangleAlertIcon} />
+              <ResetJudgingDataTab icon={WarningIcon} />
             </TabsContent>
           )}
         </Tabs>

@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowLeftIcon, TrophyIcon } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -93,7 +94,7 @@ export default function PublicChallengePage() {
 
       <Button variant="ghost" size="sm" asChild className="mb-6">
         <Link href="/">
-          <ArrowLeftIcon className="size-4" />
+          <ArrowLeftIcon aria-hidden="true" className="size-4" />
           {t("backToEvent")}
         </Link>
       </Button>

@@ -1,5 +1,5 @@
 "use client";
-import { PencilIcon } from "lucide-react";
+import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import { useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -62,7 +62,7 @@ export function WorkGroupEditor({
       onOpenChange={setOpen}
       trigger={
         <Button variant="outline">
-          <PencilIcon className="size-4" />
+          <PencilIcon aria-hidden="true" className="size-4" />
           {t("editProject")}
         </Button>
       }

@@ -1,4 +1,4 @@
-import { LockIcon } from "lucide-react";
+import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { useLocale } from "@/lib/i18n";

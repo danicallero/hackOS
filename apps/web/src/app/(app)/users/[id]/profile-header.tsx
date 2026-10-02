@@ -3,7 +3,7 @@
 // Profile identity header and the account-removal action it exposes (H10).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { IdCardIcon } from "lucide-react";
+import { IdentificationCardIcon } from "@phosphor-icons/react/dist/csr/IdentificationCard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -53,7 +53,7 @@ export function ProfileHeader({ user }: { user: UserDetail }) {
         <>
           <Button asChild variant="outline" size="sm">
             <Link href={`/logistics/accreditation?userId=${user.id}`}>
-              <IdCardIcon className="size-4" />
+              <IdentificationCardIcon aria-hidden="true" className="size-4" />
               {t("accredit")}
             </Link>
           </Button>

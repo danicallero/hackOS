@@ -2,7 +2,9 @@
 
 import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { HistoryIcon, Trash2Icon, TrophyIcon } from "lucide-react";
+import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ClockCounterClockwise";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -482,7 +484,7 @@ export function EditCard({
           </TabsContent>
 
           <TabsContent value="history" className="pt-4">
-            <SectionCard icon={HistoryIcon} title={t("versionHistoryTitle")}>
+            <SectionCard icon={ClockCounterClockwiseIcon} title={t("versionHistoryTitle")}>
               <VersionHistory challengeId={challenge.id} />
             </SectionCard>
           </TabsContent>
@@ -720,7 +722,7 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
                     disabled={busy}
                     onClick={() => removeWinner(winner.rank)}
                   >
-                    <Trash2Icon className="size-4" />
+                    <TrashIcon aria-hidden="true" className="size-4" />
                     {t("remove")}
                   </Button>
                 </li>

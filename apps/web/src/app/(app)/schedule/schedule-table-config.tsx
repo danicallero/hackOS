@@ -15,7 +15,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { SlidersHorizontalIcon } from "lucide-react";
+import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
 import { useCallback, useEffect, useState } from "react";
 import { DragHandle, SortableItem } from "@/components/common/drag-handle";
 import { Button } from "@/components/ui/button";
@@ -238,7 +238,7 @@ export function ColumnConfigPopover({
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm">
-          <SlidersHorizontalIcon className="size-4" />
+          <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
           {t("columnsAction")}
         </Button>
       </PopoverTrigger>

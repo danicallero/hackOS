@@ -1,6 +1,8 @@
 "use client";
 
-import { CheckIcon, ChevronsUpDownIcon, XIcon } from "lucide-react";
+import { CaretUpDownIcon } from "@phosphor-icons/react/dist/csr/CaretUpDown";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { useId, useState } from "react";
 import { IconButton } from "@/components/common/icon-button";
@@ -199,7 +201,7 @@ export function MultiSelect({
                   ? t("selectedCount", { count: value.length })
                   : (placeholder ?? t("selectPlaceholder"))}
               </span>
-              <ChevronsUpDownIcon
+              <CaretUpDownIcon
                 aria-hidden="true"
                 className="text-muted-foreground size-4 shrink-0"
               />

@@ -2,7 +2,9 @@
 
 import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeftIcon, ArrowRightIcon, TrophyIcon } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -308,14 +310,14 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
           <div className="flex items-center gap-2">
             {stepIndex > 0 && (
               <Button type="button" variant="outline" onClick={goPrevious}>
-                <ArrowLeftIcon className="size-4" />
+                <ArrowLeftIcon aria-hidden="true" className="size-4" />
                 {t("previous")}
               </Button>
             )}
             {stepIndex < STEPS.length - 1 ? (
               <Button type="button" onClick={goNext}>
                 {t("next")}
-                <ArrowRightIcon className="size-4" />
+                <ArrowRightIcon aria-hidden="true" className="size-4" />
               </Button>
             ) : (
               <SubmitButton pending={form.formState.isSubmitting}>

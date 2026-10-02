@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,7 +12,7 @@ export function EmptyState({
   action,
   className,
 }: {
-  icon?: LucideIcon;
+  icon?: PhosphorIcon;
   title: string;
   /** Secondary line under the title, e.g. why the state is empty. */
   description?: string;

@@ -11,7 +11,7 @@
  *   common.json, `kind<Pascal>` in web.json) and typed as template literals,
  *   so the apps fail to typecheck until both keys exist, and
  *   `pnpm check:copy` fails until all three locales do;
- * - `icon` is a lucide name the web maps exhaustively to a component
+ * - `icon` is a stable presentation key the web maps exhaustively to a component
  *   (`Record<ActivityKindIconName, …>` — a new name breaks the build until
  *   it's mapped), `symbol` is the SF Symbol the mobile app renders (a mobile
  *   test asserts it also has an Android fallback in components/symbol.tsx);
@@ -20,7 +20,7 @@
  */
 
 export interface ActivityKindDefinition {
-  /** lucide-react icon name — see apps/web/src/app/(app)/schedule/schedule-model.ts. */
+  /** Stable web icon key — see apps/web/src/app/(app)/schedule/schedule-model.ts. */
   readonly icon: string;
   /** SF Symbol name — needs an Android alias in apps/mobile/components/symbol.tsx. */
   readonly symbol: string;
@@ -44,7 +44,7 @@ const KINDS = {
 
 export type ActivityKind = keyof typeof KINDS;
 
-/** Every lucide icon name the registry references (web maps these exhaustively). */
+/** Every web icon key the registry references (web maps these exhaustively). */
 export type ActivityKindIconName = (typeof KINDS)[ActivityKind]["icon"];
 /** Every SF Symbol name the registry references (mobile renders these directly). */
 export type ActivityKindSymbolName = (typeof KINDS)[ActivityKind]["symbol"];

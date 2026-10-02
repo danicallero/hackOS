@@ -1,7 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ShieldIcon, UserIcon } from "lucide-react";
+import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
+import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";

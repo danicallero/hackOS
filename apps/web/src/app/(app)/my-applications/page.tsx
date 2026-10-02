@@ -9,7 +9,9 @@
 //   GET /api/public/applications  → { applications } (open forms w/ template)
 
 import { EVENTS } from "@hackos/shared/events";
-import { ClipboardListIcon, FilePlus2Icon, InboxIcon } from "lucide-react";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
+import { FilePlusIcon } from "@phosphor-icons/react/dist/csr/FilePlus";
+import { TrayIcon } from "@phosphor-icons/react/dist/csr/Tray";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -103,7 +105,7 @@ export default function MyApplicationsPage() {
       <PageHeader title={t("myApplications")} />
 
       <SectionCard
-        icon={ClipboardListIcon}
+        icon={ClipboardTextIcon}
         title={t("myResponses")}
         state={<span className="type-meta tabular-nums">{responses.length}</span>}
         bodyClassName={responses.length === 0 && !responsesError ? "p-0" : "space-y-2"}
@@ -112,7 +114,7 @@ export default function MyApplicationsPage() {
           <ContextualError message={responsesError} onRetry={() => void load()} />
         ) : responses.length === 0 ? (
           <EmptyState
-            icon={InboxIcon}
+            icon={TrayIcon}
             title={t("notAppliedYetTitle")}
             description={t("notAppliedYetDesc")}
           />
@@ -140,7 +142,7 @@ export default function MyApplicationsPage() {
       </SectionCard>
 
       <SectionCard
-        icon={FilePlus2Icon}
+        icon={FilePlusIcon}
         title={t("openToApply")}
         state={<span className="type-meta tabular-nums">{openToApply.length}</span>}
         bodyClassName={openToApply.length === 0 && !formsError ? "p-0" : "space-y-2"}
@@ -149,7 +151,7 @@ export default function MyApplicationsPage() {
           <ContextualError message={formsError} onRetry={() => void load()} />
         ) : openToApply.length === 0 ? (
           <EmptyState
-            icon={InboxIcon}
+            icon={TrayIcon}
             title={t("noOpenFormsTitle")}
             description={t("noOpenFormsDesc")}
           />

@@ -12,7 +12,7 @@
 // by reusing the same phase logic the public site and TV run.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
@@ -111,7 +111,7 @@ export function EventTab({
   icon,
   onDirtyChange,
 }: {
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { t } = useLocale();

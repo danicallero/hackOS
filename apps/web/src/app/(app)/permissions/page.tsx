@@ -2,14 +2,12 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  KeyRoundIcon,
-  PlusIcon,
-  ShieldCheckIcon,
-  Trash2Icon,
-  UndoIcon,
-  ZapIcon,
-} from "lucide-react";
+import { ArrowUUpLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowUUpLeft";
+import { KeyIcon } from "@phosphor-icons/react/dist/csr/Key";
+import { LightningIcon } from "@phosphor-icons/react/dist/csr/Lightning";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { ShieldCheckIcon } from "@phosphor-icons/react/dist/csr/ShieldCheck";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -438,7 +436,7 @@ export default function PermissionsPage() {
   const showHeader = !isMobile || (!showTrash && selectedRole === null);
 
   const trashPanel = (
-    <SectionCard icon={Trash2Icon} title={t("trashTitle")} bodyClassName="p-0">
+    <SectionCard icon={TrashIcon} title={t("trashTitle")} bodyClassName="p-0">
       {trashLoading ? (
         <p className="text-muted-foreground p-6 text-sm">…</p>
       ) : deletedRoles.length === 0 ? (
@@ -454,7 +452,7 @@ export default function PermissionsPage() {
                 disabled={restoringId === r.id}
                 onClick={() => restoreRole(r.id)}
               >
-                <UndoIcon /> {t("restoreRole")}
+                <ArrowUUpLeftIcon aria-hidden="true" /> {t("restoreRole")}
               </Button>
             </li>
           ))}
@@ -491,13 +489,13 @@ export default function PermissionsPage() {
   const roleActions = (
     <>
       <Button size="sm" variant="outline" onClick={() => setAllRulesOpen(true)}>
-        <ZapIcon /> {t("allGrantRulesButton")}
+        <LightningIcon aria-hidden="true" /> {t("allGrantRulesButton")}
       </Button>
       <Button size="sm" variant="outline" onClick={toggleTrash}>
-        <Trash2Icon /> {t("trashTitle")}
+        <TrashIcon aria-hidden="true" /> {t("trashTitle")}
       </Button>
       <Button size="sm" onClick={() => setCreateOpen(true)}>
-        <PlusIcon /> {t("newRole")}
+        <PlusIcon aria-hidden="true" /> {t("newRole")}
       </Button>
     </>
   );
@@ -576,7 +574,7 @@ export default function PermissionsPage() {
       <SidePanelEditor
         open={createOpen}
         onOpenChange={setCreateOpen}
-        icon={KeyRoundIcon}
+        icon={KeyIcon}
         title={t("newRole")}
         footer={
           <>

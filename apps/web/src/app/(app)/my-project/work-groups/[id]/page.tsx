@@ -1,6 +1,7 @@
 "use client";
 import { EVENTS } from "@hackos/shared/events";
-import { FolderGitIcon, UserPlusIcon } from "lucide-react";
+import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
+import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -85,7 +86,7 @@ export default function WorkGroupDetailPage() {
       </div>
     );
   if (loadError) return <ContextualError message={loadError} onRetry={load} />;
-  if (!group) return <EmptyState icon={FolderGitIcon} title={t("projectNotFoundTitle")} />;
+  if (!group) return <EmptyState icon={FolderSimpleIcon} title={t("projectNotFoundTitle")} />;
   const active = group.members.some(
     (member) => member.userId === me?.id && member.status === "active",
   );
@@ -190,7 +191,7 @@ function Members({
           <SidePanelEditor
             trigger={
               <Button variant="outline" size="sm">
-                <UserPlusIcon className="size-4" />
+                <UserPlusIcon aria-hidden="true" className="size-4" />
                 {t("inviteMemberCta")}
               </Button>
             }

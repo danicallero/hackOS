@@ -7,7 +7,7 @@
 // authorised, even if copied and shared. External URLs (the "file-url" field
 // kind, or public logos) are linked through directly.
 
-import { FileTextIcon } from "lucide-react";
+import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -40,7 +40,7 @@ export function FileLink({
     >
       {children ?? (
         <>
-          <FileTextIcon className="size-3.5" />
+          <FileTextIcon aria-hidden="true" className="size-3.5" />
           {t("viewFileLabel")}
         </>
       )}

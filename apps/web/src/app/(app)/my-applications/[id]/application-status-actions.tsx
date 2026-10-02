@@ -3,7 +3,10 @@
 // Applicant confirmation and outcome states (H12, H15): keep the place decision
 // separate from the editable answer form so each state remains easy to scan.
 
-import { CheckCircle2Icon, ShieldAlertIcon, WalletCardsIcon, XCircleIcon } from "lucide-react";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { ShieldWarningIcon } from "@phosphor-icons/react/dist/csr/ShieldWarning";
+import { WalletIcon } from "@phosphor-icons/react/dist/csr/Wallet";
+import { XCircleIcon } from "@phosphor-icons/react/dist/csr/XCircle";
 import Link from "next/link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { SectionCard } from "@/components/common/section-card";
@@ -42,7 +45,7 @@ export function ApplicationStatusActions({
     <>
       {canConfirm && (
         <SectionCard
-          icon={CheckCircle2Icon}
+          icon={CheckCircleIcon}
           title={t("youreInConfirmTitle")}
           description={t("youreInConfirmDesc")}
         >
@@ -71,12 +74,12 @@ export function ApplicationStatusActions({
       )}
 
       {status === "confirmed" && (
-        <SectionCard icon={CheckCircle2Icon} title={t("placeConfirmed")}>
+        <SectionCard icon={CheckCircleIcon} title={t("placeConfirmed")}>
           <p className="text-muted-foreground text-sm">{t("canReleaseAnytime")}</p>
           <div className="flex flex-wrap gap-2">
             <Button asChild>
               <Link href="/wallet">
-                <WalletCardsIcon aria-hidden="true" />
+                <WalletIcon aria-hidden="true" />
                 {t("viewTicket")}
               </Link>
             </Button>
@@ -113,7 +116,7 @@ export function ApplicationStatusActions({
 
       {privacyNotice && (
         <Alert role="status">
-          <ShieldAlertIcon aria-hidden="true" />
+          <ShieldWarningIcon aria-hidden="true" />
           <AlertTitle>{t("privacyNoticeTitle")}</AlertTitle>
           <AlertDescription>{privacyNotice}</AlertDescription>
         </Alert>

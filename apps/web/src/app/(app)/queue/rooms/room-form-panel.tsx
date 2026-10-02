@@ -3,7 +3,7 @@
 // Focused room editor (H29, H46). The list owns quick edits; this panel owns
 // creation and the room-to-enterprise relationship.
 
-import { Building2Icon } from "lucide-react";
+import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EntityCombobox } from "@/components/common/entity-combobox";
@@ -94,7 +94,7 @@ export function RoomFormPanel({
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      icon={Building2Icon}
+      icon={BuildingsIcon}
       footer={
         <>
           <Button variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>

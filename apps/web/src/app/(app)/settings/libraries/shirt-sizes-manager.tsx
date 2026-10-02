@@ -8,7 +8,8 @@
 // INTOLERANCES_MANAGE, same as the rest of this page).
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusIcon, XIcon } from "lucide-react";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
@@ -144,7 +145,7 @@ export function ShirtSizesManager() {
             className="rounded-full"
             onClick={() => shirtSizeFields.append({ value: "" })}
           >
-            <PlusIcon />
+            <PlusIcon aria-hidden="true" />
             {t("addSize")}
           </Button>
         </div>

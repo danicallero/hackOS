@@ -1,6 +1,7 @@
 "use client";
 
-import { HelpCircleIcon, MailIcon } from "lucide-react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import { QuestionIcon } from "@phosphor-icons/react/dist/csr/Question";
 import { useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { SectionCard } from "@/components/common/section-card";
@@ -66,7 +67,7 @@ export function EmailCard() {
     <SectionCard
       variant="plain"
       footerClassName="justify-start"
-      icon={MailIcon}
+      icon={EnvelopeSimpleIcon}
       title={t("emailAddressesTitle")}
     >
       {/* Primary */}
@@ -89,7 +90,7 @@ export function EmailCard() {
           <Tooltip>
             <TooltipTrigger asChild>
               <button type="button" className="text-muted-foreground hover:text-foreground">
-                <HelpCircleIcon className="size-3.5" />
+                <QuestionIcon aria-hidden="true" className="size-3.5" />
                 <span className="sr-only">{t("whyAddSecondaryEmail")}</span>
               </button>
             </TooltipTrigger>

@@ -9,7 +9,7 @@
 // profiles — this tab only owns the two invite-claim requirement toggles.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -54,7 +54,7 @@ export function InvitesTab({
   icon,
   onDirtyChange,
 }: {
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { t } = useLocale();

@@ -6,7 +6,8 @@
 // sits under progressive disclosure instead of dominating the default view.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronDownIcon, type LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -51,7 +52,7 @@ export function PresenceTab({
   icon,
   onDirtyChange,
 }: {
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { t } = useLocale();
@@ -148,7 +149,7 @@ export function PresenceTab({
                 size="sm"
                 className="text-muted-foreground -ml-2"
               >
-                <ChevronDownIcon className="size-4" />
+                <CaretDownIcon aria-hidden="true" className="size-4" />
                 {t("presencePolicyDetailsToggle")}
               </Button>
             </CollapsibleTrigger>

@@ -9,14 +9,12 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import type { Question } from "@hackos/shared/questions";
-import {
-  Building2Icon,
-  GripVerticalIcon,
-  LayersIcon,
-  SearchIcon,
-  TrophyIcon,
-  XIcon,
-} from "lucide-react";
+import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
+import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { StackIcon } from "@phosphor-icons/react/dist/csr/Stack";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { type DragEvent, useCallback, useEffect, useMemo, useState } from "react";
@@ -138,7 +136,7 @@ export default function QueueDetailPage() {
   if (status === "error" || !queue) {
     return (
       <div className="space-y-6">
-        <EmptyState icon={LayersIcon} title={t("queueNotFound")} />
+        <EmptyState icon={StackIcon} title={t("queueNotFound")} />
       </div>
     );
   }
@@ -268,7 +266,7 @@ export default function QueueDetailPage() {
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <SectionCard
           title={t("queueTeams")}
-          icon={LayersIcon}
+          icon={StackIcon}
           description={t("queueTeamCount", { count: queue.entries.length })}
           action={
             queue.entries.length > 0 ? (
@@ -276,7 +274,7 @@ export default function QueueDetailPage() {
                 <Label htmlFor="queue-team-search" className="sr-only">
                   {t("searchQueueTeams")}
                 </Label>
-                <SearchIcon
+                <MagnifyingGlassIcon
                   aria-hidden="true"
                   className="text-muted-foreground pointer-events-none absolute inset-y-0 start-3 my-auto size-4"
                 />
@@ -307,7 +305,7 @@ export default function QueueDetailPage() {
         >
           {queue.entries.length === 0 ? (
             <div className="p-5">
-              <EmptyState icon={LayersIcon} title={t("queueEmpty")} />
+              <EmptyState icon={StackIcon} title={t("queueEmpty")} />
             </div>
           ) : filteredEntries.length === 0 ? (
             <div className="space-y-3 p-5">
@@ -369,7 +367,7 @@ export default function QueueDetailPage() {
                         onDragEnd={clearDrag}
                         className="text-muted-foreground hover:text-foreground cursor-grab touch-none active:cursor-grabbing"
                       >
-                        <GripVerticalIcon className="size-4" aria-hidden="true" />
+                        <DotsSixVerticalIcon className="size-4" aria-hidden="true" />
                       </span>
                     )}
                     {editingPosition === entry.id ? (
@@ -451,7 +449,7 @@ export default function QueueDetailPage() {
         </SectionCard>
 
         <div className="space-y-6">
-          <SectionCard title={t("queueName")} icon={LayersIcon}>
+          <SectionCard title={t("queueName")} icon={StackIcon}>
             <div className="space-y-2">
               <Label htmlFor="queue-name" className="sr-only">
                 {t("queueName")}
@@ -477,7 +475,7 @@ export default function QueueDetailPage() {
             </ul>
           </SectionCard>
 
-          <SectionCard title={t("rooms")} icon={Building2Icon} bodyClassName="p-0">
+          <SectionCard title={t("rooms")} icon={BuildingsIcon} bodyClassName="p-0">
             <div className="space-y-2 px-4 py-4 sm:px-5">
               <Label htmlFor="queue-rooms" className="sr-only">
                 {t("rooms")}

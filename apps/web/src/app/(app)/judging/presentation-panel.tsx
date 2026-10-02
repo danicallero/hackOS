@@ -3,14 +3,12 @@
 // The room's right column (H36-H39): who is presenting, their project, and
 // the presentation clock.
 
-import {
-  DoorOpenIcon,
-  ExternalLinkIcon,
-  PlayIcon,
-  RotateCcwIcon,
-  SendIcon,
-  UsersIcon,
-} from "lucide-react";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
+import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
+import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
@@ -117,7 +115,7 @@ export function PresentationPanel({
                       )
                     }
                   >
-                    <SendIcon className="size-4" />
+                    <PaperPlaneTiltIcon aria-hidden="true" className="size-4" />
                     {t("callNextTeam")}
                   </Button>
                 )}
@@ -134,7 +132,7 @@ export function PresentationPanel({
                       )
                     }
                   >
-                    <DoorOpenIcon className="size-4" />
+                    <DoorOpenIcon aria-hidden="true" className="size-4" />
                     {t("bringInNextTeam")}
                   </Button>
                 )}
@@ -157,7 +155,7 @@ export function PresentationPanel({
                 disabled={!canJudge || !isReady || busy != null}
                 onClick={() => onEntryAction(entry, "start", undefined, t("presentationStarted"))}
               >
-                <PlayIcon className="size-4" />
+                <PlayIcon aria-hidden="true" className="size-4" />
                 {t("start")}
               </Button>
               {canSendBack && (
@@ -177,7 +175,7 @@ export function PresentationPanel({
                   }
                   trigger={
                     <Button variant="outline" disabled={!canJudge || busy != null}>
-                      <RotateCcwIcon className="size-4" />
+                      <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
                       {t("requeueWaitingRoom")}
                     </Button>
                   }
@@ -226,7 +224,7 @@ export function ProjectInfo({
     <div className="space-y-2">
       <div className="grid gap-x-4 gap-y-2 rounded-md border bg-background p-3 sm:grid-cols-2">
         <div className="flex min-w-0 items-start gap-2">
-          <UsersIcon className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+          <UsersIcon aria-hidden="true" className="text-muted-foreground mt-0.5 size-4 shrink-0" />
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase">{t("membersLabel")}</p>
             <p className="text-sm font-medium text-pretty">
@@ -252,7 +250,7 @@ export function ProjectInfo({
           {links.map((link, i) => (
             <Button key={link.label} variant={i === 0 ? "default" : "outline"} size="sm" asChild>
               <a href={link.href} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon className="size-4" />
+                <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
                 {link.label}
               </a>
             </Button>
