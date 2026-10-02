@@ -12,6 +12,41 @@ jest.mock("@expo/ui/community/menu", () => ({
   },
 }));
 let mockNfcVisible = false;
+jest.mock("@/components/badge-replacement-dialog", () => ({
+  BadgeReplacementDialog: ({
+    visible,
+    onSelect,
+    onClose,
+  }: {
+    visible: boolean;
+    onSelect: (method: "qr" | "nfc") => void;
+    onClose: () => void;
+  }) => {
+    if (!visible) return null;
+    const { Pressable, Text, View } = require("react-native");
+    return (
+      <View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="personScanBadgeCode"
+          onPress={() => onSelect("qr")}
+        >
+          <Text>QR</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="scannerNfcScan"
+          onPress={() => onSelect("nfc")}
+        >
+          <Text>NFC</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="cancel" onPress={onClose}>
+          <Text>Cancel</Text>
+        </Pressable>
+      </View>
+    );
+  },
+}));
 const mockTranslate = (key: string) => key;
 const mockPerson = {
   userId: 21,
@@ -149,7 +184,8 @@ it("links a manually entered code through the existing accreditation mutation", 
   expect(submitScannerMutation).toHaveBeenCalledTimes(1);
 });
 
-it("offers QR as a secondary replacement method and retains the badge being revoked", async () => {
+it("offers QR in the native iOS replacement dialog and retains the badge being revoked", async () => {
+  Platform.OS = "ios";
   mockPerson.badgeId = "OLD-BADGE";
   const alert = jest.spyOn(Alert, "alert");
   await renderMobile(<PersonOperationsScreen />);
@@ -190,4 +226,26 @@ it("starts NFC on the first press when linking an existing attendee", async () =
   await fireEvent.press(await screen.findByRole("button", { name: "personLinkBadgeNfc" }));
   expect(mockNfcVisible).toBe(true);
   expect(alert).not.toHaveBeenCalled();
+});
+
+it("opens the Android Material dialog and starts the selected NFC reader", async () => {
+  mockPerson.badgeId = "OLD-BADGE";
+  const alert = jest.spyOn(Alert, "alert");
+  await renderMobile(<PersonOperationsScreen />);
+  await fireEvent.press(await screen.findByRole("button", { name: "personReplaceBadge" }));
+  expect(alert).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "personEnterBadgeCode" })).toBeNull();
+  await fireEvent.press(screen.getByRole("button", { name: "scannerNfcScan" }));
+  expect(mockNfcVisible).toBe(true);
+  expect(screen.queryByRole("button", { name: "personScanBadgeCode" })).toBeNull();
+});
+
+it("dismisses Android replacement without changing the badge", async () => {
+  mockPerson.badgeId = "OLD-BADGE";
+  await renderMobile(<PersonOperationsScreen />);
+  await fireEvent.press(await screen.findByRole("button", { name: "personReplaceBadge" }));
+  await fireEvent.press(screen.getByRole("button", { name: "cancel" }));
+  expect(mockNfcVisible).toBe(false);
+  expect(submitScannerMutation).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "personScanBadgeCode" })).toBeNull();
 });

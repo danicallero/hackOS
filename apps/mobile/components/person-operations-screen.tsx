@@ -8,10 +8,20 @@ import {
   useScrollToTop,
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Alert, InteractionManager, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Alert,
+  InteractionManager,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BadgeLinkActions } from "@/components/badge-link-actions";
+import { BadgeReplacementDialog } from "@/components/badge-replacement-dialog";
 import { EmptyState, InfoRow, Section, Separator, StatusPill } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
 import { formatMinutes, PresenceManagement } from "@/components/presence-management";
@@ -159,7 +169,8 @@ export function PersonOperationsScreen() {
   const autoScrolledFocusRef = useRef<string | null>(null);
   const [badgeReaderVisible, setBadgeReaderVisible] = useState(false);
   const [badgeCodeMethod, setBadgeCodeMethod] = useState<"manual" | "qr" | null>(null);
-  const badgeInputOpen = badgeReaderVisible || badgeCodeMethod !== null;
+  const [badgeReplacementVisible, setBadgeReplacementVisible] = useState(false);
+  const badgeInputOpen = badgeReaderVisible || badgeCodeMethod !== null || badgeReplacementVisible;
 
   useLayoutEffect(() => {
     navigation.setOptions(transparentDetailHeaderOptions);
@@ -380,6 +391,10 @@ export function PersonOperationsScreen() {
 
   function confirmReplaceBadge() {
     if (!person?.badgeId || busy || badgeInputOpen || badgeMutationInFlight.current) return;
+    if (Platform.OS === "android") {
+      setBadgeReplacementVisible(true);
+      return;
+    }
     Alert.alert(
       t("personReplaceBadge"),
       t("personReplaceBadgeMethod"),
@@ -998,6 +1013,14 @@ export function PersonOperationsScreen() {
           <StatusPill tone={rolePill.tone}>{rolePill.label}</StatusPill>
         </View>
       ) : null}
+      <BadgeReplacementDialog
+        visible={badgeReplacementVisible}
+        onClose={() => setBadgeReplacementVisible(false)}
+        onSelect={(method) => {
+          setBadgeReplacementVisible(false);
+          beginBadgeAction(method);
+        }}
+      />
     </>
   );
 }

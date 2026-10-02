@@ -795,7 +795,8 @@ compact ellipsis button to its right opens a native menu with the secondary
 “Scan QR code” and “Enter code” alternatives. The swipe-revealed Replace badge
 action opens a native system dialog with QR first, NFC as the preferred primary
 action below it, and Cancel. Manual entry is available only in the linking menu.
-Android also supports outside/back dismissal.
+Android uses a native Material 3 dialog with rounded corners, secondary QR above
+a filled primary NFC button, and Cancel last; outside/back also dismiss it.
 Badge linking renders as separate rounded Liquid Glass controls: a tinted NFC
 primary capsule and a circular overflow menu, without a shared section surface.
 
