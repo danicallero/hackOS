@@ -787,6 +787,54 @@ nothing had changed. The spinner is now driven by a local `refreshing` flag
 set only by pull-to-refresh, and reloads keep the previous array identity
 when `sameActivities` says the data is unchanged.
 
+### NFC accreditations (H22–H26)
+
+Physical badges now use NTAG213 NFC tags. Pairing and replacement on the
+person screen keep linking as a direct primary “Link with NFC” action. A
+compact ellipsis button to its right opens a native menu with the secondary
+“Scan QR code” and “Enter code” alternatives. The swipe-revealed Replace badge
+action opens a native system dialog with QR first, NFC as the preferred primary
+action below it, and Cancel. Manual entry is available only in the linking menu.
+Android also supports outside/back dismissal.
+Badge linking renders as separate rounded Liquid Glass controls: a tinted NFC
+primary capsule and a circular overflow menu, without a shared section surface.
+
+Role selection and event-access warnings apply before the chosen input opens.
+NFC opens the system Core NFC sheet on iOS and a cancelable reader overlay on
+Android; typed/QR codes use the same assignment and replacement mutation paths,
+including duplicate/revoked-badge and ticket validation. Manual input reuses
+the camera's `ScannerCodeEntry` sheet and trims whitespace; canceling any input
+submits no mutation. There is no intermediate custom method chooser.
+For NFC, the seven-byte hardware UID is saved as `badgeId`,
+using uppercase hexadecimal without separators; tags are neither written nor
+required to contain NDEF records. This supersedes the physical QR-card medium
+still described in `plan/historias-hackos.md`, following the product decision
+for NFC badges; the normative plan remains unchanged pending human revision.
+Existing ticket and Wallet QR codes remain readable by the camera.
+
+The general and activity cameras expose a Liquid Glass NFC button above the
+right-hand flashlight control (an opaque fallback on Android/older iOS). Meals
+open the NFC reader once after their activity has loaded. Canceling restores
+camera scanning and the NFC button can reopen the reader. Other recordable
+activities open NFC only on request. NFC also works without camera permission.
+Camera decoding pauses while NFC is open and while an activity result awaits
+operator action. Reads reuse the same identity lookup, repeat-confirmation,
+revocation and encrypted offline-queue paths as camera scans.
+
+`lib/nfc-reader.ts` serializes native sessions and releases them on completion,
+cancellation, navigation, backgrounding and unmount. iOS uses `MifareIOS` and
+Android uses `NfcA` reader mode with NDEF checking skipped, so blank NTAG213s
+work. Unsupported hardware, disabled NFC, malformed UIDs and reader errors
+produce localized feedback; cancellation does not submit a mutation.
+
+A new native build is required after installing `react-native-nfc-manager`;
+Expo Go and iOS Simulator cannot exercise real NFC reads. Verify on physical
+iPhone and Android with the same NTAG213: identical UID, pairing, replacement,
+revoked-tag rejection, meals/repeats, offline replay, cancel/reopen, navigation
+and background cleanup. Enable the NFC Tag Reading capability in the Apple
+App ID and regenerate provisioning profiles; the Expo plugin adds TAG-only
+entitlements, the usage description and Android NFC permission.
+
 ## Scanner cache encryption & isolation
 
 Staff/scanner devices carry two distinct local caches, split into separate

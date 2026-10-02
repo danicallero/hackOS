@@ -34,6 +34,13 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
     plugins: [
       ...(config.plugins ?? []),
       "expo-font",
+      [
+        "react-native-nfc-manager",
+        {
+          nfcPermission: "Read NFC badges to pair accreditations and record attendance.",
+          includeNdefEntitlement: false,
+        },
+      ],
       ["expo-navigation-bar", { enforceContrast: false }],
       "expo-secure-store",
       "expo-status-bar",

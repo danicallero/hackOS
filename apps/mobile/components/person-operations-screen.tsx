@@ -1,5 +1,4 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import {
   useFocusEffect,
   useLocalSearchParams,
@@ -9,20 +8,16 @@ import {
   useScrollToTop,
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Alert, InteractionManager, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, InteractionManager, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  ActionButton,
-  EmptyState,
-  InfoRow,
-  Section,
-  Separator,
-  StatusPill,
-} from "@/components/native-ui";
+import { BadgeLinkActions } from "@/components/badge-link-actions";
+import { EmptyState, InfoRow, Section, Separator, StatusPill } from "@/components/native-ui";
+import { NfcReader } from "@/components/nfc-reader";
 import { formatMinutes, PresenceManagement } from "@/components/presence-management";
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SymbolView } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
@@ -89,7 +84,7 @@ function AccreditationRevealActions({
           paddingHorizontal: 16,
         })}
       >
-        <SymbolView name="qrcode.viewfinder" tintColor="white" size={16} accessible={false} />
+        <SymbolView name="wave.3.right" tintColor="white" size={16} accessible={false} />
         <Text style={{ color: "white", fontSize: 12, fontWeight: "700" }}>
           {t("personReplaceBadge")}
         </Text>
@@ -162,22 +157,13 @@ export function PersonOperationsScreen() {
   const scrollViewportRef = useRef<View>(null);
   const scrollOffsetRef = useRef(0);
   const autoScrolledFocusRef = useRef<string | null>(null);
-  const [cameraAction, setCameraAction] = useState<"assign" | "replace" | null>(null);
+  const [badgeReaderVisible, setBadgeReaderVisible] = useState(false);
+  const [badgeCodeMethod, setBadgeCodeMethod] = useState<"manual" | "qr" | null>(null);
+  const badgeInputOpen = badgeReaderVisible || badgeCodeMethod !== null;
 
-  // These profile routes can be pushed from several independent stacks. Set
-  // the same native options on the mounted leaf route as in each layout so a
-  // parent stack cannot briefly expose `[id]` while the detail screen mounts.
   useLayoutEffect(() => {
-    // QrCamera owns its own full-screen back control. On Android a transparent
-    // native header still occupies the top 210px and wins hit-testing over
-    // that control, making the first tap appear to do nothing. Remove the
-    // header while the camera is open, then restore the profile chrome.
-    navigation.setOptions(
-      cameraAction
-        ? { ...transparentDetailHeaderOptions, headerShown: false }
-        : transparentDetailHeaderOptions,
-    );
-  }, [cameraAction, navigation]);
+    navigation.setOptions(transparentDetailHeaderOptions);
+  }, [navigation]);
 
   useScrollToTop(scrollRef);
   const { me } = useMeContext();
@@ -308,6 +294,7 @@ export function PersonOperationsScreen() {
   async function saveBadge(nextBadge: string, attendeeRole?: "participant" | "mentor") {
     if (!person || ownerUserId === undefined || !nextBadge || badgeMutationInFlight.current) return;
     badgeMutationInFlight.current = true;
+    setBusy(true);
     const currentBadge = person.badgeId;
     const payload: ScanPayload = currentBadge
       ? {
@@ -324,9 +311,9 @@ export function PersonOperationsScreen() {
           method: "manual",
           attendeeRole,
         };
-    // Close the camera before doing any storage/network work. It prevents a
-    // slow Android camera callback from submitting the same badge twice.
-    setCameraAction(null);
+    // H22/H23: close badge input before storage/network work to avoid duplicate assignment.
+    setBadgeReaderVisible(false);
+    setBadgeCodeMethod(null);
     setAttendeeRole(null);
     try {
       const result = await submitScannerMutation(payload, ownerUserId);
@@ -345,12 +332,13 @@ export function PersonOperationsScreen() {
       );
     } finally {
       badgeMutationInFlight.current = false;
+      setBusy(false);
     }
   }
 
-  function beginBadgeAction() {
-    if (!person) return;
-    const nextAction = person.badgeId ? "replace" : "assign";
+  function beginBadgeAction(method: "nfc" | "manual" | "qr" = "nfc") {
+    if (!person || busy || badgeReaderVisible || badgeCodeMethod || badgeMutationInFlight.current)
+      return;
     if (!person.badgeId && person.role == null) {
       Alert.alert(t("accreditationChooseRole"), t("accreditationChooseRoleBody"), [
         { text: t("cancel"), style: "cancel" },
@@ -358,14 +346,14 @@ export function PersonOperationsScreen() {
           text: t("roleParticipant"),
           onPress: () => {
             setAttendeeRole("participant");
-            setCameraAction(nextAction);
+            chooseBadgeMethod(method);
           },
         },
         {
           text: t("roleMentor"),
           onPress: () => {
             setAttendeeRole("mentor");
-            setCameraAction(nextAction);
+            chooseBadgeMethod(method);
           },
         },
       ]);
@@ -377,12 +365,35 @@ export function PersonOperationsScreen() {
         {
           text: t("continueAnyway"),
           style: "destructive",
-          onPress: () => setCameraAction(nextAction),
+          onPress: () => chooseBadgeMethod(method),
         },
       ]);
       return;
     }
-    setCameraAction(nextAction);
+    chooseBadgeMethod(method);
+  }
+
+  function chooseBadgeMethod(method: "nfc" | "manual" | "qr") {
+    if (method === "nfc") setBadgeReaderVisible(true);
+    else setBadgeCodeMethod(method);
+  }
+
+  function confirmReplaceBadge() {
+    if (!person?.badgeId || busy || badgeInputOpen || badgeMutationInFlight.current) return;
+    Alert.alert(
+      t("personReplaceBadge"),
+      t("personReplaceBadgeMethod"),
+      [
+        { text: t("personScanBadgeCode"), onPress: () => beginBadgeAction("qr") },
+        {
+          text: t("scannerNfcScan"),
+          isPreferred: true,
+          onPress: () => beginBadgeAction("nfc"),
+        },
+        { text: t("cancel"), style: "cancel" },
+      ],
+      { cancelable: true },
+    );
   }
 
   function confirmRemoveBadge() {
@@ -493,16 +504,6 @@ export function PersonOperationsScreen() {
     }
   }
 
-  if (cameraAction) {
-    return (
-      <QrCamera
-        hint={cameraAction === "assign" ? t("personScanNewBadge") : t("personScanReplacementBadge")}
-        onClose={() => setCameraAction(null)}
-        onValue={(value) => void saveBadge(value.trim(), attendeeRole ?? undefined)}
-      />
-    );
-  }
-
   if (loadState === "loading" && !person) {
     return (
       <View
@@ -571,14 +572,24 @@ export function PersonOperationsScreen() {
   // instead — this section is then only the unassigned-person action.
   const accreditationSection =
     canAccredit && !person.badgeId ? (
-      <Section title={t("scannerAccreditation")}>
-        <ActionButton
-          testID={UI_TEST_IDS.scanner.linkBadge}
-          icon="qrcode.viewfinder"
-          label={t("personLinkBadge")}
-          onPress={beginBadgeAction}
+      <View style={{ gap: 12 }}>
+        <Text
+          accessibilityRole="header"
+          style={{
+            color: colors.secondaryLabel,
+            fontSize: 13,
+            fontWeight: "600",
+            paddingHorizontal: 16,
+          }}
+        >
+          {t("scannerAccreditation")}
+        </Text>
+        <BadgeLinkActions
+          disabled={busy || badgeInputOpen}
+          onNfc={() => beginBadgeAction("nfc")}
+          onAlternative={beginBadgeAction}
         />
-      </Section>
+      </View>
     ) : null;
 
   // Door logging needs a badge: without one the register is hidden entirely
@@ -797,7 +808,33 @@ export function PersonOperationsScreen() {
 
   return (
     <>
-      <View ref={scrollViewportRef} style={{ backgroundColor: colors.background, flex: 1 }}>
+      <ScannerCodeEntry
+        visible={badgeCodeMethod === "manual"}
+        submitLabel={person.badgeId ? t("personReplaceBadge") : t("personLinkBadge")}
+        onValue={(code) => void saveBadge(code, attendeeRole ?? undefined)}
+        onClose={() => setBadgeCodeMethod(null)}
+      />
+      <Modal
+        visible={badgeCodeMethod === "qr"}
+        animationType="slide"
+        onRequestClose={() => setBadgeCodeMethod(null)}
+      >
+        <QrCamera
+          onClose={() => setBadgeCodeMethod(null)}
+          onValue={(code) => void saveBadge(code.trim(), attendeeRole ?? undefined)}
+        />
+      </Modal>
+      <NfcReader
+        visible={badgeReaderVisible}
+        onValue={(uid) => void saveBadge(uid, attendeeRole ?? undefined)}
+        onClose={() => setBadgeReaderVisible(false)}
+      />
+      <View
+        ref={scrollViewportRef}
+        accessibilityElementsHidden={badgeInputOpen}
+        importantForAccessibility={badgeInputOpen ? "no-hide-descendants" : "auto"}
+        style={{ backgroundColor: colors.background, flex: 1 }}
+      >
         <ScrollView
           ref={scrollRef}
           contentInsetAdjustmentBehavior="automatic"
@@ -879,7 +916,7 @@ export function PersonOperationsScreen() {
                   <Swipeable
                     renderRightActions={() => (
                       <AccreditationRevealActions
-                        onReplace={beginBadgeAction}
+                        onReplace={confirmReplaceBadge}
                         onDelete={confirmRemoveBadge}
                       />
                     )}

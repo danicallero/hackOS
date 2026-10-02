@@ -20,6 +20,7 @@ export type SymbolViewProps = ExpoSymbolViewProps;
  * file fails to compile until the Android alias exists.
  */
 const ANDROID_SYMBOL_NAMES = {
+  "wave.3.right": "nfc",
   "arrow.clockwise": "refresh",
   "arrow.down": "arrow_downward",
   "arrow.down.circle": "arrow_circle_down",

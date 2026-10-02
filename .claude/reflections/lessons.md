@@ -234,3 +234,34 @@ every supported language, confirming that headings fit and reasons remain visibl
 ### Exceptions
 A generic fallback may protect unknown callers, but does not replace reviewing
 the callers within the requested scope.
+
+## [R007] Keep the primary operational action direct
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-10-02
+
+### Trigger
+Adding alternative input methods to a frequent operational action.
+
+### Mistake
+A method chooser made the normal action require another interaction and gave
+fallback methods too much prominence.
+
+### Lesson
+Keep the preferred method directly available. Secondary methods belong in a
+compact native menu; an explicit method chooser suits actions where the user
+needs to decide how to proceed.
+
+### Action
+Count taps along the common path before and after adding alternatives. Preserve
+required domain decisions, but avoid adding a method choice before the default.
+
+### Validation
+Verify that the primary action starts its input immediately and that alternatives
+remain reachable through an accessible secondary control.
+
+### Exceptions
+Destructive actions, mandatory domain choices and explicit replacement workflows
+may need a confirmation or method dialog.

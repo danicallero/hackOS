@@ -196,6 +196,7 @@ export function ActivityScannerScreen() {
       <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
       <QrCamera
         hint={null}
+        autoStartNfc={Boolean(activity) && isMealActivityKind(activity?.category) && !manualNonce}
         onValue={(value) => void scanned(value)}
         scanningEnabled={Boolean(activity) && !result}
       />
