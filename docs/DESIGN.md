@@ -384,8 +384,9 @@ never fork. Decide *whether* something is a dialog before deciding *which*
 dialog. Inventory: `apps/web/README.md`; representative live examples in
 `/design-system`.**
 
-Shared dialogs (H55) place the backdrop at `z-index: 50` and the content at
-`z-index: 51`, explicitly keeping the modal above its blurred backdrop.
+Shared dialogs and sheets (H55) use the shadcn New York/Radix backdrop:
+`bg-black/50`, without backdrop blur. Both backdrop and content use
+`z-index: 50`; the portal renders the content after the backdrop.
 
 ### Is it a dialog at all?
 
