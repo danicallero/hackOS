@@ -25,23 +25,31 @@ export function QrCamera({
   hint,
   scanningEnabled = true,
   autoStartNfc = false,
+  nfcSessionKey = 0,
 }: {
   onValue: (value: string) => void;
   onClose?: () => void;
   hint?: string | null;
   scanningEnabled?: boolean;
   autoStartNfc?: boolean;
+  nfcSessionKey?: number;
 }) {
   const [nfcVisible, setNfcVisible] = useState(false);
   const autoStarted = useRef(false);
+  const lastNfcSessionKey = useRef(0);
   const focused = useIsFocused();
   useEffect(() => {
-    if (focused && autoStartNfc && scanningEnabled && !autoStarted.current) {
+    if (
+      focused &&
+      scanningEnabled &&
+      ((autoStartNfc && !autoStarted.current) || nfcSessionKey !== lastNfcSessionKey.current)
+    ) {
       autoStarted.current = true;
+      lastNfcSessionKey.current = nfcSessionKey;
       setNfcVisible(true);
     }
     if (!focused) setNfcVisible(false);
-  }, [focused, autoStartNfc, scanningEnabled]);
+  }, [focused, autoStartNfc, scanningEnabled, nfcSessionKey]);
   return (
     <>
       <CameraPreview

@@ -55,6 +55,7 @@ export function ActivityScannerScreen() {
   const { sync: runSync, lastSync } = syncState;
   const [localActivity, setLocalActivity] = useState<ScannerActivity | null>(null);
   const [result, setResult] = useState<ActivityScanResult | null>(null);
+  const [nfcSessionKey, setNfcSessionKey] = useState(0);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<ActivityStats | null>(null);
@@ -196,7 +197,8 @@ export function ActivityScannerScreen() {
       <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
       <QrCamera
         hint={null}
-        autoStartNfc={Boolean(activity) && isMealActivityKind(activity?.category) && !manualNonce}
+        autoStartNfc={Boolean(activity) && !manualNonce}
+        nfcSessionKey={nfcSessionKey}
         onValue={(value) => void scanned(value)}
         scanningEnabled={Boolean(activity) && !result}
       />
@@ -327,9 +329,11 @@ export function ActivityScannerScreen() {
           onCancel={() => {
             setResult(null);
             setRegistering(false);
+            setNfcSessionKey((key) => key + 1);
           }}
           onContinue={() => {
             setResult(null);
+            setNfcSessionKey((key) => key + 1);
           }}
           onRegisterAnother={() => void store(result.person, result.badgeId, true, result.count)}
         />

@@ -813,10 +813,11 @@ for NFC badges; the normative plan remains unchanged pending human revision.
 Existing ticket and Wallet QR codes remain readable by the camera.
 
 The general and activity cameras expose a Liquid Glass NFC button above the
-right-hand flashlight control (an opaque fallback on Android/older iOS). Meals
-open the NFC reader once after their activity has loaded. Canceling restores
-camera scanning and the NFC button can reopen the reader. Other recordable
-activities open NFC only on request. NFC also works without camera permission.
+right-hand flashlight control (an opaque fallback on Android/older iOS). Activities and meals
+open the NFC reader once after loading. Dismissing an activity result (Continue
+or Cancel) opens the next NFC session; registering another keeps the result
+open until it is dismissed. Canceling the NFC reader restores camera scanning
+without immediately reopening it; the NFC button can reopen it manually. NFC also works without camera permission.
 Camera decoding pauses while NFC is open and while an activity result awaits
 operator action. Reads reuse the same identity lookup, repeat-confirmation,
 revocation and encrypted offline-queue paths as camera scans.

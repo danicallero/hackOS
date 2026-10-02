@@ -86,3 +86,22 @@ it("blocks NFC while a result needs attention and closes on navigation", async (
   await view.rerender(<QrCamera onValue={onValue} />);
   await waitFor(() => expect(mockReaderProps.visible).toBe(false));
 });
+
+it("reopens NFC after each dismissed activity result but not after reader cancellation", async () => {
+  const onValue = jest.fn();
+  const view = await render(<QrCamera onValue={onValue} autoStartNfc />);
+  await act(() => mockReaderProps.onClose());
+  expect(mockReaderProps.visible).toBe(false);
+  await view.rerender(<QrCamera onValue={onValue} autoStartNfc scanningEnabled={false} />);
+  await view.rerender(<QrCamera onValue={onValue} autoStartNfc nfcSessionKey={1} />);
+  expect(mockReaderProps.visible).toBe(true);
+  await act(() => mockReaderProps.onClose());
+  await view.rerender(<QrCamera onValue={onValue} autoStartNfc nfcSessionKey={1} />);
+  expect(mockReaderProps.visible).toBe(false);
+  await view.rerender(
+    <QrCamera onValue={onValue} autoStartNfc scanningEnabled={false} nfcSessionKey={2} />,
+  );
+  expect(mockReaderProps.visible).toBe(false);
+  await view.rerender(<QrCamera onValue={onValue} autoStartNfc nfcSessionKey={2} />);
+  expect(mockReaderProps.visible).toBe(true);
+});
