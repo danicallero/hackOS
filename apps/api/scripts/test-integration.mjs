@@ -29,7 +29,7 @@ function runShard(paths, shardNumber) {
         TEST_DATABASE_URL: databaseUrlFor(shardNumber),
         TEST_DATABASE_EPHEMERAL: "true",
         ...(process.env.CI === "true" && process.env.S3_BUCKET
-          ? { S3_BUCKET: `${process.env.S3_BUCKET}_shard_${shardNumber}` }
+          ? { S3_BUCKET: `${process.env.S3_BUCKET}-shard-${shardNumber}` }
           : {}),
       },
       stdio: "inherit",
