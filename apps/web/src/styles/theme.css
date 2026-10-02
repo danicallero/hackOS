@@ -82,7 +82,7 @@
   --destructive: var(--brand-red);
   --destructive-foreground: var(--brand-cream);
   --border: color-mix(in srgb, var(--brand-ink) 20%, var(--brand-cream));
-  --input: color-mix(in srgb, var(--brand-ink) 52%, var(--brand-cream));
+  --input: var(--border);
   --ring: var(--brand-red);
   --info: color-mix(in srgb, var(--brand-ink) 65%, var(--brand-blue));
   --success: #22734f;
@@ -125,8 +125,9 @@
   --accent-foreground: var(--brand-cream);
   --destructive: color-mix(in srgb, var(--brand-red) 45%, var(--brand-cream));
   --destructive-foreground: var(--brand-ink);
-  --border: #3d4350;
-  --input: #737b8c;
+  /* Subtle neutral framing follows shadcn's low-contrast dark border treatment. */
+  --border: #292d37;
+  --input: var(--border);
   --ring: var(--brand-blue);
   --info: var(--brand-blue);
   --success: #7dd9ae;

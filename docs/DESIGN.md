@@ -132,11 +132,12 @@ When adding/updating a primitive, preserve this token-backed visual contract.
 | Rockwell | `--brand-display` | Page/section/dialog titles and public headlines; supplied regular/bold WOFF2 files in `public/fonts/hackudc-2027/` |
 
 The edition defaults to **light** for new visitors. `next-themes` retains an
-existing light/dark/system preference. Dark mode uses a near-black canvas,
-charcoal surfaces and gray borders with a subtle blue tint; edition blue is
-reserved for interactive accents. Light mode retains its edition
-palette. Shared `Input` and `Textarea` controls use `--field-foreground`: neutral
-black text in light mode and the foreground token in dark mode. Native date/time
+existing light/dark/system preference. Dark mode uses a near-black canvas and
+charcoal surfaces; fields, cards, buttons and dividers share one subtle border
+token in both themes. Edition blue is reserved for interactive accents. Light
+mode retains its edition palette. Shared `Input` and `Textarea` controls use
+`--field-foreground`: neutral black text in light mode and the foreground token
+in dark mode. Native date/time
 values also consume this token so Safari follows the same field palette across
 all screens (H55). Semantic status roles remain distinct: green is success, red is danger, yellow is
 warning, blue is information. Components request `tone`/semantic utilities,
@@ -207,8 +208,8 @@ keys remain stable and map to Phosphor components in `schedule-model.ts`.
    es/gl/en, narrow/wide layouts, keyboard focus and disabled controls. Also
    inspect real auth, table/form and judging screens for content-specific fit.
 4. Run `pnpm lint`, web typecheck/tests and the Chromium UI smoke suite.
-   `src/lib/warning-contrast.test.ts` checks WCAG AA text on semantic surfaces,
-   status washes and field-outline contrast against the active edition.
+   `src/lib/warning-contrast.test.ts` checks WCAG AA text on semantic surfaces
+   and status washes, plus a shared field/border token in both themes.
    Capture screenshots outside the source branch per `docs/ui-testing.md`.
 5. Update this edition section's reference and the web README in the same change.
    Keep event names, dates, logos and copy in their existing configuration/i18n

@@ -112,7 +112,9 @@ describe("edition theme contrast", () => {
       for (const surface of ["--background", "--card", "--hackos-shell", "--secondary"]) {
         const background = tokenColor(theme, surface);
         expectAa(tokenColor(theme, "--muted-foreground"), background);
-        expect(contrast(tokenColor(theme, "--input"), background)).toBeGreaterThanOrEqual(3);
+        if (surface === "--background") {
+          expect(tokenColor(theme, "--input")).toEqual(tokenColor(theme, "--border"));
+        }
         for (const tone of ["--success", "--destructive", "--info"]) {
           const color = tokenColor(theme, tone);
           expectAa(color, blend(color, background, 0.05));
