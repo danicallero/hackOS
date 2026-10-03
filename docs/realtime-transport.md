@@ -6,6 +6,29 @@ its single payload-free `/api/tv/stream`, including content invalidations.
 Collaborative review remains a logical SSE scope; judging WebSockets and
 bidirectional presence/lease coordination are a separate migration.
 
+## Broker environment isolation (#897)
+
+Valkey Pub/Sub channels are shared across all logical databases on an instance.
+Changing the database number in `VALKEY_URL` isolates keys, **not SSE messages**.
+The relay publishes to `sse:<SSE_NAMESPACE>:<topic>` and subscribes only to
+`sse:<SSE_NAMESPACE>:*`. Namespaces accept 1–128 ASCII letters, digits, `_` or
+`-`; empty values, delimiters and Pub/Sub glob characters fail configuration.
+
+`SSE_NAMESPACE` defaults to `NODE_ENV` (`development`, `test`, `production`).
+Set a distinct explicit value for every development, staging, qualification or
+production environment sharing one Valkey instance. All API replicas and workers
+in one environment must use the same value. Integration-test setup assigns
+`test-<process pid>` to keep concurrent test processes separate from dev/load.
+Sequence keys remain `sse:seq:<topic>` in the selected logical database; use
+separate logical databases for key isolation, or separate Valkey instances for
+full broker isolation. A namespace is routing isolation, not an access-control
+boundary for clients with broker credentials.
+
+Deploy this channel-format change to every API replica and worker together:
+old `sse:<topic>` publishers and new relays cannot communicate. Changing the
+namespace similarly requires updating all publishers and relays together;
+clients recover missed events by reconnecting and refetching.
+
 ## Authenticated contract
 
 `GET /api/realtime/stream?scopes=personal,queue,domain:projects` accepts up to

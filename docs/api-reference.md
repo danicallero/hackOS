@@ -460,7 +460,7 @@ The complete route classification and durable-side-effect boundary are in
 
 ### Realtime (SSE)
 `broadcast(topic, EVENT, data)` from `lib/sse.ts` publishes to
-`sse:<topic>` in Valkey; every API instance relays to its own locally
+`sse:<namespace>:<topic>` in Valkey; every API instance relays to its own locally
 connected clients, so TVs and operator panels stay live across a
 horizontally-scaled API tier. Event names live in
 [`packages/shared/src/events.ts`](../packages/shared/src/events.ts), never as

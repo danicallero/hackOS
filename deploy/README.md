@@ -201,6 +201,13 @@ docker compose --env-file /etc/hackos/hackos.env \
 Never put a secret in a command, CI log, Compose output, or repository file.
 The secret editor remains an explicit host-permission operation.
 
+`SSE_NAMESPACE` is delivered to both API and worker (default `production`).
+Use one value across all replicas/workers and a distinct value for each
+staging, load or development environment sharing Valkey. Separate logical
+databases isolate keys but do not isolate Pub/Sub. Deploy channel-format or
+namespace changes to all API replicas and workers together; see
+[broker environment isolation](../docs/realtime-transport.md#broker-environment-isolation-897).
+
 ## Variables por servicio
 
 La siguiente matriz es deliberada: no se pasa el entorno completo a cada
@@ -214,7 +221,7 @@ contenedor.
 | `minio-init` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` |
 | `migrate` | `NODE_ENV`, `DATABASE_URL`, `BETTER_AUTH_SECRET` |
 | `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, traducción, SSE, rate limits y fixtures API-only |
-| `worker` | base de datos, Valkey, auth/URLs necesarias para enlaces, almacenamiento, correo, Wallet y tuning del worker |
+| `worker` | base de datos, Valkey, `SSE_NAMESPACE`, auth/URLs necesarias para enlaces, almacenamiento, correo, Wallet y tuning del worker |
 | `web` | sólo `API_DOMAIN` y `WEB_DOMAIN` |
 
 En particular, `web` nunca recibe secretos; `api` no recibe credenciales de

@@ -8,3 +8,6 @@ import { TEST_DATABASE_URL } from "./test-env.js";
 process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 process.env.WORKERS_INLINE = "false";
+
+// Isolate concurrent test publishers from dev/load and other shards (#897).
+process.env.SSE_NAMESPACE = `test-${process.pid}`;
