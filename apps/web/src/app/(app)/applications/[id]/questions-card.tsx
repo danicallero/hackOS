@@ -47,7 +47,7 @@ import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AlertModal } from "@/components/common/alert-modal";
-import { dragOverlayDropAnimation } from "@/components/common/drag-handle";
+import { dragOverlayDropAnimation, useReducedDragMotion } from "@/components/common/drag-handle";
 import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
 import { SaveStatus } from "@/components/common/save-status";
@@ -196,6 +196,7 @@ export function QuestionsCard({
   onSaved: () => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
+  const reducedDragMotion = useReducedDragMotion();
   const { t, language } = useLocale();
   const [fields, setFields] = useState<EditableField[]>(() => withIds(form.template));
   const originalFieldsRef = useRef(new Map<string, { key: string; kind: string }>());
@@ -397,6 +398,15 @@ export function QuestionsCard({
         if (!overField) return prev;
         destBlockId = blockIdForField(overField, sections);
         overFieldId = overId;
+      }
+
+      // Match the sortable destination when moving within a block (issue #849).
+      if (overFieldId && blockIdForField(activeField, sections) === destBlockId) {
+        return arrayMove(
+          prev,
+          prev.findIndex((field) => field._id === activeId),
+          prev.findIndex((field) => field._id === overFieldId),
+        );
       }
 
       const destSectionKey =
@@ -759,7 +769,7 @@ export function QuestionsCard({
               </div>
             </div>
           }
-          <DragOverlay dropAnimation={dragOverlayDropAnimation}>
+          <DragOverlay dropAnimation={reducedDragMotion ? null : dragOverlayDropAnimation}>
             {dragActive?.type === "field" &&
               (() => {
                 const field = fields.find((f) => f._id === dragActive.id);

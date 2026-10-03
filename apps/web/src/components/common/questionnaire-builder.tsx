@@ -42,6 +42,7 @@ import {
   DragHandle,
   dragOverlayDropAnimation,
   SortableItem,
+  useReducedDragMotion,
 } from "@/components/common/drag-handle";
 import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
@@ -231,6 +232,7 @@ export function JudgingPanelBuilder({
   onChange: (value: Question[]) => void;
   disabled?: boolean;
 }) {
+  const reducedDragMotion = useReducedDragMotion();
   const { t } = useLocale();
   const questionTypes = useMemo(() => buildQuestionTypes(t), [t]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -356,7 +358,7 @@ export function JudgingPanelBuilder({
             </SortableItem>
           ))}
         </SortableContext>
-        <DragOverlay dropAnimation={dragOverlayDropAnimation}>
+        <DragOverlay dropAnimation={reducedDragMotion ? null : dragOverlayDropAnimation}>
           {dragId !== null && (
             <Surface padding="compact" className="shadow-floating">
               <QuestionRowPreview

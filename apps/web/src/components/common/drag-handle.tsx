@@ -9,6 +9,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
+import { useSyncExternalStore } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { cn } from "@/lib/utils";
 
@@ -40,14 +41,8 @@ export function DragHandle({
   );
 }
 
-/** Sortable wrapper for one item in a flat (or grouped) drag-and-drop list.
- *
- *  `hideWhileDragging` is for callers that render a `DragOverlay` clone of
- *  the active item: the real item goes fully transparent (instead of the
- *  default translucent-in-place look) so only the overlay clone is visible
- *  while dragging, which is what avoids the snap/jump on drop — without an
- *  overlay, the real item's position resets one frame before the reordered
- *  array commits. */
+/** Sortable wrapper for a list item. With an overlay, the active item keeps
+ * its dimensions and marks the destination while siblings shift (issue #849). */
 export function SortableItem({
   id,
   data,
@@ -69,10 +64,19 @@ export function SortableItem({
   return (
     <div
       ref={setNodeRef}
+      data-drop-placeholder={isDragging || undefined}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(isDragging && (hideWhileDragging ? "opacity-0" : "z-10 opacity-60"))}
+      className={cn(
+        "relative motion-reduce:transition-none!",
+        isDragging &&
+          hideWhileDragging &&
+          "rounded-lg outline-2 outline-dashed outline-primary bg-primary/5",
+        isDragging && !hideWhileDragging && "z-10 opacity-60",
+      )}
     >
-      {children({ attributes, listeners })}
+      <div className={cn(isDragging && hideWhileDragging && "opacity-0")}>
+        {children({ attributes, listeners })}
+      </div>
     </div>
   );
 }
@@ -84,3 +88,18 @@ export const dragOverlayDropAnimation = {
   duration: 200,
   easing: "cubic-bezier(0.2, 0, 0, 1)",
 };
+
+const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
+function subscribeReducedMotion(onChange: () => void) {
+  const query = window.matchMedia(reducedMotionQuery);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+export function useReducedDragMotion() {
+  return useSyncExternalStore(
+    subscribeReducedMotion,
+    () => window.matchMedia(reducedMotionQuery).matches,
+    () => false,
+  );
+}
