@@ -511,6 +511,11 @@ correctamente.
 
 ## Service operations
 
+Interactive deployment validates the selected API/web image tags before
+confirmation. A release may publish only one unit; selecting both in that case
+reports the missing image and returns to the menu without deploying or closing
+the operator shell.
+
 ### Container resource metrics
 
 The production Compose file collects cgroup v2 RAM/swap/OOM data inside each
