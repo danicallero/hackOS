@@ -4,8 +4,8 @@
  * (H38) — is one of these envelopes, serialized as the SSE `data:` payload
  * with the envelope `type` as the SSE event name.
  *
- * Topics are coarse subscription channels; one SSE connection subscribes to
- * one topic. Fan-out across API instances rides Valkey pub/sub on
+ * Topics are logical subscription channels; a physical SSE connection may
+ * carry several independently authorized scopes. Fan-out across API instances rides Valkey pub/sub on
  * `sse:<topic>`.
  */
 
@@ -43,9 +43,11 @@ export const SSE_TOPICS = {
 } as const;
 
 export interface SseEnvelope<T = unknown> {
+  /** Logical scope on multiplexed streams; absent on legacy streams. */
+  topic?: string;
   /** event name, e.g. "queue.entry.status_changed" */
   type: string;
-  /** monotonic per-topic sequence for client resume via Last-Event-ID */
+  /** Monotonic per-topic sequence for gap detection; no replay or global cursor. */
   id: string;
   /** ISO timestamp when emitted */
   at: string;
@@ -86,3 +88,46 @@ export const EVENTS = {
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];
+
+/** Public scope identifiers accepted by /api/realtime/stream (#892). Never Valkey topics. */
+export const REALTIME_SCOPES = {
+  PERSONAL: "personal",
+  QUEUE: "queue",
+  LOGISTICS: "logistics",
+  EXPORTS: "exports",
+  PUBLIC_TV: "public-tv",
+  PUBLIC_CONTENT: "public-content",
+  REVIEW_PREFIX: "review:",
+  DOMAIN_PREFIX: "domain:",
+} as const;
+export const REALTIME_LIMITS = {
+  MAX_SCOPES: 16,
+  MAX_QUERY_LENGTH: 2048,
+  MAX_BUFFER_BYTES: 64 * 1024,
+  SUBSCRIPTION_DEBOUNCE_MS: 100,
+} as const;
+
+/** Translate legacy reader paths into logical scopes during installed-client migration. */
+export function realtimeScopeForPath(path: string): string | null {
+  const url = new URL(path, "http://realtime.invalid");
+  switch (url.pathname) {
+    case "/api/queue/me/stream":
+      return REALTIME_SCOPES.PERSONAL;
+    case "/api/queue/stream":
+      return REALTIME_SCOPES.QUEUE;
+    case "/api/logistics/stream":
+      return REALTIME_SCOPES.LOGISTICS;
+    case "/api/exports/stream":
+      return REALTIME_SCOPES.EXPORTS;
+    case "/api/tv/stream":
+      return REALTIME_SCOPES.PUBLIC_TV;
+    case "/api/content/stream":
+      return REALTIME_SCOPES.PUBLIC_CONTENT;
+    case "/api/events/stream":
+      return `${REALTIME_SCOPES.DOMAIN_PREFIX}${url.searchParams.get("topic") ?? ""}`;
+    default: {
+      const entry = /^\/api\/queue\/entries\/([1-9]\d*)\/stream$/.exec(url.pathname);
+      return entry ? `${REALTIME_SCOPES.REVIEW_PREFIX}${entry[1]}` : null;
+    }
+  }
+}

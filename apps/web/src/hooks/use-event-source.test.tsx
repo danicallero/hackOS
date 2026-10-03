@@ -2,24 +2,11 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetServerStateForTests } from "@/lib/server-state";
+import { setSseIdentity } from "@/lib/sse-broker";
+import { mockRealtimeFetch } from "@/lib/sse-test-fixture";
 import { useLiveQuery } from "./use-event-source";
 
-class FakeEventSource extends EventTarget {
-  static instances: FakeEventSource[] = [];
-  onopen: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  onmessage: ((event: MessageEvent) => void) | null = null;
-  close = vi.fn();
-
-  constructor(readonly url: string) {
-    super();
-    FakeEventSource.instances.push(this);
-  }
-
-  emit(name: string, data: unknown) {
-    this.dispatchEvent(new MessageEvent(name, { data: JSON.stringify(data) }));
-  }
-}
+let fixture: ReturnType<typeof mockRealtimeFetch>;
 
 const fetcher = vi.fn<() => Promise<{ version: number }>>();
 
@@ -45,9 +32,10 @@ describe("useLiveQuery recovery (H38, H41-H42)", () => {
     resetServerStateForTests();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-14T10:00:00.000Z"));
-    FakeEventSource.instances = [];
+    setSseIdentity(101, "http://localhost:3000");
+    fixture = mockRealtimeFetch();
     fetcher.mockReset().mockResolvedValue({ version: 1 });
-    vi.stubGlobal("EventSource", FakeEventSource);
+
     Object.defineProperty(document, "visibilityState", {
       configurable: true,
       value: "visible",
@@ -59,6 +47,7 @@ describe("useLiveQuery recovery (H38, H41-H42)", () => {
     container?.remove();
     root = undefined;
     container = undefined;
+    setSseIdentity(null, "http://localhost:3000");
     vi.unstubAllGlobals();
     resetServerStateForTests();
     vi.useRealTimers();
@@ -73,16 +62,20 @@ describe("useLiveQuery recovery (H38, H41-H42)", () => {
 
   it("revalidates when a visible tab returns after a long background", async () => {
     mount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
     await flush();
     expect(fetcher).toHaveBeenCalledOnce();
 
-    const source = FakeEventSource.instances[0];
-    act(() => source.onopen?.());
     Object.defineProperty(document, "visibilityState", { value: "hidden" });
     act(() => document.dispatchEvent(new Event("visibilitychange")));
     vi.advanceTimersByTime(60_001);
     Object.defineProperty(document, "visibilityState", { value: "visible" });
     act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
     await flush();
 
     expect(fetcher).toHaveBeenCalledTimes(2);
@@ -90,15 +83,21 @@ describe("useLiveQuery recovery (H38, H41-H42)", () => {
 
   it("polls the read model while the stream is disconnected", async () => {
     mount();
-    await flush();
-    const source = FakeEventSource.instances[0];
-    act(() => {
-      source.onopen?.();
-      source.onerror?.();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
     });
+    await flush();
+    const source = fixture.connections[0];
+    fixture.fetcher.mockResolvedValue({
+      ok: false,
+      status: 503,
+      body: null as never,
+      headers: new Headers(),
+    });
+    await act(async () => source.end());
 
     await act(async () => {
-      vi.advanceTimersByTime(15_000);
+      await vi.advanceTimersByTimeAsync(15_000);
       await Promise.resolve();
     });
     expect(fetcher).toHaveBeenCalledTimes(2);
@@ -106,14 +105,18 @@ describe("useLiveQuery recovery (H38, H41-H42)", () => {
 
   it("turns an SSE burst into one invalidation and one trailing read", async () => {
     mount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
     await flush();
-    const source = FakeEventSource.instances[0];
-    source.emit("queue.changed", { type: "queue.changed", id: "1", at: "now", data: {} });
-    source.emit("queue.changed", { type: "queue.changed", id: "2", at: "now", data: {} });
-    source.emit("queue.changed", { type: "queue.changed", id: "3", at: "now", data: {} });
+    const source = fixture.connections[0];
+    source.emit("queue", 1, "queue.changed");
+    source.emit("queue", 2, "queue.changed");
+    source.emit("queue", 3, "queue.changed");
 
     await act(async () => {
-      vi.advanceTimersByTime(150);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(150);
       await Promise.resolve();
     });
     expect(fetcher).toHaveBeenCalledTimes(2);

@@ -152,7 +152,7 @@ through the rollout. `push_tokens` (already existed in
   direct read from the authoritative API, so the client avoids pulling and
   recomputing from the full roster snapshot on every refresh. The scanner
   home screen (`components/general-scanner-screen.tsx`) also opens the
-  existing `/api/logistics/stream` SSE topic
+  logical logistics scope in the shared `/api/realtime/stream` transport
   (`lib/server-events.ts#startLogisticsEventStream`) and refetches on any
   `LOGISTICS_ACCREDITED`/`LOGISTICS_PRESENCE_SCAN`/`LOGISTICS_ACTIVITY_SCAN`/
   `LOGISTICS_MEAL_SCAN_BATCH` event, so one device's scan updates every other
@@ -932,18 +932,15 @@ physical iOS/Android and EAS verification remains a release-gate task in
   `category` on `lib/notification-events.ts` (a tiny in-process pub-sub); a
   tapped `category: "queue"` notification also navigates to the queue tab.
   Wired once for the app's lifetime from `app/_layout.tsx`.
-- `lib/server-events.ts` — native authenticated SSE reader. It takes the
-  restored cookie from Better Auth's Expo plugin, parses the RN fetch stream,
-  reconnects after interruption, and emits personal queue/wallet/session events.
-  The app keeps this one personal stream for every authenticated account;
-  permission and enterprise-affiliation changes are targeted to the affected
-  account instead of holding a second global identity stream. SSE
-  is intentionally lossy: reconnects, foreground returns, and numeric event-id
-  gaps emit a synthetic resync signal so mounted screens refetch their
-  authoritative read model; the `Last-Event-ID` header is telemetry for the
-  server boundary, not a replay contract. Streams are restarted when the
-  authenticated identity changes, so one account cannot consume another
-  account's personal events. The cache-backed readers in `lib/use-cached-api.ts`
+- `lib/server-events.ts` — one authenticated transport per native instance,
+  joining personal, queue-operation and logistics scopes. The shared bounded
+  fetch core uses Better Auth's restored cookie, per-scope cursors and resyncs,
+  pauses in background, and fences old readers across account/origin changes.
+  Reference-counted consumers coalesce union changes; personal session changes
+  remain targeted. There is no event replay or global Last-Event-ID. SSE-backed
+  queue/wallet polls run only while disconnected. See
+  [realtime transport](./realtime-transport.md) for authorization, bounds,
+  revocation and installed-version compatibility. The cache-backed readers in `lib/use-cached-api.ts`
   revalidate quietly when the app returns after at least 60 seconds away; wallet
   and notification reads also poll every 30 seconds while active as a safety
   net when their event stream is unavailable. A successful response clears the

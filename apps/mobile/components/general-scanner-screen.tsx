@@ -106,8 +106,7 @@ export function GeneralScannerScreen() {
       EVENTS.LOGISTICS_MEAL_SCAN_BATCH,
     ];
     const unsubscribes = [
-      ...events.map((event) => subscribeToServerEvent(event, loadRoleStats)),
-      subscribeToServerEvent(EVENTS.REALTIME_RESYNC, loadRoleStats),
+      ...events.map((event) => subscribeToServerEvent(event, loadRoleStats, "logistics")),
     ];
     return () => {
       for (const unsubscribe of unsubscribes) unsubscribe();

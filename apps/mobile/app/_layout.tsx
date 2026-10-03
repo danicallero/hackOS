@@ -4,7 +4,7 @@ import { type Href, useRootNavigationState, useRouter } from "expo-router";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
 import { Stack } from "expo-router/stack";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -127,22 +127,46 @@ function useInitialSessionPending(pending: boolean) {
 function PersonalEventStream({ authenticated }: { authenticated: boolean }) {
   const { me, refetch } = useMeContext();
   const enabled = authenticated;
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => {
+      refreshTimer.current = null;
+      void refetch();
+    }, 150);
+  }, [refetch]);
+  useEffect(
+    () => () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    },
+    [],
+  );
   useEffect(() => {
     if (!enabled) return;
-    return subscribeToServerEvent(EVENTS.USER_SESSION_CHANGED, () => {
-      void refetch();
-    });
-  }, [enabled, refetch]);
+    const unsubscribes = [
+      EVENTS.USER_SESSION_CHANGED,
+      EVENTS.USER_QUEUE_CHANGED,
+      EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
+    ].map((event) =>
+      subscribeToServerEvent(event, () => {
+        scheduleRefresh();
+      }),
+    );
+    return () => {
+      for (const unsubscribe of unsubscribes) unsubscribe();
+    };
+  }, [enabled, scheduleRefresh]);
   useEffect(() => {
     if (!enabled) return;
     return startPersonalEventStream({
       enabled,
       identityKey: me?.id,
-      onResync: () => {
-        void refetch();
+      onResync: (context) => {
+        // useMe owns the account facts foreground read; the stream recovers its other scoped models (#892).
+        if (context.reason !== "foreground") scheduleRefresh();
       },
     });
-  }, [enabled, me?.id, refetch]);
+  }, [enabled, me?.id, scheduleRefresh]);
   return null;
 }
 

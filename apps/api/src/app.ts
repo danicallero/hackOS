@@ -28,6 +28,7 @@ import { RequestAdmission, type RequestAdmissionLease } from "./lib/request-admi
 import { classifyRequestLane, isSseRequest } from "./lib/request-lanes.js";
 import { findReviewFixtureByUserId } from "./lib/review-fixture-log.js";
 import { openApiSecurityForPolicy, registerRoutePolicyInfrastructure } from "./lib/route-policy.js";
+import { registerSessionInvalidations } from "./lib/session-invalidation.js";
 import { broadcast } from "./lib/sse.js";
 import { mutationDomainForPath, publicContentMutationForPath } from "./lib/sse-routing.js";
 import { valkey } from "./lib/valkey.js";
@@ -415,6 +416,7 @@ export async function buildApp(): Promise<App> {
     );
   });
 
+  registerSessionInvalidations(app);
   app.addHook("onSend", idempotencyOnSend);
   app.addHook("onResponse", async (req, reply) => {
     // Browser diagnostics are intentionally not a domain mutation: emitting

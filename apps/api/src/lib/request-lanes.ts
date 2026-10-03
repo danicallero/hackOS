@@ -1,4 +1,4 @@
-import { SSE_TOPICS } from "@hackos/shared/events";
+import { REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 
 export const REQUEST_LANES = ["P0", "P1", "P2", "P3"] as const;
 export type RequestLane = (typeof REQUEST_LANES)[number];
@@ -30,7 +30,13 @@ function pathAndQuery(url: string): { path: string; query: URLSearchParams } {
  * User and entry ids are intentionally not returned as metric labels.
  */
 export function laneForSseTopic(topic: string): RequestLane {
-  if (topic === SSE_TOPICS.QUEUE || topic === SSE_TOPICS.LOGISTICS || topic === SSE_TOPICS.AUDIT) {
+  if (
+    topic === SSE_TOPICS.QUEUE ||
+    topic === SSE_TOPICS.QUEUE_FIXTURE ||
+    topic === `${SSE_TOPICS.LOGISTICS}:fixture` ||
+    topic === SSE_TOPICS.LOGISTICS ||
+    topic === SSE_TOPICS.AUDIT
+  ) {
     return "P0";
   }
   if (
@@ -84,6 +90,14 @@ export function classifyRequestLane(input: RequestLaneInput): RequestLane {
   if (path === "/api/announcements/public" || path === "/api/content/stream") return "P2";
   if (path === "/api/tv/stream" || (path.startsWith("/api/tv/") && method === "GET")) {
     return "P2";
+  }
+  if (path === "/api/realtime/stream") {
+    const lanes = (query.get("scopes") ?? "").split(",").map((scope) => {
+      if (scope === REALTIME_SCOPES.PERSONAL) return "P3" as const;
+      if (scope.startsWith(REALTIME_SCOPES.REVIEW_PREFIX)) return "P1" as const;
+      return laneForSseTopic(scope.replace(REALTIME_SCOPES.DOMAIN_PREFIX, ""));
+    });
+    return lanes.sort((a, b) => requestLaneRank(a) - requestLaneRank(b))[0] ?? "P1";
   }
   if (path === "/api/events/stream") return laneForSseTopic(query.get("topic") ?? "");
 

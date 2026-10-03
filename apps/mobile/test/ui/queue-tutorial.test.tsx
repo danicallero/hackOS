@@ -35,7 +35,10 @@ jest.mock("@/lib/queue-tutorial", () => ({
   markQueueTutorialSeen: () => Promise.resolve(),
 }));
 jest.mock("@/lib/router-tabs-inset", () => ({ useRouterTabBarScrollBottomInset: () => 0 }));
-jest.mock("@/lib/server-events", () => ({ subscribeToServerEvent: () => () => {} }));
+jest.mock("@/lib/server-events", () => ({
+  subscribeToServerEvent: () => () => {},
+  isServerEventConnected: () => false,
+}));
 jest.mock("@/lib/use-android-top-inset", () => ({ useAndroidTopInset: () => 0 }));
 jest.mock("@/lib/use-cached-api", () => ({
   useCachedApi: () => ({
