@@ -52,22 +52,19 @@ describe("TvDisplay public realtime boundary", () => {
     useEventSource.mockClear();
   });
 
-  it("subscribes only to dedicated payload-free public invalidations", () => {
+  it("subscribes once to the payload-free public TV invalidations", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
 
     act(() => root?.render(<TvDisplay />));
 
-    expect(useEventSource).toHaveBeenCalledTimes(2);
+    expect(useEventSource).toHaveBeenCalledOnce();
     expect(useEventSource).toHaveBeenCalledWith(
       "/api/tv/stream",
       expect.objectContaining({ events: [EVENTS.DATA_CHANGED] }),
     );
-    expect(useEventSource).toHaveBeenCalledWith(
-      "/api/content/stream",
-      expect.objectContaining({ events: [EVENTS.DATA_CHANGED] }),
-    );
+    expect(useEventSource).not.toHaveBeenCalledWith("/api/content/stream", expect.anything());
     expect(useEventSource).not.toHaveBeenCalledWith("/api/queue/stream", expect.anything());
   });
 });

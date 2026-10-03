@@ -96,6 +96,18 @@ export function publicInvalidationFor(topic: string): PublicInvalidation | null 
   return null;
 }
 
+/**
+ * A TV wall needs queue/TV state *and* public content, but it should not
+ * hold two sockets. Keep `/api/content/stream` for content-only consumers
+ * while mirroring its payload-free invalidation onto the TV channel too.
+ */
+export function publicInvalidationsFor(topic: string): PublicInvalidation[] {
+  const primary = publicInvalidationFor(topic);
+  if (!primary) return [];
+  if (topic !== SSE_TOPICS.CONTENT) return [primary];
+  return [primary, { topic: SSE_TOPICS.PUBLIC_TV, type: EVENTS.DATA_CHANGED, data: {} }];
+}
+
 function isPublicInvalidationTopic(topic: string): boolean {
   return topic === SSE_TOPICS.PUBLIC_TV || topic === SSE_TOPICS.PUBLIC_CONTENT;
 }
@@ -203,8 +215,7 @@ export async function broadcast<T>(
     await valkey.publish(`${CHANNEL_PREFIX}${topic}`, formatSse(envelope));
     // Public walls see only their relevant, payload-free invalidation. This is
     // intentionally separate from authenticated domain refresh notifications.
-    const publicInvalidation = publicInvalidationFor(topic);
-    if (publicInvalidation) {
+    for (const publicInvalidation of publicInvalidationsFor(topic)) {
       await broadcast(publicInvalidation.topic, publicInvalidation.type, publicInvalidation.data);
     }
     return envelope;

@@ -934,7 +934,10 @@ physical iOS/Android and EAS verification remains a release-gate task in
   Wired once for the app's lifetime from `app/_layout.tsx`.
 - `lib/server-events.ts` — native authenticated SSE reader. It takes the
   restored cookie from Better Auth's Expo plugin, parses the RN fetch stream,
-  reconnects after interruption, and emits personal queue/wallet events. SSE
+  reconnects after interruption, and emits personal queue/wallet/session events.
+  The app keeps this one personal stream for every authenticated account;
+  permission and enterprise-affiliation changes are targeted to the affected
+  account instead of holding a second global identity stream. SSE
   is intentionally lossy: reconnects, foreground returns, and numeric event-id
   gaps emit a synthetic resync signal so mounted screens refetch their
   authoritative read model; the `Last-Event-ID` header is telemetry for the

@@ -20,11 +20,7 @@ import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
 import { registerForPushNotifications } from "@/lib/push";
-import {
-  startIdentityEventStream,
-  startPersonalEventStream,
-  subscribeToServerEvent,
-} from "@/lib/server-events";
+import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { isOperator } from "@/lib/tabs";
 import { warmWalletCache } from "@/lib/wallet-cache";
 import { colors } from "@/theme/colors";
@@ -86,7 +82,6 @@ function RootLayoutSessionContents() {
       <PushRegistration authenticated={authenticated} />
       <WalletCacheWarmup authenticated={authenticated} />
       <NotificationListeners />
-      <IdentitySessionRefresh authenticated={authenticated} />
       <MobileAccessGate authenticated={authenticated} />
       <PersonalEventStream authenticated={authenticated} />
       <RootLayoutNav
@@ -128,10 +123,16 @@ function useInitialSessionPending(pending: boolean) {
   return waitingForInitialSession && !elapsed;
 }
 
-/** Push-independent foreground updates for queue and wallet state (H28/H38). */
+/** Push-independent queue, wallet and session updates over one personal stream. */
 function PersonalEventStream({ authenticated }: { authenticated: boolean }) {
   const { me, refetch } = useMeContext();
-  const enabled = authenticated && me?.hasEventAccess === true;
+  const enabled = authenticated;
+  useEffect(() => {
+    if (!enabled) return;
+    return subscribeToServerEvent(EVENTS.USER_SESSION_CHANGED, () => {
+      void refetch();
+    });
+  }, [enabled, refetch]);
   useEffect(() => {
     if (!enabled) return;
     return startPersonalEventStream({
@@ -152,29 +153,6 @@ function LanguageSync() {
   useEffect(() => {
     if (me && isSupportedLanguage(me.language)) setLanguage(me.language);
   }, [me, setLanguage]);
-  return null;
-}
-
-/** Revalidates the one session/access/profile snapshot after role changes. */
-function IdentitySessionRefresh({ authenticated }: { authenticated: boolean }) {
-  const { me, refetch } = useMeContext();
-  useEffect(() => {
-    if (!authenticated) return;
-    return subscribeToServerEvent(EVENTS.DOMAIN_CHANGED, () => {
-      void refetch();
-    });
-  }, [authenticated, refetch]);
-  useEffect(
-    () =>
-      startIdentityEventStream({
-        enabled: authenticated,
-        identityKey: me?.id,
-        onResync: () => {
-          void refetch();
-        },
-      }),
-    [authenticated, me?.id, refetch],
-  );
   return null;
 }
 

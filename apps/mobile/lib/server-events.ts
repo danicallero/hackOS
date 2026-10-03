@@ -1,4 +1,4 @@
-import { EVENTS, SSE_TOPICS, type SseEnvelope } from "@hackos/shared/events";
+import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
 import { AppState, type AppStateStatus, Platform } from "react-native";
 import { authClient } from "./auth-client";
 import { API_URL } from "./env";
@@ -214,13 +214,6 @@ function startEventStream(
 /** Native authenticated SSE loop for the personal user topic (H28/H38). */
 export function startPersonalEventStream(options: ServerEventStreamOptions = {}): () => void {
   return startEventStream("/api/queue/me/stream", options);
-}
-
-/** Native identity stream so role/capability changes revalidate /api/me immediately. */
-export function startIdentityEventStream(
-  options: boolean | ServerEventStreamOptions = true,
-): () => void {
-  return startEventStream(`/api/events/stream?topic=${SSE_TOPICS.IDENTITY}`, options);
 }
 
 /**

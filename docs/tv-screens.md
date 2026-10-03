@@ -33,11 +33,12 @@ no TV timetable, rotation, or scheduler.
 ### Public realtime boundary
 
 `/api/tv/stream` and `/api/content/stream` are deliberately invalidation-only
-public streams. The former subscribes to the dedicated `public-tv` topic, which
-is mirrored only from `queue` and `tv`; the latter subscribes to
-`public-content`, mirrored from `content` and explicit public sponsor/challenge
-changes. Their `data.changed` envelope is empty — no display, room, account,
-project, or source-event payload — so a screen refetches the public
+public streams. The TV screen uses only `/api/tv/stream`: its dedicated
+`public-tv` topic mirrors `queue`, `tv`, and public `content` changes. The
+separate `public-content` topic remains available to content-only consumers
+and is mirrored from `content` and explicit public sponsor/challenge changes.
+Their `data.changed` envelope is empty — no display, room, account, project,
+or source-event payload — so a screen refetches the public
 `/api/tv/mode`, sanitized `/api/tv/rooms`, and public content projections after
 it arrives without observing unrelated system writes. The room projection includes only
 visible room/challenge/team-status fields, never team-member identities, email,

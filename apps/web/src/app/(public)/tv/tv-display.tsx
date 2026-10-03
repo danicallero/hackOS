@@ -968,16 +968,13 @@ export function TvDisplay() {
     void load();
   }, [load]);
 
-  // Dedicated public TV/content streams carry only `data.changed` invalidations.
-  // Always refetch sanitized projections rather than deriving screen state from
-  // an SSE payload: raw queue events stay on the operational-only channel.
+  // The public TV stream carries every projection invalidation this screen
+  // needs (queue/TV plus public content). Always refetch sanitized projections
+  // rather than deriving screen state from an SSE payload: raw queue events
+  // stay on the operational-only channel.
   const refreshPublicProjection = useCallback(() => void load(), [load]);
 
   useEventSource("/api/tv/stream", {
-    events: [EVENTS.DATA_CHANGED],
-    onEvent: refreshPublicProjection,
-  });
-  useEventSource("/api/content/stream", {
     events: [EVENTS.DATA_CHANGED],
     onEvent: refreshPublicProjection,
   });
