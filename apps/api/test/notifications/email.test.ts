@@ -196,13 +196,15 @@ describe("event reminder email (H28,H45,H52)", () => {
     expect((await drainOutboxOnce()).sent).toBe(1);
     expect((await getOutboxRow(id)).status).toBe("sent");
     const messages = await waitForMailpit(1);
-    const message = await getMailpitMessage(messages[0].ID);
+    const firstMessage = messages[0];
+    if (!firstMessage) throw new Error("Expected the event reminder in Mailpit");
+    const message = await getMailpitMessage(firstMessage.ID);
     expect(message.Text).toContain("18:00 CET");
     expect(message.HTML).toContain('src="cid:event-ticket@hackos"');
     expect(message.HTML).toContain("apple-wallet-badge-es.png");
     expect(message.HTML).toContain("google-wallet-button-es.png");
     const raw = await (
-      await fetch(`http://localhost:8025/api/v1/message/${messages[0].ID}/raw`)
+      await fetch(`http://localhost:8025/api/v1/message/${firstMessage.ID}/raw`)
     ).text();
     expect(raw).toContain("Content-ID: <event-ticket@hackos>");
     expect(raw).toContain("Content-Type: image/png");
