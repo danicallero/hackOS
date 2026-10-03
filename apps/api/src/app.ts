@@ -320,7 +320,8 @@ export async function buildApp(): Promise<App> {
   const requestStartedAt = new WeakMap<FastifyRequest, bigint>();
   const finishedRequests = new WeakSet<FastifyRequest>();
 
-  app.addHook("onRequest", async (req) => {
+  app.addHook("onRequest", async (req, reply) => {
+    const admissionAbort = new AbortController();
     const requestPath = req.url.split("?", 1)[0] ?? req.url;
     const isSessionProbe = requestPath === "/api/auth/get-session";
     const lane = classifyRequestLane({ url: req.url, method: req.method, userId: req.userId });
@@ -328,6 +329,14 @@ export async function buildApp(): Promise<App> {
     if (!isSseRequest(req.url)) {
       requestStartedAt.set(req, process.hrtime.bigint());
       httpRequestsInFlight.inc();
+      // #891: an aborted response has no final HTTP status to count, but
+      // must still release its admission slot and in-flight gauge once.
+      reply.raw.once("close", () => {
+        if (reply.raw.writableFinished) return;
+        admissionAbort.abort();
+        releaseAdmission(req);
+        finishHttpRequest(req);
+      });
     }
     // A long-lived SSE socket must never hold an admission slot for its whole
     // lifetime. The connection budget/backpressure contract remains entirely
@@ -346,7 +355,12 @@ export async function buildApp(): Promise<App> {
     // the gate is meant to protect. Lane classification already keeps P0/P1
     // operational work ahead of the reserved P2/P3 share; authorization still
     // runs in the route handler.
-    const lease = await requestAdmission.acquire(lane);
+    const lease = await requestAdmission.acquire(lane, admissionAbort.signal);
+    // The connection may have closed while this request awaited admission.
+    if (finishedRequests.has(req)) {
+      lease.release();
+      return;
+    }
     admissionLeases.set(req, lease);
     if (
       req.userId != null &&
@@ -373,21 +387,21 @@ export async function buildApp(): Promise<App> {
   app.addHook("onResponse", async (req) => releaseAdmission(req));
   app.addHook("onError", async (req) => releaseAdmission(req));
 
-  const finishHttpRequest = (req: FastifyRequest, statusCode: number) => {
+  const finishHttpRequest = (req: FastifyRequest, statusCode?: number) => {
     if (finishedRequests.has(req)) return;
     const startedAt = requestStartedAt.get(req);
     if (!startedAt) return;
     finishedRequests.add(req);
     httpRequestsInFlight.dec();
+    if (statusCode === undefined) return;
     const lane = classifyRequestLane({ url: req.url, method: req.method, userId: req.userId });
     const route = req.routeOptions.url ?? "unmatched";
     const durationSeconds = Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
     observeHttpResponse(lane, req.method, route, statusCode, durationSeconds);
   };
   app.addHook("onResponse", async (req, reply) => finishHttpRequest(req, reply.statusCode));
-  app.addHook("onError", async (req, reply) =>
-    finishHttpRequest(req, reply.statusCode >= 400 ? reply.statusCode : 500),
-  );
+  // #891: onError runs before the error handler chooses the final status.
+  // Record completed responses only in onResponse, including handled errors.
 
   app.addHook("onResponse", async (req, reply) => {
     const fixture = req.reviewFixtureContext;

@@ -165,6 +165,10 @@ be pushed a fix — holders must re-add the pass.
 1. The API bumps `wallet_passes.update_tag` — canonical format is **integer
    epoch milliseconds** (`0504`; it was mixed seconds/millis before, which
    broke the text comparison in step 3 and devices never refetched).
+   Event-wide bumps use the greater of database epoch milliseconds and one
+   above the highest existing Apple tag, with a per-row increment floor for
+   concurrent bumps. This keeps them strictly ahead of a device's previous
+   cursor even when the database clock lags the Node issuance clock (#896).
 2. The `logistics.wallet-sync` worker sends an APNs push per registered device
    (`apple-push.ts`): empty payload, `apns-topic` = pass type id,
    `apns-push-type: alert` (background pushes get throttled/dropped by iOS).
@@ -267,7 +271,10 @@ switch and send date share the category's Save changes action and unsaved-change
 guard. `PUT /api/event` accepts optional `eventReminderScheduledAt` (ISO instant;
 null cancels). Event identity, dates, reminder and audit commit together. The
 field requires `EVENT_MANAGE`; scheduling needs a non-empty name and a future
-send time before `event_starts_at`. GET includes the latest `eventReminder`
+send time before `event_starts_at`. Scheduling and the due worker use the
+PostgreSQL clock; regression tests derive invalid instants from that clock so
+host/database skew cannot bypass the rejection or rollback assertions (#894,
+#895). GET includes the latest `eventReminder`
 status (`scheduled`, `queued`, `cancelled`, `expired`) and recipient count.
 
 Migration 0603 stores reminder history, with at most one pending schedule.
