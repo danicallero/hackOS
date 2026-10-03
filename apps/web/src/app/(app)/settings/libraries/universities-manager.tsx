@@ -136,7 +136,12 @@ export function UniversitiesManager() {
       await load();
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : t("couldNotDeleteUniversity"),
+        err instanceof ApiError &&
+          (err.details as { reason?: string } | undefined)?.reason === "university_in_use"
+          ? t("universityInUse")
+          : err instanceof ApiError
+            ? err.message
+            : t("couldNotDeleteUniversity"),
         t("deleteUniversityTitle"),
       );
     } finally {

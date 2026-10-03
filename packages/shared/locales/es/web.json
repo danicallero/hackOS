@@ -2070,6 +2070,7 @@
   "universitiesNormalized": "Universidades unificadas.",
   "couldNotNormalizeUniversities": "No se han podido unificar las universidades.",
   "couldNotDeleteUniversity": "No se ha podido eliminar la universidad.",
+  "universityInUse": "Esta universidad está vinculada a perfiles de usuarios. Consolídala en otra universidad antes de eliminarla.",
   "searchUniversitiesPlaceholder": "Buscar universidades…",
   "noMatchesTitle": "Sin coincidencias",
   "noUniversitiesYetTitle": "Aún no hay universidades",

@@ -214,6 +214,31 @@ describe("university directory", () => {
     expect(del.statusCode).toBe(204);
   });
 
+  it("returns a business conflict when deleting a university linked to a profile", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.INTOLERANCES_MANAGE]);
+    const user = await createUser();
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query("INSERT INTO universities (name) VALUES ($1) RETURNING id", [
+      "Used University",
+    ]);
+    const id = rows[0].id;
+    await pool.query("UPDATE users SET university_id = $1 WHERE id = $2", [id, user]);
+    const response = await a.inject({
+      method: "DELETE",
+      url: `/api/universities/${id}`,
+      headers: asUser(manager),
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.details.reason).toBe("university_in_use");
+    expect(response.json().error.message).toContain("linked to user profiles");
+    expect(
+      (await pool.query("SELECT university_id FROM users WHERE id = $1", [user])).rows[0]
+        .university_id,
+    ).toBe(id);
+    expect((await pool.query("SELECT id FROM universities WHERE id = $1", [id])).rowCount).toBe(1);
+  });
+
   it("accepts the administrator wildcard for university management", async () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);

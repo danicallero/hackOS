@@ -2070,6 +2070,7 @@
   "universitiesNormalized": "Universities merged.",
   "couldNotNormalizeUniversities": "Could not merge the universities.",
   "couldNotDeleteUniversity": "Could not delete the university.",
+  "universityInUse": "This university is linked to user profiles. Merge it into another university before deleting it.",
   "searchUniversitiesPlaceholder": "Search universities…",
   "noMatchesTitle": "No matches",
   "noUniversitiesYetTitle": "No universities yet",

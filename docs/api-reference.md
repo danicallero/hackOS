@@ -152,7 +152,12 @@ cancels stale requests, supports
 keyboard selection, and allows manual city/province/country entry when suggestions
 are unavailable or incomplete (H12). City labels are stored as text while degree
 answers retain the catalogue ID. The degree catalogue follows the university
-catalogue's authenticated-proposal and staff-curation boundary. Staff can merge
+catalogue's authenticated-proposal and staff-curation boundary.
+Universities linked to user profiles cannot be deleted: the route returns 409
+with `details.reason = university_in_use`, and the web displays a localized
+message advising consolidation into another university. Profiles remain intact.
+
+Staff can merge
 duplicate degree rows transactionally: every answer using the source catalogue
 ID moves to the retained ID before the duplicate is deleted, and the audited
 result reports the number of updated answers (#846).
