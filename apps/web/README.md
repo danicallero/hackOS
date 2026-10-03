@@ -23,6 +23,13 @@ backend, one workstream at a time.
 - `@hackos/shared` for the capability catalogue and SSE event contract — the
   same single source the API uses.
 
+Realtime readers share one authenticated fetch/SSE transport per tab through
+`lib/sse-broker.ts`, with canonical identity owned by `SessionProvider` and
+100 ms scope-union coalescing. Existing reader paths map to authorized logical
+scopes; recovery and sequence gaps stay scope-specific. Public TV uses one
+payload-free stream. See [realtime transport](../../docs/realtime-transport.md)
+for the contract, bounds, revocation and migration behavior.
+
 ## Edition theme
 
 `src/styles/theme.css` is the visual source of truth: the HackUDC 2027 palette,

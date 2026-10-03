@@ -210,15 +210,7 @@ export function requireEntryJudgeOrCapability(
   ...capabilities: Capability[]
 ): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
-    const userId = await requireUser(req);
-    await assertQueueEntryScope(pool, userId, numberParam(req, "entryId"));
-    if (await hasAnyCapability(req, capabilities)) return;
-    const entryId = numberParam(req, "entryId");
-    const challengeId = await entryChallengeId(entryId);
-    // Sponsor representatives judge their own enterprise by default; external
-    // judges reach the same scope through the enterprise roster.
-    if (challengeId != null && (await judgesChallenge(userId, challengeId))) return;
-    denied("queue entry", { entryId, capabilities });
+    await assertEntryJudgeAccess(req, numberParam(req, "entryId"), capabilities);
   };
 }
 
@@ -308,3 +300,19 @@ export const requireReviewEntryAccess: preHandlerHookHandler = async (req) => {
   await assertQueueEntryScope(pool, userId, entryId);
   await assertEntryInScope(await resolveReviewScope(getRequestAuthorizationContext(req)), entryId);
 };
+
+/** Shared contextual authorization for HTTP and multiplexed entry subscriptions (#892). */
+export async function assertEntryJudgeAccess(
+  req: FastifyRequest,
+  entryId: number,
+  capabilities: readonly Capability[] = [CAPABILITIES.JUDGE_PANEL],
+): Promise<void> {
+  const userId = await requireUser(req);
+  await assertQueueEntryScope(pool, userId, entryId);
+  if (await hasAnyCapability(req, capabilities)) return;
+  const challengeId = await entryChallengeId(entryId);
+  // Sponsor representatives judge their own enterprise by default; external
+  // judges reach the same scope through the enterprise roster.
+  if (challengeId != null && (await judgesChallenge(userId, challengeId))) return;
+  denied("queue entry", { entryId, capabilities });
+}

@@ -70,13 +70,14 @@ connect directly to PostgreSQL, Valkey or MinIO.
 2. Live queue, logistics, TV and collaboration views hold an SSE connection.
    SSE carries a small invalidation/event envelope; clients refetch the
    authoritative read model rather than receiving a full state copy.
-3. The web broker shares one physical `EventSource` per topic and identity.
+3. The web broker shares one authenticated fetch/SSE connection per tab across
+   independently authorized logical scopes.
    Matching events invalidate the exact browser read-model key and refetch
    once after a short debounce. If SSE is unavailable, live views poll every
    15 seconds and revalidate after a background tab resumes.
 4. Mobile uses the same API contract, keeps one in-flight read per cache key,
    persists a namespaced offline read cache, and retries after connectivity
-   returns. A foreground safety poll is opt-in per view.
+   returns. SSE-backed polls run only while their scope is disconnected.
 
 For 500 concurrent connections, the default budgets allow up to 2,000 local
 SSE connections globally, 500 per topic and 20 per authenticated client. That
@@ -246,3 +247,13 @@ state and Valkey memory/eviction counters before, during and after the run.
 The change is ready only when P0/P1 budgets pass, no service reaches its RAM
 ceiling, swap remains a short burst rather than a sustained working set, and
 the notification backlog drains instead of growing.
+
+## Multiplexed realtime transport (#892)
+
+Authenticated web/native readers share `/api/realtime/stream` with independently
+authorized logical scopes, per-topic cursors and scoped authoritative recovery.
+TV retains one public payload-free stream for all rendered domains. Legacy
+endpoints remain available for installed clients. Physical connection budgets
+and gauges count the shared response once; logical attachments and access-check
+load remain separate. See [realtime transport](./realtime-transport.md) for the
+scope/authorization table, lifecycle, revocation, metrics and 600-client results.

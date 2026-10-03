@@ -1,0 +1,61 @@
+{
+  "generatedAt": "2026-10-03T21:54:07.270Z",
+  "environment": {
+    "node": "v25.2.1",
+    "database": "isolated ephemeral local Postgres",
+    "apiPool": 24,
+    "perTopicLimit": 2000
+  },
+  "scenario": "Three logical scopes per instance; one identity/project event each; 10% of instances background/foreground at 5 seconds; coalesced authoritative HTTP reads; separate API processes per mode.",
+  "limitations": "Local qualification, not production capacity certification. No browser/native rendering, judging WebSocket, proxy, real cookies, scanner writes or unrelated workloads. Per-topic limit raised from 500 to admit 600 common-domain subscribers. Memory is process peak without forced GC. Reconnects are controlled foreground recoveries. The synchronized read burst exceeds local finite-request admission; errors include HTTP 429 and transport failures. This result does not qualify a 600-client refetch burst for production.",
+  "legacy": {
+    "mode": "legacy",
+    "clients": 600,
+    "scopesPerClient": 3,
+    "durationSeconds": 30.439,
+    "physicalConnectionsPeak": 1800,
+    "logicalSubscriptionsPeak": 1800,
+    "apiRssBaselineBytes": 268533760,
+    "apiRssPeakBytes": 325189632,
+    "apiHeapPeakBytes": 161989304,
+    "heartbeatWrites": 1800,
+    "eventWrites": 1200,
+    "transportReopens": 180,
+    "reconnectsPerSecond": 5.913466276815927,
+    "apiRefetches": 1320,
+    "apiRefetchesPerSecond": 43.365419363316796,
+    "apiRefetchErrors": 958,
+    "apiRefetchStatuses": {
+      "200": 362,
+      "429": 907,
+      "network_error": 51
+    },
+    "reauthorizations": 0,
+    "closedTransportsDuringRun": 180
+  },
+  "multiplexed": {
+    "mode": "multiplexed",
+    "clients": 600,
+    "scopesPerClient": 3,
+    "durationSeconds": 30.345,
+    "physicalConnectionsPeak": 600,
+    "logicalSubscriptionsPeak": 1800,
+    "apiRssBaselineBytes": 276496384,
+    "apiRssPeakBytes": 301629440,
+    "apiHeapPeakBytes": 150793136,
+    "heartbeatWrites": 600,
+    "eventWrites": 1200,
+    "transportReopens": 60,
+    "reconnectsPerSecond": 1.9772614928324272,
+    "apiRefetches": 1320,
+    "apiRefetchesPerSecond": 43.4997528423134,
+    "apiRefetchErrors": 990,
+    "apiRefetchStatuses": {
+      "200": 330,
+      "429": 698,
+      "network_error": 292
+    },
+    "reauthorizations": 1800,
+    "closedTransportsDuringRun": 60
+  }
+}

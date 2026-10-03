@@ -548,3 +548,13 @@ panel authorization is never delegated to them.
 See root [`README.md`](../README.md) for the full local dev command
 reference (`pnpm infra:up`, migrations, seeding, running the API/web/mobile
 apps together).
+
+## Multiplexed realtime transport (#892)
+
+Authenticated web/native readers share `/api/realtime/stream` with independently
+authorized logical scopes, per-topic cursors and scoped authoritative recovery.
+TV retains one public payload-free stream for all rendered domains. Legacy
+endpoints remain available for installed clients. Physical connection budgets
+and gauges count the shared response once; logical attachments and access-check
+load remain separate. See [realtime transport](./realtime-transport.md) for the
+scope/authorization table, lifecycle, revocation, metrics and 600-client results.

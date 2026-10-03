@@ -38,7 +38,7 @@ import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { declineOwnSpot } from "@/lib/self-service";
-import { subscribeToServerEvent } from "@/lib/server-events";
+import { isServerEventConnected, subscribeToServerEvent } from "@/lib/server-events";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { type WalletTicketPayload, walletCacheKey } from "@/lib/wallet-cache";
@@ -92,6 +92,8 @@ export default function WalletScreen() {
   } = useCachedApi(me ? walletCacheKey(me.id) : "user:unknown:wallet", fetchTicket, {
     enabled: me !== null,
     pollMs: 30_000,
+    pollWhen: () => !isServerEventConnected(),
+    backgroundRevalidationMs: 0,
   });
   const [refreshing, setRefreshing] = useState(false);
 

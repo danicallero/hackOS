@@ -1,4 +1,12 @@
-import { createContext, type ReactNode, useContext, useEffect, useMemo } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+} from "react";
+import { setServerEventIdentity } from "./server-events";
 import { registerSignOutListener } from "./sign-out-events";
 import type { Me } from "./types";
 import { useMe } from "./use-me";
@@ -29,14 +37,26 @@ const MeActionsContext = createContext<MeActionsContextValue | null>(null);
 /** Wraps the authenticated part of the tree in a single shared /api/me fetch. */
 export function MeProvider({ children }: { children: ReactNode }) {
   const value = useMe();
+  useLayoutEffect(() => {
+    setServerEventIdentity(value.me?.id ?? null);
+  }, [value.me?.id]);
   const actions = useMemo(
     () => ({ clear: value.clear, refetch: value.refetch }),
     [value.clear, value.refetch],
   );
-  useEffect(() => registerSignOutListener(value.clear), [value.clear]);
+  useEffect(
+    () =>
+      registerSignOutListener(() => {
+        setServerEventIdentity(null);
+        value.clear();
+      }),
+    [value.clear],
+  );
   return (
     <MeActionsContext.Provider value={actions}>
-      <MeContext.Provider value={value}>{children}</MeContext.Provider>
+      <MeContext.Provider key={value.me?.id ?? "anonymous"} value={value}>
+        {children}
+      </MeContext.Provider>
     </MeActionsContext.Provider>
   );
 }

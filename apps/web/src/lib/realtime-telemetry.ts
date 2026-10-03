@@ -19,7 +19,8 @@ export type RealtimeTopic =
   | "user"
   | "public-tv"
   | "public-content"
-  | "content";
+  | "content"
+  | "multiplexed";
 
 export type RealtimeRefetchTrigger = "sse" | "visibility" | "poll" | "retry" | "manual";
 
@@ -65,6 +66,9 @@ export function telemetryScopeForStream(streamPath: string): RealtimeTelemetrySc
   const url = streamUrl(streamPath);
   if (!url) return null;
 
+  if (url.pathname === "/api/realtime/stream") {
+    return { surface: "participant-queue", topic: "multiplexed" };
+  }
   if (url.pathname === "/api/queue/me/stream") {
     return { surface: "participant-queue", topic: "user" };
   }

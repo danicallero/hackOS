@@ -1,7 +1,7 @@
 "use client";
 
-import { EVENTS } from "@hackos/shared/events";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { API_URL } from "@/lib/env";
 import {
   observeRefetch,
@@ -9,7 +9,13 @@ import {
   telemetryScopeForStream,
 } from "@/lib/realtime-telemetry";
 import { invalidateServerState, readServerState, type ServerStateKey } from "@/lib/server-state";
-import { type SseResyncContext, type SseResyncReason, subscribeToSse } from "@/lib/sse-broker";
+import {
+  type SseResyncContext,
+  type SseResyncReason,
+  sseIdentitySnapshot,
+  subscribeSseIdentity,
+  subscribeToSse,
+} from "@/lib/sse-broker";
 
 /**
  * SSE consumption for the queue/judging vertical (H38, H41-H42). The server
@@ -18,11 +24,11 @@ import { type SseResyncContext, type SseResyncReason, subscribeToSse } from "@/l
  * event name. Clients refetch their read model on matching server events; the
  * payload is a signal, not full state (see plan §4).
  *
- * `EventSource` can't set headers; the queue/tv streams are cookie-auth or
- * public, so `withCredentials` carries the session cookie.
+ * The shared fetch reader sends credentials for cookie-authenticated scopes
+ * and honors server retry hints across reconnections.
  */
 
-export type SseEnvelope<T = unknown> = { type: string; id: string; at: string; data: T };
+export type { SseEnvelope } from "@hackos/shared/events";
 
 /** Keep live views usable when a browser suspends the tab or loses SSE. */
 const FALLBACK_POLL_MS = 15_000;
@@ -59,6 +65,11 @@ export function useEventSource(
   { events, onEvent, enabled = true, identityKey = null, onResync }: UseEventSourceOptions = {},
 ): { connected: boolean } {
   const [connected, setConnected] = useState(false);
+  const sessionIdentity = useSyncExternalStore(
+    subscribeSseIdentity,
+    sseIdentitySnapshot,
+    () => null,
+  );
   // Keep the latest callback without forcing a resubscribe every render.
   // Assigned in useEffect to comply with react-hooks/rules-of-hooks.
   const onEventRef = useRef(onEvent);
@@ -76,9 +87,9 @@ export function useEventSource(
 
   useEffect(() => {
     // SSR and lightweight component-test environments do not provide the
-    // browser EventSource constructor. There is no stream to subscribe to in
+    // browser window. There is no stream to subscribe to in
     // either case; the next mounted browser session performs the normal sync.
-    if (!enabled || !path || typeof EventSource === "undefined") return;
+    if (!enabled || !path || typeof window === "undefined") return;
 
     const names = eventsKey ? eventsKey.split(",") : null;
     const unsubscribe = subscribeToSse(`${API_URL}${path}`, {
@@ -86,7 +97,7 @@ export function useEventSource(
       onConnectionChange: setConnected,
       onEvent: (envelope) => onEventRef.current?.(envelope),
       onResync: (context) => onResyncRef.current?.(context),
-      identityKey,
+      identityKey: sessionIdentity,
     });
 
     if (hasPreviousIdentityKey.current && previousIdentityKey.current !== identityKey) {
@@ -103,7 +114,7 @@ export function useEventSource(
       unsubscribe();
       setConnected(false);
     };
-  }, [path, enabled, eventsKey, identityKey]);
+  }, [path, enabled, eventsKey, identityKey, sessionIdentity]);
 
   return { connected };
 }
@@ -289,11 +300,12 @@ export function useLiveQuery<T>(
         invalidateServerState(resourceKey);
         if (requestRef.current) requestRef.current.cancelled = true;
       }
-      refetch("sse");
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => refetch("sse"), debounceMs);
     },
   });
 
-  // Browser backgrounding can suspend EventSource without delivering an
+  // Browser backgrounding can suspend SSE without delivering an
   // event. Revalidate once after a meaningful hidden interval, even if the
   // browser still reports the stream as open (H38, H41-H42).
   const hiddenAtRef = useRef<number | null>(null);

@@ -1,154 +1,221 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { physicalSseConnectionStats } from "./realtime-telemetry";
-import { subscribeToSse } from "./sse-broker";
+import { setSseIdentity, subscribeToSse } from "./sse-broker";
+import { mockRealtimeFetch } from "./sse-test-fixture";
 
-class FakeEventSource extends EventTarget {
-  static instances: FakeEventSource[] = [];
-  onopen: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  onmessage: ((event: MessageEvent) => void) | null = null;
-  close = vi.fn();
+const origin = "https://api.test";
+const mux = `${origin}/api/realtime/stream`;
+let fixture: ReturnType<typeof mockRealtimeFetch>;
+const disposers: (() => void)[] = [];
+const subscribe = (path: string, options: Parameters<typeof subscribeToSse>[1] = {}) => {
+  const dispose = subscribeToSse(`${origin}${path}`, options);
+  disposers.push(dispose);
+  return dispose;
+};
+const settle = async () => {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+};
 
-  constructor(
-    readonly url: string,
-    readonly options: EventSourceInit,
-  ) {
-    super();
-    FakeEventSource.instances.push(this);
-  }
-
-  emit(name: string, data: unknown) {
-    const event = new MessageEvent(name, { data: JSON.stringify(data) });
-    if (name === "message") this.onmessage?.(event);
-    else this.dispatchEvent(event);
-  }
-}
-
-describe("SSE broker", () => {
+describe("multiplexed SSE broker (#892)", () => {
   beforeEach(() => {
-    FakeEventSource.instances = [];
-    vi.stubGlobal("EventSource", FakeEventSource);
+    vi.useFakeTimers();
+    setSseIdentity(null, origin);
+    setSseIdentity(101, origin);
+    fixture = mockRealtimeFetch();
+  });
+  afterEach(() => {
+    for (const dispose of disposers.splice(0)) dispose();
+    setSseIdentity(null, origin);
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
-  afterEach(() => vi.unstubAllGlobals());
-
-  it("fans out one physical stream and closes it after the final unsubscribe", () => {
-    const firstEvent = vi.fn();
-    const secondEvent = vi.fn();
-    const firstConnection = vi.fn();
-    const secondConnection = vi.fn();
-    const url = "https://api.test/api/queue/stream";
-
-    const unsubscribeFirst = subscribeToSse(url, {
-      events: ["queue.changed"],
-      onConnectionChange: firstConnection,
-      onEvent: firstEvent,
-    });
-    const unsubscribeSecond = subscribeToSse(url, {
-      events: ["queue.changed"],
-      onConnectionChange: secondConnection,
-      onEvent: secondEvent,
-    });
-
-    expect(FakeEventSource.instances).toHaveLength(1);
-    expect(physicalSseConnectionStats(url)).toMatchObject({ active: 1, opened: 1 });
-    const source = FakeEventSource.instances[0];
-    source.onopen?.();
-    source.emit("queue.changed", { type: "queue.changed", id: "1", at: "now", data: {} });
-    expect(firstEvent).toHaveBeenCalledOnce();
-    expect(secondEvent).toHaveBeenCalledOnce();
-    expect(firstConnection).toHaveBeenLastCalledWith(true);
-    expect(secondConnection).toHaveBeenLastCalledWith(true);
-
-    unsubscribeFirst();
-    expect(source.close).not.toHaveBeenCalled();
-    unsubscribeSecond();
-    expect(source.close).toHaveBeenCalledOnce();
-    expect(physicalSseConnectionStats(url)).toMatchObject({ active: 0, closed: 1 });
-  });
-
-  it("canonicalizes equivalent topic URLs before opening a physical stream", () => {
-    const first = subscribeToSse("/api/queue/stream?topic=queue&mode=live", {
-      events: ["queue.changed"],
-      onConnectionChange: vi.fn(),
-    });
-    const second = subscribeToSse("/api/queue/stream?mode=live&topic=queue", {
-      events: ["queue.changed"],
-      onConnectionChange: vi.fn(),
-    });
-
-    expect(FakeEventSource.instances).toHaveLength(1);
+  it("coalesces unrelated topics and inconsistent component identity keys into one socket", async () => {
+    const personal = vi.fn();
+    const queue = vi.fn();
+    const sponsors = vi.fn();
+    const first = subscribe("/api/queue/me/stream", { identityKey: "shell", onEvent: personal });
+    subscribe("/api/queue/stream", { identityKey: 101, onEvent: queue });
+    subscribe("/api/events/stream?topic=sponsors", { onEvent: sponsors });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fixture.fetcher).toHaveBeenCalledOnce();
+    expect(fixture.connections[0].url).toBe(`${mux}?scopes=domain%3Asponsors%2Cpersonal%2Cqueue`);
+    expect(physicalSseConnectionStats(mux).active).toBe(1);
+    fixture.connections[0].emit("personal", 1, "user.notification");
+    await settle();
+    expect(personal).toHaveBeenCalledOnce();
+    expect(queue).not.toHaveBeenCalled();
+    expect(sponsors).not.toHaveBeenCalled();
     first();
+    expect(fixture.connections[0].signal.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fixture.fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("reference counts identical subscriptions and releases the final reader", async () => {
+    const first = subscribe("/api/queue/stream");
+    const second = subscribe("/api/queue/stream");
+    await vi.advanceTimersByTimeAsync(100);
+    first();
+    expect(fixture.connections[0].signal.aborted).toBe(false);
     second();
+    expect(fixture.connections[0].signal.aborted).toBe(true);
+    expect(physicalSseConnectionStats(mux).active).toBe(0);
   });
 
-  it("keeps event filters isolated between subscribers", () => {
+  it("filters names and tracks interleaved sequence IDs independently by topic", async () => {
     const queueEvent = vi.fn();
-    const roomEvent = vi.fn();
-    const unsubscribeQueue = subscribeToSse("/stream", {
+    const sponsorEvent = vi.fn();
+    const queueResync = vi.fn();
+    const sponsorResync = vi.fn();
+    subscribe("/api/queue/stream", {
       events: ["queue.changed"],
-      onConnectionChange: vi.fn(),
       onEvent: queueEvent,
+      onResync: queueResync,
     });
-    const unsubscribeRoom = subscribeToSse("/stream", {
-      events: ["room.changed"],
-      onConnectionChange: vi.fn(),
-      onEvent: roomEvent,
+    subscribe("/api/events/stream?topic=sponsors", {
+      onEvent: sponsorEvent,
+      onResync: sponsorResync,
     });
-
-    FakeEventSource.instances[0].emit("queue.changed", {
-      type: "queue.changed",
-      id: "1",
-      at: "now",
-      data: {},
-    });
+    await vi.advanceTimersByTimeAsync(100);
+    const source = fixture.connections[0];
+    source.emit("queue", 10, "queue.changed");
+    source.emit("domain:sponsors", 80);
+    source.emit("queue", 11, "room.changed");
+    source.emit("domain:sponsors", 81);
+    source.emit("queue", 13, "queue.changed");
+    await settle();
     expect(queueEvent).toHaveBeenCalledOnce();
-    expect(roomEvent).not.toHaveBeenCalled();
-
-    unsubscribeQueue();
-    unsubscribeRoom();
+    expect(sponsorEvent).toHaveBeenCalledTimes(2);
+    expect(queueResync).toHaveBeenCalledExactlyOnceWith({
+      reason: "gap",
+      topic: "queue",
+      lastEventId: "11",
+    });
+    expect(sponsorResync).not.toHaveBeenCalled();
   });
 
-  it("requests an authoritative resync after reconnect and an event-id gap", () => {
-    const onResync = vi.fn();
-    const unsubscribe = subscribeToSse("/api/queue/stream", {
-      onConnectionChange: vi.fn(),
-      onResync,
-    });
-    const source = FakeEventSource.instances[0];
-
-    source.onopen?.();
-    source.emit("message", { type: "queue.changed", id: "10", at: "now", data: {} });
-    source.onerror?.();
-    source.onopen?.();
-    source.emit("message", { type: "queue.changed", id: "12", at: "now", data: {} });
-    source.emit("message", { type: "queue.changed", id: "14", at: "now", data: {} });
-
-    expect(onResync).toHaveBeenNthCalledWith(1, {
+  it("recovers once after reconnect without sending a misleading global cursor", async () => {
+    const resync = vi.fn();
+    subscribe("/api/queue/stream", { onResync: resync });
+    await vi.advanceTimersByTimeAsync(100);
+    fixture.connections[0].emit("queue", 10);
+    await settle();
+    fixture.connections[0].end();
+    await settle();
+    await vi.advanceTimersByTimeAsync(1250);
+    expect(resync).toHaveBeenCalledExactlyOnceWith({
       reason: "reconnect",
-      topic: "/api/queue/stream",
+      topic: "queue",
       lastEventId: "10",
     });
-    expect(onResync).toHaveBeenNthCalledWith(2, {
-      reason: "gap",
-      topic: "/api/queue/stream",
-      lastEventId: "12",
-    });
-    unsubscribe();
+    expect(fixture.fetcher.mock.calls[1][1].headers).not.toHaveProperty("last-event-id");
+    fixture.connections[1].emit("queue", 50);
+    await settle();
+    expect(resync).toHaveBeenCalledOnce();
   });
 
-  it("does not share a stream across identity keys", () => {
-    const first = subscribeToSse("/api/queue/me/stream", {
-      identityKey: 101,
-      onConnectionChange: vi.fn(),
-    });
-    const second = subscribeToSse("/api/queue/me/stream", {
-      identityKey: 202,
-      onConnectionChange: vi.fn(),
-    });
+  it("drops delayed old-account frames and old listeners after account switching", async () => {
+    const old = vi.fn();
+    subscribe("/api/queue/me/stream", { onEvent: old });
+    await vi.advanceTimersByTimeAsync(100);
+    const source = fixture.connections[0];
+    setSseIdentity(202, origin);
+    const next = vi.fn();
+    subscribe("/api/queue/me/stream", { onEvent: next });
+    source.emit("personal", 1);
+    await vi.advanceTimersByTimeAsync(100);
+    fixture.connections[1].emit("personal", 2);
+    await settle();
+    expect(source.signal.aborted).toBe(true);
+    expect(old).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledOnce();
+  });
 
-    expect(FakeEventSource.instances).toHaveLength(2);
-    first();
-    second();
+  it("joins participant, projects, scanner, queue and collaborative review readers", async () => {
+    for (const path of [
+      "/api/queue/me/stream",
+      "/api/events/stream?topic=projects",
+      "/api/logistics/stream",
+      "/api/queue/stream",
+      "/api/queue/entries/42/stream",
+    ])
+      subscribe(path);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fixture.fetcher).toHaveBeenCalledOnce();
+    expect(fixture.connections[0].url).toBe(
+      `${mux}?scopes=domain%3Aprojects%2Clogistics%2Cpersonal%2Cqueue%2Creview%3A42`,
+    );
+  });
+
+  it("origin switching and sign-out discard the old reader and listeners", async () => {
+    const old = vi.fn();
+    subscribe("/api/queue/me/stream", { onEvent: old });
+    await vi.advanceTimersByTimeAsync(100);
+    setSseIdentity(101, "https://next.test");
+    const next = vi.fn();
+    disposers.push(subscribeToSse("https://next.test/api/queue/me/stream", { onEvent: next }));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fixture.connections[0].signal.aborted).toBe(true);
+    expect(fixture.connections[1].url).toContain("https://next.test/");
+    fixture.connections[0].emit("personal", 1);
+    await settle();
+    expect(old).not.toHaveBeenCalled();
+    setSseIdentity(null, "https://next.test");
+    fixture.connections[1].emit("personal", 2);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fixture.connections[1].signal.aborted).toBe(true);
+    expect(next).not.toHaveBeenCalled();
+    expect(fixture.fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("disconnects an oversized UTF-8 frame and recovers with one scoped resync", async () => {
+    const event = vi.fn();
+    const resync = vi.fn();
+    subscribe("/api/queue/stream", { onEvent: event, onResync: resync });
+    await vi.advanceTimersByTimeAsync(100);
+    // Under 64 KiB in characters, over the byte bound: measure UTF-8 bytes.
+    fixture.connections[0].raw(`data: ${"é".repeat(33_000)}`);
+    await settle();
+    expect(fixture.connections[0].signal.aborted).toBe(true);
+    expect(event).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1250);
+    expect(fixture.fetcher).toHaveBeenCalledTimes(2);
+    expect(resync).toHaveBeenCalledExactlyOnceWith({
+      reason: "reconnect",
+      topic: "queue",
+      lastEventId: null,
+    });
+  });
+
+  it("keeps anonymous TV on one payload-free legacy stream", async () => {
+    setSseIdentity(null, origin);
+    subscribe("/api/tv/stream");
+    subscribe("/api/tv/stream");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fixture.fetcher).toHaveBeenCalledOnce();
+    expect(fixture.connections[0].url).toBe(`${origin}/api/tv/stream`);
+  });
+
+  it("honors Retry-After and stops retrying forbidden scope sets", async () => {
+    fixture.fetcher.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      body: null as never,
+      headers: new Headers({ "retry-after": "120" }),
+    });
+    subscribe("/api/queue/stream");
+    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(119_000);
+    expect(fixture.fetcher).toHaveBeenCalledOnce();
+    fixture.fetcher.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      body: null as never,
+      headers: new Headers(),
+    });
+    await vi.advanceTimersByTimeAsync(1500);
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(fixture.fetcher).toHaveBeenCalledTimes(2);
   });
 });

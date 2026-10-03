@@ -31,7 +31,7 @@ import { useMeContext } from "@/lib/me-context";
 import { subscribeToCategory } from "@/lib/notification-events";
 import { hasSeenQueueTutorial, markQueueTutorialSeen } from "@/lib/queue-tutorial";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
-import { subscribeToServerEvent } from "@/lib/server-events";
+import { isServerEventConnected, subscribeToServerEvent } from "@/lib/server-events";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
@@ -93,7 +93,7 @@ export default function QueueScreen() {
   const { data, loading, error, staleSince, load } = useCachedApi(
     `user:${me?.id ?? "unknown"}:queue`,
     fetchQueue,
-    { enabled: me !== null },
+    { enabled: me !== null, backgroundRevalidationMs: 0 },
   );
   const entries = data ?? [];
 
@@ -133,7 +133,9 @@ export default function QueueScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const id = setInterval(() => void load(), POLL_MS);
+      const id = setInterval(() => {
+        if (!isServerEventConnected()) void load();
+      }, POLL_MS);
       return () => clearInterval(id);
     }, [load]),
   );

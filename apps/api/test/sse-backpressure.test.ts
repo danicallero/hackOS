@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { EVENTS } from "@hackos/shared/events";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -13,7 +14,7 @@ process.env.SSE_WRITE_TIMEOUT_MS = "50";
 process.env.SSE_MAX_CONNECTIONS_PER_CLIENT = "2";
 process.env.SSE_MAX_CONNECTIONS_PER_TOPIC = "2";
 
-const { subscribe } = await import("../src/lib/sse.js");
+const { subscribe, subscribeMany, broadcast } = await import("../src/lib/sse.js");
 const { TooManyRequestsError } = await import("../src/lib/errors.js");
 const { closeValkey } = await import("../src/lib/valkey.js");
 
@@ -112,5 +113,83 @@ describe("SSE connection budgets (H540)", () => {
     ).rejects.toBeInstanceOf(TooManyRequestsError);
 
     for (const reply of replies) (reply.raw as FakeRaw).destroy();
+  });
+});
+
+describe("multiplexed bounds (#892)", () => {
+  it("counts several scopes as one physical client connection", async () => {
+    const req = fakeReq("10.10.40.1");
+    const replies = [fakeReply(() => true), fakeReply(() => true)] as const;
+    try {
+      await subscribeMany(
+        ["a", "b", "c"].map((scope) => ({ scope, topic: `bp-mux-${scope}` })),
+        req,
+        replies[0],
+        async () => undefined,
+      );
+      await subscribeMany(
+        [{ scope: "other", topic: "bp-mux-other" }],
+        req,
+        replies[1],
+        async () => undefined,
+      );
+      await expect(
+        subscribeMany(
+          [{ scope: "extra", topic: "bp-mux-extra" }],
+          req,
+          fakeReply(() => true),
+          async () => undefined,
+        ),
+      ).rejects.toBeInstanceOf(TooManyRequestsError);
+    } finally {
+      for (const reply of replies) (reply.raw as FakeRaw).destroy();
+    }
+  });
+
+  it("preserves slow-client disconnection for multiplexed replies", async () => {
+    const reply = fakeReply(() => false);
+    let closed = false;
+    reply.raw.on("close", () => {
+      closed = true;
+    });
+    await subscribeMany(
+      [{ scope: "personal", topic: "bp-mux-slow" }],
+      fakeReq("10.10.40.2"),
+      reply,
+      async () => undefined,
+    );
+    await expect.poll(() => closed).toBe(true);
+  });
+
+  it("bounds pending frames while an authorization check is blocked", async () => {
+    let unblock!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      unblock = resolve;
+    });
+    const written: string[] = [];
+    const reply = fakeReply(() => true);
+    reply.raw.write = (chunk: string) => {
+      written.push(chunk);
+      return true;
+    };
+    let closed = false;
+    reply.raw.on("close", () => {
+      closed = true;
+    });
+    await subscribeMany(
+      [{ scope: "queue", topic: "bp-mux-pending" }],
+      fakeReq("10.10.40.3"),
+      reply,
+      () => blocked,
+    );
+    try {
+      await broadcast("bp-mux-pending", EVENTS.DOMAIN_CHANGED, { value: "x".repeat(40_000) });
+      await broadcast("bp-mux-pending", EVENTS.DOMAIN_CHANGED, { value: "x".repeat(40_000) });
+      await expect.poll(() => closed).toBe(true);
+      expect(written).toEqual([": connected\n\n"]);
+    } finally {
+      unblock();
+      if (!closed) (reply.raw as FakeRaw).destroy();
+    }
   });
 });
