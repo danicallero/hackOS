@@ -91,7 +91,11 @@ restricted to the design system's neutral, positive, critical, warning, and
 informational roles. Customization mode turns the panel area into a direct
 sortable grid with keyboard-accessible drag handles and resize controls. The
 Overview cards form their own nested sortable grid, so their order can be
-personalized without moving the complete Overview panel. Grid rows grow
+personalized without moving the complete Overview panel. During reordering,
+the active panel or KPI has a floating preview and a dashed destination outline;
+siblings shift to show the resulting order. Keyboard pickup, arrow movement,
+drop, and cancellation use the same feedback. Reduced-motion preferences disable
+sortable transitions and preview drop animations (issue #849). Grid rows grow
 with their content so expanded access settings cannot overlap a panel. Unknown
 panel ids are ignored by the sanitizer and new panels receive catalog defaults,
 so older preferences cannot blank or break a dashboard. The default layout

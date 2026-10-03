@@ -58,10 +58,16 @@ export function SortableSection({
   return (
     <div
       ref={setNodeRef}
+      data-drop-placeholder={isDragging || undefined}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(isDragging && "opacity-0")}
+      className={cn(
+        "relative motion-reduce:transition-none!",
+        isDragging && "rounded-lg outline-2 outline-dashed outline-primary bg-primary/5",
+      )}
     >
-      {children({ attributes, listeners, setActivatorNodeRef })}
+      <div className={cn(isDragging && "opacity-0")}>
+        {children({ attributes, listeners, setActivatorNodeRef })}
+      </div>
     </div>
   );
 }

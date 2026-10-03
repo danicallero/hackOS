@@ -469,3 +469,12 @@ list turns into a dumping ground and the guard stops meaning anything.
 4. Compose from `components/ui` + `components/common`; extract anything reused
    twice into `components/common`.
 5. Gate controls with `<CapabilityGate>` / `useCan`.
+
+## Sortable builders
+
+Form and judging builders share `SortableItem` and `DragHandle`. When using a
+`DragOverlay`, keep `hideWhileDragging` enabled: it hides the active content
+while retaining a dashed destination outline and the item's dimensions as
+siblings shift (issue #849). Use `useReducedDragMotion` to disable overlay drop
+animations, and `motion-reduce:transition-none!` on sortable wrappers. Keyboard
+sensors retain pickup, arrow movement, drop, and Escape cancellation.

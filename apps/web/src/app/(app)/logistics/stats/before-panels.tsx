@@ -4,6 +4,7 @@ import {
   closestCenter,
   DndContext,
   type DragEndEvent,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -35,7 +36,11 @@ import { ShieldSlashIcon } from "@phosphor-icons/react/dist/csr/ShieldSlash";
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/csr/SquaresFour";
 import { TimerIcon } from "@phosphor-icons/react/dist/csr/Timer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DragHandle } from "@/components/common/drag-handle";
+import {
+  DragHandle,
+  dragOverlayDropAnimation,
+  useReducedDragMotion,
+} from "@/components/common/drag-handle";
 import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
 import { SectionCard } from "@/components/common/section-card";
@@ -149,6 +154,8 @@ export function BeforePanels({
   onRetry: () => void;
   editMode?: boolean;
 }) {
+  const reducedDragMotion = useReducedDragMotion();
+  const [activePanel, setActivePanel] = useState<string | null>(null);
   const { language, t } = useLocale();
   const resolvedLayoutKey = layoutKey ?? (applicationId ? String(applicationId) : "");
   const availablePanelKeys = useMemo(() => panelKeysForStats(stats), [stats]);
@@ -254,6 +261,7 @@ export function BeforePanels({
   );
 
   const onPanelDragEnd = (event: DragEndEvent) => {
+    setActivePanel(null);
     if (!editMode || !event.over || event.active.id === event.over.id) return;
     const from = effectiveLayout.order.indexOf(String(event.active.id));
     const to = effectiveLayout.order.indexOf(String(event.over.id));
@@ -277,7 +285,7 @@ export function BeforePanels({
     });
   };
 
-  const renderPanel = (key: string) => {
+  const renderPanel = (key: string, preview = false) => {
     if (key === "overview") {
       return (
         <OverviewPanel
@@ -286,7 +294,7 @@ export function BeforePanels({
           loading={loading}
           error={error}
           onRetry={onRetry}
-          editMode={editMode}
+          editMode={editMode && !preview}
           tone={effectiveLayout.tones.overview ?? "neutral"}
           kpiTones={effectiveLayout.tones}
           onToneChange={setTone}
@@ -331,7 +339,13 @@ export function BeforePanels({
           </Button>
         </div>
       )}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onPanelDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={onPanelDragEnd}
+        onDragStart={({ active }) => setActivePanel(String(active.id))}
+        onDragCancel={() => setActivePanel(null)}
+      >
         <SortableContext items={renderedKeys} strategy={rectSortingStrategy}>
           <div className="grid items-start gap-4 xl:grid-cols-2">
             {renderedKeys.map((key) => (
@@ -353,6 +367,17 @@ export function BeforePanels({
             ))}
           </div>
         </SortableContext>
+        <DragOverlay dropAnimation={reducedDragMotion ? null : dragOverlayDropAnimation}>
+          {activePanel && (
+            <div
+              inert
+              aria-hidden="true"
+              className="bg-background rounded-lg shadow-lg outline-2 outline-primary"
+            >
+              {renderPanel(activePanel, true)}
+            </div>
+          )}
+        </DragOverlay>
       </DndContext>
     </div>
   );
@@ -384,20 +409,22 @@ function SortablePanel({
   children: React.ReactNode;
 }) {
   const { t } = useLocale();
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     disabled: !editMode,
   });
   return (
     <div
       ref={setNodeRef}
+      data-drop-placeholder={isDragging || undefined}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex min-w-0 flex-col",
+        "relative flex min-w-0 flex-col motion-reduce:transition-none!",
         width === 2 && "xl:col-span-2",
         height === 2 && "min-h-[38rem]",
         editMode && "rounded-lg outline outline-1 outline-dashed outline-border",
         hidden && "opacity-60",
+        isDragging && "[&>*]:opacity-0 bg-primary/5 outline-2 outline-dashed outline-primary",
       )}
     >
       {editMode && (
@@ -665,6 +692,8 @@ function OverviewPanel({
   kpiOrder: string[];
   onKpiOrderChange: (order: string[]) => void;
 }) {
+  const reducedDragMotion = useReducedDragMotion();
+  const [activeKpi, setActiveKpi] = useState<string | null>(null);
   const { t } = useLocale();
   const confirmed = stats?.overview?.confirmed ?? stats?.funnel?.confirmed;
   const submitted =
@@ -847,7 +876,12 @@ function OverviewPanel({
         <DndContext
           sensors={kpiSensors}
           collisionDetection={closestCenter}
-          onDragEnd={onKpiDragEnd}
+          onDragEnd={(event) => {
+            setActiveKpi(null);
+            onKpiDragEnd(event);
+          }}
+          onDragStart={({ active }) => setActiveKpi(String(active.id))}
+          onDragCancel={() => setActiveKpi(null)}
         >
           <SortableContext items={kpiOrder} strategy={rectSortingStrategy}>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -858,6 +892,17 @@ function OverviewPanel({
               ))}
             </div>
           </SortableContext>
+          <DragOverlay dropAnimation={reducedDragMotion ? null : dragOverlayDropAnimation}>
+            {activeKpi && (
+              <div
+                inert
+                aria-hidden="true"
+                className="bg-background rounded-lg shadow-lg outline-2 outline-primary"
+              >
+                {cards[activeKpi]?.(null)}
+              </div>
+            )}
+          </DragOverlay>
         </DndContext>
       )}
     </SectionCard>
@@ -882,11 +927,13 @@ function SortableOverviewKpi({
   return (
     <div
       ref={setNodeRef}
+      data-drop-placeholder={isDragging || undefined}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "min-w-0",
+        "min-w-0 motion-reduce:transition-none!",
         wide && "sm:col-span-2 lg:col-span-1 xl:col-span-2",
-        isDragging && "z-10 opacity-80 shadow-lg",
+        isDragging &&
+          "[&>*]:opacity-0 rounded-lg outline-2 outline-dashed outline-primary bg-primary/5",
       )}
     >
       {children(
