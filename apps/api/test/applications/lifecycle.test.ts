@@ -1112,7 +1112,7 @@ describe("re-accept (admin)", () => {
     expect(inbox.statusCode).toBe(200);
     expect(inbox.json().total).toBe(1);
     expect(inbox.json().items[0].payload.subject).toBe(
-      "Your application to Participant form has been accepted",
+      "Your spot at Participant form is waiting for you!",
     );
 
     // the new token can confirm

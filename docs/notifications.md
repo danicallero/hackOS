@@ -356,8 +356,9 @@ from marketing templates do not belong in this shared wrapper.
 Participant emails use a warm, direct voice. Rejection thanks the applicant,
 acknowledges disappointment and welcomes interest in future editions without
 inventing a reason, waiting list or promise of a place. Acceptance celebrates
-briefly, then explains confirmation, declining and automatic release at the
-deadline. Operational queue alerts and security instructions remain precise.
+with an enthusiastic invitation to share ideas, learn and build together,
+then explains that the applicant still needs to confirm their place, how to
+decline and the automatic release at the deadline. Operational queue alerts and security instructions remain precise.
 
 `application.decision` stays the outbox template name; the renderer selects
 complete `accepted`/`rejected` subject/body variants in es/gl/en from the internal

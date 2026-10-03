@@ -66,9 +66,9 @@
         "subject": "Unha decisión sobre a túa solicitude",
         "body": "Ola {{name}},\n\nRevisamos a túa solicitude a {{applicationName}}.{{decisionDetails}}",
         "accepted": {
-          "subject": "A túa solicitude a {{applicationName}} foi aceptada",
-          "body": "Ola {{name}},\n\nBoas novas! Aceptamos a túa solicitude a {{applicationName}}. Alégranos contar contigo.{{decisionDetails}}",
-          "heading": "Confirma a túa praza en {{applicationName}}"
+          "subject": "A túa praza en {{applicationName}} agárdate!",
+          "heading": "Agardámoste en {{applicationName}}!",
+          "body": "Ola {{name}},\n\nBoas novas! Aceptamos a túa solicitude a {{applicationName}} e fainos moita ilusión contar contigo.\n\nTemos moitas ganas de ver as túas ideas tomar forma, aprender contigo e construír cousas xuntos. Só falta que confirmes a túa praza para sumarte!{{decisionDetails}}"
         },
         "rejected": {
           "subject": "Sobre a túa solicitude a {{applicationName}}",
