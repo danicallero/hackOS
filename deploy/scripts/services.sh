@@ -1739,7 +1739,9 @@ deploy_target_shell() {
     pause_shell
     return 0
   fi
-  if ! validate_published_release "$tag" "$api_changed" "$web_changed" 2>/dev/null; then
+  # Registry validation calls die(); contain that exit within the menu (#544).
+  if ! (validate_published_release "$tag" "$api_changed" "$web_changed") 2>/dev/null; then
+    last_child_succeeded=false
     printf '%s\n' "${c_red}Release ${tag} is not published in GHCR for the selected units.${c_reset}"
     pause_shell
     return 0
