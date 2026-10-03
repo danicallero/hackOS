@@ -19,7 +19,7 @@ deploy_files=false
 while IFS= read -r path; do
   [[ -n "$path" ]] || continue
   case "$path" in
-    apps/api|apps/api/*)
+    apps/api|apps/api/*|deploy/metrics/*)
       api_image=true
       ;;
     apps/web|apps/web/*)

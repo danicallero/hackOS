@@ -1,11 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { pool } from "../db/pool.js";
+import { refreshServiceMemory } from "./container-memory.js";
 import {
   containerMemoryCurrentBytes,
   containerMemoryLimitBytes,
   containerMemoryUnlimited,
   notificationOutboxOldestQueuedSeconds,
+  notificationOutboxOverdueSeconds,
   notificationOutboxRows,
+  operationalCollectionSuccess,
   postgresConnections,
   postgresDatabaseSizeBytes,
   postgresEffectiveCacheSizeBytes,
@@ -46,20 +49,17 @@ function pgMemoryBytes(setting: string, unit: string | null): number {
 }
 
 async function refreshPostgresMetrics(): Promise<void> {
-  notificationOutboxRows.reset();
-  notificationOutboxOldestQueuedSeconds.reset();
-  postgresConnections.reset();
-  postgresDatabaseSizeBytes.reset();
-
   const [outbox, connections, settings, database] = await Promise.all([
     pool.query<{
       channel: string;
       status: string;
       count: string;
       oldest_queued_seconds: number | null;
+      overdue_seconds: number | null;
     }>(
       `SELECT channel, status, count(*)::text AS count,
-              EXTRACT(EPOCH FROM (now() - min(next_attempt_at))) AS oldest_queued_seconds
+              EXTRACT(EPOCH FROM (now() - min(created_at))) AS oldest_queued_seconds,
+              EXTRACT(EPOCH FROM (now() - min(next_attempt_at))) AS overdue_seconds
          FROM notification_outbox
         GROUP BY channel, status`,
     ),
@@ -80,12 +80,28 @@ async function refreshPostgresMetrics(): Promise<void> {
     ),
   ]);
 
+  notificationOutboxRows.reset();
+  notificationOutboxOldestQueuedSeconds.reset();
+  notificationOutboxOverdueSeconds.reset();
+  postgresConnections.reset();
+  postgresDatabaseSizeBytes.reset();
+  for (const channel of ["email", "push", "in_app"]) {
+    for (const status of ["queued", "sent", "failed", "superseded"]) {
+      notificationOutboxRows.set({ channel, status }, 0);
+    }
+    notificationOutboxOldestQueuedSeconds.set({ channel }, 0);
+    notificationOutboxOverdueSeconds.set({ channel }, 0);
+  }
   for (const row of outbox.rows) {
     notificationOutboxRows.set({ channel: row.channel, status: row.status }, Number(row.count));
     if (row.status === "queued" && row.oldest_queued_seconds !== null) {
       notificationOutboxOldestQueuedSeconds.set(
         { channel: row.channel },
         Math.max(0, Number(row.oldest_queued_seconds)),
+      );
+      notificationOutboxOverdueSeconds.set(
+        { channel: row.channel },
+        Math.max(0, Number(row.overdue_seconds ?? 0)),
       );
     }
   }
@@ -133,8 +149,9 @@ async function refreshCgroupMetrics(): Promise<void> {
     }
   };
   for (const resource of ["memory", "swap"] as const) {
-    const current = await read(`/sys/fs/cgroup/${resource}.current`);
-    const limit = await read(`/sys/fs/cgroup/${resource}.max`);
+    const prefix = resource === "swap" ? "memory.swap" : "memory";
+    const current = await read(`/sys/fs/cgroup/${prefix}.current`);
+    const limit = await read(`/sys/fs/cgroup/${prefix}.max`);
     if (current && /^\d+$/.test(current)) {
       containerMemoryCurrentBytes.set({ resource }, Number(current));
     }
@@ -154,9 +171,21 @@ async function refreshCgroupMetrics(): Promise<void> {
  * not create a permanent polling query or retain stale DB connections.
  */
 export async function refreshOperationalMetrics(): Promise<void> {
-  await Promise.allSettled([
-    refreshPostgresMetrics(),
-    refreshValkeyMetrics(),
+  const observe = async (dependency: string, refresh: () => Promise<void>) => {
+    try {
+      await refresh();
+      operationalCollectionSuccess.set({ dependency }, 1);
+    } catch {
+      operationalCollectionSuccess.set({ dependency }, 0);
+    }
+  };
+  await Promise.all([
+    observe("postgres", refreshPostgresMetrics),
+    observe("valkey", async () => {
+      await refreshValkeyMetrics();
+      if (valkey.status !== "ready") throw new Error("Valkey not ready");
+    }),
     refreshCgroupMetrics(),
+    refreshServiceMemory("api"),
   ]);
 }

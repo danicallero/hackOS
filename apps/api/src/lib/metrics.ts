@@ -95,6 +95,20 @@ export const notificationOutboxOldestQueuedSeconds = new client.Gauge({
   registers: [register],
 });
 
+export const notificationOutboxOverdueSeconds = new client.Gauge({
+  name: "hackos_notification_outbox_overdue_seconds",
+  help: "Seconds since the oldest queued notification became due, excluding future retries",
+  labelNames: ["channel"],
+  registers: [register],
+});
+
+export const operationalCollectionSuccess = new client.Gauge({
+  name: "hackos_operational_collection_success",
+  help: "Whether this scrape successfully refreshed a dependency's operational metrics",
+  labelNames: ["dependency"],
+  registers: [register],
+});
+
 export const notificationDispatchTotal = new client.Counter({
   name: "hackos_notification_dispatch_total",
   help: "Notification outbox dispatch outcomes by channel",

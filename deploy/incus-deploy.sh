@@ -435,6 +435,7 @@ if [[ "$deploy_web" == true ]]; then
   verify_pulled_image_revision web "$web_image_tag"
 fi
 phase "Starting database, queue, and object storage"
+run_compose "initialize container-local metrics reader" run --rm --no-deps metrics-init
 run_compose "start datastores" up --detach postgres valkey minio
 wait_for_health postgres
 wait_for_health valkey

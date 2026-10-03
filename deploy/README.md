@@ -511,6 +511,20 @@ correctamente.
 
 ## Service operations
 
+### Container resource metrics
+
+The production Compose file collects cgroup v2 RAM/swap/OOM data inside each
+hackOS container and serves it through the existing API/worker Prometheus
+endpoints. It does not deploy a host agent, open a metrics port, or mount the
+Docker socket. The API mounts the non-API samples read-only from private tmpfs
+volumes; expired samples are omitted instead of reported as zero.
+
+The deployment runs the one-shot `metrics-init` job after pulling the API
+image and before it brings up the datastores. Its only task is to copy the
+static reader into a temporary volume. A deployment whose Compose definition
+changes recreates the affected datastore containers in the normal Compose way;
+schedule that brief restart outside event traffic when possible.
+
 Every deployment installs the same operator helper at
 `/opt/hackos/services.sh`. The first argument must be the explicit environment
 (`staging` or `production`); the helper derives the corresponding Compose
