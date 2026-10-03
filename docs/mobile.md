@@ -680,7 +680,14 @@ remain attached to their surfaces rather than moving into navigation chrome.
 Opening a person from People Finder or a scan shows the current badge as the
 last row in Personal data. When a badge is assigned, swipe that row left to
 reveal the deliberate Replace and Delete actions; an unassigned person keeps
-the separate Link badge action in the Accreditation section.
+the separate Link badge action in the Accreditation section. Server lookup
+responses with a null badge clear the cached badge. Mutations reload from the
+freshly returned sync snapshot, and older concurrent profile/timeline requests
+cannot overwrite newer loads. The presence register refreshes the timeline before enabling actions again.
+Its primary button records the valid next movement; the secondary button
+retains the other movement’s date/time editor for past entries and exits. Scanner error
+feedback appears centered directly below Confirmed, Checked in, and Inside,
+with wrapping text and flexible height so it stays in the upper scanner area.
 The local `modules/camera-capabilities` Expo module reads the back camera's
 actual torch support from AVFoundation/Camera2. Flash-capable devices keep
 manual entry at bottom-left and the torch at bottom-right. Devices without a
@@ -786,6 +793,61 @@ spinner on its own, and every reload committed a brand-new array even when
 nothing had changed. The spinner is now driven by a local `refreshing` flag
 set only by pull-to-refresh, and reloads keep the previous array identity
 when `sameActivities` says the data is unchanged.
+
+### NFC accreditations (H22–H26)
+
+Physical badges now use NTAG213 NFC tags. Pairing and replacement on the
+person screen keep linking as a direct primary “Link with NFC” action. A
+compact ellipsis button to its right opens a native menu with the secondary
+“Scan QR code” and “Enter code” alternatives. The swipe-revealed Replace badge
+action opens a native system dialog with QR first, NFC as the preferred primary
+action below it, and Cancel. Manual entry is available only in the linking menu.
+Android uses a native Material 3 dialog with rounded corners, secondary QR above
+a filled primary NFC button, and Cancel last; outside/back also dismiss it.
+Badge linking renders as separate rounded Liquid Glass controls: a tinted NFC
+primary capsule and a circular overflow menu, without a shared section surface.
+
+Role selection and event-access warnings apply before the chosen input opens.
+NFC opens the system Core NFC sheet on iOS and a cancelable reader overlay on
+Android; typed/QR codes use the same assignment and replacement mutation paths,
+including duplicate/revoked-badge and ticket validation. Manual input reuses
+the camera's `ScannerCodeEntry` sheet and trims whitespace; canceling any input
+submits no mutation. There is no intermediate custom method chooser.
+For NFC, the seven-byte hardware UID is saved as `badgeId`,
+using uppercase hexadecimal without separators; tags are neither written nor
+required to contain NDEF records. This supersedes the physical QR-card medium
+still described in `plan/historias-hackos.md`, following the product decision
+for NFC badges; the normative plan remains unchanged pending human revision.
+Existing ticket and Wallet QR codes remain readable by the camera.
+
+The general and activity cameras expose a Liquid Glass NFC button above the
+right-hand flashlight control (an opaque fallback on Android/older iOS). Activities and meals
+open the NFC reader once after loading. Dismissing an activity result (Continue
+or Cancel) opens the next NFC session; registering another keeps the result
+open until it is dismissed. Canceling the NFC reader restores camera scanning
+without immediately reopening it; the NFC button can reopen it manually. NFC also works without camera permission.
+Camera decoding pauses while NFC is open and while an activity result awaits
+operator action. Reads reuse the same identity lookup, repeat-confirmation,
+revocation and encrypted offline-queue paths as camera scans.
+
+NFC controls and automatic sessions stay hidden until hardware support is confirmed.
+Devices without NFC retain QR and manual entry, including badge linking and replacement.
+The iOS usage description explains reading badge serial numbers for attendee
+identification at check-in, meals, and activities.
+
+`lib/nfc-reader.ts` serializes native sessions and releases them on completion,
+cancellation, navigation, backgrounding and unmount. iOS uses `MifareIOS` and
+Android uses `NfcA` reader mode with NDEF checking skipped, so blank NTAG213s
+work. Unsupported hardware, disabled NFC, malformed UIDs and reader errors
+produce localized feedback; cancellation does not submit a mutation.
+
+A new native build is required after installing `react-native-nfc-manager`;
+Expo Go and iOS Simulator cannot exercise real NFC reads. Verify on physical
+iPhone and Android with the same NTAG213: identical UID, pairing, replacement,
+revoked-tag rejection, meals/repeats, offline replay, cancel/reopen, navigation
+and background cleanup. Enable the NFC Tag Reading capability in the Apple
+App ID and regenerate provisioning profiles; the Expo plugin adds TAG-only
+entitlements, the usage description and Android NFC permission.
 
 ## Scanner cache encryption & isolation
 
@@ -951,3 +1013,9 @@ later foreground/15s/manual sync. Failed items stay visible and can be reset to
 acknowledgement. Badge rotation, presence, meals, and activities apply local
 operational feedback immediately, then the post-replay full snapshot converges
 them to server truth.
+
+Activity and meal scanners also resolve entry-ticket QR tokens, including for
+participants without a badge. Offline activity payloads preserve the original
+credential and the API revalidates tickets on replay, with the same repeat
+confirmation and idempotency as badge scans. Scanner lookup errors appear
+centered below the statistics on both screens and dismiss after six seconds.

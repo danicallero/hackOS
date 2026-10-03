@@ -128,7 +128,7 @@ class ScannerSyncStore {
     this.setState({ lastSync: meta.lastSync, queue: scans, errorHistory: errors });
   };
 
-  sync = async (): Promise<void> => {
+  sync = async (): Promise<ScannerSnapshot | undefined> => {
     this.setState({ syncing: true });
     try {
       const result = await synchronizeScanner(this.ownerUserId);
@@ -140,6 +140,7 @@ class ScannerSyncStore {
         error: null,
         autoRetryPaused: false,
       });
+      return result.snapshot;
     } catch (cause) {
       const conflict =
         cause instanceof ApiError &&

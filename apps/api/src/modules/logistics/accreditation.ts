@@ -43,16 +43,20 @@ export type CheckInMethod = "qr" | "manual" | "nfc";
 
 // ── H22: lookup by ticket ─────────────────────────────────────────────────
 
+export async function resolveByTicket(db: pg.Pool | pg.PoolClient, token: string): Promise<number> {
+  await assertTicketNotRevoked(db, token);
+  const ticket = await db.query(`SELECT user_id FROM tickets WHERE token = $1`, [token]);
+  if (!ticket.rows[0]) throw new NotFoundError("Ticket not recognized");
+  return ticket.rows[0].user_id as number;
+}
+
 /**
  * Resolve an entrance-QR ticket token to the person card staff needs to
  * accredit: name, confirmed-spot flag, intolerances, notes, and whether they
  * are already accredited (with the current badge). Never a mutation.
  */
 export async function lookupByTicket(token: string, actorId?: number) {
-  await assertTicketNotRevoked(pool, token);
-  const t = await pool.query(`SELECT user_id FROM tickets WHERE token = $1`, [token]);
-  if (!t.rows[0]) throw new NotFoundError("Ticket not recognized"); // names no personal data
-  return lookupByUserId(t.rows[0].user_id as number, actorId);
+  return lookupByUserId(await resolveByTicket(pool, token), actorId);
 }
 
 export async function lookupByUserId(userId: number, actorId?: number) {

@@ -2,27 +2,20 @@ import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from "expo-camera";
 import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Keyboard,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { GlassView } from "@/components/glass-view";
+import { NfcReader } from "@/components/nfc-reader";
+import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SymbolView } from "@/components/symbol";
-
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { getBarcodeFrameObservation } from "@/lib/qr-frame";
 import { advanceQrScanCandidate, type QrScanCandidate } from "@/lib/qr-scan-stability";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { scannerCameraControls } from "@/lib/scanner-camera-controls";
+import { useNfcSupported } from "@/lib/use-nfc-supported";
 import CameraCapabilities from "@/modules/camera-capabilities";
 import { colors } from "@/theme/colors";
 
@@ -31,7 +24,60 @@ export function QrCamera({
   onClose,
   hint,
   scanningEnabled = true,
+  autoStartNfc = false,
+  nfcSessionKey = 0,
 }: {
+  onValue: (value: string) => void;
+  onClose?: () => void;
+  hint?: string | null;
+  scanningEnabled?: boolean;
+  autoStartNfc?: boolean;
+  nfcSessionKey?: number;
+}) {
+  const nfcSupported = useNfcSupported();
+  const [nfcVisible, setNfcVisible] = useState(false);
+  const autoStarted = useRef(false);
+  const lastNfcSessionKey = useRef(0);
+  const focused = useIsFocused();
+  useEffect(() => {
+    if (
+      nfcSupported &&
+      focused &&
+      scanningEnabled &&
+      ((autoStartNfc && !autoStarted.current) || nfcSessionKey !== lastNfcSessionKey.current)
+    ) {
+      autoStarted.current = true;
+      lastNfcSessionKey.current = nfcSessionKey;
+      setNfcVisible(true);
+    }
+    if (!focused) setNfcVisible(false);
+  }, [focused, autoStartNfc, scanningEnabled, nfcSessionKey, nfcSupported]);
+  return (
+    <>
+      <CameraPreview
+        onValue={onValue}
+        onClose={onClose}
+        hint={hint}
+        scanningEnabled={scanningEnabled && !nfcVisible}
+        onNfc={nfcSupported ? () => setNfcVisible(true) : undefined}
+      />
+      <NfcReader
+        visible={nfcSupported && nfcVisible && scanningEnabled}
+        onValue={onValue}
+        onClose={() => setNfcVisible(false)}
+      />
+    </>
+  );
+}
+
+function CameraPreview({
+  onValue,
+  onClose,
+  hint,
+  scanningEnabled = true,
+  onNfc,
+}: {
+  onNfc?: () => void;
   onValue: (value: string) => void;
   onClose?: () => void;
   hint?: string | null;
@@ -54,8 +100,6 @@ export function QrCamera({
     }
   });
   const [manualEntryVisible, setManualEntryVisible] = useState(false);
-  const [manualCode, setManualCode] = useState("");
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const frameLeft = (width - FRAME) / 2;
   const frameTop = (height - FRAME) / 2;
   const frameRight = frameLeft + FRAME;
@@ -84,7 +128,6 @@ export function QrCamera({
       scanCandidate.current = null;
       setTorchEnabled(false);
       setManualEntryVisible(false);
-      setManualCode("");
     }
   }, [isFocused]);
 
@@ -92,26 +135,6 @@ export function QrCamera({
     scanCandidate.current = null;
     if (scanningEnabled) locked.current = false;
   }, [scanningEnabled]);
-
-  useEffect(() => {
-    if (Platform.OS !== "ios") return;
-    const showSub = Keyboard.addListener("keyboardWillShow", (e) =>
-      setKeyboardHeight(e.endCoordinates.height),
-    );
-    const hideSub = Keyboard.addListener("keyboardWillHide", () => setKeyboardHeight(0));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  function submitManualEntry() {
-    const value = manualCode.trim();
-    if (!value) return;
-    setManualEntryVisible(false);
-    setManualCode("");
-    onValue(value);
-  }
 
   const handleBarcodeScanned = useCallback(
     (result: BarcodeScanningResult) => {
@@ -138,7 +161,22 @@ export function QrCamera({
     [height, width, onValue],
   );
 
-  if (!permission) return <View style={styles.black} />;
+  function nfcPermissionButton() {
+    if (!onNfc) return null;
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !scanningEnabled }}
+        disabled={!scanningEnabled}
+        onPress={onNfc}
+        style={styles.primaryButton}
+      >
+        <Text style={styles.primaryButtonText}>{t("scannerNfcScan")}</Text>
+      </Pressable>
+    );
+  }
+
+  if (!permission) return <View style={styles.black}>{nfcPermissionButton()}</View>;
   if (!permission.granted) {
     return (
       <View
@@ -159,6 +197,7 @@ export function QrCamera({
         <Text selectable style={styles.permissionBody}>
           {t("scannerCameraPermissionBody")}
         </Text>
+        {nfcPermissionButton()}
         {permission.canAskAgain ? (
           <Pressable
             accessibilityRole="button"
@@ -222,6 +261,25 @@ export function QrCamera({
           {hint ?? t("scannerQrHint")}
         </Text>
       )}
+      {onNfc ? (
+        <GlassView
+          glassEffectStyle="regular"
+          isInteractive
+          colorScheme="dark"
+          style={[styles.cameraControl, { bottom: tabBarBottomInset + 76 }]}
+        >
+          <Pressable
+            accessibilityLabel={t("scannerNfcScan")}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !scanningEnabled }}
+            disabled={!scanningEnabled}
+            onPress={onNfc}
+            style={styles.cameraControlPressable}
+          >
+            <SymbolView name="wave.3.right" tintColor="white" size={23} weight="semibold" />
+          </Pressable>
+        </GlassView>
+      ) : null}
       {cameraControls.showTorch ? (
         <GlassView
           glassEffectStyle="regular"
@@ -291,58 +349,11 @@ export function QrCamera({
           </Pressable>
         </GlassView>
       ) : null}
-      <Modal
-        animationType="fade"
-        transparent
+      <ScannerCodeEntry
         visible={manualEntryVisible}
-        onRequestClose={() => setManualEntryVisible(false)}
-      >
-        <Pressable
-          accessibilityLabel={t("close")}
-          accessibilityRole="button"
-          onPress={() => setManualEntryVisible(false)}
-          style={styles.manualEntryBackdrop}
-        />
-        <View
-          pointerEvents="box-none"
-          style={[
-            styles.manualEntryWrapper,
-            {
-              bottom: keyboardHeight > 0 ? keyboardHeight + 40 : tabBarBottomInset + 40,
-            },
-          ]}
-        >
-          <GlassView colorScheme="dark" glassEffectStyle="regular" style={styles.manualEntrySheet}>
-            <Text selectable style={styles.manualEntryTitle}>
-              {t("scannerManualEntryTitle")}
-            </Text>
-            <TextInput
-              testID={UI_TEST_IDS.scanner.manualCode}
-              accessibilityLabel={t("scannerManualEntryTitle")}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              autoFocus
-              onChangeText={setManualCode}
-              onSubmitEditing={submitManualEntry}
-              placeholder={t("scannerManualEntryPlaceholder")}
-              placeholderTextColor="rgba(255,255,255,0.5)"
-              returnKeyType="done"
-              style={styles.manualEntryInput}
-              value={manualCode}
-            />
-            <Pressable
-              testID={UI_TEST_IDS.scanner.manualSubmit}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !manualCode.trim() }}
-              disabled={!manualCode.trim()}
-              onPress={submitManualEntry}
-              style={[styles.primaryButton, !manualCode.trim() && styles.primaryButtonDisabled]}
-            >
-              <Text style={styles.primaryButtonText}>{t("scannerManualEntrySubmit")}</Text>
-            </Pressable>
-          </GlassView>
-        </View>
-      </Modal>
+        onClose={() => setManualEntryVisible(false)}
+        onValue={onValue}
+      />
     </View>
   );
 }
@@ -451,40 +462,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
   },
-  primaryButtonDisabled: { opacity: 0.45 },
   secondaryButton: { padding: 12 },
   secondaryButtonText: { color: colors.accent, fontSize: 16, fontWeight: "600" },
-  manualEntryBackdrop: {
-    backgroundColor: "rgba(0,0,0,0.4)",
-    bottom: 0,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  manualEntryWrapper: {
-    alignItems: "center",
-    left: 0,
-    paddingHorizontal: 20,
-    position: "absolute",
-    right: 0,
-  },
-  manualEntrySheet: {
-    borderCurve: "continuous",
-    borderRadius: 28,
-    gap: 14,
-    maxWidth: 390,
-    overflow: "hidden",
-    padding: 20,
-    width: "100%",
-  },
-  manualEntryTitle: { color: "white", fontSize: 18, fontWeight: "700" },
-  manualEntryInput: {
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderCurve: "continuous",
-    borderRadius: 12,
-    color: "white",
-    fontSize: 17,
-    padding: 14,
-  },
 });

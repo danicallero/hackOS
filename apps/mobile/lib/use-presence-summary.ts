@@ -1,5 +1,5 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PresenceTimeline } from "@/components/presence-management";
 import { apiFetch } from "@/lib/api";
 import {
@@ -29,9 +29,12 @@ export function usePresenceSummary({
 }) {
   const [timeline, setTimeline] = useState<PresenceTimeline | null>(null);
 
+  const requestRef = useRef(0);
   const load = useCallback(async () => {
+    const request = ++requestRef.current;
     try {
       const next = await apiFetch<PresenceTimeline>(`/api/presence/timeline/${userId}`);
+      if (request !== requestRef.current) return;
       setTimeline(next);
       const lastDoor = [...next.signals].reverse().find((signal) => signal.source === "door");
       const doorState = lastDoor
@@ -62,6 +65,7 @@ export function usePresenceSummary({
   );
 
   return {
+    refresh: load,
     timeline,
     guaranteedMinutes: guaranteedMinutesTotal(timeline?.windows ?? []),
   };

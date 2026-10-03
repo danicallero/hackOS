@@ -1,68 +1,5 @@
 # Lessons
 
-## [R007] Preserve intentional product voice during copy audits
-
-Status: active
-Scope: repository
-Source: user-correction
-Date: 2026-10-03
-
-### Trigger
-Auditing interface copy for verbosity or generic wording.
-
-### Mistake
-Removed the Ursula cookie notice's humor and illustration as presumed unwanted copy, although they were deliberate human design choices.
-
-### Lesson
-Intentional humor and brand character are not evidence of poor copy. Evaluate whether wording obstructs the task before removing its personality.
-
-### Action
-Preserve established product voice, including the Ursula cookie notice. Focus edits on redundancy, ambiguity, and unnecessary explanations.
-
-### Validation
-Check that copy revisions improve comprehension while retaining deliberate character and existing visual identity.
-
-### Exceptions
-Change intentional voice when the user requests it or it creates a concrete comprehension problem.
-
-Active reflections for hackOS. See `README.md` in this directory for the
-format, classification flow, and promotion path.
-
-## [R006] Let layout carry hierarchy before adding containers
-
-Status: active
-Scope: repository
-Source: user-correction
-Date: 2026-10-01
-
-### Trigger
-Composing detail pages, lists, or participant workflows.
-
-### Mistake
-Nested cards surrounded every member and challenge, while badges decorated
-static metadata. The single-project participant had to navigate a catalogue.
-
-### Lesson
-Apply `docs/DESIGN.md` §3 deliberately: start with spacing, aligned headings
-and columns. Containers need a bounded purpose; badges need actual state.
-Optimize the primary layout for the common case without removing exceptions.
-
-### Action
-Use open sections for related page content, with quiet hairlines where spacing
-alone leaves row ownership ambiguous. Removing cards does not mean removing
-all boundaries. Repeated inbox/list rows still need clear ownership: use quiet
-hairlines, restrained neutral washes and distinct subject/meta/body hierarchy.
-Validate with several adjacent records, not just one isolated item. Keep static metadata as text and secondary multi-record
-navigation available without making it the default.
-
-### Validation
-Inspect real desktop and narrow screenshots, including a single record,
-multiple records, and independent simultaneous states.
-
-### Exceptions
-Dense operational tables, overlays and truly selectable/bounded objects still
-justify surfaces; meaningful changing states still justify status badges.
-
 ## [R001] Validate tests before committing
 
 Status: active
@@ -230,7 +167,42 @@ and ensure the agent has a disjoint task and does not overwrite unrelated work.
 If the requested model is unavailable, report that blocker rather than
 silently substituting the default model.
 
-## [R006] Review feedback copy at its call sites
+## [R006] Let layout carry hierarchy before adding containers
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-10-01
+
+### Trigger
+Composing detail pages, lists, or participant workflows.
+
+### Mistake
+Nested cards surrounded every member and challenge, while badges decorated
+static metadata. The single-project participant had to navigate a catalogue.
+
+### Lesson
+Apply `docs/DESIGN.md` §3 deliberately: start with spacing, aligned headings
+and columns. Containers need a bounded purpose; badges need actual state.
+Optimize the primary layout for the common case without removing exceptions.
+
+### Action
+Use open sections for related page content, with quiet hairlines where spacing
+alone leaves row ownership ambiguous. Removing cards does not mean removing
+all boundaries. Repeated inbox/list rows still need clear ownership: use quiet
+hairlines, restrained neutral washes and distinct subject/meta/body hierarchy.
+Validate with several adjacent records, not just one isolated item. Keep static metadata as text and secondary multi-record
+navigation available without making it the default.
+
+### Validation
+Inspect real desktop and narrow screenshots, including a single record,
+multiple records, and independent simultaneous states.
+
+### Exceptions
+Dense operational tables, overlays and truly selectable/bounded objects still
+justify surfaces; meaningful changing states still justify status badges.
+
+## [R007] Review feedback copy at its call sites
 
 Status: active
 Scope: module:web
@@ -260,7 +232,66 @@ every supported language, confirming that headings fit and reasons remain visibl
 A generic fallback may protect unknown callers, but does not replace reviewing
 the callers within the requested scope.
 
-## [R008] Align multi-column fields independently of helper text
+## [R008] Keep the primary operational action direct
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-10-02
+
+### Trigger
+Adding alternative input methods to a frequent operational action.
+
+### Mistake
+A method chooser made the normal action require another interaction and gave
+fallback methods too much prominence.
+
+### Lesson
+Keep the preferred method directly available. Secondary methods belong in a
+compact native menu; an explicit method chooser suits actions where the user
+needs to decide how to proceed.
+
+### Action
+Count taps along the common path before and after adding alternatives. Preserve
+required domain decisions, but avoid adding a method choice before the default.
+
+### Validation
+Verify that the primary action starts its input immediately and that alternatives
+remain reachable through an accessible secondary control.
+
+### Exceptions
+Destructive actions, mandatory domain choices and explicit replacement workflows
+may need a confirmation or method dialog.
+
+## [R009] Preserve intentional product voice during copy audits
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-10-03
+
+### Trigger
+Auditing interface copy for verbosity or generic wording.
+
+### Mistake
+Removed the Ursula cookie notice's humor and illustration as presumed unwanted copy, although they were deliberate human design choices.
+
+### Lesson
+Intentional humor and brand character are not evidence of poor copy. Evaluate whether wording obstructs the task before removing its personality.
+
+### Action
+Preserve established product voice, including the Ursula cookie notice. Focus edits on redundancy, ambiguity, and unnecessary explanations.
+
+### Validation
+Check that copy revisions improve comprehension while retaining deliberate character and existing visual identity.
+
+### Exceptions
+Change intentional voice when the user requests it or it creates a concrete comprehension problem.
+
+Active reflections for hackOS. See `README.md` in this directory for the
+format, classification flow, and promotion path.
+
+## [R010] Align multi-column fields independently of helper text
 
 Status: active
 Scope: repository
@@ -294,7 +325,7 @@ labels, and the stacked mobile layout.
 An action deliberately aligned with a control is not a second form field;
 it may align to that control, independently of the help below it.
 
-## [R009] Keep event settings within their save scope
+## [R011] Keep event settings within their save scope
 
 Status: active
 Scope: module:event
@@ -325,7 +356,7 @@ invalid schedule rolls back the accompanying event-settings changes.
 A separate action with a genuinely distinct lifecycle, such as destructive
 maintenance, may keep its own explicit action.
 
-## [R010] Preserve official Wallet badge artwork
+## [R012] Preserve official Wallet badge artwork
 
 Status: active
 Scope: module:logistics

@@ -940,7 +940,7 @@ function SignalEditor({
   onClose: () => void;
   onSaved: () => Promise<void>;
   ownerUserId: number | undefined;
-  sync: { sync: () => Promise<void> };
+  sync: { sync: () => Promise<unknown> };
   userId: number;
 }) {
   useColorScheme();

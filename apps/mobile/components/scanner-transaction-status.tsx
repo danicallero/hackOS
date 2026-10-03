@@ -111,8 +111,13 @@ export function findSubject(
     case "badge_removal":
       return lookup.byUserId(p.userId);
     case "presence":
-    case "activity":
       return lookup.byBadgeId(p.badgeId);
+    case "activity":
+      return p.ticketToken
+        ? lookup.byTicketToken(p.ticketToken)
+        : p.badgeId
+          ? lookup.byBadgeId(p.badgeId)
+          : undefined;
     case "presence_signal":
     case "presence_signal_activity":
       return lookup.byUserId(p.userId);
@@ -279,7 +284,10 @@ function manualLogDetails(
       break;
     case "activity": {
       const activity = activities.find((a) => a.id === p.activityId);
-      details.push({ label: t("scannerFieldBadge"), value: p.badgeId });
+      details.push({
+        label: t(p.ticketToken ? "scannerFieldTicket" : "scannerFieldBadge"),
+        value: p.ticketToken ?? p.badgeId ?? "",
+      });
       details.push({
         label: t("scannerFieldActivity"),
         value: activity ? `${activity.name} (#${p.activityId})` : `#${p.activityId}`,
