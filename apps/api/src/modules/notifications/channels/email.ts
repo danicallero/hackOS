@@ -1,5 +1,6 @@
 import { config } from "../../../config.js";
 import type { Queryable } from "../../../db/pool.js";
+import { translateEmail } from "../../../lib/i18n.js";
 import type { EmailPayload } from "../templates.js";
 import { normalizeLanguage, renderEmailTemplate } from "../templates.js";
 import { sendViaSmtp } from "./email-adapters/smtp.js";
@@ -76,7 +77,7 @@ export async function sendEmail(
     to,
     subject: rendered.subject,
     html: rendered.html,
-    text: rendered.text,
+    text: `${rendered.text}\n\n${translateEmail("mail.footer", language, {})}`,
   };
 
   return sendViaSmtp(mail, message);

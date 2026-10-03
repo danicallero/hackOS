@@ -1,5 +1,6 @@
 {
   "mail": {
+    "footer": "Este mensaje es automático. No respondas: esta dirección no recibe mensajes.\nPara contactar con la organización, escribe a hackudc@gpul.org.",
     "generic": {
       "subject": "{{subject}}",
       "body": "{{body}}"
@@ -7,15 +8,15 @@
     "auth": {
       "verify": {
         "subject": "Verifica tu correo de hackOS",
-        "body": "Hola {{name}},\n\nConfirma tu dirección de correo para desbloquear el resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nSi no lo has pedido tú, ignora este mensaje."
+        "body": "Hola {{name}},\n\n¡Bienvenido a hackOS! Confirma tu dirección de correo para continuar con tu solicitud:\n\n[Verificar correo]({{verifyUrl}})\n\nSi no lo has pedido tú, ignora este mensaje."
       },
       "verifySecondaryEmail": {
         "subject": "Confirma tu correo secundario para hackOS",
-        "body": "Hola {{name}},\n\nTu cuenta de hackOS ({{primaryEmail}}) ha pedido añadir {{secondaryEmail}} como dirección secundaria, para poder vincular tus proyectos de Devpost a tu cuenta:\n\n[Confirmar {{secondaryEmail}}]({{verifyUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nSi no lo has pedido tú, ignora este mensaje — tu cuenta no cambiará."
+        "body": "Hola {{name}},\n\nTu cuenta de hackOS ({{primaryEmail}}) ha pedido añadir {{secondaryEmail}} como dirección secundaria, para poder vincular tus proyectos de Devpost a tu cuenta:\n\n[Confirmar {{secondaryEmail}}]({{verifyUrl}})\n\nSi no lo has pedido tú, ignora este mensaje — tu cuenta no cambiará."
       },
       "reset": {
         "subject": "Restablece tu contraseña de hackOS",
-        "body": "Hola {{name}},\n\nUsa este botón para fijar una contraseña nueva:\n\n[Restablecer contraseña]({{resetUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nSi no lo has pedido tú, puedes ignorar este correo — tu contraseña no ha cambiado."
+        "body": "Hola {{name}},\n\nPuedes elegir una contraseña nueva aquí:\n\n[Restablecer contraseña]({{resetUrl}})\n\nSi no lo has pedido tú, puedes ignorar este correo — tu contraseña no ha cambiado."
       },
       "accountRemovalPin": {
         "subject": "Confirma la eliminación de tu cuenta de hackOS",
@@ -23,7 +24,7 @@
       },
       "invite": {
         "subject": "Te han invitado a hackOS",
-        "body": "Hola,\n\nCrea tu cuenta para continuar:\n\n[Crear cuenta]({{claimUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nDesde ahí fijas tu contraseña, nombre y el resto de tus datos."
+        "body": "Hola,\n\nTe han invitado a hackOS. Nos alegra contar contigo. Crea tu cuenta para aceptar la invitación:\n\n[Crear cuenta]({{claimUrl}})\n\nAl crear tu cuenta podrás elegir tu contraseña y completar tus datos."
       }
     },
     "project": {
@@ -63,7 +64,18 @@
     "application": {
       "decision": {
         "subject": "Una decisión sobre tu solicitud",
-        "body": "Hola {{name}},\n\nTu solicitud a {{applicationName}} ha sido {{decision}}.{{decisionDetails}}"
+        "body": "Hola {{name}},\n\nHemos revisado tu solicitud a {{applicationName}}.{{decisionDetails}}",
+        "accepted": {
+          "subject": "Tu solicitud a {{applicationName}} ha sido aceptada",
+          "body": "Hola {{name}},\n\n¡Buenas noticias! Hemos aceptado tu solicitud a {{applicationName}}. Nos alegra contar contigo.{{decisionDetails}}",
+          "heading": "Confirma tu plaza en {{applicationName}}"
+        },
+        "rejected": {
+          "subject": "Sobre tu solicitud a {{applicationName}}",
+          "body": "Hola {{name}},\n\nLamentablemente, tu solicitud a {{applicationName}} no ha sido seleccionada en esta ocasión. Sabemos que no es la noticia que esperabas.\n\nGracias por tu interés y por el tiempo que has dedicado a tu solicitud. Esperamos verte en próximas ediciones.\n\nUn saludo,\nEl equipo de organización"
+        },
+        "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirmar mi plaza]({{confirmUrl}})\n\nSi no puedes venir, renuncia a tu plaza para que otra persona pueda aprovecharla:\n\n[Renunciar a mi plaza]({{declineUrl}})\n\nSi no confirmas dentro de ese plazo, tu plaza se liberará automáticamente.",
+        "confirmationDeadline": "Puedes confirmar tu plaza hasta el {{deadline}}."
       }
     },
     "schedule": {

@@ -155,6 +155,20 @@ comes from the edition, with no changes to staff density. Use flat color blocks;
 no decorative gradients, glows or glass on auth/public page surfaces. Keep the
 hackOS product wordmark: an event's logo belongs to its configured event identity.
 
+Transactional email applies this edition through an email-safe wrapper
+(`notifications/templates.ts`, H52). Correspondence uses red/cream actions
+in both themes; this brand accent does not encode acceptance or rejection.
+Header and content share the theme's card surface without a decorative top rule.
+The email header uses the centered horizontal HackUDC 2027 marketing wordmark
+in red for light mail and cream for supported dark-mode clients, using PNG
+exports of the supplied edition SVGs (`public/email/hackudc-2027{,-dark}.*`);
+the app keeps its hackOS product wordmark. Rockwell headings, sans body
+text, pill actions and 8px surfaces retain the edition geometry. The acceptance
+heading names confirmation, the primary button confirms, and declining is a
+secondary text link. Copy leads with the outcome, shows the exact localized
+expiry in the event timezone before the action, then gives consequences or
+security notes. See [`notifications.md`](./notifications.md#transactional-email-theme-h7-h52).
+
 ### List filter standard
 
 Use `components/common/filter-menu.tsx` (`FilterMenu`) for management toolbars

@@ -28,7 +28,7 @@ sending `null` clears a nullable field.
 | Column | Meaning |
 | --- | --- |
 | `name`, `tagline` | Event identity, shown on the public site and on the pass back. |
-| `timezone` | IANA zone name; formats the date/time printed on the pass. |
+| `timezone` | IANA zone name; formats pass dates and the exact expiry in admission emails. `event/service.ts` exposes this to other modules with UTC fallback when unset. |
 | `event_starts_at` | **Doors open** — when attendees can arrive at the venue. This (not the hacking start) is the date/time shown on the Apple Wallet pass and Google EventTicketObject's `validTimeInterval`. |
 | `event_ends_at` | **Event over** — distinct from `hacking_ends_at` (multi-day events keep going after submissions close). Becomes the Apple pass's `expirationDate` and the Google object's validity end, so Wallet stops surfacing the pass afterwards. `CHECK (ends > starts)`. |
 | `hacking_starts_at`, `hacking_ends_at` | The publicly-"spoken" hacking window; drives the countdown. `CHECK (ends > starts)`. |

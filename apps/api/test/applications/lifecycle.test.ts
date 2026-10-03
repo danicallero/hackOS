@@ -1111,7 +1111,9 @@ describe("re-accept (admin)", () => {
     });
     expect(inbox.statusCode).toBe(200);
     expect(inbox.json().total).toBe(1);
-    expect(inbox.json().items[0].payload.subject).toBe("A decision on your application");
+    expect(inbox.json().items[0].payload.subject).toBe(
+      "Your application to Participant form has been accepted",
+    );
 
     // the new token can confirm
     const token = await latestConfirmationToken(userId);
@@ -1568,8 +1570,66 @@ describe("decision pool", () => {
   });
 });
 
-describe("email countdown", () => {
-  it("decision email contains a human-readable countdown", async () => {
+describe("email confirmation deadline", () => {
+  it.each([
+    ["es", "¡Buenas noticias!", "Puedes confirmar tu plaza hasta el", "Confirmar mi plaza"],
+    ["gl", "Boas novas!", "Podes confirmar a túa praza ata o", "Confirmar a miña praza"],
+    ["en", "Good news!", "You can confirm your spot until", "Confirm my spot"],
+  ])("localizes acceptance, exact expiry and action links in %s (H14/H15)", async (language, welcome, deadline, action) => {
+    const a = await getApp();
+    const appId = await createApplication({ confirmation_window_hours: 1 });
+    const { userId, responseId } = await submittedApplicant(appId);
+    await pool.query("UPDATE users SET language = $1 WHERE id = $2", [language, userId]);
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "accepted" },
+    });
+    const sent = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/send-decision`,
+      headers: asUser(decider),
+    });
+    expect(sent.statusCode).toBe(200);
+    const { rows } = await pool.query(
+      "SELECT payload FROM notification_outbox WHERE user_id = $1 AND channel = 'email'",
+      [userId],
+    );
+    const { renderEmailTemplate, normalizeLanguage } = await import(
+      "../../src/modules/notifications/templates.js"
+    );
+    const rendered = renderEmailTemplate(rows[0].payload, normalizeLanguage(language));
+    expect(rendered.text).toContain(welcome);
+    expect(rendered.text).toContain(deadline);
+    const { rows: tokens } = await pool.query(
+      "SELECT expires_at FROM email_verification_tokens WHERE user_id = $1 AND type = 'spot_confirmation' AND used_at IS NULL",
+      [userId],
+    );
+    expect(rows[0].payload.vars.confirmationExpiresAt).toBe(tokens[0].expires_at.toISOString());
+    const formattedDeadline = new Intl.DateTimeFormat(language, {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone: rows[0].payload.vars.confirmationTimeZone,
+      timeZoneName: "short",
+    }).format(tokens[0].expires_at);
+    expect(rendered.text).toContain(formattedDeadline);
+    expect(rendered.text).toContain(action);
+    expect(rendered.text).not.toContain("{{");
+    expect(rendered.html).toContain("/applications/confirm?token=");
+    expect(rendered.html).toContain("/applications/decline?token=");
+    expect(rendered.text.indexOf(deadline)).toBeLessThan(rendered.text.indexOf(action));
+    if (language !== "en") {
+      expect(rendered.text).not.toContain("accepted");
+      expect(rendered.text).not.toContain("You have");
+    }
+  });
+
+  it("decision email contains a localized absolute deadline", async () => {
     const appId = await createApplication();
     const { userId } = await toAcceptedSent(appId);
 
@@ -1578,8 +1638,8 @@ describe("email countdown", () => {
       [userId],
     );
     const details = outbox[0].payload.vars.decisionDetails;
-    expect(details).toMatch(/You have /);
-    expect(details).toMatch(/to confirm/);
+    expect(details).toMatch(/You can confirm your spot until /);
+    expect(details).toContain(new Date().getUTCFullYear().toString());
   });
 });
 

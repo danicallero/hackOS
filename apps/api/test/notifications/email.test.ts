@@ -67,6 +67,11 @@ describe("SMTP via Mailpit (default dev provider)", () => {
     expect(detail.Text).toContain("Sala 3");
     expect(detail.Text).toContain("Rocket");
     expect(detail.HTML).toContain("hackOS"); // branded wrapper
+    expect(detail.HTML).toContain('<html lang="en">');
+    expect(detail.HTML).toContain("This is an automated message.");
+    expect(detail.Text).toContain("This is an automated message.");
+    expect(detail.HTML).toContain("this address does not receive incoming messages");
+    expect(detail.HTML).toContain('href="mailto:hackudc@gpul.org"');
   });
 
   it("selects the template language from users.language (gl), not the payload (i18n)", async () => {
@@ -82,6 +87,9 @@ describe("SMTP via Mailpit (default dev provider)", () => {
     await drainOutboxOnce();
     const messages = await waitForMailpit(1);
     expect(messages[0]!.Subject).toBe("Chamaron ao teu equipo");
+    const detail = await getMailpitMessage(messages[0]!.ID);
+    expect(detail.HTML).toContain('<html lang="gl">');
+    expect(detail.HTML).toContain("Esta é unha mensaxe automática.");
   });
 
   it("falls back to English for an unsupported language", async () => {
@@ -92,6 +100,39 @@ describe("SMTP via Mailpit (default dev provider)", () => {
     await drainOutboxOnce();
     const messages = await waitForMailpit(1);
     expect(messages[0]!.Subject).toBe("Reset your hackOS password");
+  });
+
+  it.each([
+    ["es", "Lamentablemente", "Esperamos verte en próximas ediciones"],
+    ["gl", "Lamentablemente", "Agardamos verte en próximas edicións"],
+    ["en", "Unfortunately", "We hope to see you at a future edition"],
+  ])("delivers a considerate rejection in %s without internal status keys (H14/H52)", async (language, outcome, closing) => {
+    const userId = await createUser({ email: "applicant@test.local" });
+    await setUserLanguage(userId, language);
+    await enqueueOutbox(
+      userId,
+      "email",
+      {
+        template: "application.decision",
+        vars: {
+          name: "Ada",
+          applicationName: "HackUDC",
+          decision: "rejected",
+          decisionDetails: "",
+        },
+      },
+      "application",
+    );
+    await drainOutboxOnce();
+    const messages = await waitForMailpit(1);
+    const detail = await getMailpitMessage(messages[0]!.ID);
+    expect(detail.Text).toContain(outcome);
+    expect(detail.Text).toContain(closing);
+    expect(detail.Text).toContain("HackUDC");
+    expect(detail.Text).not.toContain("rejected");
+    expect(detail.Text).not.toContain("{{");
+    expect(detail.HTML).not.toContain("/applications/confirm");
+    expect(messages[0]!.Subject).not.toContain("rejected");
   });
 
   it("unknown template falls back to generic rendering of the payload", async () => {
