@@ -1,8 +1,14 @@
+jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupported: () => mockNfcSupported }));
+
 import { act, fireEvent, render } from "@testing-library/react-native";
 import { StyleSheet } from "react-native";
 import { BadgeLinkActions } from "@/components/badge-link-actions";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 
+let mockNfcSupported = true;
+beforeEach(() => {
+  mockNfcSupported = true;
+});
 let mockMenuProps: {
   actions: { id: string }[];
   onPressAction: (event: { nativeEvent: { event: string } }) => void;
@@ -87,4 +93,17 @@ it("clears a canceled code before the next entry", async () => {
   await view.rerender(<ScannerCodeEntry visible={false} onValue={onValue} onClose={onClose} />);
   await view.rerender(<ScannerCodeEntry visible onValue={onValue} onClose={onClose} />);
   expect(view.getByLabelText("scannerManualEntryTitle").props.value).toBe("");
+});
+
+it("offers QR linking instead of NFC on unsupported hardware", async () => {
+  mockNfcSupported = false;
+  const onNfc = jest.fn();
+  const onAlternative = jest.fn();
+  const view = await render(
+    <BadgeLinkActions onNfc={onNfc} onAlternative={onAlternative} disabled={false} />,
+  );
+  expect(view.queryByRole("button", { name: "personLinkBadgeNfc" })).toBeNull();
+  await fireEvent.press(view.getByRole("button", { name: "personScanBadgeCode" }));
+  expect(onAlternative).toHaveBeenCalledWith("qr");
+  expect(onNfc).not.toHaveBeenCalled();
 });

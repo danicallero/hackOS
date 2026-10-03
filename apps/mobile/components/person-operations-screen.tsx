@@ -39,7 +39,8 @@ import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { enqueueLocalScan, findPersonById, pendingScans } from "@/lib/scanner-db";
 import { submitScannerMutation } from "@/lib/scanner-sync";
-import type { ScannerPerson, ScanPayload } from "@/lib/scanner-types";
+import type { ScannerPerson, ScannerSnapshot, ScanPayload } from "@/lib/scanner-types";
+import { useNfcSupported } from "@/lib/use-nfc-supported";
 import { usePresenceSummary } from "@/lib/use-presence-summary";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
@@ -161,6 +162,7 @@ export function PersonOperationsScreen() {
   const navigation = useNavigation();
   const pathname = usePathname();
   const { language, t } = useLocale();
+  const nfcSupported = useNfcSupported();
   const insets = useSafeAreaInsets();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
@@ -237,61 +239,82 @@ export function PersonOperationsScreen() {
     primaryOverride: null,
     secondary: null,
   });
-  const { timeline, guaranteedMinutes } = usePresenceSummary({
+  const {
+    timeline,
+    guaranteedMinutes,
+    refresh: refreshPresence,
+  } = usePresenceSummary({
     userId,
     refreshKey: sync.lastSync ?? undefined,
     onDoorState,
     onDivergence: setDivergence,
   });
-  const load = useCallback(async () => {
-    setLoadError(null);
-    setLoadState((current) => (current === "ready" ? current : "loading"));
-    try {
-      // Once the network has answered, it is authoritative. Do not reject a
-      // valid online profile merely because the disposable SQLite backup is
-      // empty, locked, or unavailable.
-      const local = sync.serverSnapshot
-        ? (sync.serverSnapshot.people.find((candidate) => candidate.userId === userId) ?? null)
-        : await findPersonById(userId);
-      if (!local) {
-        setPerson(null);
-        setLoadState("missing");
-        return;
-      }
-
-      if (canAccredit) {
-        try {
-          const details = await apiFetch<PersonDetails>("/api/accreditation/lookup-user", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ userId }),
-          });
-          // Single setPerson call with the fully-merged result: setting the
-          // local-only snapshot first and the enriched one after causes a
-          // visible flicker as dni/shirtSize/badge briefly disappear and
-          // reappear on every periodic sync.
-          setPerson({ ...local, ...details, badgeId: details.currentBadge ?? local.badgeId });
-          setLoadState("ready");
+  const profileRequest = useRef(0);
+  const snapshotRef = useRef(sync.serverSnapshot);
+  snapshotRef.current = sync.serverSnapshot;
+  const load = useCallback(
+    async (snapshot?: ScannerSnapshot) => {
+      const request = ++profileRequest.current;
+      setLoadError(null);
+      setLoadState((current) => (current === "ready" ? current : "loading"));
+      try {
+        // Once the network has answered, it is authoritative. Do not reject a
+        // valid online profile merely because the disposable SQLite backup is
+        // empty, locked, or unavailable.
+        const currentSnapshot = snapshot ?? snapshotRef.current;
+        const local = currentSnapshot
+          ? (currentSnapshot.people.find((candidate) => candidate.userId === userId) ?? null)
+          : await findPersonById(userId);
+        if (request !== profileRequest.current) return;
+        if (!local) {
+          setPerson(null);
+          setLoadState("missing");
           return;
-        } catch {
-          /* Fall through to the local-only card, e.g. while offline. */
         }
+
+        if (canAccredit) {
+          try {
+            const details = await apiFetch<PersonDetails>("/api/accreditation/lookup-user", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ userId }),
+            });
+            // Single setPerson call with the fully-merged result: setting the
+            // local-only snapshot first and the enriched one after causes a
+            // visible flicker as dni/shirtSize/badge briefly disappear and
+            // reappear on every periodic sync.
+            if (request !== profileRequest.current) return;
+            setPerson({
+              ...local,
+              ...details,
+              badgeId: details.currentBadge === undefined ? local.badgeId : details.currentBadge,
+            });
+            setLoadState("ready");
+            return;
+          } catch {
+            /* Fall through to the local-only card, e.g. while offline. */
+          }
+        }
+        if (request !== profileRequest.current) return;
+        setPerson(local);
+        setLoadState("ready");
+      } catch (cause) {
+        if (request !== profileRequest.current) return;
+        setLoadError(cause instanceof Error ? cause : new Error(t("requestError")));
+        setLoadState("error");
       }
-      setPerson(local);
-      setLoadState("ready");
-    } catch (cause) {
-      setLoadError(cause instanceof Error ? cause : new Error(t("requestError")));
-      setLoadState("error");
-    }
-  }, [canAccredit, sync.serverSnapshot, t, userId]);
+    },
+    [canAccredit, t, userId],
+  );
 
   // Reload on every scanner sync: the register derives its direction from
   // the person's last door log, which door scans on other devices (or manual
   // timeline edits) change under us.
   useEffect(() => {
     void sync.lastSync;
+    void sync.serverSnapshot;
     void load();
-  }, [load, sync.lastSync]);
+  }, [load, sync.lastSync, sync.serverSnapshot]);
 
   // Also reload on focus: this screen stays mounted while "Add event" (a
   // separate pushed screen) saves a presence signal, so returning here
@@ -332,8 +355,8 @@ export function PersonOperationsScreen() {
       // Refresh the authoritative snapshot after an online mutation. A local
       // cache failure is intentionally contained by useScannerSync, so it
       // cannot turn a successful server assignment into an error state.
-      await sync.sync().catch(() => undefined);
-      await load();
+      const snapshot = await sync.sync().catch(() => undefined);
+      await load(snapshot);
     } catch (cause) {
       void haptic("error");
       const message = cause instanceof Error ? cause.message : t("requestError");
@@ -385,7 +408,8 @@ export function PersonOperationsScreen() {
   }
 
   function chooseBadgeMethod(method: "nfc" | "manual" | "qr") {
-    if (method === "nfc") setBadgeReaderVisible(true);
+    if (method === "nfc" && nfcSupported) setBadgeReaderVisible(true);
+    else if (method === "nfc") return;
     else setBadgeCodeMethod(method);
   }
 
@@ -400,11 +424,15 @@ export function PersonOperationsScreen() {
       t("personReplaceBadgeMethod"),
       [
         { text: t("personScanBadgeCode"), onPress: () => beginBadgeAction("qr") },
-        {
-          text: t("scannerNfcScan"),
-          isPreferred: true,
-          onPress: () => beginBadgeAction("nfc"),
-        },
+        ...(nfcSupported
+          ? [
+              {
+                text: t("scannerNfcScan"),
+                isPreferred: true,
+                onPress: () => beginBadgeAction("nfc"),
+              },
+            ]
+          : []),
         { text: t("cancel"), style: "cancel" },
       ],
       { cancelable: true },
@@ -412,7 +440,7 @@ export function PersonOperationsScreen() {
   }
 
   function confirmRemoveBadge() {
-    if (!person?.badgeId || ownerUserId === undefined) return;
+    if (!person?.badgeId || ownerUserId === undefined || busy) return;
     Alert.alert(t("personDeleteBadge"), t("personDeleteBadgeBody", { badge: person.badgeId }), [
       { text: t("cancel"), style: "cancel" },
       {
@@ -420,33 +448,44 @@ export function PersonOperationsScreen() {
         style: "destructive",
         onPress: () =>
           void (async () => {
-            const scanId = await enqueueLocalScan(
-              {
-                kind: "badge_removal",
-                userId,
-                currentBadgeId: person.badgeId!,
-                reason: t("badgeRemovalReason"),
-              },
-              ownerUserId,
-            );
-            void haptic("light");
-            await sync.sync();
-            const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-            void haptic(
-              stored?.status === "failed"
-                ? "error"
-                : stored?.status === "acknowledged"
-                  ? "warning"
-                  : "light",
-            );
-            await load();
+            if (badgeMutationInFlight.current) return;
+            badgeMutationInFlight.current = true;
+            setBusy(true);
+            try {
+              const result = await submitScannerMutation(
+                {
+                  kind: "badge_removal",
+                  userId,
+                  currentBadgeId: person.badgeId!,
+                  reason: t("badgeRemovalReason"),
+                },
+                ownerUserId,
+              );
+              const snapshot = await sync.sync();
+              await load(snapshot);
+              if (result.state === "acknowledged") {
+                setPerson((current) =>
+                  current ? { ...current, badgeId: null, currentBadge: null } : current,
+                );
+              }
+              void haptic(result.state === "acknowledged" ? "warning" : "light");
+            } catch (cause) {
+              void haptic("error");
+              Alert.alert(
+                t("scannerBusinessRejected"),
+                cause instanceof Error ? cause.message : t("requestError"),
+              );
+            } finally {
+              badgeMutationInFlight.current = false;
+              setBusy(false);
+            }
           })(),
       },
     ]);
   }
 
   async function registerPresence(direction: "in" | "out") {
-    if (!person?.badgeId || ownerUserId === undefined) return;
+    if (!person?.badgeId || ownerUserId === undefined || busy) return;
     const scannedAt = new Date();
     setBusy(true);
     try {
@@ -459,7 +498,7 @@ export function PersonOperationsScreen() {
         },
         ownerUserId,
       );
-      await sync.sync();
+      const snapshot = await sync.sync();
       // The offline queue fails 4xx replays permanently (e.g. an entry while
       // a session is already open) — without this check the rejection is
       // invisible and the log just never appears.
@@ -480,7 +519,8 @@ export function PersonOperationsScreen() {
       } else {
         void haptic("light");
       }
-      await load();
+      await load(snapshot);
+      await refreshPresence();
     } finally {
       setBusy(false);
     }
@@ -500,7 +540,7 @@ export function PersonOperationsScreen() {
         { kind: "presence_signal", userId, direction: kind, occurredAt: occurredAt.toISOString() },
         ownerUserId,
       );
-      await sync.sync();
+      const snapshot = await sync.sync();
       const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
       if (stored?.status === "failed") {
         void haptic("error");
@@ -513,7 +553,8 @@ export function PersonOperationsScreen() {
       } else {
         void haptic("light");
       }
-      await load();
+      await load(snapshot);
+      await refreshPresence();
     } finally {
       setBusy(false);
     }
@@ -611,13 +652,13 @@ export function PersonOperationsScreen() {
   // and assigning a badge becomes the profile's primary action instead.
   // The suggested direction (inferred from the last door signal — or
   // overridden when an activity opened a session with no door entry behind
-  // it, see PresenceDivergence) gets the full filled button; the other
-  // direction is still one tap away, as a clearly labeled outline button.
+  // it, see PresenceDivergence) is the primary movement action.
+  // The secondary button opens the timestamp editor for the other movement.
   const effectiveDirection: "in" | "out" = divergence.primaryOverride ?? direction;
   const otherDirection: "in" | "out" = effectiveDirection === "in" ? "out" : "in";
   // The door-only scan endpoint can't represent either half of the
   // activity-open case (no door session exists for it to open or close) —
-  // both buttons instead create the signal directly via createPresenceSignal.
+  // the valid movement instead creates the signal via createPresenceSignal.
   const isActivityOpenDivergence = divergence.primaryOverride !== null;
   const directionTone = (dir: "in" | "out") => (dir === "in" ? colors.accent : colors.warning);
   // The primary button fills with the matching tinted container, so its

@@ -1,6 +1,7 @@
 import { AlertDialog, Button, Column, Host, Text, TextButton } from "@expo/ui/jetpack-compose";
 import { defaultMinSize, fillMaxWidth } from "@expo/ui/jetpack-compose/modifiers";
 import { useLocale } from "@/lib/i18n";
+import { useNfcSupported } from "@/lib/use-nfc-supported";
 
 // H22–H26: native Material presentation with an explicit primary NFC action.
 export function BadgeReplacementDialog({
@@ -13,6 +14,7 @@ export function BadgeReplacementDialog({
   onClose: () => void;
 }) {
   const { t } = useLocale();
+  const nfcSupported = useNfcSupported();
   if (!visible) return null;
   return (
     <Host style={{ position: "absolute", width: 0, height: 0 }}>
@@ -31,12 +33,14 @@ export function BadgeReplacementDialog({
             >
               <Text>{t("personScanBadgeCode")}</Text>
             </TextButton>
-            <Button
-              modifiers={[fillMaxWidth(), defaultMinSize({ minHeight: 48 })]}
-              onClick={() => onSelect("nfc")}
-            >
-              <Text>{t("scannerNfcScan")}</Text>
-            </Button>
+            {nfcSupported ? (
+              <Button
+                modifiers={[fillMaxWidth(), defaultMinSize({ minHeight: 48 })]}
+                onClick={() => onSelect("nfc")}
+              >
+                <Text>{t("scannerNfcScan")}</Text>
+              </Button>
+            ) : null}
             <TextButton
               modifiers={[fillMaxWidth(), defaultMinSize({ minHeight: 48 })]}
               onClick={onClose}

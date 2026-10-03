@@ -9,13 +9,13 @@ import { GlassView } from "@/components/glass-view";
 import { NfcReader } from "@/components/nfc-reader";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SymbolView } from "@/components/symbol";
-
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { getBarcodeFrameObservation } from "@/lib/qr-frame";
 import { advanceQrScanCandidate, type QrScanCandidate } from "@/lib/qr-scan-stability";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { scannerCameraControls } from "@/lib/scanner-camera-controls";
+import { useNfcSupported } from "@/lib/use-nfc-supported";
 import CameraCapabilities from "@/modules/camera-capabilities";
 import { colors } from "@/theme/colors";
 
@@ -34,12 +34,14 @@ export function QrCamera({
   autoStartNfc?: boolean;
   nfcSessionKey?: number;
 }) {
+  const nfcSupported = useNfcSupported();
   const [nfcVisible, setNfcVisible] = useState(false);
   const autoStarted = useRef(false);
   const lastNfcSessionKey = useRef(0);
   const focused = useIsFocused();
   useEffect(() => {
     if (
+      nfcSupported &&
       focused &&
       scanningEnabled &&
       ((autoStartNfc && !autoStarted.current) || nfcSessionKey !== lastNfcSessionKey.current)
@@ -49,7 +51,7 @@ export function QrCamera({
       setNfcVisible(true);
     }
     if (!focused) setNfcVisible(false);
-  }, [focused, autoStartNfc, scanningEnabled, nfcSessionKey]);
+  }, [focused, autoStartNfc, scanningEnabled, nfcSessionKey, nfcSupported]);
   return (
     <>
       <CameraPreview
@@ -57,10 +59,10 @@ export function QrCamera({
         onClose={onClose}
         hint={hint}
         scanningEnabled={scanningEnabled && !nfcVisible}
-        onNfc={() => setNfcVisible(true)}
+        onNfc={nfcSupported ? () => setNfcVisible(true) : undefined}
       />
       <NfcReader
-        visible={nfcVisible && scanningEnabled}
+        visible={nfcSupported && nfcVisible && scanningEnabled}
         onValue={onValue}
         onClose={() => setNfcVisible(false)}
       />
@@ -75,7 +77,7 @@ function CameraPreview({
   scanningEnabled = true,
   onNfc,
 }: {
-  onNfc: () => void;
+  onNfc?: () => void;
   onValue: (value: string) => void;
   onClose?: () => void;
   hint?: string | null;
@@ -160,6 +162,7 @@ function CameraPreview({
   );
 
   function nfcPermissionButton() {
+    if (!onNfc) return null;
     return (
       <Pressable
         accessibilityRole="button"
@@ -258,23 +261,25 @@ function CameraPreview({
           {hint ?? t("scannerQrHint")}
         </Text>
       )}
-      <GlassView
-        glassEffectStyle="regular"
-        isInteractive
-        colorScheme="dark"
-        style={[styles.cameraControl, { bottom: tabBarBottomInset + 76 }]}
-      >
-        <Pressable
-          accessibilityLabel={t("scannerNfcScan")}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !scanningEnabled }}
-          disabled={!scanningEnabled}
-          onPress={onNfc}
-          style={styles.cameraControlPressable}
+      {onNfc ? (
+        <GlassView
+          glassEffectStyle="regular"
+          isInteractive
+          colorScheme="dark"
+          style={[styles.cameraControl, { bottom: tabBarBottomInset + 76 }]}
         >
-          <SymbolView name="wave.3.right" tintColor="white" size={23} weight="semibold" />
-        </Pressable>
-      </GlassView>
+          <Pressable
+            accessibilityLabel={t("scannerNfcScan")}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !scanningEnabled }}
+            disabled={!scanningEnabled}
+            onPress={onNfc}
+            style={styles.cameraControlPressable}
+          >
+            <SymbolView name="wave.3.right" tintColor="white" size={23} weight="semibold" />
+          </Pressable>
+        </GlassView>
+      ) : null}
       {cameraControls.showTorch ? (
         <GlassView
           glassEffectStyle="regular"

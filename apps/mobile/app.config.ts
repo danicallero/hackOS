@@ -37,7 +37,8 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
       [
         "react-native-nfc-manager",
         {
-          nfcPermission: "Read NFC badges to pair accreditations and record attendance.",
+          nfcPermission:
+            "hackOS uses NFC to read participant badge serial numbers, link badges to participant accounts, and record check-in, meal collection, and activity attendance.",
           includeNdefEntitlement: false,
         },
       ],

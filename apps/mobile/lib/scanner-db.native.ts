@@ -888,8 +888,8 @@ export async function enqueueLocalScan(
     const roster = await rosterDb();
     await withSerializedTransaction(rosterChainRef, roster, async () => {
       const owner = await roster.getFirstAsync<{ user_id: number }>(
-        `SELECT user_id FROM scanner_people WHERE badge_id = ?`,
-        payload.badgeId,
+        `SELECT user_id FROM scanner_people WHERE ${payload.ticketToken ? "ticket_token" : "badge_id"} = ?`,
+        payload.ticketToken ?? payload.badgeId!,
       );
       if (owner) {
         await roster.runAsync(

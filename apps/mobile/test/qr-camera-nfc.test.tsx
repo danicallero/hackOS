@@ -1,8 +1,11 @@
+jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupported: () => mockNfcSupported }));
+
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import { QrCamera } from "@/components/QrCamera";
 
 let mockCameraProps: { onBarcodeScanned?: unknown };
 let mockReaderProps: { visible: boolean; onClose: () => void; onValue: (uid: string) => void };
+let mockNfcSupported = true;
 let mockFocused = true;
 let mockPermission = { granted: true, canAskAgain: true };
 jest.mock("expo-camera", () => ({
@@ -38,6 +41,7 @@ jest.mock("@/components/nfc-reader", () => ({
 }));
 
 beforeEach(() => {
+  mockNfcSupported = true;
   mockFocused = true;
   mockPermission = { granted: true, canAskAgain: true };
 });
@@ -104,4 +108,15 @@ it("reopens NFC after each dismissed activity result but not after reader cancel
   expect(mockReaderProps.visible).toBe(false);
   await view.rerender(<QrCamera onValue={onValue} autoStartNfc nfcSessionKey={2} />);
   expect(mockReaderProps.visible).toBe(true);
+});
+
+it("hides NFC controls and never auto-starts on unsupported hardware", async () => {
+  mockNfcSupported = false;
+  const view = await render(<QrCamera onValue={jest.fn()} autoStartNfc nfcSessionKey={1} />);
+  expect(view.queryByRole("button", { name: "scannerNfcScan" })).toBeNull();
+  expect(mockReaderProps.visible).toBe(false);
+  expect(mockCameraProps.onBarcodeScanned).toBeDefined();
+  mockPermission = { granted: false, canAskAgain: false };
+  await view.rerender(<QrCamera onValue={jest.fn()} autoStartNfc />);
+  expect(view.queryByRole("button", { name: "scannerNfcScan" })).toBeNull();
 });

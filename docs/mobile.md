@@ -680,7 +680,14 @@ remain attached to their surfaces rather than moving into navigation chrome.
 Opening a person from People Finder or a scan shows the current badge as the
 last row in Personal data. When a badge is assigned, swipe that row left to
 reveal the deliberate Replace and Delete actions; an unassigned person keeps
-the separate Link badge action in the Accreditation section.
+the separate Link badge action in the Accreditation section. Server lookup
+responses with a null badge clear the cached badge. Mutations reload from the
+freshly returned sync snapshot, and older concurrent profile/timeline requests
+cannot overwrite newer loads. The presence register refreshes the timeline before enabling actions again.
+Its primary button records the valid next movement; the secondary button
+retains the other movement’s date/time editor for past entries and exits. Scanner error
+feedback appears centered directly below Confirmed, Checked in, and Inside,
+with wrapping text and flexible height so it stays in the upper scanner area.
 The local `modules/camera-capabilities` Expo module reads the back camera's
 actual torch support from AVFoundation/Camera2. Flash-capable devices keep
 manual entry at bottom-left and the torch at bottom-right. Devices without a
@@ -822,6 +829,11 @@ without immediately reopening it; the NFC button can reopen it manually. NFC als
 Camera decoding pauses while NFC is open and while an activity result awaits
 operator action. Reads reuse the same identity lookup, repeat-confirmation,
 revocation and encrypted offline-queue paths as camera scans.
+
+NFC controls and automatic sessions stay hidden until hardware support is confirmed.
+Devices without NFC retain QR and manual entry, including badge linking and replacement.
+The iOS usage description explains reading badge serial numbers for attendee
+identification at check-in, meals, and activities.
 
 `lib/nfc-reader.ts` serializes native sessions and releases them on completion,
 cancellation, navigation, backgrounding and unmount. iOS uses `MifareIOS` and
@@ -1001,3 +1013,9 @@ later foreground/15s/manual sync. Failed items stay visible and can be reset to
 acknowledgement. Badge rotation, presence, meals, and activities apply local
 operational feedback immediately, then the post-replay full snapshot converges
 them to server truth.
+
+Activity and meal scanners also resolve entry-ticket QR tokens, including for
+participants without a badge. Offline activity payloads preserve the original
+credential and the API revalidates tickets on replay, with the same repeat
+confirmation and idempotency as badge scans. Scanner lookup errors appear
+centered below the statistics on both screens and dismiss after six seconds.

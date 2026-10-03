@@ -5,6 +5,7 @@ import { GlassView } from "@/components/glass-view";
 import { ActionButton } from "@/components/native-ui";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
+import { useNfcSupported } from "@/lib/use-nfc-supported";
 import { colors } from "@/theme/colors";
 
 export function BadgeLinkActions({
@@ -17,6 +18,7 @@ export function BadgeLinkActions({
   disabled: boolean;
 }) {
   const { t } = useLocale();
+  const nfcSupported = useNfcSupported();
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
       <GlassView
@@ -27,12 +29,12 @@ export function BadgeLinkActions({
       >
         <ActionButton
           testID={UI_TEST_IDS.scanner.linkBadge}
-          icon="wave.3.right"
-          label={t("personLinkBadgeNfc")}
+          icon={nfcSupported ? "wave.3.right" : "qrcode.viewfinder"}
+          label={t(nfcSupported ? "personLinkBadgeNfc" : "personScanBadgeCode")}
           variant="filled"
           style={{ borderRadius: 25, backgroundColor: "transparent" }}
           disabled={disabled}
-          onPress={onNfc}
+          onPress={nfcSupported ? onNfc : () => onAlternative("qr")}
         />
       </GlassView>
       <MenuView

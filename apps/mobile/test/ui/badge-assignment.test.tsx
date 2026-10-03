@@ -1,6 +1,10 @@
+jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupported: () => true }));
+
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { Alert, Platform } from "react-native";
 import { PersonOperationsScreen } from "@/components/person-operations-screen";
+import { apiFetch } from "@/lib/api";
+import { enqueueLocalScan, pendingScans } from "@/lib/scanner-db";
 import { submitScannerMutation } from "@/lib/scanner-sync";
 import { renderMobile } from "./render";
 
@@ -66,18 +70,19 @@ const mockPerson = {
   intolerances: [],
   foodIntoleranceNotes: null,
   notes: null,
-  lastPresenceKind: null,
-  lastPresenceAt: null,
+  lastPresenceKind: null as "in" | "out" | null,
+  lastPresenceAt: null as string | null,
 };
 const mockSyncState = {
   serverSnapshot: { people: [mockPerson] },
   lastSync: null,
   sync: jest.fn().mockResolvedValue(undefined),
 };
+const mockRouter = { push: jest.fn() };
 const mockNavigation = { setOptions: jest.fn() };
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: "21" }),
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => mockRouter,
   usePathname: () => "/scan/person/21",
   useNavigation: () => mockNavigation,
   useScrollToTop: () => {},
@@ -103,7 +108,11 @@ jest.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
 }));
 jest.mock("@/lib/use-presence-summary", () => ({
-  usePresenceSummary: () => ({ timeline: null, guaranteedMinutes: 0 }),
+  usePresenceSummary: () => ({
+    timeline: null,
+    guaranteedMinutes: 0,
+    refresh: jest.fn().mockResolvedValue(undefined),
+  }),
 }));
 jest.mock("@/components/presence-management", () => ({
   PresenceManagement: () => null,
@@ -155,6 +164,10 @@ const originalOS = Platform.OS;
 beforeEach(() => {
   Platform.OS = "android";
   mockPerson.badgeId = null;
+  mockPerson.lastPresenceKind = null;
+  mockPerson.lastPresenceAt = null;
+  jest.mocked(apiFetch).mockReset().mockRejectedValue(new Error("Offline"));
+  mockSyncState.sync.mockReset().mockResolvedValue(undefined);
   mockNfcVisible = false;
   jest.mocked(submitScannerMutation).mockClear();
 });
@@ -248,4 +261,112 @@ it("dismisses Android replacement without changing the badge", async () => {
   expect(mockNfcVisible).toBe(false);
   expect(submitScannerMutation).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { name: "personScanBadgeCode" })).toBeNull();
+});
+
+it("treats the server's null badge as authoritative over the cached badge", async () => {
+  mockPerson.badgeId = "OLD-BADGE";
+  jest.mocked(apiFetch).mockResolvedValue({ currentBadge: null });
+  await renderMobile(<PersonOperationsScreen />);
+  await screen.findByRole("button", { name: "personLinkBadgeNfc" });
+  expect(screen.queryByRole("button", { name: "personReplaceBadge" })).toBeNull();
+});
+
+it("removes the badge controls immediately after an acknowledged removal", async () => {
+  mockPerson.badgeId = "OLD-BADGE";
+  const alert = jest.spyOn(Alert, "alert");
+  await renderMobile(<PersonOperationsScreen />);
+  await fireEvent.press(await screen.findByRole("button", { name: "personDeleteBadge" }));
+  await act(async () => {
+    alert.mock.calls[0][2]?.find((button) => button.text === "delete")?.onPress?.();
+  });
+  await screen.findByRole("button", { name: "personLinkBadgeNfc" });
+  expect(screen.queryByRole("button", { name: "personDeleteBadge" })).toBeNull();
+  expect(submitScannerMutation).toHaveBeenCalledWith(
+    expect.objectContaining({ kind: "badge_removal" }),
+    11,
+  );
+});
+
+it("switches the primary movement using the fresh sync snapshot", async () => {
+  mockPerson.badgeId = "BADGE";
+  const freshPerson = {
+    ...mockPerson,
+    lastPresenceKind: "in",
+    lastPresenceAt: new Date().toISOString(),
+  };
+  mockSyncState.sync.mockResolvedValue({ people: [freshPerson] });
+  jest.mocked(enqueueLocalScan).mockResolvedValue("presence-1");
+  jest
+    .mocked(pendingScans)
+    .mockResolvedValue([{ id: "presence-1", status: "acknowledged" }] as never);
+  await renderMobile(<PersonOperationsScreen />);
+  const entry = await screen.findByRole("button", { name: "personRegisterEntry" });
+  expect(screen.getByRole("button", { name: "personRegisterExit" })).toBeTruthy();
+  await fireEvent.press(entry);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "personRegisterExit" })).not.toBeDisabled(),
+  );
+  jest.mocked(enqueueLocalScan).mockClear();
+  await fireEvent.press(screen.getByRole("button", { name: "personRegisterExit" }));
+  await waitFor(() =>
+    expect(enqueueLocalScan).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "presence", direction: "out" }),
+      11,
+    ),
+  );
+  expect(screen.getByRole("button", { name: "personRegisterEntry" })).toBeTruthy();
+});
+
+it("switches exit to entry using the acknowledged snapshot", async () => {
+  mockPerson.badgeId = "BADGE";
+  mockPerson.lastPresenceKind = "in";
+  mockPerson.lastPresenceAt = "2026-10-03T10:00:00Z";
+  mockSyncState.sync.mockResolvedValue({
+    people: [{ ...mockPerson, lastPresenceKind: "out", lastPresenceAt: new Date().toISOString() }],
+  });
+  jest.mocked(enqueueLocalScan).mockResolvedValue("presence-2");
+  jest
+    .mocked(pendingScans)
+    .mockResolvedValue([{ id: "presence-2", status: "acknowledged" }] as never);
+  await renderMobile(<PersonOperationsScreen />);
+  await fireEvent.press(await screen.findByRole("button", { name: "personRegisterExit" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "personRegisterEntry" })).not.toBeDisabled(),
+  );
+  jest.mocked(enqueueLocalScan).mockClear();
+  await fireEvent.press(screen.getByRole("button", { name: "personRegisterEntry" }));
+  await waitFor(() =>
+    expect(enqueueLocalScan).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "presence", direction: "in" }),
+      11,
+    ),
+  );
+  expect(screen.getByRole("button", { name: "personRegisterExit" })).toBeTruthy();
+});
+
+it("keeps the badge visible and surfaces a rejected removal", async () => {
+  mockPerson.badgeId = "OLD-BADGE";
+  jest.mocked(submitScannerMutation).mockRejectedValueOnce(new Error("Removal rejected"));
+  const alert = jest.spyOn(Alert, "alert");
+  await renderMobile(<PersonOperationsScreen />);
+  await fireEvent.press(await screen.findByRole("button", { name: "personDeleteBadge" }));
+  await act(async () => {
+    alert.mock.calls[0][2]?.find((button) => button.text === "delete")?.onPress?.();
+  });
+  await waitFor(() =>
+    expect(alert).toHaveBeenCalledWith("scannerBusinessRejected", "Removal rejected"),
+  );
+  expect(screen.getByRole("button", { name: "personDeleteBadge" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "personLinkBadgeNfc" })).toBeNull();
+});
+
+it("preserves the secondary movement's date and time editor", async () => {
+  mockPerson.badgeId = "BADGE";
+  mockRouter.push.mockClear();
+  await renderMobile(<PersonOperationsScreen />);
+  await fireEvent.press(await screen.findByRole("button", { name: "personRegisterExit" }));
+  expect(mockRouter.push).toHaveBeenCalledWith({
+    pathname: "/scan/person/presence/[id]",
+    params: { id: "21", draftKind: "out", draftAt: expect.any(String) },
+  });
 });
