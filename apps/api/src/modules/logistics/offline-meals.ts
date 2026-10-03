@@ -109,7 +109,14 @@ export async function enqueueMealScanBatch(
     return { batchId, accepted, duplicate };
   });
 
-  await getQueue(QUEUE_NAME).add(`batch:${batch.batchId}`, { batchId: batch.batchId });
+  await getQueue(QUEUE_NAME).add(
+    `batch:${batch.batchId}`,
+    { batchId: batch.batchId },
+    {
+      removeOnComplete: true,
+      removeOnFail: { age: 24 * 60 * 60, count: 1_000 },
+    },
+  );
   return { ...batch, queued: true };
 }
 

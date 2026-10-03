@@ -212,7 +212,7 @@ El API no recibe variables de correo ni la cuenta root de MinIO.
 
 | Grupo | Variables |
 |---|---|
-| Proceso | `NODE_ENV=production`, `WORKERS_INLINE=false`, `LOG_LEVEL`, `LOG_EXPO_PUSH_TICKETS`, `LOG_EXPO_PUSH_UNSAFE_DEBUG` |
+| Proceso | `NODE_ENV=production`, `WORKERS_INLINE=false`, `LOG_LEVEL`, `LOG_EXPO_PUSH_TICKETS`, `LOG_EXPO_PUSH_UNSAFE_DEBUG`, `METRICS_PORT=9464` |
 | Pool y outbox | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECTION_TIMEOUT_MS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `NOTIFICATION_OUTBOX_BATCH_SIZE` |
 | Correo | `MAIL_PROVIDER`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `SMTP_HOST`, `SMTP_TLS_SERVERNAME`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `SMTP_REQUIRE_TLS` |
 | Wallet | El mismo bloque de Wallet que usa API, porque el worker empuja sincronizaciones de pases. |
@@ -281,17 +281,17 @@ exponen variables de memoria. Los límites actuales están fijados en Compose:
 
 | Servicio | Memoria |
 |---|---:|
-| `postgres` | `2g` |
-| `valkey` | `1g` |
-| `minio` | `1g` |
-| `api` | `1g` |
-| `worker` | `1g` |
-| `web` | `512m` |
+| `postgres` | `5g` + `memswap_limit=6g` |
+| `valkey` | `2g` + `memswap_limit=3g` |
+| `minio` | `1g` + `memswap_limit=2g` |
+| `api` | `2g` + `memswap_limit=3g` |
+| `worker` | `2g` + `memswap_limit=3g` |
+| `web` | `1g` + `memswap_limit=2g` |
 
-La suma declarada es `6.5 GiB` (`2 + 1 + 1 + 1 + 1 + 0.5`) y deja margen
-dentro del presupuesto de memoria de producción para el sistema operativo,
-Docker y presión operativa breve. Los límites no se cambian mediante variables
-de entorno. Para cambiar uno, edita el Compose, recrea el servicio y comprueba
+La suma declarada de RAM es `13 GiB` (`5 + 2 + 1 + 2 + 2 + 1`) y los servicios
+tienen `6 GiB` de swap explícita para picos breves. El swap no es capacidad de
+trabajo sostenida. Los límites no se cambian mediante variables de entorno.
+Para cambiar uno, edita el Compose, recrea el servicio y comprueba
 su salud:
 
 ```sh

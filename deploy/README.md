@@ -252,22 +252,24 @@ sus registros oficiales, pero todas quedan inmutables por digest.
 
 Los límites de memoria del evento se mantienen como literales, sin variables de
 override. La suma de los seis servicios persistentes/de larga duración es
-`2 + 1 + 1 + 1 + 1 + 0.5 = 6.5 GiB` declarados: PostgreSQL recibe la mayor
-parte por la contención de 12 salas y 7 colas, Valkey tiene margen para la
-fan-in de 3 colas compartidas y API/worker comparten el presupuesto restante
-para 24 conexiones por proceso. Queda margen dentro del presupuesto de
-memoria de producción para el sistema operativo y Docker:
+`5 + 2 + 1 + 2 + 2 + 1 = 13 GiB` de RAM declarada, más límites explícitos de
+swap por servicio: PostgreSQL recibe 5 GiB de RAM + 1 GiB de swap, Valkey 2 +
+1, API/worker 2 + 1 cada uno, MinIO 1 + 1 y web 1 + 1. El swap es un fusible
+para picos breves, no capacidad de trabajo sostenida:
 
 | Servicio | Límite |
 |---|---:|
-| `postgres` | `2g` |
-| `valkey` | `1g` |
-| `minio` | `1g` |
-| `api` | `1g` |
-| `worker` | `1g` |
-| `web` | `512m` |
+| `postgres` | `5g` + `memswap_limit=6g` |
+| `valkey` | `2g` + `memswap_limit=3g` |
+| `minio` | `1g` + `memswap_limit=2g` |
+| `api` | `2g` + `memswap_limit=3g` |
+| `worker` | `2g` + `memswap_limit=3g` |
+| `web` | `1g` + `memswap_limit=2g` |
 
-No existen `API_MEM_LIMIT` ni `WEB_MEM_LIMIT` en el contrato de despliegue.
+No existen `API_MEM_LIMIT` ni `WEB_MEM_LIMIT` en el contrato de despliegue. El
+perfil también fija PostgreSQL en `shared_buffers=1GB`,
+`effective_cache_size=4GB`, `work_mem=8MB`, `maintenance_work_mem=256MB` y
+`max_connections=100`.
 
 ## Qualification pre-evento
 
@@ -278,14 +280,11 @@ destruye después de recuperar el artefacto; nunca comparte estado, volumen,
 red, secretos o servicios con producción.
 
 Sus límites reflejan exactamente los servicios equivalentes de producción:
-`postgres=2g`, `valkey=1g`, `api=1g` y `worker=1g`. El helper `migrate` usa
+`postgres=5g`, `valkey=2g`, `api=2g` y `worker=2g`. El helper `migrate` usa
 `512m` y el runner desechable usa `1g`; juntos, los seis servicios de la
-qualification declaran 6.5 GiB y siguen bajo el presupuesto de memoria de
-producción durante la prueba. `deploy/qualification/validate-compose.mjs`
-falla antes del arranque si cambia una cifra o si la suma deja de estar bajo el
-presupuesto. Como las cotas coinciden, pasar la qualification es una señal
-útil de que la imagen puede operar bajo las cotas de producción, no un ensayo
-con más memoria.
+qualification declaran 12.5 GiB bajo el presupuesto de qualification de 16
+GiB. `deploy/qualification/validate-compose.mjs` falla antes del arranque si
+cambia una cifra o si la suma deja de estar bajo el presupuesto.
 
 La carga por defecto redondea el evento a 600 participantes, 35 personas de
 staff, 30 representantes de sponsors, 12 salas y 7 colas, 3 de ellas
@@ -385,28 +384,33 @@ dedicated to this workflow and contain only the deployment key and pinned host
 key; they are not application secrets. It does not expose SSH through the
 public ingress.
 
-`.github/workflows/deploy-incus.yml` runs only by manual dispatch after an
-operator selects a published SHA and its API/web image set. It passes those
-partial-release flags to the host script and uses the protected `production`
-environment. The protection of both environments must
+`.github/workflows/deploy-incus.yml` runs by manual dispatch after an operator
+selects a published SHA, its API/web image set and a `release_action`:
+`promote` clears a manual rollback hold, while `rollback` pins production at
+that SHA. It passes those partial-release flags to the host script and uses the
+protected `production` environment. The protection of both environments must
 be configured in GitHub (approval and, where appropriate, branch restrictions);
 the workflows do not contain application secrets.
 
-The production job needs an enabled self-hosted runner with local Incus
-access. This dependency is explicit: the infrastructure repository currently
-does not provide that runner, so enabling and registering it is a prerequisite
-outside this repository. The staging job uses a GitHub-hosted runner plus a
-private overlay network instead.
+The production job needs an enabled repository-scoped self-hosted runner with
+local Incus access. The infrastructure repository provisions it in the
+`gh-runner` LXC for `danicallero/hackOS`; an organization runner registered only
+at `gpul-org` cannot satisfy this workflow. The staging job uses a GitHub-hosted
+runner plus a private overlay network instead.
 
 Production can also avoid that GitHub Actions dependency entirely. The
 infrastructure repository installs a five-minute systemd timer in the existing
 `hackos` LXC; it checks the latest GitHub Release and the two public GHCR
 packages, then invokes `/opt/hackos/incus-deploy.sh` with the exact `sha-<commit>` tag
-for whichever unit is available. The timer does not clone this repository,
-accept mutable tags, or bypass the deployment lock, migration, backup and
-healthcheck steps. GitHub Actions remains useful for the initial file transfer,
-manual rollback and staging, but it is not required for normal production
-rollouts.
+for whichever unit is available. The interactive production operator shell uses
+the same host-local path after the operator confirms a release. Neither path
+clones this repository, accepts mutable tags, or bypasses the deployment lock,
+migration, backup and healthcheck steps. GitHub Actions remains useful for the
+initial file transfer, manual rollback and staging, but it is not required for
+normal production rollouts. A successful explicit-SHA rollback writes
+`/opt/hackos/.release-policy` with a secret-free hold; the five-minute updater
+exits while that hold exists. A successful `latest`/`promote` deployment removes
+the hold. Failed deployments leave the existing policy unchanged.
 
 Both workflows check the tag and select the exact commit encoded in
 `sha-<commit>`. The production workflow transfers files with `incus file push`
@@ -453,8 +457,9 @@ with its declared interpreter.
 ### Rollback
 
 To return to the previous version, dispatch the relevant workflow with the
-previous SHA tag from the deployment history. The workflow selects the exact
-commit associated with the tag, so Compose and the scripts match that release;
+previous SHA tag from the deployment history and choose
+`release_action=rollback`, or use `services.sh production deploy sha-<commit>`.
+The workflow selects the exact commit associated with the tag, so Compose and the scripts match that release;
 each deployment also keeps a secret-free copy under
 `/opt/hackos/releases/<tag>`. Rollback does not automatically reverse database
 migrations: an incompatible migration needs a separately reviewed procedure.
@@ -587,8 +592,8 @@ deployment** submenu and to the CLI:
 | `start`, `stop`, `recreate`, `shutdown` | None | Operate only on containers and images already present on the host. `start` unpauses paused containers and starts existing stopped containers without pulling or rebuilding (falling back to `--pull never` only if a container was deleted); it never queries GHCR or downloads images. `recreate` explicitly uses Compose's `--pull never`. |
 | `status`, `release` | Local Docker inspection only | Show service state; `release` also shows the deployed image, channel, commit and creation time. |
 | `available` | GHCR package registry | List operator-selectable API/web images without serial per-image metadata requests, distinguishing `staging`, `main` and legacy SHA tags. |
-| `deploy latest` | Resolves the current channel release, then pulls it | Staging deploys the latest successful staging build; production prints the protected workflow command instead of bypassing approval. |
-| `deploy sha-<commit>` | Validates the immutable SHA release, then pulls it | Deploy or roll back the selected API, web, or both units. |
+| `deploy latest` | Resolves the current channel release, then pulls it | Deploys the exact immutable SHA selected for the environment; production uses the host-local deployment script and its safety gates. |
+| `deploy sha-<commit>` | Validates the immutable SHA release, then pulls it | Deploy or roll back the selected API, web, or both units; production records a rollback hold. |
 
 `latest` never means Docker `:latest`: every deploy resolves a published
 immutable `sha-<40 hexadecimal characters>` tag. The command prints the

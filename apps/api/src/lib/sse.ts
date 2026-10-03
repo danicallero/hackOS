@@ -20,6 +20,7 @@ import { valkey, valkeySub } from "./valkey.js";
  */
 
 const CHANNEL_PREFIX = "sse:";
+const SEQUENCE_RETENTION_SECONDS = 7 * 24 * 60 * 60;
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const localSubscribers = new Map<string, Set<FastifyReply>>();
 const subscriberLanes = new Map<FastifyReply, RequestLane>();
@@ -186,7 +187,13 @@ export async function broadcast<T>(
 ): Promise<SseEnvelope<T> | null> {
   assertPayloadFreePublicInvalidation(topic, type, data);
   try {
-    const seq = await valkey.incr(`sse:seq:${topic}`);
+    const sequenceKey = `sse:seq:${topic}`;
+    const seq = await valkey.incr(sequenceKey);
+    // Sequence IDs only need to bridge reconnects/gap detection. Retaining
+    // them forever would make an ephemeral broker's keyspace grow with every
+    // topic ever created; refreshing this TTL on activity keeps the active
+    // event window safe while allowing old topics to disappear.
+    await valkey.expire(sequenceKey, SEQUENCE_RETENTION_SECONDS);
     const envelope: SseEnvelope<T> = {
       type,
       id: String(seq),

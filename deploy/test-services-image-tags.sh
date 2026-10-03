@@ -37,6 +37,9 @@ cat >"$test_dir/bin/curl" <<'EOF'
 set -Eeuo pipefail
 
 case "$*" in
+  *api.github.com/repos/danicallero/hackOS/releases/latest*)
+    printf '%s\n' '{"target_commitish":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
+    ;;
   *ghcr.io/token*) printf '%s\n' '{"token":"test"}' ;;
   *hackos-api/tags/list*|*hackos-web/tags/list*)
     printf '%s\n' '{"tags":["sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}'
@@ -80,8 +83,40 @@ env -u API_IMAGE_TAG -u WEB_IMAGE_TAG \
   HACKOS_TEST_DEPLOY_LOG="$test_dir/deploy.log" \
   bash "$services_script" staging deploy sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --both >/dev/null
 
-grep -Fxq 'true staging sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa true true' "$test_dir/deploy.log" || {
+grep -Fxq 'true staging sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa true true manual' "$test_dir/deploy.log" || {
   echo 'services.sh did not pass its deployment lock to deploy.sh.' >&2
+  exit 1
+}
+
+# Production uses the same host-local deployment script after the release has
+# been resolved and validated. It must not only print a workflow command and
+# report success without deploying. The explicit SHA form exercises the exact
+# handoff used after latest-release resolution.
+env -u API_IMAGE_TAG -u WEB_IMAGE_TAG \
+  PATH="$test_dir/bin:$PATH" \
+  HACKOS_APP_DIR="$test_dir/app" \
+  HACKOS_COMPOSE_FILE="$test_dir/docker-compose.yml" \
+  HACKOS_CONFIG_FILE="$test_dir/hackos.env" \
+  HACKOS_TEST_DOCKER_LOG="$test_dir/docker.log" \
+  HACKOS_TEST_DEPLOY_LOG="$test_dir/deploy.log" \
+  bash "$services_script" production deploy sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --both >/dev/null
+
+grep -Fxq 'true production sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa true true rollback' "$test_dir/deploy.log" || {
+  echo 'services.sh did not deploy the selected production release.' >&2
+  exit 1
+}
+
+env -u API_IMAGE_TAG -u WEB_IMAGE_TAG \
+  PATH="$test_dir/bin:$PATH" \
+  HACKOS_APP_DIR="$test_dir/app" \
+  HACKOS_COMPOSE_FILE="$test_dir/docker-compose.yml" \
+  HACKOS_CONFIG_FILE="$test_dir/hackos.env" \
+  HACKOS_TEST_DOCKER_LOG="$test_dir/docker.log" \
+  HACKOS_TEST_DEPLOY_LOG="$test_dir/deploy.log" \
+  bash "$services_script" production deploy latest --both >/dev/null
+
+grep -Fxq 'true production sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa true true promote' "$test_dir/deploy.log" || {
+  echo 'services.sh did not deploy the latest production release.' >&2
   exit 1
 }
 

@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { PermanentDispatchError } from "../../errors.js";
 import type { MailConfig, MailMessage } from "../email.js";
 
 /**
@@ -19,13 +20,40 @@ export function smtpTransportOptions(mail: MailConfig) {
     // TCP connection must target a private relay address.
     ...(mail.smtpTlsServername ? { tls: { servername: mail.smtpTlsServername } } : {}),
     auth: mail.smtpUser ? { user: mail.smtpUser, pass: mail.smtpPass } : undefined,
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 30_000,
   };
 }
 
-export async function sendViaSmtp(mail: MailConfig, message: MailMessage): Promise<void> {
-  const transport = nodemailer.createTransport(smtpTransportOptions(mail));
+let pooledTransport: ReturnType<typeof nodemailer.createTransport> | null = null;
+let pooledTransportKey = "";
 
-  await transport.sendMail({
+function transportFor(mail: MailConfig) {
+  const key = JSON.stringify({
+    provider: mail.provider,
+    fromAddress: mail.fromAddress,
+    fromName: mail.fromName,
+    smtpHost: mail.smtpHost,
+    smtpTlsServername: mail.smtpTlsServername,
+    smtpPort: mail.smtpPort,
+    smtpUser: mail.smtpUser,
+    smtpSecure: mail.smtpSecure,
+    smtpRequireTls: mail.smtpRequireTls,
+  });
+  if (!pooledTransport || pooledTransportKey !== key) {
+    pooledTransport?.close();
+    pooledTransport = nodemailer.createTransport(smtpTransportOptions(mail));
+    pooledTransportKey = key;
+  }
+  return pooledTransport;
+}
+
+export async function sendViaSmtp(mail: MailConfig, message: MailMessage): Promise<void> {
+  const info = await transportFor(mail).sendMail({
     from: `${mail.fromName} <${mail.fromAddress}>`,
     to: message.to,
     subject: message.subject,
@@ -33,4 +61,7 @@ export async function sendViaSmtp(mail: MailConfig, message: MailMessage): Promi
     text: message.text,
     attachments: message.attachments,
   });
+  if (info.accepted.length === 0 && info.rejected.length > 0) {
+    throw new PermanentDispatchError("SMTP relay rejected the recipient");
+  }
 }

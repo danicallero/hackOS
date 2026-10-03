@@ -1,5 +1,6 @@
 import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
+import { notificationDispatchTotal } from "../../lib/metrics.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { dispatchChannel, type OutboxRow } from "./channels/index.js";
 import { PermanentDispatchError, SupersededDispatchError } from "./errors.js";
@@ -95,6 +96,7 @@ async function claimAndDispatchOne(): Promise<RowOutcome | null> {
             WHERE id = $1`,
           [row.id],
         );
+        notificationDispatchTotal.inc({ channel: row.channel, outcome: "superseded" });
         return "superseded";
       }
 
@@ -104,6 +106,7 @@ async function claimAndDispatchOne(): Promise<RowOutcome | null> {
           `UPDATE notification_outbox SET status = 'sent', sent_at = now() WHERE id = $1`,
           [row.id],
         );
+        notificationDispatchTotal.inc({ channel: row.channel, outcome: "sent" });
         return "sent";
       } catch (err) {
         if (err instanceof SupersededDispatchError) {
@@ -113,6 +116,7 @@ async function claimAndDispatchOne(): Promise<RowOutcome | null> {
              WHERE id = $1`,
             [row.id, row.attempts + 1, err.message],
           );
+          notificationDispatchTotal.inc({ channel: row.channel, outcome: "superseded" });
           return "superseded";
         }
         const message = err instanceof Error ? err.message : String(err);
@@ -125,6 +129,10 @@ async function claimAndDispatchOne(): Promise<RowOutcome | null> {
              WHERE id = $1`,
             [row.id, attempts, message],
           );
+          notificationDispatchTotal.inc({
+            channel: row.channel,
+            outcome: permanent ? "rejected" : "parked",
+          });
           return "parked";
         }
         const delayMs = backoffDelayMs(attempts);
@@ -134,6 +142,7 @@ async function claimAndDispatchOne(): Promise<RowOutcome | null> {
            WHERE id = $1`,
           [row.id, attempts, message, delayMs / 1000],
         );
+        notificationDispatchTotal.inc({ channel: row.channel, outcome: "retry" });
         return "failed";
       }
     }
