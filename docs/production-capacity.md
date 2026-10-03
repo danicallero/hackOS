@@ -27,6 +27,30 @@ swap activity is a capacity incident because it increases latency and can
 still exhaust the host. The Incus `hackos` container remains host-managed and
 unlimited; Docker supplies the service-level ceilings above.
 
+### How container RAM reaches Grafana
+
+Every service reports the Linux cgroup v2 accounting for **its own**
+container: total RAM charged, inactive file cache, calculated working set,
+RAM/swap ceilings, and memory-limit/OOM counters. API and worker publish their
+own readings directly. PostgreSQL, Valkey, MinIO and web run the same small
+reader as their unprivileged container user and atomically write a JSON sample
+to a private tmpfs volume; API mounts those four volumes read-only and
+republishes the values through its existing `/metrics` endpoint.
+
+This is deliberately not a host exporter: it does not use the Docker socket,
+does not install a host service, does not open a port, and does not grant a
+container visibility into another container's cgroup. The short-lived
+`metrics-init` Compose job copies the static reader into a tmpfs hand-off
+volume as UID 1000; it has no network or capabilities. A sample older than 45
+seconds is removed from Prometheus rather than shown as zero or as healthy
+historical data.
+
+`memory.current` includes filesystem cache because that cache counts against
+the service limit. The dashboard therefore shows both total charge and
+`memory.current - inactive_file` (working set). Neither figure should be
+called PostgreSQL's private heap: PostgreSQL's shared buffers and kernel cache
+are real memory pressure even though they are not a per-query allocation.
+
 PostgreSQL starts with `shared_buffers=1GB`,
 `effective_cache_size=4GB`, `work_mem=8MB`, `maintenance_work_mem=256MB` and
 `max_connections=100`. The 5 GiB limit is a hard container ceiling, not a
@@ -137,13 +161,14 @@ The shared infrastructure monitoring instance already runs Prometheus, Loki
 and Grafana at `grafana.gpul.org`. The provisioned `HackUDC V · hackOS
 production · operations` dashboard adds:
 
-- request rate, 5xx rate, p95 latency and in-flight finite work;
-- SSE connection count, event-loop lag and API cgroup memory/current limit;
-- PostgreSQL pool waiters, connections, memory settings, database size and
-  notification outbox depth;
-- Valkey connectivity, used/max memory, evictions, hits and misses;
-- worker dispatch outcomes and hackOS production logs;
-- Mailcow delivery/rejection logs for relay-level diagnosis.
+- explicit scrape/dependency state and a six-service RAM/swap/OOM table;
+- application-only request rate, 5xx count, p95 by priority lane, SSE,
+  admission queue and event-loop lag;
+- PostgreSQL connection state, Valkey data/cache activity, and guard values
+  that disappear when collection fails rather than pretending to be zero;
+- email-only outbox depth, age, overdue retry time and worker outcomes;
+- structured API errors plus hackOS-only service logs. Historical
+  `ECONNREFUSED` records are visible but are not presented as current state.
 
 The existing shared Grafana database and dashboards remain untouched. The
 dashboard is the only new Grafana dashboard provider, versioned at
@@ -193,7 +218,7 @@ Interpret signals together:
 | SSE rejections/disconnects | SSE by lane/topic, Valkey connected/evictions | Check client reconnect storm and topic distribution; do not blindly raise the global ceiling. |
 | DB waiters/lock waits | P0/P1 latency, PostgreSQL connections/max, query timeouts | Fix hot query/lock or shed P2/P3; do not raise pools past the connection equation. |
 | Outbox queued age rising | Worker `/metrics`, sent/rejected outcomes, SMTP logs | Verify relay, then add a worker replica or increase batch only after duplicate-send review. |
-| Memory current near limit | API cgroup metrics, Incus LXC headroom, swap | Treat swap as temporary; raise only the specific service after load evidence. |
+| Memory current near limit | Service RAM/working-set/cache, swap, OOM events and request latency | Treat swap as temporary; raise only the specific service after load evidence. |
 | Mail `sent` but users report no mail | Mailcow/SES bounce and deferred logs | This is provider delivery state, not an API retry problem. |
 
 ## Release and rollback policy

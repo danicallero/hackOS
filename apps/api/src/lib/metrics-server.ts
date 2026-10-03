@@ -1,4 +1,5 @@
 import { createServer, type Server } from "node:http";
+import { refreshServiceMemory } from "./container-memory.js";
 import { register } from "./metrics.js";
 
 /** Small Prometheus endpoint for the dedicated worker process. */
@@ -14,6 +15,7 @@ export async function startMetricsServer(): Promise<Server> {
       response.writeHead(404).end();
       return;
     }
+    await refreshServiceMemory("worker");
     response.writeHead(200, { "content-type": register.contentType });
     response.end(await register.metrics());
   });
