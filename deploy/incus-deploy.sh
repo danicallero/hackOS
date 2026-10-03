@@ -465,7 +465,9 @@ if [[ "$deploy_web" == true ]]; then
   run_compose "update web" up --detach --no-deps --force-recreate web
   wait_for_health web
 else
-  echo "SKIP: web unchanged"
+  # Retain the image while adopting Compose changes such as metrics volumes.
+  run_compose "refresh retained web configuration" up --detach --no-deps --pull never web
+  wait_for_health web
 fi
 
 state_tmp="$(mktemp "${state_file}.XXXXXX")"

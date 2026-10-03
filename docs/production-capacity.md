@@ -40,9 +40,12 @@ republishes the values through its existing `/metrics` endpoint.
 This is deliberately not a host exporter: it does not use the Docker socket,
 does not install a host service, does not open a port, and does not grant a
 container visibility into another container's cgroup. The short-lived
-`metrics-init` Compose job copies the static reader into a tmpfs hand-off
-volume as UID 1000; it has no network or capabilities. A sample older than 45
-seconds is removed from Prometheus rather than shown as zero or as healthy
+`metrics-init` Compose job copies the static reader into the ordinary
+`metrics-tools-v2` named volume as UID 1000; it has no network or capabilities.
+The executable survives the helper exiting. Only JSON samples use small,
+non-executable tmpfs volumes. The versioned tools volume replaces the original
+1 MiB/noexec volume without deleting it or touching database/storage volumes.
+A sample older than 45 seconds is removed from Prometheus rather than shown as zero or as healthy
 historical data.
 
 `memory.current` includes filesystem cache because that cache counts against
