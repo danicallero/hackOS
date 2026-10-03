@@ -146,6 +146,10 @@ Deployment:
   checklist for ~600 concurrent event identities: pool sizing, the fixed
   Compose memory limits, load testing the hot paths, and the monitoring queries
   to watch.
+- [Production capacity and operations](./production-capacity.md) — the
+  authoritative 500-connection model: RAM/swap ceilings, API/SSE channels,
+  P0–P3 priorities, Valkey retention, mail diagnostics, Grafana signals and
+  manual rollback holds.
 
 Historical (not required reading — see [`audits/README.md`](./audits/README.md)):
 

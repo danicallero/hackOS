@@ -19,12 +19,11 @@
 # Set PUBLISH_BIND_ADDRESS=127.0.0.1 when the proxy runs on the same host; the
 # proxy LXC normally needs 0.0.0.0.
 #
-# Event-day sizing (H22-H42, H46, H540, #544): postgres 2 GiB + valkey 1 GiB +
-# minio 1 GiB + api 1 GiB + worker 1 GiB + web 512 MiB = 6.5 GiB of declared
-# container limits. This is sized for the production host budget with margin
-# for the OS and Docker overhead. Qualification mirrors the four shared
-# services and adds only its disposable 1 GiB runner and 512 MiB migrate
-# helper, keeping that stack at the same 6.5 GiB declared budget.
+# Event-day sizing (H22-H42, H46, H540, #544): postgres 5 GiB + valkey 2 GiB +
+# minio 1 GiB + api 2 GiB + worker 2 GiB + web 1 GiB = 13 GiB of declared
+# container RAM limits. Each service also has an explicit swap ceiling so a
+# short-lived burst can use host swap without allowing one service to consume
+# the entire host. Qualification mirrors the shared-service limits.
 
 # API and web are released as separate immutable tags. The deploy script sets
 # the service-specific variables so a partial release can retain the image for
@@ -129,6 +128,7 @@ x-worker-env: &worker-env
   DB_STATEMENT_TIMEOUT_MS: "${DB_STATEMENT_TIMEOUT_MS:-30000}"
   DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: "${DB_IDLE_IN_TRANSACTION_TIMEOUT_MS:-30000}"
   NOTIFICATION_OUTBOX_BATCH_SIZE: "${NOTIFICATION_OUTBOX_BATCH_SIZE:-100}"
+  METRICS_PORT: "9464"
 
 x-hardening: &hardening
   security_opt:
@@ -144,6 +144,18 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
       POSTGRES_DB: "${POSTGRES_DB}"
       POSTGRES_INITDB_ARGS: "--data-checksums"
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=4GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=100
     volumes:
       - type: bind
         source: "${HACKOS_DATA_DIR:-/mnt/data}/postgres"
@@ -158,7 +170,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2g
+          memory: 5g
+    memswap_limit: 6g
+    mem_swappiness: 10
+    shm_size: 1g
 
   valkey:
     <<: *hardening
@@ -171,6 +186,16 @@ services:
       - ""
       - --appendonly
       - "no"
+      - --maxmemory
+      - 1536mb
+      - --maxmemory-policy
+      - volatile-lru
+      - --lazyfree-lazy-eviction
+      - "yes"
+      - --lazyfree-lazy-expire
+      - "yes"
+      - --tcp-keepalive
+      - "60"
     environment:
       VALKEY_PASSWORD: "${VALKEY_PASSWORD}"
     networks: [private]
@@ -182,7 +207,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: 2g
+    memswap_limit: 3g
+    mem_swappiness: 40
 
   minio:
     <<: *hardening
@@ -216,6 +243,8 @@ services:
       resources:
         limits:
           memory: 1g
+    memswap_limit: 2g
+    mem_swappiness: 40
 
   # Idempotent storage bootstrap. It is deliberately separate from migrate:
   # the API and worker receive S3 credentials, while this helper also receives
@@ -312,7 +341,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: 2g
+    memswap_limit: 3g
+    mem_swappiness: 20
 
   worker:
     <<: *hardening
@@ -320,6 +351,8 @@ services:
     pull_policy: always
     command: ["node", "dist/worker.js"]
     environment: *worker-env
+    ports:
+      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${WORKER_METRICS_PUBLISH_PORT:-9464}:9464"
     dns: ["1.1.1.1", "8.8.8.8"]
     depends_on:
       migrate:
@@ -342,7 +375,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: 2g
+    memswap_limit: 3g
+    mem_swappiness: 20
 
   web:
     <<: *hardening
@@ -367,7 +402,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 1g
+    memswap_limit: 2g
+    mem_swappiness: 40
 
 networks:
   private:

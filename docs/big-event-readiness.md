@@ -40,10 +40,10 @@ reflexively adding replicas everywhere.
 |---|---|---|---|---|
 | **api** | Request-handling CPU/event-loop contention — auth checks, Zod validation, JSON serialization, and the number of concurrently-open HTTP/SSE connections a single Node process can service. | Postgres load — every extra `api` replica opens its own `DB_POOL_MAX`-sized pool, so scaling `api` *adds* to Postgres's connection budget, it doesn't reduce query load there. | The canonical Compose runtime has one replica. A future multi-replica Compose project can add stateless API containers; Valkey already fans out SSE, so no sticky sessions are needed. | 1 replica on the production host is the default; keep one on the smaller ARM64 staging host. |
 | **worker** | `notification_outbox` drain latency (mass announcements, acceptance emails) and state-machine tick backlog (queue pump, confirmation expirer, wallet sync). The drain is a repeatable BullMQ job (`every: 5s`) that queues a new occurrence regardless of whether the previous one finished, so under real backlog multiple ticks queue up and `FOR UPDATE SKIP LOCKED` lets replicas split them safely. | Nothing HTTP-facing — the worker has no ingress, so it never helps with request latency or SSE capacity. Replicas also don't help an *empty* queue drain faster — see the mass-messaging section below for why batch size, not replica count, is the first lever. | Add replicas; no coordination needed beyond what's already in the query. | 1 replica for steady-state. See "Mass-messaging bursts" below for what to do specifically before a 600+-recipient, multi-channel send. |
-| **postgres** | The one thing that's genuinely shared: query latency and lock-wait time on `FOR UPDATE` transitions (queue calls, scan idempotency, badge rotation). This is the resource `api` and `worker` replicas both draw down, not build up. | Nothing about it "scales" by adding replicas — it's a single primary by design (§7 architecture.md), so more Postgres capacity means a *bigger* box, not more of them. | The canonical limit is fixed at `2g`; put the persistent volume on fast local storage and size the host appropriately. A larger host requires a reviewed Compose change, not an undocumented env override. | The production host budget reserves the larger database share for 12-room queue-transition contention and the 24-connection per-process baseline. |
-| **valkey** | SSE pub/sub fan-out throughput and BullMQ job enqueue/dequeue throughput. | Nothing durable — it holds no source-of-truth data, so scaling it is about pub/sub message rate, not correctness. | Single-node by design; not a lever worth reaching for at this scale — Valkey handles orders of magnitude more throughput than this event's SSE population produces. | Leave the fixed `1g` Compose limit; it gives queue fan-in and connection state room without crowding Postgres. |
+| **postgres** | The one thing that's genuinely shared: query latency and lock-wait time on `FOR UPDATE` transitions (queue calls, scan idempotency, badge rotation). This is the resource `api` and `worker` replicas both draw down, not build up. | Nothing about it "scales" by adding replicas — it's a single primary by design (§7 architecture.md), so more Postgres capacity means a *bigger* box, not more of them. | The canonical limit is `5g`, with `1g` explicit swap and tuned shared buffers; put the persistent volume on fast local storage and size the host appropriately. | The production host budget reserves the larger database share for 12-room queue-transition contention and the 24-connection per-process baseline. |
+| **valkey** | SSE pub/sub fan-out throughput and BullMQ job enqueue/dequeue throughput. | Nothing durable — it holds no source-of-truth data, so scaling it is about pub/sub message rate, not correctness. | Single-node by design; `maxmemory=1536mb` with `volatile-lru` only evicts expiring rate-limit keys, not BullMQ keys. | The fixed `2g` Compose limit plus `1g` swap gives broker overhead room; evictions and reconnects are alert signals. |
 | **minio** | Object upload/download throughput — application file attachments, sponsor logo serving, export downloads, wallet-pass assets. | Nothing else — it's not on the query/lock-wait path at all. | Single-node; if you outgrow it, repoint `S3_ENDPOINT`/`S3_PUBLIC_URL` at managed S3/R2/Spaces (§7 architecture.md) rather than trying to cluster MinIO yourself. | The fixed `1g` Compose limit is fine for steady use; a simultaneous upload burst requires host sizing or a reviewed storage change. |
-| **web** | Next.js SSR/page-render load for the browser app and TV screens — each connected TV/participant browser holds a request the Node process has to render. | Nothing on the API/DB side — `web` calls the public API URL like any other client, it never touches Postgres directly. | The canonical Compose runtime has one web container behind the host ingress. A future multi-replica topology can add stateless web containers. | 1 replica is the default; keep one on both production and staging. The fixed memory limit is `512m`. |
+| **web** | Next.js SSR/page-render load for the browser app and TV screens — each connected TV/participant browser holds a request the Node process has to render. | Nothing on the API/DB side — `web` calls the public API URL like any other client, it never touches Postgres directly. | The canonical Compose runtime has one web container behind the host ingress. A future multi-replica topology can add stateless web containers. | 1 replica is the default; keep one on both production and staging. The fixed memory limit is `1g` plus `1g` swap. |
 
 The practical takeaway: **`api` and `worker` replicas trade Postgres headroom for their own headroom** — they don't create capacity, they redistribute where the bottleneck shows up. If the monitoring queries below show Postgres itself under pressure (active connections near the ceiling, or long lock waits), scaling `api`/`worker` further makes it worse, not better — that's the signal to size Postgres up (or split it onto its own host) instead.
 
@@ -88,16 +88,15 @@ not something to do by default.
 | Setting | Where | Default | Event-day baseline |
 |---|---|---|---|
 | `DB_POOL_MAX` | `api` + `worker` env | `24` in production Compose | `24` per process: 48 pooled connections across one API and one worker, plus an explicit operational allowance below. |
-| `Compose memory limits` | `deploy/docker-compose.yml` | fixed | `postgres=2g`, `valkey=1g`, `minio=1g`, `api=1g`, `worker=1g`, `web=512m`; the declared production sum is 6.5 GiB. |
+| `Compose memory limits` | `deploy/docker-compose.yml` | fixed | `postgres=5g`, `valkey=2g`, `minio=1g`, `api=2g`, `worker=2g`, `web=1g`; the declared production RAM sum is 13 GiB plus explicit per-service swap ceilings. |
 | `api` replica count | canonical Compose | 1 | 1 is the supported runtime on production and the ARM64 staging host. A future multi-replica change must account for the Postgres connection budget below. |
 | `worker` replica count | canonical Compose | 1 | 1 is fine; a reviewed Compose topology can add a second worker only if `notification_outbox` depth (query below) climbs during the event instead of draining. |
 | `NOTIFICATION_OUTBOX_BATCH_SIZE` | `worker` env | `100` | Already sized for a mass-send — see "Mass-messaging bursts" above. No change needed by default. |
 
-The fixed production memory sum is `2 + 1 + 1 + 1 + 1 + 0.5 = 6.5 GiB` of
-declared container limits. It leaves 1.5 GiB below the `<8 GiB` production host
-budget for the OS, Docker overhead, and short-lived operational pressure. The
-limits are intentionally literals in Compose; they are not environment
-overrides.
+The fixed production memory sum is `5 + 2 + 1 + 2 + 2 + 1 = 13 GiB` of
+declared container RAM limits, with 6 GiB of explicit service swap ceilings.
+The limits are intentionally literals in Compose; they are not environment
+overrides. Sustained swap use is a capacity incident, not successful scaling.
 
 **Postgres connection budget.** Every `api`/`worker` process holds its own
 pool sized by `DB_POOL_MAX`. Before raising it, check the arithmetic against
@@ -108,13 +107,10 @@ Postgres's stock `max_connections=100`:
 ```
 
 The allowance of 12 covers migration, health/maintenance, admin, and
-superuser headroom. Keep the stock `max_connections` baseline; the 2 GiB
-Postgres limit is reserved for the database working set and connection
-overhead, not for an unbounded pool. The qualification check also confirms the
-stock `shared_buffers=128MB` setting; keep that and `max_connections=100` until
-a reviewed database-memory calculation supports a change. Add replicas only
-after recomputing the same expression, and do not raise Postgres's own
-`max_connections` without that review.
+superuser headroom. Keep `max_connections=100`; the 5 GiB Postgres limit and
+`shared_buffers=1GB` leave room for the working set without permitting an
+unbounded pool. Add replicas only after recomputing the same expression, and
+do not raise Postgres's own `max_connections` without that review.
 
 **Admission baseline.** With `DB_POOL_MAX=24`, the scheduler reserves
 `min(23, ceil(24 / 4)) = 6` concurrent slots from all P2/P3 traffic and allows
@@ -278,10 +274,9 @@ the artifact is retrieved. It is not a long-running service and never reuses
 production state. The stack runs the exact immutable release image in all API,
 worker, migration and runner containers. Resource limits are fixed, validated
 before startup, and mirror production for the shared services: API/runner 2
-CPU + 1 GiB, worker 2 CPU + 1 GiB, Postgres 2 CPU + 2 GiB, Valkey 1 CPU + 1 GiB,
+CPU + 2 GiB, worker 2 CPU + 2 GiB, Postgres 2 CPU + 5 GiB, Valkey 1 CPU + 2 GiB,
 and the disposable migration helper 1 CPU + 512 MiB. The declared qualification
-sum is 6.5 GiB, so the runner and helper fit under the same `<8 GiB`
-production host budget while they run. Matching limits make a pass meaningful:
+sum is 12.5 GiB under the 16 GiB qualification budget. Matching limits make a pass meaningful:
 the test exercises the release image under the production service ceilings,
 not a more generously provisioned rehearsal. This is still a qualification of
 the release image and resources, not a change to SSE connection budgets or
@@ -343,7 +338,7 @@ API is reachable from the stack with `docker compose exec`, not from the host:
 compose='docker compose -p hackos-event-day-qualification -f deploy/qualification/docker-compose.yml'
 $compose ps
 $compose exec api wget -qO- http://127.0.0.1:3000/metrics | \
-  rg 'hackos_(http_requests|http_request_admission|sse_local_connections|sse_rejections|queue_participant_invalidations|browser_refetch)'
+  rg 'hackos_(http_requests|http_responses|http_request_duration|http_request_admission|sse_local_connections|sse_rejections|db_pool|postgres_|valkey_|notification_outbox|container_memory|browser_refetch)'
 $compose exec postgres psql -U hackos_qualification -d hackos_event_day_qualification \
   -c "select count(*) as active, current_setting('max_connections') as max_connections, current_setting('shared_buffers') as shared_buffers from pg_stat_activity;"
 $compose exec postgres psql -U hackos_qualification -d hackos_event_day_qualification \

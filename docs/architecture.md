@@ -220,7 +220,7 @@ truth; everything else is derivable or ephemeral.**
 | Store | Owns | Durable? | If it's lost |
 |---|---|---|---|
 | **Postgres** | All domain state, the notification outbox (the *real* queue), audit log, sessions | Yes — back it up | Total loss; restore from snapshot |
-| **Valkey** | BullMQ scheduling, SSE pub/sub + per-topic sequence counters | No (by design) | Transient; ticks re-run, clients refetch |
+| **Valkey** | BullMQ scheduling, SSE pub/sub + seven-day sequence counters, distributed rate limits and ephemeral TV state | No (by design) | Transient; ticks re-run, clients refetch; expiring rate-limit keys may be evicted under the bounded `volatile-lru` policy |
 | **MinIO** | Uploaded files + public logos | Yes — back it up | Files gone; DB rows dangle until re-upload |
 
 This is why the worker subsystem doesn't use BullMQ's own retry/DLQ: durability
@@ -289,7 +289,8 @@ The complete route/topic classification, capacity formula, role examples, and
 edge cases live in [`request-admission.md`](./request-admission.md).
 Long-lived SSE requests bypass this scheduler so they continue to be governed
 only by #540's connection budgets and write backpressure. Monitor
-`hackos_http_requests_total`,
+`hackos_http_requests_total`, `hackos_http_responses_total`,
+`hackos_http_request_duration_seconds`,
 `hackos_http_request_admission_wait_seconds`, and
 `hackos_http_request_admission_queue_size` by lane, plus
 `hackos_sse_local_connections` by lane and normalized topic family.
@@ -391,7 +392,10 @@ Headroom, in order of reach-for:
 4. Partition/prune `notification_outbox` (and audit) for a very large event.
 
 **Valkey / MinIO.** Valkey is single-node and ephemeral — a hackathon never
-needs a cluster; if it dies, restart and ticks resume. MinIO is single-node;
+needs a cluster at this scale; if it dies, restart and ticks resume. Its
+production container has 2 GiB RAM, 1 GiB swap, `maxmemory=1536mb` and
+`volatile-lru`, so only expiring cache/rate-limit keys are eviction candidates;
+BullMQ coordination keys are protected. MinIO is single-node;
 swap it for managed S3/R2/Spaces by repointing `S3_ENDPOINT` + `S3_PUBLIC_URL`
 when object durability/scale matters more than self-hosting.
 

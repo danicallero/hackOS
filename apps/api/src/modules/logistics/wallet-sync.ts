@@ -31,10 +31,17 @@ export async function enqueueWalletSync(
 ): Promise<void> {
   if (passIds.length === 0) return;
   const uniquePassIds = [...new Set(passIds)].sort((a, b) => a - b);
-  await getQueue(QUEUE_NAME).add(`sync:${action}:${uniquePassIds.join(",")}`, {
-    passIds: uniquePassIds,
-    action,
-  } satisfies SyncJobData);
+  await getQueue(QUEUE_NAME).add(
+    `sync:${action}:${uniquePassIds.join(",")}`,
+    {
+      passIds: uniquePassIds,
+      action,
+    } satisfies SyncJobData,
+    {
+      removeOnComplete: true,
+      removeOnFail: { age: 24 * 60 * 60, count: 1_000 },
+    },
+  );
 }
 
 interface PassRow {

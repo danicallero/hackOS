@@ -28,6 +28,12 @@ describe("SMTP transport security", () => {
       port: 465,
       secure: true,
       auth: undefined,
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 30_000,
     });
   });
 
