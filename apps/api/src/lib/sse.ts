@@ -10,7 +10,7 @@ import { valkey, valkeySub } from "./valkey.js";
 
 /**
  * SSE hub (plan/03 Fase 0 contract, H41-H42). Publishers call `broadcast`;
- * every API instance relays via Valkey pub/sub (`sse:<topic>`) to its local
+ * every API instance relays via Valkey pub/sub (`sse:<namespace>:<topic>`) to its local
  * connections, so TVs and panels can hit any instance behind a balancer.
  *
  * Envelope ids are per-topic monotonic counters (Valkey INCR) so clients can
@@ -19,7 +19,7 @@ import { valkey, valkeySub } from "./valkey.js";
  * client is disconnected (below) rather than buffered indefinitely.
  */
 
-const CHANNEL_PREFIX = "sse:";
+const CHANNEL_PREFIX = `sse:${config.SSE_NAMESPACE}:`;
 const SEQUENCE_RETENTION_SECONDS = 7 * 24 * 60 * 60;
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const localSubscribers = new Map<string, Set<FastifyReply>>();
@@ -234,6 +234,7 @@ async function ensureRelay(): Promise<void> {
 // Install the relay once. ioredis automatically restores subscriptions after
 // reconnect; if the initial PSUBSCRIBE fails, ensureRelay() remains retryable.
 valkeySub.on("pmessage", (_pattern, channel, message) => {
+  if (!channel.startsWith(CHANNEL_PREFIX)) return;
   const topic = channel.slice(CHANNEL_PREFIX.length);
   const conns = localSubscribers.get(topic);
   if (!conns?.size) return;

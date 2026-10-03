@@ -37,6 +37,7 @@ x-database-env: &database-env
 
 x-valkey-env: &valkey-env
   VALKEY_URL: "redis://:${VALKEY_PASSWORD}@valkey:6379"
+  SSE_NAMESPACE: "${SSE_NAMESPACE:-production}"
 
 x-auth-env: &auth-env
   BETTER_AUTH_URL: "https://${API_DOMAIN}"

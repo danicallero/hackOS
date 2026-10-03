@@ -30,6 +30,12 @@ const envSchema = z.object({
   /** Postgres `idle_in_transaction_session_timeout`: reclaims a connection stuck mid-transaction. */
   DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30_000),
   VALKEY_URL: z.string().default("redis://localhost:6379"),
+  /** Pub/Sub is instance-wide, independent of logical databases (#897). */
+  SSE_NAMESPACE: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .max(128)
+    .optional(),
 
   BETTER_AUTH_URL: z.string().default("http://localhost:3000"),
   BETTER_AUTH_SECRET: z.string().default("dev-only-secret-change-me"),
@@ -308,6 +314,7 @@ const parsed = envSchema
 
 export const config = {
   ...parsed,
+  SSE_NAMESPACE: parsed.SSE_NAMESPACE ?? parsed.NODE_ENV,
   isTest: parsed.NODE_ENV === "test",
   isProd: parsed.NODE_ENV === "production",
   workersInline: parsed.WORKERS_INLINE ?? parsed.NODE_ENV !== "production",

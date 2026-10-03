@@ -138,6 +138,7 @@ en ningún contenedor de aplicación.
 | Variable | Procesos | Notas |
 |---|---|---|
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `postgres`; Compose para `api`, `worker`, `migrate` | Identidad, contraseña y destino de la base; el usuario y la base están en configuración, la contraseña en secretos, y se convierten en `DATABASE_URL`. |
+| `SSE_NAMESPACE` | `api`, `worker` | SSE Pub/Sub namespace; defaults to `production` in Compose, otherwise `NODE_ENV`. Use the same value across replicas/workers and a distinct value per environment sharing Valkey. Logical database numbers do not isolate Pub/Sub. See [realtime transport](./realtime-transport.md#broker-environment-isolation-897). |
 | `VALKEY_PASSWORD` | `valkey`; Compose para `api`, `worker` | Se usa en `VALKEY_URL=redis://:<password>@valkey:6379`. Valkey no persiste datos. |
 | `S3_ACCESS_KEY`, `S3_SECRET_KEY` | `minio-init`, `api`, `worker` | El identificador está en configuración y la clave en secretos; `minio-init` crea la cuenta de servicio y la limita al bucket. No es la cuenta root de MinIO. |
 | `S3_ENDPOINT` | `api`, `worker` | Fixed at `http://minio:9000`; do not replace it with the public object URL. |
@@ -217,6 +218,7 @@ El API no recibe variables de correo ni la cuenta root de MinIO.
 | Correo | `MAIL_PROVIDER`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `SMTP_HOST`, `SMTP_TLS_SERVERNAME`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `SMTP_REQUIRE_TLS` |
 | Wallet | El mismo bloque de Wallet que usa API, porque el worker empuja sincronizaciones de pases. |
 
+El worker recibe `SSE_NAMESPACE` para publicar en el mismo entorno que el API.
 El worker no recibe `CORS_ORIGINS`, límites SSE, rate limits de scanner,
 fixtures ni credenciales de administración de MinIO.
 
