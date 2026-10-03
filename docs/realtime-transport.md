@@ -102,7 +102,9 @@ count each scope attachment separately, including aliases of one broker topic.
   disconnects. Existing browser read-model telemetry keeps its logical dimensions;
   local transport accounting uses one multiplexed physical source.
 
-Retry uses exponential 1–30 second backoff plus jitter, honors `Retry-After` as
+Only successful `text/event-stream` responses establish a connection. Wrong
+content types are canceled and retry with backoff without triggering recovery
+reads. Retry uses exponential 1–30 second backoff plus jitter, honors `Retry-After` as
 a minimum (including values over 60 seconds), and prevents stale reader loops
 from scheduling retries. Logical subscription changes coalesce independently
 of that failure backoff. Web recovery reads retain exact-resource invalidation,

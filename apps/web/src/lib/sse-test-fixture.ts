@@ -41,7 +41,12 @@ export function mockRealtimeFetch() {
         }
       },
     });
-    return { ok: true, status: 200, body, headers: new Headers() };
+    return {
+      ok: true,
+      status: 200,
+      body,
+      headers: new Headers({ "content-type": "text/event-stream" }),
+    };
   });
   vi.stubGlobal("fetch", fetcher);
   return { connections, fetcher };

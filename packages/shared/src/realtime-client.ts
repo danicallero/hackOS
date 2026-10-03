@@ -239,6 +239,15 @@ export class RealtimeClient {
         await response.body?.cancel();
         return;
       }
+      const contentType = response.headers
+        .get("content-type")
+        ?.split(";", 1)[0]
+        ?.trim()
+        .toLowerCase();
+      if (contentType !== "text/event-stream") {
+        await response.body.cancel();
+        return;
+      }
       this.failures = 0;
       this.status(true);
       if (this.opened) this.resyncAll(this.foregroundRecovery ? "foreground" : "reconnect");

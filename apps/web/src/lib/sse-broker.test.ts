@@ -197,6 +197,25 @@ describe("multiplexed SSE broker (#892)", () => {
     expect(fixture.connections[0].url).toBe(`${origin}/api/tv/stream`);
   });
 
+  it("rejects successful JSON responses without announcing a connection or recovery", async () => {
+    const cancel = vi.fn(async () => undefined);
+    fixture.fetcher.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: { cancel } as unknown as ReadableStream<Uint8Array>,
+      headers: new Headers({ "content-type": "application/json" }),
+    });
+    const status = vi.fn();
+    const resync = vi.fn();
+    subscribe("/api/queue/stream", { onConnectionChange: status, onResync: resync });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(cancel).toHaveBeenCalled();
+    expect(status).not.toHaveBeenCalledWith(true);
+    expect(resync).not.toHaveBeenCalled();
+    // Failed handshakes retain exponential backoff instead of 1-second reopen loops.
+    expect(fixture.fetcher.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+
   it("honors Retry-After and stops retrying forbidden scope sets", async () => {
     fixture.fetcher.mockResolvedValueOnce({
       ok: false,

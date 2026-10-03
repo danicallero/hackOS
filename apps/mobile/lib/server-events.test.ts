@@ -80,7 +80,7 @@ describe("multiplexed native events (#892)", () => {
         return {
           ok: true,
           body: { getReader: () => response.reader },
-          headers: { get: () => null },
+          headers: new Headers({ "content-type": "text/event-stream" }),
         };
       }),
     });
