@@ -1,4 +1,9 @@
 {
+  "eventReminderTitle": "Email reminder",
+  "eventReminderAudience": "Everyone with event access will receive their ticket and the check-in time.",
+  "eventReminderQueued": "The email to {{count}} people is on its way.",
+  "eventReminderExpired": "The reminder was not sent because the event had already started.",
+  "eventReminderSendAt": "When to send it",
   "myApplications": "My applications",
   "myQueue": "My queue",
   "workspaceApplications": "Applications",
@@ -3249,5 +3254,7 @@
   "designSystemFields": "Fields",
   "designSystemStates": "States",
   "designSystemTable": "Table",
-  "designSystemOverlay": "Dialog"
+  "designSystemOverlay": "Dialog",
+  "eventReminderNeedsDetails": "Set the event name and opening time to schedule the email.",
+  "eventReminderInvalidDate": "Choose a future date before the event opens."
 }

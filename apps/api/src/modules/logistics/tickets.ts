@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type pg from "pg";
-import { pool } from "../../db/pool.js";
+import { pool, type Queryable } from "../../db/pool.js";
 import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { hasEventAccess } from "../identity/role.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
@@ -12,7 +12,7 @@ import { voidTicketPasses } from "./wallet-passes.js";
  * Creates the permanent entrance credential for any attendee category. The
  * unique user key makes repeated role transitions safe (plan/07 invariant 10).
  */
-export async function issueTicket(client: pg.PoolClient, userId: number): Promise<string> {
+export async function issueTicket(client: Queryable, userId: number): Promise<string> {
   // H54: ticket issuance is an identity-bearing credential mutation. The
   // caller may have resolved eligibility earlier, so re-check while sharing
   // the user row lock with account removal immediately before minting.

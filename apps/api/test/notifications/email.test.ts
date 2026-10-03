@@ -116,7 +116,8 @@ describe("SMTP via Mailpit (default dev provider)", () => {
         template: "application.decision",
         vars: {
           name: "Ada",
-          applicationName: "HackUDC",
+          applicationName: "Participants",
+          eventName: "HackUDC 2027",
           decision: "rejected",
           decisionDetails: "",
         },
@@ -128,7 +129,8 @@ describe("SMTP via Mailpit (default dev provider)", () => {
     const detail = await getMailpitMessage(messages[0]!.ID);
     expect(detail.Text).toContain(outcome);
     expect(detail.Text).toContain(closing);
-    expect(detail.Text).toContain("HackUDC");
+    expect(detail.Text).toContain("HackUDC 2027");
+    expect(detail.Text).toContain("Participants");
     expect(detail.Text).not.toContain("rejected");
     expect(detail.Text).not.toContain("{{");
     expect(detail.HTML).not.toContain("/applications/confirm");
@@ -173,5 +175,48 @@ describe("SMTP via Mailpit (default dev provider)", () => {
     expect(messages[0]!.Subject).toBe("Verifica tu correo de hackOS"); // es, not en
     const detail = await getMailpitMessage(messages[0]!.ID);
     expect(detail.Text).toContain("http://verify");
+  });
+});
+
+describe("event reminder email (H28,H45,H52)", () => {
+  it("delivers an embedded ticket image and the official Wallet artwork through SMTP", async () => {
+    const { assignRole, createRole } = await import("../helpers.js");
+    const userId = await createUser({ email: "reminder@test.local", name: "Ada" });
+    await setUserLanguage(userId, "es");
+    await assignRole(userId, await createRole([], { eventAccess: true }));
+    await pool.query(
+      "INSERT INTO event_config (id, name, timezone, event_starts_at) VALUES (1, 'HackUDC 2027', 'Europe/Madrid', '2027-02-19T17:00:00Z')",
+    );
+    const id = await enqueueOutbox(
+      userId,
+      "email",
+      { template: "event.reminder" },
+      "event.reminder",
+    );
+    expect((await drainOutboxOnce()).sent).toBe(1);
+    expect((await getOutboxRow(id)).status).toBe("sent");
+    const messages = await waitForMailpit(1);
+    const message = await getMailpitMessage(messages[0].ID);
+    expect(message.Text).toContain("18:00 CET");
+    expect(message.HTML).toContain('src="cid:event-ticket@hackos"');
+    expect(message.HTML).toContain("apple-wallet-badge-es.png");
+    expect(message.HTML).toContain("google-wallet-button-es.png");
+    const raw = await (
+      await fetch(`http://localhost:8025/api/v1/message/${messages[0].ID}/raw`)
+    ).text();
+    expect(raw).toContain("Content-ID: <event-ticket@hackos>");
+    expect(raw).toContain("Content-Type: image/png");
+  });
+  it("supersedes a queued reminder after event access is revoked", async () => {
+    const userId = await createUser();
+    const id = await enqueueOutbox(
+      userId,
+      "email",
+      { template: "event.reminder" },
+      "event.reminder",
+    );
+    expect((await drainOutboxOnce()).superseded).toBe(1);
+    expect((await getOutboxRow(id)).status).toBe("superseded");
+    expect(await listMailpitMessages()).toEqual([]);
   });
 });

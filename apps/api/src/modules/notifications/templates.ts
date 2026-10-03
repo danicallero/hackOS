@@ -215,7 +215,11 @@ function ctaButton(url: string, label: string): string {
  * tappable CTA button (raw wrapping URLs looked terrible on phones); everything
  * else is escaped text with `<br/>` for soft line breaks.
  */
-function renderBodyHtml(text: string): string {
+function renderBodyHtml(
+  text: string,
+  wallet?: { appleUrl: unknown; googleUrl: unknown; language: Language; ticketQr: boolean },
+): string {
+  let ticketRendered = false;
   return text
     .split(/\n\n+/)
     .map((para) => {
@@ -233,7 +237,26 @@ function renderBodyHtml(text: string): string {
         const bare = line.match(BARE_URL_LINE);
         if (labeled) {
           flush();
-          out += ctaButton(labeled[2] as string, labeled[1] as string);
+          const walletBrand =
+            wallet && labeled[2] === wallet.appleUrl
+              ? "apple"
+              : wallet && labeled[2] === wallet.googleUrl
+                ? "google"
+                : null;
+          if (walletBrand && wallet) {
+            if (wallet.ticketQr && !ticketRendered) {
+              out += `<div style="margin:24px 0;text-align:center;"><img src="cid:event-ticket@hackos" alt="${escapeHtml(translateEmail("mail.event.reminder.ticketAlt", wallet.language, {}))}" width="240" height="240" style="display:block;margin:0 auto;width:240px;max-width:100%;height:auto;border:0;background:#ffffff;" /></div>`;
+              ticketRendered = true;
+            }
+            const locale = wallet.language === "en" ? "en" : "es";
+            const asset = walletBrand === "apple" ? "apple-wallet-badge" : "google-wallet-button";
+            // H28/H52: preserve the official Wallet artwork used by /wallet.
+            // PNG exports of those SVGs work in email clients without SVG support.
+            const width = walletBrand === "google" ? 227 : locale === "en" ? 127 : 151;
+            out += `<p style="margin:16px 0;"><a href="${escapeHtml(labeled[2] as string)}" target="_blank" rel="noopener" style="display:inline-block;"><img src="${escapeHtml(`${config.WEB_URL}/wallet-badges/${asset}-${locale}.png`)}" alt="${escapeHtml(labeled[1] as string)}" width="${width}" height="40" style="display:block;width:${width}px;max-width:100%;height:auto;border:0;" /></a></p>`;
+          } else {
+            out += ctaButton(labeled[2] as string, labeled[1] as string);
+          }
         } else if (bare) {
           flush();
           out += ctaButton(bare[1] as string, bare[1] as string);
@@ -292,6 +315,7 @@ export function renderEmailTemplate(payload: EmailPayload, language: Language): 
     subject: payload.subject ?? "hackOS notification",
     body: payload.body ?? "",
     fromAddress: config.MAIL_FROM_ADDRESS,
+    eventName: config.APPLE_PASS_ORGANIZATION,
     ...payload.vars,
   };
   const subject = translateEmail(`mail.${templateName}.subject`, language, vars);
@@ -302,7 +326,17 @@ export function renderEmailTemplate(payload: EmailPayload, language: Language): 
   const text = bodyToPlainText(rendered);
   const html = brandWrapHtml(
     subject,
-    renderBodyHtml(rendered),
+    renderBodyHtml(
+      rendered,
+      templateName === "event.reminder"
+        ? {
+            appleUrl: payload.vars?.appleUrl,
+            googleUrl: payload.vars?.googleUrl,
+            language,
+            ticketQr: payload.vars?.ticketQr === true,
+          }
+        : undefined,
+    ),
     derivePreheader(text),
     language,
     heading,

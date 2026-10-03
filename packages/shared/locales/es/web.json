@@ -1,4 +1,9 @@
 {
+  "eventReminderTitle": "Recordatorio por correo",
+  "eventReminderAudience": "Todas las personas con acceso al evento recibirán su entrada y la hora de check-in.",
+  "eventReminderQueued": "El envío a {{count}} personas ya está en marcha.",
+  "eventReminderExpired": "El recordatorio no se envió porque el evento ya había empezado.",
+  "eventReminderSendAt": "Cuándo enviarlo",
   "myApplications": "Mis solicitudes",
   "myQueue": "Mi cola",
   "workspaceApplications": "Solicitudes",
@@ -3249,5 +3254,7 @@
   "designSystemFields": "Campos",
   "designSystemStates": "Estados",
   "designSystemTable": "Tabla",
-  "designSystemOverlay": "Diálogo"
+  "designSystemOverlay": "Diálogo",
+  "eventReminderNeedsDetails": "Indica el nombre y la hora de inicio del evento para programar el correo.",
+  "eventReminderInvalidDate": "Elige una fecha futura, anterior al inicio del evento."
 }

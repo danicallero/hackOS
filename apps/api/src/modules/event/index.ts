@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { scheduleEventReminders } from "./reminders.js";
 import { registerEventRoutes } from "./routes.js";
 
 /**
@@ -7,4 +8,5 @@ import { registerEventRoutes } from "./routes.js";
  */
 export async function registerEventModule(app: FastifyInstance): Promise<void> {
   registerEventRoutes(app);
+  await scheduleEventReminders();
 }

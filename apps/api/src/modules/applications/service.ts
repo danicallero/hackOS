@@ -10,7 +10,7 @@ import { assertVerifiedPrimaryEmail } from "../../lib/email-verification.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { translateEmail } from "../../lib/i18n.js";
 import { broadcast } from "../../lib/sse.js";
-import { getEventTimezone } from "../event/service.js";
+import { getEventName, getEventTimezone } from "../event/service.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { applyRoleAssignmentRevokeRules } from "../identity/role-grants.js";
 import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
@@ -1675,6 +1675,7 @@ async function decisionNotificationPayload(
   confirmToken: string | null,
 ): Promise<EmailPayload> {
   const language = normalizeLanguage(user.language);
+  const eventName = await getEventName(client);
   let decisionDetails = "";
   let confirmationExpiresAt: string | undefined;
   let confirmationTimeZone: string | undefined;
@@ -1711,6 +1712,7 @@ async function decisionNotificationPayload(
     vars: {
       name: user.name ?? "",
       applicationName: app.name,
+      eventName,
       decision,
       decisionDetails,
       confirmationExpiresAt,

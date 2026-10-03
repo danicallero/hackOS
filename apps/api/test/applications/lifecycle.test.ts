@@ -1111,9 +1111,7 @@ describe("re-accept (admin)", () => {
     });
     expect(inbox.statusCode).toBe(200);
     expect(inbox.json().total).toBe(1);
-    expect(inbox.json().items[0].payload.subject).toBe(
-      "Your spot at Participant form is waiting for you!",
-    );
+    expect(inbox.json().items[0].payload.subject).toBe("Your spot at hackOS is waiting for you!");
 
     // the new token can confirm
     const token = await latestConfirmationToken(userId);
@@ -1572,12 +1570,15 @@ describe("decision pool", () => {
 
 describe("email confirmation deadline", () => {
   it.each([
-    ["es", "¡Buenas noticias!", "Puedes confirmar tu plaza hasta el", "Confirmar mi plaza"],
-    ["gl", "Boas novas!", "Podes confirmar a túa praza ata o", "Confirmar a miña praza"],
-    ["en", "Good news!", "You can confirm your spot until", "Confirm my spot"],
+    ["es", "¡Enhorabuena!", "Confirma tu plaza antes del", "Confirmar mi plaza"],
+    ["gl", "Parabéns!", "Confirma a túa praza antes do", "Confirmar a miña praza"],
+    ["en", "Congratulations!", "Confirm your spot before", "Confirm my spot"],
   ])("localizes acceptance, exact expiry and action links in %s (H14/H15)", async (language, welcome, deadline, action) => {
     const a = await getApp();
-    const appId = await createApplication({ confirmation_window_hours: 1 });
+    await pool.query(
+      "INSERT INTO event_config (id, name, timezone) VALUES (1, 'HackUDC 2027', 'Europe/Madrid')",
+    );
+    const appId = await createApplication({ confirmation_window_hours: 1, name: "Participants" });
     const { userId, responseId } = await submittedApplicant(appId);
     await pool.query("UPDATE users SET language = $1 WHERE id = $2", [language, userId]);
     await a.inject({
@@ -1601,6 +1602,12 @@ describe("email confirmation deadline", () => {
     );
     const rendered = renderEmailTemplate(rows[0].payload, normalizeLanguage(language));
     expect(rendered.text).toContain(welcome);
+    expect(rows[0].payload.vars.eventName).toBe("HackUDC 2027");
+    expect(rows[0].payload.vars.applicationName).toBe("Participants");
+    expect(rendered.subject).toContain("HackUDC 2027");
+    expect(rendered.subject).not.toContain("Participants");
+    expect(rendered.text).toContain("Participants");
+    expect(rendered.text).toContain("HackUDC 2027");
     expect(rendered.text).toContain(deadline);
     const { rows: tokens } = await pool.query(
       "SELECT expires_at FROM email_verification_tokens WHERE user_id = $1 AND type = 'spot_confirmation' AND used_at IS NULL",
@@ -1638,7 +1645,7 @@ describe("email confirmation deadline", () => {
       [userId],
     );
     const details = outbox[0].payload.vars.decisionDetails;
-    expect(details).toMatch(/You can confirm your spot until /);
+    expect(details).toMatch(/Confirm your spot before /);
     expect(details).toContain(new Date().getUTCFullYear().toString());
   });
 });

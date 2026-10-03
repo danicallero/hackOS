@@ -1,6 +1,14 @@
 {
   "mail": {
     "footer": "This is an automated message. Please do not reply: this address does not receive incoming messages.\nTo contact the organizers, email hackudc@gpul.org.",
+    "event": {
+      "reminder": {
+        "subject": "See you at {{eventName}}!",
+        "heading": "{{eventName}} is getting close",
+        "body": "Hi {{name}},\n\n{{eventName}} starts on {{eventDate}}. See you at {{checkInTime}} for check-in.\n\nRemember to bring your ticket: show the QR code in this email when you arrive, or save it to your wallet.\n\n[Add to Apple Wallet]({{appleUrl}})\n\n[Add to Google Wallet]({{googleUrl}})\n\nYour ticket is also available in your profile:\n\n[View my ticket]({{walletUrl}})\n\nWe’re looking forward to seeing you!\nThe {{eventName}} team",
+        "ticketAlt": "Your ticket QR code"
+      }
+    },
     "generic": {
       "subject": "{{subject}}",
       "body": "{{body}}"
@@ -66,16 +74,16 @@
         "subject": "A decision on your application",
         "body": "Hi {{name}},\n\nWe’ve reviewed your application to {{applicationName}}.{{decisionDetails}}",
         "accepted": {
-          "subject": "Your spot at {{applicationName}} is waiting for you!",
-          "heading": "We can’t wait to see you at {{applicationName}}!",
-          "body": "Hi {{name}},\n\nGood news! We’ve accepted your application to {{applicationName}}, and we’re excited to have you join us.\n\nWe can’t wait to see your ideas take shape, learn from each other and build things together. Just confirm your spot to be part of it!{{decisionDetails}}"
+          "subject": "Your spot at {{eventName}} is waiting for you!",
+          "heading": "We can’t wait to see you at {{eventName}}!",
+          "body": "Hi {{name}},\n\nCongratulations! We’ve accepted your application for {{applicationName}} at {{eventName}}, and we’re excited to have you join us.\n\nWe’ve reserved a spot for you. All that’s left is to confirm you’re coming.{{decisionDetails}}\n\nWe can’t wait to meet you!\nThe {{eventName}} team"
         },
         "rejected": {
-          "subject": "About your application to {{applicationName}}",
-          "body": "Hi {{name}},\n\nUnfortunately, your application to {{applicationName}} hasn’t been selected this time. We know this isn’t the news you were hoping for.\n\nThank you for your interest and for the time you put into your application. We hope to see you at a future edition.\n\nBest wishes,\nThe organizing team"
+          "subject": "About your application for {{applicationName}} at {{eventName}}",
+          "body": "Hi {{name}},\n\nUnfortunately, your application for {{applicationName}} at {{eventName}} hasn’t been selected this time. We know this isn’t the news you were hoping for.\n\nThank you for your interest and for the time you put into your application. We hope to see you at a future edition.\n\nBest wishes,\nThe organizing team"
         },
-        "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirm my spot]({{confirmUrl}})\n\nIf you can’t make it, please let us know so someone else can take your place:\n\n[Decline my spot]({{declineUrl}})\n\nIf you don’t confirm within that time, your spot will be released automatically.",
-        "confirmationDeadline": "You can confirm your spot until {{deadline}}."
+        "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirm my spot]({{confirmUrl}})\n\nIf it turns out you can’t make it, please let us know so someone else can take your spot:\n\n[Decline my spot]({{declineUrl}})\n\nIf the deadline passes without your confirmation, the spot will be released automatically.",
+        "confirmationDeadline": "Confirm your spot before {{deadline}}."
       }
     },
     "schedule": {

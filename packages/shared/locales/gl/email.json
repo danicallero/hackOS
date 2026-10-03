@@ -1,6 +1,14 @@
 {
   "mail": {
     "footer": "Esta é unha mensaxe automática. Non respondas: este enderezo non recibe mensaxes.\nPara contactar coa organización, escribe a hackudc@gpul.org.",
+    "event": {
+      "reminder": {
+        "subject": "Vémonos en {{eventName}}!",
+        "heading": "Xa queda menos para {{eventName}}",
+        "body": "Ola {{name}},\n\n{{eventName}} comeza o {{eventDate}}. Vémonos ás {{checkInTime}} para o check-in.\n\nNon esquezas levar a túa entrada: podes amosar o QR deste correo ao chegar ou gardala na túa carteira.\n\n[Engadir a Apple Wallet]({{appleUrl}})\n\n[Engadir a Google Wallet]({{googleUrl}})\n\nTamén tes a túa entrada dispoñible no teu perfil:\n\n[Ver a miña entrada]({{walletUrl}})\n\nTemos ganas de verte!\nO equipo de {{eventName}}",
+        "ticketAlt": "QR da túa entrada"
+      }
+    },
     "generic": {
       "subject": "{{subject}}",
       "body": "{{body}}"
@@ -66,16 +74,16 @@
         "subject": "Unha decisión sobre a túa solicitude",
         "body": "Ola {{name}},\n\nRevisamos a túa solicitude a {{applicationName}}.{{decisionDetails}}",
         "accepted": {
-          "subject": "A túa praza en {{applicationName}} agárdate!",
-          "heading": "Agardámoste en {{applicationName}}!",
-          "body": "Ola {{name}},\n\nBoas novas! Aceptamos a túa solicitude a {{applicationName}} e fainos moita ilusión contar contigo.\n\nTemos moitas ganas de ver as túas ideas tomar forma, aprender contigo e construír cousas xuntos. Só falta que confirmes a túa praza para sumarte!{{decisionDetails}}"
+          "subject": "A túa praza en {{eventName}} agárdate!",
+          "heading": "Agardámoste en {{eventName}}!",
+          "body": "Ola {{name}},\n\nParabéns! Aceptamos a túa solicitude de {{applicationName}} para {{eventName}} e fainos moita ilusión contar contigo.\n\nReservámosche unha praza. Agora só falta que confirmes a túa asistencia.{{decisionDetails}}\n\nTemos moitas ganas de coñecerte!\nO equipo de {{eventName}}"
         },
         "rejected": {
-          "subject": "Sobre a túa solicitude a {{applicationName}}",
-          "body": "Ola {{name}},\n\nLamentablemente, a túa solicitude a {{applicationName}} non foi seleccionada nesta ocasión. Sabemos que non é a nova que agardabas.\n\nGrazas polo teu interese e polo tempo que dedicaches á túa solicitude. Agardamos verte en próximas edicións.\n\nUn saúdo,\nO equipo de organización"
+          "subject": "Sobre a túa solicitude de {{applicationName}} para {{eventName}}",
+          "body": "Ola {{name}},\n\nLamentablemente, a túa solicitude de {{applicationName}} para {{eventName}} non foi seleccionada nesta ocasión. Sabemos que non é a nova que agardabas.\n\nGrazas polo teu interese e polo tempo que dedicaches á túa solicitude. Agardamos verte en próximas edicións.\n\nUn saúdo,\nO equipo de organización"
         },
-        "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirmar a miña praza]({{confirmUrl}})\n\nSe non podes vir, renuncia á túa praza para que outra persoa poida aproveitala:\n\n[Renunciar á miña praza]({{declineUrl}})\n\nSe non confirmas dentro dese prazo, a túa praza liberarase automaticamente.",
-        "confirmationDeadline": "Podes confirmar a túa praza ata o {{deadline}}."
+        "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirmar a miña praza]({{confirmUrl}})\n\nSe ao final non podes vir, avísanos para que outra persoa poida aproveitar a túa praza:\n\n[Renunciar á miña praza]({{declineUrl}})\n\nSe pasa o prazo sen que confirmes, a praza liberarase automaticamente.",
+        "confirmationDeadline": "Confirma a túa praza antes do {{deadline}}."
       }
     },
     "schedule": {

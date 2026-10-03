@@ -13,7 +13,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -42,24 +42,53 @@ import { useCategorySaveState } from "./use-category-save-state";
 import { ZonedTimePreview } from "./zoned-time-preview";
 
 const createSchema = (t: Translate) =>
-  z.object({
-    name: z.string().max(200, t("tooLong")),
-    tagline: z.string().max(500, t("tooLong")),
-    timezone: z.string().min(1, t("required")).max(100, t("tooLong")),
-    participantsCanCreateProjects: z.boolean(),
-    participantSelfServiceStartsAt: z.string(),
-    participantSelfServiceEndsAt: z.string(),
-    eventStartsAt: z.string(),
-    eventEndsAt: z.string(),
-    hackingStartsAt: z.string(),
-    hackingEndsAt: z.string(),
-    showStartCountdown: z.boolean(),
-  });
+  z
+    .object({
+      eventReminderScheduledAt: z.string(),
+      name: z.string().max(200, t("tooLong")),
+      tagline: z.string().max(500, t("tooLong")),
+      timezone: z.string().min(1, t("required")).max(100, t("tooLong")),
+      participantsCanCreateProjects: z.boolean(),
+      participantSelfServiceStartsAt: z.string(),
+      participantSelfServiceEndsAt: z.string(),
+      eventStartsAt: z.string(),
+      eventEndsAt: z.string(),
+      hackingStartsAt: z.string(),
+      hackingEndsAt: z.string(),
+      showStartCountdown: z.boolean(),
+    })
+    .superRefine((values, ctx) => {
+      if (!values.eventReminderScheduledAt) return;
+      if (!values.name.trim() || !values.eventStartsAt) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["eventReminderScheduledAt"],
+          message: t("eventReminderNeedsDetails"),
+        });
+        return;
+      }
+      const sendAt = new Date(values.eventReminderScheduledAt).getTime();
+      if (
+        !Number.isFinite(sendAt) ||
+        sendAt <= Date.now() ||
+        sendAt >= new Date(values.eventStartsAt).getTime()
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["eventReminderScheduledAt"],
+          message: t("eventReminderInvalidDate"),
+        });
+      }
+    });
 
 type Values = z.infer<ReturnType<typeof createSchema>>;
 
 function fromConfig(cfg: EventConfig): Values {
   return {
+    eventReminderScheduledAt:
+      cfg.eventReminder?.status === "scheduled"
+        ? toLocalInputValue(cfg.eventReminder.scheduled_at)
+        : "",
     name: cfg.name ?? "",
     tagline: cfg.tagline ?? "",
     timezone: cfg.timezone || "Europe/Madrid",
@@ -114,10 +143,12 @@ export function EventTab({
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { t } = useLocale();
+  const reminderLabelId = useId();
   const { config, status, applyConfig } = useEventConfig();
   const form = useForm<Values>({
     resolver: zodResolver(createSchema(t)),
     defaultValues: {
+      eventReminderScheduledAt: "",
       name: "",
       tagline: "",
       timezone: "Europe/Madrid",
@@ -143,6 +174,9 @@ export function EventTab({
     setSaveState("saving");
     try {
       const next = await api.put<EventConfig>("/api/event", {
+        ...(form.formState.dirtyFields.eventReminderScheduledAt
+          ? { eventReminderScheduledAt: fromLocalInputValue(values.eventReminderScheduledAt) }
+          : {}),
         name: values.name.trim() || null,
         tagline: values.tagline.trim() || null,
         timezone: values.timezone.trim(),
@@ -336,6 +370,64 @@ export function EventTab({
                 </FormItem>
               )}
             />
+          </div>
+          <div className="border-t pt-4 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <h3 id={reminderLabelId} className="text-balance text-sm font-semibold">
+                {t("eventReminderTitle")}
+              </h3>
+              <Switch
+                aria-labelledby={reminderLabelId}
+                checked={!!values.eventReminderScheduledAt}
+                onCheckedChange={(checked) =>
+                  form.setValue(
+                    "eventReminderScheduledAt",
+                    checked
+                      ? toLocalInputValue(
+                          new Date(
+                            Math.max(
+                              Date.now() + 3600000,
+                              new Date(
+                                fromLocalInputValue(values.eventStartsAt ?? "") ?? Date.now(),
+                              ).getTime() - 86400000,
+                            ),
+                          ).toISOString(),
+                        )
+                      : "",
+                    { shouldDirty: true, shouldValidate: true },
+                  )
+                }
+              />
+            </div>
+            <p className="text-muted-foreground text-sm">{t("eventReminderAudience")}</p>
+            {values.eventReminderScheduledAt && (
+              <FormField
+                control={form.control}
+                name="eventReminderScheduledAt"
+                render={({ field }) => (
+                  <FormItem className="max-w-md">
+                    <FormLabel>{t("eventReminderSendAt")}</FormLabel>
+                    <FormControl>
+                      <DateTimeInput
+                        value={field.value}
+                        onChange={field.onChange}
+                        max={values.eventStartsAt}
+                      />
+                    </FormControl>
+                    <ZonedTimePreview value={field.value} timezone={timezone} />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+            {config.eventReminder?.status === "queued" && (
+              <p className="text-sm">
+                {t("eventReminderQueued", { count: config.eventReminder.recipient_count })}
+              </p>
+            )}
+            {config.eventReminder?.status === "expired" && (
+              <p className="text-sm">{t("eventReminderExpired")}</p>
+            )}
           </div>
         </SectionCard>
       </form>
