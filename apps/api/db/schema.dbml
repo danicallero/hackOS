@@ -133,7 +133,6 @@ Table announcement_recipients {
 }
 
 Table announcements {
-  audiences "text[]" [not null, default: `'{}'::text[]`]
   author_id integer
   body text [not null]
   channels "text[]" [not null, default: `'{in_app,email,push}'::text[]`]
@@ -141,8 +140,10 @@ Table announcements {
   expires_at "timestamp with time zone"
   fanned_out_at "timestamp with time zone"
   id integer [pk, increment, not null]
+  intolerance_ids "integer[]" [not null, default: `'{}'::integer[]`, note: 'H50/H12: food intolerance dictionary IDs that further narrow announcement recipients. Empty means no dietary restriction.']
   notify_users boolean [not null, default: `false`]
   publish_at "timestamp with time zone"
+  role_ids "integer[]" [not null, default: `'{}'::integer[]`, note: 'H50: roles whose current holders receive this announcement. Empty means no role restriction.']
   screen_placement text [not null, default: `'none'::text`]
   title text [not null]
   translations jsonb [not null, default: `'{}'::jsonb`]
@@ -226,7 +227,6 @@ Table application_responses {
   referrer_application_id integer
   referrer_user_id integer
   responses jsonb [not null, default: `'{}'::jsonb`]
-  staff_notes text
   status app_response_status [not null, default: `'draft'::app_response_status`]
   submitted_at "timestamp with time zone"
   updated_at "timestamp with time zone" [not null, default: `now()`]
@@ -333,6 +333,7 @@ Table challenges {
   id integer [pk, increment, not null]
   is_test_account boolean [not null, default: `false`, note: 'Synthetic review-fixture queue marker; ordinary event operations exclude marked rows.']
   judging_panel_criteria jsonb
+  mandatory boolean [not null, default: `false`, note: 'When true, every project is enrolled regardless of Devpost tags or manual selection (issue #851).']
   max_in_waiting_area integer [not null, default: `2`]
   max_presentation_seconds integer
   prizes jsonb
@@ -469,6 +470,8 @@ Table event_config {
   hacking_starts_at "timestamp with time zone"
   id integer [pk, not null]
   name text
+  participant_self_service_ends_at "timestamp with time zone"
+  participant_self_service_starts_at "timestamp with time zone"
   participants_can_create_projects boolean [not null, default: `false`]
   pass_back_fields jsonb [not null, default: `'[]'::jsonb`]
   pass_field_labels jsonb [not null, default: `'{}'::jsonb`]
@@ -492,6 +495,16 @@ Table event_config {
   wifi_ssid text
 }
 
+Table event_email_reminders {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  created_by integer
+  id integer [pk, increment, not null]
+  queued_at "timestamp with time zone"
+  recipient_count integer [not null, default: `0`]
+  scheduled_at "timestamp with time zone" [not null]
+  status text [not null, default: `'scheduled'::text`]
+}
+
 Table food_intolerances {
   created_at "timestamp with time zone" [not null, default: `now()`]
   description jsonb
@@ -511,6 +524,19 @@ Table idempotency_keys {
 
   indexes {
   (key, scope) [pk]
+  }
+}
+
+Table judging_field_leases {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  expires_at "timestamp with time zone" [not null]
+  field_key text [not null]
+  judge_id integer [not null]
+  queue_entry_id integer [not null]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (queue_entry_id, field_key) [pk]
   }
 }
 
@@ -580,6 +606,46 @@ Table notification_preferences {
   indexes {
   (user_id, category, channel) [pk]
   }
+}
+
+Table planned_work_group_challenges {
+  challenge_id integer [not null]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  group_id bigint [not null]
+
+  indexes {
+  (group_id, challenge_id) [pk]
+  }
+}
+
+Table planned_work_group_members {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  group_id bigint [not null]
+  invited_by integer
+  responded_at "timestamp with time zone"
+  status text [not null]
+  user_id integer [not null]
+
+  indexes {
+  (group_id, user_id) [pk]
+  }
+}
+
+Table planned_work_groups {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  created_by integer [not null]
+  demo_url text
+  description text [not null, default: `''::text`]
+  devpost_canonical_url text
+  devpost_url text
+  github_url text
+  id bigint [pk, increment, not null]
+  linked_repo_id integer [unique, note: 'Exact Devpost URL linkage only (#854); planning metadata never creates queue entries.']
+  name text [not null]
+  presentation_timing_preference text [not null, default: `'no_preference'::text`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  Note: 'Issue #852 planning only. linked_repo_id and presentation_timing_preference are contracts for #854 and #853; no conversion or queue behavior exists here.'
 }
 
 Table push_tokens {
@@ -664,11 +730,13 @@ Table repos {
   created_by integer
   demo_url text
   description text [not null, default: `''::text`]
+  devpost_canonical_url text
   devpost_url text
   github_url text
   id integer [pk, increment, not null]
   is_test_account boolean [not null, default: `false`, note: 'Synthetic review-fixture project marker; ordinary event operations exclude marked rows.']
   name text [not null]
+  presentation_timing_preference text [not null, default: `'no_preference'::text`]
   source text [not null, default: `'devpost'::text`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
 
@@ -906,6 +974,14 @@ Table universities {
   suggested_by integer [note: 'H12: authenticated self-service proposer. Unlike proposed_by (which records every creator, including staff), a person may have at most one active suggestion.']
 }
 
+Table university_degrees {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  id integer [pk, increment, not null]
+  name text [unique, not null]
+  proposed_by integer
+  suggested_by integer
+}
+
 Table user_effective_capabilities {
   capability text
   user_id integer
@@ -1114,7 +1190,10 @@ Ref: enterprise_judges.added_by > users.id
 Ref: enterprise_judges.enterprise_id > enterprises.id
 Ref: enterprise_judges.user_id > users.id
 Ref: enterprises.director_id > users.id
+Ref: event_email_reminders.created_by > users.id
 Ref: food_intolerances.proposed_by > users.id
+Ref: judging_field_leases.judge_id > users.id
+Ref: judging_field_leases.queue_entry_id > queue_entries.id
 Ref: judging_session.judge_id > users.id
 Ref: judging_session.queue_entry_id > queue_entries.id
 Ref: judging_session.room_id > rooms.id
@@ -1124,6 +1203,13 @@ Ref: meal_scan_batches.activity_id > activities.id
 Ref: meal_scan_batches.submitted_by > users.id
 Ref: notification_outbox.user_id > users.id
 Ref: notification_preferences.user_id > users.id
+Ref: planned_work_group_challenges.challenge_id > challenges.id
+Ref: planned_work_group_challenges.group_id > planned_work_groups.id
+Ref: planned_work_group_members.group_id > planned_work_groups.id
+Ref: planned_work_group_members.invited_by > users.id
+Ref: planned_work_group_members.user_id > users.id
+Ref: planned_work_groups.created_by > users.id
+Ref: planned_work_groups.linked_repo_id > repos.id
 Ref: push_tokens.user_id > users.id
 Ref: queue_entries.assigned_room_id > rooms.id
 Ref: queue_entries.challenge_id > challenges.id
@@ -1170,6 +1256,8 @@ Ref: time_logs.scanned_by > users.id
 Ref: time_logs.user_id > users.id
 Ref: universities.proposed_by > users.id
 Ref: universities.suggested_by > users.id
+Ref: university_degrees.proposed_by > users.id
+Ref: university_degrees.suggested_by > users.id
 Ref: user_email_history.user_id > users.id
 Ref: user_invite_link_redemptions.link_id > user_invite_links.id
 Ref: user_invite_link_redemptions.user_id > users.id

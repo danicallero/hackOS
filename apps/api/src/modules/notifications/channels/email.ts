@@ -1,5 +1,7 @@
 import { config } from "../../../config.js";
 import type { Queryable } from "../../../db/pool.js";
+import { translateEmail } from "../../../lib/i18n.js";
+import { prepareEventReminder } from "../../event/reminder-email.js";
 import type { EmailPayload } from "../templates.js";
 import { normalizeLanguage, renderEmailTemplate } from "../templates.js";
 import { sendViaSmtp } from "./email-adapters/smtp.js";
@@ -9,6 +11,7 @@ export interface MailMessage {
   subject: string;
   html: string;
   text: string;
+  attachments?: { filename: string; content: Buffer; cid: string; contentType: string }[];
 }
 
 /**
@@ -71,12 +74,17 @@ export async function sendEmail(
   // flows that mail an address or language not yet on the user record).
   const to = payload.recipient ?? user.email;
   const language = normalizeLanguage(payload.language ?? user.language);
-  const rendered = renderEmailTemplate(payload, language);
+  const reminder =
+    payload.template === "event.reminder"
+      ? await prepareEventReminder(db, userId, language, payload)
+      : null;
+  const rendered = renderEmailTemplate(reminder?.payload ?? payload, language);
   const message: MailMessage = {
     to,
+    ...(reminder ? { attachments: [reminder.attachment] } : {}),
     subject: rendered.subject,
     html: rendered.html,
-    text: rendered.text,
+    text: `${rendered.text}\n\n${translateEmail("mail.footer", language, {})}`,
   };
 
   return sendViaSmtp(mail, message);

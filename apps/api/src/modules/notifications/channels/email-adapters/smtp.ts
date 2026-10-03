@@ -31,5 +31,6 @@ export async function sendViaSmtp(mail: MailConfig, message: MailMessage): Promi
     subject: message.subject,
     html: message.html,
     text: message.text,
+    attachments: message.attachments,
   });
 }

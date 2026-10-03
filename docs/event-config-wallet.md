@@ -27,8 +27,8 @@ sending `null` clears a nullable field.
 
 | Column | Meaning |
 | --- | --- |
-| `name`, `tagline` | Event identity, shown on the public site and on the pass back. |
-| `timezone` | IANA zone name; formats the date/time printed on the pass. |
+| `name`, `tagline` | Event identity, shown on the public site and on the pass back. Admission emails read `name` through `event/service.ts`, separately from the application form name, with the same organization-name fallback as Wallet. |
+| `timezone` | IANA zone name; formats pass dates and the exact expiry in admission emails. `event/service.ts` exposes this to other modules with UTC fallback when unset. |
 | `event_starts_at` | **Doors open** — when attendees can arrive at the venue. This (not the hacking start) is the date/time shown on the Apple Wallet pass and Google EventTicketObject's `validTimeInterval`. |
 | `event_ends_at` | **Event over** — distinct from `hacking_ends_at` (multi-day events keep going after submissions close). Becomes the Apple pass's `expirationDate` and the Google object's validity end, so Wallet stops surfacing the pass afterwards. `CHECK (ends > starts)`. |
 | `hacking_starts_at`, `hacking_ends_at` | The publicly-"spoken" hacking window; drives the countdown. `CHECK (ends > starts)`. |
@@ -259,3 +259,30 @@ the scoped routes and to `credentials: "omit"` fetches, so the request carries
 no cookie at all. The Apple Wallet badge is a same-tab link: the browser must
 hand the `.pkpass` response to Wallet without creating a blank tab that the
 holder has to close manually.
+
+## Pre-event email reminder (H45, H52)
+
+The Event tab includes an email-reminder section in its existing form. Its
+switch and send date share the category's Save changes action and unsaved-change
+guard. `PUT /api/event` accepts optional `eventReminderScheduledAt` (ISO instant;
+null cancels). Event identity, dates, reminder and audit commit together. The
+field requires `EVENT_MANAGE`; scheduling needs a non-empty name and a future
+send time before `event_starts_at`. GET includes the latest `eventReminder`
+status (`scheduled`, `queued`, `cancelled`, `expired`) and recipient count.
+
+Migration 0603 stores reminder history, with at most one pending schedule.
+The 15-second `event-email-reminders` worker claims due rows with `FOR UPDATE
+SKIP LOCKED`, then atomically enqueues one email per active, non-synthetic
+`user_event_access` holder. Multiple qualifying roles do not duplicate emails.
+This event-wide operational email is sent to every eligible account, independent
+of optional activity subscriptions. After doors open, a missed schedule expires.
+
+Delivery checks current access and the opening time again. Dates use each
+recipient's language and the event timezone. The permanent entrance token is
+rendered locally as a PNG QR and attached inline (CID); no external QR service
+receives ticket credentials. Official Apple/Google Wallet artwork is exported
+from the SVGs already used on `/wallet` to email-compatible PNGs, preserving the
+artwork and aspect ratio; Galician uses Spanish artwork. Email buttons open
+`/wallet?add=apple` or `?add=google`, retaining the action through login, then
+request the authenticated recipient's pass. A separate `/wallet` link remains
+available. No long-lived sessionless Wallet credential is issued.

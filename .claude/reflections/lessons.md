@@ -293,3 +293,62 @@ labels, and the stacked mobile layout.
 ### Exceptions
 An action deliberately aligned with a control is not a second form field;
 it may align to that control, independently of the help below it.
+
+## [R009] Keep event settings within their save scope
+
+Status: active
+Scope: module:event
+Source: user-correction
+Date: 2026-10-03
+
+### Trigger
+Adding controls to an existing event-settings category.
+
+### Mistake
+A reminder section sat outside the category form and introduced independent
+scheduling buttons, then repeated the selected date in a separate status line.
+
+### Lesson
+A category's sections share its form, save footer and unsaved-change guard.
+Show optional scheduling controls only when enabled; do not repeat field values
+in status copy.
+
+### Action
+Use the existing category form and save transaction. Match adjacent sections'
+heading hierarchy and control spacing. Keep audience copy brief.
+
+### Validation
+Capture the section with the common Save changes footer and test that an
+invalid schedule rolls back the accompanying event-settings changes.
+
+### Exceptions
+A separate action with a genuinely distinct lifecycle, such as destructive
+maintenance, may keep its own explicit action.
+
+## [R010] Preserve official Wallet badge artwork
+
+Status: active
+Scope: module:logistics
+Source: user-correction
+Date: 2026-10-03
+
+### Trigger
+Displaying Add to Apple Wallet or Add to Google Wallet actions on any surface.
+
+### Mistake
+Email rendered Wallet links as generic branded text buttons.
+
+### Lesson
+Reuse the official artwork already shipped in `apps/web/public/wallet-badges`.
+Keep its aspect ratio and localized variant; email may use PNG exports of the
+same SVGs for client compatibility.
+
+### Action
+Use image links with meaningful alternative text. Galician follows the existing
+Spanish artwork fallback.
+
+### Validation
+Inspect the rendered surface and verify links contain the official badge images.
+
+### Exceptions
+The plain-text MIME part retains readable labeled links.

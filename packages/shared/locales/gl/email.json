@@ -1,5 +1,14 @@
 {
   "mail": {
+    "footer": "Esta é unha mensaxe automática. Non respondas: este enderezo non recibe mensaxes.\nPara contactar coa organización, escribe a hackudc@gpul.org.",
+    "event": {
+      "reminder": {
+        "subject": "Vémonos en {{eventName}}!",
+        "heading": "Xa queda menos para {{eventName}}",
+        "body": "Ola {{name}},\n\n{{eventName}} comeza o {{eventDate}}. Vémonos ás {{checkInTime}} para o check-in.\n\nNon esquezas levar a túa entrada: podes amosar o QR deste correo ao chegar ou gardala na túa carteira.\n\n[Engadir a Apple Wallet]({{appleUrl}})\n\n[Engadir a Google Wallet]({{googleUrl}})\n\nTamén tes a túa entrada dispoñible no teu perfil:\n\n[Ver a miña entrada]({{walletUrl}})\n\nTemos ganas de verte!\nO equipo de {{eventName}}",
+        "ticketAlt": "QR da túa entrada"
+      }
+    },
     "generic": {
       "subject": "{{subject}}",
       "body": "{{body}}"
@@ -7,15 +16,15 @@
     "auth": {
       "verify": {
         "subject": "Verifica o teu correo de hackOS",
-        "body": "Ola {{name}},\n\nConfirma o teu enderezo de correo para desbloquear o resto de hackOS:\n\n[Verificar correo]({{verifyUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, ignora esta mensaxe."
+        "body": "Ola {{name}},\n\nDámosche a benvida a hackOS! Confirma o teu enderezo de correo para continuar coa túa solicitude:\n\n[Verificar correo]({{verifyUrl}})\n\nSe non o pediches ti, ignora esta mensaxe."
       },
       "verifySecondaryEmail": {
         "subject": "Confirma o teu correo secundario para hackOS",
-        "body": "Ola {{name}},\n\nA túa conta de hackOS ({{primaryEmail}}) pediu engadir {{secondaryEmail}} como enderezo secundario, para poder vincular os teus proxectos de Devpost á túa conta:\n\n[Confirmar {{secondaryEmail}}]({{verifyUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, ignora esta mensaxe — a túa conta non cambiará."
+        "body": "Ola {{name}},\n\nA túa conta de hackOS ({{primaryEmail}}) pediu engadir {{secondaryEmail}} como enderezo secundario, para poder vincular os teus proxectos de Devpost á túa conta:\n\n[Confirmar {{secondaryEmail}}]({{verifyUrl}})\n\nSe non o pediches ti, ignora esta mensaxe — a túa conta non cambiará."
       },
       "reset": {
         "subject": "Restablece o teu contrasinal de hackOS",
-        "body": "Ola {{name}},\n\nUsa este botón para fixar un contrasinal novo:\n\n[Restablecer contrasinal]({{resetUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, podes ignorar este correo — o teu contrasinal non cambiou."
+        "body": "Ola {{name}},\n\nPodes escoller un contrasinal novo aquí:\n\n[Restablecer contrasinal]({{resetUrl}})\n\nSe non o pediches ti, podes ignorar este correo — o teu contrasinal non cambiou."
       },
       "accountRemovalPin": {
         "subject": "Confirma a eliminación da túa conta de hackOS",
@@ -23,7 +32,7 @@
       },
       "invite": {
         "subject": "Convidáronte a hackOS",
-        "body": "Ola,\n\nCrea a túa conta para continuar:\n\n[Crear conta]({{claimUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nDende alí fixa o teu contrasinal, nome e o resto dos teus datos."
+        "body": "Ola,\n\nConvidáronte a hackOS. Alégranos contar contigo. Crea a túa conta para aceptar o convite:\n\n[Crear conta]({{claimUrl}})\n\nAo crear a túa conta poderás escoller o teu contrasinal e completar os teus datos."
       }
     },
     "project": {
@@ -63,7 +72,18 @@
     "application": {
       "decision": {
         "subject": "Unha decisión sobre a túa solicitude",
-        "body": "Ola {{name}},\n\nA túa solicitude a {{applicationName}} foi {{decision}}.{{decisionDetails}}"
+        "body": "Ola {{name}},\n\nRevisamos a túa solicitude a {{applicationName}}.{{decisionDetails}}",
+        "accepted": {
+          "subject": "A túa praza en {{eventName}} agárdate!",
+          "heading": "Agardámoste en {{eventName}}!",
+          "body": "Ola {{name}},\n\nParabéns! Aceptamos a túa solicitude de {{applicationName}} para {{eventName}} e fainos moita ilusión contar contigo.\n\nReservámosche unha praza. Agora só falta que confirmes a túa asistencia.{{decisionDetails}}\n\nTemos moitas ganas de coñecerte!\nO equipo de {{eventName}}"
+        },
+        "rejected": {
+          "subject": "Sobre a túa solicitude de {{applicationName}} para {{eventName}}",
+          "body": "Ola {{name}},\n\nLamentablemente, a túa solicitude de {{applicationName}} para {{eventName}} non foi seleccionada nesta ocasión. Sabemos que non é a nova que agardabas.\n\nGrazas polo teu interese e polo tempo que dedicaches á túa solicitude. Agardamos verte en próximas edicións.\n\nUn saúdo,\nO equipo de organización"
+        },
+        "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirmar a miña praza]({{confirmUrl}})\n\nSe ao final non podes vir, avísanos para que outra persoa poida aproveitar a túa praza:\n\n[Renunciar á miña praza]({{declineUrl}})\n\nSe pasa o prazo sen que confirmes, a praza liberarase automaticamente.",
+        "confirmationDeadline": "Confirma a túa praza antes do {{deadline}}."
       }
     },
     "schedule": {

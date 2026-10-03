@@ -169,6 +169,12 @@ export interface PassBackField {
 
 /** GET/PUT /api/event. */
 export interface EventConfig {
+  eventReminder?: {
+    id: number;
+    scheduled_at: string;
+    status: "scheduled" | "queued" | "cancelled" | "expired";
+    recipient_count: number;
+  } | null;
   name: string | null;
   tagline: string | null;
   timezone: string;

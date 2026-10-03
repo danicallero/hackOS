@@ -1,5 +1,14 @@
 {
   "mail": {
+    "footer": "This is an automated message. Please do not reply: this address does not receive incoming messages.\nTo contact the organizers, email hackudc@gpul.org.",
+    "event": {
+      "reminder": {
+        "subject": "See you at {{eventName}}!",
+        "heading": "{{eventName}} is getting close",
+        "body": "Hi {{name}},\n\n{{eventName}} starts on {{eventDate}}. See you at {{checkInTime}} for check-in.\n\nRemember to bring your ticket: show the QR code in this email when you arrive, or save it to your wallet.\n\n[Add to Apple Wallet]({{appleUrl}})\n\n[Add to Google Wallet]({{googleUrl}})\n\nYour ticket is also available in your profile:\n\n[View my ticket]({{walletUrl}})\n\nWe’re looking forward to seeing you!\nThe {{eventName}} team",
+        "ticketAlt": "Your ticket QR code"
+      }
+    },
     "generic": {
       "subject": "{{subject}}",
       "body": "{{body}}"
@@ -7,15 +16,15 @@
     "auth": {
       "verify": {
         "subject": "Verify your hackOS email",
-        "body": "Hi {{name}},\n\nConfirm your email address to unlock the rest of hackOS:\n\n[Verify email]({{verifyUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, ignore this message."
+        "body": "Hi {{name}},\n\nWelcome to hackOS! Confirm your email address to continue with your application:\n\n[Verify email]({{verifyUrl}})\n\nIf you didn't request this, ignore this message."
       },
       "verifySecondaryEmail": {
         "subject": "Confirm your secondary email for hackOS",
-        "body": "Hi {{name}},\n\nYour hackOS account ({{primaryEmail}}) asked to add {{secondaryEmail}} as a secondary address, so we can match your Devpost projects to your account:\n\n[Confirm {{secondaryEmail}}]({{verifyUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, ignore this message — your account won't change."
+        "body": "Hi {{name}},\n\nYour hackOS account ({{primaryEmail}}) asked to add {{secondaryEmail}} as a secondary address, so we can match your Devpost projects to your account:\n\n[Confirm {{secondaryEmail}}]({{verifyUrl}})\n\nIf you didn't request this, ignore this message — your account won't change."
       },
       "reset": {
         "subject": "Reset your hackOS password",
-        "body": "Hi {{name}},\n\nUse this button to set a new password:\n\n[Reset password]({{resetUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, you can safely ignore this email — your password hasn't changed."
+        "body": "Hi {{name}},\n\nYou can choose a new password here:\n\n[Reset password]({{resetUrl}})\n\nIf you didn't request this, you can safely ignore this email — your password hasn't changed."
       },
       "accountRemovalPin": {
         "subject": "Confirm your hackOS account removal",
@@ -23,7 +32,7 @@
       },
       "invite": {
         "subject": "You're invited to hackOS",
-        "body": "Hi,\n\nCreate your account to continue:\n\n[Create account]({{claimUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nSet your password, name and the rest of your details from there."
+        "body": "Hi,\n\nYou’ve been invited to hackOS. We’re glad to have you joining us. Create your account to accept the invitation:\n\n[Create account]({{claimUrl}})\n\nWhen you create your account, you’ll choose your password and fill in your details."
       }
     },
     "project": {
@@ -63,7 +72,18 @@
     "application": {
       "decision": {
         "subject": "A decision on your application",
-        "body": "Hi {{name}},\n\nYour application to {{applicationName}} has been {{decision}}.{{decisionDetails}}"
+        "body": "Hi {{name}},\n\nWe’ve reviewed your application to {{applicationName}}.{{decisionDetails}}",
+        "accepted": {
+          "subject": "Your spot at {{eventName}} is waiting for you!",
+          "heading": "We can’t wait to see you at {{eventName}}!",
+          "body": "Hi {{name}},\n\nCongratulations! We’ve accepted your application for {{applicationName}} at {{eventName}}, and we’re excited to have you join us.\n\nWe’ve reserved a spot for you. All that’s left is to confirm you’re coming.{{decisionDetails}}\n\nWe can’t wait to meet you!\nThe {{eventName}} team"
+        },
+        "rejected": {
+          "subject": "About your application for {{applicationName}} at {{eventName}}",
+          "body": "Hi {{name}},\n\nUnfortunately, your application for {{applicationName}} at {{eventName}} hasn’t been selected this time. We know this isn’t the news you were hoping for.\n\nThank you for your interest and for the time you put into your application. We hope to see you at a future edition.\n\nBest wishes,\nThe organizing team"
+        },
+        "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirm my spot]({{confirmUrl}})\n\nIf it turns out you can’t make it, please let us know so someone else can take your spot:\n\n[Decline my spot]({{declineUrl}})\n\nIf the deadline passes without your confirmation, the spot will be released automatically.",
+        "confirmationDeadline": "Confirm your spot before {{deadline}}."
       }
     },
     "schedule": {
