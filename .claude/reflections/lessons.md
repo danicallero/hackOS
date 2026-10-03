@@ -1,5 +1,30 @@
 # Lessons
 
+## [R007] Preserve intentional product voice during copy audits
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-10-03
+
+### Trigger
+Auditing interface copy for verbosity or generic wording.
+
+### Mistake
+Removed the Ursula cookie notice's humor and illustration as presumed unwanted copy, although they were deliberate human design choices.
+
+### Lesson
+Intentional humor and brand character are not evidence of poor copy. Evaluate whether wording obstructs the task before removing its personality.
+
+### Action
+Preserve established product voice, including the Ursula cookie notice. Focus edits on redundancy, ambiguity, and unnecessary explanations.
+
+### Validation
+Check that copy revisions improve comprehension while retaining deliberate character and existing visual identity.
+
+### Exceptions
+Change intentional voice when the user requests it or it creates a concrete comprehension problem.
+
 Active reflections for hackOS. See `README.md` in this directory for the
 format, classification flow, and promotion path.
 
@@ -234,3 +259,37 @@ every supported language, confirming that headings fit and reasons remain visibl
 ### Exceptions
 A generic fallback may protect unknown callers, but does not replace reviewing
 the callers within the requested scope.
+
+## [R008] Align multi-column fields independently of helper text
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-10-03
+
+### Trigger
+When building or auditing inputs in two or more columns, especially when only
+some fields have helper text, validation errors, or timezone previews.
+
+### Mistake
+Grid children stretched to the tallest field, distributing a shorter
+FormItem's internal rows and pushing its label and input below its neighbors.
+
+### Lesson
+Align field labels and controls, not the bottom of each field's entire content.
+Helper text and errors belong below the control and must not shift neighboring
+labels or inputs.
+
+### Action
+Use start alignment for field containers (for example, `grid items-start`) and
+inspect mixed-help rows. If translated labels wrap to different heights, use
+shared label/control tracks rather than aligning entire fields to the bottom.
+
+### Validation
+Compare label and input top edges in desktop screenshots and browser geometry.
+Repeat with one help message, multiline help, one validation error, translated
+labels, and the stacked mobile layout.
+
+### Exceptions
+An action deliberately aligned with a control is not a second form field;
+it may align to that control, independently of the help below it.

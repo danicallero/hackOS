@@ -13,9 +13,7 @@ import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
-import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
-import { SubmitButton } from "@/components/common/submit-button";
 import {
   Form,
   FormControl,
@@ -28,24 +26,26 @@ import {
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import { parseCoordinate, parseCoordinatePair } from "@/lib/coords";
-import { useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
+import { CategorySaveFooter } from "./category-save-footer";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
 
-const schema = z.object({
-  venueName: z.string().max(200),
-  // Strings so an empty input is representable; parsed to number | null on submit.
-  venueLatitude: z.string(),
-  venueLongitude: z.string(),
-  // H42: shown on the venue TV screens, so a scheduled Wi-Fi slot needs
-  // nobody at the control page.
-  wifiSsid: z.string().max(64),
-  wifiPassword: z.string().max(128),
-});
+const createSchema = (t: Translate) =>
+  z.object({
+    venueName: z.string().max(200, t("tooLong")),
+    // Strings so an empty input is representable; parsed to number | null on submit.
+    venueLatitude: z.string(),
+    venueLongitude: z.string(),
+    // H42: shown on the venue TV screens, so a scheduled Wi-Fi slot needs
+    // nobody at the control page.
+    wifiSsid: z.string().max(64, t("tooLong")),
+    wifiPassword: z.string().max(128, t("tooLong")),
+  });
 
-type Values = z.infer<typeof schema>;
+type Values = z.infer<ReturnType<typeof createSchema>>;
 
 function fromConfig(cfg: EventConfig): Values {
   return {
@@ -71,7 +71,6 @@ function VenuePreview({
 
   return (
     <div className="rounded-lg border p-4">
-      <p className="text-muted-foreground mb-2 text-xs uppercase">{t("venuePreviewLabel")}</p>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2">
           <MapPinIcon aria-hidden="true" className="text-muted-foreground mt-0.5 size-4 shrink-0" />
@@ -108,7 +107,7 @@ export function VenueTab({
   const { t } = useLocale();
   const { config, status, applyConfig } = useEventConfig();
   const form = useForm<Values>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(createSchema(t)),
     defaultValues: {
       venueName: "",
       venueLatitude: "",
@@ -171,6 +170,7 @@ export function VenueTab({
       applyConfig(next);
       reset(fromConfig(next));
       setSaveState("saved");
+      toast.success(t("saved"), { compactTitle: t("toastVenueSettings") });
     } catch (err) {
       setSaveState("error");
       toast.error(
@@ -191,14 +191,7 @@ export function VenueTab({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <SectionCard
-          variant="plain"
-          footerClassName="justify-start"
-          icon={icon}
-          title={t("venueSectionTitle")}
-          state={<SaveStatus state={saveState} />}
-          footer={<SubmitButton pending={formState.isSubmitting}>{t("saveChanges")}</SubmitButton>}
-        >
+        <SectionCard variant="plain" footerClassName="justify-start">
           <FormField
             control={form.control}
             name="venueName"
@@ -212,7 +205,7 @@ export function VenueTab({
               </FormItem>
             )}
           />
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid items-start gap-4 sm:grid-cols-2">
             <FormField
               control={form.control}
               name="venueLatitude"
@@ -263,11 +256,9 @@ export function VenueTab({
           className="mt-6"
           icon={WifiHighIcon}
           title={t("venueWifiSectionTitle")}
-          description={t("venueWifiSectionDesc")}
-          state={<SaveStatus state={saveState} />}
-          footer={<SubmitButton pending={formState.isSubmitting}>{t("saveChanges")}</SubmitButton>}
+          footer={<CategorySaveFooter pending={formState.isSubmitting} state={saveState} />}
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid items-start gap-4 sm:grid-cols-2">
             <FormField
               control={form.control}
               name="wifiSsid"
@@ -275,7 +266,7 @@ export function VenueTab({
                 <FormItem>
                   <FormLabel>{t("networkNameLabel")}</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder={t("hackathonWifiPlaceholder")} />
+                    <Input {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

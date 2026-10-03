@@ -16,7 +16,15 @@ function csvValue(value: string) {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
+export function UserRosterExportPanel({
+  users,
+  open,
+  onOpenChange,
+}: {
+  users: UserListItem[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { language, t } = useLocale();
   const [roles, setRoles] = useState<string[]>([]);
   const [fields, setFields] = useState(["name", "email", "role"]);
@@ -95,12 +103,8 @@ export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
   };
   return (
     <SidePanelEditor
-      trigger={
-        <Button variant="outline">
-          <UsersIcon aria-hidden="true" />
-          {t("export")}
-        </Button>
-      }
+      open={open}
+      onOpenChange={onOpenChange}
       title={t("exportUsers")}
       icon={UsersIcon}
       footer={

@@ -237,10 +237,28 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `SectionCard variant="plain"` keeps the shared section heading/actions without
 card chrome. Use it when page spacing and columns explain the structure; reserve
 the default bordered surface for genuinely bounded groups. Event settings and My profile use open sections within a constrained reading
-width, with save actions at the start of each section footer. Inbox preferences
+width, with save actions at the start of each section footer. Event settings omit
+headings already supplied by the active tab, pair save status with the submit
+action, and use the shared Sileo toast after saving. Inbox preferences
 use category rows with channel menus; mandatory queue delivery stays read-only.
 Password changes open a focused modal from the profile section. Static metadata is
 text, not a badge. See `docs/DESIGN.md` §3.
+
+Settings → Libraries uses a local `LibraryToolbar` for universities, degrees and
+dietary restrictions: search, clear action, result count and add action sit above
+the table. `LibraryAddButton` adapts its label to container width (full label,
+short add label, then icon only) without forcing a second row. Keep filtering
+with the owning manager: universities/degrees query the API, dietary restrictions
+filter the loaded trilingual catalogue.
+
+The Users roster groups export, invitations and review accounts in an outlined
+actions menu at the far right of its header. Search, filters and visible fields
+share a separate toolbar. Filters allow multiple selections and match any selected
+criterion; removable chips scroll horizontally below search. The counter totals
+selected criteria, not categories. Its visible-field picker is called Columns on
+desktop and Tags on mobile. Mobile entries keep the name as their drill-down
+title and render each selected remaining field as a labeled tag, using the same
+column selection as the table (including presence when authorized).
 
 `SidePanelEditor` is the focused-record counterpart to `Modal`: it opens a
 right-side editor over the current workspace, with a fixed title/actions area

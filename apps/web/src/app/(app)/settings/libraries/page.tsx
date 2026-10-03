@@ -27,7 +27,7 @@ export default function LibrariesSettingsPage() {
       <PageHeader title={t("libraries")} />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabBar className="w-full max-w-md">
+        <TabBar className="w-full">
           <TabsTrigger value="intolerances">{t("foodIntolerances")}</TabsTrigger>
           <TabsTrigger value="shirt-sizes">{t("shirtSizesGroup")}</TabsTrigger>
           <TabsTrigger value="universities">{t("universitiesTab")}</TabsTrigger>

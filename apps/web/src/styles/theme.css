@@ -83,7 +83,7 @@
   --destructive-foreground: var(--brand-cream);
   --border: color-mix(in srgb, var(--brand-ink) 20%, var(--brand-cream));
   --input: var(--border);
-  --ring: var(--brand-red);
+  --ring: var(--brand-ink);
   --info: color-mix(in srgb, var(--brand-ink) 65%, var(--brand-blue));
   --success: #22734f;
   --success-foreground: var(--brand-cream);

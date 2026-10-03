@@ -241,7 +241,6 @@ export function MessagesTab() {
         <EmptyState
           icon={TrayIcon}
           title={unreadOnly ? t("noUnreadMessages") : t("noMessagesYet")}
-          description={t("messagesWillShowUp")}
         />
       ) : (
         <ul className="border-y border-border/60 divide-y divide-border/60">

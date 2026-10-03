@@ -22,7 +22,6 @@ export default function NewChallengePage() {
     <div className="space-y-6">
       <PageHeader
         title={t("newChallenge")}
-        description={t("newChallengeDescription")}
         leading={<TrophyIcon className="text-muted-foreground size-6" aria-hidden="true" />}
       />
       <NewChallengeForm onCreated={(challenge) => router.push(`/challenges/${challenge.id}`)} />

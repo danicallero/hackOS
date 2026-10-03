@@ -135,7 +135,6 @@ export function ProjectFormDialog({
       }
       icon={TriggerIcon}
       title={triggerLabel}
-      description={isEdit ? t("editProjectDesc") : t("newProjectDesc")}
       footer={
         <SubmitButton pending={pending} disabled={!name.trim()} onClick={submit}>
           {isEdit ? t("save") : t("create")}

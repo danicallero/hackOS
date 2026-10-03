@@ -376,7 +376,7 @@ export function LogoCard({
   }
 
   return (
-    <SectionCard icon={ImageIcon} title={t("logoTitle")} description={t("logoDesc")}>
+    <SectionCard icon={ImageIcon} title={t("logoTitle")}>
       <div className="flex items-center gap-4">
         <Avatar size="lg" className="rounded-md">
           {enterprise.logo_url ? (
@@ -537,7 +537,6 @@ export function EditCard({
                 <FormControl>
                   <Input type="url" placeholder="https://…/logo.png" {...field} />
                 </FormControl>
-                <FormDescription>{t("setDirectlyOrUpload")}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
