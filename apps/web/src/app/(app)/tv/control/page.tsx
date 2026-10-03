@@ -185,7 +185,6 @@ export default function TvControlPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("tvControl")}
-        description={t("tvControlDesc")}
         primaryAction={
           <Button size="sm" variant="outline" asChild>
             <a href="/tv" target="_blank" rel="noreferrer">
@@ -266,7 +265,7 @@ export default function TvControlPage() {
         }
       >
         <fieldset>
-          <legend className="mb-3 text-sm font-medium">{t("chooseAMode")}</legend>
+          <legend className="sr-only">{t("displayMode")}</legend>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {MODES.map((item) => (
               <label

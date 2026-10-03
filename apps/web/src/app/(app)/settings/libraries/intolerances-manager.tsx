@@ -10,7 +10,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { ForkKnifeIcon } from "@phosphor-icons/react/dist/csr/ForkKnife";
-import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -40,6 +39,7 @@ import { ApiError, api } from "@/lib/api";
 import { pickText, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { Intolerance } from "@/lib/types";
+import { LibraryToolbar } from "./library-toolbar";
 
 const FORM_ID = "intolerance-form";
 
@@ -84,6 +84,7 @@ const EMPTY: Values = {
 export function IntolerancesManager() {
   const { t } = useLocale();
   const [entries, setEntries] = useState<Intolerance[]>([]);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const hasLoadedRef = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -125,6 +126,7 @@ export function IntolerancesManager() {
 
   // Prime the form whenever the create/edit modal opens.
   const formOpen = editing !== undefined;
+
   useEffect(() => {
     if (editing === undefined) return;
     if (editing === null) {
@@ -210,24 +212,28 @@ export function IntolerancesManager() {
     },
   ];
 
+  const query = search.trim().toLowerCase();
+  const filteredEntries = entries.filter((row) =>
+    `${pickText(row.label, "es")} ${row.label.en} ${row.label.gl}`.toLowerCase().includes(query),
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-muted-foreground text-sm">{t("sharedCatalogueDesc")}</p>
-        <Button onClick={() => setEditing(null)}>
-          <PlusIcon aria-hidden="true" />
-          {t("newAction")}
-        </Button>
-      </div>
-
+      <LibraryToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchLabel={t("searchIntolerances")}
+        count={filteredEntries.length}
+        addLabel={t("addIntolerance")}
+        onAdd={() => setEditing(null)}
+      />
       <DataTable
         columns={columns}
-        data={entries}
+        data={filteredEntries}
         getRowId={(row) => String(row.id)}
         loading={loading && !hasLoadedRef.current}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
-        searchable={(row) => `${pickText(row.label, "es")} ${row.label.en} ${row.label.gl}`}
-        searchPlaceholder={t("searchIntolerances")}
+        filteredEmpty={{ active: query.length > 0, onClear: () => setSearch("") }}
         empty={{
           icon: ForkKnifeIcon,
           title: t("noIntolerancesYetTitle"),

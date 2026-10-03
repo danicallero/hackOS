@@ -49,9 +49,14 @@ function formatLastSignIn(value: string | null): string {
 }
 
 /** Admin-only control for the synthetic accounts used by App Store review. */
-export function ReviewFixturesDialog() {
+export function ReviewFixturesDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { t } = useLocale();
-  const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<RegenerateResponse | null>(null);
@@ -81,13 +86,14 @@ export function ReviewFixturesDialog() {
 
   function openFlow() {
     setResult(null);
-    setOpen(true);
+    onOpenChange(true);
   }
 
   function closeFlow() {
     if (!pending) {
       setConfirmOpen(false);
-      setOpen(false);
+      setResult(null);
+      onOpenChange(false);
     }
   }
 
@@ -123,11 +129,6 @@ export function ReviewFixturesDialog() {
 
   return (
     <>
-      <Button type="button" variant="outline" onClick={openFlow}>
-        <ShieldCheckIcon aria-hidden="true" />
-        {t("reviewFixturesButton")}
-      </Button>
-
       <Modal
         open={open}
         onOpenChange={(nextOpen) => {

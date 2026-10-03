@@ -146,13 +146,7 @@ export function ApplicationTab({ userId }: { userId: number }) {
     );
   }
   if (rows.length === 0) {
-    return (
-      <EmptyState
-        icon={ClipboardTextIcon}
-        title={t("noApplicationsYet")}
-        description={t("hasntStartedApplication")}
-      />
-    );
+    return <EmptyState icon={ClipboardTextIcon} title={t("noApplicationsYet")} />;
   }
   return (
     <SectionCard icon={ClipboardTextIcon} title={t("applications")}>

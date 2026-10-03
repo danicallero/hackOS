@@ -30,7 +30,7 @@ export interface FilterOption {
   label: string;
 }
 
-type FilterDefinition = {
+export type FilterDefinition = {
   id: string;
   label: string;
   icon: PhosphorIcon;
@@ -66,9 +66,13 @@ function clearFilter(filter: FilterDefinition) {
 export function FilterMenu({
   filters,
   className,
+  iconOnly = false,
+  chipsClassName,
 }: {
   filters: readonly FilterDefinition[];
   className?: string;
+  iconOnly?: boolean;
+  chipsClassName?: string;
 }) {
   const { t } = useLocale();
   const isMobile = useIsMobile();
@@ -78,6 +82,7 @@ export function FilterMenu({
   const contentRef = useRef<HTMLDivElement>(null);
   const mobileFilter = filters.find((filter) => filter.id === mobileFilterId);
   const active = filters.filter((filter) => activeValues(filter).length > 0);
+  const activeCount = active.reduce((total, filter) => total + activeValues(filter).length, 0);
 
   // Replacing the mobile category list must move focus into its new menu.
   useEffect(() => {
@@ -100,12 +105,24 @@ export function FilterMenu({
         }}
       >
         <DropdownMenuTrigger asChild>
-          <Button ref={triggerRef} variant="outline" type="button">
+          <Button
+            ref={triggerRef}
+            variant="outline"
+            type="button"
+            size={iconOnly ? "icon" : "default"}
+            aria-label={iconOnly ? t("filtersLabel") : undefined}
+            className="relative"
+          >
             <FunnelIcon aria-hidden="true" />
-            {t("filtersLabel")}
+            {!iconOnly && t("filtersLabel")}
             {active.length > 0 && (
-              <span className="bg-primary text-primary-foreground flex size-5 items-center justify-center rounded-full text-xs tabular-nums">
-                {active.length}
+              <span
+                className={cn(
+                  "bg-primary text-primary-foreground flex size-5 items-center justify-center rounded-full text-xs tabular-nums",
+                  iconOnly && "absolute -top-1 -right-1",
+                )}
+              >
+                {activeCount}
               </span>
             )}
           </Button>
@@ -191,31 +208,35 @@ export function FilterMenu({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      {active.flatMap((filter) =>
-        activeValues(filter).map((value) => {
-          const label = filter.options.find((option) => option.value === value)?.label ?? value;
-          return (
-            <Button
-              key={`${filter.id}:${value}`}
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="max-w-full font-normal"
-              aria-label={t("removeItemLabel", { name: `${filter.label}: ${label}` })}
-              onClick={() => {
-                if (filter.type === "multiple") {
-                  filter.onChange(filter.value.filter((selected) => selected !== value));
-                } else clearFilter(filter);
-                triggerRef.current?.focus();
-              }}
-            >
-              <span className="truncate">
-                {filter.label}: {label}
-              </span>
-              <XIcon aria-hidden="true" className="size-3.5 shrink-0" />
-            </Button>
-          );
-        }),
+      {active.length > 0 && (
+        <div className={cn("contents", chipsClassName)}>
+          {active.flatMap((filter) =>
+            activeValues(filter).map((value) => {
+              const label = filter.options.find((option) => option.value === value)?.label ?? value;
+              return (
+                <Button
+                  key={`${filter.id}:${value}`}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="max-w-full font-normal"
+                  aria-label={t("removeItemLabel", { name: `${filter.label}: ${label}` })}
+                  onClick={() => {
+                    if (filter.type === "multiple") {
+                      filter.onChange(filter.value.filter((selected) => selected !== value));
+                    } else clearFilter(filter);
+                    triggerRef.current?.focus();
+                  }}
+                >
+                  <span className="truncate">
+                    {filter.label}: {label}
+                  </span>
+                  <XIcon aria-hidden="true" className="size-3.5 shrink-0" />
+                </Button>
+              );
+            }),
+          )}
+        </div>
       )}
     </div>
   );

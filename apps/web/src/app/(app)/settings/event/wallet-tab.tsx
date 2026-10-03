@@ -19,10 +19,8 @@ import {
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
-import { useCallback, useEffect, useState } from "react";
-import { SaveStatus } from "@/components/common/save-status";
+import { useCallback, useEffect, useId, useState } from "react";
 import { SectionCard } from "@/components/common/section-card";
-import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
@@ -32,6 +30,7 @@ import { ApiError, api } from "@/lib/api";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig, PassBackField } from "@/lib/types";
+import { CategorySaveFooter } from "./category-save-footer";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
 
@@ -56,12 +55,12 @@ function normalizeBackFields(fields: PassBackField[]): PassBackField[] {
     .filter((field) => field.label.length > 0 && field.value.length > 0);
 }
 
-const FRONT_FIELDS: { key: PassFieldVisibilityKey; titleKey: MessageKey; fillKey: MessageKey }[] = [
-  { key: "participant", titleKey: "passFieldParticipantTitle", fillKey: "passFillParticipant" },
-  { key: "role", titleKey: "passFieldRoleTitle", fillKey: "passFillRole" },
-  { key: "passType", titleKey: "passFieldPassTypeTitle", fillKey: "passFillPassType" },
-  { key: "university", titleKey: "fieldKindUniversity", fillKey: "passFillUniversity" },
-  { key: "email", titleKey: "passFieldEmailTitle", fillKey: "passFillEmail" },
+const FRONT_FIELDS: { key: PassFieldVisibilityKey; titleKey: MessageKey }[] = [
+  { key: "participant", titleKey: "passFieldParticipantTitle" },
+  { key: "role", titleKey: "passFieldRoleTitle" },
+  { key: "passType", titleKey: "passFieldPassTypeTitle" },
+  { key: "university", titleKey: "fieldKindUniversity" },
+  { key: "email", titleKey: "passFieldEmailTitle" },
 ];
 
 function PassFrontFieldsEditor({
@@ -81,14 +80,16 @@ function PassFrontFieldsEditor({
 
   return (
     <div className="space-y-2">
-      {FRONT_FIELDS.map(({ key, titleKey, fillKey }) => {
+      {FRONT_FIELDS.map(({ key, titleKey }) => {
         const shown = visibility[key] !== false;
         return (
           <div key={key} className="space-y-3 border-b border-border/60 py-4 last:border-b-0">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <Label htmlFor={`pass-visible-${key}`}>{t(titleKey)}</Label>
-                <p className="text-muted-foreground text-sm">{t(fillKey)}</p>
+                {key === "university" && (
+                  <p className="text-muted-foreground text-sm">{t("passFillUniversity")}</p>
+                )}
               </div>
               <Switch
                 id={`pass-visible-${key}`}
@@ -151,24 +152,26 @@ function PassFrontFieldsEditor({
 }
 
 function BuiltinBackFieldRow({
+  title,
   caption,
   onCaptionChange,
   value,
   note,
 }: {
+  title: string;
   caption: string;
   onCaptionChange: (value: string) => void;
   value: string | null;
   note?: string;
 }) {
   const { t } = useLocale();
+  const id = useId();
   return (
-    <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
-      <Input
-        aria-label={t("captionOnPassLabel")}
-        value={caption}
-        onChange={(event) => onCaptionChange(event.target.value)}
-      />
+    <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      <div className="space-y-1.5">
+        <Label htmlFor={id}>{title}</Label>
+        <Input id={id} value={caption} onChange={(event) => onCaptionChange(event.target.value)} />
+      </div>
       <div className="text-muted-foreground flex min-h-[var(--control-height-default)] items-center rounded-control border border-dashed px-3 text-sm">
         {value || <span className="italic">{t("notSetYet")}</span>}
         {value && note && <span className="ml-2 text-xs">({note})</span>}
@@ -187,6 +190,7 @@ function BackFieldBuilder({
   onChange: (value: PassBackField[]) => void;
 }) {
   const { t } = useLocale();
+  const id = useId();
   const add = () => onChange([...value, { label: "", value: "" }]);
   const update = (index: number, patch: Partial<PassBackField>) =>
     onChange(value.map((field, i) => (i === index ? { ...field, ...patch } : field)));
@@ -195,22 +199,32 @@ function BackFieldBuilder({
   return (
     <div className="space-y-2">
       {value.map((field, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: rows are positional; a stable id would remount inputs and drop focus.
-        <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
-          <Input
-            value={field.label}
-            placeholder={t("backFieldLabelPlaceholder")}
-            onChange={(event) => update(index, { label: event.target.value })}
-          />
-          <Input
-            value={field.value}
-            placeholder={t("backFieldValuePlaceholder")}
-            onChange={(event) => update(index, { value: event.target.value })}
-          />
+        <div
+          // biome-ignore lint/suspicious/noArrayIndexKey: rows are positional; input keys must remain stable while typing.
+          key={index}
+          className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end"
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor={`${id}-label-${index}`}>{t("backFieldLabelPlaceholder")}</Label>
+            <Input
+              id={`${id}-label-${index}`}
+              value={field.label}
+              onChange={(event) => update(index, { label: event.target.value })}
+            />
+          </div>
+          <div className="col-start-1 space-y-1.5 sm:col-start-auto">
+            <Label htmlFor={`${id}-value-${index}`}>{t("backFieldValuePlaceholder")}</Label>
+            <Input
+              id={`${id}-value-${index}`}
+              value={field.value}
+              onChange={(event) => update(index, { value: event.target.value })}
+            />
+          </div>
           <Button
             type="button"
             variant="ghost"
             size="icon"
+            className="col-start-2 row-start-1 self-end sm:col-start-auto sm:row-start-auto"
             aria-label={t("removeBackFieldAria", { index: index + 1 })}
             onClick={() => remove(index)}
           >
@@ -260,7 +274,6 @@ function PassPreview({
 
   return (
     <div className="rounded-lg border p-4">
-      <p className="text-muted-foreground mb-3 text-xs uppercase">{t("walletPreviewLabel")}</p>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-md border p-3">
           <p className="text-muted-foreground mb-2 text-xs font-medium">
@@ -365,6 +378,7 @@ export function WalletTab({
       applyConfig(next);
       applyFromConfig(next);
       setSaveState("saved");
+      toast.success(t("saved"), { compactTitle: t("toastWalletSettings") });
     } catch (err) {
       setSaveState("error");
       toast.error(
@@ -392,10 +406,7 @@ export function WalletTab({
       <SectionCard
         variant="plain"
         footerClassName="justify-start"
-        icon={icon}
-        title={t("walletPassSectionTitle")}
-        state={<SaveStatus state={saveState} />}
-        footer={<SubmitButton pending={submitting}>{t("saveChanges")}</SubmitButton>}
+        footer={<CategorySaveFooter pending={submitting} state={saveState} />}
       >
         <div className="space-y-2">
           <p className="text-sm font-medium">{t("passFrontFieldsLabel")}</p>
@@ -428,6 +439,7 @@ export function WalletTab({
               <p className="text-sm font-medium">{t("passBackBuiltinLabel")}</p>
               {/* Same order as on the actual pass: event, venue, then "Organized by" last. */}
               <BuiltinBackFieldRow
+                title={t("eventTitle")}
                 caption={passFieldLabels.event ?? ""}
                 onCaptionChange={(v) =>
                   markDirty(setPassFieldLabels)({ ...passFieldLabels, event: v })
@@ -435,6 +447,7 @@ export function WalletTab({
                 value={liveEventName || null}
               />
               <BuiltinBackFieldRow
+                title={t("venueSectionTitle")}
                 caption={passFieldLabels.location ?? ""}
                 onCaptionChange={(v) =>
                   markDirty(setPassFieldLabels)({ ...passFieldLabels, location: v })
@@ -442,6 +455,7 @@ export function WalletTab({
                 value={liveVenueName || null}
               />
               <BuiltinBackFieldRow
+                title={t("passFieldOrganizerTitle")}
                 caption={passFieldLabels.organizedBy ?? ""}
                 onCaptionChange={(v) =>
                   markDirty(setPassFieldLabels)({ ...passFieldLabels, organizedBy: v })

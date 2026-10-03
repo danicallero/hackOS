@@ -193,17 +193,34 @@ native PassKit protocol.
 
 ## 3. The settings page (apps/web/src/app/(app)/settings/event/page.tsx)
 
-One form over `GET/PUT /api/event`, presented as four cards — Event (identity),
-Schedule (doors open + hacking window), Venue, and Apple Wallet pass — plus a
-separate Judging-window form (different resource, `/api/queue/settings`,
-capability `QUEUE_ADMIN`). Wallet-pass conventions the UI relies on:
+Six capability-gated tabs: Event, Venue, Apple Wallet pass, Presence, Invited
+accounts, and Danger zone. Editable categories use open sections and save only
+their own fields through `PUT /api/event`; changing tabs with unsaved edits
+requires confirmation. The active tab names its panel without a repeated section
+header. A shared save footer pairs the submit button with the persistent save
+state; successful saves also use the app's Sileo toast. Forms retain native Enter
+submission from inputs. Multi-column fields align at the start so helpers do not
+move neighboring labels or controls. The danger zone keeps the three-stage event-wide reset
+confirmation (H16–H40/H53). Judging timing lives in Queue → Rooms, on the separate
+`/api/queue/settings` resource (`QUEUE_ADMIN`).
+
+Event groups identity, paired event/hacking dates, the countdown preview, and
+participant editing dates in that order. Every populated date shows the event
+timezone; previews follow the draft timezone before saving. Venue and Wi-Fi
+share one save action at the end. Presence-policy consequences stay beside the
+two controls, rather than behind a disclosure. Invite toggles distinguish a
+required shirt size from optional dietary information. Wallet-pass conventions:
 
 - Caption inputs are prefilled with the **resolved** caption (override or
   default) — no placeholders; what you see is what the pass prints. On save,
   captions equal to the default are dropped so they keep tracking it.
-- Auto-filled fields never ask for a value: each row shows a note of what
-  fills it, and the built-in back rows display the live value they'll carry
+- Auto-filled fields never ask for a value: front rows name the field without
+  explaining obvious values; the university row notes its empty-value behavior.
+  Built-in back rows display the live value they'll carry
   (event name, venue name, `organizerName`).
+- Back-field caption and custom label/value inputs have persistent labels.
+  Less-frequent back-field edits remain behind a disclosure; the preview stays
+  visible while editing.
 - Venue coordinates accept decimal degrees (dot or comma decimals) or DMS
   ("43°19′58″N", with `O` accepted for Spanish "Oeste"), and a full pair
   pasted into either box fills both — parsing lives in

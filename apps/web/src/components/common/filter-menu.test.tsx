@@ -100,7 +100,7 @@ describe("FilterMenu", () => {
 
   it("clears all categories together, including single and multiple selections", async () => {
     act(() => root.render(<FilteredList initiallyFiltered />));
-    await act(async () => user.click(getByRole(document.body, "button", { name: "Filters 2" })));
+    await act(async () => user.click(getByRole(document.body, "button", { name: "Filters 3" })));
     await act(async () =>
       user.click(getByRole(document.body, "menuitem", { name: "Clear filters" })),
     );

@@ -117,7 +117,7 @@ export function ResetJudgingDataTab({ icon: Icon }: { icon: PhosphorIcon }) {
         title={t("resetJudgingDataFirstConfirmTitle")}
         description={t("resetJudgingDataFirstConfirmDescription")}
         cancelLabel={t("cancel")}
-        confirmLabel={t("continueToFinalConfirmation")}
+        confirmLabel={t("continue")}
         destructive
         reverseActions
         onConfirm={() => setStage(2)}

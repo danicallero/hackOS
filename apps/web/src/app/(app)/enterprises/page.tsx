@@ -301,7 +301,6 @@ export default function EnterprisesPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("enterprises")}
-        description={t("enterprisesDesc")}
         primaryAction={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon aria-hidden="true" className="size-4" />

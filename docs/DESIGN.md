@@ -127,10 +127,13 @@ When adding/updating a primitive, preserve this token-backed visual contract.
 | Ink `#030846` | `--brand-ink` | Text in light mode, primary actions and light outlines; brand accent |
 | Cream `#fafafa` | `--brand-cream` | Light canvas/surfaces; dark text |
 | Blue `#a3d5ff` | `--brand-blue` | Secondary and active surfaces; dark primary actions |
-| Red `#bf2100` | `--brand-red` | Light focus rings and destructive actions; lighter derived destructive color on ink |
+| Red `#bf2100` | `--brand-red` | Errors and destructive actions; lighter derived destructive color on ink |
 | Yellow `#f5dc8f` | `--brand-yellow` | Warning marker/wash, paired with normal foreground text |
 | Inter | `--brand-sans` | Body, labels, navigation and dense data; loaded by `next/font` in the root layout |
 | Rockwell | `--brand-display` | Page/section/dialog titles and public headlines; supplied regular/bold WOFF2 files in `public/fonts/hackudc-2027/` |
+
+Focus uses `--ring`: ink in light mode, pale blue in dark mode. Never use red
+for ordinary field hover or focus; reserve it for invalid and destructive states.
 
 The edition defaults to **light** for new visitors. `next-themes` retains an
 existing light/dark/system preference. Dark mode uses a near-black canvas and
@@ -166,7 +169,7 @@ separate, and keep filtering, persistence and API parameters owned by the page.
   choices use checkboxes and keep the menu open while selecting.
 - Show selected values as removable chips next to the button. Removing a chip
   clears only that value and returns focus to the trigger. The trigger count
-  represents active categories; **Clear filters** resets all categories.
+  represents selected values; **Clear filters** resets all categories.
 - Use localized category/option labels, Phosphor category icons, and the shared
   shadcn dropdown, button and semantic theme tokens. Menus support keyboard
   navigation and scroll when options exceed the available space.
@@ -646,6 +649,10 @@ Calibration examples:
 | Instead of | Write / do |
 | --- | --- |
 | "Sign in to hackOS." | Omit — title and fields suffice |
+| "Venue preview", "Pass preview" above an obvious configuration preview | Omit the eyebrow; retain labels that distinguish front/back or real/draft state |
+| "Upload a standard logo and, optionally, an alternate logo…" above upload buttons | Omit; the upload buttons and fallback hint explain the choice |
+| "No applications yet" + "This user hasn’t started any application form" | Keep only the empty-state title |
+| "Choose a mode" below "Display mode" | Keep a screen-reader legend; omit the repeated visible heading |
 | "Create rooms in Administration to start building queue views." | Empty state "No rooms yet" + **Create room** |
 | "The accreditation scan capability is required." | "Ask an administrator for accreditation access." |
 | "H19: lets each participant create…" | "Participants can create their own projects." |

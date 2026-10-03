@@ -145,7 +145,6 @@ export function ProjectsTab({ userId }: { userId: number }) {
       <EmptyState
         icon={FolderSimpleIcon}
         title={t("noProjectsYet")}
-        description={t("projectsAppearHere")}
         action={
           <Button variant="outline" asChild>
             <Link href="/projects">{t("openProjects")}</Link>
