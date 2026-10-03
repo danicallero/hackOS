@@ -1,6 +1,8 @@
 "use client";
 
-import { CalendarDaysIcon, Clock3Icon, MapPinIcon } from "lucide-react";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
+import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -207,7 +209,7 @@ export function ScheduleTimeline({
   }, []);
 
   if (!ordered.length) {
-    return <EmptyState icon={CalendarDaysIcon} title={emptyTitle ?? t("schedulePending")} />;
+    return <EmptyState icon={CalendarDotsIcon} title={emptyTitle ?? t("schedulePending")} />;
   }
 
   const dateFormatter = new Intl.DateTimeFormat(LOCALE_CODES[language], {
@@ -307,7 +309,7 @@ export function ScheduleTimeline({
                             </h3>
                             <p className="text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 text-xs tabular-nums">
                               <span className="inline-flex items-center gap-1">
-                                <Clock3Icon className="size-3" aria-hidden="true" />
+                                <ClockIcon className="size-3" aria-hidden="true" />
                                 {timeFormatter.format(new Date(starts))}–
                                 {timeFormatter.format(new Date(ends))}
                               </span>
@@ -424,7 +426,7 @@ export function ScheduleTimeline({
             ? `${dateFormatter.format(new Date(selectedItem.startsAt))} · ${timeFormatter.format(new Date(selectedItem.startsAt))}–${timeFormatter.format(new Date(selectedItem.endsAt))}`
             : undefined
         }
-        icon={CalendarDaysIcon}
+        icon={CalendarDotsIcon}
       >
         {selectedItem && (
           <div className="space-y-4 text-sm">

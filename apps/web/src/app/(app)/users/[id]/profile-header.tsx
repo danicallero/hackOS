@@ -3,7 +3,7 @@
 // Profile identity header and the account-removal action it exposes (H10).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { IdCardIcon } from "lucide-react";
+import { IdentificationCardIcon } from "@phosphor-icons/react/dist/csr/IdentificationCard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -53,7 +53,7 @@ export function ProfileHeader({ user }: { user: UserDetail }) {
         <>
           <Button asChild variant="outline" size="sm">
             <Link href={`/logistics/accreditation?userId=${user.id}`}>
-              <IdCardIcon className="size-4" />
+              <IdentificationCardIcon aria-hidden="true" className="size-4" />
               {t("accredit")}
             </Link>
           </Button>
@@ -121,11 +121,15 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
             : eligibility.action === "delete"
               ? t("accountDeleted")
               : t("accountAnonymized");
-      if (result.status !== "completed") toast.info(message);
-      else toast.success(message);
+      if (result.status !== "completed")
+        toast.info(message, { compactTitle: t("toastCloseAccount") });
+      else toast.success(message, { compactTitle: t("toastCloseAccount") });
       router.push("/users");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveAccount"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveAccount"),
+        t("toastCloseAccount"),
+      );
       setPending(false);
     }
   }

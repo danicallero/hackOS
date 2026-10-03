@@ -1,12 +1,10 @@
 "use client";
 
-import {
-  ArrowRightIcon,
-  CalendarDaysIcon,
-  ClipboardListIcon,
-  MegaphoneIcon,
-  TrophyIcon,
-} from "lucide-react";
+import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
+import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Brand } from "@/components/common/brand";
@@ -118,12 +116,6 @@ export function PublicPage() {
   }, [content]);
   return (
     <div className="relative overflow-x-clip">
-      {/* Decorative glow, purely cosmetic — sits behind all content. */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
-        <div className="bg-primary/10 absolute -top-32 -left-32 size-112 rounded-full blur-3xl" />
-        <div className="bg-chart-2/10 absolute top-40 -right-24 size-96 rounded-full blur-3xl" />
-      </div>
-
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <header className="flex items-center justify-between gap-2 py-5 sm:py-6">
           <Brand />
@@ -133,7 +125,7 @@ export function PublicPage() {
             <Button size="sm" asChild className="hidden sm:inline-flex">
               <Link href={appHref}>
                 {appLabel}
-                <ArrowRightIcon className="size-4" />
+                <ArrowRightIcon aria-hidden="true" className="size-4" />
               </Link>
             </Button>
           </div>
@@ -211,7 +203,7 @@ function PublicPageContent({
   return (
     <>
       <section className="py-12 sm:py-24">
-        <h1 className="text-balance wrap-break-word text-4xl font-semibold tracking-tight sm:text-6xl">
+        <h1 className="text-balance wrap-break-word font-display text-4xl font-normal sm:text-6xl">
           {event.name ?? "hackOS"}
         </h1>
         {event.tagline && (
@@ -224,7 +216,7 @@ function PublicPageContent({
             <Button size="lg" asChild>
               <Link href={withReturnPath("/signup", "/my-applications")}>
                 {t("applyNow")}
-                <ArrowRightIcon className="size-4" />
+                <ArrowRightIcon aria-hidden="true" className="size-4" />
               </Link>
             </Button>
           )}
@@ -233,7 +225,7 @@ function PublicPageContent({
           </Button>
         </div>
         {eventPhase.kind !== "none" && (
-          <div className="border-primary/20 bg-card/60 mt-10 inline-flex max-w-full flex-col rounded-xl border p-4 shadow-sm backdrop-blur sm:p-5">
+          <div className="border-border bg-card mt-10 inline-flex max-w-full flex-col rounded-surface border p-4 sm:p-5">
             <EventPhaseDisplay
               phase={eventPhase}
               className="mt-1 block font-mono text-3xl font-semibold tabular-nums sm:text-5xl"
@@ -244,14 +236,14 @@ function PublicPageContent({
 
       {openApplications.length > 0 && (
         <section aria-labelledby="applications-title" className="border-t py-12">
-          <SectionHeading icon={ClipboardListIcon} id="applications-title">
+          <SectionHeading icon={ClipboardTextIcon} id="applications-title">
             {t("openApplications")}
           </SectionHeading>
           <div className="mt-6 grid gap-3 md:grid-cols-2">
             {openApplications.map((form) => (
               <div
                 key={form.id}
-                className="hover:border-primary/30 flex items-center justify-between gap-4 rounded-xl border p-5 transition-colors"
+                className="hover:border-primary/30 flex items-center justify-between gap-4 rounded-surface border p-5 transition-colors"
               >
                 <div className="min-w-0">
                   <h3 className="font-medium">{form.name}</h3>
@@ -284,7 +276,7 @@ function PublicPageContent({
             {screenAnnouncements.map((item) => (
               <article
                 key={item.id}
-                className="hover:border-primary/30 rounded-xl border p-5 shadow-sm transition-colors hover:shadow-md"
+                className="hover:border-primary/30 rounded-surface border p-5 transition-colors"
               >
                 <h3 className="font-medium">{item.title}</h3>
                 <p className="text-muted-foreground text-pretty mt-2 wrap-anywhere whitespace-pre-wrap text-sm">
@@ -297,11 +289,11 @@ function PublicPageContent({
       )}
 
       <section aria-labelledby="schedule-title" className="border-t py-12">
-        <SectionHeading icon={CalendarDaysIcon} id="schedule-title">
+        <SectionHeading icon={CalendarDotsIcon} id="schedule-title">
           {t("publicSchedule")}
         </SectionHeading>
         {upcomingSchedule.length ? (
-          <ol className="mt-6 divide-y overflow-hidden rounded-xl border">
+          <ol className="mt-6 divide-y overflow-hidden rounded-surface border">
             {upcomingSchedule.map((item) => (
               <li
                 key={item.id}
@@ -347,7 +339,7 @@ function PublicPageContent({
               <Link
                 key={challenge.id}
                 href={`/challenge/${challenge.id}`}
-                className="hover:border-primary/30 block rounded-xl border p-5 shadow-sm transition-colors hover:shadow-md"
+                className="hover:border-primary/30 block rounded-surface border p-5 transition-colors"
               >
                 <p className="text-muted-foreground text-sm">{challenge.enterprise.name}</p>
                 <h3 className="mt-1 text-lg font-medium">
@@ -368,7 +360,7 @@ function PublicPageContent({
       </section>
 
       <section aria-labelledby="sponsors-title" className="border-t py-12">
-        <h2 id="sponsors-title" className="text-balance text-2xl font-semibold">
+        <h2 id="sponsors-title" className="text-balance font-display text-2xl font-normal">
           {t("sponsors")}
         </h2>
         {sponsors.length ? (
@@ -376,7 +368,7 @@ function PublicPageContent({
             {sponsors.map((sponsor) => (
               <li
                 key={sponsor.enterpriseId}
-                className="hover:border-primary/30 flex min-h-28 items-center justify-center rounded-xl border p-5 text-center shadow-sm transition-colors hover:shadow-md"
+                className="hover:border-primary/30 flex min-h-28 items-center justify-center rounded-surface border p-5 text-center transition-colors"
               >
                 {sponsor.logoUrl ? (
                   <SponsorLogo
@@ -404,7 +396,7 @@ function SectionHeading({
   id,
   children,
 }: {
-  icon: typeof CalendarDaysIcon;
+  icon: typeof CalendarDotsIcon;
   id: string;
   children: React.ReactNode;
 }) {
@@ -413,7 +405,7 @@ function SectionHeading({
       <span className="bg-primary/10 text-primary grid size-8 place-items-center rounded-full">
         <Icon className="size-4" aria-hidden="true" />
       </span>
-      <h2 id={id} className="text-balance text-2xl font-semibold">
+      <h2 id={id} className="text-balance font-display text-2xl font-normal">
         {children}
       </h2>
     </div>
@@ -422,7 +414,7 @@ function SectionHeading({
 
 function EmptyNotice({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-muted-foreground mt-6 rounded-xl border border-dashed p-6 text-center text-sm">
+    <p className="text-muted-foreground mt-6 rounded-surface border border-dashed p-6 text-center text-sm">
       {children}
     </p>
   );

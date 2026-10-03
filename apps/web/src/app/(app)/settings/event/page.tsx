@@ -13,15 +13,13 @@
 // Settings → Libraries, next to the other shared reference lists.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import {
-  MailPlusIcon,
-  MapPinIcon,
-  TagIcon,
-  TriangleAlertIcon,
-  UserCheckIcon,
-  WalletCardsIcon,
-} from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
+import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
+import { UserCheckIcon } from "@phosphor-icons/react/dist/csr/UserCheck";
+import { WalletIcon } from "@phosphor-icons/react/dist/csr/Wallet";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
 import { TabBar } from "@/components/common/tab-bar";
@@ -70,6 +68,18 @@ export default function EventSettingsPage() {
     values: visibleCategories.length > 0 ? visibleCategories : CATEGORIES,
     defaultValue: visibleCategories[0] ?? "event",
   });
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  const categoryCount = visibleCategories.length;
+  useEffect(() => {
+    if (!categoryCount || !tab) return;
+    const bar = tabBarRef.current;
+    const active = bar?.querySelector<HTMLElement>(`[data-state="active"]`);
+    if (!bar || !active) return;
+    const bounds = bar.getBoundingClientRect();
+    const selected = active.getBoundingClientRect();
+    if (selected.left < bounds.left) bar.scrollLeft -= bounds.left - selected.left;
+    else if (selected.right > bounds.right) bar.scrollLeft += selected.right - bounds.right;
+  }, [tab, categoryCount]);
 
   // Tracked per category so the beforeunload guard and the tab-switch confirm
   // both know exactly which category (if any) owns the unsaved edit.
@@ -102,11 +112,11 @@ export default function EventSettingsPage() {
 
   return (
     <EventConfigProvider>
-      <div className="space-y-6">
+      <div className="mx-auto w-full max-w-4xl space-y-8">
         <PageHeader title={t("eventSettings")} />
 
         <Tabs value={tab} onValueChange={changeTab}>
-          <TabBar className="w-full">
+          <TabBar ref={tabBarRef} variant="line" className="w-full justify-start border-b">
             {canEvent && <TabsTrigger value="event">{t("eventTitle")}</TabsTrigger>}
             {canVenue && <TabsTrigger value="venue">{t("venueSectionTitle")}</TabsTrigger>}
             {canWallet && <TabsTrigger value="wallet">{t("walletPassSectionTitle")}</TabsTrigger>}
@@ -116,25 +126,22 @@ export default function EventSettingsPage() {
           </TabBar>
 
           {canEvent && (
-            <TabsContent value="event" className="pt-4">
+            <TabsContent value="event" className="pt-6">
               <EventTab icon={TagIcon} onDirtyChange={(dirty) => setDirty("event", dirty)} />
             </TabsContent>
           )}
           {canVenue && (
-            <TabsContent value="venue" className="pt-4">
+            <TabsContent value="venue" className="pt-6">
               <VenueTab icon={MapPinIcon} onDirtyChange={(dirty) => setDirty("venue", dirty)} />
             </TabsContent>
           )}
           {canWallet && (
-            <TabsContent value="wallet" className="pt-4">
-              <WalletTab
-                icon={WalletCardsIcon}
-                onDirtyChange={(dirty) => setDirty("wallet", dirty)}
-              />
+            <TabsContent value="wallet" className="pt-6">
+              <WalletTab icon={WalletIcon} onDirtyChange={(dirty) => setDirty("wallet", dirty)} />
             </TabsContent>
           )}
           {canPresence && (
-            <TabsContent value="presence" className="pt-4">
+            <TabsContent value="presence" className="pt-6">
               <PresenceTab
                 icon={UserCheckIcon}
                 onDirtyChange={(dirty) => setDirty("presence", dirty)}
@@ -142,16 +149,16 @@ export default function EventSettingsPage() {
             </TabsContent>
           )}
           {canInvites && (
-            <TabsContent value="invites" className="pt-4">
+            <TabsContent value="invites" className="pt-6">
               <InvitesTab
-                icon={MailPlusIcon}
+                icon={EnvelopeSimpleIcon}
                 onDirtyChange={(dirty) => setDirty("invites", dirty)}
               />
             </TabsContent>
           )}
           {canDanger && (
-            <TabsContent value="danger" className="pt-4">
-              <ResetJudgingDataTab icon={TriangleAlertIcon} />
+            <TabsContent value="danger" className="pt-6">
+              <ResetJudgingDataTab icon={WarningIcon} />
             </TabsContent>
           )}
         </Tabs>

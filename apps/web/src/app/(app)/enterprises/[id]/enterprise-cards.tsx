@@ -7,7 +7,10 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2Icon, ImageIcon, TrophyIcon, UploadIcon } from "lucide-react";
+import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
+import { ImageIcon } from "@phosphor-icons/react/dist/csr/Image";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
+import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -234,8 +237,9 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
         });
         return r.users.filter((u) => !memberUserIds.has(u.id));
       } catch (err) {
-        if (err instanceof ApiError && err.status === 403) toast.error(t("needUsersReadSearch"));
-        else toast.error(t("searchFailed"));
+        if (err instanceof ApiError && err.status === 403)
+          toast.error(t("needUsersReadSearch"), t("toastFindUsers"));
+        else toast.error(t("searchFailed"), t("toastFindUsers"));
         return [];
       }
     },
@@ -248,9 +252,12 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
       await api.post(`/api/enterprises/${enterpriseId}/members`, { userId });
       setSelectedUserId("");
       await loadMembers();
-      toast.success(t("userAffiliated"));
+      toast.success(t("userAffiliated"), { compactTitle: t("addMemberLabel") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddUser"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotAddUser"),
+        t("addMemberLabel"),
+      );
     } finally {
       setBusy(false);
     }
@@ -261,16 +268,19 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
     try {
       await api.delete(`/api/enterprises/${enterpriseId}/members/${userId}`);
       await loadMembers();
-      toast.success(t("affiliationRemoved"));
+      toast.success(t("affiliationRemoved"), { compactTitle: t("toastRemoveMember") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveUser"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveUser"),
+        t("toastRemoveMember"),
+      );
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <SectionCard icon={Building2Icon} title={t("affiliatedUsersTitle")}>
+    <SectionCard icon={BuildingsIcon} title={t("affiliatedUsersTitle")}>
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor={`enterprise-member-${enterpriseId}`}>{t("addMemberLabel")}</Label>
@@ -298,7 +308,7 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
           </div>
         ) : members.length === 0 ? (
           <EmptyState
-            icon={Building2Icon}
+            icon={BuildingsIcon}
             title={t("noAffiliatedUsersTitle")}
             description={t("searchAboveToAffiliate")}
           />
@@ -343,7 +353,7 @@ export function LogoCard({
     if (!file) return;
 
     if (!LOGO_CONTENT_TYPES.includes(file.type as (typeof LOGO_CONTENT_TYPES)[number])) {
-      toast.error(t("unsupportedFileType"));
+      toast.error(t("unsupportedFileType"), t("uploadLogo"));
       return;
     }
 
@@ -355,16 +365,18 @@ export function LogoCard({
       fd.append("file", file);
       await apiUpload(`/api/enterprises/${enterprise.id}/logo?variant=${variant}`, fd);
       await onChanged();
-      toast.success(variant === "negative" ? t("darkLogoUpdated") : t("logoUpdated"));
+      toast.success(variant === "negative" ? t("darkLogoUpdated") : t("logoUpdated"), {
+        compactTitle: t("uploadLogo"),
+      });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("couldNotUploadLogo"));
+      toast.error(err instanceof Error ? err.message : t("couldNotUploadLogo"), t("uploadLogo"));
     } finally {
       setUploading(false);
     }
   }
 
   return (
-    <SectionCard icon={ImageIcon} title={t("logoTitle")} description={t("logoDesc")}>
+    <SectionCard icon={ImageIcon} title={t("logoTitle")}>
       <div className="flex items-center gap-4">
         <Avatar size="lg" className="rounded-md">
           {enterprise.logo_url ? (
@@ -385,7 +397,7 @@ export function LogoCard({
             onClick={() => defaultInputRef.current?.click()}
             disabled={uploading}
           >
-            {uploading ? <Spinner /> : <UploadIcon className="size-4" />}
+            {uploading ? <Spinner /> : <UploadSimpleIcon aria-hidden="true" className="size-4" />}
             {enterprise.logo_url ? t("replaceLogo") : t("uploadLogo")}
           </Button>
           <Button
@@ -394,7 +406,7 @@ export function LogoCard({
             onClick={() => negativeInputRef.current?.click()}
             disabled={uploading}
           >
-            {uploading ? <Spinner /> : <UploadIcon className="size-4" />}
+            {uploading ? <Spinner /> : <UploadSimpleIcon aria-hidden="true" className="size-4" />}
             {enterprise.logo_negative_url === enterprise.logo_url
               ? t("uploadDarkLogo")
               : t("replaceDarkLogo")}
@@ -470,9 +482,12 @@ export function EditCard({
           : ownerPatch,
       );
       await onSaved();
-      toast.success(t("enterpriseUpdated"));
+      toast.success(t("enterpriseUpdated"), { compactTitle: t("toastSaveCompany") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEnterprise"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveEnterprise"),
+        t("toastSaveCompany"),
+      );
     }
   }
 
@@ -480,7 +495,7 @@ export function EditCard({
     <Form {...form}>
       <form id="profile-edit" onSubmit={form.handleSubmit(onSubmit)} className="scroll-mt-6">
         <SectionCard
-          icon={Building2Icon}
+          icon={BuildingsIcon}
           title={t("profileTitle")}
           footer={
             <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
@@ -522,7 +537,6 @@ export function EditCard({
                 <FormControl>
                   <Input type="url" placeholder="https://…/logo.png" {...field} />
                 </FormControl>
-                <FormDescription>{t("setDirectlyOrUpload")}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

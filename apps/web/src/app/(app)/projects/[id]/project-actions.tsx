@@ -1,5 +1,7 @@
 "use client";
-import { LinkIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
+import { LinkIcon } from "@phosphor-icons/react/dist/csr/Link";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useEffect, useMemo, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
@@ -69,10 +71,13 @@ export function MemberRemoveButton({
         try {
           if (imported && email) await removeDevpostParticipant(repoId, email);
           else await removeRepoMember(repoId, userId);
-          toast.success(t("memberRemoved"));
+          toast.success(t("memberRemoved"), { compactTitle: t("toastRemoveMember") });
           await onRemoved();
         } catch (err) {
-          toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveMember"));
+          toast.error(
+            err instanceof ApiError ? err.message : t("couldNotRemoveMember"),
+            t("toastRemoveMember"),
+          );
         } finally {
           setBusy(false);
         }
@@ -104,10 +109,13 @@ export function DevpostParticipantActions({
     setBusy("delete");
     try {
       await removeDevpostParticipant(repoId, email);
-      toast.success(t("participantDeleted"));
+      toast.success(t("participantDeleted"), { compactTitle: t("toastDeleteParticipant") });
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteParticipant"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotDeleteParticipant"),
+        t("toastDeleteParticipant"),
+      );
     } finally {
       setBusy(null);
     }
@@ -118,12 +126,15 @@ export function DevpostParticipantActions({
     setBusy("link");
     try {
       await linkSecondaryEmail(repoId, email, Number(selectedUserId));
-      toast.success(t("verificationEmailSentLinked"));
+      toast.success(t("verificationEmailSentLinked"), { compactTitle: t("toastLinkParticipant") });
       setOpen(false);
       setSelectedUserId("");
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLinkParticipant"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLinkParticipant"),
+        t("toastLinkParticipant"),
+      );
     } finally {
       setBusy(null);
     }
@@ -141,7 +152,7 @@ export function DevpostParticipantActions({
             aria-controls={dialogId}
             onClick={() => setOpen((current) => !current)}
           >
-            <UserPlusIcon className="size-4" />
+            <UserPlusIcon aria-hidden="true" className="size-4" />
             {t("linkParticipantToUser")}
           </Button>
           {open && (
@@ -162,7 +173,7 @@ export function DevpostParticipantActions({
                 disabled={!selectedUserId || busy === "link"}
                 onClick={linkParticipant}
               >
-                <LinkIcon className="size-4" />
+                <LinkIcon aria-hidden="true" className="size-4" />
                 {t("link")}
               </Button>
             </div>
@@ -179,7 +190,7 @@ export function DevpostParticipantActions({
           pending={busy === "delete"}
           trigger={
             <Button type="button" variant="outline" size="sm" disabled={busy !== null}>
-              <Trash2Icon className="size-4" />
+              <TrashIcon aria-hidden="true" className="size-4" />
               {t("deleteAction")}
             </Button>
           }
@@ -234,9 +245,12 @@ export function ProjectMemberAdder({
             try {
               await onAdd(Number(selectedUserId));
               setSelectedUserId("");
-              toast.success(t("memberAdded"));
+              toast.success(t("memberAdded"), { compactTitle: t("addMemberLabel") });
             } catch (err) {
-              toast.error(err instanceof ApiError ? err.message : t("couldNotAddMember"));
+              toast.error(
+                err instanceof ApiError ? err.message : t("couldNotAddMember"),
+                t("addMemberLabel"),
+              );
             } finally {
               setBusy(false);
             }
@@ -293,9 +307,12 @@ export function ProjectChallengeAdder({
             setBusy(true);
             try {
               await onAdd(Number(challengeId));
-              toast.success(t("challengeAddedMsg"));
+              toast.success(t("challengeAddedMsg"), { compactTitle: t("addChallengeLabel") });
             } catch (err) {
-              toast.error(err instanceof ApiError ? err.message : t("couldNotAddChallenge"));
+              toast.error(
+                err instanceof ApiError ? err.message : t("couldNotAddChallenge"),
+                t("addChallengeLabel"),
+              );
             } finally {
               setBusy(false);
             }

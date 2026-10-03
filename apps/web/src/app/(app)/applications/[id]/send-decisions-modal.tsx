@@ -2,7 +2,7 @@
 
 // Batch send decisions (H14).
 
-import { SendIcon } from "lucide-react";
+import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { useState } from "react";
 import { Modal } from "@/components/common/modal";
 import { Spinner } from "@/components/common/spinner";
@@ -48,10 +48,13 @@ export function SendDecisionsModal({
           : tokenCount > 0
             ? t("sentDecisionsWithLinks", { sent, tokenCount })
             : t("sentDecisions", { sent });
-      toast.success(msg);
+      toast.success(msg, { compactTitle: t("sendDecisions") });
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSendDecisions"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSendDecisions"),
+        t("sendDecisions"),
+      );
     } finally {
       setBusy(false);
     }
@@ -61,7 +64,7 @@ export function SendDecisionsModal({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      icon={SendIcon}
+      icon={PaperPlaneTiltIcon}
       title={t("sendDecisions")}
       description={t("sendDecisionsDesc")}
       footer={

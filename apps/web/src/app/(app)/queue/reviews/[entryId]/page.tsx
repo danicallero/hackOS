@@ -7,7 +7,11 @@
 // back. Visibility is scoped server-side exactly like the overview list.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { ArrowLeftIcon, ClipboardListIcon, LockIcon, SendIcon, UsersIcon } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
+import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
+import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -91,6 +95,7 @@ export default function ReviewDetailPage() {
         await toast.promise(
           saveReviewFromOverview(detail.entryId, { scores: answers, notes, submit }),
           {
+            compactTitle: t("saveReview"),
             loading: { title: submit ? t("submitReview") : t("saveReview") },
             success: { title: submit ? t("reviewSubmitted") : t("evaluationUpdated") },
             error: { title: t("couldNotSaveReview") },
@@ -111,6 +116,7 @@ export default function ReviewDetailPage() {
     setSending(true);
     try {
       await toast.promise(messageReviewTeam(detail.entryId, message.trim()), {
+        compactTitle: t("toastMessageTeam"),
         loading: { title: t("sending") },
         success: ({ recipients }) => ({
           title: t("teamMessageSent", { count: recipients }),
@@ -145,7 +151,7 @@ export default function ReviewDetailPage() {
           action={
             <Button size="sm" asChild variant="outline">
               <Link href="/queue/reviews">
-                <ArrowLeftIcon className="size-4" />
+                <ArrowLeftIcon aria-hidden="true" className="size-4" />
                 {t("backToReviews")}
               </Link>
             </Button>
@@ -170,7 +176,7 @@ export default function ReviewDetailPage() {
         primaryAction={
           canMessage ? (
             <Button size="sm" onClick={() => setMessageOpen(true)}>
-              <SendIcon className="size-4" />
+              <PaperPlaneTiltIcon aria-hidden="true" className="size-4" />
               {t("messageTeam")}
             </Button>
           ) : undefined
@@ -182,7 +188,7 @@ export default function ReviewDetailPage() {
         }
       />
 
-      <SectionCard title={t("projectDetailsTitle")} icon={ClipboardListIcon}>
+      <SectionCard title={t("projectDetailsTitle")} icon={ClipboardTextIcon}>
         <div className="space-y-4">
           <ProjectDescriptionLinks
             description={project.description}
@@ -216,7 +222,7 @@ export default function ReviewDetailPage() {
           </div>
           <div>
             <p className="flex items-center gap-2 text-sm font-medium">
-              <UsersIcon className="text-muted-foreground size-4" />
+              <UsersIcon aria-hidden="true" className="text-muted-foreground size-4" />
               {t("teamMembersLabel")}
             </p>
             <p className="text-muted-foreground text-sm">
@@ -307,14 +313,14 @@ export default function ReviewDetailPage() {
         onOpenChange={setMessageOpen}
         title={t("messageTeam")}
         description={t("messageTeamDesc")}
-        icon={SendIcon}
+        icon={PaperPlaneTiltIcon}
         footer={
           <>
             <Button variant="outline" onClick={() => setMessageOpen(false)} disabled={sending}>
               {t("cancel")}
             </Button>
             <Button onClick={() => void sendMessage()} disabled={sending || !message.trim()}>
-              <SendIcon className="size-4" />
+              <PaperPlaneTiltIcon aria-hidden="true" className="size-4" />
               {t("sendMessage")}
             </Button>
           </>

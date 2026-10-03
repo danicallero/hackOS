@@ -6,7 +6,9 @@
 // its full Starts date).
 
 import { ACTIVITY_KINDS, isMealActivityKind } from "@hackos/shared/activity-kinds";
-import { CalendarDaysIcon, ChevronDownIcon, XIcon } from "lucide-react";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { PublicationControls } from "@/components/common/publication-controls";
@@ -239,7 +241,10 @@ export function ScheduleFormModal({
       });
       setTranslations((prev) => ({ ...prev, ...result }));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotTranslate"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotTranslate"),
+        t("toastTranslate"),
+      );
     } finally {
       setTranslating(false);
     }
@@ -260,7 +265,10 @@ export function ScheduleFormModal({
         await logisticsApi.saveScheduleTranslations(result.id, translations);
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastSaveActivity"),
+      );
     } finally {
       setPending(false);
     }
@@ -297,7 +305,7 @@ export function ScheduleFormModal({
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      icon={CalendarDaysIcon}
+      icon={CalendarDotsIcon}
       footer={
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
@@ -461,7 +469,8 @@ export function ScheduleFormModal({
           <div className="flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3">
             <CollapsibleTrigger asChild>
               <button type="button" className="flex items-center gap-2 text-sm font-medium">
-                <ChevronDownIcon
+                <CaretDownIcon
+                  aria-hidden="true"
                   className={cn("size-4 transition-transform", translationsOpen && "rotate-180")}
                 />
                 {t("translationsAndSettings")}
@@ -513,7 +522,8 @@ export function ScheduleFormModal({
         <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
           <CollapsibleTrigger asChild>
             <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
-              <ChevronDownIcon
+              <CaretDownIcon
+                aria-hidden="true"
                 className={cn("size-4 transition-transform", advancedOpen && "rotate-180")}
               />
               {t("moreOptions")}
@@ -614,8 +624,9 @@ function PendingOwnersField({
       const r = await logisticsApi.scheduleOwnerCandidates(query);
       return r.users.filter((u) => !ownerIds.has(u.id));
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) toast.error(t("needScheduleManageSearch"));
-      else toast.error(t("searchFailed"));
+      if (err instanceof ApiError && err.status === 403)
+        toast.error(t("needScheduleManageSearch"), t("toastFindUsers"));
+      else toast.error(t("searchFailed"), t("toastFindUsers"));
       return [];
     }
   }
@@ -686,7 +697,7 @@ function PendingOwnersField({
                     onChange(owners.filter((o) => pendingOwnerKey(o) !== pendingOwnerKey(owner)))
                   }
                 >
-                  <XIcon className="size-4" />
+                  <XIcon aria-hidden="true" className="size-4" />
                 </Button>
               </li>
             ))}
@@ -725,8 +736,9 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
       const r = await logisticsApi.scheduleOwnerCandidates(query);
       return r.users.filter((u) => !ownerUserIds.has(u.id));
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) toast.error(t("needScheduleManageSearch"));
-      else toast.error(t("searchFailed"));
+      if (err instanceof ApiError && err.status === 403)
+        toast.error(t("needScheduleManageSearch"), t("toastFindUsers"));
+      else toast.error(t("searchFailed"), t("toastFindUsers"));
       return [];
     }
   }
@@ -738,9 +750,9 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
       setSelectedUserId("");
       setFreeTextName("");
       await loadOwners();
-      toast.success(t("userAffiliated"));
+      toast.success(t("userAffiliated"), { compactTitle: t("toastAddOwner") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddUser"));
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddUser"), t("toastAddOwner"));
     } finally {
       setBusy(false);
     }
@@ -751,9 +763,12 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
     try {
       await logisticsApi.removeScheduleOwner(scheduleId, ownerId);
       await loadOwners();
-      toast.success(t("affiliationRemoved"));
+      toast.success(t("affiliationRemoved"), { compactTitle: t("toastRemoveOwner") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveUser"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveUser"),
+        t("toastRemoveOwner"),
+      );
     } finally {
       setBusy(false);
     }
@@ -823,7 +838,7 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
                   disabled={busy}
                   onClick={() => remove(owner.id)}
                 >
-                  <XIcon className="size-4" />
+                  <XIcon aria-hidden="true" className="size-4" />
                 </Button>
               </li>
             ))}

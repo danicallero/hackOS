@@ -114,7 +114,8 @@ export type ScanPayload =
   | {
       kind: "activity";
       activityId: number;
-      badgeId: string;
+      badgeId?: string;
+      ticketToken?: string;
       allowRepeat: boolean;
       scannedAt: string;
     }

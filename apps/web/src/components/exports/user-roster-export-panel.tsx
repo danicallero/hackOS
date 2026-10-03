@@ -1,6 +1,7 @@
 "use client";
 
-import { DownloadIcon, UsersIcon } from "lucide-react";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useMemo, useState } from "react";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -15,7 +16,15 @@ function csvValue(value: string) {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
+export function UserRosterExportPanel({
+  users,
+  open,
+  onOpenChange,
+}: {
+  users: UserListItem[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { language, t } = useLocale();
   const [roles, setRoles] = useState<string[]>([]);
   const [fields, setFields] = useState(["name", "email", "role"]);
@@ -47,7 +56,7 @@ export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
         intolerances.map((intolerance) => [intolerance.id, pickText(intolerance.label, language)]),
       );
     } catch {
-      toast.error(t("exportFailed"));
+      toast.error(t("exportFailed"), t("export"));
       setExporting(false);
       return;
     }
@@ -94,17 +103,13 @@ export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
   };
   return (
     <SidePanelEditor
-      trigger={
-        <Button variant="outline">
-          <UsersIcon aria-hidden="true" />
-          {t("export")}
-        </Button>
-      }
+      open={open}
+      onOpenChange={onOpenChange}
       title={t("exportUsers")}
       icon={UsersIcon}
       footer={
         <Button onClick={() => void exportRoster()} disabled={exporting}>
-          <DownloadIcon aria-hidden="true" />
+          <DownloadSimpleIcon aria-hidden="true" />
           {t("export")}
         </Button>
       }

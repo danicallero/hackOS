@@ -9,7 +9,7 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import { assignBadge, createActivity, createMeal } from "./fixtures.js";
+import { assignBadge, createActivity, createMeal, issueTicket } from "./fixtures.js";
 
 let app: App;
 let scanner: number;
@@ -33,6 +33,63 @@ afterAll(async () => {
 });
 
 describe("H25 meals", () => {
+  it("accepts an entry ticket without an assigned badge and confirms repeats", async () => {
+    const meal = await createMeal();
+    const uid = await createUser({ name: "Ticket participant" });
+    const ticketToken = await issueTicket(uid);
+    const scan = (allowRepeat = false) =>
+      app.inject({
+        method: "POST",
+        url: `/api/activities/${meal}/scan`,
+        headers: asUser(scanner),
+        payload: { ticketToken, allowRepeat },
+      });
+    expect((await scan()).statusCode).toBe(200);
+    expect((await scan()).statusCode).toBe(409);
+    expect((await scan(true)).json().timesEaten).toBe(2);
+  });
+
+  it("rejects revoked ticket credentials without creating activity logs", async () => {
+    const meal = await createMeal();
+    const uid = await createUser();
+    const ticketToken = await issueTicket(uid);
+    const { pool } = await import("../../src/db/pool.js");
+    const { scannerCredentialDigest } = await import(
+      "../../src/modules/logistics/credential-tombstones.js"
+    );
+    await pool.query(`INSERT INTO scanner_revoked_tickets (credential_digest) VALUES ($1)`, [
+      scannerCredentialDigest("ticket", ticketToken),
+    ]);
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/activities/${meal}/scan`,
+      headers: asUser(scanner),
+      payload: { ticketToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("ticket_revoked");
+    expect(
+      (await pool.query(`SELECT 1 FROM activity_logs WHERE user_id = $1`, [uid])).rowCount,
+    ).toBe(0);
+  });
+
+  it("rejects unknown and ambiguous activity credentials", async () => {
+    const meal = await createMeal();
+    for (const payload of [
+      { ticketToken: "unknown-ticket" },
+      { ticketToken: "ticket", badgeId: "badge" },
+      {},
+    ]) {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/activities/${meal}/scan`,
+        headers: asUser(scanner),
+        payload,
+      });
+      expect(res.statusCode).toBe(payload.ticketToken === "unknown-ticket" ? 404 : 400);
+    }
+  });
+
   it("first scan auto-registers, reports firstTime + card", async () => {
     const meal = await createMeal();
     const uid = await createUser({ name: "Mel" });

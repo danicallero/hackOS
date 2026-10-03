@@ -11,7 +11,7 @@
 // gate itself stays in the parent page, this component assumes access.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { GavelIcon } from "lucide-react";
+import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
@@ -72,7 +72,6 @@ function PacePreview({ startsAt, endsAt }: { startsAt: string; endsAt: string })
 
   return (
     <div className="rounded-lg border p-4">
-      <p className="text-muted-foreground mb-2 text-xs uppercase">{t("judgingPacePreviewLabel")}</p>
       {!start || !end ? (
         <p className="text-muted-foreground text-sm">{t("judgingWindowUnsetDesc")}</p>
       ) : (
@@ -126,7 +125,10 @@ export function JudgingWindowTab() {
         setLoaded(true);
       })
       .catch((err) =>
-        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadJudgingWindow")),
+        toast.error(
+          err instanceof ApiError ? err.message : t("couldNotLoadJudgingWindow"),
+          t("toastJudgingHours"),
+        ),
       );
   }, [reset, t]);
 
@@ -141,7 +143,10 @@ export function JudgingWindowTab() {
       setSaveState("saved");
     } catch (err) {
       setSaveState("error");
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveJudgingWindow"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveJudgingWindow"),
+        t("toastJudgingHours"),
+      );
     }
   }
 

@@ -6,14 +6,12 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import {
-  CheckCircle2Icon,
-  ClockIcon,
-  MegaphoneIcon,
-  PencilIcon,
-  PlusIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
+import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
+import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -102,7 +100,7 @@ export default function AnnouncementsPage() {
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements");
       setLoadError(message);
-      toast.error(message);
+      toast.error(message, t("announcements"));
     } finally {
       setLoading(false);
     }
@@ -124,7 +122,10 @@ export default function AnnouncementsPage() {
       const full = await notificationsApi.getAnnouncement(item.id);
       setEditingItem(full);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"),
+        t("announcements"),
+      );
     }
   }
 
@@ -133,13 +134,13 @@ export default function AnnouncementsPage() {
     setDeleteError(null);
     try {
       await notificationsApi.deleteAnnouncement(item.id);
-      toast.success(t("announcementDeleted"));
+      toast.success(t("announcementDeleted"), { compactTitle: t("deleteAnnouncementAria") });
       setDeleting(null);
       await load();
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotDeleteAnnouncement");
       setDeleteError(message);
-      toast.error(message);
+      toast.error(message, t("deleteAnnouncementAria"));
     } finally {
       setBusy(false);
     }
@@ -191,7 +192,7 @@ export default function AnnouncementsPage() {
         return (
           <span className="inline-flex items-center gap-1.5 text-xs">
             {state === "delivered" ? (
-              <CheckCircle2Icon className="text-success size-3.5" aria-hidden="true" />
+              <CheckCircleIcon className="text-success size-3.5" aria-hidden="true" />
             ) : (
               <ClockIcon className="text-muted-foreground size-3.5" aria-hidden="true" />
             )}
@@ -218,7 +219,7 @@ export default function AnnouncementsPage() {
         title={t("announcements")}
         primaryAction={
           <Button onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="size-4" />
+            <PlusIcon aria-hidden="true" className="size-4" />
             {t("newAnnouncement")}
           </Button>
         }
@@ -256,7 +257,7 @@ export default function AnnouncementsPage() {
                 setDeleting(a);
               }}
             >
-              <Trash2Icon className="size-4" />
+              <TrashIcon aria-hidden="true" className="size-4" />
             </Button>
           </div>
         )}
@@ -300,7 +301,7 @@ export default function AnnouncementsPage() {
         submitLabel={t("publishAnnouncement")}
         onSubmit={async (values: AnnouncementInput) => {
           await notificationsApi.createAnnouncement(values);
-          toast.success(t("announcementCreated"));
+          toast.success(t("announcementCreated"), { compactTitle: t("toastCreateAnnouncement") });
           setCreateOpen(false);
           await load();
         }}
@@ -319,7 +320,7 @@ export default function AnnouncementsPage() {
           submitLabel={t("saveChanges")}
           onSubmit={async (values: AnnouncementInput) => {
             await notificationsApi.updateAnnouncement(editingItem.id, values);
-            toast.success(t("announcementUpdated"));
+            toast.success(t("announcementUpdated"), { compactTitle: t("publishAnnouncement") });
             setEditingItem(null);
             await load();
           }}

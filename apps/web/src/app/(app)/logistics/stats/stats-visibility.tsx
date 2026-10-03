@@ -1,6 +1,9 @@
 "use client";
 
-import { ChevronDownIcon, EyeIcon, LoaderCircleIcon, Trash2Icon } from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
+import { SpinnerGapIcon } from "@phosphor-icons/react/dist/csr/SpinnerGap";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { IconButton } from "@/components/common/icon-button";
@@ -219,7 +222,7 @@ export function StatsVisibility({ scopeKey }: { scopeKey: string }) {
     >
       {!open ? null : loading ? (
         <div className="text-muted-foreground flex items-center gap-2 text-sm" role="status">
-          <LoaderCircleIcon className="size-4 animate-spin" aria-hidden="true" />
+          <SpinnerGapIcon className="size-4 animate-spin" aria-hidden="true" />
           {t("loading")}
         </div>
       ) : error && roles.length === 0 ? (
@@ -261,7 +264,7 @@ export function StatsVisibility({ scopeKey }: { scopeKey: string }) {
                           })
                         }
                       >
-                        <ChevronDownIcon
+                        <CaretDownIcon
                           className={`text-muted-foreground size-4 shrink-0 ${expanded ? "rotate-180" : ""}`}
                           aria-hidden="true"
                         />
@@ -296,7 +299,7 @@ export function StatsVisibility({ scopeKey }: { scopeKey: string }) {
                           disabled={pending !== null}
                           onClick={() => setRoleToRemove(role)}
                         >
-                          <Trash2Icon aria-hidden="true" />
+                          <TrashIcon aria-hidden="true" />
                         </IconButton>
                       )}
                     </div>

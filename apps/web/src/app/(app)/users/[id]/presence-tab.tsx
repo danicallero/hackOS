@@ -4,7 +4,9 @@
 // four modals that edit or delete a log.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { ClockIcon, DownloadIcon, PlusIcon } from "lucide-react";
+import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useCallback, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -137,7 +139,7 @@ export function PresenceSection({ userId, refreshKey }: { userId: number; refres
             {canExport && (
               <Button asChild variant="outline">
                 <a href={`${API_URL}/api/presence/hours/${userId}/export.csv?format=full`}>
-                  <DownloadIcon className="size-4" aria-hidden="true" />
+                  <DownloadSimpleIcon className="size-4" aria-hidden="true" />
                   {t("exportHoursDetailed")}
                 </a>
               </Button>
@@ -308,7 +310,7 @@ export function EditTimeLogModal({
         scannedAt: new Date(scannedAt).toISOString(),
         notes: notes.trim() || null,
       });
-      toast.success(t("scanUpdated"));
+      toast.success(t("scanUpdated"), { compactTitle: t("toastEditScan") });
       onSaved();
     } catch (err) {
       setError(errorMessage(err, t("couldNotUpdateScan")));
@@ -381,10 +383,10 @@ export function DeleteTimeLogModal({
     setPending(true);
     try {
       await logisticsApi.deleteTimeLog(log.id);
-      toast.success(t("scanDeleted"));
+      toast.success(t("scanDeleted"), { compactTitle: t("toastDeleteScan") });
       onDeleted();
     } catch (err) {
-      toast.error(errorMessage(err, t("couldNotDeleteScan")));
+      toast.error(errorMessage(err, t("couldNotDeleteScan")), t("toastDeleteScan"));
       setPending(false);
     }
   }
@@ -487,7 +489,9 @@ export function PresenceSignalModal({
           notes: notes.trim() || null,
         });
       }
-      toast.success(editingActivity ? t("presenceSignalUpdated") : t("presenceSignalAdded"));
+      toast.success(editingActivity ? t("presenceSignalUpdated") : t("presenceSignalAdded"), {
+        compactTitle: t("toastPresenceActivity"),
+      });
       onSaved();
     } catch (err) {
       setError(errorMessage(err, t("couldNotSavePresenceSignal")));
@@ -605,7 +609,7 @@ export function DeletePresenceActivityModal({
     setError("");
     try {
       await logisticsApi.deletePresenceActivity(signal.id);
-      toast.success(t("presenceSignalDeleted"));
+      toast.success(t("presenceSignalDeleted"), { compactTitle: t("toastRemovePresence") });
       onDeleted();
     } catch (err) {
       setError(errorMessage(err, t("couldNotDeletePresenceSignal")));

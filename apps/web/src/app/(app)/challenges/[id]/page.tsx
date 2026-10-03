@@ -2,7 +2,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { TrophyIcon } from "lucide-react";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";

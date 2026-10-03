@@ -1,6 +1,8 @@
 "use client";
 
-import { DownloadIcon, GavelIcon, RefreshCwIcon } from "lucide-react";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowsClockwise";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { type Challenge, textForDisplay } from "@/app/(app)/challenges/shared";
 import { EntityCombobox } from "@/components/common/entity-combobox";
@@ -58,7 +60,7 @@ export function JudgingExportPanel({ trigger }: { trigger?: ReactNode }) {
     >
       <div className="flex justify-end">
         <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
-          <RefreshCwIcon aria-hidden="true" />
+          <ArrowsClockwiseIcon aria-hidden="true" />
           {t("refresh")}
         </Button>
       </div>
@@ -92,7 +94,7 @@ export function JudgingExportPanel({ trigger }: { trigger?: ReactNode }) {
               <span className="text-sm font-medium">{t("judgingQueue")}</span>
               <Button asChild variant="outline" size="sm">
                 <a href={`${API_URL}/api/queue/challenges/${challengeId}/export/queue.csv`}>
-                  <DownloadIcon aria-hidden="true" />
+                  <DownloadSimpleIcon aria-hidden="true" />
                   {t("export")}
                 </a>
               </Button>
@@ -101,7 +103,7 @@ export function JudgingExportPanel({ trigger }: { trigger?: ReactNode }) {
               <span className="text-sm font-medium">{t("judgingEvaluations")}</span>
               <Button asChild variant="outline" size="sm">
                 <a href={`${API_URL}/api/queue/challenges/${challengeId}/export/evaluations.csv`}>
-                  <DownloadIcon aria-hidden="true" />
+                  <DownloadSimpleIcon aria-hidden="true" />
                   {t("export")}
                 </a>
               </Button>

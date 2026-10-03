@@ -4,6 +4,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
 import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { resolveByTicket } from "./accreditation.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
 import { assertBadgeScanTimestamp, resolveByBadge } from "./badge.js";
 import { loadPersonCard, type PersonCard } from "./cards.js";
@@ -41,7 +42,8 @@ export async function activityScan(
   actorId: number | null,
   activityId: number,
   input: {
-    badgeId: string;
+    badgeId?: string;
+    ticketToken?: string;
     allowRepeat: boolean;
     scannedAt?: Date;
     sourceDeviceId?: string;
@@ -57,7 +59,12 @@ export async function activityScan(
     throw new BadRequestError("Activity is not scannable", { activityId });
   }
 
-  const userId = await resolveByBadge(pool, input.badgeId);
+  if ((input.badgeId == null) === (input.ticketToken == null)) {
+    throw new BadRequestError("Provide either a badge or a ticket");
+  }
+  const userId = input.ticketToken
+    ? await resolveByTicket(pool, input.ticketToken)
+    : await resolveByBadge(pool, input.badgeId!);
   if (input.scannedAt && isImplausiblyFuture(input.scannedAt)) {
     throw new BadRequestError("Offline scan timestamp must be in the past");
   }
@@ -84,10 +91,17 @@ export async function activityScan(
     // resolveByBadge ran before this transaction and can race a staff badge
     // rotation. Re-check the current assignment while the user row is locked
     // so an already-resolved old badge cannot write a post-rotation activity.
-    if (lockedUser.badge_id !== input.badgeId) {
-      throw new AppError(409, "badge_revoked", "This badge has been revoked");
+    if (input.ticketToken) {
+      // H25/H26: revalidate the scanned ticket under the account lock, also on offline replay.
+      if ((await resolveByTicket(client, input.ticketToken)) !== userId) {
+        throw new NotFoundError("Ticket not recognized");
+      }
+    } else {
+      if (lockedUser.badge_id !== input.badgeId) {
+        throw new AppError(409, "badge_revoked", "This badge has been revoked");
+      }
+      assertBadgeScanTimestamp(input.scannedAt, lockedUser.badge_assigned_at);
     }
-    assertBadgeScanTimestamp(input.scannedAt, lockedUser.badge_assigned_at);
     if (actorId != null) await assertFixtureSubjectScope(client, actorId, userId);
 
     const card = await loadPersonCard(client, userId);

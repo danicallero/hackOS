@@ -4,7 +4,8 @@
 // planned work groups and their queue status are one model, not destinations to
 // reconcile mentally (H19, H20, H38, #852).
 import { EVENTS } from "@hackos/shared/events";
-import { FolderGitIcon, MailIcon } from "lucide-react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from "react";
@@ -79,7 +80,10 @@ export default function MyProjectPage() {
         );
       }
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
+        t("projectLabel"),
+      );
     } finally {
       setLoading(false);
     }
@@ -118,7 +122,7 @@ export default function MyProjectPage() {
       {invites.length > 0 && <PendingInvitesCard invites={invites} onChanged={load} />}
       {projects.length === 0 && groups.length === 0 ? (
         <EmptyState
-          icon={FolderGitIcon}
+          icon={FolderSimpleIcon}
           title={t("myProjectsEmptyTitle")}
           description={canCreate ? t("myProjectCanCreateDesc") : t("myProjectEmptyDesc")}
         />
@@ -172,7 +176,10 @@ function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
       setOpen(false);
       await onCreated();
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotCreateWorkGroup"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("couldNotCreateWorkGroup"),
+        t("toastCreateProject"),
+      );
     } finally {
       setSaving(false);
     }
@@ -326,13 +333,16 @@ function PendingInvitesCard({
       else await declineProjectInvite(repoId, crypto.randomUUID());
       await onChanged();
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
+        t("toastReplyInvite"),
+      );
     } finally {
       setBusy(null);
     }
   }
   return (
-    <SectionCard variant="plain" title={t("pendingInvitesTitle")} icon={MailIcon}>
+    <SectionCard variant="plain" title={t("pendingInvitesTitle")} icon={EnvelopeSimpleIcon}>
       <ul className="space-y-3">
         {invites.map((invite) => (
           <li

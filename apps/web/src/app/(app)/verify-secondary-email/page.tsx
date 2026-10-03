@@ -1,6 +1,8 @@
 "use client";
 
-import { CheckCircle2Icon, MailWarningIcon, UserRoundXIcon } from "lucide-react";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import { UserMinusIcon } from "@phosphor-icons/react/dist/csr/UserMinus";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
@@ -104,7 +106,7 @@ function VerifySecondaryInner() {
           <>
             <CardHeader className="items-center justify-items-center text-center">
               <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
-                <MailWarningIcon className="size-6" />
+                <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
               </div>
               <CardTitle>{t("confirmSecondaryEmailTitle")}</CardTitle>
               <CardDescription>
@@ -131,7 +133,7 @@ function VerifySecondaryInner() {
           <>
             <CardHeader className="items-center justify-items-center text-center">
               <div className="bg-destructive/10 text-destructive mb-2 grid size-12 place-items-center rounded-full">
-                <UserRoundXIcon className="size-6" />
+                <UserMinusIcon aria-hidden="true" className="size-6" />
               </div>
               <CardTitle>{t("wrongAccountTitle")}</CardTitle>
               <CardDescription>
@@ -146,7 +148,7 @@ function VerifySecondaryInner() {
           <>
             <CardHeader className="items-center justify-items-center text-center">
               <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-                <CheckCircle2Icon className="size-6" />
+                <CheckCircleIcon aria-hidden="true" className="size-6" />
               </div>
               <CardTitle>{t("secondaryEmailVerified")}</CardTitle>
               <CardDescription>
@@ -163,7 +165,7 @@ function VerifySecondaryInner() {
           <>
             <CardHeader className="items-center justify-items-center text-center">
               <div className="bg-destructive/10 text-destructive mb-2 grid size-12 place-items-center rounded-full">
-                <MailWarningIcon className="size-6" />
+                <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
               </div>
               <CardTitle>{t("couldntVerifyTitle")}</CardTitle>
               <CardDescription>{state.message}</CardDescription>

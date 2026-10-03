@@ -135,6 +135,7 @@ export function requestForScanPayload(
     headers,
     body: {
       badgeId: payload.badgeId,
+      ticketToken: payload.ticketToken,
       allowRepeat: payload.allowRepeat,
       scannedAt: payload.scannedAt,
     },

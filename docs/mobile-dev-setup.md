@@ -22,6 +22,12 @@ again when upgrading the SDK.
 - [7. Compile and run locally](#7-compile-and-run-locally)
 - [8. EAS preview and production builds](#8-eas-preview-and-production-builds)
 
+NFC accreditation reads require a rebuilt development/production client and
+physical NFC hardware; Expo Go and Simulator cannot read NTAG213 badges.
+The config plugin supplies iOS TAG entitlements and Android NFC permission.
+Enable NFC Tag Reading on the Apple App ID and regenerate signing profiles
+before a device/EAS build. See [NFC accreditations](./mobile.md#nfc-accreditations-h22h26).
+
 ## 1. Required accounts and local tools
 
 ### Always required

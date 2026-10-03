@@ -682,12 +682,13 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         params: activityIdParam,
         body: activityScanBody,
         description:
-          "Records one meal or activity-attendance event. Every distinct idempotent scan is recorded, including repeats; door presence remains the separate state-transition flow.",
+          "Records one meal or activity-attendance event using either a current badge or an entry ticket, including participants without an assigned badge. Every distinct idempotent scan is recorded, including repeats; door presence remains the separate state-transition flow.",
       },
     },
     async (req, reply) => {
       const r = await activityScan(actor(req.userId), req.params.id, {
         badgeId: req.body.badgeId,
+        ticketToken: req.body.ticketToken,
         allowRepeat: req.body.allowRepeat,
         scannedAt: req.body.scannedAt,
       });

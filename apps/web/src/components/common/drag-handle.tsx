@@ -8,7 +8,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVerticalIcon } from "lucide-react";
+import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
 import { IconButton } from "@/components/common/icon-button";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +35,7 @@ export function DragHandle({
       {...listeners}
       disabled={disabled}
     >
-      <GripVerticalIcon className="size-4" aria-hidden="true" />
+      <DotsSixVerticalIcon className="size-4" aria-hidden="true" />
     </IconButton>
   );
 }

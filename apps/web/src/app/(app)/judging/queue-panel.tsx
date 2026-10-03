@@ -4,18 +4,16 @@
 // and the per-entry actions. Split out of page.tsx; page.tsx still owns the
 // data and passes it down.
 
-import {
-  AlertTriangleIcon,
-  ArrowUpToLineIcon,
-  DoorOpenIcon,
-  ListOrderedIcon,
-  type LucideIcon,
-  MoreHorizontalIcon,
-  RotateCcwIcon,
-  SearchIcon,
-  SendIcon,
-  SkipForwardIcon,
-} from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
+import { ArrowLineUpIcon } from "@phosphor-icons/react/dist/csr/ArrowLineUp";
+import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
+import { ListNumbersIcon } from "@phosphor-icons/react/dist/csr/ListNumbers";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
+import { SkipForwardIcon } from "@phosphor-icons/react/dist/csr/SkipForward";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Modal } from "@/components/common/modal";
@@ -220,7 +218,7 @@ export function QueuePanel({
               disabled={searchDisabled}
               onClick={() => setSearchOpen((open) => !open)}
             >
-              <SearchIcon className="size-4" />
+              <MagnifyingGlassIcon aria-hidden="true" className="size-4" />
             </Button>
           </div>
 
@@ -248,7 +246,7 @@ export function QueuePanel({
             title=""
             entries={waitingEntries}
             empty={t("noTeamsChallengeQueue")}
-            emptyIcon={ListOrderedIcon}
+            emptyIcon={ListNumbersIcon}
             className="min-h-0 flex-1"
             emptyClassName="min-h-0 flex-1"
             desiredMinutesPerTeam={pace?.desiredMinutesPerTeam ?? null}
@@ -285,7 +283,7 @@ export function QueuePanel({
                         )
                       }
                     >
-                      <SkipForwardIcon className="size-4" />
+                      <SkipForwardIcon aria-hidden="true" className="size-4" />
                       {t("skip")}
                     </Button>
                   </div>
@@ -344,7 +342,7 @@ export function CalledEntryActions({
         disabled={busy != null || canModerate}
         onClick={() => onEntryAction(entry, "notify-enter", undefined, t("entranceNoticeSent"))}
       >
-        <SendIcon className="size-4" />
+        <PaperPlaneTiltIcon aria-hidden="true" className="size-4" />
         {t("callIn")}
       </Button>
       <Button
@@ -353,7 +351,7 @@ export function CalledEntryActions({
         disabled={busy != null || !canJudge}
         onClick={() => onEntryAction(entry, "bring-in", undefined, t("teamBroughtInShort"))}
       >
-        <DoorOpenIcon className="size-4" />
+        <DoorOpenIcon aria-hidden="true" className="size-4" />
         {t("bringIn")}
       </Button>
       <DropdownMenu>
@@ -364,7 +362,7 @@ export function CalledEntryActions({
             className="min-w-28 flex-1"
             disabled={busy != null || canModerate}
           >
-            <MoreHorizontalIcon className="size-4" />
+            <DotsThreeIcon aria-hidden="true" className="size-4" />
             {t("moreActions")}
           </Button>
         </DropdownMenuTrigger>
@@ -379,7 +377,7 @@ export function CalledEntryActions({
               )
             }
           >
-            <ArrowUpToLineIcon className="size-4" />
+            <ArrowLineUpIcon aria-hidden="true" className="size-4" />
             {t("requeueTop")}
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -392,7 +390,7 @@ export function CalledEntryActions({
               )
             }
           >
-            <RotateCcwIcon className="size-4" />
+            <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
             {t("requeueBottom")}
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -401,12 +399,12 @@ export function CalledEntryActions({
               setPositionOpen(true);
             }}
           >
-            <ListOrderedIcon className="size-4" />
+            <ListNumbersIcon aria-hidden="true" className="size-4" />
             {t("queueMoveToPosition")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={() => setConfirming("no-show")}>
-            <AlertTriangleIcon className="size-4" />
+            <WarningIcon aria-hidden="true" className="size-4" />
             {t("noShow")}
           </DropdownMenuItem>
           {canAdmin && (
@@ -421,7 +419,7 @@ export function CalledEntryActions({
         onOpenChange={setPositionOpen}
         title={t("queueMoveToPosition")}
         description={t("queueMoveToPositionDescription")}
-        icon={ListOrderedIcon}
+        icon={ListNumbersIcon}
         footer={
           <>
             <Button variant="outline" onClick={() => setPositionOpen(false)}>
@@ -503,7 +501,7 @@ export function QueueList({
   title: string;
   entries: QueueEntry[];
   empty: string;
-  emptyIcon?: LucideIcon;
+  emptyIcon?: PhosphorIcon;
   emptyClassName?: string;
   className?: string;
   compact?: boolean;
@@ -518,7 +516,7 @@ export function QueueList({
       {entries.length === 0 ? (
         <JudgingEmptyState
           className={emptyClassName}
-          icon={EmptyIcon ?? ListOrderedIcon}
+          icon={EmptyIcon ?? ListNumbersIcon}
           title={empty}
         />
       ) : (

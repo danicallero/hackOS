@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: "7", manualBadge: "BADGE-1", manualNonce: "1" }),
@@ -44,6 +44,7 @@ jest.mock("@/lib/me-context", () => ({ useMeContext: () => ({ me: { id: 11 } }) 
 jest.mock("@/lib/router-tabs-inset", () => ({ useRouterTabBarBottomInset: () => 0 }));
 jest.mock("@/lib/scanner-db", () => ({
   enqueueLocalScan: jest.fn().mockResolvedValue("scan-1"),
+  findPersonByTicket: jest.fn().mockResolvedValue(null),
   findPersonByBadge: jest.fn().mockResolvedValue({
     person: {
       userId: 21,
@@ -106,7 +107,12 @@ jest.mock("@/theme/colors", () => ({
 }));
 
 import { ActivityScannerScreen } from "@/components/activity-scanner-screen";
-import { enqueueLocalScan, getActivityState } from "@/lib/scanner-db";
+import {
+  enqueueLocalScan,
+  findPersonByBadge,
+  findPersonByTicket,
+  getActivityState,
+} from "@/lib/scanner-db";
 import { renderMobile } from "./render";
 
 describe("activity scanner result (H26)", () => {
@@ -136,4 +142,31 @@ describe("activity scanner result (H26)", () => {
       ),
     );
   });
+});
+
+it("accepts a ticket QR and preserves it in the offline activity payload", async () => {
+  jest.mocked(enqueueLocalScan).mockClear();
+  const badge = await findPersonByBadge("BADGE-1");
+  jest
+    .mocked(findPersonByTicket)
+    .mockResolvedValueOnce({ ...badge.person!, badgeId: null, ticketToken: "BADGE-1" });
+  await renderMobile(<ActivityScannerScreen />);
+  await screen.findByRole("button", { name: "Close" });
+  expect(enqueueLocalScan).toHaveBeenCalledWith(
+    expect.objectContaining({ ticketToken: "BADGE-1", kind: "activity" }),
+    11,
+  );
+});
+
+it("automatically dismisses lookup errors after six seconds", async () => {
+  jest.mocked(findPersonByBadge).mockResolvedValueOnce({ person: null, revoked: false });
+  jest.useFakeTimers();
+  try {
+    await renderMobile(<ActivityScannerScreen />);
+    await screen.findByRole("button", { name: "scannerBadgeUnknown" });
+    await act(() => jest.advanceTimersByTime(6000));
+    expect(screen.queryByRole("button", { name: "scannerBadgeUnknown" })).toBeNull();
+  } finally {
+    jest.useRealTimers();
+  }
 });

@@ -1,13 +1,11 @@
 "use client";
 
 import { EVENTS } from "@hackos/shared/events";
-import {
-  CalendarClockIcon,
-  CheckCircle2Icon,
-  Globe2Icon,
-  TrophyIcon,
-  UsersIcon,
-} from "lucide-react";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { GlobeIcon } from "@phosphor-icons/react/dist/csr/Globe";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useCallback, useEffect, useState } from "react";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
@@ -135,7 +133,7 @@ export function EnterpriseOverviewCard({
         : t("enterpriseChallengeBreakdown", challengeCounts);
 
   return (
-    <SectionCard icon={Globe2Icon} title={t("enterpriseOverviewTitle")}>
+    <SectionCard icon={GlobeIcon} title={t("enterpriseOverviewTitle")}>
       <div
         className={cn("grid gap-4 sm:grid-cols-2", canManage ? "xl:grid-cols-4" : "xl:grid-cols-3")}
       >
@@ -147,7 +145,7 @@ export function EnterpriseOverviewCard({
             </StatusBadge>
           }
           hint={visibilityHint}
-          icon={CalendarClockIcon}
+          icon={CalendarDotsIcon}
         />
         <StatCard
           label={t("enterpriseChallengesLabel")}
@@ -163,7 +161,7 @@ export function EnterpriseOverviewCard({
               ? t("enterpriseProfileFieldsComplete", { count: profileFieldsComplete })
               : t("profileCompleteMessage")
           }
-          icon={profileFieldsComplete === 3 ? CheckCircle2Icon : Globe2Icon}
+          icon={profileFieldsComplete === 3 ? CheckCircleIcon : GlobeIcon}
         />
         {canManage && (
           <StatCard

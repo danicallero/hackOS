@@ -1,6 +1,9 @@
 "use client";
 
-import { AlertCircleIcon, CheckIcon, CloudUploadIcon, LoaderCircleIcon } from "lucide-react";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
+import { CloudArrowUpIcon } from "@phosphor-icons/react/dist/csr/CloudArrowUp";
+import { SpinnerGapIcon } from "@phosphor-icons/react/dist/csr/SpinnerGap";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/csr/WarningCircle";
 import { useLocale } from "@/lib/i18n";
 import { type SaveState, saveStateLabel } from "@/lib/save-state";
 import { cn } from "@/lib/utils";
@@ -10,9 +13,9 @@ export function SaveStatus({ state, className }: { state: SaveState; className?:
   const { t } = useLocale();
   const Icon = {
     saved: CheckIcon,
-    saving: LoaderCircleIcon,
-    unsaved: CloudUploadIcon,
-    error: AlertCircleIcon,
+    saving: SpinnerGapIcon,
+    unsaved: CloudArrowUpIcon,
+    error: WarningCircleIcon,
   }[state];
   return (
     <span

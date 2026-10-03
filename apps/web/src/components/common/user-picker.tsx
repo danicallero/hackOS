@@ -5,7 +5,8 @@
 // — callers supply the search function so this works against /api/users,
 // /api/projects/member-candidates, or any other user-search endpoint.
 
-import { CheckIcon, ChevronsUpDownIcon } from "lucide-react";
+import { CaretUpDownIcon } from "@phosphor-icons/react/dist/csr/CaretUpDown";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -184,10 +185,7 @@ export function UserPicker({
           <span className={cn("flex-1 truncate text-left", !label && "text-muted-foreground")}>
             {label ?? placeholder ?? t("selectUserPlaceholder")}
           </span>
-          <ChevronsUpDownIcon
-            aria-hidden="true"
-            className="text-muted-foreground size-4 shrink-0"
-          />
+          <CaretUpDownIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
         </Button>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal {...portalProps}>{content}</PopoverPrimitive.Portal>

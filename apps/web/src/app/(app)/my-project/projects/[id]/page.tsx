@@ -1,6 +1,7 @@
 "use client";
 import { EVENTS } from "@hackos/shared/events";
-import { FolderGitIcon, UserPlusIcon } from "lucide-react";
+import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
+import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -59,7 +60,10 @@ export default function MyProjectDetailPage() {
       setChallenges(catalogue.items);
       setGroup(planned.groups.find((item) => item.linked_repo_id === Number(id)) ?? null);
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
+        t("projectLabel"),
+      );
       setLoadError(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
     } finally {
       setLoading(false);
@@ -81,7 +85,7 @@ export default function MyProjectDetailPage() {
       </div>
     );
   if (loadError) return <ContextualError message={loadError} onRetry={load} />;
-  if (!project) return <EmptyState icon={FolderGitIcon} title={t("projectNotFoundTitle")} />;
+  if (!project) return <EmptyState icon={FolderSimpleIcon} title={t("projectNotFoundTitle")} />;
   return (
     <div className="space-y-6">
       <PageHeader
@@ -240,7 +244,10 @@ function AddChallenge({
       setSelected("");
       await onAdded();
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("couldNotSaveProject"),
+        t("addChallengeLabel"),
+      );
     } finally {
       setSaving(false);
     }
@@ -298,10 +305,14 @@ function InviteMember({
     } catch (error) {
       if (error instanceof ApiError && (error.status === 404 || error.status === 403)) {
         showErrorToast(error, t("couldNotInvite"), {
+          compactTitle: t("toastSendInvite"),
           description: t("inviteAcceptedParticipantRequired"),
         });
       } else {
-        toast.error(error instanceof ApiError ? error.message : t("couldNotSendInvite"));
+        toast.error(
+          error instanceof ApiError ? error.message : t("couldNotSendInvite"),
+          t("toastSendInvite"),
+        );
       }
     } finally {
       setSaving(false);
@@ -311,7 +322,7 @@ function InviteMember({
     <SidePanelEditor
       trigger={
         <Button size="sm" variant="outline">
-          <UserPlusIcon className="size-4" />
+          <UserPlusIcon aria-hidden="true" className="size-4" />
           {t("inviteMemberCta")}
         </Button>
       }

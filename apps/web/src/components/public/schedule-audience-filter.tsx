@@ -1,6 +1,6 @@
 "use client";
 
-import { FilterIcon } from "lucide-react";
+import { FunnelIcon } from "@phosphor-icons/react/dist/csr/Funnel";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -10,7 +10,7 @@ import type { PublicScheduleItem, ScheduleAudience } from "@/lib/logistics";
 
 /**
  * The general schedule viewer's own audience filter (H59 follow-up), distinct
- * from the Manage Schedule table's `AudienceFilterPopover` (schedule/
+ * from the Manage Schedule table's `ScheduleFilterMenu` (schedule/
  * schedule-dialogs.tsx), which filters an *editor's* view while managing
  * every item including drafts. This one narrows what a viewer already
  * received from /api/public/activities — the API only ever sends items a
@@ -86,7 +86,7 @@ export function ScheduleAudienceFilterPopover({
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm">
-          <FilterIcon className="size-4" />
+          <FunnelIcon aria-hidden="true" className="size-4" />
           {t("audienceFilterAction")}
           {selected.size > 0 && (
             <span className="bg-primary text-primary-foreground ml-0.5 flex size-4 items-center justify-center rounded-full text-[10px]">

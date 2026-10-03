@@ -169,3 +169,23 @@ describe("offline scanner contract", () => {
     expect(activityDelete.method).toBe("DELETE");
   });
 });
+
+it("preserves a ticket credential and idempotency key for activity replay", () => {
+  const request = requestForPendingScan(
+    pending({
+      kind: "activity",
+      activityId: 7,
+      ticketToken: "TICKET",
+      allowRepeat: false,
+      scannedAt: "2026-10-03T10:00:00Z",
+    }),
+  );
+  expect(request.path).toBe("/api/activities/7/scan");
+  expect(request.body).toEqual({
+    badgeId: undefined,
+    ticketToken: "TICKET",
+    allowRepeat: false,
+    scannedAt: "2026-10-03T10:00:00Z",
+  });
+  expect(request.headers["idempotency-key"]).toBe("stable-device-id");
+});

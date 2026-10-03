@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowLeftIcon, CalendarDaysIcon } from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import Link from "next/link";
 import { ActionGroup } from "@/components/common/action-group";
 import { Brand } from "@/components/common/brand";
@@ -34,7 +35,7 @@ export default function PublicSchedulePage() {
             <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
               <div className="flex min-w-0 items-start gap-3">
                 <div className="bg-primary/10 text-primary shrink-0 rounded-lg p-2.5">
-                  <CalendarDaysIcon className="size-5" aria-hidden="true" />
+                  <CalendarDotsIcon className="size-5" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
                   <h1 className="text-balance text-3xl font-semibold">{t("publicSchedule")}</h1>

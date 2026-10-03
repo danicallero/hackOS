@@ -228,11 +228,16 @@ export const scannerSnapshotResponse = z.object({
   ),
 });
 
-export const activityScanBody = z.object({
-  badgeId: z.string().min(1),
-  allowRepeat: z.boolean().default(false),
-  scannedAt: z.coerce.date().optional(),
-});
+export const activityScanBody = z
+  .object({
+    badgeId: z.string().min(1).optional(),
+    ticketToken: z.string().min(1).optional(),
+    allowRepeat: z.boolean().default(false),
+    scannedAt: z.coerce.date().optional(),
+  })
+  .refine((body) => (body.badgeId != null) !== (body.ticketToken != null), {
+    message: "Provide either badgeId or ticketToken",
+  });
 
 export const mealScanBatchBody = z.object({
   deviceId: z.string().min(1),

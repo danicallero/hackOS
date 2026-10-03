@@ -14,7 +14,6 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
 import { ROLE_FILTER_ALL_ICON } from "@/lib/role-filters";
-import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { findPersonByBadge, findPersonByTicket, listScannerPeople } from "@/lib/scanner-db";
 import {
   isAccreditationEligible,
@@ -42,9 +41,14 @@ export function GeneralScannerScreen() {
   const pathname = usePathname();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
-  const tabBarBottomInset = useRouterTabBarBottomInset();
   const glassAvailable = isRealLiquidGlassAvailable();
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!error) return;
+    const timeout = setTimeout(() => setError(null), 6000);
+    return () => clearTimeout(timeout);
+  }, [error]);
+
   const sync = useScannerSync();
   const { me } = useMeContext();
   const [people, setPeople] = useState<ScannerPerson[]>([]);
@@ -215,7 +219,7 @@ export function GeneralScannerScreen() {
         />
       </View>
       <View
-        pointerEvents="none"
+        pointerEvents="box-none"
         style={{
           left: 0,
           position: "absolute",
@@ -223,42 +227,58 @@ export function GeneralScannerScreen() {
           top: insets.top + 56,
         }}
       >
-        <ScannerGroupStatistics stats={stats} />
-      </View>
-      {error ? (
-        <GlassView
-          colorScheme="dark"
-          glassEffectStyle="regular"
-          style={{
-            borderRadius: 14,
-            bottom: tabBarBottomInset + 26,
-            left: 16,
-            minHeight: 60,
-            overflow: "hidden",
-            position: "absolute",
-            right: 94,
-          }}
-        >
-          <Pressable
-            accessibilityLabel={error}
-            accessibilityHint={t("close")}
-            accessibilityRole="button"
-            onPress={() => setError(null)}
-            accessibilityLiveRegion="assertive"
-            style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 9, padding: 14 }}
+        <View pointerEvents="none">
+          <ScannerGroupStatistics stats={stats} />
+        </View>
+        {error ? (
+          <GlassView
+            colorScheme="dark"
+            glassEffectStyle="regular"
+            style={{
+              borderRadius: 14,
+              marginTop: 12,
+              marginHorizontal: 32,
+              minHeight: 60,
+              overflow: "hidden",
+            }}
           >
-            <SymbolView
-              accessible={false}
-              name="xmark.circle.fill"
-              tintColor={colors.destructive}
-              size={20}
-            />
-            <Text selectable style={{ color: "white", flex: 1, fontSize: 16, fontWeight: "700" }}>
-              {error}
-            </Text>
-          </Pressable>
-        </GlassView>
-      ) : null}
+            <Pressable
+              accessibilityLabel={error}
+              accessibilityHint={t("close")}
+              accessibilityRole="button"
+              onPress={() => setError(null)}
+              accessibilityLiveRegion="assertive"
+              style={{
+                minHeight: 60,
+                justifyContent: "center",
+                alignItems: "center",
+                flexDirection: "row",
+                gap: 9,
+                padding: 14,
+              }}
+            >
+              <SymbolView
+                accessible={false}
+                name="xmark.circle.fill"
+                tintColor={colors.destructive}
+                size={20}
+              />
+              <Text
+                selectable
+                style={{
+                  color: "white",
+                  flexShrink: 1,
+                  fontSize: 14,
+                  fontWeight: "600",
+                  textAlign: "center",
+                }}
+              >
+                {error}
+              </Text>
+            </Pressable>
+          </GlassView>
+        ) : null}
+      </View>
     </View>
   );
 }

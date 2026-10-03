@@ -6,15 +6,13 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import {
-  ChevronDownIcon,
-  DoorOpenIcon,
-  DownloadIcon,
-  LockIcon,
-  PauseIcon,
-  PlayIcon,
-  XIcon,
-} from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
+import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
+import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -75,15 +73,10 @@ function showQueueError(t: Translate, err: unknown, fallbackTitle: string) {
     t("couldNotCallTeam"),
     t("teamCallBlockedDescription"),
   );
-  toast.error(
-    copy.title,
-    copy.description
-      ? {
-          description: copy.description,
-          ...(copy.isBusyTeam ? { autopilot: { expand: 0, collapse: 0 } } : {}),
-        }
-      : undefined,
-  );
+  toast.error(copy.description ?? copy.title, {
+    compactTitle: t("judging"),
+    ...(copy.isBusyTeam ? { autopilot: { expand: 0, collapse: 0 } } : {}),
+  });
   return copy.message;
 }
 
@@ -214,7 +207,7 @@ export default function QueuePage() {
       setActionError(null);
       try {
         await action();
-        toast.success(success);
+        toast.success(success, { compactTitle: t("judging") });
         await refreshLive();
       } catch (err) {
         showQueueError(t, err, t("queueActionFailed"));
@@ -332,7 +325,7 @@ export default function QueuePage() {
           <div className="min-w-44 flex-[1.2] space-y-2">
             <p className="text-sm font-medium">{t("challengeLabel")}</p>
             <div className="border-input bg-muted/40 text-muted-foreground flex h-[var(--control-height-default)] w-full min-w-0 items-center gap-2 rounded-control border px-3 text-sm">
-              <LockIcon className="size-3.5 shrink-0" />
+              <LockIcon aria-hidden="true" className="size-3.5 shrink-0" />
               <span className="text-foreground truncate font-medium">{challengeLabel}</span>
             </div>
           </div>
@@ -350,7 +343,7 @@ export default function QueuePage() {
                   )
                 }
               >
-                <PlayIcon className="size-4" />
+                <PlayIcon aria-hidden="true" className="size-4" />
                 {t("resume")}
               </Button>
             ) : (
@@ -373,7 +366,7 @@ export default function QueuePage() {
                     variant="outline"
                     disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
                   >
-                    <PauseIcon className="size-4" />
+                    <PauseIcon aria-hidden="true" className="size-4" />
                     {t("pause")}
                   </Button>
                 }
@@ -384,22 +377,22 @@ export default function QueuePage() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" disabled={!effectiveChallengeId}>
-                    <DownloadIcon className="size-4" />
+                    <DownloadSimpleIcon aria-hidden="true" className="size-4" />
                     {t("exportData")}
-                    <ChevronDownIcon className="size-4" />
+                    <CaretDownIcon aria-hidden="true" className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 {effectiveChallengeId && (
                   <DropdownMenuContent align="end" className="w-44">
                     <DropdownMenuItem asChild>
                       <a href={exportHref(exportUrls(effectiveChallengeId).queue)}>
-                        <DownloadIcon className="size-4" />
+                        <DownloadSimpleIcon aria-hidden="true" className="size-4" />
                         {t("queueExportLabel")}
                       </a>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <a href={exportHref(exportUrls(effectiveChallengeId).evaluations)}>
-                        <DownloadIcon className="size-4" />
+                        <DownloadSimpleIcon aria-hidden="true" className="size-4" />
                         {t("evaluationsExport")}
                       </a>
                     </DropdownMenuItem>
@@ -423,7 +416,7 @@ export default function QueuePage() {
             onClick={() => setActionError(null)}
             className="shrink-0 opacity-70 transition-opacity hover:opacity-100"
           >
-            <XIcon className="size-4" />
+            <XIcon aria-hidden="true" className="size-4" />
           </button>
         </div>
       )}

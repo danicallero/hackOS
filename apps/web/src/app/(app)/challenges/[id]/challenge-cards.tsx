@@ -2,7 +2,9 @@
 
 import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { HistoryIcon, Trash2Icon, TrophyIcon } from "lucide-react";
+import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ClockCounterClockwise";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -172,7 +174,7 @@ export function EditCard({
     const canEditGeneral = canAdmin || challenge.visibility !== "visible";
     const title = titleI18n.en.trim();
     if (!title) {
-      toast.error(t("englishTitleRequired"));
+      toast.error(t("englishTitleRequired"), t("toastSaveChallenge"));
       return;
     }
     const descriptionEn = descriptionI18n.en.trim();
@@ -212,10 +214,13 @@ export function EditCard({
           : {}),
       });
       await onSaved();
-      toast.success(t("challengeUpdated"));
+      toast.success(t("challengeUpdated"), { compactTitle: t("toastSaveChallenge") });
     } catch (err) {
       setSaveError(true);
-      toast.error(err instanceof Error ? err.message : t("checkBuilderFields"));
+      toast.error(
+        err instanceof Error ? err.message : t("checkBuilderFields"),
+        t("toastSaveChallenge"),
+      );
     }
   }
 
@@ -459,11 +464,14 @@ export function EditCard({
                       setDeleting(true);
                       try {
                         await api.delete(`/api/challenges/${challenge.id}`);
-                        toast.success(t("challengeDeleted"));
+                        toast.success(t("challengeDeleted"), {
+                          compactTitle: t("deleteChallenge"),
+                        });
                         router.push("/challenges");
                       } catch (err) {
                         toast.error(
                           err instanceof ApiError ? err.message : t("couldNotDeleteChallenge"),
+                          t("deleteChallenge"),
                         );
                       } finally {
                         setDeleting(false);
@@ -476,7 +484,7 @@ export function EditCard({
           </TabsContent>
 
           <TabsContent value="history" className="pt-4">
-            <SectionCard icon={HistoryIcon} title={t("versionHistoryTitle")}>
+            <SectionCard icon={ClockCounterClockwiseIcon} title={t("versionHistoryTitle")}>
               <VersionHistory challengeId={challenge.id} />
             </SectionCard>
           </TabsContent>
@@ -527,9 +535,13 @@ function BulkEnrollmentCard({ challengeId }: { challengeId: number }) {
         kind === "add"
           ? t("bulkAddResult", { added: result.added ?? 0, total: result.total })
           : t("bulkRemoveResult", { removed: result.removed ?? 0, total: result.total }),
+        { compactTitle: t("toastChallengeEntries") },
       );
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("bulkActionFailed"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("bulkActionFailed"),
+        t("toastChallengeEntries"),
+      );
     } finally {
       setBusy(null);
       setConfirming(null);
@@ -628,7 +640,10 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
       setWinners(list);
       setEligible(repos);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadWinners"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLoadWinners"),
+        t("winnersTabLabel"),
+      );
     } finally {
       setLoading(false);
     }
@@ -650,11 +665,14 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
     setBusy(true);
     try {
       await api.put(`/api/challenges/${challengeId}/winners/${rank}`, { repoId });
-      toast.success(t("winnerSaved"));
+      toast.success(t("winnerSaved"), { compactTitle: t("toastAddWinner") });
       setNewRepoId("");
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveWinner"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveWinner"),
+        t("toastAddWinner"),
+      );
     } finally {
       setBusy(false);
     }
@@ -664,10 +682,13 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
     setBusy(true);
     try {
       await api.delete(`/api/challenges/${challengeId}/winners/${rank}`);
-      toast.success(t("winnerRemoved"));
+      toast.success(t("winnerRemoved"), { compactTitle: t("toastRemoveWinner") });
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveWinner"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveWinner"),
+        t("toastRemoveWinner"),
+      );
     } finally {
       setBusy(false);
     }
@@ -701,7 +722,7 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
                     disabled={busy}
                     onClick={() => removeWinner(winner.rank)}
                   >
-                    <Trash2Icon className="size-4" />
+                    <TrashIcon aria-hidden="true" className="size-4" />
                     {t("remove")}
                   </Button>
                 </li>

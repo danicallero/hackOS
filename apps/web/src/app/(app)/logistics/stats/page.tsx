@@ -2,16 +2,14 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import {
-  ActivityIcon,
-  BadgeCheckIcon,
-  DownloadIcon,
-  LayoutDashboardIcon,
-  RefreshCwIcon,
-  SoupIcon,
-  TrophyIcon,
-  UsersIcon,
-} from "lucide-react";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowsClockwise";
+import { BowlFoodIcon } from "@phosphor-icons/react/dist/csr/BowlFood";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { PulseIcon } from "@phosphor-icons/react/dist/csr/Pulse";
+import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
+import { SquaresFourIcon } from "@phosphor-icons/react/dist/csr/SquaresFour";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -316,7 +314,7 @@ function StatisticsToolbar({
           aria-pressed={editMode}
           onClick={() => onEditModeChange(!editMode)}
         >
-          <LayoutDashboardIcon className="size-4" aria-hidden="true" />
+          <SquaresFourIcon className="size-4" aria-hidden="true" />
           {editMode ? t("finishCustomizePanel") : t("customizePanel")}
         </Button>
       )}
@@ -415,7 +413,7 @@ function DuringPanel({ stats }: { stats: LiveStatsState }) {
         <StatCard
           label={t("accredited")}
           value={data?.accreditedCount ?? "—"}
-          icon={BadgeCheckIcon}
+          icon={SealCheckIcon}
           hint={t(FRESHNESS_LABEL_KEYS[freshness])}
         />
         <StatCard
@@ -427,18 +425,18 @@ function DuringPanel({ stats }: { stats: LiveStatsState }) {
         <StatCard
           label={t("mealsServed")}
           value={data ? data.meals.reduce((sum, meal) => sum + meal.served, 0) : "—"}
-          icon={SoupIcon}
+          icon={BowlFoodIcon}
           hint={t(FRESHNESS_LABEL_KEYS[freshness])}
         />
         <StatCard
           label={t("activityScans")}
           value={data ? data.activities.reduce((sum, activity) => sum + activity.scans, 0) : "—"}
-          icon={ActivityIcon}
+          icon={PulseIcon}
           hint={t(FRESHNESS_LABEL_KEYS[freshness])}
         />
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
-        <SectionCard title={t("meals")} icon={SoupIcon} state={<Freshness kind={freshness} />}>
+        <SectionCard title={t("meals")} icon={BowlFoodIcon} state={<Freshness kind={freshness} />}>
           <DataTable
             columns={mealColumns}
             data={data?.meals ?? []}
@@ -449,12 +447,12 @@ function DuringPanel({ stats }: { stats: LiveStatsState }) {
                 ? { message: errorMessage(stats.error, t("couldNotLoadStatistics")) }
                 : undefined
             }
-            empty={{ icon: SoupIcon, title: t("noMealScansYet") }}
+            empty={{ icon: BowlFoodIcon, title: t("noMealScansYet") }}
           />
         </SectionCard>
         <SectionCard
           title={t("registrableActivities")}
-          icon={ActivityIcon}
+          icon={PulseIcon}
           state={<Freshness kind={freshness} />}
         >
           <DataTable
@@ -467,7 +465,7 @@ function DuringPanel({ stats }: { stats: LiveStatsState }) {
                 ? { message: errorMessage(stats.error, t("couldNotLoadStatistics")) }
                 : undefined
             }
-            empty={{ icon: ActivityIcon, title: t("noActivityScansYet") }}
+            empty={{ icon: PulseIcon, title: t("noActivityScansYet") }}
           />
         </SectionCard>
       </div>
@@ -544,12 +542,12 @@ function StaffRankingSection() {
       action={
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
-            <RefreshCwIcon className="size-4" aria-hidden="true" />
+            <ArrowsClockwiseIcon className="size-4" aria-hidden="true" />
             {t("refresh")}
           </Button>
           <Button asChild variant="outline">
             <a href={`${API_URL}/api/exports/staff-scan-stats.csv`}>
-              <DownloadIcon className="size-4" aria-hidden="true" />
+              <DownloadSimpleIcon className="size-4" aria-hidden="true" />
               {t("exportStaffScanStats")}
             </a>
           </Button>
@@ -609,7 +607,7 @@ function AfterPanel({
         action={
           <Button asChild variant="outline">
             <a href={`${API_URL}/api/exports/attendance.csv`}>
-              <DownloadIcon className="size-4" aria-hidden="true" />
+              <DownloadSimpleIcon className="size-4" aria-hidden="true" />
               {t("exportAttendance")}
             </a>
           </Button>

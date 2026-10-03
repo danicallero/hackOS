@@ -1,6 +1,10 @@
 "use client";
 
-import { BanIcon, CopyIcon, LinkIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
+import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
+import { LinkIcon } from "@phosphor-icons/react/dist/csr/Link";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { ProhibitIcon } from "@phosphor-icons/react/dist/csr/Prohibit";
 import { useCallback, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -150,10 +154,13 @@ export function UserInviteLinksSection({
     try {
       await api.post(`/api/invites/user-links/${link.id}/withdraw`);
       setWithdrawLinkId(null);
-      toast.success(t("linkWithdrawn"));
+      toast.success(t("linkWithdrawn"), { compactTitle: t("toastWithdrawInvite") });
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotWithdrawLink"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotWithdrawLink"),
+        t("toastWithdrawInvite"),
+      );
     } finally {
       setBusy((current) => {
         const next = new Set(current);
@@ -197,7 +204,7 @@ export function UserInviteLinksSection({
       });
       setCreateOpen(false);
       resetForm();
-      toast.success(t("userInviteLinkCreated"));
+      toast.success(t("userInviteLinkCreated"), { compactTitle: t("toastCreateInvite") });
       await onChanged();
     } catch (err) {
       setCreateError(err instanceof ApiError ? err.message : t("couldNotCreateUserInviteLink"));
@@ -478,7 +485,7 @@ export function UserInviteLinksSection({
                               label={t("withdrawLink")}
                               title={t("withdrawLink")}
                             >
-                              <BanIcon className="size-4" aria-hidden="true" />
+                              <ProhibitIcon className="size-4" aria-hidden="true" />
                             </IconButton>
                           }
                           open={withdrawLinkId === link.id}
@@ -554,7 +561,7 @@ export function UserInviteLinksSection({
                       size="icon-sm"
                       label={t("openMenuAria")}
                     >
-                      <MoreHorizontalIcon className="size-4" aria-hidden="true" />
+                      <DotsThreeIcon className="size-4" aria-hidden="true" />
                     </IconButton>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
@@ -562,7 +569,7 @@ export function UserInviteLinksSection({
                       onClick={() => setWithdrawLinkId(link.id)}
                       disabled={busy.has(`${link.id}:withdraw`)}
                     >
-                      <BanIcon className="size-4" />
+                      <ProhibitIcon aria-hidden="true" className="size-4" />
                       {t("withdrawLink")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>

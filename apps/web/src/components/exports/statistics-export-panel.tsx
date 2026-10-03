@@ -1,6 +1,6 @@
 "use client";
 
-import { DownloadIcon } from "lucide-react";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -66,7 +66,7 @@ export function StatisticsExportPanel({ trigger }: { trigger?: ReactNode }) {
       trigger={
         trigger ?? (
           <Button variant="outline">
-            <DownloadIcon aria-hidden="true" />
+            <DownloadSimpleIcon aria-hidden="true" />
             {t("export")}
           </Button>
         )
@@ -76,13 +76,13 @@ export function StatisticsExportPanel({ trigger }: { trigger?: ReactNode }) {
         selectedScopes.length > 0 ? (
           <Button asChild disabled={loading}>
             <a href={href}>
-              <DownloadIcon aria-hidden="true" />
+              <DownloadSimpleIcon aria-hidden="true" />
               {t("export")}
             </a>
           </Button>
         ) : (
           <Button disabled>
-            <DownloadIcon aria-hidden="true" />
+            <DownloadSimpleIcon aria-hidden="true" />
             {t("export")}
           </Button>
         )

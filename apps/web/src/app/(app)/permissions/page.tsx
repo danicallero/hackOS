@@ -2,14 +2,12 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  KeyRoundIcon,
-  PlusIcon,
-  ShieldCheckIcon,
-  Trash2Icon,
-  UndoIcon,
-  ZapIcon,
-} from "lucide-react";
+import { ArrowUUpLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowUUpLeft";
+import { KeyIcon } from "@phosphor-icons/react/dist/csr/Key";
+import { LightningIcon } from "@phosphor-icons/react/dist/csr/Lightning";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { ShieldCheckIcon } from "@phosphor-icons/react/dist/csr/ShieldCheck";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -63,29 +61,10 @@ import { permissionTemplateName } from "./helpers";
 import { DrilldownBackButton, RoleEditor } from "./role-editor";
 import { RoleList } from "./role-list";
 
-// H8: admins manage a hierarchical, position-ordered multi-role model on a single
-// master-detail page — the left column lists every role on one reorderable
-// hierarchy, the right column edits whichever role is selected (persisted as
-// ?role=<id> for deep links, e.g. from a user's permissions tab). This
-// replaced a separate full-page /permissions/[roleId] route per the design
-// review: selecting a role should feel like flipping a tab, not navigating
-// away from the list.
-//
-// Below the `md` breakpoint (`useIsMobile`, this app's existing mobile/desktop
-// split convention), the same data/state instead drives a drill-down
-// presentation — one screen at a time with a back button — instead of the
-// always-visible two-pane split. Desktop is unchanged.
-//
-// role_grant_rules admin (H8, H43-H46) originally lived here as a standalone
-// "Automation" tab, an equal-weight sibling of "Roles" showing a flat,
-// ungrouped, id-referencing list of every rule in the system. A later UX
-// pass found that bolted-on: a rule is inherently about ONE role, so
-// create/edit/delete now lives on that role's own "Grant rules" tab
-// (role-editor.tsx), scoped via `GET /api/role-grant-rules?roleId=`. What a
-// per-role view genuinely can't answer — "show me every automatic rule in
-// the system" — survives as a lightweight, read-only, filterable overview
-// (`grant-rules-overview.tsx`), opened from a plain button here rather than
-// competing as a second top-level tab.
+// H8: one role hierarchy with the selected role persisted in ?role=<id>.
+// Desktop uses two panes; below md, the same state drives a mobile drill-down.
+// Grant rules belong to their role's editor (H43-H46); the cross-role overview
+// is read-only and opens that role's Grant Rules tab for editing.
 
 const createSchema = (t: Translate) =>
   z.object({
@@ -176,14 +155,8 @@ export default function PermissionsPage() {
     },
   });
 
-  // `silent`: a background re-sync (e.g. the live SSE refresh below, which
-  // also fires for the admin's OWN mutations — every role write broadcasts
-  // DOMAIN_CHANGED, see roles.ts) must NOT toggle `loading`. Doing so used to
-  // swap the whole left column from <RoleList> to a bare <Spinner/> and back
-  // a couple hundred ms after every mutation (reorder, save, etc.), tearing
-  // down and rebuilding RoleList's DndContext for a visible flicker even
-  // though the mutation itself had already updated state optimistically.
-  // `loading` now only gates the true first paint.
+  // H8: SSE also echoes our own mutations. Silent refreshes preserve RoleList
+  // and its DndContext; only the initial load shows the spinner.
   const load = useCallback(
     async (opts?: { silent?: boolean; force?: boolean }) => {
       if (!opts?.silent) setLoading(true);
@@ -222,7 +195,10 @@ export default function PermissionsPage() {
       const all = await api.get<RoleSummary[]>("/api/roles", { query: { includeDeleted: true } });
       setDeletedRoles(all.filter((r) => r.deletedAt !== null));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadRoles"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLoadRoles"),
+        t("announcementRolesLabel"),
+      );
     } finally {
       setTrashLoading(false);
     }
@@ -239,11 +215,14 @@ export default function PermissionsPage() {
     try {
       await api.post<RoleDetail>(`/api/roles/${roleId}/restore`, {});
       invalidatePermissionsResources();
-      toast.success(t("roleRestored"));
+      toast.success(t("roleRestored"), { compactTitle: t("toastRestoreRole") });
       setDeletedRoles((prev) => prev.filter((r) => r.id !== roleId));
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRestoreRole"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRestoreRole"),
+        t("toastRestoreRole"),
+      );
     } finally {
       setRestoringId(null);
     }
@@ -279,7 +258,7 @@ export default function PermissionsPage() {
         templateKey: template?.key,
       });
       invalidatePermissionsResources();
-      toast.success(t("roleCreated"));
+      toast.success(t("roleCreated"), { compactTitle: t("createRole") });
       setCreateOpen(false);
       form.reset({
         name: "",
@@ -291,7 +270,7 @@ export default function PermissionsPage() {
       setRoles((prev) => [...prev, role]);
       selectRole(role.id);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateRole"));
+      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateRole"), t("createRole"));
     }
   }
 
@@ -306,7 +285,10 @@ export default function PermissionsPage() {
       applyRole(updated);
     } catch (err) {
       setRoles(before);
-      toast.error(err instanceof ApiError ? err.message : t("couldNotMoveRole"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotMoveRole"),
+        t("toastMoveRole"),
+      );
     }
   }
 
@@ -318,9 +300,12 @@ export default function PermissionsPage() {
       const r = await api.patch<RoleDetail>(`/api/roles/${roleId}`, values);
       invalidatePermissionsResources();
       applyRole(r);
-      toast.success(t("roleUpdated"));
+      toast.success(t("roleUpdated"), { compactTitle: t("toastSaveRole") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveRole"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveRole"),
+        t("toastSaveRole"),
+      );
     }
   }
 
@@ -332,9 +317,12 @@ export default function PermissionsPage() {
       const r = await api.put<RoleDetail>(`/api/roles/${roleId}/capabilities`, { capabilities });
       invalidatePermissionsResources();
       applyRole(r);
-      toast.success(t("capabilitiesSaved"));
+      toast.success(t("capabilitiesSaved"), { compactTitle: t("toastSavePermissions") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveCapabilities"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveCapabilities"),
+        t("toastSavePermissions"),
+      );
     }
   }
 
@@ -344,9 +332,12 @@ export default function PermissionsPage() {
       invalidatePermissionsResources();
       if (user) mergeUsers([user]);
       applyRole(r);
-      toast.success(t("memberAdded"));
+      toast.success(t("memberAdded"), { compactTitle: t("toastAssignRole") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddMemberRole"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotAddMemberRole"),
+        t("toastAssignRole"),
+      );
     }
   }
 
@@ -356,7 +347,10 @@ export default function PermissionsPage() {
       invalidatePermissionsResources();
       applyRole(r);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveMemberRole"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveMemberRole"),
+        t("toastRemoveRole"),
+      );
     }
   }
 
@@ -384,6 +378,7 @@ export default function PermissionsPage() {
         succeededCount === 1
           ? t("membersRemovedOne", { count: succeededCount })
           : t("membersRemovedOther", { count: succeededCount }),
+        { compactTitle: t("toastRemoveRole") },
       );
     }
     if (failedCount > 0) {
@@ -391,6 +386,7 @@ export default function PermissionsPage() {
         failedCount === 1
           ? t("someMembersFailedToRemoveOne", { count: failedCount })
           : t("someMembersFailedToRemoveOther", { count: failedCount }),
+        t("toastRemoveRole"),
       );
     }
   }
@@ -400,9 +396,12 @@ export default function PermissionsPage() {
       const r = await api.post<RoleDetail>(`/api/roles/${roleId}/reset-to-default`, {});
       invalidatePermissionsResources();
       applyRole(r);
-      toast.success(t("resetToDefaultDone"));
+      toast.success(t("resetToDefaultDone"), { compactTitle: t("toastResetRole") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotResetRole"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotResetRole"),
+        t("toastResetRole"),
+      );
     }
   }
 
@@ -410,11 +409,11 @@ export default function PermissionsPage() {
     try {
       await api.delete<{ deleted: true }>(`/api/roles/${roleId}`);
       invalidatePermissionsResources();
-      toast.success(t("roleDeleted"));
+      toast.success(t("roleDeleted"), { compactTitle: t("deleteRole") });
       setRoles((prev) => prev.filter((r) => r.id !== roleId));
       selectRole(null);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteRole"));
+      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteRole"), t("deleteRole"));
     }
   }
 
@@ -437,7 +436,7 @@ export default function PermissionsPage() {
   const showHeader = !isMobile || (!showTrash && selectedRole === null);
 
   const trashPanel = (
-    <SectionCard icon={Trash2Icon} title={t("trashTitle")} bodyClassName="p-0">
+    <SectionCard icon={TrashIcon} title={t("trashTitle")} bodyClassName="p-0">
       {trashLoading ? (
         <p className="text-muted-foreground p-6 text-sm">…</p>
       ) : deletedRoles.length === 0 ? (
@@ -453,7 +452,7 @@ export default function PermissionsPage() {
                 disabled={restoringId === r.id}
                 onClick={() => restoreRole(r.id)}
               >
-                <UndoIcon /> {t("restoreRole")}
+                <ArrowUUpLeftIcon aria-hidden="true" /> {t("restoreRole")}
               </Button>
             </li>
           ))}
@@ -490,13 +489,13 @@ export default function PermissionsPage() {
   const roleActions = (
     <>
       <Button size="sm" variant="outline" onClick={() => setAllRulesOpen(true)}>
-        <ZapIcon /> {t("allGrantRulesButton")}
+        <LightningIcon aria-hidden="true" /> {t("allGrantRulesButton")}
       </Button>
       <Button size="sm" variant="outline" onClick={toggleTrash}>
-        <Trash2Icon /> {t("trashTitle")}
+        <TrashIcon aria-hidden="true" /> {t("trashTitle")}
       </Button>
       <Button size="sm" onClick={() => setCreateOpen(true)}>
-        <PlusIcon /> {t("newRole")}
+        <PlusIcon aria-hidden="true" /> {t("newRole")}
       </Button>
     </>
   );
@@ -575,7 +574,7 @@ export default function PermissionsPage() {
       <SidePanelEditor
         open={createOpen}
         onOpenChange={setCreateOpen}
-        icon={KeyRoundIcon}
+        icon={KeyIcon}
         title={t("newRole")}
         footer={
           <>

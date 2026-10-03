@@ -8,7 +8,9 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { assertVerifiedPrimaryEmail } from "../../lib/email-verification.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { translateEmail } from "../../lib/i18n.js";
 import { broadcast } from "../../lib/sse.js";
+import { getEventName, getEventTimezone } from "../event/service.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { applyRoleAssignmentRevokeRules } from "../identity/role-grants.js";
 import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
@@ -16,7 +18,7 @@ import { reconcileTicketAccess } from "../logistics/tickets.js";
 import { issueWalletAccessToken } from "../logistics/wallet-access.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 import { notify } from "../notifications/service.js";
-import type { EmailPayload } from "../notifications/templates.js";
+import { type EmailPayload, normalizeLanguage } from "../notifications/templates.js";
 import type { FormSection, TemplateField } from "./schemas.js";
 
 /**
@@ -427,22 +429,6 @@ const PRIVACY_NOTICE: Record<string, string> = {
 
 export function privacyNotice(language: string | null | undefined): string {
   return PRIVACY_NOTICE[language ?? "en"] ?? PRIVACY_NOTICE_EN;
-}
-
-// ── countdown formatting ──────────────────────────────────────────────────────
-
-function formatRemainingTime(expiresAt: Date): string {
-  const remainingMs = expiresAt.getTime() - Date.now();
-  if (remainingMs <= 0) return "";
-  const totalMinutes = Math.floor(remainingMs / 60_000);
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor((totalMinutes % 1440) / 60);
-  const minutes = totalMinutes % 60;
-  const parts: string[] = [];
-  if (days > 0) parts.push(`${days} ${days === 1 ? "day" : "days"}`);
-  if (hours > 0) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
-  if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? "minute" : "minutes"}`);
-  return parts.length > 0 ? `You have ${parts.join(", ")} to confirm.` : "";
 }
 
 // ── tokens / tickets / emails ─────────────────────────────────────────────────
@@ -1651,7 +1637,7 @@ async function enqueueDecisionEmailRow(
   decision: "accepted" | "rejected",
   confirmToken: string | null,
 ): Promise<void> {
-  const payload = decisionNotificationPayload(user, app, decision, confirmToken);
+  const payload = await decisionNotificationPayload(client, user, app, decision, confirmToken);
   await client.query(
     `INSERT INTO notification_outbox (user_id, category, channel, payload)
      VALUES ($1, 'application', 'email', $2::jsonb)`,
@@ -1677,24 +1663,48 @@ async function enqueueDecisionNotificationRows(
     userId,
     category: "application",
     channels: ["in_app", "email", "push"],
-    payload: decisionNotificationPayload(user, app, decision, confirmToken),
+    payload: await decisionNotificationPayload(client, user, app, decision, confirmToken),
   });
 }
 
-function decisionNotificationPayload(
+async function decisionNotificationPayload(
+  client: pg.PoolClient,
   user: UserComms,
   app: ApplicationRow,
   decision: "accepted" | "rejected",
   confirmToken: string | null,
-): EmailPayload {
-  const countdown =
-    decision === "accepted" && confirmToken
-      ? formatRemainingTime(new Date(Date.now() + app.confirmation_window_hours * 3_600_000))
-      : "";
-  const decisionDetails =
-    decision === "accepted" && confirmToken
-      ? `\n\nYou have been accepted. Please confirm your spot, or if you can't make it please let us know so we can give your spot to someone else:\n\n[Accept my spot](${config.WEB_URL}/applications/confirm?token=${confirmToken})\n[No, I can't make it](${config.WEB_URL}/applications/decline?token=${confirmToken})\n\n${countdown}\n\nAfter that time your spot will be automatically released.`
-      : "";
+): Promise<EmailPayload> {
+  const language = normalizeLanguage(user.language);
+  const eventName = await getEventName(client);
+  let decisionDetails = "";
+  let confirmationExpiresAt: string | undefined;
+  let confirmationTimeZone: string | undefined;
+  if (decision === "accepted" && confirmToken) {
+    const { rows } = await client.query<{ expires_at: Date }>(
+      "SELECT expires_at FROM email_verification_tokens WHERE token = $1 AND type = 'spot_confirmation'",
+      [confirmToken],
+    );
+    if (!rows[0]) throw new NotFoundError("Confirmation token not found");
+    confirmationExpiresAt = rows[0].expires_at.toISOString();
+    confirmationTimeZone = await getEventTimezone(client);
+    const deadline = new Intl.DateTimeFormat(language, {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone: confirmationTimeZone,
+      timeZoneName: "short",
+    }).format(rows[0].expires_at);
+    decisionDetails = translateEmail("mail.application.decision.confirmationDetails", language, {
+      confirmUrl: `${config.WEB_URL}/applications/confirm?token=${confirmToken}`,
+      declineUrl: `${config.WEB_URL}/applications/decline?token=${confirmToken}`,
+      deadlineNotice: translateEmail("mail.application.decision.confirmationDeadline", language, {
+        deadline,
+      }),
+    });
+  }
   return {
     template: "application.decision",
     recipient: user.email,
@@ -1702,8 +1712,11 @@ function decisionNotificationPayload(
     vars: {
       name: user.name ?? "",
       applicationName: app.name,
+      eventName,
       decision,
       decisionDetails,
+      confirmationExpiresAt,
+      confirmationTimeZone,
     },
   };
 }

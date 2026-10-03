@@ -6,7 +6,8 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ClipboardListIcon, PlusIcon } from "lucide-react";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApplicationExportPanel } from "@/components/applications/application-export-panel";
@@ -44,7 +45,7 @@ export default function ApplicationsPage() {
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadApplicationForms");
       setLoadError(message);
-      toast.error(message);
+      toast.error(message, t("workspaceApplications"));
     } finally {
       setLoading(false);
     }
@@ -128,7 +129,7 @@ export default function ApplicationsPage() {
           canManage ? (
             <Button asChild>
               <Link href="/applications/new">
-                <PlusIcon />
+                <PlusIcon aria-hidden="true" />
                 {t("newForm")}
               </Link>
             </Button>
@@ -153,7 +154,7 @@ export default function ApplicationsPage() {
         searchable={(f) => `${f.name} ${grantedRoleNameLabel(f.granted_role_name, t)}`}
         searchPlaceholder={t("searchFormsPlaceholder")}
         empty={{
-          icon: ClipboardListIcon,
+          icon: ClipboardTextIcon,
           title: t("noApplicationFormsYet"),
           description: canManage ? t("createFirstFormDesc") : t("formsWillAppear"),
           action: canManage ? (

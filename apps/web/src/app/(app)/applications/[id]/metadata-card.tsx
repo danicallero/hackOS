@@ -3,16 +3,14 @@
 // Form metadata editor (H11): trilingual name/description, window, limits.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  CalendarClockIcon,
-  ChevronDownIcon,
-  InfoIcon,
-  type LucideIcon,
-  SettingsIcon,
-  ShieldCheckIcon,
-  Trash2Icon,
-  TriangleAlertIcon,
-} from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { GearIcon } from "@phosphor-icons/react/dist/csr/Gear";
+import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
+import { ShieldCheckIcon } from "@phosphor-icons/react/dist/csr/ShieldCheck";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -65,7 +63,7 @@ function SettingsGroup({
   className,
   children,
 }: {
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   title: string;
   defaultOpen?: boolean;
   className?: string;
@@ -84,7 +82,7 @@ function SettingsGroup({
             <Icon aria-hidden="true" className="size-4" />
           </span>
           <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">{title}</span>
-          <ChevronDownIcon
+          <CaretDownIcon
             aria-hidden="true"
             className={cn(
               "size-4 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none",
@@ -181,10 +179,13 @@ export function MetadataCard({
       await onSaved();
       rhf.reset(values);
       setSaveState("saved");
-      toast.success(t("formUpdated"));
+      toast.success(t("formUpdated"), { compactTitle: t("toastSaveForm") });
     } catch (err) {
       setSaveState("error");
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveForm"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveForm"),
+        t("toastSaveForm"),
+      );
     }
   }
 
@@ -200,7 +201,7 @@ export function MetadataCard({
     <Form {...rhf}>
       <form onSubmit={rhf.handleSubmit(onSubmit)}>
         <SectionCard
-          icon={SettingsIcon}
+          icon={GearIcon}
           title={t("formSettings")}
           state={<SaveStatus state={currentSaveState} />}
           bodyClassName="p-4 sm:p-5"
@@ -251,7 +252,7 @@ export function MetadataCard({
             </SettingsGroup>
 
             <SettingsGroup
-              icon={CalendarClockIcon}
+              icon={CalendarDotsIcon}
               title={t("builderAvailability")}
               defaultOpen
               className="lg:col-span-2"
@@ -416,7 +417,7 @@ export function ApplicationDangerZone({ onDelete }: { onDelete: () => void }) {
   return (
     <SectionCard
       leading={
-        <TriangleAlertIcon aria-hidden="true" className="text-destructive mt-0.5 size-5 shrink-0" />
+        <WarningIcon aria-hidden="true" className="text-destructive mt-0.5 size-5 shrink-0" />
       }
       title={t("dangerZone")}
       className="border-destructive/30"
@@ -434,7 +435,7 @@ export function ApplicationDangerZone({ onDelete }: { onDelete: () => void }) {
           className="text-destructive sm:shrink-0"
           onClick={onDelete}
         >
-          <Trash2Icon aria-hidden="true" />
+          <TrashIcon aria-hidden="true" />
           {t("deleteApplication")}
         </Button>
       </div>

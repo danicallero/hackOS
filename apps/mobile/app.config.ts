@@ -34,6 +34,14 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
     plugins: [
       ...(config.plugins ?? []),
       "expo-font",
+      [
+        "react-native-nfc-manager",
+        {
+          nfcPermission:
+            "hackOS uses NFC to read participant badge serial numbers, link badges to participant accounts, and record check-in, meal collection, and activity attendance.",
+          includeNdefEntitlement: false,
+        },
+      ],
       ["expo-navigation-bar", { enforceContrast: false }],
       "expo-secure-store",
       "expo-status-bar",

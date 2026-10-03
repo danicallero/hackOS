@@ -19,7 +19,9 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ClipboardListIcon, LockIcon, UsersIcon } from "lucide-react";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
+import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -175,7 +177,7 @@ export default function ApplicationDetailPage() {
     return (
       <div className="space-y-6">
         <EmptyState
-          icon={ClipboardListIcon}
+          icon={ClipboardTextIcon}
           title={t("formNotFound")}
           description={errorMsg || t("formCouldNotBeLoaded")}
         />

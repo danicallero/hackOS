@@ -7,7 +7,10 @@
 
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { ACTIVITY_KINDS, isMealActivityKind } from "@hackos/shared/activity-kinds";
-import { CopyIcon, GripVerticalIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
+import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
+import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useCallback } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -85,7 +88,10 @@ export function ActivityRow({
     const next = withTimeOfDayAcrossMidnight(item.startsAt, item.endsAt, field, hhmm);
     if (!next.ok) {
       if (next.reason === "rolledWindowTooLong") {
-        toast.error(t("inlineTimeRollTooLong", { hours: MAX_INLINE_ROLLED_HOURS }));
+        toast.error(
+          t("inlineTimeRollTooLong", { hours: MAX_INLINE_ROLLED_HOURS }),
+          t("toastActivityTime"),
+        );
         return false;
       }
       return true;
@@ -99,7 +105,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityTime"),
+      );
       return false;
     }
   }
@@ -112,7 +121,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityLocation"),
+      );
       return false;
     }
   }
@@ -125,7 +137,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("saveNotes"),
+      );
       return false;
     }
   }
@@ -133,7 +148,7 @@ export function ActivityRow({
   async function saveType(next: string | null): Promise<boolean> {
     if (next === (item.type ?? null)) return true;
     if (isMealActivityKind(next) && !(item.audiences ?? []).includes("participant")) {
-      toast.error(t("mealNeedsParticipantAudience"));
+      toast.error(t("mealNeedsParticipantAudience"), t("toastActivityType"));
       return false;
     }
     try {
@@ -141,14 +156,17 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityType"),
+      );
       return false;
     }
   }
 
   async function saveAudiences(next: ScheduleAudience[]): Promise<boolean> {
     if (isMealActivityKind(item.type) && !next.includes("participant")) {
-      toast.error(t("mealNeedsParticipantAudience"));
+      toast.error(t("mealNeedsParticipantAudience"), t("toastActivityAudience"));
       return false;
     }
     const requiresScan = next.includes("participant") ? item.requiresScan === true : false;
@@ -160,7 +178,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityAudience"),
+      );
       return false;
     }
   }
@@ -171,7 +192,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityScanning"),
+      );
       return false;
     }
   }
@@ -183,7 +207,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityVisibility"),
+      );
       return false;
     }
   }
@@ -195,7 +222,10 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastPublishSchedule"),
+      );
       return false;
     }
   }
@@ -429,7 +459,7 @@ export function ActivityRow({
               {...attributes}
               {...listeners}
             >
-              <GripVerticalIcon className="size-4" aria-hidden="true" />
+              <DotsSixVerticalIcon className="size-4" aria-hidden="true" />
             </IconButton>
             <Checkbox
               checked={selected}
@@ -486,7 +516,7 @@ export function ActivityRow({
               className="text-destructive"
               onClick={onDelete}
             >
-              <Trash2Icon className="size-3.5" aria-hidden="true" />
+              <TrashIcon className="size-3.5" aria-hidden="true" />
             </IconButton>
           </div>
         </TableCell>

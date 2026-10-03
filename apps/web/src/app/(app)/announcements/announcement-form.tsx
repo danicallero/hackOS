@@ -1,6 +1,8 @@
 "use client";
 
-import { ChevronDownIcon, MegaphoneIcon, XIcon } from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { MultiSelect } from "@/components/common/multi-select";
@@ -162,7 +164,8 @@ export function AnnouncementFormModal({
         setIntolerances(dictionary.intolerances);
       })
       .catch(() => {
-        if (!cancelled) toast.error(t("couldNotLoadAnnouncementTargeting"));
+        if (!cancelled)
+          toast.error(t("couldNotLoadAnnouncementTargeting"), t("announcementTargetingLabel"));
       });
     return () => {
       cancelled = true;
@@ -204,7 +207,10 @@ export function AnnouncementFormModal({
         };
       });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotTranslate"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotTranslate"),
+        t("toastTranslate"),
+      );
     } finally {
       setTranslating(false);
     }
@@ -250,7 +256,7 @@ export function AnnouncementFormModal({
       const existing = new Set(values.recipientUserIds);
       return result.users.filter((u) => !existing.has(u.id));
     } catch {
-      toast.error(t("searchFailed"));
+      toast.error(t("searchFailed"), t("toastFindRecipients"));
       return [];
     }
   }
@@ -273,7 +279,7 @@ export function AnnouncementFormModal({
     const publishAt = values.publishAt ? fromDatetimeLocal(values.publishAt) : null;
     const expiresAt = values.expiresAt ? fromDatetimeLocal(values.expiresAt) : null;
     if ((values.publishAt && !publishAt) || (values.expiresAt && !expiresAt)) {
-      toast.error(t("enterValidDatesTimes"));
+      toast.error(t("enterValidDatesTimes"), t("toastAnnouncementDates"));
       return;
     }
     if (invalidWindow) {
@@ -324,7 +330,10 @@ export function AnnouncementFormModal({
         expiresAt: values.screenPlacement === "none" ? null : expiresAt,
       });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveAnnouncement"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveAnnouncement"),
+        t("publishAnnouncement"),
+      );
     } finally {
       setPending(false);
     }
@@ -398,7 +407,8 @@ export function AnnouncementFormModal({
                     className="justify-start px-0 text-sm font-medium"
                     aria-label={t("translationsAndSettings")}
                   >
-                    <ChevronDownIcon
+                    <CaretDownIcon
+                      aria-hidden="true"
                       className={cn(
                         "size-4 transition-transform",
                         translationsOpen && "rotate-180",
@@ -652,7 +662,7 @@ export function AnnouncementFormModal({
                               aria-label={t("remove")}
                               onClick={() => removeRecipient(user.id)}
                             >
-                              <XIcon className="size-4" />
+                              <XIcon aria-hidden="true" className="size-4" />
                             </Button>
                           </li>
                         ))}

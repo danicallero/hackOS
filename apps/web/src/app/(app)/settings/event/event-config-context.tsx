@@ -5,7 +5,7 @@
 // own PUT (the API accepts partial bodies — fields it omits are left
 // unchanged, so one category's save can never clobber another's edits).
 
-import type { LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { SectionCard } from "@/components/common/section-card";
@@ -82,14 +82,14 @@ export function useEventConfig(): EventConfigContextValue {
  * Keeps H48 schedule and H28 wallet settings actionable while their shared
  * event snapshot is loading or unavailable instead of rendering blank tabs.
  */
-export function EventConfigLoadState({ icon, title }: { icon: LucideIcon; title: string }) {
+export function EventConfigLoadState({ icon, title }: { icon: PhosphorIcon; title: string }) {
   const { t } = useLocale();
   const { status, error, retry } = useEventConfig();
 
   if (status === "ready") return null;
 
   return (
-    <SectionCard icon={icon} title={title}>
+    <SectionCard variant="plain" footerClassName="justify-start" icon={icon} title={title}>
       {status === "error" ? (
         <ContextualError message={error ?? t("couldNotLoadEventSettings")} onRetry={retry} />
       ) : (

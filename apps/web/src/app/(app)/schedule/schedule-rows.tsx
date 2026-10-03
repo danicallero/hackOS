@@ -1,7 +1,7 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
-import { PlusIcon } from "lucide-react";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -124,7 +124,7 @@ export function NewDayDropzoneRow({
         <span className="inline-flex flex-wrap items-center justify-center gap-2">
           {t("dropNewDayLabel")}
           <Button variant="ghost" size="sm" onClick={onOpen}>
-            <PlusIcon className="size-3" />
+            <PlusIcon aria-hidden="true" className="size-3" />
             {t("newDateAction")}
           </Button>
         </span>
@@ -151,7 +151,7 @@ export function InsertRowDivider({ colSpan, onInsert }: { colSpan: number; onIns
           className="absolute inset-x-0 top-1/2 flex h-[var(--control-height-tiny)] -translate-y-1/2 cursor-pointer items-center gap-1 px-3 opacity-0 transition-opacity group-hover/insert:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
         >
           <span className="bg-primary text-primary-foreground flex size-[var(--control-height-tiny)] shrink-0 items-center justify-center rounded-full">
-            <PlusIcon className="size-3" />
+            <PlusIcon aria-hidden="true" className="size-3" />
           </span>
           <span className="bg-primary/40 h-px flex-1" />
         </button>

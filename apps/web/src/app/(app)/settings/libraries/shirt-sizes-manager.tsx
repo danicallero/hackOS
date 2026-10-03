@@ -8,7 +8,7 @@
 // INTOLERANCES_MANAGE, same as the rest of this page).
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusIcon, XIcon } from "lucide-react";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
@@ -23,6 +23,7 @@ import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
 import { useCategorySaveState } from "../event/use-category-save-state";
+import { LibraryAddButton } from "./library-add-button";
 
 const NOOP_DIRTY_CHANGE = () => {};
 
@@ -76,7 +77,10 @@ export function ShirtSizesManager() {
       setSaveState("saved");
     } catch (err) {
       setSaveState("error");
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
+        t("toastShirtSizes"),
+      );
     }
   }
 
@@ -100,8 +104,7 @@ export function ShirtSizesManager() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <p className="text-muted-foreground text-sm">{t("shirtSizesGroupDesc")}</p>
-        <div className="flex flex-wrap items-start gap-2">
+        <div className="@container flex flex-wrap items-start gap-2">
           {shirtSizeFields.fields.map((item, index) => (
             <FormField
               key={item.id}
@@ -134,16 +137,10 @@ export function ShirtSizesManager() {
               )}
             />
           ))}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="rounded-full"
+          <LibraryAddButton
+            label={t("addSize")}
             onClick={() => shirtSizeFields.append({ value: "" })}
-          >
-            <PlusIcon />
-            {t("addSize")}
-          </Button>
+          />
         </div>
         {form.formState.errors.shirtSizes?.root?.message && (
           <p className="text-destructive text-sm">{t("shirtSizesDuplicateError")}</p>

@@ -40,3 +40,29 @@ describe("WalletButtons", () => {
     expect(link?.querySelector("img")?.getAttribute("alt")).toBe("addToAppleWallet");
   });
 });
+
+it("consumes a Google Wallet email action once and leaves the badges available after failure", async () => {
+  const { logisticsApi } = await import("@/lib/logistics");
+  const { toast } = await import("@/lib/toast");
+  vi.mocked(logisticsApi.googleWalletSaveUrl).mockRejectedValueOnce(new Error("Unavailable"));
+  window.history.replaceState(null, "", "/wallet?add=google");
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => {
+      root.render(<WalletButtons purpose="ticket" />);
+    });
+    expect(logisticsApi.googleWalletSaveUrl).toHaveBeenCalledWith("ticket");
+    expect(window.location.search).toBe("");
+    expect(toast.error).toHaveBeenCalledWith("walletGoogleSaveFailed", "toastWalletSettings");
+    expect(container.querySelector("button img")?.getAttribute("src")).toBe(
+      "/wallet-badges/google-wallet-button-en.svg",
+    );
+  } finally {
+    act(() => root.unmount());
+    container.remove();
+    window.history.replaceState(null, "", "/");
+    vi.clearAllMocks();
+  }
+});

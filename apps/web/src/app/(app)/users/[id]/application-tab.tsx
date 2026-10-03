@@ -2,7 +2,7 @@
 
 // This person's application response and its decision state (H11-H15).
 
-import { ClipboardListIcon } from "lucide-react";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { useCallback, useEffect, useState } from "react";
 import { ReviewModal } from "@/components/applications/review-modal";
 import { EmptyState } from "@/components/common/empty-state";
@@ -111,7 +111,10 @@ export function ApplicationTab({ userId }: { userId: number }) {
         askFoodIntolerances: detail.application.ask_food_intolerances,
       });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotOpenApplication"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotOpenApplication"),
+        t("toastOpenApplication"),
+      );
     } finally {
       setOpeningId(null);
     }
@@ -127,7 +130,7 @@ export function ApplicationTab({ userId }: { userId: number }) {
   if (state === "forbidden") {
     return (
       <EmptyState
-        icon={ClipboardListIcon}
+        icon={ClipboardTextIcon}
         title={t("applicationsHiddenTitle")}
         description={t("needApplicationsReviewCap")}
       />
@@ -136,23 +139,17 @@ export function ApplicationTab({ userId }: { userId: number }) {
   if (state === "error" || !rows) {
     return (
       <EmptyState
-        icon={ClipboardListIcon}
+        icon={ClipboardTextIcon}
         title={t("couldNotLoadApplicationsTitle")}
         description={t("applicationsUnavailable")}
       />
     );
   }
   if (rows.length === 0) {
-    return (
-      <EmptyState
-        icon={ClipboardListIcon}
-        title={t("noApplicationsYet")}
-        description={t("hasntStartedApplication")}
-      />
-    );
+    return <EmptyState icon={ClipboardTextIcon} title={t("noApplicationsYet")} />;
   }
   return (
-    <SectionCard icon={ClipboardListIcon} title={t("applications")}>
+    <SectionCard icon={ClipboardTextIcon} title={t("applications")}>
       <ul className="divide-border divide-y">
         {rows.map((r) => (
           <li key={r.id} className="flex items-center gap-3 py-3">

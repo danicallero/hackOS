@@ -2,21 +2,22 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import {
-  ChevronRightIcon,
-  SearchIcon,
-  SlidersHorizontalIcon,
-  UsersIcon,
-  XIcon,
-} from "lucide-react";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
+import { TableIcon } from "@phosphor-icons/react/dist/csr/Table";
+import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
+import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CapabilityGate } from "@/components/common/capability-gate";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { type FilterDefinition, FilterMenu } from "@/components/common/filter-menu";
 import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
-import { UserRosterExportPanel } from "@/components/exports/user-roster-export-panel";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -27,14 +28,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { ApiError, api } from "@/lib/api";
 import { shortDateFmt } from "@/lib/datetime";
@@ -43,7 +39,7 @@ import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { UserList, UserListItem } from "@/lib/types";
-import { ReviewFixturesDialog } from "./review-fixtures-dialog";
+import { UsersActions } from "./users-actions";
 
 function fullName(u: UserListItem): string {
   const name = [u.name, u.surname].filter(Boolean).join(" ").trim();
@@ -258,8 +254,29 @@ function buildColumns(presentIds: Set<number> | null, t: Translate): Column<User
   ];
 }
 
-function UserMobileRow({ user, t }: { user: UserListItem; t: Translate }) {
+function UserMobileRow({
+  user,
+  t,
+  columns,
+  presentIds,
+}: {
+  user: UserListItem;
+  t: Translate;
+  columns: Column<UserListItem>[];
+  presentIds: Set<number> | null;
+}) {
   const name = fullName(user);
+  const values: Record<UserColumnId, string> = {
+    name,
+    role: roleLabel(user.visibleRoleName, t),
+    email: user.email,
+    application: applicationLabel(user.applicationStatus, t),
+    badge: user.badgeId ?? "—",
+    presence: presentIds === null ? "—" : t(presentIds.has(user.id) ? "present" : "away"),
+    shirt: user.shirtSize ?? "—",
+    language: user.language.toUpperCase(),
+    created: dateFmt.format(new Date(user.createdAt)),
+  };
   return (
     <Link
       href={`/users/${user.id}`}
@@ -274,32 +291,41 @@ function UserMobileRow({ user, t }: { user: UserListItem; t: Translate }) {
             </StatusBadge>
           )}
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <StatusBadge tone={ROLE_TONE} dot={false}>
-            {roleLabel(user.visibleRoleName, t)}
-          </StatusBadge>
-          <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
-            {user.emailVerified ? t("verified") : t("unverified")}
-          </StatusBadge>
+        <div className="flex min-w-0 flex-wrap items-start gap-1.5">
+          {columns
+            .filter((column) => column.id !== "name")
+            .map((column) => (
+              <StatusBadge
+                key={column.id}
+                tone={
+                  column.id === "application"
+                    ? applicationTone(user.applicationStatus)
+                    : column.id === "email" && !user.emailVerified
+                      ? "warning"
+                      : "neutral"
+                }
+                dot={false}
+                className="max-w-full items-baseline gap-1 wrap-anywhere text-left"
+              >
+                <span className="text-muted-foreground shrink-0">{column.header}:</span>
+                <span className="min-w-0">{values[column.id as UserColumnId]}</span>
+                {column.id === "email" && (
+                  <span className="sr-only">
+                    {user.emailVerified ? t("verified") : t("unverified")}
+                  </span>
+                )}
+              </StatusBadge>
+            ))}
         </div>
-        <span className="text-muted-foreground block break-all font-mono text-xs">
-          {user.email}
-        </span>
-        <StatusBadge
-          tone={applicationTone(user.applicationStatus)}
-          dot={false}
-          className="capitalize"
-        >
-          {applicationLabel(user.applicationStatus, t)}
-        </StatusBadge>
       </div>
-      <ChevronRightIcon className="text-muted-foreground mt-1 size-4 shrink-0" aria-hidden="true" />
+      <CaretRightIcon className="text-muted-foreground mt-1 size-4 shrink-0" aria-hidden="true" />
     </Link>
   );
 }
 
 export default function UsersPage() {
   const { t } = useLocale();
+  const isMobile = useIsMobile();
   const COLUMN_LABEL = useMemo(() => columnLabel(t), [t]);
   const [q, setQ] = usePersistedState("users-list:q", "");
   const [users, setUsers] = useState<UserListItem[]>([]);
@@ -308,9 +334,33 @@ export default function UsersPage() {
   const hasLoadedUsers = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
-  const [emailFilter, setEmailFilter] = usePersistedState("users-list:email", "all");
-  const [roleFilter, setRoleFilter] = usePersistedState("users-list:role", "all");
-  const [spotFilter, setSpotFilter] = usePersistedState("users-list:spot", "all");
+  const [emailSelection, setEmailFilter] = usePersistedState<string | string[]>(
+    "users-list:email",
+    [],
+  );
+  const emailFilter = Array.isArray(emailSelection)
+    ? emailSelection
+    : emailSelection === "all"
+      ? []
+      : [emailSelection];
+  const [roleSelection, setRoleFilter] = usePersistedState<string | string[]>(
+    "users-list:role",
+    [],
+  );
+  const roleFilter = Array.isArray(roleSelection)
+    ? roleSelection
+    : roleSelection === "all"
+      ? []
+      : [roleSelection];
+  const [spotSelection, setSpotFilter] = usePersistedState<string | string[]>(
+    "users-list:spot",
+    [],
+  );
+  const spotFilter = Array.isArray(spotSelection)
+    ? spotSelection
+    : spotSelection === "all"
+      ? []
+      : [spotSelection];
   const [visibleColumns, setVisibleColumns] = useState<Set<UserColumnId>>(DEFAULT_COLUMNS);
   const [columnsHydrated, setColumnsHydrated] = useState(false);
   const canScanPresence = useCan(CAPABILITIES.PRESENCE_SCAN);
@@ -388,7 +438,7 @@ export default function UsersPage() {
           setTotal(0);
           const message = err instanceof ApiError ? err.message : t("couldNotLoadUsers");
           setLoadError(message);
-          toast.error(message);
+          toast.error(message, t("columnPeople"));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -403,24 +453,22 @@ export default function UsersPage() {
   const filteredUsers = useMemo(
     () =>
       users.filter((user) => {
-        if (emailFilter === "verified" && !user.emailVerified) return false;
-        if (emailFilter === "unverified" && user.emailVerified) return false;
-        if (roleFilter !== "all" && user.visibleRoleName !== roleFilter) return false;
-        if (spotFilter === "confirmed" && user.applicationStatus !== "confirmed") return false;
-        if (
-          spotFilter === "accepted_pending" &&
-          user.applicationStatus !== "accepted" &&
-          user.applicationStatus !== "accepted_internal"
-        )
-          return false;
-        if (spotFilter === "declined" && user.applicationStatus !== "declined") return false;
-        if (spotFilter === "not_confirmed" && user.applicationStatus === "confirmed") return false;
-        return true;
+        if (emailFilter.length + roleFilter.length + spotFilter.length === 0) return true;
+        return (
+          emailFilter.includes(user.emailVerified ? "verified" : "unverified") ||
+          roleFilter.includes(user.visibleRoleName ?? "") ||
+          spotFilter.some((filter) => {
+            if (filter === "accepted_pending")
+              return ["accepted", "accepted_internal"].includes(user.applicationStatus ?? "");
+            if (filter === "not_confirmed") return user.applicationStatus !== "confirmed";
+            return user.applicationStatus === filter;
+          })
+        );
       }),
     [users, emailFilter, roleFilter, spotFilter],
   );
   const hasFilters =
-    q.trim().length > 0 || emailFilter !== "all" || roleFilter !== "all" || spotFilter !== "all";
+    q.trim().length > 0 || emailFilter.length > 0 || roleFilter.length > 0 || spotFilter.length > 0;
 
   /** H8: role names are arbitrary now — the filter's option list is whatever
    * distinct role names are actually present in the loaded page of users. */
@@ -432,9 +480,9 @@ export default function UsersPage() {
 
   function clearUserFilters() {
     setQ("");
-    setEmailFilter("all");
-    setRoleFilter("all");
-    setSpotFilter("all");
+    setEmailFilter([]);
+    setRoleFilter([]);
+    setSpotFilter([]);
     document.getElementById("user-search")?.focus();
   }
 
@@ -462,44 +510,69 @@ export default function UsersPage() {
     });
   }
 
+  const filters: FilterDefinition[] = [
+    {
+      id: "email",
+      label: t("email"),
+      icon: EnvelopeSimpleIcon,
+      type: "multiple",
+      value: emailFilter,
+      onChange: (values) => setEmailFilter([...values]),
+      options: [
+        { value: "verified", label: t("verified") },
+        { value: "unverified", label: t("unverified") },
+      ],
+    },
+    {
+      id: "role",
+      label: t("colRole"),
+      icon: ShieldIcon,
+      type: "multiple",
+      value: roleFilter,
+      onChange: (values) => setRoleFilter([...values]),
+      options: [...roleFilterOptions.map((name) => ({ value: name, label: name }))],
+    },
+    {
+      id: "spot",
+      label: t("colApplication"),
+      icon: TicketIcon,
+      type: "multiple",
+      value: spotFilter,
+      onChange: (values) => setSpotFilter([...values]),
+      options: [
+        { value: "confirmed", label: t("confirmed") },
+        { value: "accepted_pending", label: t("acceptedPending") },
+        { value: "declined", label: t("declined") },
+        { value: "not_confirmed", label: t("notConfirmed") },
+      ],
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <PageHeader
+        className="flex-row items-center justify-between gap-2 md:items-center"
         title={t("users")}
         state={
           total > 0 ? (
-            <StatusBadge tone="neutral" dot={false}>
+            <span className="text-muted-foreground text-xs tabular-nums">
               {total === 1
                 ? t("peopleCountOne", { count: total })
                 : t("peopleCountOther", { count: total })}
-            </StatusBadge>
+            </span>
           ) : undefined
         }
         description={total > users.length ? t("showingFirst", { shown: users.length }) : undefined}
-        actions={
-          <>
-            <CapabilityGate capability={CAPABILITIES.EXPORTS_RUN}>
-              <UserRosterExportPanel users={filteredUsers} />
-            </CapabilityGate>
-            <CapabilityGate capability={CAPABILITIES.INVITES_MANAGE}>
-              <Button asChild variant="outline">
-                <Link href="/users/invites">{t("invitationManagement")}</Link>
-              </Button>
-            </CapabilityGate>
-            <CapabilityGate capability={CAPABILITIES.ADMIN_ALL}>
-              <ReviewFixturesDialog />
-            </CapabilityGate>
-          </>
-        }
+        actions={<UsersActions users={filteredUsers} />}
       />
 
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-          <div className="relative col-span-2 min-w-0 w-full sm:min-w-[12rem] sm:flex-[1_1_18rem] sm:max-w-[28rem]">
+      <div className="space-y-4">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
+          <div className="relative min-w-0">
             <label htmlFor="user-search" className="sr-only">
               {t("searchUsers")}
             </label>
-            <SearchIcon
+            <MagnifyingGlassIcon
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
               aria-hidden="true"
             />
@@ -508,65 +581,41 @@ export default function UsersPage() {
               type="search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={t("searchUsersPlaceholder")}
+              placeholder={t("searchUsers")}
               className="pr-9 pl-9"
             />
             {q && (
-              <IconButton
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="absolute top-1/2 right-0.5 -translate-y-1/2"
-                onClick={() => {
-                  setQ("");
-                  document.getElementById("user-search")?.focus();
-                }}
-                label={t("clearSearch")}
-              >
-                <XIcon className="size-4" aria-hidden="true" />
-              </IconButton>
+              <div className="absolute inset-y-0 right-0.5 z-10 flex items-center">
+                <IconButton
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => {
+                    setQ("");
+                    document.getElementById("user-search")?.focus();
+                  }}
+                  label={t("clearSearch")}
+                >
+                  <XIcon className="size-4" aria-hidden="true" />
+                </IconButton>
+              </div>
             )}
           </div>
-          <Select value={emailFilter} onValueChange={setEmailFilter}>
-            <SelectTrigger className="w-full sm:w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("anyEmail")}</SelectItem>
-              <SelectItem value="verified">{t("verified")}</SelectItem>
-              <SelectItem value="unverified">{t("unverified")}</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="w-full sm:w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("anyRole")}</SelectItem>
-              {roleFilterOptions.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={spotFilter} onValueChange={setSpotFilter}>
-            <SelectTrigger className="w-full sm:w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("anySpot")}</SelectItem>
-              <SelectItem value="confirmed">{t("confirmed")}</SelectItem>
-              <SelectItem value="accepted_pending">{t("acceptedPending")}</SelectItem>
-              <SelectItem value="declined">{t("declined")}</SelectItem>
-              <SelectItem value="not_confirmed">{t("notConfirmed")}</SelectItem>
-            </SelectContent>
-          </Select>
+          <FilterMenu
+            iconOnly={isMobile}
+            className="contents"
+            chipsClassName="col-span-full row-start-2 flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain pb-1"
+            filters={filters}
+          />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full sm:w-auto">
-                <SlidersHorizontalIcon />
-                {t("columnsLabel")}
+              <Button
+                variant="outline"
+                size={isMobile ? "icon" : "default"}
+                aria-label={t(isMobile ? "tagsLabel" : "columnsLabel")}
+              >
+                {isMobile ? <TagIcon aria-hidden="true" /> : <TableIcon aria-hidden="true" />}
+                {!isMobile && t("columnsLabel")}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -584,14 +633,16 @@ export default function UsersPage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+        {hasFilters && (
           <span
             role="status"
             aria-live="polite"
-            className="text-muted-foreground col-span-2 justify-self-end text-xs tabular-nums sm:ml-auto sm:col-span-1"
+            className="text-muted-foreground block text-xs tabular-nums"
           >
             {t("tableResultCount", { count: filteredUsers.length })}
           </span>
-        </div>
+        )}
 
         <DataTable
           columns={columns}
@@ -600,7 +651,9 @@ export default function UsersPage() {
           stateKey="users-list"
           getRowHref={(u) => `/users/${u.id}`}
           getRowLabel={(u) => `${u.name ?? ""} ${u.surname ?? ""}`.trim() || u.email}
-          renderMobileRow={(u) => <UserMobileRow user={u} t={t} />}
+          renderMobileRow={(u) => (
+            <UserMobileRow user={u} t={t} columns={columns} presentIds={presentIds} />
+          )}
           pageSize={15}
           loading={loading}
           error={

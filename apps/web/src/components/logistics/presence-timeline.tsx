@@ -1,12 +1,10 @@
-import {
-  ActivityIcon,
-  AlertTriangleIcon,
-  CheckCircle2Icon,
-  Clock3Icon,
-  DoorOpenIcon,
-  TimerOffIcon,
-  WrenchIcon,
-} from "lucide-react";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { ClockIcon } from "@phosphor-icons/react/dist/ssr/Clock";
+import { DoorOpenIcon } from "@phosphor-icons/react/dist/ssr/DoorOpen";
+import { PulseIcon } from "@phosphor-icons/react/dist/ssr/Pulse";
+import { TimerIcon } from "@phosphor-icons/react/dist/ssr/Timer";
+import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
+import { WrenchIcon } from "@phosphor-icons/react/dist/ssr/Wrench";
 import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
@@ -61,10 +59,7 @@ export function PresenceTimeline({
           aria-live="assertive"
           className="border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-4"
         >
-          <AlertTriangleIcon
-            className="text-destructive mt-0.5 size-4 shrink-0"
-            aria-hidden="true"
-          />
+          <WarningIcon className="text-destructive mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <p className="text-destructive font-medium">{t("presenceConflictTitle")}</p>
             <p className="text-pretty mt-1 text-sm">
@@ -109,7 +104,7 @@ export function PresenceTimeline({
 
       {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed p-6 text-center">
-          <Clock3Icon className="text-muted-foreground mx-auto size-5" aria-hidden="true" />
+          <ClockIcon className="text-muted-foreground mx-auto size-5" aria-hidden="true" />
           <p className="mt-2 font-medium">{t("noPresenceWindows")}</p>
           <p className="text-muted-foreground text-pretty mt-1 text-sm">
             {t("addSignalToStartWindow")}
@@ -160,12 +155,12 @@ function PresenceTimelineRow({
         ? t("entryOption")
         : t("exitOption");
   const StatusIcon = window?.conflict
-    ? AlertTriangleIcon
+    ? WarningIcon
     : window?.status === "secured"
-      ? CheckCircle2Icon
+      ? CheckCircleIcon
       : window?.status === "provisional"
-        ? Clock3Icon
-        : TimerOffIcon;
+        ? ClockIcon
+        : TimerIcon;
   const statusTone: "danger" | "success" | "warning" | "neutral" = window?.conflict
     ? "danger"
     : window?.status === "secured"
@@ -186,7 +181,7 @@ function PresenceTimelineRow({
         <div className="min-w-0 flex-1">
           <p className="flex min-w-0 items-start gap-2 font-medium">
             {signal.kind === "activity" ? (
-              <ActivityIcon className="text-primary mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <PulseIcon className="text-primary mt-0.5 size-4 shrink-0" aria-hidden="true" />
             ) : (
               <DoorOpenIcon className="text-primary mt-0.5 size-4 shrink-0" aria-hidden="true" />
             )}

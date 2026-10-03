@@ -9,26 +9,18 @@
 // profiles — this tab only owns the two invite-claim requirement toggles.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
-import { SubmitButton } from "@/components/common/submit-button";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-} from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
+import { CategorySaveFooter } from "./category-save-footer";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
 
@@ -54,7 +46,7 @@ export function InvitesTab({
   icon,
   onDirtyChange,
 }: {
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { t } = useLocale();
@@ -82,9 +74,13 @@ export function InvitesTab({
       applyConfig(next);
       reset(fromConfig(next));
       setSaveState("saved");
+      toast.success(t("saved"), { compactTitle: t("toastInviteSettings") });
     } catch (err) {
       setSaveState("error");
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
+        t("toastInviteSettings"),
+      );
     }
   }
 
@@ -96,10 +92,9 @@ export function InvitesTab({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <SectionCard
-          icon={icon}
-          title={t("invitesSectionTitle")}
-          state={<SaveStatus state={saveState} />}
-          footer={<SubmitButton pending={formState.isSubmitting}>{t("saveChanges")}</SubmitButton>}
+          variant="plain"
+          footerClassName="justify-start"
+          footer={<CategorySaveFooter pending={formState.isSubmitting} state={saveState} />}
         >
           <h3 className="text-balance text-sm font-semibold">{t("invitesSponsorsGroup")}</h3>
           <FormField
@@ -107,12 +102,11 @@ export function InvitesTab({
             name="requireSponsorShirtSize"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-4 py-3">
                   <div>
                     <FormLabel className="font-normal">
                       {t("requireSponsorShirtSizeLabel")}
                     </FormLabel>
-                    <FormDescription>{t("requireSponsorShirtSizeDesc")}</FormDescription>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -126,10 +120,9 @@ export function InvitesTab({
             name="requireSponsorDietary"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-4 py-3">
                   <div>
                     <FormLabel className="font-normal">{t("requireSponsorDietaryLabel")}</FormLabel>
-                    <FormDescription>{t("requireSponsorDietaryDesc")}</FormDescription>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -146,10 +139,9 @@ export function InvitesTab({
             name="requireStaffShirtSize"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-4 py-3">
                   <div>
                     <FormLabel className="font-normal">{t("requireStaffShirtSizeLabel")}</FormLabel>
-                    <FormDescription>{t("requireStaffShirtSizeDesc")}</FormDescription>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -163,10 +155,9 @@ export function InvitesTab({
             name="requireStaffDietary"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-4 py-3">
                   <div>
                     <FormLabel className="font-normal">{t("requireStaffDietaryLabel")}</FormLabel>
-                    <FormDescription>{t("requireStaffDietaryDesc")}</FormDescription>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />

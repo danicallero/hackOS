@@ -1,6 +1,8 @@
 "use client";
 
-import { AlertTriangleIcon, DoorOpenIcon, UsersIcon } from "lucide-react";
+import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import Link from "next/link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -111,7 +113,7 @@ export function SessionsTab({
         <StatCard
           label={t("staleSessions")}
           value={sessions.filter((s) => s.stale).length}
-          icon={AlertTriangleIcon}
+          icon={WarningIcon}
           hint={t("staleSessionsHint")}
           footer={sessionsError && <ContextualError {...sessionsError} />}
         />
@@ -120,7 +122,7 @@ export function SessionsTab({
       <SectionCard
         title={t("openSessions")}
         description={t("openSessionsDesc")}
-        icon={AlertTriangleIcon}
+        icon={WarningIcon}
         className="xl:col-span-2"
       >
         <DataTable

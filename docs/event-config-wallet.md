@@ -27,8 +27,8 @@ sending `null` clears a nullable field.
 
 | Column | Meaning |
 | --- | --- |
-| `name`, `tagline` | Event identity, shown on the public site and on the pass back. |
-| `timezone` | IANA zone name; formats the date/time printed on the pass. |
+| `name`, `tagline` | Event identity, shown on the public site and on the pass back. Admission emails read `name` through `event/service.ts`, separately from the application form name, with the same organization-name fallback as Wallet. |
+| `timezone` | IANA zone name; formats pass dates and the exact expiry in admission emails. `event/service.ts` exposes this to other modules with UTC fallback when unset. |
 | `event_starts_at` | **Doors open** — when attendees can arrive at the venue. This (not the hacking start) is the date/time shown on the Apple Wallet pass and Google EventTicketObject's `validTimeInterval`. |
 | `event_ends_at` | **Event over** — distinct from `hacking_ends_at` (multi-day events keep going after submissions close). Becomes the Apple pass's `expirationDate` and the Google object's validity end, so Wallet stops surfacing the pass afterwards. `CHECK (ends > starts)`. |
 | `hacking_starts_at`, `hacking_ends_at` | The publicly-"spoken" hacking window; drives the countdown. `CHECK (ends > starts)`. |
@@ -193,17 +193,34 @@ native PassKit protocol.
 
 ## 3. The settings page (apps/web/src/app/(app)/settings/event/page.tsx)
 
-One form over `GET/PUT /api/event`, presented as four cards — Event (identity),
-Schedule (doors open + hacking window), Venue, and Apple Wallet pass — plus a
-separate Judging-window form (different resource, `/api/queue/settings`,
-capability `QUEUE_ADMIN`). Wallet-pass conventions the UI relies on:
+Six capability-gated tabs: Event, Venue, Apple Wallet pass, Presence, Invited
+accounts, and Danger zone. Editable categories use open sections and save only
+their own fields through `PUT /api/event`; changing tabs with unsaved edits
+requires confirmation. The active tab names its panel without a repeated section
+header. A shared save footer pairs the submit button with the persistent save
+state; successful saves also use the app's Sileo toast. Forms retain native Enter
+submission from inputs. Multi-column fields align at the start so helpers do not
+move neighboring labels or controls. The danger zone keeps the three-stage event-wide reset
+confirmation (H16–H40/H53). Judging timing lives in Queue → Rooms, on the separate
+`/api/queue/settings` resource (`QUEUE_ADMIN`).
+
+Event groups identity, paired event/hacking dates, the countdown preview, and
+participant editing dates in that order. Every populated date shows the event
+timezone; previews follow the draft timezone before saving. Venue and Wi-Fi
+share one save action at the end. Presence-policy consequences stay beside the
+two controls, rather than behind a disclosure. Invite toggles distinguish a
+required shirt size from optional dietary information. Wallet-pass conventions:
 
 - Caption inputs are prefilled with the **resolved** caption (override or
   default) — no placeholders; what you see is what the pass prints. On save,
   captions equal to the default are dropped so they keep tracking it.
-- Auto-filled fields never ask for a value: each row shows a note of what
-  fills it, and the built-in back rows display the live value they'll carry
+- Auto-filled fields never ask for a value: front rows name the field without
+  explaining obvious values; the university row notes its empty-value behavior.
+  Built-in back rows display the live value they'll carry
   (event name, venue name, `organizerName`).
+- Back-field caption and custom label/value inputs have persistent labels.
+  Less-frequent back-field edits remain behind a disclosure; the preview stays
+  visible while editing.
 - Venue coordinates accept decimal degrees (dot or comma decimals) or DMS
   ("43°19′58″N", with `O` accepted for Spanish "Oeste"), and a full pair
   pasted into either box fills both — parsing lives in
@@ -242,3 +259,30 @@ the scoped routes and to `credentials: "omit"` fetches, so the request carries
 no cookie at all. The Apple Wallet badge is a same-tab link: the browser must
 hand the `.pkpass` response to Wallet without creating a blank tab that the
 holder has to close manually.
+
+## Pre-event email reminder (H45, H52)
+
+The Event tab includes an email-reminder section in its existing form. Its
+switch and send date share the category's Save changes action and unsaved-change
+guard. `PUT /api/event` accepts optional `eventReminderScheduledAt` (ISO instant;
+null cancels). Event identity, dates, reminder and audit commit together. The
+field requires `EVENT_MANAGE`; scheduling needs a non-empty name and a future
+send time before `event_starts_at`. GET includes the latest `eventReminder`
+status (`scheduled`, `queued`, `cancelled`, `expired`) and recipient count.
+
+Migration 0603 stores reminder history, with at most one pending schedule.
+The 15-second `event-email-reminders` worker claims due rows with `FOR UPDATE
+SKIP LOCKED`, then atomically enqueues one email per active, non-synthetic
+`user_event_access` holder. Multiple qualifying roles do not duplicate emails.
+This event-wide operational email is sent to every eligible account, independent
+of optional activity subscriptions. After doors open, a missed schedule expires.
+
+Delivery checks current access and the opening time again. Dates use each
+recipient's language and the event timezone. The permanent entrance token is
+rendered locally as a PNG QR and attached inline (CID); no external QR service
+receives ticket credentials. Official Apple/Google Wallet artwork is exported
+from the SVGs already used on `/wallet` to email-compatible PNGs, preserving the
+artwork and aspect ratio; Galician uses Spanish artwork. Email buttons open
+`/wallet?add=apple` or `?add=google`, retaining the action through login, then
+request the authenticated recipient's pass. A separate `/wallet` link remains
+available. No long-lived sessionless Wallet credential is issued.

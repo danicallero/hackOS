@@ -3,7 +3,11 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2Icon, EyeIcon, EyeOffIcon, PlusIcon, UploadIcon } from "lucide-react";
+import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
+import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
+import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -177,7 +181,7 @@ export default function EnterprisesPage() {
       setEnterprises([]);
       const message = err instanceof ApiError ? err.message : t("couldNotLoadEnterprises");
       setLoadError(message);
-      toast.error(message);
+      toast.error(message, t("toastCompanies"));
     } finally {
       setLoading(false);
     }
@@ -198,10 +202,14 @@ export default function EnterprisesPage() {
             : ids.length === 1
               ? t("hidEnterpriseOne", { count: ids.length })
               : t("hidEnterpriseOther", { count: ids.length }),
+          { compactTitle: t("toastCompanyVisibility") },
         );
         await load();
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"));
+        toast.error(
+          err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"),
+          t("toastCompanyVisibility"),
+        );
       } finally {
         setBulkBusy(false);
       }
@@ -236,7 +244,7 @@ export default function EnterprisesPage() {
         if (!alive) return;
         const message = err instanceof ApiError ? err.message : t("couldNotLoadYourEnterprise");
         setLoadError(message);
-        toast.error(message);
+        toast.error(message, t("toastDeleteCompany"));
         setLoading(false);
       });
     return () => {
@@ -262,7 +270,7 @@ export default function EnterprisesPage() {
           data={[]}
           getRowId={(e) => String(e.id)}
           loading
-          empty={{ icon: Building2Icon, title: t("loadingEnterprise") }}
+          empty={{ icon: BuildingsIcon, title: t("loadingEnterprise") }}
         />
       </div>
     );
@@ -293,10 +301,9 @@ export default function EnterprisesPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("enterprises")}
-        description={t("enterprisesDesc")}
         primaryAction={
           <Button onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="size-4" />
+            <PlusIcon aria-hidden="true" className="size-4" />
             {t("newEnterprise")}
           </Button>
         }
@@ -329,7 +336,7 @@ export default function EnterprisesPage() {
                 disabled={bulkBusy}
                 onClick={() => bulkVisibility(true)}
               >
-                <EyeIcon className="size-4" />
+                <EyeIcon aria-hidden="true" className="size-4" />
                 {t("makeVisible")}
               </Button>
               <Button
@@ -338,14 +345,14 @@ export default function EnterprisesPage() {
                 disabled={bulkBusy}
                 onClick={() => bulkVisibility(false)}
               >
-                <EyeOffIcon className="size-4" />
+                <EyeSlashIcon aria-hidden="true" className="size-4" />
                 {t("hide")}
               </Button>
             </>
           ) : undefined
         }
         empty={{
-          icon: Building2Icon,
+          icon: BuildingsIcon,
           title: t("noEnterprisesYetTitle"),
           description: t("createFirstSponsorEnterprise"),
         }}
@@ -408,7 +415,7 @@ function CreateEnterpriseModal({
   function selectLogo(file: File | undefined, variant: "default" | "negative") {
     if (!file) return;
     if (!LOGO_CONTENT_TYPES.includes(file.type as (typeof LOGO_CONTENT_TYPES)[number])) {
-      toast.error(t("unsupportedFileType"));
+      toast.error(t("unsupportedFileType"), t("uploadLogo"));
       return;
     }
     if (variant === "default") setDefaultLogo(file);
@@ -439,12 +446,18 @@ function CreateEnterpriseModal({
         if (defaultLogo) await uploadLogo(created.id, defaultLogo, "default");
         if (darkLogo) await uploadLogo(created.id, darkLogo, "negative");
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : t("couldNotUploadLogo"));
+        toast.error(
+          err instanceof ApiError ? err.message : t("couldNotUploadLogo"),
+          t("uploadLogo"),
+        );
       }
-      toast.success(t("enterpriseCreated"));
+      toast.success(t("enterpriseCreated"), { compactTitle: t("toastCreateCompany") });
       await onCreated(created);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateEnterprise"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotCreateEnterprise"),
+        t("toastCreateCompany"),
+      );
     }
   }
 
@@ -452,7 +465,7 @@ function CreateEnterpriseModal({
     <SidePanelEditor
       open={open}
       onOpenChange={onOpenChange}
-      icon={Building2Icon}
+      icon={BuildingsIcon}
       title={t("newEnterprise")}
       footer={
         <SubmitButton form="create-enterprise-form" pending={form.formState.isSubmitting}>
@@ -528,7 +541,7 @@ function CreateEnterpriseModal({
                 disabled={form.formState.isSubmitting}
                 onClick={() => defaultLogoInputRef.current?.click()}
               >
-                <UploadIcon aria-hidden="true" />
+                <UploadSimpleIcon aria-hidden="true" />
                 {defaultLogo ? defaultLogo.name : t("uploadLogo")}
               </Button>
               <Button
@@ -537,7 +550,7 @@ function CreateEnterpriseModal({
                 disabled={form.formState.isSubmitting}
                 onClick={() => darkLogoInputRef.current?.click()}
               >
-                <UploadIcon aria-hidden="true" />
+                <UploadSimpleIcon aria-hidden="true" />
                 {darkLogo ? darkLogo.name : t("uploadDarkLogo")}
               </Button>
             </div>

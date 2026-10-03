@@ -2,7 +2,8 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { SearchIcon, TicketIcon } from "lucide-react";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
@@ -71,6 +72,7 @@ export default function QueueOperationsPage() {
         const team = typeof data.teamName === "string" ? data.teamName : t("challengeFallback");
         const room = typeof data.roomName === "string" ? data.roomName : t("noLocation");
         toast.info(team, {
+          compactTitle: t("toastTeamCalled"),
           description: t("teamShouldArriveDescription", { room }),
           duration: 5_000,
         });
@@ -82,6 +84,7 @@ export default function QueueOperationsPage() {
       const team = typeof data.team_name === "string" ? data.team_name : t("challengeFallback");
       const room = typeof data.room_name === "string" ? data.room_name : null;
       toast.info(room ? `${team} · ${room}` : team, {
+        compactTitle: t("toastNotifyEntry"),
         description: t("teamAskedToEnter"),
         duration: 5_000,
       });
@@ -109,10 +112,11 @@ export default function QueueOperationsPage() {
       const result = await enqueueAllChallengeQueues(crypto.randomUUID());
       toast.success(
         t("queuesGenerated", { inserted: result.inserted, challenges: result.challenges.length }),
+        { compactTitle: t("generateQueues") },
       );
       roomViews.refetch();
     } catch (err) {
-      showErrorToast(err, t("couldNotGenerateQueues"));
+      showErrorToast(err, t("couldNotGenerateQueues"), { compactTitle: t("generateQueues") });
     } finally {
       setBusy(false);
     }
@@ -190,7 +194,7 @@ export default function QueueOperationsPage() {
               aria-expanded={searchOpen}
               onClick={() => setSearchOpen((open) => !open)}
             >
-              <SearchIcon className="size-4" />
+              <MagnifyingGlassIcon aria-hidden="true" className="size-4" />
             </Button>
           )}
         </div>

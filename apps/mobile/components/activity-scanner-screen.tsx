@@ -20,6 +20,7 @@ import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import {
   enqueueLocalScan,
   findPersonByBadge,
+  findPersonByTicket,
   getActivityState,
   listScannerActivities,
   pendingScans,
@@ -30,6 +31,7 @@ import { colors } from "@/theme/colors";
 
 interface ActivityScanResult {
   badgeId: string;
+  ticketToken?: string;
   count: number;
   person: ScannerPerson;
   state: "saved" | "confirmed" | "attention" | "repeat_pending";
@@ -55,8 +57,15 @@ export function ActivityScannerScreen() {
   const { sync: runSync, lastSync } = syncState;
   const [localActivity, setLocalActivity] = useState<ScannerActivity | null>(null);
   const [result, setResult] = useState<ActivityScanResult | null>(null);
+  const [nfcSessionKey, setNfcSessionKey] = useState(0);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!error) return;
+    const timeout = setTimeout(() => setError(null), 6000);
+    return () => clearTimeout(timeout);
+  }, [error]);
+
   const [stats, setStats] = useState<ActivityStats | null>(null);
   const handledManualScan = useRef<string | null>(null);
   const activity = useMemo(
@@ -94,7 +103,13 @@ export function ActivityScannerScreen() {
   }, [lastSync, loadStats]);
 
   const store = useCallback(
-    async (person: ScannerPerson, badgeId: string, allowRepeat: boolean, count: number) => {
+    async (
+      person: ScannerPerson,
+      badgeId: string,
+      allowRepeat: boolean,
+      count: number,
+      ticketToken?: string,
+    ) => {
       if (ownerUserId === undefined) return;
       setRegistering(true);
       setError(null);
@@ -103,13 +118,20 @@ export function ActivityScannerScreen() {
           {
             kind: "activity",
             activityId,
-            badgeId,
+            ...(ticketToken ? { ticketToken } : { badgeId }),
             allowRepeat,
             scannedAt: new Date().toISOString(),
           },
           ownerUserId,
         );
-        setResult({ badgeId, count: count + 1, person, state: "saved", wasRepeat: allowRepeat });
+        setResult({
+          badgeId,
+          ticketToken,
+          count: count + 1,
+          person,
+          state: "saved",
+          wasRepeat: allowRepeat,
+        });
         void haptic("light");
         await runSync();
         const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
@@ -140,16 +162,25 @@ export function ActivityScannerScreen() {
     async (raw: string) => {
       const badgeId = raw.trim();
       const serverPerson = syncState.serverSnapshot?.people.find(
-        (candidate) => candidate.badgeId === badgeId,
+        (candidate) => candidate.badgeId === badgeId || candidate.ticketToken === badgeId,
       );
+      const ticketPerson = syncState.serverSnapshot ? null : await findPersonByTicket(badgeId);
       const found = syncState.serverSnapshot
-        ? { person: serverPerson ?? null, revoked: false }
-        : await findPersonByBadge(badgeId);
+        ? {
+            person: serverPerson ?? null,
+            revoked: syncState.serverSnapshot.people.some((person) =>
+              person.revokedBadgeIds.includes(badgeId),
+            ),
+          }
+        : ticketPerson
+          ? { person: ticketPerson, revoked: false }
+          : await findPersonByBadge(badgeId);
       if (!found.person) {
         setError(found.revoked ? t("scannerBadgeRevoked") : t("scannerBadgeUnknown"));
         setResult(null);
         return;
       }
+      const ticketToken = found.person.ticketToken === badgeId ? badgeId : undefined;
       const state = syncState.serverSnapshot
         ? {
             userId: found.person.userId,
@@ -167,6 +198,7 @@ export function ActivityScannerScreen() {
         void haptic("warning");
         setResult({
           badgeId,
+          ticketToken,
           count: state.count,
           person: found.person,
           state: "repeat_pending",
@@ -174,7 +206,7 @@ export function ActivityScannerScreen() {
         });
         return;
       }
-      await store(found.person, badgeId, false, state.count);
+      await store(found.person, badgeId, false, state.count, ticketToken);
     },
     [activityId, store, syncState.serverSnapshot, t],
   );
@@ -196,6 +228,8 @@ export function ActivityScannerScreen() {
       <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
       <QrCamera
         hint={null}
+        autoStartNfc={Boolean(activity) && !manualNonce}
+        nfcSessionKey={nfcSessionKey}
         onValue={(value) => void scanned(value)}
         scanningEnabled={Boolean(activity) && !result}
       />
@@ -253,69 +287,70 @@ export function ActivityScannerScreen() {
       </GlassView>
       <View
         pointerEvents="box-none"
-        style={{
-          left: 0,
-          position: "absolute",
-          right: 0,
-          top: insets.top + 56,
-        }}
+        style={{ left: 0, right: 0, position: "absolute", top: insets.top + 56 }}
       >
         <ActivityStatistics activity={activity} stats={stats} />
-      </View>
-      <View
-        pointerEvents="box-none"
-        style={{
-          left: 16,
-          position: "absolute",
-          right: 16,
-          top: insets.top + 150,
-        }}
-      >
-        <ScannerQueueStatus
-          queue={syncState.queue}
-          syncing={syncState.syncing}
-          onSync={() => void syncState.sync()}
-          onRetry={() => void syncState.retryFailed()}
-          onRetryOne={(id) => void syncState.retryOne(id)}
-          onDelete={(id) => void syncState.discardScan(id)}
-          clockSkewMs={syncState.clockSkewMs}
-          fillWidth={false}
-        />
-      </View>
-      {error ? (
-        <GlassView
-          colorScheme="dark"
-          glassEffectStyle="regular"
-          style={{
-            borderRadius: 18,
-            bottom: tabBarBottomInset + 26,
-            left: 16,
-            minHeight: 60,
-            overflow: "hidden",
-            position: "absolute",
-            right: 94,
-          }}
-        >
-          <Pressable
-            accessibilityLabel={error}
-            accessibilityHint={t("close")}
-            accessibilityRole="button"
-            accessibilityLiveRegion="assertive"
-            onPress={() => setError(null)}
-            style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 9, padding: 14 }}
+        {error ? (
+          <GlassView
+            colorScheme="dark"
+            glassEffectStyle="regular"
+            style={{
+              borderRadius: 14,
+              marginTop: 12,
+              marginHorizontal: 32,
+              minHeight: 60,
+              overflow: "hidden",
+            }}
           >
-            <SymbolView
-              accessible={false}
-              name="xmark.circle.fill"
-              tintColor={colors.destructive}
-              size={20}
-            />
-            <Text selectable style={{ color: "white", flex: 1, fontSize: 15, fontWeight: "700" }}>
-              {error}
-            </Text>
-          </Pressable>
-        </GlassView>
-      ) : null}
+            <Pressable
+              accessibilityLabel={error}
+              accessibilityHint={t("close")}
+              accessibilityRole="button"
+              accessibilityLiveRegion="assertive"
+              onPress={() => setError(null)}
+              style={{
+                minHeight: 60,
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "row",
+                gap: 9,
+                padding: 14,
+              }}
+            >
+              <SymbolView
+                accessible={false}
+                name="xmark.circle.fill"
+                tintColor={colors.destructive}
+                size={20}
+              />
+              <Text
+                selectable
+                style={{
+                  color: "white",
+                  flexShrink: 1,
+                  fontSize: 14,
+                  fontWeight: "600",
+                  textAlign: "center",
+                }}
+              >
+                {error}
+              </Text>
+            </Pressable>
+          </GlassView>
+        ) : null}
+        <View pointerEvents="box-none" style={{ marginTop: 14, marginHorizontal: 16 }}>
+          <ScannerQueueStatus
+            queue={syncState.queue}
+            syncing={syncState.syncing}
+            onSync={() => void syncState.sync()}
+            onRetry={() => void syncState.retryFailed()}
+            onRetryOne={(id) => void syncState.retryOne(id)}
+            onDelete={(id) => void syncState.discardScan(id)}
+            clockSkewMs={syncState.clockSkewMs}
+            fillWidth={false}
+          />
+        </View>
+      </View>
       {result ? (
         <ActivityResultPanel
           activity={activity}
@@ -326,11 +361,15 @@ export function ActivityScannerScreen() {
           onCancel={() => {
             setResult(null);
             setRegistering(false);
+            setNfcSessionKey((key) => key + 1);
           }}
           onContinue={() => {
             setResult(null);
+            setNfcSessionKey((key) => key + 1);
           }}
-          onRegisterAnother={() => void store(result.person, result.badgeId, true, result.count)}
+          onRegisterAnother={() =>
+            void store(result.person, result.badgeId, true, result.count, result.ticketToken)
+          }
         />
       ) : null}
     </View>

@@ -1,6 +1,6 @@
 "use client";
 
-import { DownloadIcon } from "lucide-react";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { type FormEvent, type ReactNode, useCallback, useMemo, useState } from "react";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -131,7 +131,7 @@ export function ApplicationExportPanel({
     } catch (error) {
       const message = errorMessage(error, t("applicationExportCatalogFailed"));
       setCatalogError(message);
-      toast.error(message);
+      toast.error(message, t("toastExportApplications"));
     } finally {
       setCatalogLoading(false);
     }
@@ -303,12 +303,18 @@ export function ApplicationExportPanel({
       link.remove();
       URL.revokeObjectURL(url);
       setMissingFiles(report);
-      toast.success(t("applicationExportDownloaded"));
-      if (report) toast.error(t("applicationExportMissingFilesDesc", { count: report.total }));
+      toast.success(t("applicationExportDownloaded"), {
+        compactTitle: t("toastExportApplications"),
+      });
+      if (report)
+        toast.error(
+          t("applicationExportMissingFilesDesc", { count: report.total }),
+          t("exportFiles"),
+        );
     } catch (error) {
       const message = errorMessage(error, t("applicationExportFailed"));
       setExportError(message);
-      toast.error(message);
+      toast.error(message, t("toastExportApplications"));
     } finally {
       setExporting(false);
     }
@@ -316,7 +322,7 @@ export function ApplicationExportPanel({
 
   const defaultTrigger = (
     <Button variant="outline">
-      <DownloadIcon aria-hidden="true" />
+      <DownloadSimpleIcon aria-hidden="true" />
       {t("exportApplicationData")}
     </Button>
   );
@@ -327,7 +333,7 @@ export function ApplicationExportPanel({
       onOpenChange={onOpenChange}
       trigger={trigger ?? defaultTrigger}
       title={t("applicationExportTitle")}
-      icon={DownloadIcon}
+      icon={DownloadSimpleIcon}
       className="sm:max-w-2xl"
       footer={
         <>
@@ -339,7 +345,7 @@ export function ApplicationExportPanel({
             pending={exporting}
             disabled={catalogLoading || !catalog}
           >
-            <DownloadIcon aria-hidden="true" />
+            <DownloadSimpleIcon aria-hidden="true" />
             {t("export")}
           </SubmitButton>
         </>

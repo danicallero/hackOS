@@ -1,7 +1,9 @@
 "use client";
 
 import { EVENTS } from "@hackos/shared/events";
-import { LinkIcon, PlusIcon, UserRoundIcon } from "lucide-react";
+import { LinkIcon } from "@phosphor-icons/react/dist/csr/Link";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { SectionCard } from "@/components/common/section-card";
@@ -103,7 +105,7 @@ export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
       });
       setCreateOpen(false);
       resetForm();
-      toast.success(t("linkCreated"));
+      toast.success(t("linkCreated"), { compactTitle: t("toastCreateInvite") });
       await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : t("couldNotCreateEnterpriseInviteLink"));
@@ -118,10 +120,13 @@ export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
     try {
       await api.post(`/api/invites/enterprise-links/${withdrawId}/withdraw`);
       setWithdrawId(null);
-      toast.success(t("linkWithdrawn"));
+      toast.success(t("linkWithdrawn"), { compactTitle: t("toastWithdrawInvite") });
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotWithdrawLink"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotWithdrawLink"),
+        t("toastWithdrawInvite"),
+      );
     } finally {
       setWithdrawPending(false);
     }
@@ -316,7 +321,7 @@ export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
                 </dl>
                 <div className="border-t pt-3">
                   <h3 className="mb-2 flex items-center gap-2 text-sm font-medium">
-                    <UserRoundIcon aria-hidden="true" className="size-4" /> {t("redemptionsLabel")}
+                    <UserIcon aria-hidden="true" className="size-4" /> {t("redemptionsLabel")}
                   </h3>
                   {link.redemptions.length === 0 ? (
                     <p className="text-muted-foreground text-sm">{t("noRedemptionsYet")}</p>

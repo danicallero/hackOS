@@ -277,20 +277,41 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
   // Admin: delete a university.
   r.delete(
     "/api/universities/:id",
-    { ...routeAccess(manageAccess), preHandler: manage, schema: { params: idParam } },
+    {
+      ...routeAccess(manageAccess),
+      preHandler: manage,
+      schema: {
+        params: idParam,
+        summary: "Delete an unused university",
+        description:
+          "Deletes a university and audits the mutation. Returns 409 with reason university_in_use when user profiles still reference it; consolidate it into another university first.",
+      },
+    },
     async (req, reply) => {
-      await withTransaction(async (client) => {
-        const { rowCount } = await client.query(`DELETE FROM universities WHERE id = $1`, [
-          req.params.id,
-        ]);
-        if (rowCount === 0) throw new NotFoundError("University not found", { id: req.params.id });
-        await audit(client, {
-          actorId: req.userId,
-          entityType: "university",
-          entityId: req.params.id,
-          action: "deleted",
+      try {
+        await withTransaction(async (client) => {
+          const { rowCount } = await client.query(`DELETE FROM universities WHERE id = $1`, [
+            req.params.id,
+          ]);
+          if (rowCount === 0)
+            throw new NotFoundError("University not found", { id: req.params.id });
+          await audit(client, {
+            actorId: req.userId,
+            entityType: "university",
+            entityId: req.params.id,
+            action: "deleted",
+          });
         });
-      });
+      } catch (error) {
+        const databaseError = error as { code?: string; constraint?: string };
+        if (databaseError.code === "23503" && databaseError.constraint === "users_university_fk") {
+          throw new ConflictError(
+            "This university is linked to user profiles. Merge it into another university before deleting it.",
+            { reason: "university_in_use", id: req.params.id },
+          );
+        }
+        throw error;
+      }
       reply.code(204);
       return null;
     },
