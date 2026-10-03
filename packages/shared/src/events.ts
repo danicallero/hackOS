@@ -80,6 +80,8 @@ export const EVENTS = {
   USER_QUEUE_CHANGED: "user.queue.changed", // H38: one of the user's challenge queues changed
   USER_QUEUE_MESSAGE: "user.queue.message", // H46: free-text message from staff/sponsor about an evaluation
   USER_NOTIFICATION: "user.notification", // generic in-app inbox push
+  /** Refresh the current account's session facts (roles, capabilities, affiliations). */
+  USER_SESSION_CHANGED: "user.session.changed",
   EXPORT_REQUEST_CHANGED: "exports.request.status_changed", // H54
 } as const;
 

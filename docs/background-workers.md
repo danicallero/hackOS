@@ -167,13 +167,18 @@ policy beside the processor.
 
 ## Queue and public-screen streams
 
+`GET /api/queue/me/stream` is the authenticated personal channel. It carries
+only the current account's queue, inbox, and session-refresh signals, so the
+web shell can use one physical connection for all three.
+
 `GET /api/queue/stream` is an authenticated operational channel: only global
 `queue:operate`, `queue:admin`, or `judge:panel` holders can subscribe because
 its events carry room-control and team details. `GET /api/events/stream` is
 authenticated only when a domain topic is supplied (`applications`, `projects`,
 `identity`, `sponsors`, `logistics`, or `audit`); it carries payload-free
 `domain.changed` signals and never acts as a global refresh channel. Public
-`/api/tv/stream` subscribes only to `public-tv` (mirrors `queue` and `tv`) and
+`/api/tv/stream` subscribes only to `public-tv` (mirrors `queue`, `tv`, and
+public `content`) and
 `/api/content/stream` only to `public-content` (mirrors `content` and explicit
 public sponsor/challenge changes). Both mirrors use an empty `data.changed`
 envelope, never the source payload, and neither sees private roster, identity,

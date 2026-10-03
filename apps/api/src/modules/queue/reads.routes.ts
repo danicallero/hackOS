@@ -305,7 +305,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Personal queue stream",
         description:
-          "Authenticated SSE stream for the current participant's queue notifications only.",
+          "Authenticated SSE stream for the current participant's queue, inbox and session-refresh notifications only.",
       },
     },
     async (req, reply) => subscribe(`user:${req.userId}`, req, reply),

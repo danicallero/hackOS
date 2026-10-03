@@ -437,6 +437,9 @@ export async function buildApp(): Promise<App> {
     const broadcasts = [...topics].map((topic) => broadcast(topic, EVENTS.DOMAIN_CHANGED, {}));
     if (publicContentMutationForPath(req.url)) {
       broadcasts.push(broadcast(SSE_TOPICS.PUBLIC_CONTENT, EVENTS.DATA_CHANGED, {}));
+      // TV walls render the same public sponsor/challenge projection as
+      // content-only clients, but hold only the public-TV socket.
+      broadcasts.push(broadcast(SSE_TOPICS.PUBLIC_TV, EVENTS.DATA_CHANGED, {}));
     }
     await Promise.all(broadcasts).catch((err) =>
       logSoftFailure(req, err, "scoped SSE refresh failed"),

@@ -109,21 +109,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => registerSignOutListener(clear), [clear]);
 
-  // Judge assignments are enterprise mutations. Refresh the caller's
-  // association facts as soon as that topic changes so the judging workspace
-  // appears (or disappears) without a full-page reload.
-  useEventSource("/api/events/stream?topic=sponsors", {
-    events: [EVENTS.DOMAIN_CHANGED],
+  // The authenticated shell already holds the personal stream for queue and
+  // inbox updates. Session changes are addressed to that same user topic,
+  // rather than making every signed-in tab subscribe to the global identity
+  // and sponsors domains. This keeps the normal shell to one SSE connection.
+  useEventSource("/api/queue/me/stream", {
+    events: [EVENTS.USER_SESSION_CHANGED],
     onEvent: refresh,
     onResync: refresh,
-    identityKey: me?.id ?? null,
-    enabled: status === "authenticated",
-  });
-  useEventSource("/api/events/stream?topic=identity", {
-    events: [EVENTS.DOMAIN_CHANGED],
-    onEvent: refresh,
-    onResync: refresh,
-    identityKey: me?.id ?? null,
     enabled: status === "authenticated",
   });
 
