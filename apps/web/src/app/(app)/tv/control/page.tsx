@@ -2,7 +2,9 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { GlobeIcon, MonitorUpIcon, RadioIcon } from "lucide-react";
+import { GlobeIcon } from "@phosphor-icons/react/dist/csr/Globe";
+import { MonitorArrowUpIcon } from "@phosphor-icons/react/dist/csr/MonitorArrowUp";
+import { RadioIcon } from "@phosphor-icons/react/dist/csr/Radio";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -183,7 +185,6 @@ export default function TvControlPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("tvControl")}
-        description={t("tvControlDesc")}
         primaryAction={
           <Button size="sm" variant="outline" asChild>
             <a href="/tv" target="_blank" rel="noreferrer">
@@ -251,7 +252,7 @@ export default function TvControlPage() {
       </SectionCard>
 
       <SectionCard
-        icon={MonitorUpIcon}
+        icon={MonitorArrowUpIcon}
         title={t("displayMode")}
         description={isDraftUnbroadcast ? t("draftNotYetBroadcastDesc") : t("draftMatchesLiveDesc")}
         footer={
@@ -264,7 +265,7 @@ export default function TvControlPage() {
         }
       >
         <fieldset>
-          <legend className="mb-3 text-sm font-medium">{t("chooseAMode")}</legend>
+          <legend className="sr-only">{t("displayMode")}</legend>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {MODES.map((item) => (
               <label

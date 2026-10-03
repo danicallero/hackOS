@@ -10,12 +10,8 @@ export default function TimetablePage() {
   return (
     <div className="space-y-6 sm:space-y-8">
       <PublicScheduleView
-        header={(event, actions) => (
-          <PageHeader
-            context={event?.name ?? "hackOS"}
-            title={t("schedule")}
-            secondaryActions={actions}
-          />
+        header={(_event, actions) => (
+          <PageHeader title={t("schedule")} secondaryActions={actions} />
         )}
       />
     </div>

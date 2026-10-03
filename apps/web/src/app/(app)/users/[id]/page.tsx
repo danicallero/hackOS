@@ -1,7 +1,8 @@
 "use client";
 
 import { EVENTS } from "@hackos/shared/events";
-import { ChevronDownIcon, UsersIcon } from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
@@ -130,7 +131,7 @@ export default function UserProfilePage() {
                     {t("activityPassesProjectionDesc")}
                   </p>
                 </div>
-                <ChevronDownIcon
+                <CaretDownIcon
                   className="text-muted-foreground mt-1 size-5 shrink-0 transition-transform group-open:rotate-180"
                   aria-hidden="true"
                 />

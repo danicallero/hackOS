@@ -1,6 +1,6 @@
 "use client";
 
-import { DownloadIcon } from "lucide-react";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { type ReactNode, useMemo, useState } from "react";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { ExportSensitivityBadge } from "@/components/exports/export-sensitivity-badge";
@@ -28,7 +28,7 @@ export function PresenceExportPanel({ trigger }: { trigger?: ReactNode }) {
       trigger={
         trigger ?? (
           <Button variant="outline">
-            <DownloadIcon aria-hidden="true" />
+            <DownloadSimpleIcon aria-hidden="true" />
             {t("export")}
           </Button>
         )
@@ -55,7 +55,7 @@ export function PresenceExportPanel({ trigger }: { trigger?: ReactNode }) {
           <span className="text-sm font-medium">{t("presenceHoursSummary")}</span>
           <Button asChild variant="outline" size="sm">
             <a href={hoursUrl("reduced")}>
-              <DownloadIcon aria-hidden="true" />
+              <DownloadSimpleIcon aria-hidden="true" />
               {t("export")}
             </a>
           </Button>
@@ -64,7 +64,7 @@ export function PresenceExportPanel({ trigger }: { trigger?: ReactNode }) {
           <span className="text-sm font-medium">{t("presenceHoursDetailed")}</span>
           <Button asChild variant="outline" size="sm">
             <a href={hoursUrl("full")}>
-              <DownloadIcon aria-hidden="true" />
+              <DownloadSimpleIcon aria-hidden="true" />
               {t("export")}
             </a>
           </Button>
@@ -75,7 +75,7 @@ export function PresenceExportPanel({ trigger }: { trigger?: ReactNode }) {
           </span>
           <Button asChild variant="outline" size="sm">
             <a href={`${API_URL}/api/exports/presence-log.csv`}>
-              <DownloadIcon aria-hidden="true" />
+              <DownloadSimpleIcon aria-hidden="true" />
               {t("export")}
             </a>
           </Button>

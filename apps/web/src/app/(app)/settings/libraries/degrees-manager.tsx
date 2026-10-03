@@ -1,8 +1,9 @@
 "use client";
 
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 // Curated degree directory: same self-service proposal limits as universities,
 // with staff create, rename and deletion controls in the shared Libraries area.
-import { GraduationCapIcon, MoreHorizontalIcon, PlusIcon, SearchIcon } from "lucide-react";
+import { GraduationCapIcon } from "@phosphor-icons/react/dist/csr/GraduationCap";
 import { useCallback, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import type { Column } from "@/components/common/data-table";
@@ -22,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
+import { LibraryToolbar } from "./library-toolbar";
 
 interface Degree {
   id: number;
@@ -135,35 +137,27 @@ export function DegreesManager() {
   ];
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-muted-foreground text-sm">{t("degreesDirectoryDesc")}</p>
-        <Button onClick={() => openEditor(null)}>
-          <PlusIcon />
-          {t("newAction")}
-        </Button>
-      </div>
-      <div className="relative max-w-xs">
-        <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-        <Input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={t("searchDegreesPlaceholder")}
-          className="pl-9"
-        />
-      </div>
+      <LibraryToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchLabel={t("searchDegreesPlaceholder")}
+        count={entries.length}
+        addLabel={t("addDegree")}
+        onAdd={() => openEditor(null)}
+      />
       <DataTable
         columns={columns}
         data={entries}
         getRowId={(row) => String(row.id)}
         loading={loading}
+        filteredEmpty={{ active: search.trim().length > 0, onClear: () => setSearch("") }}
         error={error ? { message: error, onRetry: load } : undefined}
         empty={{ icon: GraduationCapIcon, title: t("noDegreesYetTitle") }}
         rowActions={(row) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm">
-                <MoreHorizontalIcon />
+                <DotsThreeIcon aria-hidden="true" />
                 <span className="sr-only">{t("openMenuAria")}</span>
               </Button>
             </DropdownMenuTrigger>

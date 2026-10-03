@@ -3,7 +3,7 @@
 // Meals and registrable activities consumed by this person (H25-H26).
 
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
-import { ClipboardListIcon } from "lucide-react";
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { useEffect, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
@@ -59,7 +59,7 @@ export function PhysicalActivity({
   if (state === "error" || !data) {
     return (
       <EmptyState
-        icon={ClipboardListIcon}
+        icon={ClipboardTextIcon}
         title={t("couldNotLoadActivityTitle")}
         description={t("passesUnavailable")}
       />
@@ -96,7 +96,7 @@ export function PhysicalActivity({
       getRowId={(p) => String(p.id)}
       pageSize={10}
       empty={{
-        icon: ClipboardListIcon,
+        icon: ClipboardTextIcon,
         title: t("noPassesYet"),
         description: t("passesWillAppear"),
       }}
@@ -106,7 +106,7 @@ export function PhysicalActivity({
   if (embedded) return table;
 
   return (
-    <SectionCard icon={ClipboardListIcon} title={t("activityPasses")} bodyClassName="p-0">
+    <SectionCard icon={ClipboardTextIcon} title={t("activityPasses")} bodyClassName="p-0">
       {table}
     </SectionCard>
   );

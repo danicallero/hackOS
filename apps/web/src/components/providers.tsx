@@ -1,5 +1,6 @@
 "use client";
 
+import { IconContext } from "@phosphor-icons/react/dist/lib/context";
 import { usePathname } from "next/navigation";
 import { ThemeProvider } from "next-themes";
 import { CookieNotice } from "@/components/layout/cookie-notice";
@@ -10,7 +11,8 @@ import { SessionProvider } from "@/lib/session";
 
 /**
  * Global client providers, mounted once in the root layout:
- * - next-themes: dark-first, with class strategy on <html>.
+ * - next-themes: light-first edition theme, with class strategy on <html>.
+ * - IconContext: shared Phosphor weight, base size and inherited color.
  * - SessionProvider: /api/me + capability gating (H8/H55).
  * - TooltipProvider: required once for all shadcn tooltips.
  * - Toaster: Sileo toasts for success, status, action and business-error feedback.
@@ -27,14 +29,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // dismisses on click would sit there forever, permanently covering rooms.
   const isKiosk = pathname?.startsWith("/tv");
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-      <SessionProvider>
-        <LocaleProvider>
-          <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
-          {!isKiosk && <CookieNotice />}
-          <Toaster position="top-right" />
-        </LocaleProvider>
-      </SessionProvider>
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+      <IconContext.Provider value={{ size: 24, weight: "regular", color: "currentColor" }}>
+        <SessionProvider>
+          <LocaleProvider>
+            <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+            {!isKiosk && <CookieNotice />}
+            <Toaster position="top-right" />
+          </LocaleProvider>
+        </SessionProvider>
+      </IconContext.Provider>
     </ThemeProvider>
   );
 }

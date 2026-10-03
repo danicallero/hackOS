@@ -1,24 +1,19 @@
 "use client";
 
 // Presence policy category (H24): the two knobs behind automatic presence
-// estimation. The explanation of how the estimator combines door/meal/
-// activity signals is domain-unfamiliar and rarely needed once set, so it
-// sits under progressive disclosure instead of dominating the default view.
+// estimation. Keep each policy's consequence beside its control (H24).
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronDownIcon, type LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
-import { SubmitButton } from "@/components/common/submit-button";
-import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -27,18 +22,25 @@ import {
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
-import { useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
+import { CategorySaveFooter } from "./category-save-footer";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
+import { ZonedTimePreview } from "./zoned-time-preview";
 
-const schema = z.object({
-  presenceAutoEntryAt: z.string(),
-  presenceCertaintyWindowMinutes: z.number().int().min(15).max(10080),
-});
+const createSchema = (t: Translate) =>
+  z.object({
+    presenceAutoEntryAt: z.string(),
+    presenceCertaintyWindowMinutes: z
+      .number({ error: t("fieldMustBeNumber") })
+      .int(t("fieldMustBeNumber"))
+      .min(15, t("tooSmall"))
+      .max(10080, t("tooLarge")),
+  });
 
-type Values = z.infer<typeof schema>;
+type Values = z.infer<ReturnType<typeof createSchema>>;
 
 function fromConfig(cfg: EventConfig): Values {
   return {
@@ -51,13 +53,13 @@ export function PresenceTab({
   icon,
   onDirtyChange,
 }: {
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { t } = useLocale();
   const { config, status, applyConfig } = useEventConfig();
   const form = useForm<Values>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(createSchema(t)),
     defaultValues: { presenceAutoEntryAt: "", presenceCertaintyWindowMinutes: 720 },
   });
   const { reset, formState } = form;
@@ -77,6 +79,7 @@ export function PresenceTab({
       applyConfig(next);
       reset(fromConfig(next));
       setSaveState("saved");
+      toast.success(t("saved"), { compactTitle: t("attendanceTab") });
     } catch (err) {
       setSaveState("error");
       toast.error(
@@ -96,12 +99,9 @@ export function PresenceTab({
         <SectionCard
           variant="plain"
           footerClassName="justify-start"
-          icon={icon}
-          title={t("presencePolicyTitle")}
-          state={<SaveStatus state={saveState} />}
-          footer={<SubmitButton pending={formState.isSubmitting}>{t("saveChanges")}</SubmitButton>}
+          footer={<CategorySaveFooter pending={formState.isSubmitting} state={saveState} />}
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid items-start gap-4 sm:grid-cols-2">
             <FormField
               control={form.control}
               name="presenceAutoEntryAt"
@@ -111,6 +111,8 @@ export function PresenceTab({
                   <FormControl>
                     <DateTimeInput value={field.value} onChange={field.onChange} />
                   </FormControl>
+                  <ZonedTimePreview value={field.value} timezone={config.timezone} />
+                  <FormDescription>{t("automaticEntryTimeDesc")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -134,30 +136,12 @@ export function PresenceTab({
                       ref={field.ref}
                     />
                   </FormControl>
+                  <FormDescription>{t("certaintyWindowDesc")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
           </div>
-
-          <Collapsible>
-            <CollapsibleTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground -ml-2"
-              >
-                <ChevronDownIcon className="size-4" />
-                {t("presencePolicyDetailsToggle")}
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="text-muted-foreground space-y-2 pt-2 text-sm text-pretty">
-              <p>{t("presencePolicyDesc")}</p>
-              <p>{t("automaticEntryTimeDesc")}</p>
-              <p>{t("certaintyWindowDesc")}</p>
-            </CollapsibleContent>
-          </Collapsible>
         </SectionCard>
       </form>
     </Form>

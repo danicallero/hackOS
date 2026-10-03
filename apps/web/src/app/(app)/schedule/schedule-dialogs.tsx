@@ -1,13 +1,16 @@
 "use client";
 
 import { ACTIVITY_KINDS, type ActivityKind } from "@hackos/shared/activity-kinds";
-import { CalendarClockIcon, CalendarPlusIcon, FilterIcon, ListFilterIcon } from "lucide-react";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { CalendarPlusIcon } from "@phosphor-icons/react/dist/csr/CalendarPlus";
+import { FunnelSimpleIcon } from "@phosphor-icons/react/dist/csr/FunnelSimple";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
+import { FilterMenu } from "@/components/common/filter-menu";
 import { Modal } from "@/components/common/modal";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
@@ -19,132 +22,57 @@ import { SCHEDULE_AUDIENCES, scheduleAudienceLabel, scheduleTypeLabel } from "./
 // "new date" strip opens. Extracted from page.tsx, which the page-size ratchet
 // keeps to the page itself.
 
-export function AudienceFilterPopover({
-  selected,
+export function ScheduleFilterMenu({
+  audiences,
   staffOnly,
-  onChange,
+  kinds,
+  onAudienceChange,
+  onKindChange,
 }: {
-  selected: Set<ScheduleAudience>;
+  audiences: Set<ScheduleAudience>;
   staffOnly: boolean;
-  onChange: (selected: Set<ScheduleAudience>, staffOnly: boolean) => void;
+  kinds: Set<ActivityKind>;
+  onAudienceChange: (selected: Set<ScheduleAudience>, staffOnly: boolean) => void;
+  onKindChange: (selected: Set<ActivityKind>) => void;
 }) {
   const { t } = useLocale();
-  const activeCount = selected.size + (staffOnly ? 1 : 0);
-
-  function toggleAudience(audience: ScheduleAudience, checked: boolean) {
-    const next = new Set(selected);
-    if (checked) next.add(audience);
-    else next.delete(audience);
-    onChange(next, staffOnly);
-  }
-
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm">
-          <FilterIcon className="size-4" />
-          {t("audienceFilterAction")}
-          {activeCount > 0 && (
-            <span className="bg-primary text-primary-foreground ml-0.5 flex size-4 items-center justify-center rounded-full text-[10px]">
-              {activeCount}
-            </span>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-60 space-y-1">
-        {SCHEDULE_AUDIENCES.map((audience) => (
-          <div key={audience} className="flex items-center gap-2 px-1 py-1">
-            <Checkbox
-              id={`audience-filter-${audience}`}
-              checked={selected.has(audience)}
-              onCheckedChange={(checked) => toggleAudience(audience, checked === true)}
-            />
-            <label htmlFor={`audience-filter-${audience}`} className="flex-1 text-sm">
-              {scheduleAudienceLabel(audience, t)}
-            </label>
-          </div>
-        ))}
-        <div className="mt-1 flex items-center gap-2 border-t px-1 pt-2">
-          <Checkbox
-            id="audience-filter-staff-only"
-            checked={staffOnly}
-            onCheckedChange={(checked) => onChange(selected, checked === true)}
-          />
-          <label htmlFor="audience-filter-staff-only" className="flex-1 text-sm">
-            {t("audienceFilterStaffOnly")}
-          </label>
-        </div>
-        {activeCount > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="w-full"
-            onClick={() => onChange(new Set(), false)}
-          >
-            {t("clearFilters")}
-          </Button>
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-export function KindFilterPopover({
-  selected,
-  onChange,
-}: {
-  selected: Set<ActivityKind>;
-  onChange: (selected: Set<ActivityKind>) => void;
-}) {
-  const { t } = useLocale();
-
-  function toggleKind(kind: ActivityKind, checked: boolean) {
-    const next = new Set(selected);
-    if (checked) next.add(kind);
-    else next.delete(kind);
-    onChange(next);
-  }
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm">
-          <ListFilterIcon className="size-4" />
-          {t("kindFilterAction")}
-          {selected.size > 0 && (
-            <span className="bg-primary text-primary-foreground ml-0.5 flex size-4 items-center justify-center rounded-full text-[10px]">
-              {selected.size}
-            </span>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-60 space-y-1">
-        {ACTIVITY_KINDS.map((kind) => (
-          <div key={kind} className="flex items-center gap-2 px-1 py-1">
-            <Checkbox
-              id={`kind-filter-${kind}`}
-              checked={selected.has(kind)}
-              onCheckedChange={(checked) => toggleKind(kind, checked === true)}
-            />
-            <label htmlFor={`kind-filter-${kind}`} className="flex-1 text-sm">
-              {scheduleTypeLabel(kind, t)}
-            </label>
-          </div>
-        ))}
-        {selected.size > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="w-full"
-            onClick={() => onChange(new Set())}
-          >
-            {t("clearFilters")}
-          </Button>
-        )}
-      </PopoverContent>
-    </Popover>
+    <FilterMenu
+      filters={[
+        {
+          id: "audience",
+          label: t("audienceFilterAction"),
+          icon: UsersIcon,
+          type: "multiple",
+          value: [...audiences, ...(staffOnly ? ["staffOnly"] : [])],
+          onChange: (values) =>
+            onAudienceChange(
+              new Set(SCHEDULE_AUDIENCES.filter((audience) => values.includes(audience))),
+              values.includes("staffOnly"),
+            ),
+          options: [
+            ...SCHEDULE_AUDIENCES.map((audience) => ({
+              value: audience,
+              label: scheduleAudienceLabel(audience, t),
+            })),
+            { value: "staffOnly", label: t("audienceFilterStaffOnly") },
+          ],
+        },
+        {
+          id: "kind",
+          label: t("kindFilterAction"),
+          icon: FunnelSimpleIcon,
+          type: "multiple",
+          value: [...kinds],
+          onChange: (values) =>
+            onKindChange(new Set(ACTIVITY_KINDS.filter((kind) => values.includes(kind)))),
+          options: ACTIVITY_KINDS.map((kind) => ({
+            value: kind,
+            label: scheduleTypeLabel(kind, t),
+          })),
+        },
+      ]}
+    />
   );
 }
 
@@ -213,7 +141,7 @@ export function BulkSchedulePopover({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button size="sm" variant="outline" disabled={disabled}>
-          <CalendarClockIcon className="size-4" />
+          <CalendarDotsIcon aria-hidden="true" className="size-4" />
           {t("bulkScheduleAction")}
         </Button>
       </PopoverTrigger>

@@ -1,7 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { CircleIcon } from "@phosphor-icons/react/dist/csr/Circle";
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 
 import {
@@ -142,7 +144,7 @@ function DropdownMenuCheckboxItem({
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
         <DropdownMenuPrimitive.ItemIndicator>
-          <CheckIcon className="size-4" />
+          <CheckIcon aria-hidden="true" className="size-4" />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}
@@ -177,7 +179,7 @@ function DropdownMenuRadioItem({
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
         <DropdownMenuPrimitive.ItemIndicator>
-          <CircleIcon className="size-2 fill-current" />
+          <CircleIcon aria-hidden="true" className="size-2" weight="fill" />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}
@@ -259,10 +261,9 @@ function DropdownMenuSubTrigger({
       {...props}
     >
       {children}
-      <ChevronRightIcon
+      <CaretRightIcon
         aria-hidden="true"
         className="ml-auto size-3.5 text-muted-foreground/75"
-        strokeWidth={1.75}
       />
     </DropdownMenuPrimitive.SubTrigger>
   )

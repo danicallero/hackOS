@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Inter } from "next/font/google";
 import { headers } from "next/headers";
 import Script from "next/script";
 import { Providers } from "@/components/providers";
 import { getSiteUrl, SITE_DESCRIPTION, SITE_TITLE, SOCIAL_IMAGE_PATH } from "@/lib/metadata";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -74,7 +74,7 @@ export default function RootLayout({
       lang="es"
       data-locale-ready="false"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
         <Script src="/runtime-config.js" strategy="beforeInteractive" />

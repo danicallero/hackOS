@@ -9,7 +9,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { config } from "../../config.js";
-import { pool } from "../../db/pool.js";
+import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import {
   type AuthorizationContext,
@@ -28,6 +28,7 @@ import {
   listActiveWalletPassIds,
 } from "../logistics/wallet-passes.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
+import { type EventReminder, readEventReminder, saveEventReminder } from "./reminders.js";
 
 /**
  * Event-wide config (H45/H47). The hacking window is the publicly-"spoken"
@@ -46,6 +47,7 @@ import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 /** Every writable field's owning capability (H8) — one entry per `eventConfigBody` key. */
 const EVENT_SETTINGS_CAPABILITIES: Record<string, Capability> = {
   name: CAPABILITIES.EVENT_MANAGE,
+  eventReminderScheduledAt: CAPABILITIES.EVENT_MANAGE,
   tagline: CAPABILITIES.EVENT_MANAGE,
   timezone: CAPABILITIES.EVENT_MANAGE,
   eventStartsAt: CAPABILITIES.EVENT_MANAGE,
@@ -123,6 +125,7 @@ const passFieldVisibilitySchema = z
 const eventConfigBody = z
   .object({
     name: z.string().nullable().optional(),
+    eventReminderScheduledAt: z.coerce.date().nullable().optional(),
     tagline: z.string().nullable().optional(),
     timezone: z.string().min(1).optional(),
     eventStartsAt: z.coerce.date().nullable().optional(),
@@ -222,8 +225,8 @@ interface EventConfigRow {
   shirt_sizes: string[];
 }
 
-async function readConfig(): Promise<EventConfigRow> {
-  const { rows } = await pool.query(
+async function readConfig(db: Queryable = pool): Promise<EventConfigRow> {
+  const { rows } = await db.query(
     `SELECT name, tagline, timezone, event_starts_at, event_ends_at,
             hacking_starts_at, hacking_ends_at,
             show_start_countdown, participants_can_create_projects,
@@ -304,9 +307,11 @@ function toPublic(
 function toAdmin(
   row: EventConfigRow,
   judging: { judging_starts_at: string | null; judging_ends_at: string | null },
+  eventReminder: EventReminder | null = null,
 ) {
   return {
     ...toPublic(row, judging),
+    eventReminder,
     wifiSsid: row.wifi_ssid,
     wifiPassword: row.wifi_password,
     requireSponsorShirtSize: row.require_sponsor_shirt_size,
@@ -355,10 +360,11 @@ export function registerEventRoutes(app: FastifyInstance): void {
         summary:
           "Read the full event config, including venue, Wi-Fi credentials and Wallet pass back fields.",
         description:
-          "Staff-only counterpart of GET /api/public/event, readable by anyone holding at least one event-settings capability (EVENT_MANAGE, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE, INTOLERANCES_MANAGE). Adds the venue Wi-Fi credentials on top of everything the public feed returns, for the settings page.",
+          "Staff-only counterpart of GET /api/public/event, readable by anyone holding at least one event-settings capability (EVENT_MANAGE, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE, INTOLERANCES_MANAGE). Includes the latest pre-event email reminder status. Adds the venue Wi-Fi credentials on top of everything the public feed returns, for the settings page.",
       },
     },
-    async () => toAdmin(await readConfig(), await readJudgingWindow()),
+    async () =>
+      toAdmin(await readConfig(), await readJudgingWindow(), await readEventReminder(pool)),
   );
 
   r.put(
@@ -369,106 +375,113 @@ export function registerEventRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update event config",
         description:
-          "Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), presence-detection policy, whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), and the shirt-size options offered by every picker in the app (H12). Fields omitted from the body are left unchanged. Each field is additionally gated by its own owning capability (EVENT_MANAGE for identity/timing, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE for the sponsor/staff requirements, INTOLERANCES_MANAGE for shirtSizes) — a 403 names exactly which field(s) the caller lacks rights to. When the saved config actually changes, Apple Wallet devices are pushed and the shared Google Wallet event-ticket class is refreshed for saved tickets.",
+          "Atomically saves an optional eventReminderScheduledAt (null cancels a pending pre-event email) alongside the event settings. The reminder requires event:manage and a future send before doors open. Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), presence-detection policy, whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), and the shirt-size options offered by every picker in the app (H12). Fields omitted from the body are left unchanged. Each field is additionally gated by its own owning capability (EVENT_MANAGE for identity/timing, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE for the sponsor/staff requirements, INTOLERANCES_MANAGE for shirtSizes) — a 403 names exactly which field(s) the caller lacks rights to. When the saved config actually changes, Apple Wallet devices are pushed and the shared Google Wallet event-ticket class is refreshed for saved tickets.",
         body: eventConfigBody,
       },
     },
     async (req) => {
       const b = req.body;
       await assertFieldCapabilities(getRequestAuthorizationContext(req), b);
-      const current = await readConfig();
-      const next = {
-        name: b.name === undefined ? current.name : b.name,
-        tagline: b.tagline === undefined ? current.tagline : b.tagline,
-        timezone: b.timezone ?? current.timezone,
-        event_starts_at: b.eventStartsAt === undefined ? current.event_starts_at : b.eventStartsAt,
-        event_ends_at: b.eventEndsAt === undefined ? current.event_ends_at : b.eventEndsAt,
-        hacking_starts_at:
-          b.hackingStartsAt === undefined ? current.hacking_starts_at : b.hackingStartsAt,
-        hacking_ends_at: b.hackingEndsAt === undefined ? current.hacking_ends_at : b.hackingEndsAt,
-        show_start_countdown:
-          b.showStartCountdown === undefined ? current.show_start_countdown : b.showStartCountdown,
-        participants_can_create_projects:
-          b.participantsCanCreateProjects === undefined
-            ? current.participants_can_create_projects
-            : b.participantsCanCreateProjects,
-        participant_self_service_starts_at:
-          b.participantSelfServiceStartsAt === undefined
-            ? current.participant_self_service_starts_at
-            : b.participantSelfServiceStartsAt,
-        participant_self_service_ends_at:
-          b.participantSelfServiceEndsAt === undefined
-            ? current.participant_self_service_ends_at
-            : b.participantSelfServiceEndsAt,
-        presence_auto_entry_at:
-          b.presenceAutoEntryAt === undefined
-            ? current.presence_auto_entry_at
-            : b.presenceAutoEntryAt,
-        presence_certainty_window_minutes:
-          b.presenceCertaintyWindowMinutes ?? current.presence_certainty_window_minutes,
-        venue_name: b.venueName === undefined ? current.venue_name : b.venueName,
-        venue_latitude: b.venueLatitude === undefined ? current.venue_latitude : b.venueLatitude,
-        venue_longitude:
-          b.venueLongitude === undefined ? current.venue_longitude : b.venueLongitude,
-        wifi_ssid: b.wifiSsid === undefined ? current.wifi_ssid : b.wifiSsid,
-        wifi_password: b.wifiPassword === undefined ? current.wifi_password : b.wifiPassword,
-        pass_back_fields:
-          b.passBackFields === undefined ? current.pass_back_fields : b.passBackFields,
-        pass_field_labels:
-          b.passFieldLabels === undefined ? current.pass_field_labels : b.passFieldLabels,
-        pass_field_visibility:
-          b.passFieldVisibility === undefined
-            ? current.pass_field_visibility
-            : b.passFieldVisibility,
-        require_sponsor_shirt_size:
-          b.requireSponsorShirtSize === undefined
-            ? current.require_sponsor_shirt_size
-            : b.requireSponsorShirtSize,
-        require_sponsor_dietary:
-          b.requireSponsorDietary === undefined
-            ? current.require_sponsor_dietary
-            : b.requireSponsorDietary,
-        require_staff_shirt_size:
-          b.requireStaffShirtSize === undefined
-            ? current.require_staff_shirt_size
-            : b.requireStaffShirtSize,
-        require_staff_dietary:
-          b.requireStaffDietary === undefined
-            ? current.require_staff_dietary
-            : b.requireStaffDietary,
-        shirt_sizes: b.shirtSizes === undefined ? current.shirt_sizes : b.shirtSizes,
-      };
+      const result = await withTransaction(async (client) => {
+        // H45/H52: serialize singleton edits, including first-save scheduling.
+        await client.query("SELECT pg_advisory_xact_lock(603, 1)");
+        const current = await readConfig(client);
+        const next = {
+          name: b.name === undefined ? current.name : b.name,
+          tagline: b.tagline === undefined ? current.tagline : b.tagline,
+          timezone: b.timezone ?? current.timezone,
+          event_starts_at:
+            b.eventStartsAt === undefined ? current.event_starts_at : b.eventStartsAt,
+          event_ends_at: b.eventEndsAt === undefined ? current.event_ends_at : b.eventEndsAt,
+          hacking_starts_at:
+            b.hackingStartsAt === undefined ? current.hacking_starts_at : b.hackingStartsAt,
+          hacking_ends_at:
+            b.hackingEndsAt === undefined ? current.hacking_ends_at : b.hackingEndsAt,
+          show_start_countdown:
+            b.showStartCountdown === undefined
+              ? current.show_start_countdown
+              : b.showStartCountdown,
+          participants_can_create_projects:
+            b.participantsCanCreateProjects === undefined
+              ? current.participants_can_create_projects
+              : b.participantsCanCreateProjects,
+          participant_self_service_starts_at:
+            b.participantSelfServiceStartsAt === undefined
+              ? current.participant_self_service_starts_at
+              : b.participantSelfServiceStartsAt,
+          participant_self_service_ends_at:
+            b.participantSelfServiceEndsAt === undefined
+              ? current.participant_self_service_ends_at
+              : b.participantSelfServiceEndsAt,
+          presence_auto_entry_at:
+            b.presenceAutoEntryAt === undefined
+              ? current.presence_auto_entry_at
+              : b.presenceAutoEntryAt,
+          presence_certainty_window_minutes:
+            b.presenceCertaintyWindowMinutes ?? current.presence_certainty_window_minutes,
+          venue_name: b.venueName === undefined ? current.venue_name : b.venueName,
+          venue_latitude: b.venueLatitude === undefined ? current.venue_latitude : b.venueLatitude,
+          venue_longitude:
+            b.venueLongitude === undefined ? current.venue_longitude : b.venueLongitude,
+          wifi_ssid: b.wifiSsid === undefined ? current.wifi_ssid : b.wifiSsid,
+          wifi_password: b.wifiPassword === undefined ? current.wifi_password : b.wifiPassword,
+          pass_back_fields:
+            b.passBackFields === undefined ? current.pass_back_fields : b.passBackFields,
+          pass_field_labels:
+            b.passFieldLabels === undefined ? current.pass_field_labels : b.passFieldLabels,
+          pass_field_visibility:
+            b.passFieldVisibility === undefined
+              ? current.pass_field_visibility
+              : b.passFieldVisibility,
+          require_sponsor_shirt_size:
+            b.requireSponsorShirtSize === undefined
+              ? current.require_sponsor_shirt_size
+              : b.requireSponsorShirtSize,
+          require_sponsor_dietary:
+            b.requireSponsorDietary === undefined
+              ? current.require_sponsor_dietary
+              : b.requireSponsorDietary,
+          require_staff_shirt_size:
+            b.requireStaffShirtSize === undefined
+              ? current.require_staff_shirt_size
+              : b.requireStaffShirtSize,
+          require_staff_dietary:
+            b.requireStaffDietary === undefined
+              ? current.require_staff_dietary
+              : b.requireStaffDietary,
+          shirt_sizes: b.shirtSizes === undefined ? current.shirt_sizes : b.shirtSizes,
+        };
 
-      if (
-        next.hacking_starts_at !== null &&
-        next.hacking_ends_at !== null &&
-        new Date(next.hacking_ends_at).getTime() <= new Date(next.hacking_starts_at).getTime()
-      ) {
-        throw new BadRequestError("hackingEndsAt must be after hackingStartsAt");
-      }
-      if (
-        next.participant_self_service_starts_at !== null &&
-        next.participant_self_service_ends_at !== null &&
-        new Date(next.participant_self_service_ends_at).getTime() <=
-          new Date(next.participant_self_service_starts_at).getTime()
-      ) {
-        throw new BadRequestError(
-          "participantSelfServiceEndsAt must be after participantSelfServiceStartsAt",
-        );
-      }
-      if (
-        next.event_starts_at !== null &&
-        next.event_ends_at !== null &&
-        new Date(next.event_ends_at).getTime() <= new Date(next.event_starts_at).getTime()
-      ) {
-        throw new BadRequestError("eventEndsAt must be after eventStartsAt");
-      }
-      if ((next.venue_latitude === null) !== (next.venue_longitude === null)) {
-        throw new BadRequestError("venueLatitude and venueLongitude must be set together");
-      }
+        if (
+          next.hacking_starts_at !== null &&
+          next.hacking_ends_at !== null &&
+          new Date(next.hacking_ends_at).getTime() <= new Date(next.hacking_starts_at).getTime()
+        ) {
+          throw new BadRequestError("hackingEndsAt must be after hackingStartsAt");
+        }
+        if (
+          next.participant_self_service_starts_at !== null &&
+          next.participant_self_service_ends_at !== null &&
+          new Date(next.participant_self_service_ends_at).getTime() <=
+            new Date(next.participant_self_service_starts_at).getTime()
+        ) {
+          throw new BadRequestError(
+            "participantSelfServiceEndsAt must be after participantSelfServiceStartsAt",
+          );
+        }
+        if (
+          next.event_starts_at !== null &&
+          next.event_ends_at !== null &&
+          new Date(next.event_ends_at).getTime() <= new Date(next.event_starts_at).getTime()
+        ) {
+          throw new BadRequestError("eventEndsAt must be after eventStartsAt");
+        }
+        if ((next.venue_latitude === null) !== (next.venue_longitude === null)) {
+          throw new BadRequestError("venueLatitude and venueLongitude must be set together");
+        }
 
-      const { rows } = await pool.query(
-        `INSERT INTO event_config
+        const { rows } = await client.query(
+          `INSERT INTO event_config
             (id, name, tagline, timezone, event_starts_at, event_ends_at,
              hacking_starts_at, hacking_ends_at,
              show_start_countdown, participants_can_create_projects,
@@ -515,58 +528,68 @@ export function registerEventRoutes(app: FastifyInstance): void {
                    pass_back_fields, pass_field_labels, pass_field_visibility,
                    require_sponsor_shirt_size, require_sponsor_dietary,
                    require_staff_shirt_size, require_staff_dietary, shirt_sizes`,
-        [
-          next.name,
-          next.tagline,
-          next.timezone,
-          next.event_starts_at,
-          next.event_ends_at,
-          next.hacking_starts_at,
-          next.hacking_ends_at,
-          next.show_start_countdown,
-          next.participants_can_create_projects,
-          next.participant_self_service_starts_at,
-          next.participant_self_service_ends_at,
-          next.presence_auto_entry_at,
-          next.presence_certainty_window_minutes,
-          next.venue_name,
-          next.venue_latitude,
-          next.venue_longitude,
-          next.wifi_ssid,
-          next.wifi_password,
-          JSON.stringify(next.pass_back_fields),
-          JSON.stringify(next.pass_field_labels),
-          JSON.stringify(next.pass_field_visibility),
-          next.require_sponsor_shirt_size,
-          next.require_sponsor_dietary,
-          next.require_staff_shirt_size,
-          next.require_staff_dietary,
-          next.shirt_sizes,
-        ],
-      );
-      const judging = await readJudgingWindow();
-      await audit(pool, {
-        actorId: req.userId,
-        entityType: "event_config",
-        entityId: 1,
-        action: "updated",
-        // The Wi-Fi password is a credential: audit that it changed, never
-        // what it changed to.
-        after: { ...toAdmin(rows[0], judging), wifiPassword: rows[0].wifi_password ? "***" : null },
+          [
+            next.name,
+            next.tagline,
+            next.timezone,
+            next.event_starts_at,
+            next.event_ends_at,
+            next.hacking_starts_at,
+            next.hacking_ends_at,
+            next.show_start_countdown,
+            next.participants_can_create_projects,
+            next.participant_self_service_starts_at,
+            next.participant_self_service_ends_at,
+            next.presence_auto_entry_at,
+            next.presence_certainty_window_minutes,
+            next.venue_name,
+            next.venue_latitude,
+            next.venue_longitude,
+            next.wifi_ssid,
+            next.wifi_password,
+            JSON.stringify(next.pass_back_fields),
+            JSON.stringify(next.pass_field_labels),
+            JSON.stringify(next.pass_field_visibility),
+            next.require_sponsor_shirt_size,
+            next.require_sponsor_dietary,
+            next.require_staff_shirt_size,
+            next.require_staff_dietary,
+            next.shirt_sizes,
+          ],
+        );
+        if (b.eventReminderScheduledAt !== undefined)
+          await saveEventReminder(client, req.userId, b.eventReminderScheduledAt);
+        const reminder = await readEventReminder(client);
+        const judging = await readJudgingWindow();
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "event_config",
+          entityId: 1,
+          action: "updated",
+          // The Wi-Fi password is a credential: audit that it changed, never
+          // what it changed to.
+          after: {
+            ...toAdmin(rows[0], judging, reminder),
+            wifiPassword: rows[0].wifi_password ? "***" : null,
+          },
+        });
+
+        return { current, row: rows[0], judging, reminder };
       });
+      const { current, row, judging, reminder } = result;
 
       // Apple Wallet passes render event name/venue/back fields fresh from
       // event_config on every fetch. Google event tickets inherit their
       // event-wide fields from one EventTicketClass. Refresh both providers
       // only when something actually changed, so clicking Save with no edits
       // doesn't push every device or call Google's API.
-      if (JSON.stringify(current) !== JSON.stringify(rows[0])) {
+      if (JSON.stringify(current) !== JSON.stringify(row)) {
         const applePassIds = await bumpAllAppleWalletUpdateTags();
         const activePassIds = await listActiveWalletPassIds();
         await enqueueWalletSync([...new Set([...applePassIds, ...activePassIds])], "refresh");
       }
 
-      return toAdmin(rows[0], judging);
+      return toAdmin(row, judging, reminder);
     },
   );
 }

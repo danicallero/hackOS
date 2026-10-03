@@ -6,23 +6,20 @@
 
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import {
-  ArrowLeftIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CircleCheckIcon,
-  DownloadIcon,
-  ExternalLinkIcon,
-  FilePenLineIcon,
-  FileTextIcon,
-  GavelIcon,
-  GripVerticalIcon,
-  Maximize2Icon,
-  Minimize2Icon,
-  PencilIcon,
-  SaveIcon,
-  SendIcon,
-} from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
+import { ArrowsInSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsInSimple";
+import { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSimple";
+import { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
+import { FloppyDiskIcon } from "@phosphor-icons/react/dist/csr/FloppyDisk";
+import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
+import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
+import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import Link from "next/link";
 import {
   type CSSProperties,
@@ -499,7 +496,7 @@ function ApplicationFileViewer({
                 aria-label={t("viewFileLabel")}
                 title={t("viewFileLabel")}
               >
-                <ExternalLinkIcon />
+                <ArrowSquareOutIcon aria-hidden="true" />
               </a>
               <button
                 type="button"
@@ -509,7 +506,11 @@ function ApplicationFileViewer({
                 aria-pressed={isFullscreen}
                 title={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
               >
-                {isFullscreen ? <Minimize2Icon /> : <Maximize2Icon />}
+                {isFullscreen ? (
+                  <ArrowsInSimpleIcon aria-hidden="true" />
+                ) : (
+                  <ArrowsOutSimpleIcon aria-hidden="true" />
+                )}
               </button>
             </>
           )}
@@ -539,7 +540,7 @@ function ApplicationFileViewer({
               side: t(nextSide === "left" ? "leftSide" : "rightSide"),
             })}
           >
-            <GripVerticalIcon />
+            <DotsSixVerticalIcon aria-hidden="true" />
             <span className="sr-only">{t("moveFileViewerHint")}</span>
           </Button>
           {files.length > 1 && (
@@ -552,7 +553,7 @@ function ApplicationFileViewer({
                 aria-label={t("previousFile")}
                 title={t("previousFile")}
               >
-                <ChevronLeftIcon />
+                <CaretLeftIcon aria-hidden="true" />
               </button>
               <span
                 className="text-muted-foreground min-w-14 text-center text-xs tabular-nums"
@@ -568,7 +569,7 @@ function ApplicationFileViewer({
                 aria-label={t("nextFile")}
                 title={t("nextFile")}
               >
-                <ChevronRightIcon />
+                <CaretRightIcon aria-hidden="true" />
               </button>
             </div>
           )}
@@ -725,7 +726,7 @@ function FileViewerDropZones({
             side: t(side === "left" ? "leftSide" : "rightSide"),
           })}
         >
-          <GripVerticalIcon className="size-5" aria-hidden="true" />
+          <DotsSixVerticalIcon className="size-5" aria-hidden="true" />
           <span>{t("dropFileViewerHere")}</span>
         </button>
       ))}
@@ -779,7 +780,7 @@ function StatusPillsRow({
         <StatusBadge tone={statusTone(st)}>{applicationStatusLabel(st, t)}</StatusBadge>
         {reviewedByMe && (
           <StatusBadge tone="success" dot={false}>
-            <CircleCheckIcon className="size-3" aria-hidden="true" />
+            <CheckCircleIcon className="size-3" aria-hidden="true" />
             {t("reviewedByYou")}
           </StatusBadge>
         )}
@@ -832,6 +833,8 @@ export function ReviewModal({
   const canExport = useCan(CAPABILITIES.EXPORTS_RUN);
   const me = useMe();
   const lang = (me?.language ?? "es") as Language;
+  const onChangedRef = useRef(onChanged);
+  onChangedRef.current = onChanged;
 
   const [staffNotes, setStaffNotes] = useState(response.staff_notes ?? "");
   const [savingNotes, setSavingNotes] = useState(false);
@@ -1105,6 +1108,7 @@ export function ReviewModal({
         }
         setReviewSaveState("saved");
         setReviewDirty(false);
+        void onChangedRef.current();
       } catch {
         setReviewSaveState("error");
       }
@@ -1131,6 +1135,7 @@ export function ReviewModal({
       setMyScore(message.score);
       setMyNotes(message.notes);
       setReviewSaveState(message.saveState);
+      if (message.saveState === "saved") void onChangedRef.current();
     },
   );
 
@@ -1371,7 +1376,7 @@ export function ReviewModal({
                   aria-label={t("previousCandidate")}
                   title={t("previousCandidate")}
                 >
-                  <ChevronLeftIcon />
+                  <CaretLeftIcon aria-hidden="true" />
                 </button>
                 <button
                   type="button"
@@ -1381,7 +1386,7 @@ export function ReviewModal({
                   aria-label={t("nextCandidate")}
                   title={t("nextCandidate")}
                 >
-                  <ChevronRightIcon />
+                  <CaretRightIcon aria-hidden="true" />
                 </button>
               </>
             )}
@@ -1406,7 +1411,7 @@ export function ReviewModal({
                   aria-label={t("saveAnswers")}
                   title={t("saveAnswers")}
                 >
-                  {savingEdit ? <Spinner /> : <SaveIcon />}
+                  {savingEdit ? <Spinner /> : <FloppyDiskIcon aria-hidden="true" />}
                 </button>
               ) : (
                 <button
@@ -1416,7 +1421,7 @@ export function ReviewModal({
                   aria-label={t("editAnswers")}
                   title={t("editAnswers")}
                 >
-                  <PencilIcon />
+                  <PencilIcon aria-hidden="true" />
                 </button>
               ))}
             {showExportAction && (
@@ -1427,7 +1432,7 @@ export function ReviewModal({
                 aria-label={t("exportAnswers")}
                 title={t("exportAnswers")}
               >
-                <DownloadIcon />
+                <DownloadSimpleIcon aria-hidden="true" />
               </button>
             )}
           </div>
@@ -1711,6 +1716,7 @@ function AnswersSection({
                       key={f.key}
                       field={f}
                       applicationId={fieldEditing ? applicationId : undefined}
+                      responseId={fieldEditing ? response.id : undefined}
                       value={value}
                       disabled={!fieldEditing}
                       error={fieldEditing ? editErrors[f.key] : undefined}
@@ -1825,7 +1831,7 @@ function ReviewsPage({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Button type="button" size="sm" variant="ghost" onClick={onBack}>
-            <ArrowLeftIcon />
+            <ArrowLeftIcon aria-hidden="true" />
             {t("backToApplication")}
           </Button>
           <h3 id="all-reviews-title" className="type-section-title mt-3 text-balance">
@@ -1963,7 +1969,7 @@ export function ReviewPanelCard({
             aria-label={t("openReviewWindow")}
             title={t("openReviewWindow")}
           >
-            <ExternalLinkIcon />
+            <ArrowSquareOutIcon aria-hidden="true" />
           </button>
         )}
       </div>
@@ -2120,7 +2126,7 @@ function FloatingReviewPanel(props: ReviewComposerProps) {
       aria-label={t("moveReviewPanel")}
       title={t("moveReviewPanel")}
     >
-      <GripVerticalIcon />
+      <DotsSixVerticalIcon aria-hidden="true" />
     </button>
   );
 
@@ -2192,7 +2198,7 @@ function DecisionMenu({
           aria-label={t("decisionMenuLabel")}
           title={t("decisionMenuLabel")}
         >
-          <GavelIcon />
+          <GavelIcon aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-52" style={{ direction: "ltr" }}>
@@ -2249,7 +2255,7 @@ function DecisionMenu({
                 )
               }
             >
-              <SendIcon />
+              <PaperPlaneTiltIcon aria-hidden="true" />
               {t("sendDecision")}
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -2274,7 +2280,7 @@ function DecisionMenu({
             <DropdownMenuSeparator />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger disabled={busy}>
-                <FilePenLineIcon />
+                <FileTextIcon aria-hidden="true" />
                 {t("returnToDraft")}
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent

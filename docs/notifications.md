@@ -319,3 +319,79 @@ for the same optional auto-translate action as web. Each language's Title
 field has `returnKeyType="next"` chained to its own Message field
 (`bodyRefs`) — a multiline field's own return key inserts a newline instead,
 so the chain stops there rather than trying to jump languages.
+
+## Transactional email theme (H7, H52)
+
+Every email uses the common wrapper in `notifications/templates.ts`, aligned
+with the active edition in `apps/web/src/styles/theme.css` and
+[`DESIGN.md` §2](./DESIGN.md#2-foundation-tokens). Email clients need inline,
+resolved colors rather than CSS variables: light mail uses a blue-tinted shell,
+cream card, ink text, subtle borders and 8px surfaces. Primary actions
+are red/cream pills in both themes; dark canvas, card, footer and borders
+mirror the web's semantic pairs.
+The header shares the card surface in both schemes, without a decorative top
+rule. Its centered, responsive HackUDC 2027 marketing wordmark comes from the
+supplied edition SVGs: red `logo_h-white.svg` for
+light mail and cream `logo_h-white (4).svg` for supported dark-mode clients.
+Original vectors and 720px-wide transparent PNG exports are hosted under
+`public/email/hackudc-2027{,-dark}.{svg,png}`. PNGs preserve compatibility;
+clients without dark-mode CSS use the red logo. The previous `brand-mark.png`
+stays available for images in already-sent messages. The footer retains hackOS as the sending
+platform. Edition red is the action accent, independent of admission outcome.
+
+Body text uses an Inter/system sans stack; 24px regular Rockwell headings load
+from the web's existing font asset and fall back to Georgia. Clients that block
+webfonts retain readable system typography. Narrow layouts reduce padding and
+expand action links, including long verification labels. The document language
+and automated-message footer follow the recipient's es/gl/en language. The
+footer says the sender does not receive incoming messages and links to the
+organization at `hackudc@gpul.org`. This footer also appears in the outgoing
+plain-text MIME part; inbox and push message bodies retain just the message.
+Subject, preheader, escaping and action URLs are preserved.
+These are transactional messages: campaign tracking and unsubscribe controls
+from marketing templates do not belong in this shared wrapper.
+
+### Message voice and admission decisions (H7, H14, H15, H52)
+
+`eventName` identifies the configured event; `applicationName` identifies the
+application form. The applications service supplies both independently for
+acceptance and rejection. If no event name is configured, it uses the same
+organization-name fallback as Wallet (`APPLE_PASS_ORGANIZATION`). Older queued
+payloads without `eventName` also use that fallback rather than leaking an
+unresolved placeholder.
+
+Participant emails use a warm, direct voice. Rejection thanks the applicant,
+acknowledges disappointment and welcomes interest in future editions without
+inventing a reason, waiting list or promise of a place. Acceptance celebrates
+with congratulations and a personal welcome, then explains that a place is
+reserved pending confirmation, how to decline and the automatic release at
+the deadline. Operational queue alerts and security instructions remain precise.
+
+`application.decision` stays the outbox template name; the renderer selects
+complete `accepted`/`rejected` subject/body variants in es/gl/en from the internal
+decision variable, so raw status keys never appear in participant messages.
+This also applies to existing queued decisions. Confirmation details and the
+exact token expiry are localized when the applications service creates the
+payload. The deadline includes day, month,
+year, time and zone in the configured event timezone (UTC if unset), rather
+than a relative duration that would become stale during delivery. Expiry and
+zone are retained in the payload for traceability; existing queued acceptance
+details retain their stored text.
+
+Emails put the outcome first, then required actions/deadlines, then security
+notes or a courteous sign-off. Authentication mail omits the repeated spam
+advice. Admission rejection leads with a considerate, unambiguous outcome and
+closes with thanks and an invitation to future editions. Email correspondence
+uses edition red as a brand/action accent in both themes, not as a status color;
+this is deliberately separate from the web's ink/blue primary control pairing.
+
+### Scheduled pre-event entrance reminder
+
+`event.reminder` is an email-only operational template scheduled from Event
+settings (see [event configuration](./event-config-wallet.md#pre-event-email-reminder-h45-h52)).
+The send adapter resolves event data and live ticket entitlement at dispatch,
+formats the opening date/time in the recipient's language and event timezone,
+and attaches the permanent entrance QR as inline `ticket.png` using
+`cid:event-ticket@hackos`. Official Wallet badge PNGs are exports of the same
+SVGs used in the web wallet. Revoked access or an event that has already opened
+supersedes the queued email. The existing outbox handles delivery and retries.

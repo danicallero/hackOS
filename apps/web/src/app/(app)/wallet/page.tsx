@@ -1,6 +1,8 @@
 "use client";
 
-import { IdCardIcon, TicketIcon, UserIcon } from "lucide-react";
+import { IdentificationCardIcon } from "@phosphor-icons/react/dist/csr/IdentificationCard";
+import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
+import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -121,7 +123,7 @@ function roleLabel(role: Me["visibleRoleName"], t: Translate): string {
 
 function WalletPurposePanel({ purpose, value }: { purpose: Purpose; value?: string | null }) {
   const { t } = useLocale();
-  const icon = purpose === "ticket" ? TicketIcon : IdCardIcon;
+  const icon = purpose === "ticket" ? TicketIcon : IdentificationCardIcon;
 
   if (!value) {
     return (

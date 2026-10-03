@@ -1,6 +1,6 @@
 "use client";
 
-import type { LucideIcon } from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { Brand } from "@/components/common/brand";
 import { useTvScale } from "@/hooks/use-tv-scale";
@@ -85,7 +85,7 @@ export function TvHeader({
   compact = false,
 }: {
   title?: string;
-  icon?: LucideIcon;
+  icon?: PhosphorIcon;
   eventName?: string | null;
   /** Rooms fit their dense card grid with a slightly shorter version of the
    * same bar; the information and hierarchy never change between modes. */

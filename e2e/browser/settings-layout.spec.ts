@@ -15,6 +15,7 @@ test.beforeEach(async ({ page }) => {
           CAPABILITIES.WALLET_MANAGE,
           CAPABILITIES.PRESENCE_MANAGE,
           CAPABILITIES.INVITES_MANAGE,
+          CAPABILITIES.ADMIN_ALL,
         ],
       };
     if (path === "/api/public/food-intolerances") body = { intolerances: [] };
@@ -32,6 +33,23 @@ test.beforeEach(async ({ page }) => {
         hackingEndsAt: null,
         participantSelfServiceStartsAt: null,
         participantSelfServiceEndsAt: null,
+        venueName: "University campus",
+        venueLatitude: 43.3328,
+        venueLongitude: -8.4109,
+        wifiSsid: "HackUDC",
+        wifiPassword: "test-network-password",
+        presenceAutoEntryAt: null,
+        presenceCertaintyWindowMinutes: 720,
+        requireSponsorShirtSize: false,
+        requireSponsorDietary: false,
+        requireStaffShirtSize: false,
+        requireStaffDietary: false,
+        passBackFields: [{ label: "Schedule", value: "https://example.com/schedule" }],
+        passFieldLabels: {},
+        passFieldVisibility: {},
+        organizerName: "GPUL",
+        judgingStartsAt: null,
+        judgingEndsAt: null,
       };
     if (path === "/api/me/notification-preferences") {
       body = {
@@ -40,6 +58,9 @@ test.beforeEach(async ({ page }) => {
         overrides:
           route.request().method() === "PUT" ? route.request().postDataJSON().preferences : [],
       };
+    }
+    if (path === "/api/event" && route.request().method() === "PUT") {
+      body = { ...(body as Record<string, unknown>), ...route.request().postDataJSON() };
     }
     await route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
   });
@@ -107,6 +128,97 @@ test("event settings fit the viewport", async ({ page }) => {
     fullPage: true,
   });
 });
+
+// H19/H24/H28/H42: every settings category, including the expanded Wallet editor.
+for (const tab of ["venue", "wallet", "presence", "invites", "danger"] as const) {
+  test(`event settings ${tab} fits the viewport`, async ({ page }) => {
+    await page.goto(`/settings/event?tab=${tab}`);
+    const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
+    await expect(cookies).toBeVisible();
+    await cookies.locator("button").first().click();
+    const panel = page.getByRole("tabpanel");
+    if (tab === "danger") await expect(panel.getByRole("heading").first()).toBeVisible();
+    else
+      await expect(panel.getByRole("button", { name: "Save changes", exact: true })).toBeVisible();
+    await expect
+      .poll(async () =>
+        page.getByRole("tab", { selected: true }).evaluate((element) => {
+          const selected = element.getBoundingClientRect();
+          const bar = element.closest('[role="tablist"]')?.getBoundingClientRect();
+          return !!bar && selected.left >= bar.left - 1 && selected.right <= bar.right + 1;
+        }),
+      )
+      .toBe(true);
+    if (tab !== "danger") {
+      await expect(panel.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(1);
+    }
+    if (tab === "venue") {
+      const ssid = await panel.getByLabel("Network name", { exact: true }).boundingBox();
+      const password = await panel.getByLabel("Password", { exact: true }).boundingBox();
+      if (ssid && password && ssid.x !== password.x) {
+        expect(Math.abs(ssid.y - password.y)).toBeLessThanOrEqual(1);
+        const labels = await panel
+          .locator("label")
+          .evaluateAll((elements) =>
+            elements
+              .filter((element) => ["Network name", "Password"].includes(element.textContent ?? ""))
+              .map((element) => element.getBoundingClientRect().top),
+          );
+        expect(Math.abs(labels[0] - labels[1])).toBeLessThanOrEqual(1);
+      }
+    }
+    if (tab === "wallet") {
+      await panel.getByRole("button", { name: "Edit back fields" }).click();
+      await expect(panel.getByLabel("Organizer", { exact: true })).toBeVisible();
+      await expect(panel.getByLabel("Label", { exact: true })).toHaveValue("Schedule");
+      await expect(panel.getByLabel("Value", { exact: true })).toHaveValue(
+        "https://example.com/schedule",
+      );
+    }
+    if (tab === "presence") {
+      await expect(
+        panel.getByText(
+          "Without an exit or activity in this window, provisional time stops counting.",
+        ),
+      ).toBeVisible();
+    }
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await page.screenshot({
+      path: `artifacts/settings/${tab}-${test.info().project.name}.png`,
+      fullPage: true,
+    });
+  });
+}
+
+for (const [tab, inputLabel] of [
+  ["event", "Name"],
+  ["venue", "Venue name"],
+  ["wallet", "Caption on the pass"],
+] as const) {
+  test(`event settings ${tab} saves on Enter with success feedback`, async ({ page }) => {
+    await page.goto(`/settings/event?tab=${tab}`);
+    const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
+    await expect(cookies).toBeVisible();
+    await cookies.locator("button").first().click();
+    const panel = page.getByRole("tabpanel");
+    const input = panel.getByLabel(inputLabel, { exact: true }).first();
+    await expect(input).toBeVisible();
+    await input.fill("Edited caption");
+    await expect(panel.getByRole("status")).toContainText("Unsaved");
+    const request = page.waitForRequest(
+      (request) => request.method() === "PUT" && new URL(request.url()).pathname === "/api/event",
+    );
+    await input.press("Enter");
+    const body = (await request).postDataJSON();
+    if (tab === "event") expect(body.name).toBe("Edited caption");
+    if (tab === "venue") expect(body.venueName).toBe("Edited caption");
+    if (tab === "wallet") expect(body.passFieldLabels.participant).toBe("Edited caption");
+    await expect(panel.getByRole("status")).toContainText("Saved");
+    await expect(page.locator("[data-sileo-toast]")).toContainText("Saved");
+  });
+}
 
 test("searches activities and subscribes from the reminder dialog", async ({ page }) => {
   await page.route("**/api/public/activities", (route) =>

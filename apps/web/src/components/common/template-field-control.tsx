@@ -96,6 +96,7 @@ export function TemplateFieldControl({
   lang,
   error,
   applicationId,
+  responseId,
   inDialog = false,
   sharedWithSponsors,
   onSharedWithSponsorsChange,
@@ -108,12 +109,10 @@ export function TemplateFieldControl({
   disabled?: boolean;
   lang: Language;
   error?: string;
-  /**
-   * Enables direct file upload for the "file" kind (the applicant owns the
-   * response). Omit for staff editing — the upload route stores under the
-   * caller's user id, so staff see the current file read-only instead.
-   */
+  /** Enables file upload for an applicant response or staff correction. */
   applicationId?: number;
+  /** Existing response being corrected by staff. */
+  responseId?: number;
   inDialog?: boolean;
   /**
    * H56: whether the applicant has consented to share this "file" field's
@@ -328,6 +327,7 @@ export function TemplateFieldControl({
           {applicationId != null ? (
             <FileUploadField
               applicationId={applicationId}
+              responseId={responseId}
               fieldKey={field.key}
               value={typeof value === "string" ? value : ""}
               onChange={(url) => onChange(url)}

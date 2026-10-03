@@ -1,6 +1,9 @@
 "use client";
 
-import { CopyIcon, LinkIcon, MailIcon, UserPlusIcon } from "lucide-react";
+import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import { LinkIcon } from "@phosphor-icons/react/dist/csr/Link";
+import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useCallback, useEffect, useState } from "react";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { MultiSelect } from "@/components/common/multi-select";
@@ -197,7 +200,7 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
         </Button>
       }
       className="w-[min(40rem,calc(100vw-1rem))] sm:w-[min(40rem,calc(100vw-2rem))]"
-      icon={method === "email" ? MailIcon : LinkIcon}
+      icon={method === "email" ? EnvelopeSimpleIcon : LinkIcon}
       title={method === "email" ? t("inviteUser") : t("createLink")}
       footer={
         result ? (
@@ -240,7 +243,7 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
               variant={method === "email" ? "default" : "outline"}
               onClick={() => setMethod("email")}
             >
-              <MailIcon className="size-4" aria-hidden="true" /> {t("emailInvitation")}
+              <EnvelopeSimpleIcon className="size-4" aria-hidden="true" /> {t("emailInvitation")}
             </Button>
             <Button
               type="button"

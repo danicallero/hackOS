@@ -2,7 +2,8 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { SearchIcon, TicketIcon } from "lucide-react";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
@@ -193,7 +194,7 @@ export default function QueueOperationsPage() {
               aria-expanded={searchOpen}
               onClick={() => setSearchOpen((open) => !open)}
             >
-              <SearchIcon className="size-4" />
+              <MagnifyingGlassIcon aria-hidden="true" className="size-4" />
             </Button>
           )}
         </div>

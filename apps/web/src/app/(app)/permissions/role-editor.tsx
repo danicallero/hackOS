@@ -1,17 +1,15 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  ArrowLeftIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  History,
-  KeyRoundIcon,
-  LockIcon,
-  SearchIcon,
-  Trash2Icon,
-  UserPlusIcon,
-} from "lucide-react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ClockCounterClockwise";
+import { KeyIcon } from "@phosphor-icons/react/dist/csr/Key";
+import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -226,7 +224,7 @@ export function RoleEditor({
       <h1 className="type-page-title text-balance">{role.name}</h1>
       {isProtected && (
         <StatusBadge tone="neutral" dot={false}>
-          <LockIcon className="size-3" /> {t("systemRoleBadge")}
+          <LockIcon aria-hidden="true" className="size-3" /> {t("systemRoleBadge")}
         </StatusBadge>
       )}
     </div>
@@ -296,7 +294,7 @@ export function RoleEditor({
 
   const dangerZoneSection = (
     <SectionCard
-      icon={Trash2Icon}
+      icon={TrashIcon}
       title={t("dangerZoneTitle")}
       description={isProtected ? t("superadminLockedDesc") : t("deletingRoleRemovesDesc")}
       action={
@@ -317,7 +315,7 @@ export function RoleEditor({
     <>
       {seedDiff?.hasDrifted && (
         <SectionCard
-          icon={History}
+          icon={ClockCounterClockwiseIcon}
           title={t("roleDriftedFromDefault")}
           action={
             <Button variant="outline" size="sm" onClick={() => setResetOpen(true)}>
@@ -330,7 +328,7 @@ export function RoleEditor({
       )}
       {/* No title here — the "Capabilities" tab label / nav row already names this panel (H8). */}
       <SectionCard
-        icon={KeyRoundIcon}
+        icon={KeyIcon}
         description={isProtected ? t("superadminLockedDesc") : t("capabilitiesChangeDesc")}
         bodyClassName="p-0"
         footer={
@@ -342,7 +340,10 @@ export function RoleEditor({
         }
       >
         <div className="relative border-b p-4">
-          <SearchIcon className="text-muted-foreground absolute top-1/2 left-7 size-4 -translate-y-1/2" />
+          <MagnifyingGlassIcon
+            aria-hidden="true"
+            className="text-muted-foreground absolute top-1/2 left-7 size-4 -translate-y-1/2"
+          />
           <Input
             value={capQuery}
             onChange={(e) => setCapQuery(e.target.value)}
@@ -526,7 +527,7 @@ export function DrilldownBackButton({ label, onClick }: { label: string; onClick
       onClick={onClick}
       className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
     >
-      <ArrowLeftIcon className="size-4" />
+      <ArrowLeftIcon aria-hidden="true" className="size-4" />
       {label}
     </button>
   );
@@ -541,7 +542,7 @@ function RoleNavRow({ label, onClick }: { label: string; onClick: () => void }) 
       className="hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium"
     >
       {label}
-      <ChevronRightIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
+      <CaretRightIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
     </button>
   );
 }
@@ -569,7 +570,7 @@ function CapabilityGroup({
           className="hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left"
         >
           <span className="type-label text-muted-foreground">{domain}</span>
-          <ChevronDownIcon
+          <CaretDownIcon
             aria-hidden
             className={cn(
               "text-muted-foreground size-4 transition-transform",
@@ -696,7 +697,7 @@ function MembersPanel({
             className="min-w-56 flex-1"
           />
           <Button size="sm" disabled={!pickedId || adding} onClick={handleAdd}>
-            <UserPlusIcon /> {t("addAction")}
+            <UserPlusIcon aria-hidden="true" /> {t("addAction")}
           </Button>
         </div>
       )}
@@ -727,7 +728,7 @@ function MembersPanel({
                   disabled={bulkRemoving}
                   onClick={handleBulkRemove}
                 >
-                  <Trash2Icon />
+                  <TrashIcon aria-hidden="true" />
                   {selectedIds.size === 1
                     ? t("removeRoleFromMembersOne", { count: selectedIds.size })
                     : t("removeRoleFromMembersOther", { count: selectedIds.size })}
@@ -767,7 +768,7 @@ function MembersPanel({
                     onClick={() => onRemove(id)}
                     aria-label={t("removeMemberAria", { id })}
                   >
-                    <Trash2Icon />
+                    <TrashIcon aria-hidden="true" />
                   </Button>
                 )}
               </li>

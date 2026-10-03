@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircle2Icon } from "lucide-react";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -194,7 +194,7 @@ function ClaimInner() {
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-            <CheckCircle2Icon aria-hidden="true" className="size-6" />
+            <CheckCircleIcon aria-hidden="true" className="size-6" />
           </div>
           <CardTitle>{t("accountCreated")}</CardTitle>
         </CardHeader>

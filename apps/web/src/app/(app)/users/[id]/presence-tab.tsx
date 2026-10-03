@@ -4,7 +4,9 @@
 // four modals that edit or delete a log.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { ClockIcon, DownloadIcon, PlusIcon } from "lucide-react";
+import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useCallback, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -137,7 +139,7 @@ export function PresenceSection({ userId, refreshKey }: { userId: number; refres
             {canExport && (
               <Button asChild variant="outline">
                 <a href={`${API_URL}/api/presence/hours/${userId}/export.csv?format=full`}>
-                  <DownloadIcon className="size-4" aria-hidden="true" />
+                  <DownloadSimpleIcon className="size-4" aria-hidden="true" />
                   {t("exportHoursDetailed")}
                 </a>
               </Button>

@@ -1,6 +1,10 @@
 "use client";
 
-import { BellRingIcon, DoorOpenIcon, EllipsisIcon, ListEndIcon, UsersIcon } from "lucide-react";
+import { BellRingingIcon } from "@phosphor-icons/react/dist/csr/BellRinging";
+import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
+import { ListBulletsIcon } from "@phosphor-icons/react/dist/csr/ListBullets";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useMemo, useState } from "react";
 import { SectionCard } from "@/components/common/section-card";
 import { Button } from "@/components/ui/button";
@@ -268,7 +272,7 @@ function CalledTeamRow({
               disabled={!canOperate || busyAction("remind-waiting")}
               onClick={() => void onAction(entry, "remind-waiting")}
             >
-              <BellRingIcon className="size-3.5" />
+              <BellRingingIcon aria-hidden="true" className="size-3.5" />
               {t("queueRemindWaiting")}
             </Button>
           </div>
@@ -351,28 +355,28 @@ function QueueEntryMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="icon-xs" disabled={disabled} aria-label={t("moreActions")}>
-          <EllipsisIcon className="size-3.5" />
+          <DotsThreeIcon aria-hidden="true" className="size-3.5" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {includeNotify && (
           <DropdownMenuItem onSelect={() => void onAction(entry, "notify-enter")}>
-            <DoorOpenIcon className="size-4" />
+            <DoorOpenIcon aria-hidden="true" className="size-4" />
             {t("queueNotifyEntrance")}
           </DropdownMenuItem>
         )}
         {includeManualCall && (
           <DropdownMenuItem onSelect={() => void onAction(entry, "manual-call", roomId)}>
-            <UsersIcon className="size-4" />
+            <UsersIcon aria-hidden="true" className="size-4" />
             {t("queueManualAdd")}
           </DropdownMenuItem>
         )}
         <DropdownMenuItem onSelect={() => void onAction(entry, "top")}>
-          <ListEndIcon className="size-4 rotate-180" />
+          <ListBulletsIcon aria-hidden="true" className="size-4 rotate-180" />
           {t("queuePrioritize")}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => void onAction(entry, "requeue")}>
-          <ListEndIcon className="size-4" />
+          <ListBulletsIcon aria-hidden="true" className="size-4" />
           {t("queueMoveToEnd")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />

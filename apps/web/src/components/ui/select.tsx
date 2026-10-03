@@ -1,7 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { CaretUpIcon } from "@phosphor-icons/react/dist/csr/CaretUp";
 import { Select as SelectPrimitive } from "radix-ui"
 
 import {
@@ -64,7 +66,7 @@ const SelectTrigger = React.forwardRef<
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "flex w-fit max-w-full min-w-0 items-center justify-between gap-2 rounded-control border border-input bg-transparent px-3 py-1.5 text-sm whitespace-nowrap shadow-xs transition-[border-color,color,box-shadow] outline-none hover:border-foreground/25 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-[var(--control-height-default)] data-[size=sm]:h-[var(--control-height-compact)] data-[size=lg]:h-[var(--control-height-prominent)] data-[size=content]:h-auto data-[size=content]:min-h-[var(--control-height-default)] data-[size=content]:whitespace-normal data-[size=content]:py-2 *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:flex-1 *:data-[slot=select-value]:truncate *:data-[slot=select-value]:whitespace-nowrap *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 data-[size=content]:*:data-[slot=select-value]:whitespace-normal data-[size=content]:*:data-[slot=select-value]:text-pretty dark:bg-input/50 dark:hover:bg-input/70 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
+        "flex w-fit max-w-full min-w-0 items-center justify-between gap-2 rounded-control border border-input bg-background px-3 py-1.5 text-sm whitespace-nowrap shadow-xs transition-[border-color,color,box-shadow] outline-none hover:border-ring focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-[var(--control-height-default)] data-[size=sm]:h-[var(--control-height-compact)] data-[size=lg]:h-[var(--control-height-prominent)] data-[size=content]:h-auto data-[size=content]:min-h-[var(--control-height-default)] data-[size=content]:whitespace-normal data-[size=content]:py-2 *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:flex-1 *:data-[slot=select-value]:truncate *:data-[slot=select-value]:whitespace-nowrap *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 data-[size=content]:*:data-[slot=select-value]:whitespace-normal data-[size=content]:*:data-[slot=select-value]:text-pretty dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
         className
       )}
       {...props}
@@ -75,7 +77,7 @@ const SelectTrigger = React.forwardRef<
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon className="size-4 opacity-50" />
+        <CaretDownIcon aria-hidden="true" className="size-4 opacity-50" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )
@@ -154,7 +156,7 @@ function SelectItem({
         className="absolute right-2 flex size-3.5 items-center justify-center"
       >
         <SelectPrimitive.ItemIndicator>
-          <CheckIcon className="size-4" />
+          <CheckIcon aria-hidden="true" className="size-4" />
         </SelectPrimitive.ItemIndicator>
       </span>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
@@ -188,7 +190,7 @@ function SelectScrollUpButton({
       )}
       {...props}
     >
-      <ChevronUpIcon className="size-4" />
+      <CaretUpIcon aria-hidden="true" className="size-4" />
     </SelectPrimitive.ScrollUpButton>
   )
 }
@@ -206,7 +208,7 @@ function SelectScrollDownButton({
       )}
       {...props}
     >
-      <ChevronDownIcon className="size-4" />
+      <CaretDownIcon aria-hidden="true" className="size-4" />
     </SelectPrimitive.ScrollDownButton>
   )
 }

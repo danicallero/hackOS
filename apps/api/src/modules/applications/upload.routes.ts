@@ -20,7 +20,7 @@ import { requireIdempotencyKey } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { getObject, putObject } from "../../lib/storage.js";
 import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
-import type { TemplateField } from "./schemas.js";
+import { type TemplateField, uploadQuerySchema } from "./schemas.js";
 
 const uploadParamsSchema = z.object({
   applicationId: z.coerce.number().int().positive(),
@@ -85,13 +85,14 @@ export function registerUploadRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Upload a file for an application field",
         description:
-          "Uploads a file for a template field of kind 'file' on one of the caller's application forms (H12). Validated against that field's allowed_file_types and max_file_size_mb before being stored privately in MinIO; the response key is not a public URL — reads go through GET /api/files/download.",
+          "Uploads a file for a template field of kind 'file' on the caller's application form, or on a specified response while staff correct it (H12). Validated against that field's allowed_file_types and max_file_size_mb before being stored privately in MinIO; the response key is not a public URL — reads go through GET /api/files/download.",
         params: uploadParamsSchema,
+        querystring: uploadQuerySchema,
       },
     },
     async (req) => {
       const { applicationId, fieldKey } = req.params;
-      const userId = req.userId as number;
+      const actorId = req.userId as number;
 
       const file = await req.file();
       if (!file) throw new BadRequestError("No file uploaded");
@@ -108,30 +109,43 @@ export function registerUploadRoutes(app: FastifyInstance): void {
         .update(req.idempotency?.key ?? `${Date.now()}-${Math.random()}`)
         .digest("hex")
         .slice(0, 32);
-      const key = `uploads/${applicationId}/${userId}/${fieldKey}/${operation}/${safeFilename(name)}`;
-      await withTransaction(async (client) => {
+      const key = await withTransaction(async (client) => {
         // H54: lock the active user while validating and storing the object.
         // Removal takes the same user's row lock, so it cannot delete the
         // account between this check and putObject. The field definition must
-        // come from the response's pinned form version; an unversioned response
-        // fails closed instead of consulting a later mutable template.
-        const { rows: responseRows } = await client.query<{ template: unknown }>(
-          `SELECT fv.template
+        // come from the response's pinned form version. Staff correction uses
+        // the current template, matching PUT /api/responses/:id.
+        const responseId = req.query.responseId;
+        if (
+          responseId !== undefined &&
+          !(await userHasCapability(
+            getRequestAuthorizationContext(req),
+            CAPABILITIES.APPLICATIONS_EDIT_RESPONSE,
+          ))
+        ) {
+          throw new ForbiddenError("You don't have permission to edit this response");
+        }
+        const { rows: responseRows } = await client.query<{ template: unknown; user_id: number }>(
+          `SELECT CASE WHEN $3::int IS NULL THEN fv.template ELSE a.template END AS template,
+                  r.user_id
              FROM application_responses r
              JOIN applications a ON a.id = r.application_id
              JOIN users u ON u.id = r.user_id
              JOIN application_form_versions fv
                ON fv.id = r.application_form_version_id
               AND fv.application_id = r.application_id
-            WHERE r.user_id = $1 AND r.application_id = $2
+            WHERE r.application_id = $2
+              AND (($3::int IS NULL AND r.user_id = $1) OR r.id = $3)
               AND u.account_state = 'active' AND u.anonymized_at IS NULL
             LIMIT 1
             FOR UPDATE OF u, r`,
-          [userId, applicationId],
+          [actorId, applicationId, responseId ?? null],
         );
         if (!responseRows[0]) {
           throw new ForbiddenError("Create the application response before uploading a file");
         }
+        const ownerId = responseRows[0].user_id;
+        await assertFixtureSubjectScope(client, actorId, ownerId);
 
         const template = Array.isArray(responseRows[0].template)
           ? (responseRows[0].template as TemplateField[])
@@ -160,7 +174,9 @@ export function registerUploadRoutes(app: FastifyInstance): void {
 
         // The bucket's uploads/ prefix is private (H12): store the KEY in the
         // response, not a URL. Reads are proxied by the owner-or-staff route below.
-        await putObject(key, bytes, file.mimetype);
+        const storageKey = `uploads/${applicationId}/${ownerId}/${fieldKey}/${operation}/${safeFilename(name)}`;
+        await putObject(storageKey, bytes, file.mimetype);
+        return storageKey;
       });
 
       return { key, filename: safeFilename(name) };

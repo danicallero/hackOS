@@ -23,8 +23,8 @@ vi.mock("next/link", () => ({
   default: ({ children, ...props }: ComponentProps<"a">) => <a {...props}>{children}</a>,
 }));
 
-vi.mock("lucide-react", () => ({
-  X: (props: ComponentProps<"svg">) => <svg {...props} />,
+vi.mock("@phosphor-icons/react/dist/csr/X", () => ({
+  XIcon: (props: ComponentProps<"svg">) => <svg {...props} />,
 }));
 
 vi.mock("@/lib/i18n", () => ({

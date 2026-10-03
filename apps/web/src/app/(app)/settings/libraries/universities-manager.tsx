@@ -8,7 +8,8 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { GraduationCapIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
+import { GraduationCapIcon } from "@phosphor-icons/react/dist/csr/GraduationCap";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -38,6 +39,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
+import { LibraryToolbar } from "./library-toolbar";
 
 interface University {
   id: number;
@@ -98,6 +100,7 @@ export function UniversitiesManager() {
   }, [load, liveRefresh]);
 
   const formOpen = editing !== undefined;
+
   useEffect(() => {
     if (editing === undefined) return;
     reset({ name: editing?.name ?? "" });
@@ -133,7 +136,12 @@ export function UniversitiesManager() {
       await load();
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : t("couldNotDeleteUniversity"),
+        err instanceof ApiError &&
+          (err.details as { reason?: string } | undefined)?.reason === "university_in_use"
+          ? t("universityInUse")
+          : err instanceof ApiError
+            ? err.message
+            : t("couldNotDeleteUniversity"),
         t("deleteUniversityTitle"),
       );
     } finally {
@@ -180,55 +188,14 @@ export function UniversitiesManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-muted-foreground text-sm">{t("sharedDirectoryDesc")}</p>
-        <Button onClick={() => setEditing(null)}>
-          <PlusIcon />
-          {t("newAction")}
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full max-w-xs">
-          <label htmlFor="university-search" className="sr-only">
-            {t("searchUniversities")}
-          </label>
-          <SearchIcon
-            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-            aria-hidden="true"
-          />
-          <Input
-            id="university-search"
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("searchUniversitiesPlaceholder")}
-            className="pr-9 pl-9"
-          />
-          {search && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="absolute top-1/2 right-0.5 -translate-y-1/2"
-              onClick={() => {
-                setSearch("");
-                document.getElementById("university-search")?.focus();
-              }}
-              aria-label={t("clearSearch")}
-            >
-              <XIcon className="size-4" aria-hidden="true" />
-            </Button>
-          )}
-        </div>
-        <span
-          role="status"
-          aria-live="polite"
-          className="text-muted-foreground text-xs tabular-nums"
-        >
-          {t("tableResultCount", { count: entries.length })}
-        </span>
-      </div>
+      <LibraryToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchLabel={t("searchUniversitiesPlaceholder")}
+        count={entries.length}
+        addLabel={t("addUniversity")}
+        onAdd={() => setEditing(null)}
+      />
 
       <DataTable
         columns={columns}
@@ -240,7 +207,6 @@ export function UniversitiesManager() {
           active: search.trim().length > 0,
           onClear: () => {
             setSearch("");
-            document.getElementById("university-search")?.focus();
           },
         }}
         empty={{
@@ -251,7 +217,7 @@ export function UniversitiesManager() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm">
-                <MoreHorizontalIcon />
+                <DotsThreeIcon aria-hidden="true" />
                 <span className="sr-only">{t("openMenuAria")}</span>
               </Button>
             </DropdownMenuTrigger>
@@ -280,7 +246,6 @@ export function UniversitiesManager() {
         onOpenChange={(o) => !o && setEditing(undefined)}
         icon={GraduationCapIcon}
         title={editing ? t("renameUniversityTitle") : t("newUniversityTitle")}
-        description={editing ? t("updateInstitutionNameDesc") : undefined}
         footer={
           <>
             <Button type="button" variant="outline" onClick={() => setEditing(undefined)}>

@@ -2,7 +2,8 @@
 
 // The person's projects and their queue state across challenges (H16-H17).
 
-import { ExternalLinkIcon, FolderGitIcon } from "lucide-react";
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
+import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -83,7 +84,7 @@ export function ProjectLink({ href, label }: { href: string; label: string }) {
   return (
     <Button variant="ghost" size="sm" asChild className="px-2">
       <a href={href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
-        <ExternalLinkIcon className="size-3.5" />
+        <ArrowSquareOutIcon aria-hidden="true" className="size-3.5" />
         {label}
       </a>
     </Button>
@@ -127,7 +128,7 @@ export function ProjectsTab({ userId }: { userId: number }) {
   if (error) {
     return (
       <EmptyState
-        icon={FolderGitIcon}
+        icon={FolderSimpleIcon}
         title={t("projectsCouldNotLoad")}
         description={error}
         action={
@@ -142,9 +143,8 @@ export function ProjectsTab({ userId }: { userId: number }) {
   if (projects.length === 0) {
     return (
       <EmptyState
-        icon={FolderGitIcon}
+        icon={FolderSimpleIcon}
         title={t("noProjectsYet")}
-        description={t("projectsAppearHere")}
         action={
           <Button variant="outline" asChild>
             <Link href="/projects">{t("openProjects")}</Link>

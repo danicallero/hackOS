@@ -1,6 +1,6 @@
 "use client";
 
-import { UsersIcon } from "lucide-react";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useCallback, useEffect, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { SectionCard } from "@/components/common/section-card";

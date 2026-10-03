@@ -127,7 +127,12 @@ replaces newer local answers), staff review + scoring, batch
 and per-response accept/reject decisions, the three confirm/decline paths
 (email link, authenticated web, admin override — H15), file uploads for
 template `file` fields proxied through an owner-or-staff check (never a
-presigned URL), and the pre-event stats panel (H27). Draft preparation and
+presigned URL). Staff response correction can upload a replacement file under
+the applicant's identity with `APPLICATIONS_EDIT_RESPONSE`; the uploaded key
+is saved with the corrected answers. Form field key renames explicitly map
+old and new keys during the form update, copying existing answers (and sponsor
+sharing consent) only when the field kind matches. Old keys remain for
+responses' immutable historical form versions. Draft preparation and
 uploads remain available before verification; submitting or confirming a
 place does not. Decision-makers can return a response to its owner as a draft.
 A confirmed response keeps its application-granted role and live ticket access
@@ -147,7 +152,12 @@ cancels stale requests, supports
 keyboard selection, and allows manual city/province/country entry when suggestions
 are unavailable or incomplete (H12). City labels are stored as text while degree
 answers retain the catalogue ID. The degree catalogue follows the university
-catalogue's authenticated-proposal and staff-curation boundary. Staff can merge
+catalogue's authenticated-proposal and staff-curation boundary.
+Universities linked to user profiles cannot be deleted: the route returns 409
+with `details.reason = university_in_use`, and the web displays a localized
+message advising consolidation into another university. Profiles remain intact.
+
+Staff can merge
 duplicate degree rows transactionally: every answer using the source catalogue
 ID moves to the retained ID before the duplicate is deleted, and the audited
 result reports the number of updated answers (#846).

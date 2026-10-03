@@ -1,14 +1,12 @@
 "use client";
 
-import {
-  ArrowDownIcon,
-  ArrowUpDownIcon,
-  ArrowUpIcon,
-  ChevronRightIcon,
-  type LucideIcon,
-  SearchIcon,
-  XIcon,
-} from "lucide-react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { ArrowDownIcon } from "@phosphor-icons/react/dist/csr/ArrowDown";
+import { ArrowsDownUpIcon } from "@phosphor-icons/react/dist/csr/ArrowsDownUp";
+import { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef } from "react";
@@ -73,7 +71,7 @@ interface DataTableProps<T> {
   /** Enable client-side pagination at this page size. */
   pageSize?: number;
   loading?: boolean;
-  empty?: { icon?: LucideIcon; title: string; description?: string; action?: React.ReactNode };
+  empty?: { icon?: PhosphorIcon; title: string; description?: string; action?: React.ReactNode };
   filteredEmpty?: {
     active: boolean;
     onClear: () => void;
@@ -260,7 +258,7 @@ export function DataTable<T>({
                 <label htmlFor={searchId} className="sr-only">
                   {searchLabel ?? t("searchTable")}
                 </label>
-                <SearchIcon
+                <MagnifyingGlassIcon
                   className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
                   aria-hidden="true"
                 />
@@ -351,12 +349,12 @@ export function DataTable<T>({
                         {col.header}
                         {sort?.id === col.id ? (
                           sort.dir === "asc" ? (
-                            <ArrowUpIcon className="size-3.5" />
+                            <ArrowUpIcon aria-hidden="true" className="size-3.5" />
                           ) : (
-                            <ArrowDownIcon className="size-3.5" />
+                            <ArrowDownIcon aria-hidden="true" className="size-3.5" />
                           )
                         ) : (
-                          <ArrowUpDownIcon className="size-3.5 opacity-50" />
+                          <ArrowsDownUpIcon aria-hidden="true" className="size-3.5 opacity-50" />
                         )}
                       </button>
                     ) : (
@@ -436,7 +434,7 @@ export function DataTable<T>({
                               label={getRowLabel?.(row) ?? rowId}
                             >
                               <Link href={getRowHref(row)} aria-label={getRowLabel?.(row) ?? rowId}>
-                                <ChevronRightIcon className="size-4" aria-hidden="true" />
+                                <CaretRightIcon className="size-4" aria-hidden="true" />
                               </Link>
                             </IconButton>
                           ) : (
@@ -448,7 +446,7 @@ export function DataTable<T>({
                               onClick={() => onRowClick?.(row)}
                               label={getRowLabel?.(row) ?? rowId}
                             >
-                              <ChevronRightIcon className="size-4" aria-hidden="true" />
+                              <CaretRightIcon className="size-4" aria-hidden="true" />
                             </IconButton>
                           )}
                         </TableCell>

@@ -1,7 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircle2Icon, MailIcon } from "lucide-react";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -129,7 +130,7 @@ function VerifyEmailInner() {
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-            <CheckCircle2Icon aria-hidden="true" className="size-6" />
+            <CheckCircleIcon aria-hidden="true" className="size-6" />
           </div>
           <CardTitle>{t("emailVerified")}</CardTitle>
           <CardDescription>{t("emailVerifiedDescription")}</CardDescription>
@@ -153,7 +154,7 @@ function VerifyEmailInner() {
     <Card>
       <CardHeader className="items-center justify-items-center text-center">
         <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
-          <MailIcon aria-hidden="true" className="size-6" />
+          <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
         </div>
         <CardTitle>{t("verifyEmail")}</CardTitle>
         <CardDescription>{t("verificationInstructions")}</CardDescription>

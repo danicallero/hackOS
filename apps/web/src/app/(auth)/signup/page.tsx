@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { MailCheckIcon } from "lucide-react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -148,7 +148,7 @@ function SignUpInner() {
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-            <MailCheckIcon aria-hidden="true" className="size-6" />
+            <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
           </div>
           <CardTitle>{t("checkInbox")}</CardTitle>
           <CardDescription>{t("verificationSent", { email: submittedEmail })}</CardDescription>

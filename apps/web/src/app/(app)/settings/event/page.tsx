@@ -13,15 +13,13 @@
 // Settings → Libraries, next to the other shared reference lists.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import {
-  MailPlusIcon,
-  MapPinIcon,
-  TagIcon,
-  TriangleAlertIcon,
-  UserCheckIcon,
-  WalletCardsIcon,
-} from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
+import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
+import { UserCheckIcon } from "@phosphor-icons/react/dist/csr/UserCheck";
+import { WalletIcon } from "@phosphor-icons/react/dist/csr/Wallet";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
 import { TabBar } from "@/components/common/tab-bar";
@@ -70,6 +68,18 @@ export default function EventSettingsPage() {
     values: visibleCategories.length > 0 ? visibleCategories : CATEGORIES,
     defaultValue: visibleCategories[0] ?? "event",
   });
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  const categoryCount = visibleCategories.length;
+  useEffect(() => {
+    if (!categoryCount || !tab) return;
+    const bar = tabBarRef.current;
+    const active = bar?.querySelector<HTMLElement>(`[data-state="active"]`);
+    if (!bar || !active) return;
+    const bounds = bar.getBoundingClientRect();
+    const selected = active.getBoundingClientRect();
+    if (selected.left < bounds.left) bar.scrollLeft -= bounds.left - selected.left;
+    else if (selected.right > bounds.right) bar.scrollLeft += selected.right - bounds.right;
+  }, [tab, categoryCount]);
 
   // Tracked per category so the beforeunload guard and the tab-switch confirm
   // both know exactly which category (if any) owns the unsaved edit.
@@ -106,7 +116,7 @@ export default function EventSettingsPage() {
         <PageHeader title={t("eventSettings")} />
 
         <Tabs value={tab} onValueChange={changeTab}>
-          <TabBar variant="line" className="w-full justify-start border-b">
+          <TabBar ref={tabBarRef} variant="line" className="w-full justify-start border-b">
             {canEvent && <TabsTrigger value="event">{t("eventTitle")}</TabsTrigger>}
             {canVenue && <TabsTrigger value="venue">{t("venueSectionTitle")}</TabsTrigger>}
             {canWallet && <TabsTrigger value="wallet">{t("walletPassSectionTitle")}</TabsTrigger>}
@@ -127,10 +137,7 @@ export default function EventSettingsPage() {
           )}
           {canWallet && (
             <TabsContent value="wallet" className="pt-6">
-              <WalletTab
-                icon={WalletCardsIcon}
-                onDirtyChange={(dirty) => setDirty("wallet", dirty)}
-              />
+              <WalletTab icon={WalletIcon} onDirtyChange={(dirty) => setDirty("wallet", dirty)} />
             </TabsContent>
           )}
           {canPresence && (
@@ -144,14 +151,14 @@ export default function EventSettingsPage() {
           {canInvites && (
             <TabsContent value="invites" className="pt-6">
               <InvitesTab
-                icon={MailPlusIcon}
+                icon={EnvelopeSimpleIcon}
                 onDirtyChange={(dirty) => setDirty("invites", dirty)}
               />
             </TabsContent>
           )}
           {canDanger && (
             <TabsContent value="danger" className="pt-6">
-              <ResetJudgingDataTab icon={TriangleAlertIcon} />
+              <ResetJudgingDataTab icon={WarningIcon} />
             </TabsContent>
           )}
         </Tabs>

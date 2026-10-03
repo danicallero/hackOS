@@ -6,14 +6,12 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import {
-  CheckCircle2Icon,
-  ClockIcon,
-  MegaphoneIcon,
-  PencilIcon,
-  PlusIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
+import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
+import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
+import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -194,7 +192,7 @@ export default function AnnouncementsPage() {
         return (
           <span className="inline-flex items-center gap-1.5 text-xs">
             {state === "delivered" ? (
-              <CheckCircle2Icon className="text-success size-3.5" aria-hidden="true" />
+              <CheckCircleIcon className="text-success size-3.5" aria-hidden="true" />
             ) : (
               <ClockIcon className="text-muted-foreground size-3.5" aria-hidden="true" />
             )}
@@ -221,7 +219,7 @@ export default function AnnouncementsPage() {
         title={t("announcements")}
         primaryAction={
           <Button onClick={() => setCreateOpen(true)}>
-            <PlusIcon className="size-4" />
+            <PlusIcon aria-hidden="true" className="size-4" />
             {t("newAnnouncement")}
           </Button>
         }
@@ -259,7 +257,7 @@ export default function AnnouncementsPage() {
                 setDeleting(a);
               }}
             >
-              <Trash2Icon className="size-4" />
+              <TrashIcon aria-hidden="true" className="size-4" />
             </Button>
           </div>
         )}

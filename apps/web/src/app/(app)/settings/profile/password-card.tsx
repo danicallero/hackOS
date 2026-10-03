@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { KeyRoundIcon } from "lucide-react";
+import { KeyIcon } from "@phosphor-icons/react/dist/csr/Key";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -90,7 +90,7 @@ export function PasswordCard() {
           if (!next) form.reset();
         }}
         title={t("changePassword")}
-        icon={KeyRoundIcon}
+        icon={KeyIcon}
       >
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">

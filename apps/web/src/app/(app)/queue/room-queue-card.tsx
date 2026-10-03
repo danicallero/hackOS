@@ -1,13 +1,11 @@
 "use client";
 
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
-import {
-  AlertTriangleIcon,
-  BellRingIcon,
-  DoorOpenIcon,
-  RotateCcwIcon,
-  SearchIcon,
-} from "lucide-react";
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
+import { BellRingingIcon } from "@phosphor-icons/react/dist/csr/BellRinging";
+import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/common/modal";
@@ -221,7 +219,7 @@ export function RoomQueueCard({
                     )
                   }
                 >
-                  <BellRingIcon className="size-4" />
+                  <BellRingingIcon aria-hidden="true" className="size-4" />
                   {t("renotify")}
                 </Button>
                 <Button
@@ -236,7 +234,7 @@ export function RoomQueueCard({
                     )
                   }
                 >
-                  <DoorOpenIcon className="size-4" />
+                  <DoorOpenIcon aria-hidden="true" className="size-4" />
                   {t("bringIn")}
                 </Button>
                 <Button
@@ -257,7 +255,7 @@ export function RoomQueueCard({
                     )
                   }
                 >
-                  <RotateCcwIcon className="size-4" />
+                  <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
                   {t("requeue")}
                 </Button>
                 <Button
@@ -278,7 +276,7 @@ export function RoomQueueCard({
                     )
                   }
                 >
-                  <AlertTriangleIcon className="size-4" />
+                  <WarningIcon aria-hidden="true" className="size-4" />
                   {t("absent")}
                 </Button>
               </>
@@ -314,7 +312,7 @@ export function RoomQueueCard({
                   )
                 }
               >
-                <DoorOpenIcon className="size-4" />
+                <DoorOpenIcon aria-hidden="true" className="size-4" />
                 {t("addWaiting")}
               </Button>
             )}
@@ -322,7 +320,10 @@ export function RoomQueueCard({
 
           <div className="space-y-1.5 rounded-md border p-2.5">
             <div className="relative">
-              <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
+              <MagnifyingGlassIcon
+                aria-hidden="true"
+                className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+              />
               <Input
                 size="sm"
                 value={query}
@@ -387,7 +388,7 @@ export function RoomQueueCard({
                             )
                           }
                         >
-                          <DoorOpenIcon className="size-4" />
+                          <DoorOpenIcon aria-hidden="true" className="size-4" />
                           {t("waiting")}
                         </Button>
                       </div>

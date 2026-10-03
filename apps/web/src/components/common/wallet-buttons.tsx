@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
@@ -49,6 +49,32 @@ export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
   const googleButtonSrc =
     GOOGLE_WALLET_BUTTON_BY_LOCALE[language] ?? GOOGLE_WALLET_BUTTON_BY_LOCALE.en;
   const [googleLoading, setGoogleLoading] = useState(false);
+  const handledEmailAction = useRef(false);
+
+  useEffect(() => {
+    // H28/H52: email buttons return through login to the authenticated wallet.
+    // Consume the action once, so returning from Wallet does not reopen it.
+    if (handledEmailAction.current || accessToken || purpose !== "ticket") return;
+    const url = new URL(window.location.href);
+    if (url.pathname !== "/wallet") return;
+    const action = url.searchParams.get("add");
+    if (action !== "apple" && action !== "google") return;
+    handledEmailAction.current = true;
+    url.searchParams.delete("add");
+    window.history.replaceState(window.history.state, "", url);
+    if (action === "apple") {
+      window.location.assign(`${API_URL}/api/me/wallet/apple/ticket.pkpass`);
+    } else {
+      void logisticsApi
+        .googleWalletSaveUrl("ticket")
+        .then(({ saveUrl }) => {
+          window.location.assign(saveUrl);
+        })
+        .catch(() => {
+          toast.error(t("walletGoogleSaveFailed"), t("toastWalletSettings"));
+        });
+    }
+  }, [accessToken, purpose, t]);
 
   const appleHref = accessToken
     ? `${API_URL}/api/wallet/scoped/apple/${purpose}.pkpass?token=${encodeURIComponent(accessToken)}`

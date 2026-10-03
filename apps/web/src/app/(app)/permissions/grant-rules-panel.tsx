@@ -1,7 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PlusIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { LightningIcon } from "@phosphor-icons/react/dist/csr/Lightning";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -247,13 +249,13 @@ export function GrantRulesPanel({
       {!disabled && (
         <div className="flex justify-end">
           <Button onClick={openCreate}>
-            <PlusIcon /> {t("newGrantRule")}
+            <PlusIcon aria-hidden="true" /> {t("newGrantRule")}
           </Button>
         </div>
       )}
 
       <SectionCard
-        icon={scopedRole ? undefined : ZapIcon}
+        icon={scopedRole ? undefined : LightningIcon}
         title={scopedRole ? undefined : t("grantRulesTitle")}
         description={disabled ? t("superadminLockedDesc") : undefined}
         bodyClassName="p-0"
@@ -263,7 +265,7 @@ export function GrantRulesPanel({
             <Spinner className="size-6" />
           </div>
         ) : rules.length === 0 ? (
-          <EmptyState icon={ZapIcon} title={t("noGrantRulesYetTitle")} />
+          <EmptyState icon={LightningIcon} title={t("noGrantRulesYetTitle")} />
         ) : (
           <ul className="divide-border divide-y">
             {rules.map((rule) => (
@@ -298,7 +300,7 @@ export function GrantRulesPanel({
                       className="text-muted-foreground hover:text-destructive"
                       onClick={() => setDeleteTarget(rule)}
                     >
-                      <Trash2Icon />
+                      <TrashIcon aria-hidden="true" />
                     </Button>
                   </div>
                 )}
@@ -311,7 +313,7 @@ export function GrantRulesPanel({
       <Modal
         open={modalOpen}
         onOpenChange={setModalOpen}
-        icon={ZapIcon}
+        icon={LightningIcon}
         title={editing ? t("grantRulesTitle") : t("newGrantRule")}
         footer={
           <>

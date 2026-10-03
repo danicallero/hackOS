@@ -5,7 +5,8 @@
 // runtime already ships (Intl.supportedValuesOf), so it never drifts from
 // what the server accepts — no separate catalogue to keep in sync.
 
-import { CheckIcon, ChevronsUpDownIcon } from "lucide-react";
+import { CaretUpDownIcon } from "@phosphor-icons/react/dist/csr/CaretUpDown";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -123,7 +124,10 @@ export function TimezonePicker({
           <CommandGroup>
             {filtered.map((zone) => (
               <CommandItem key={zone} value={zone} onSelect={() => select(zone)}>
-                <CheckIcon className={cn("size-4", zone === value ? "opacity-100" : "opacity-0")} />
+                <CheckIcon
+                  aria-hidden="true"
+                  className={cn("size-4", zone === value ? "opacity-100" : "opacity-0")}
+                />
                 <span className="flex-1 truncate">{zone.replace(/_/g, " ")}</span>
                 <span className="text-muted-foreground text-xs tabular-nums">
                   {offsetLabel(zone)}
@@ -153,7 +157,7 @@ export function TimezonePicker({
             {currentOffset && (
               <span className="text-muted-foreground text-xs tabular-nums">{currentOffset}</span>
             )}
-            <ChevronsUpDownIcon className="text-muted-foreground size-4" />
+            <CaretUpDownIcon aria-hidden="true" className="text-muted-foreground size-4" />
           </span>
         </Button>
       </PopoverPrimitive.Trigger>

@@ -2,7 +2,7 @@
 
 // Batch send decisions (H14).
 
-import { SendIcon } from "lucide-react";
+import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { useState } from "react";
 import { Modal } from "@/components/common/modal";
 import { Spinner } from "@/components/common/spinner";
@@ -64,7 +64,7 @@ export function SendDecisionsModal({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      icon={SendIcon}
+      icon={PaperPlaneTiltIcon}
       title={t("sendDecisions")}
       description={t("sendDecisionsDesc")}
       footer={

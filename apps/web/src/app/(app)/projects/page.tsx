@@ -5,7 +5,9 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { FolderGitIcon, UploadIcon, UsersIcon } from "lucide-react";
+import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
+import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -43,7 +45,7 @@ function buildColumns(t: Translate): Column<ProjectRepo>[] {
       sortValue: (r) => r.members.length,
       cell: (r) => (
         <span className="text-muted-foreground inline-flex items-center gap-1 text-sm">
-          <UsersIcon className="size-3.5" />
+          <UsersIcon aria-hidden="true" className="size-3.5" />
           {r.members.length}
         </span>
       ),
@@ -196,7 +198,7 @@ export default function ProjectsPage() {
                   variant={canEdit ? "outline" : "default"}
                   onClick={() => router.push("/projects/import")}
                 >
-                  <UploadIcon className="size-4" />
+                  <UploadSimpleIcon aria-hidden="true" className="size-4" />
                   {t("importFromDevpost")}
                 </Button>
               )}
@@ -253,12 +255,12 @@ export default function ProjectsPage() {
         searchPlaceholder={t("searchProjectsPlaceholder")}
         pageSize={15}
         empty={{
-          icon: FolderGitIcon,
+          icon: FolderSimpleIcon,
           title: t("noProjectsYet"),
           description: canImport ? t("importDevpostToStart") : t("projectsAppearAfterImport"),
           action: canImport ? (
             <Button type="button" onClick={() => router.push("/projects/import")}>
-              <UploadIcon aria-hidden="true" />
+              <UploadSimpleIcon aria-hidden="true" />
               {t("importFromDevpost")}
             </Button>
           ) : undefined,

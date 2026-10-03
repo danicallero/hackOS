@@ -1,13 +1,11 @@
 "use client";
 
-import {
-  BanIcon,
-  ChevronDownIcon,
-  DoorOpenIcon,
-  ListEndIcon,
-  SearchIcon,
-  XIcon,
-} from "lucide-react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { ListBulletsIcon } from "@phosphor-icons/react/dist/csr/ListBullets";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { ProhibitIcon } from "@phosphor-icons/react/dist/csr/Prohibit";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -236,7 +234,7 @@ export function TeamQueueSearch({
           <p className="text-muted-foreground mt-1 text-sm">{t("queueTeamSearchDescription")}</p>
         </div>
         <Button variant="ghost" size="icon-sm" aria-label={t("queueCloseSearch")} onClick={onClose}>
-          <XIcon className="size-4" />
+          <XIcon aria-hidden="true" className="size-4" />
         </Button>
       </div>
 
@@ -245,7 +243,7 @@ export function TeamQueueSearch({
           {t("queueTeamSearch")}
         </Label>
         <div className="relative">
-          <SearchIcon
+          <MagnifyingGlassIcon
             className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
             aria-hidden="true"
           />
@@ -396,9 +394,9 @@ function TeamQueueActions({
               title={canManualCall ? t("queueManualAdd") : busyReason}
               aria-label={t("queueManualAdd")}
             >
-              <DoorOpenIcon className="size-3.5" />
+              <DoorOpenIcon aria-hidden="true" className="size-3.5" />
               {t("queueManualAdd")}
-              <ChevronDownIcon className="size-3.5" aria-hidden="true" />
+              <CaretDownIcon className="size-3.5" aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -408,7 +406,7 @@ function TeamQueueActions({
                 title={t("queueManualAddToRoom", { room: room.name })}
                 onSelect={() => onAction("manual-call", room.id)}
               >
-                <DoorOpenIcon className="size-4" />
+                <DoorOpenIcon aria-hidden="true" className="size-4" />
                 {room.name}
               </DropdownMenuItem>
             ))}
@@ -424,7 +422,7 @@ function TeamQueueActions({
             title={canMove ? t("queuePrioritize") : busyReason}
             onClick={() => onAction("move-top")}
           >
-            <ListEndIcon className="size-3.5 rotate-180" />
+            <ListBulletsIcon aria-hidden="true" className="size-3.5 rotate-180" />
             {t("queuePrioritize")}
           </Button>
           <Button
@@ -434,7 +432,7 @@ function TeamQueueActions({
             title={canMove ? t("queueMoveToEnd") : busyReason}
             onClick={() => onAction("move-end")}
           >
-            <ListEndIcon className="size-3.5" />
+            <ListBulletsIcon aria-hidden="true" className="size-3.5" />
             {t("queueMoveToEnd")}
           </Button>
         </>
@@ -447,7 +445,7 @@ function TeamQueueActions({
           className="text-destructive hover:text-destructive"
           onClick={() => onAction("disqualify")}
         >
-          <BanIcon className="size-3.5" />
+          <ProhibitIcon aria-hidden="true" className="size-3.5" />
           {t("queueDisqualify")}
         </Button>
       )}
