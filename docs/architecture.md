@@ -294,6 +294,10 @@ only by #540's connection budgets and write backpressure. Monitor
 `hackos_http_request_admission_wait_seconds`, and
 `hackos_http_request_admission_queue_size` by lane, plus
 `hackos_sse_local_connections` by lane and normalized topic family.
+HTTP response counters and duration histograms record the final status once in
+`onResponse`, including handled business errors (#891). Aborted connections
+release admission and the in-flight gauge without recording a completed HTTP
+response; a request disconnected while queued cancels its admission wait.
 
 Participant queue invalidations are one delayed BullMQ job per current queue
 group, coalescing all affected challenge transitions in that shared queue;

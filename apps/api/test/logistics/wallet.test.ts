@@ -515,7 +515,9 @@ describe("H28 Apple Wallet PassKit", () => {
     ).toBe(200);
   });
 
-  it("reports an event-config bump on the incremental poll a device actually makes (H28 regression)", async () => {
+  it.each([
+    0, 60_000,
+  ])("reports an event-config bump with %i ms clock skew (H28 / #896)", async (clockSkew) => {
     // Pre-0504 regression: issuance wrote millisecond tags, bumps wrote
     // second tags, and the endpoint compared them AS TEXT — so this exact
     // sequence (poll, change event, poll again with the stored lastUpdated)
@@ -541,6 +543,34 @@ describe("H28 Apple Wallet PassKit", () => {
       headers: { authorization: `ApplePass ${pass.rows[0].authentication_token}` },
       payload: { pushToken: "push-poll" },
     });
+
+    const otherUser = await createUser();
+    await issueTicket(otherUser, "ticket-wallet-poll-other");
+    await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/ticket.pkpass",
+      headers: asUser(otherUser),
+    });
+    const otherPass = await pool.query(
+      `SELECT serial_number, authentication_token FROM wallet_passes WHERE user_id = $1`,
+      [otherUser],
+    );
+    const otherSerial = otherPass.rows[0].serial_number;
+    await app.inject({
+      method: "POST",
+      url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}/${otherSerial}`,
+      headers: { authorization: `ApplePass ${otherPass.rows[0].authentication_token}` },
+      payload: { pushToken: "push-poll" },
+    });
+
+    // H28 / #896: model an issuance clock ahead of the database without
+    // relying on the machine's actual clock skew or elapsed test time.
+    await pool.query(
+      `UPDATE wallet_passes
+          SET update_tag = ((extract(epoch FROM clock_timestamp()) * 1000)::bigint + $2)::text
+        WHERE user_id = $1`,
+      [uid, clockSkew],
+    );
 
     // First poll: device stores lastUpdated, as Wallet does.
     const first = await app.inject({
@@ -582,8 +612,25 @@ describe("H28 Apple Wallet PassKit", () => {
       headers: { authorization: `ApplePass ${pass.rows[0].authentication_token}` },
     });
     expect(afterChange.statusCode).toBe(200);
-    expect(afterChange.json().serialNumbers).toContain(serial);
+    expect(afterChange.json().serialNumbers.sort()).toEqual([serial, otherSerial].sort());
     expect(Number(afterChange.json().lastUpdated)).toBeGreaterThan(Number(lastUpdated));
+
+    // Repeated/concurrent bumps must advance even while the clock remains
+    // behind the tags and all passes must exceed the shared device cursor.
+    const { bumpAllAppleWalletUpdateTags } = await import(
+      "../../src/modules/logistics/wallet-passes.js"
+    );
+    await Promise.all([bumpAllAppleWalletUpdateTags(), bumpAllAppleWalletUpdateTags()]);
+    const again = await app.inject({
+      method: "GET",
+      url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}?passesUpdatedSince=${afterChange.json().lastUpdated}`,
+      headers: { authorization: `ApplePass ${pass.rows[0].authentication_token}` },
+    });
+    expect(again.statusCode).toBe(200);
+    expect(again.json().serialNumbers.sort()).toEqual([serial, otherSerial].sort());
+    expect(Number(again.json().lastUpdated)).toBeGreaterThan(
+      Number(afterChange.json().lastUpdated),
+    );
   });
 
   it("serves Last-Modified and answers 304 until the pass actually changes (H28)", async () => {
@@ -666,6 +713,17 @@ describe("H28 Apple Wallet PassKit", () => {
       [uid],
     );
     expect(passes.rows.map((r: { status: string }) => r.status)).toEqual(["voided", "active"]);
+
+    // H28 / #896: event-wide bumps include voided passes whose rotation
+    // path still writes legacy fractional-second tags.
+    const { bumpAllAppleWalletUpdateTags } = await import(
+      "../../src/modules/logistics/wallet-passes.js"
+    );
+    expect(await bumpAllAppleWalletUpdateTags()).toHaveLength(2);
+    const bumped = await pool.query(`SELECT update_tag FROM wallet_passes WHERE user_id = $1`, [
+      uid,
+    ]);
+    for (const pass of bumped.rows) expect(pass.update_tag).toMatch(/^\d{13,}$/);
   });
 });
 
