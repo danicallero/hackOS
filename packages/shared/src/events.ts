@@ -6,7 +6,7 @@
  *
  * Topics are logical subscription channels; a physical SSE connection may
  * carry several independently authorized scopes. Fan-out across API instances rides Valkey pub/sub on
- * `sse:<topic>`.
+ * `sse:<namespace>:<topic>`.
  */
 
 export const SSE_TOPICS = {

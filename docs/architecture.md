@@ -245,13 +245,13 @@ sequenceDiagram
     participant VK as Valkey pub/sub
     participant A2 as api #2 (or worker)
     Client->>A1: GET /…/stream (subscribe topic)
-    A2->>VK: broadcast(topic, EVENT, data) → PUBLISH sse:topic
-    VK-->>A1: pmessage on sse:*
+    A2->>VK: broadcast(topic, EVENT, data) → PUBLISH sse:namespace:topic
+    VK-->>A1: pmessage on sse:<namespace>:*
     A1-->>Client: SSE event (id = per-topic INCR seq)
 ```
 
-`broadcast()` (`src/lib/sse.ts`) `PUBLISH`es to `sse:<topic>`; every instance
-`PSUBSCRIBE`s `sse:*` and relays to its *local* connections. Envelope ids are
+`broadcast()` (`src/lib/sse.ts`) `PUBLISH`es to `sse:<namespace>:<topic>`; every instance
+`PSUBSCRIBE`s `sse:<namespace>:*` and relays to its *local* connections. Envelope ids are
 monotonic per-topic Valkey `INCR` counters, so a client can detect gaps after a
 reconnect and refetch full state (the recovery contract). CRUD writes emit a
 payload-free `domain.changed` event only on their owning topic (`applications`,

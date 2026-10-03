@@ -122,7 +122,7 @@ Valkey is a shared transient broker, not a correctness cache:
 
 | Key/channel | Role | Retention/failure policy |
 |---|---|---|
-| `sse:<topic>` | Pub/sub fan-out to local API processes | No durable state; reconnect and refetch on loss. |
+| `sse:<namespace>:<topic>` | Pub/sub fan-out to local API processes | No durable state; reconnect and refetch on loss. |
 | `sse:seq:<topic>` | Gap detection IDs | Seven-day sliding TTL; old topics disappear. |
 | `bull:*` | BullMQ scheduling and jobs | Must not be evicted; the database/outbox remains the recovery boundary. |
 | `ratelimit:*` | Distributed fixed-window limits | TTL keys may be evicted under pressure; the API fails open and reports it. |
