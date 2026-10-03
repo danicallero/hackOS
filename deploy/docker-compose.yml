@@ -147,7 +147,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command: ["cp /usr/local/bin/memory-launch /opt/hackos-metrics/memory-launch.new && chmod 0555 /opt/hackos-metrics/memory-launch.new && mv /opt/hackos-metrics/memory-launch.new /opt/hackos-metrics/memory-launch"]
     volumes:
-      - metrics-tools:/opt/hackos-metrics
+      - metrics-tools-v2:/opt/hackos-metrics
 
   postgres:
     <<: *hardening
@@ -177,7 +177,7 @@ services:
       - type: bind
         source: "${HACKOS_DATA_DIR:-/mnt/data}/postgres"
         target: /var/lib/postgresql/data
-      - metrics-tools:/opt/hackos-metrics:ro
+      - metrics-tools-v2:/opt/hackos-metrics:ro
       - postgres-memory:/run/hackos-memory
     networks:
       private: {}
@@ -222,7 +222,7 @@ services:
     environment:
       VALKEY_PASSWORD: "${VALKEY_PASSWORD}"
     volumes:
-      - metrics-tools:/opt/hackos-metrics:ro
+      - metrics-tools-v2:/opt/hackos-metrics:ro
       - valkey-memory:/run/hackos-memory
     networks: [private]
     healthcheck:
@@ -253,7 +253,7 @@ services:
       - type: bind
         source: "${HACKOS_DATA_DIR:-/mnt/data}/minio"
         target: /data
-      - metrics-tools:/opt/hackos-metrics:ro
+      - metrics-tools-v2:/opt/hackos-metrics:ro
       - minio-memory:/run/hackos-memory
     networks:
       private: {}
@@ -423,7 +423,7 @@ services:
       metrics-init:
         condition: service_completed_successfully
     volumes:
-      - metrics-tools:/opt/hackos-metrics:ro
+      - metrics-tools-v2:/opt/hackos-metrics:ro
       - web-memory:/run/hackos-memory
     image: *web-image
     pull_policy: always
@@ -451,14 +451,14 @@ services:
     mem_swappiness: 40
 
 volumes:
-  # Volatile hand-off from the non-root init job to the upstream images.
-  metrics-tools:
+  # Executable storage survives metrics-init exiting. Version the volume so
+  # existing noexec/1 MiB volumes need no destructive migration (#544).
+  metrics-tools-v2:
+  postgres-memory:
     driver_opts: &metrics-volume
       type: tmpfs
       device: tmpfs
       o: "size=1m,mode=1777,nosuid,nodev,noexec"
-  postgres-memory:
-    driver_opts: *metrics-volume
   valkey-memory:
     driver_opts: *metrics-volume
   minio-memory:

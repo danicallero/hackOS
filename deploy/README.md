@@ -521,7 +521,9 @@ volumes; expired samples are omitted instead of reported as zero.
 
 The deployment runs the one-shot `metrics-init` job after pulling the API
 image and before it brings up the datastores. Its only task is to copy the
-static reader into a temporary volume. A deployment whose Compose definition
+static reader into the executable `metrics-tools-v2` named volume. Its contents
+must survive this one-shot exiting, so the executable is not stored on tmpfs;
+the JSON sample volumes remain tmpfs/noexec. A deployment whose Compose definition
 changes recreates the affected datastore containers in the normal Compose way;
 schedule that brief restart outside event traffic when possible.
 
