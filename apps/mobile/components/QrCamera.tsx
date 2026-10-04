@@ -2,7 +2,7 @@ import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from "expo-camera";
 import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { GlassView } from "@/components/glass-view";
@@ -15,7 +15,7 @@ import { getBarcodeFrameObservation } from "@/lib/qr-frame";
 import { advanceQrScanCandidate, type QrScanCandidate } from "@/lib/qr-scan-stability";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { scannerCameraControls } from "@/lib/scanner-camera-controls";
-import { useNfcSupported } from "@/lib/use-nfc-supported";
+import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import CameraCapabilities from "@/modules/camera-capabilities";
 import { colors } from "@/theme/colors";
 
@@ -26,6 +26,7 @@ export function QrCamera({
   scanningEnabled = true,
   autoStartNfc = false,
   nfcSessionKey = 0,
+  requestCameraOnFocus = true,
 }: {
   onValue: (value: string) => void;
   onClose?: () => void;
@@ -33,12 +34,19 @@ export function QrCamera({
   scanningEnabled?: boolean;
   autoStartNfc?: boolean;
   nfcSessionKey?: number;
+  requestCameraOnFocus?: boolean;
 }) {
-  const nfcSupported = useNfcSupported();
+  const nfcSupportStatus = useNfcSupportStatus();
+  const nfcSupported = nfcSupportStatus === "supported";
   const [nfcVisible, setNfcVisible] = useState(false);
   const autoStarted = useRef(false);
   const lastNfcSessionKey = useRef(0);
   const focused = useIsFocused();
+  const nfcSessionPending =
+    focused &&
+    scanningEnabled &&
+    nfcSupportStatus !== "unsupported" &&
+    ((autoStartNfc && !autoStarted.current) || nfcSessionKey !== lastNfcSessionKey.current);
   useEffect(() => {
     if (
       nfcSupported &&
@@ -59,6 +67,8 @@ export function QrCamera({
         onClose={onClose}
         hint={hint}
         scanningEnabled={scanningEnabled && !nfcVisible}
+        nfcSessionPending={nfcSessionPending}
+        requestCameraOnFocus={requestCameraOnFocus}
         onNfc={nfcSupported ? () => setNfcVisible(true) : undefined}
       />
       <NfcReader
@@ -76,12 +86,16 @@ function CameraPreview({
   hint,
   scanningEnabled = true,
   onNfc,
+  nfcSessionPending,
+  requestCameraOnFocus,
 }: {
   onNfc?: () => void;
   onValue: (value: string) => void;
   onClose?: () => void;
   hint?: string | null;
   scanningEnabled?: boolean;
+  nfcSessionPending: boolean;
+  requestCameraOnFocus: boolean;
 }) {
   const [permission, requestPermission] = useCameraPermissions();
   const { t } = useLocale();
@@ -89,6 +103,7 @@ function CameraPreview({
   const insets = useSafeAreaInsets();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const locked = useRef(false);
+  const permissionRequestStarted = useRef(false);
   const scanCandidate = useRef<QrScanCandidate | null>(null);
   const [{ height, width }, setViewport] = useState({ height: 0, width: 0 });
   const [torchEnabled, setTorchEnabled] = useState(false);
@@ -100,6 +115,10 @@ function CameraPreview({
     }
   });
   const [manualEntryVisible, setManualEntryVisible] = useState(false);
+  const requestCamera = useCallback(() => {
+    permissionRequestStarted.current = true;
+    void requestPermission();
+  }, [requestPermission]);
   const frameLeft = (width - FRAME) / 2;
   const frameTop = (height - FRAME) / 2;
   const frameRight = frameLeft + FRAME;
@@ -119,8 +138,24 @@ function CameraPreview({
   ].join(" ");
 
   useEffect(() => {
-    if (permission && !permission.granted && permission.canAskAgain) void requestPermission();
-  }, [permission, requestPermission]);
+    if (
+      permission?.status !== "undetermined" ||
+      !isFocused ||
+      !scanningEnabled ||
+      nfcSessionPending ||
+      !requestCameraOnFocus ||
+      permissionRequestStarted.current
+    )
+      return;
+    requestCamera();
+  }, [
+    isFocused,
+    nfcSessionPending,
+    permission?.status,
+    requestCamera,
+    requestCameraOnFocus,
+    scanningEnabled,
+  ]);
 
   useEffect(() => {
     if (!isFocused) {
@@ -176,8 +211,30 @@ function CameraPreview({
     );
   }
 
-  if (!permission) return <View style={styles.black}>{nfcPermissionButton()}</View>;
+  if (!permission || nfcSessionPending) return <View style={styles.black} />;
+  if (permission.status === "undetermined") {
+    if (!scanningEnabled || requestCameraOnFocus) return <View style={styles.black} />;
+    return (
+      <View
+        style={[
+          styles.permission,
+          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
+        ]}
+      >
+        <Pressable accessibilityRole="button" onPress={requestCamera} style={styles.primaryButton}>
+          <Text style={styles.primaryButtonText}>{t("scannerCamera")}</Text>
+        </Pressable>
+        {nfcPermissionButton()}
+        {onClose ? (
+          <Pressable accessibilityRole="button" onPress={onClose} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>{t("close")}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  }
   if (!permission.granted) {
+    if (!scanningEnabled) return <View style={styles.black} />;
     return (
       <View
         style={[
@@ -198,13 +255,13 @@ function CameraPreview({
           {t("scannerCameraPermissionBody")}
         </Text>
         {nfcPermissionButton()}
-        {permission.canAskAgain ? (
+        {permission.canAskAgain && Platform.OS !== "ios" ? (
           <Pressable
             accessibilityRole="button"
-            onPress={() => void requestPermission()}
+            onPress={requestCamera}
             style={styles.primaryButton}
           >
-            <Text style={styles.primaryButtonText}>{t("scannerAllowCamera")}</Text>
+            <Text style={styles.primaryButtonText}>{t("scannerRetryCamera")}</Text>
           </Pressable>
         ) : null}
         {onClose ? (

@@ -231,6 +231,7 @@ export function ActivityScannerScreen() {
         autoStartNfc={Boolean(activity) && !manualNonce}
         nfcSessionKey={nfcSessionKey}
         onValue={(value) => void scanned(value)}
+        requestCameraOnFocus={false}
         scanningEnabled={Boolean(activity) && !result}
       />
       <AdaptiveBackButton

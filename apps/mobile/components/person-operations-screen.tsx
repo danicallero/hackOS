@@ -875,10 +875,12 @@ export function PersonOperationsScreen() {
         animationType="slide"
         onRequestClose={() => setBadgeCodeMethod(null)}
       >
-        <QrCamera
-          onClose={() => setBadgeCodeMethod(null)}
-          onValue={(code) => void saveBadge(code.trim(), attendeeRole ?? undefined)}
-        />
+        {badgeCodeMethod === "qr" ? (
+          <QrCamera
+            onClose={() => setBadgeCodeMethod(null)}
+            onValue={(code) => void saveBadge(code.trim(), attendeeRole ?? undefined)}
+          />
+        ) : null}
       </Modal>
       <NfcReader
         visible={badgeReaderVisible}
