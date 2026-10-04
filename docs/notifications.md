@@ -344,12 +344,22 @@ from the web's existing font asset and fall back to Georgia. Clients that block
 webfonts retain readable system typography. Narrow layouts reduce padding and
 expand action links, including long verification labels. The document language
 and automated-message footer follow the recipient's es/gl/en language. The
-footer says the sender does not receive incoming messages and links to the
+footer warns recipients to ignore unexpected messages and avoid following
+links, says the sender does not receive incoming messages, and links to the
 organization at `hackudc@gpul.org`. This footer also appears in the outgoing
 plain-text MIME part; inbox and push message bodies retain just the message.
 Subject, preheader, escaping and action URLs are preserved.
 These are transactional messages: campaign tracking and unsubscribe controls
 from marketing templates do not belong in this shared wrapper.
+
+Account-setup emails (H9/H10) identify the staff member sending or resending
+access and the configured event. They explain how to complete account creation
+without mentioning passwords, list the explicitly assigned roles (singular or
+plural), and name the linked company for sponsors. Context is captured when
+queued, using current active roles; the account claim remains the authority for
+actual grants. The participant label alone does not promise form access.
+Older queued invitations fall back to the localized organizers label and event
+fallback without unresolved placeholders. All three languages share this copy.
 
 ### Message voice and admission decisions (H7, H14, H15, H52)
 

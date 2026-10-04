@@ -16,6 +16,7 @@ import {
 import { requireIdempotencyKey } from "../../../lib/idempotency.js";
 import { keyByIp, rateLimitGuard } from "../../../lib/rate-limit.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
+import { getEventName } from "../../event/service.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 import {
@@ -147,8 +148,21 @@ async function enqueueInviteEmail(
   actorId: number,
   recipient: string,
   language: string,
-  token: string,
+  invite: TokenRow,
 ): Promise<void> {
+  const { rows: actors } = await db.query<{ name: string; surname: string | null }>(
+    "SELECT name, surname FROM users WHERE id = $1",
+    [actorId],
+  );
+  const { rows: roles } = await db.query<{ name: string }>(
+    "SELECT name FROM roles WHERE id = ANY($1::int[]) AND deleted_at IS NULL ORDER BY position DESC, id",
+    [invite.role_ids],
+  );
+  const { rows: enterprises } = await db.query<{ name: string }>(
+    "SELECT name FROM enterprises WHERE id = $1",
+    [invite.enterprise_id],
+  );
+  const inviterName = [actors[0]?.name, actors[0]?.surname].filter(Boolean).join(" ").trim();
   await db.query(
     `INSERT INTO notification_outbox (user_id, category, channel, payload)
      VALUES ($1, 'auth', 'email', $2::jsonb)`,
@@ -158,7 +172,13 @@ async function enqueueInviteEmail(
         template: "auth.invite",
         recipient,
         language,
-        vars: { claimUrl: enterpriseInviteClaimUrl(token) },
+        vars: {
+          claimUrl: enterpriseInviteClaimUrl(invite.token),
+          inviterName,
+          eventName: await getEventName(db),
+          roleNames: roles.map((role) => role.name),
+          enterpriseName: enterprises[0]?.name ?? "",
+        },
       }),
     ],
   );
@@ -246,7 +266,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           ],
         );
         const created = rows[0] as TokenRow;
-        await enqueueInviteEmail(client, req.userId as number, email, "en", token);
+        await enqueueInviteEmail(client, req.userId as number, email, "en", created);
         await audit(client, {
           actorId: req.userId,
           entityType: "invite",
@@ -395,7 +415,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           ],
         );
         const created = newRows[0] as TokenRow;
-        await enqueueInviteEmail(client, req.userId as number, old.email, "en", token);
+        await enqueueInviteEmail(client, req.userId as number, old.email, "en", created);
         await audit(client, {
           actorId: req.userId,
           entityType: "invite",
@@ -544,7 +564,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             [id],
           );
         }
-        await enqueueInviteEmail(client, req.userId as number, invite.email, "en", invite.token);
+        await enqueueInviteEmail(client, req.userId as number, invite.email, "en", invite);
         await audit(client, {
           actorId: req.userId,
           entityType: "invite",

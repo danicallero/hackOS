@@ -70,6 +70,9 @@ describe("SMTP via Mailpit (default dev provider)", () => {
     expect(detail.HTML).toContain('<html lang="en">');
     expect(detail.HTML).toContain("This is an automated message.");
     expect(detail.Text).toContain("This is an automated message.");
+    expect(detail.Text).toContain("If you were not expecting this email");
+    expect(detail.HTML).toContain("If you were not expecting this email");
+    expect(detail.Text).toContain("hackudc@gpul.org");
     expect(detail.HTML).toContain("this address does not receive incoming messages");
     expect(detail.HTML).toContain('href="mailto:hackudc@gpul.org"');
   });
@@ -135,6 +138,60 @@ describe("SMTP via Mailpit (default dev provider)", () => {
     expect(detail.Text).not.toContain("{{");
     expect(detail.HTML).not.toContain("/applications/confirm");
     expect(messages[0]!.Subject).not.toContain("rejected");
+  });
+
+  it.each([
+    ["es", "Configura tu cuenta de hackOS", "el rol:", "los roles:"],
+    ["gl", "Configura a túa conta de hackOS", "o rol:", "os roles:"],
+    ["en", "Set up your hackOS account", "the role:", "the roles:"],
+  ])("delivers account setup with sender, event and singular/plural roles in %s (H10/H52)", async (language, subject, singular, plural) => {
+    const userId = await createUser({ email: "organizer@test.local" });
+    for (const roleNames of [["Mentor"], ["Mentor", "Judge"]]) {
+      await clearMailpit();
+      await enqueueOutbox(
+        userId,
+        "email",
+        {
+          template: "auth.invite",
+          recipient: "new-person@test.local",
+          language,
+          vars: {
+            inviterName: "Ada <Lovelace>",
+            eventName: "HackUDC 2027",
+            roleNames,
+            enterpriseName: "ACME",
+            claimUrl: "https://os.example.org/claim-account?token=test",
+          },
+        },
+        "auth",
+      );
+      expect((await drainOutboxOnce()).sent).toBe(1);
+      const messages = await waitForMailpit(1);
+      expect(messages[0]!.Subject).toBe(subject);
+      expect(messages[0]!.To[0]!.Address).toBe("new-person@test.local");
+      const detail = await getMailpitMessage(messages[0]!.ID);
+      expect(detail.Text).toContain("Ada <Lovelace>");
+      expect(detail.HTML).toContain("Ada &lt;Lovelace&gt;");
+      expect(detail.Text).toContain("HackUDC 2027");
+      expect(detail.Text).toContain(roleNames.length === 1 ? singular : plural);
+      expect(detail.Text).toContain(roleNames.join(", "));
+      expect(detail.Text).toContain("ACME");
+      expect(detail.Text).toContain("hackudc@gpul.org");
+      expect(detail.HTML).toContain('href="mailto:hackudc@gpul.org"');
+      expect(detail.Text).not.toMatch(/password|contrase[ñn]a|contrasinal|\{\{/i);
+    }
+  });
+
+  it("renders previously queued invitations without missing context placeholders (H10)", async () => {
+    const { renderEmailTemplate } = await import("../../src/modules/notifications/templates.js");
+    for (const language of ["es", "gl", "en"] as const) {
+      const message = renderEmailTemplate(
+        { template: "auth.invite", vars: { claimUrl: "https://os.example.org/claim-account" } },
+        language,
+      );
+      expect(message.text).not.toContain("{{");
+      expect(message.text).not.toContain("undefined");
+    }
   });
 
   it("unknown template falls back to generic rendering of the payload", async () => {
