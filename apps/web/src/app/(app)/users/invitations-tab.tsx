@@ -376,7 +376,12 @@ export function InvitationsScreen() {
                 </Button>
               )}
               {selected.source === "email" && selected.status === "active" && (
-                <Button variant="outline" disabled={resending} onClick={() => void resend()}>
+                <Button
+                  variant="outline"
+                  disabled={resending}
+                  onClick={() => void resend()}
+                  loading={resending}
+                >
                   {t("resendEmail")}
                 </Button>
               )}

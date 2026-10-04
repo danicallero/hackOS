@@ -240,11 +240,20 @@ export default function ReviewDetailPage() {
         footer={
           panel.length > 0 ? (
             <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="outline" disabled={saving || !dirty} onClick={() => save(false)}>
+              <Button
+                variant="outline"
+                disabled={saving || !dirty}
+                onClick={() => save(false)}
+                loading={saving}
+              >
                 {review.status === "submitted" ? t("saveCorrection") : t("saveDraft")}
               </Button>
               {review.status !== "submitted" && (
-                <Button disabled={saving || requiredUnansweredCount > 0} onClick={() => save(true)}>
+                <Button
+                  disabled={saving || requiredUnansweredCount > 0}
+                  onClick={() => save(true)}
+                  loading={saving}
+                >
                   {t("submitReview")}
                 </Button>
               )}
@@ -319,7 +328,11 @@ export default function ReviewDetailPage() {
             <Button variant="outline" onClick={() => setMessageOpen(false)} disabled={sending}>
               {t("cancel")}
             </Button>
-            <Button onClick={() => void sendMessage()} disabled={sending || !message.trim()}>
+            <Button
+              onClick={() => void sendMessage()}
+              disabled={sending || !message.trim()}
+              loading={sending}
+            >
               <PaperPlaneTiltIcon aria-hidden="true" className="size-4" />
               {t("sendMessage")}
             </Button>

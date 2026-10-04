@@ -1,0 +1,186 @@
+@layer components {
+  /* Rows, editable cells and official badge actions keep their own geometry. */
+  .button-interaction {
+    cursor: pointer;
+    transition-property: background-color, color;
+    transition-duration: var(--button-feedback-duration);
+    transition-timing-function: ease-out;
+  }
+
+  .button-interaction:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+
+  .button-interaction:not(:disabled, [aria-disabled="true"]):active {
+    background-color: var(--button-quiet-pressed);
+    box-shadow: inset 0 0 0 1px var(--button-outline-border);
+  }
+
+  .button-interaction[aria-pressed="true"]:active {
+    background-color: var(--button-primary-pressed);
+  }
+
+  .button-interaction:disabled {
+    cursor: not-allowed;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .button-interaction:not(
+        :disabled,
+        [aria-disabled="true"],
+        [aria-pressed="true"],
+        [aria-selected="true"]
+      ):hover {
+      background-color: var(--button-quiet-hover);
+    }
+  }
+
+  .button {
+    --button-background: transparent;
+    --button-foreground: var(--foreground);
+    --button-border: transparent;
+    --button-hover: var(--button-quiet-hover);
+    --button-pressed: var(--button-quiet-pressed);
+    position: relative;
+    background-color: var(--button-background);
+    color: var(--button-foreground);
+    border-color: var(--button-border);
+    cursor: pointer;
+    transition-property: background-color, border-color, color, box-shadow, transform;
+    transition-duration: var(--button-feedback-duration);
+    transition-timing-function: ease-out;
+  }
+
+  .button-primary {
+    --button-background: var(--primary);
+    --button-foreground: var(--primary-foreground);
+    --button-hover: var(--button-primary-hover);
+    --button-pressed: var(--button-primary-pressed);
+    @apply shadow-xs;
+  }
+
+  .button-secondary {
+    --button-background: var(--secondary);
+    --button-foreground: var(--secondary-foreground);
+    --button-hover: var(--button-secondary-hover);
+    --button-pressed: var(--button-secondary-pressed);
+  }
+
+  .button-outline {
+    --button-background: var(--background);
+    --button-border: var(--button-outline-border);
+  }
+
+  .button-destructive {
+    --button-background: var(--destructive);
+    --button-foreground: var(--destructive-foreground);
+    --button-hover: var(--button-destructive-hover);
+    --button-pressed: var(--button-destructive-pressed);
+  }
+
+  .button-link {
+    --button-foreground: var(--primary);
+    --button-hover: transparent;
+    --button-pressed: transparent;
+    text-decoration-line: underline;
+    text-decoration-color: transparent;
+    text-underline-offset: 4px;
+  }
+
+  /* Hover belongs only to devices with a cursor, including cursor-equipped tablets. */
+  @media (hover: hover) and (pointer: fine) {
+    .button:not(:disabled, [aria-disabled="true"]):hover {
+      background-color: var(--button-hover);
+    }
+
+    .button-outline:not(:disabled, [aria-disabled="true"]):hover {
+      border-color: var(--foreground);
+    }
+
+    .button-link:not(:disabled, [aria-disabled="true"]):hover {
+      text-decoration-color: currentColor;
+    }
+  }
+
+  /* The public specimen uses these attributes to display states side by side. */
+  .button[data-preview-state="hover"] {
+    background-color: var(--button-hover);
+  }
+
+  .button-outline[data-preview-state="hover"] {
+    border-color: var(--foreground);
+  }
+
+  .button-link[data-preview-state="hover"] {
+    text-decoration-color: currentColor;
+  }
+
+  .button:not(:disabled, [aria-disabled="true"]):active,
+  .button[data-preview-state="pressed"] {
+    background-color: var(--button-pressed);
+    box-shadow: none;
+  }
+
+  .button-link:not(:disabled, [aria-disabled="true"]):active,
+  .button-link[data-preview-state="pressed"] {
+    text-decoration-color: currentColor;
+    text-decoration-thickness: 2px;
+  }
+
+  /* A solid, offset perimeter stays visible beside filled and outlined controls. */
+  .button:focus-visible,
+  .button[data-preview-state="focus"] {
+    outline: 2px solid var(--ring);
+    outline-offset: 3px;
+  }
+
+  .button:disabled,
+  .button[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: var(--button-disabled-opacity);
+    box-shadow: none;
+  }
+
+  .button[data-loading="true"] > svg:not([data-slot="button-spinner"]) {
+    display: none;
+  }
+
+  .button[data-loading="true"] {
+    cursor: progress;
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .button:not(:disabled, [aria-disabled="true"], .button-static):active,
+    .button[data-preview-state="pressed"] {
+      transform: scale(0.96);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .button,
+    .button-interaction {
+      transition: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .button {
+      border-color: ButtonText;
+    }
+
+    .button:focus-visible,
+    .button-interaction:focus-visible,
+    .button[data-preview-state="focus"] {
+      outline-color: Highlight;
+    }
+
+    .button:disabled,
+    .button[aria-disabled="true"] {
+      color: GrayText;
+      border-color: GrayText;
+      opacity: 1;
+    }
+  }
+}

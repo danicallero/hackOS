@@ -140,7 +140,7 @@ export function EditableStatusCell({
           }}
           data-schedule-focusable="true"
           data-schedule-activate="true"
-          className="hover:bg-muted -mx-1 block rounded px-1 py-0.5 text-left"
+          className="button-interaction hover:bg-muted -mx-1 block rounded px-1 py-0.5 text-left"
         >
           <StatusPill item={item} status={status} />
         </button>
@@ -216,7 +216,7 @@ export function EditableTextCell({
         onKeyDown={handleScheduleGridKeyDown}
         data-schedule-focusable="true"
         data-schedule-activate="true"
-        className="hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
+        className="button-interaction hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
       >
         {value || <span className="text-muted-foreground">{placeholder ?? "—"}</span>}
       </button>
@@ -323,7 +323,7 @@ export function EditableTimeCell({
         onKeyDown={handleScheduleGridKeyDown}
         data-schedule-focusable="true"
         data-schedule-activate="true"
-        className="hover:bg-muted -mx-1 w-full rounded px-1 py-0.5 text-left"
+        className="button-interaction hover:bg-muted -mx-1 w-full rounded px-1 py-0.5 text-left"
       >
         {value}
       </button>
@@ -497,7 +497,7 @@ export function EditableAudienceCell({
         <button
           type="button"
           disabled={saving}
-          className="hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
+          className="button-interaction hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
           aria-label={t("editScheduleFieldAria", { field: fieldLabel })}
           onKeyDown={handleScheduleGridKeyDown}
           data-schedule-focusable="true"
@@ -524,7 +524,13 @@ export function EditableAudienceCell({
           <Button type="button" size="sm" variant="outline" onClick={() => setOpen(false)}>
             {t("cancel")}
           </Button>
-          <Button type="button" size="sm" disabled={saving} onClick={() => void apply()}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={saving}
+            onClick={() => void apply()}
+            loading={saving}
+          >
             {t("applyAction")}
           </Button>
         </div>
@@ -638,7 +644,7 @@ export function EditablePublishDateCell({
         onKeyDown={handleScheduleGridKeyDown}
         data-schedule-focusable="true"
         data-schedule-activate="true"
-        className="hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
+        className="button-interaction hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
         aria-label={t("editScheduleFieldAria", { field: fieldLabel })}
       >
         {value ? formatScheduledDateTime(value, locale) : t("notSet")}
@@ -745,7 +751,7 @@ export function EditableOwnersCell({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
+          className="button-interaction hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
           onKeyDown={handleScheduleGridKeyDown}
           data-schedule-focusable="true"
           data-schedule-activate="true"
@@ -768,6 +774,7 @@ export function EditableOwnersCell({
             variant="outline"
             disabled={busy || !selectedUserId}
             onClick={() => add({ userId: Number(selectedUserId) })}
+            loading={busy}
           >
             {t("addAction")}
           </Button>
@@ -790,6 +797,7 @@ export function EditableOwnersCell({
             variant="outline"
             disabled={busy || !freeTextName.trim()}
             onClick={() => add({ freeTextName: freeTextName.trim() })}
+            loading={busy}
           >
             {t("addAction")}
           </Button>
@@ -808,6 +816,7 @@ export function EditableOwnersCell({
                   aria-label={t("remove")}
                   disabled={busy}
                   onClick={() => remove(owner.id)}
+                  loading={busy}
                 >
                   <XIcon aria-hidden="true" className="size-3.5" />
                 </Button>

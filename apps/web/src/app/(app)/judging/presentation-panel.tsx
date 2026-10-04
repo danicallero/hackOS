@@ -106,6 +106,7 @@ export function PresentationPanel({
                     variant="outline"
                     size="sm"
                     disabled={(!canOperate && !canJudge) || busy != null}
+                    loading={busy === `notify-enter-${firstCalledEntry.id}`}
                     onClick={() =>
                       onEntryAction(
                         firstCalledEntry,
@@ -123,6 +124,7 @@ export function PresentationPanel({
                   <Button
                     size="sm"
                     disabled={!canJudge || busy != null}
+                    loading={busy === `bring-in-${firstCalledEntry.id}`}
                     onClick={() =>
                       onEntryAction(
                         firstCalledEntry,
@@ -153,6 +155,7 @@ export function PresentationPanel({
             <div className="grid gap-2 sm:grid-cols-2">
               <Button
                 disabled={!canJudge || !isReady || busy != null}
+                loading={busy === `start-${entry.id}`}
                 onClick={() => onEntryAction(entry, "start", undefined, t("presentationStarted"))}
               >
                 <PlayIcon aria-hidden="true" className="size-4" />
@@ -174,7 +177,11 @@ export function PresentationPanel({
                     )
                   }
                   trigger={
-                    <Button variant="outline" disabled={!canJudge || busy != null}>
+                    <Button
+                      variant="outline"
+                      disabled={!canJudge || busy != null}
+                      loading={busy === `send-back-${entry.id}`}
+                    >
                       <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
                       {t("requeueWaitingRoom")}
                     </Button>

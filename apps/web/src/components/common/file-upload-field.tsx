@@ -12,7 +12,6 @@ import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useId, useRef, useState } from "react";
 import { FileLink } from "@/components/common/file-link";
 import { IconButton } from "@/components/common/icon-button";
-import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { ApiError, apiUpload } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -166,9 +165,10 @@ export function FileUploadField({
           aria-describedby={describedBy || undefined}
           aria-invalid={invalid}
           onClick={() => inputRef.current?.click()}
+          loading={uploading}
         >
-          {uploading ? <Spinner /> : <UploadSimpleIcon aria-hidden="true" />}
-          {uploading ? t("uploading") : t("chooseFile")}
+          {<UploadSimpleIcon aria-hidden="true" />}
+          {t("chooseFile")}
         </Button>
       )}
       {uploadError && (

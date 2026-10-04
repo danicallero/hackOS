@@ -1029,7 +1029,7 @@ export function FieldEditor({
           type="button"
           aria-expanded="false"
           onClick={() => changeActivePreservingPosition(onActivate, cardRef.current)}
-          className="focus-visible:ring-ring w-full rounded-control text-left focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className="button-interaction w-full rounded-control text-left"
         >
           <div className="pointer-events-none">
             <FieldPreviewRow field={field} locale={primaryLocale} />

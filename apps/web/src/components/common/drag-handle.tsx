@@ -31,7 +31,7 @@ export function DragHandle({
       variant="ghost"
       size="icon-sm"
       label={label}
-      className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 cursor-grab touch-none active:cursor-grabbing"
+      className="button-static text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 cursor-grab touch-none active:cursor-grabbing"
       {...attributes}
       {...listeners}
       disabled={disabled}

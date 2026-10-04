@@ -97,7 +97,7 @@ function EditableRoomTextCell({
         data-room-focusable="true"
         data-room-activate="true"
         aria-label={roomFieldAria(t, fieldLabel, value)}
-        className="hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
+        className="button-interaction hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
       >
         {value || <span className="text-muted-foreground">{placeholder ?? "—"}</span>}
       </button>
@@ -197,6 +197,7 @@ export function DraftRoomRow({
             size="sm"
             disabled={saving || !trimmedName}
             onClick={() => onCreate(trimmedName, location.trim())}
+            loading={saving}
           >
             <PlusIcon className="size-3.5" aria-hidden="true" />
             {t("addAction")}
@@ -312,7 +313,7 @@ export function RoomsTable({
                     <button
                       type="button"
                       onClick={() => onOpenEdit(room.id)}
-                      className="hover:bg-muted -mx-1 block max-w-56 truncate rounded px-1 py-0.5 text-left"
+                      className="button-interaction hover:bg-muted -mx-1 block max-w-56 truncate rounded px-1 py-0.5 text-left"
                       aria-label={t("editRoomAssignmentsAria", { room: room.name })}
                     >
                       {room.enterprise_name ?? (

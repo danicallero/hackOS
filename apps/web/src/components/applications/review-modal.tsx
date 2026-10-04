@@ -48,7 +48,6 @@ import { fileDownloadUrl } from "@/components/common/file-link";
 import { Modal } from "@/components/common/modal";
 import { SaveStatus } from "@/components/common/save-status";
 import { ScaleButtons } from "@/components/common/scale-buttons";
-import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import {
   type FieldValue,
@@ -532,7 +531,7 @@ function ApplicationFileViewer({
               }
               onSideChange(nextSide);
             }}
-            className="hidden cursor-grab touch-none px-1.5 active:cursor-grabbing lg:inline-flex"
+            className="button-static hidden cursor-grab touch-none px-1.5 active:cursor-grabbing lg:inline-flex"
             aria-label={t("moveFileViewer", {
               side: t(nextSide === "left" ? "leftSide" : "rightSide"),
             })}
@@ -715,7 +714,7 @@ function FileViewerDropZones({
           type="button"
           data-dialog-floating
           data-file-viewer-dropzone={side}
-          className="border-primary/60 bg-primary/10 text-primary hover:bg-primary/20 focus-visible:ring-ring pointer-events-auto flex h-[min(54vh,32rem)] w-28 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 text-center text-xs font-medium shadow-lg backdrop-blur-sm transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden"
+          className="button-interaction border-primary/60 bg-primary/10 text-primary hover:bg-primary/20 pointer-events-auto flex h-[min(54vh,32rem)] w-28 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 text-center text-xs font-medium shadow-lg backdrop-blur-sm transition-colors"
           onDragOver={onDragOver}
           onDrop={(event) => onDrop(side, event)}
           onClick={() => onSideChange(side)}
@@ -1403,16 +1402,18 @@ export function ReviewModal({
             )}
             {showEditAction &&
               (editing ? (
-                <button
+                <Button
                   type="button"
+                  size="icon-sm"
+                  variant="ghost"
                   className={dialogIconButtonClass}
-                  disabled={savingEdit}
+                  loading={savingEdit}
                   onClick={() => void saveEdit()}
                   aria-label={t("saveAnswers")}
                   title={t("saveAnswers")}
                 >
-                  {savingEdit ? <Spinner /> : <FloppyDiskIcon aria-hidden="true" />}
-                </button>
+                  <FloppyDiskIcon aria-hidden="true" />
+                </Button>
               ) : (
                 <button
                   type="button"
@@ -1755,8 +1756,7 @@ function AnswersSection({
               >
                 {t("cancel")}
               </Button>
-              <Button size="sm" disabled={savingEdit} onClick={saveEdit}>
-                {savingEdit && <Spinner />}
+              <Button size="sm" disabled={savingEdit} onClick={saveEdit} loading={savingEdit}>
                 {t("saveAnswers")}
               </Button>
             </div>
@@ -1805,8 +1805,13 @@ function StaffNotesCard({
         placeholder={t("visibleToAllReviewersPlaceholder")}
       />
       <div className="flex justify-end">
-        <Button size="sm" variant="outline" disabled={savingNotes} onClick={saveStaffNotes}>
-          {savingNotes && <Spinner />}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={savingNotes}
+          onClick={saveStaffNotes}
+          loading={savingNotes}
+        >
           {t("saveNotes")}
         </Button>
       </div>
@@ -2117,7 +2122,10 @@ function FloatingReviewPanel(props: ReviewComposerProps) {
   const dragHandle = (
     <button
       type="button"
-      className={cn(dialogIconButtonClass, "cursor-grab touch-none active:cursor-grabbing")}
+      className={cn(
+        dialogIconButtonClass,
+        "button-static cursor-grab touch-none active:cursor-grabbing",
+      )}
       onPointerDown={startDragging}
       onPointerMove={moveDragging}
       onPointerUp={stopDragging}

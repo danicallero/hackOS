@@ -272,6 +272,25 @@ right-side editor over the current workspace, with a fixed title/actions area
 and independently scrollable form body. Use it for a single record's details;
 keep blocking confirmations in `Modal` and deep, bookmarkable workflows on a route.
 
+### Button states
+
+All six `Button` variants (`default`, `secondary`, `outline`, `ghost`,
+`destructive`, `link`) consume the interaction tokens in `styles/theme.css`
+through `styles/buttons.css`. The same styles cover `IconButton`,
+`SubmitButton`, and dialog header actions. `/design-system` includes the six
+states for each variant and icon-only actions, all sizes and live loading demos.
+
+Use `loading={pending}` for requests: the primitive keeps the action label,
+shows a Phosphor spinner, exposes `aria-busy`, and blocks repeated activation.
+`SubmitButton pending={pending}` delegates to it. Keep sibling controls disabled
+without a loading indicator. `asChild` retains navigation semantics while
+blocking disabled links. Hover requires a fine cursor; focus uses a solid,
+offset `--ring` outline; press adds a distinct color and restrained scale.
+Reduced motion and forced colors have explicit treatments.
+Native row/cell controls use `button-interaction` to keep their specialized
+geometry. Wallet controls retain the official artwork and their separate badge
+sizes. Full rules and brand adaptations: [`docs/DESIGN.md`](../../docs/DESIGN.md#web-button-standard).
+
 ### Control sizing — one geometry contract
 
 Buttons, inputs, selects, command inputs, and tabs use the same token-backed

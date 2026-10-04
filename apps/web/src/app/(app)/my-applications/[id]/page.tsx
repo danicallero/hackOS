@@ -24,7 +24,6 @@ import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
-import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { TemplateFieldControl, templateFieldId } from "@/components/common/template-field-control";
@@ -536,8 +535,8 @@ export default function MyApplicationDetailPage() {
                 onClick={handleSaveDraft}
                 disabled={saving || submitting}
                 className="w-full sm:w-auto"
+                loading={saving}
               >
-                {saving && <Spinner />}
                 {t("saveDraft")}
               </Button>
               <SubmitButton

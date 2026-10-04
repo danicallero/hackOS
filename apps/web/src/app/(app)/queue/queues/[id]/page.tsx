@@ -437,6 +437,7 @@ export default function QueueDetailPage() {
                         variant="ghost"
                         disabled={busy}
                         onClick={() => void sendTeamToEnd(entry.id)}
+                        loading={busy}
                       >
                         {t("sendToEnd")}
                       </Button>
@@ -459,6 +460,7 @@ export default function QueueDetailPage() {
                 variant="outline"
                 disabled={busy || !name.trim() || name.trim() === queue.group.display_name}
                 onClick={() => void rename()}
+                loading={busy}
               >
                 {t("save")}
               </Button>
@@ -509,7 +511,11 @@ export default function QueueDetailPage() {
           description={meta.evaluationStarted ? t("queueCriteriaLocked") : undefined}
           footer={
             !meta.evaluationStarted ? (
-              <Button onClick={() => void saveCriteria()} disabled={criteriaBusy}>
+              <Button
+                onClick={() => void saveCriteria()}
+                disabled={criteriaBusy}
+                loading={criteriaBusy}
+              >
                 {t("saveQueueCriteria")}
               </Button>
             ) : undefined

@@ -270,7 +270,7 @@ export function TeamQueueSearch({
               <button
                 key={candidate.repoId}
                 type="button"
-                className="hover:bg-muted focus-visible:bg-muted flex w-full min-w-0 items-center rounded-control px-3 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="button-interaction hover:bg-muted focus-visible:bg-muted flex w-full min-w-0 items-center rounded-control px-3 py-2 text-left text-sm"
                 title={candidate.repoName}
                 onClick={() => selectTeam(candidate)}
               >
@@ -421,6 +421,7 @@ function TeamQueueActions({
             disabled={busy || !canMove}
             title={canMove ? t("queuePrioritize") : busyReason}
             onClick={() => onAction("move-top")}
+            loading={busy}
           >
             <ListBulletsIcon aria-hidden="true" className="size-3.5 rotate-180" />
             {t("queuePrioritize")}
@@ -431,6 +432,7 @@ function TeamQueueActions({
             disabled={busy || !canMove}
             title={canMove ? t("queueMoveToEnd") : busyReason}
             onClick={() => onAction("move-end")}
+            loading={busy}
           >
             <ListBulletsIcon aria-hidden="true" className="size-3.5" />
             {t("queueMoveToEnd")}
@@ -444,6 +446,7 @@ function TeamQueueActions({
           disabled={busy}
           className="text-destructive hover:text-destructive"
           onClick={() => onAction("disqualify")}
+          loading={busy}
         >
           <ProhibitIcon aria-hidden="true" className="size-3.5" />
           {t("queueDisqualify")}

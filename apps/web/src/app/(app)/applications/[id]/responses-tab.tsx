@@ -521,6 +521,7 @@ export function ResponsesTab({
                     }),
                   )
                 }
+                loading={batchBusy}
               >
                 <PaperPlaneTiltIcon aria-hidden="true" />
                 {t("send")}
@@ -538,6 +539,7 @@ export function ResponsesTab({
                     }),
                   )
                 }
+                loading={batchBusy}
               >
                 <PaperPlaneTiltIcon aria-hidden="true" />
                 {t("resend")}

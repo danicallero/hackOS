@@ -721,6 +721,7 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
                     size="sm"
                     disabled={busy}
                     onClick={() => removeWinner(winner.rank)}
+                    loading={busy}
                   >
                     <TrashIcon aria-hidden="true" className="size-4" />
                     {t("remove")}

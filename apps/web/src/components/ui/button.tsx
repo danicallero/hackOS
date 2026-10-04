@@ -1,24 +1,24 @@
+"use client"
+
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
 
+import { SpinnerGapIcon } from "@phosphor-icons/react/dist/csr/SpinnerGap"
+
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-button border border-transparent text-sm font-semibold whitespace-nowrap transition-[background-color,border-color,color,box-shadow,transform] duration-150 outline-none active:translate-y-px focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "button inline-flex shrink-0 items-center justify-center gap-2 rounded-button border text-sm font-semibold whitespace-nowrap aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40",
-        outline:
-          "border-border bg-background hover:bg-accent hover:text-accent-foreground",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-        link: "text-primary underline-offset-4 hover:underline",
+        default: "button-primary",
+        destructive: "button-destructive",
+        outline: "button-outline",
+        secondary: "button-secondary",
+        ghost: "button-ghost",
+        link: "button-link",
       },
       size: {
         default: "h-[var(--control-height-default)] px-4 py-2 has-[>svg]:px-3",
@@ -44,23 +44,72 @@ function Button({
   size = "default",
   asChild = false,
   title,
+  loading = false,
+  disabled,
+  children,
+  onClickCapture,
+  onAuxClickCapture,
+  onKeyDownCapture,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    /** Keeps the action label visible and prevents activation while work is pending. */
+    loading?: boolean
   }) {
   const Comp = asChild ? Slot.Root : "button"
   const labelTitle = typeof props["aria-label"] === "string" ? props["aria-label"] : undefined
+
+  const unavailable = Boolean(disabled || loading || props["aria-disabled"] === true || props["aria-disabled"] === "true")
+  const content = (contentChildren: React.ReactNode) => (
+    <>
+      {loading && <SpinnerGapIcon data-slot="button-spinner" className="size-4 motion-safe:animate-spin" aria-hidden="true" />}
+      {contentChildren}
+    </>
+  )
+  const renderedChildren = asChild && React.isValidElement<{ children?: React.ReactNode }>(children)
+    ? React.cloneElement(children, undefined, loading ? content(children.props.children) : children.props.children)
+    : loading ? content(children) : children
 
   return (
     <Comp
       data-slot="button"
       data-variant={variant}
       data-size={size}
+      data-loading={loading || undefined}
       title={title ?? labelTitle}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+      disabled={asChild ? undefined : disabled || loading}
+      aria-disabled={asChild && unavailable ? true : props["aria-disabled"]}
+      aria-busy={loading || props["aria-busy"]}
+      onClickCapture={(event) => {
+        if (unavailable) {
+          event.preventDefault()
+          event.stopPropagation()
+          return
+        }
+        onClickCapture?.(event)
+      }}
+      onAuxClickCapture={(event) => {
+        if (unavailable) {
+          event.preventDefault()
+          event.stopPropagation()
+          return
+        }
+        onAuxClickCapture?.(event)
+      }}
+      onKeyDownCapture={(event) => {
+        if (unavailable && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault()
+          event.stopPropagation()
+          return
+        }
+        onKeyDownCapture?.(event)
+      }}
+    >
+      {renderedChildren}
+    </Comp>
   )
 }
 

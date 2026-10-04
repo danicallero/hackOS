@@ -451,6 +451,7 @@ export default function PermissionsPage() {
                 variant="outline"
                 disabled={restoringId === r.id}
                 onClick={() => restoreRole(r.id)}
+                loading={restoringId === r.id}
               >
                 <ArrowUUpLeftIcon aria-hidden="true" /> {t("restoreRole")}
               </Button>

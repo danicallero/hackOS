@@ -212,7 +212,7 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
               role="option"
               tabIndex={-1}
               aria-selected={index === activeIndex}
-              className="hover:bg-muted aria-selected:bg-muted w-full px-3 py-2 text-left text-sm"
+              className="button-interaction hover:bg-muted aria-selected:bg-muted w-full px-3 py-2 text-left text-sm"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => selectCity(city)}
             >

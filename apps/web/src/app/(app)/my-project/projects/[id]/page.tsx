@@ -207,6 +207,7 @@ export default function MyProjectDetailPage() {
                         setRemovingChallenge(null);
                       }
                     }}
+                    loading={removingChallenge === challenge.id}
                   >
                     {t("remove")}
                   </Button>
@@ -261,7 +262,7 @@ function AddChallenge({
       }
       title={t("addChallenge")}
       footer={
-        <Button disabled={saving || !selected} onClick={add}>
+        <Button disabled={saving || !selected} onClick={add} loading={saving}>
           {t("addChallenge")}
         </Button>
       }
@@ -328,7 +329,7 @@ function InviteMember({
       }
       title={t("inviteMemberTitle")}
       footer={
-        <Button disabled={saving || !email.trim()} onClick={invite}>
+        <Button disabled={saving || !email.trim()} onClick={invite} loading={saving}>
           {t("inviteMemberCta")}
         </Button>
       }

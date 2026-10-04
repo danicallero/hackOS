@@ -484,3 +484,34 @@ geometry. State which browser was checked.
 ### Exceptions
 A directly observable code error can be fixed first, but its affected
 interaction still needs runtime verification.
+
+## [R016] Verify that interaction feedback is perceptible
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-10-05
+
+### Trigger
+Designing or changing hover, pressed, or other visual action states.
+
+### Mistake
+The primary button changed color on hover and passed text-contrast checks, but
+its small color difference was too subtle for the user to notice.
+
+### Lesson
+Legible labels and different CSS values do not establish a perceptible state
+change. Interaction feedback must remain visible in the actual interface.
+
+### Action
+Compare default, hover and pressed states in a running browser, in both themes.
+Inspect computed paint values and side-by-side captures; strengthen feedback
+when the difference is barely visible while preserving text contrast.
+
+### Validation
+Exercise pointer entry and press, inspect the rendered state change, and verify
+that disabled and touch-only controls do not acquire hover feedback. Keep a
+regression check for the corrected state distinction when appropriate.
+
+### Exceptions
+Controls deliberately lacking hover behavior, including touch-only surfaces.

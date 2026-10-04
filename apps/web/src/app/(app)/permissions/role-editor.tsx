@@ -333,7 +333,7 @@ export function RoleEditor({
         bodyClassName="p-0"
         footer={
           !isProtected ? (
-            <Button onClick={submitCaps} disabled={!capsDirty || savingCaps}>
+            <Button onClick={submitCaps} disabled={!capsDirty || savingCaps} loading={savingCaps}>
               {t("saveCapabilities")}
             </Button>
           ) : undefined
@@ -525,7 +525,7 @@ export function DrilldownBackButton({ label, onClick }: { label: string; onClick
     <button
       type="button"
       onClick={onClick}
-      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
+      className="button-interaction text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
     >
       <ArrowLeftIcon aria-hidden="true" className="size-4" />
       {label}
@@ -539,7 +539,7 @@ function RoleNavRow({ label, onClick }: { label: string; onClick: () => void }) 
     <button
       type="button"
       onClick={onClick}
-      className="hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium"
+      className="button-interaction hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium"
     >
       {label}
       <CaretRightIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
@@ -567,7 +567,7 @@ function CapabilityGroup({
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left"
+          className="button-interaction hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left"
         >
           <span className="type-label text-muted-foreground">{domain}</span>
           <CaretDownIcon
@@ -696,7 +696,7 @@ function MembersPanel({
             search={searchExcludingMembers}
             className="min-w-56 flex-1"
           />
-          <Button size="sm" disabled={!pickedId || adding} onClick={handleAdd}>
+          <Button size="sm" disabled={!pickedId || adding} onClick={handleAdd} loading={adding}>
             <UserPlusIcon aria-hidden="true" /> {t("addAction")}
           </Button>
         </div>
@@ -727,6 +727,7 @@ function MembersPanel({
                   variant="destructive"
                   disabled={bulkRemoving}
                   onClick={handleBulkRemove}
+                  loading={bulkRemoving}
                 >
                   <TrashIcon aria-hidden="true" />
                   {selectedIds.size === 1

@@ -543,7 +543,12 @@ function StaffRankingSection() {
       icon={TrophyIcon}
       action={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => void load()} disabled={loading}>
+          <Button
+            variant="outline"
+            onClick={() => void load()}
+            disabled={loading}
+            loading={loading}
+          >
             <ArrowsClockwiseIcon className="size-4" aria-hidden="true" />
             {t("refresh")}
           </Button>

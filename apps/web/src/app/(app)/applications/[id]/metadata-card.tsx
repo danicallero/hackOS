@@ -76,7 +76,7 @@ function SettingsGroup({
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="flex min-h-14 w-full items-center gap-3 px-1 py-3 text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          className="button-interaction flex min-h-14 w-full items-center gap-3 px-1 py-3 text-left hover:text-foreground"
         >
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground shadow-xs">
             <Icon aria-hidden="true" className="size-4" />

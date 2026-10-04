@@ -424,8 +424,9 @@ export function AnnouncementFormModal({
                     size="sm"
                     disabled={translating || !canAutoTranslate}
                     onClick={() => void autoTranslate()}
+                    loading={translating}
                   >
-                    {translating ? t("translatingInProgress") : t("translateAutomatically")}
+                    {t("translateAutomatically")}
                   </Button>
                 ) : null}
               </div>

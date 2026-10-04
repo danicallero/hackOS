@@ -193,7 +193,12 @@ function WorkspaceGroup({
               asChild
               className={`cursor-pointer px-2 ${effectiveOpen ? "mb-1" : ""} ${active ? "text-sidebar-foreground" : "text-sidebar-foreground/60 hover:text-sidebar-foreground"}`}
             >
-              <button type="button" aria-expanded={effectiveOpen} data-active={active || undefined}>
+              <button
+                type="button"
+                aria-expanded={effectiveOpen}
+                data-active={active || undefined}
+                className="button-interaction"
+              >
                 <Icon className="mr-2 size-4 shrink-0" />
                 <span className="flex-1 text-left">{t(workspace.label)}</span>
                 <CaretRightIcon

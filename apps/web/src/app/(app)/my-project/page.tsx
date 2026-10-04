@@ -191,7 +191,7 @@ function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
       trigger={<Button>{t("createMyProjectCta")}</Button>}
       title={t("createMyProjectCta")}
       footer={
-        <Button disabled={saving || !name.trim()} onClick={create}>
+        <Button disabled={saving || !name.trim()} onClick={create} loading={saving}>
           {t("createMyProjectCta")}
         </Button>
       }
@@ -360,6 +360,7 @@ function PendingInvitesCard({
                 disabled={busy === invite.repoId}
                 onClick={() => respond(invite.repoId, "accept")}
                 size="sm"
+                loading={busy === invite.repoId}
               >
                 {t("acceptInvite")}
               </Button>
@@ -368,6 +369,7 @@ function PendingInvitesCard({
                 onClick={() => respond(invite.repoId, "decline")}
                 size="sm"
                 variant="outline"
+                loading={busy === invite.repoId}
               >
                 {t("declineInvite")}
               </Button>

@@ -120,10 +120,15 @@ export default function WorkGroupDetailPage() {
             <WorkGroupEditor key={JSON.stringify(group)} group={group} onSaved={load} />
           ) : (
             <div className="flex flex-wrap gap-2">
-              <Button disabled={responding} onClick={() => respond("accept")}>
+              <Button disabled={responding} onClick={() => respond("accept")} loading={responding}>
                 {t("acceptInvite")}
               </Button>
-              <Button variant="outline" disabled={responding} onClick={() => respond("decline")}>
+              <Button
+                variant="outline"
+                disabled={responding}
+                onClick={() => respond("decline")}
+                loading={responding}
+              >
                 {t("declineInvite")}
               </Button>
             </div>
@@ -197,7 +202,7 @@ function Members({
             }
             title={t("inviteMemberTitle")}
             footer={
-              <Button disabled={busy || !email.trim()} onClick={invite}>
+              <Button disabled={busy || !email.trim()} onClick={invite} loading={busy}>
                 {t("inviteMemberCta")}
               </Button>
             }
@@ -251,6 +256,7 @@ function Members({
                       setBusy(false);
                     }
                   }}
+                  loading={busy}
                 >
                   {t("remove")}
                 </Button>
@@ -313,7 +319,11 @@ function Challenges({
               onChange={setSelected}
               disabled={busy}
             />
-            <Button disabled={busy || !selected} onClick={() => change(Number(selected))}>
+            <Button
+              disabled={busy || !selected}
+              onClick={() => change(Number(selected))}
+              loading={busy}
+            >
               {t("addAction")}
             </Button>
           </div>
@@ -337,6 +347,7 @@ function Challenges({
                 variant="outline"
                 disabled={busy}
                 onClick={() => change(challenge.id, true)}
+                loading={busy}
               >
                 {t("remove")}
               </Button>

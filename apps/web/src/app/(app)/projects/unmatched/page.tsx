@@ -220,6 +220,7 @@ export default function UnmatchedProjectsPage() {
                           t("participantLinked"),
                         )
                       }
+                      loading={busy === key}
                     >
                       <LinkIcon aria-hidden="true" className="size-4" />
                       {t("linkDirectlyButton")}
@@ -239,6 +240,7 @@ export default function UnmatchedProjectsPage() {
                           t("verificationEmailSentLinked"),
                         )
                       }
+                      loading={busy === `${key}:secondary`}
                     >
                       <UserPlusIcon aria-hidden="true" className="size-4" />
                       {t("requestConfirmationButton")}
@@ -253,6 +255,7 @@ export default function UnmatchedProjectsPage() {
                           t("claimEmailQueued"),
                         )
                       }
+                      loading={busy === `${key}:claim`}
                     >
                       <EnvelopeSimpleIcon aria-hidden="true" className="size-4" />
                       {t("claimEmail")}
@@ -311,6 +314,7 @@ export default function UnmatchedProjectsPage() {
                       onClick={() =>
                         mutate(key, () => mapPrize(prize.name, Number(selected)), t("prizeMapped"))
                       }
+                      loading={busy === key}
                     >
                       <LinkIcon aria-hidden="true" className="size-4" />
                       {t("mapPrize")}
@@ -337,6 +341,7 @@ export default function UnmatchedProjectsPage() {
                 t("prizeMapped"),
               )
             }
+            loading={busy === "map-prize"}
           >
             <LinkIcon aria-hidden="true" className="size-4" />
             {t("mapPrize")}
@@ -423,6 +428,7 @@ export default function UnmatchedProjectsPage() {
                           t("participantLinked"),
                         )
                       }
+                      loading={busy === key}
                     >
                       <LinkIcon aria-hidden="true" className="size-4" />
                       {t("linkDirectlyButton")}
@@ -442,6 +448,7 @@ export default function UnmatchedProjectsPage() {
                           t("verificationEmailSentLinked"),
                         )
                       }
+                      loading={busy === `${key}:secondary`}
                     >
                       <UserPlusIcon aria-hidden="true" className="size-4" />
                       {t("requestConfirmationButton")}
@@ -456,6 +463,7 @@ export default function UnmatchedProjectsPage() {
                           t("claimEmailQueued"),
                         )
                       }
+                      loading={busy === `${key}:claim`}
                     >
                       <EnvelopeSimpleIcon aria-hidden="true" className="size-4" />
                       {t("claimEmail")}

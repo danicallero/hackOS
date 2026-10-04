@@ -142,7 +142,7 @@ export function VersionHistory({ challengeId }: { challengeId: number }) {
               <button
                 type="button"
                 onClick={() => toggleExpanded(version.id)}
-                className="text-primary mt-1 text-xs underline underline-offset-2"
+                className="button-interaction text-primary mt-1 text-xs underline underline-offset-2"
               >
                 {expanded.has(version.id)
                   ? t("hideVersionDetailsLabel")

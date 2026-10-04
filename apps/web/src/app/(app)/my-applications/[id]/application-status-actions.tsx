@@ -10,7 +10,6 @@ import { XCircleIcon } from "@phosphor-icons/react/dist/csr/XCircle";
 import Link from "next/link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { SectionCard } from "@/components/common/section-card";
-import { Spinner } from "@/components/common/spinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
@@ -57,8 +56,12 @@ export function ApplicationStatusActions({
             </p>
           )}
           <div className="flex flex-wrap gap-2">
-            <Button onClick={onConfirm} disabled={acting} className="w-full sm:w-auto">
-              {acting && <Spinner />}
+            <Button
+              onClick={onConfirm}
+              disabled={acting}
+              className="w-full sm:w-auto"
+              loading={acting}
+            >
               {t("confirmPlace")}
             </Button>
             <Button

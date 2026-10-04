@@ -491,6 +491,7 @@ export function StaffEditForm({
                 variant="outline"
                 disabled={!secEmail.includes("@") || secSending}
                 onClick={handleSetSecondaryEmail}
+                loading={secSending}
               >
                 {secSending ? t("sending") : user.secondaryEmail ? t("change") : t("setEmail")}
               </Button>

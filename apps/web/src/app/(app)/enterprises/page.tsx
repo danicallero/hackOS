@@ -335,6 +335,7 @@ export default function EnterprisesPage() {
                 size="sm"
                 disabled={bulkBusy}
                 onClick={() => bulkVisibility(true)}
+                loading={bulkBusy}
               >
                 <EyeIcon aria-hidden="true" className="size-4" />
                 {t("makeVisible")}
@@ -344,6 +345,7 @@ export default function EnterprisesPage() {
                 size="sm"
                 disabled={bulkBusy}
                 onClick={() => bulkVisibility(false)}
+                loading={bulkBusy}
               >
                 <EyeSlashIcon aria-hidden="true" className="size-4" />
                 {t("hide")}

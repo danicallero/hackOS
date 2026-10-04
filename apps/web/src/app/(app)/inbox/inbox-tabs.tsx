@@ -257,7 +257,7 @@ export function MessagesTab() {
                   onClick={() => toggleExpanded(item)}
                   aria-expanded={isOpen}
                   aria-controls={`message-${item.id}`}
-                  className="flex w-full items-start gap-3 px-4 py-5 text-left transition-colors hover:bg-muted/30 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px]"
+                  className="button-interaction flex w-full items-start gap-3 px-4 py-5 text-left transition-colors hover:bg-muted/30"
                 >
                   <span
                     className={`mt-1.5 size-2 shrink-0 rounded-full ${unread ? "bg-primary" : "bg-transparent"}`}
@@ -769,6 +769,7 @@ export function PreferencesTab() {
                           }
                           onClick={() => enqueueReminderRemoval(category, prefs.channels)}
                           aria-label={t("removeReminderAria", { label })}
+                          loading={busy}
                         >
                           {removalState === "failed" ? t("retry") : t("turnOff")}
                         </Button>

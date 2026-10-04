@@ -162,7 +162,7 @@ function RoleRow({
       <button
         type="button"
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center justify-between gap-2 py-2.5 text-left"
+        className="button-interaction flex min-w-0 flex-1 items-center justify-between gap-2 py-2.5 text-left"
       >
         <span className="flex min-w-0 items-center gap-2">
           {mobile && (

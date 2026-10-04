@@ -340,7 +340,7 @@ export function DataTable<T>({
                       <button
                         type="button"
                         onClick={() => toggleSort(col.id)}
-                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
+                        className="button-interaction text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
                         aria-label={t("sortBy", {
                           column:
                             col.sortLabel ?? (typeof col.header === "string" ? col.header : col.id),

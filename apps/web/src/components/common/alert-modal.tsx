@@ -2,7 +2,6 @@
 
 import { AlertDialog } from "radix-ui";
 import { useState } from "react";
-import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -56,8 +55,8 @@ export function AlertModal({
           if (!autoClose || pending) event.preventDefault();
           onConfirm();
         }}
+        loading={pending}
       >
-        {pending && <Spinner className="size-4" />}
         {confirmLabel}
       </Button>
     </AlertDialog.Action>

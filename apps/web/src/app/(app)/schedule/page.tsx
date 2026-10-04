@@ -384,8 +384,8 @@ export default function SchedulePage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={busy}
                   onClick={() => bulkVisibility("shown")}
+                  loading={busy}
                 >
                   <EyeIcon aria-hidden="true" className="size-4" />
                   {t("show")}
@@ -393,8 +393,8 @@ export default function SchedulePage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={busy}
                   onClick={() => bulkVisibility("hidden")}
+                  loading={busy}
                 >
                   <EyeSlashIcon aria-hidden="true" className="size-4" />
                   {t("hide")}

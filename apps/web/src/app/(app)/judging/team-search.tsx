@@ -108,6 +108,7 @@ export function TeamSearch({
                     variant="outline"
                     disabled={busy != null || !canOperate || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onReEnter(entry, "top")}
+                    loading={busy === `re-enter-${entry.id}-top`}
                   >
                     {t("reenterTop")}
                   </Button>
@@ -116,6 +117,7 @@ export function TeamSearch({
                     variant="outline"
                     disabled={busy != null || !canOperate || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onReEnter(entry, "bottom")}
+                    loading={busy === `re-enter-${entry.id}-bottom`}
                   >
                     {t("reenterBottom")}
                   </Button>
@@ -127,6 +129,7 @@ export function TeamSearch({
                     variant="outline"
                     disabled={busy != null || !canOperate || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onAddTop(entry)}
+                    loading={busy === `move-top-${entry.id}`}
                   >
                     <ArrowLineUpIcon aria-hidden="true" className="size-4" />
                     {t("topOfQueue")}
@@ -135,6 +138,7 @@ export function TeamSearch({
                     size="sm"
                     disabled={busy != null || !canOperate || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onAddWaiting(entry)}
+                    loading={busy === `add-waiting-${entry.id}`}
                   >
                     <DoorOpenIcon aria-hidden="true" className="size-4" />
                     {t("waitingRoomButton")}
@@ -144,6 +148,7 @@ export function TeamSearch({
                     className="col-span-2"
                     disabled={busy != null || !canJudge || Boolean(entry.blocked_by_room_name)}
                     onClick={() => onBringIn(entry)}
+                    loading={busy === `manual-${entry.id}`}
                   >
                     <DoorOpenIcon aria-hidden="true" className="size-4" />
                     {t("bringInDirectly")}

@@ -137,7 +137,7 @@ function LoginInner() {
                     </Link>
                     <button
                       type="button"
-                      className="underline underline-offset-2"
+                      className="button-interaction underline underline-offset-2"
                       onClick={dismissRemovalProgress}
                     >
                       {t("dismiss")}

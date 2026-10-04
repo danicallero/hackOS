@@ -175,8 +175,9 @@ export function ApplicationTab({ userId }: { userId: number }) {
               variant="outline"
               disabled={openingId === r.id}
               onClick={() => openResponse(r.id)}
+              loading={openingId === r.id}
             >
-              {openingId === r.id ? t("opening") : t("open")}
+              {t("open")}
             </Button>
           </li>
         ))}

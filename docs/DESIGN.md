@@ -171,6 +171,77 @@ secondary text link. Copy leads with the outcome, shows the exact localized
 expiry in the event timezone before the action, then gives consequences or
 security notes. See [`notifications.md`](./notifications.md#transactional-email-theme-h7-h52).
 
+### Web button standard
+
+The button audit also reviewed the landing at commit
+`5e3b1f743d2bb1e2cc7d7776dcb2a1c113a7cee2`: the header/fixed/sponsor CTAs,
+illustrated hero plaques, gallery/media controls, language selectors, social
+icons, and text links. The platform retains the palette, Inter labels and pill
+actions, adapting the marketing red hover/focus and illustrated plaques to an
+operational interface with semantic danger colors and explicit loading states.
+
+`components/ui/button.tsx` and `styles/buttons.css` own action appearance and
+interaction. `styles/theme.css` owns `--button-*` state tokens, derived from the
+edition's semantic colors. `Button`, `IconButton`, `SubmitButton`, dialog header
+actions and `buttonVariants()` share this contract. The public `/design-system`
+shows every variant, all six states, all eight sizes, icon-only actions,
+link navigation, and working loading demonstrations in es/gl/en and both themes.
+Hover/focus/pressed specimens use `data-preview-state` only to display CSS;
+this attribute must not be used on product controls or to fake keyboard focus.
+
+| Variant | Purpose | Default appearance |
+| --- | --- | --- |
+| `default` | One primary action per scope | Ink/cream in light mode; blue/dark text in dark mode; slight shadow |
+| `secondary` | Supporting action that benefits from a filled surface | Quiet filled semantic secondary surface |
+| `outline` | Supporting action alongside the primary | Canvas surface and a solid, contrasting outline |
+| `ghost` | Toolbar, overflow, and low-emphasis action | Transparent surface; text/icon remains visible |
+| `destructive` | Confirm a destructive operation | Semantic danger fill; keep `AlertModal` for confirmation |
+| `link` | Text action, or navigation composed with `asChild` | Semantic primary text; underline on interaction |
+
+| State | Shared behavior |
+| --- | --- |
+| Default | A visible label or named icon; stable edition geometry |
+| Hover | A small opaque color change; outline strengthens; links underline. Only inside `(hover: hover) and (pointer: fine)`, never required to discover an action |
+| Focus | `:focus-visible`, solid 2 px `--ring` perimeter with 3 px separation. Native rows/cells use an inset perimeter to avoid clipping. Forced colors use `Highlight` |
+| Pressed | A distinct surface and removal of the primary shadow; links thicken their underline. Pill actions scale to 0.96 for tactile feedback only without reduced motion |
+| Loading | `loading={pending}` adds a decorative Phosphor spinner inside the action, preserves its label, sets `aria-busy`, and blocks activation. Existing decorative icons are replaced visually. Loading stays at full contrast |
+| Disabled | Native `disabled`, reduced opacity, no hover/press feedback, no shadow, and an unavailable cursor. `asChild` exposes `aria-disabled` and blocks click, auxiliary click and activation keys |
+
+The primary hover visibly lightens the ink fill in light mode and darkens the
+blue fill in dark mode; pressed is darker than hover in either theme.
+Feedback transitions last 150 ms and target only explicit properties. Reduced
+motion removes transitions and press transforms; the loading glyph stays visible
+without spinning. Drag handles opt out of press scaling with `button-static`.
+Focus follows the platform's ink/blue `--ring`, deliberately adapting the
+landing's red-focus suggestion: red stays reserved for invalid/destructive
+states in this operational product.
+
+Use `loading` on the action performing a request; a neighboring Cancel or menu
+trigger is merely disabled while that request runs. `SubmitButton` maps its
+existing `pending` prop into this same primitive; do not hand-code a spinner in
+another action. Keep labels specific to the action rather than replacing them
+with generic “Loading”. Icon-only actions use `IconButton` with a localized
+`label`; loading replaces the glyph without changing the accessible name.
+
+Native composite controls (editable cells, row disclosures, sort headings,
+permission segments and picker options) use `button-interaction` for cursor,
+hover, pressed and solid focus feedback while retaining their layout and
+keyboard model. Shared dialog icon classes consume `buttonVariants`. Official
+Apple/Google Wallet artwork stays intact; Google adds an adjacent spinner and
+`aria-busy` while fetching its save URL. Do not replace these badges with generic
+pill buttons.
+
+```tsx
+<Button loading={saving} disabled={!hasChanges} onClick={save}>
+  {t("save")}
+</Button>
+<SubmitButton pending={form.formState.isSubmitting}>{t("save")}</SubmitButton>
+<IconButton label={t("remove")} variant="ghost" loading={removing}>
+  <TrashIcon aria-hidden="true" />
+</IconButton>
+<Button asChild variant="outline"><Link href="/schedule">{t("schedule")}</Link></Button>
+```
+
 ### List filter standard
 
 Use `components/common/filter-menu.tsx` (`FilterMenu`) for management toolbars
