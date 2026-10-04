@@ -1,15 +1,25 @@
-jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupported: () => mockNfcSupported }));
+jest.mock("@/lib/use-nfc-supported", () => ({
+  useNfcSupportStatus: () => (mockNfcSupported ? "supported" : "unsupported"),
+  useNfcSupported: () => mockNfcSupported,
+}));
 
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
+import { Platform } from "react-native";
 import { QrCamera } from "@/components/QrCamera";
 
 let mockCameraProps: { onBarcodeScanned?: unknown };
 let mockReaderProps: { visible: boolean; onClose: () => void; onValue: (uid: string) => void };
 let mockNfcSupported = true;
 let mockFocused = true;
-let mockPermission = { granted: true, canAskAgain: true };
+type MockPermission = {
+  status: "granted" | "undetermined" | "denied";
+  granted: boolean;
+  canAskAgain: boolean;
+};
+let mockPermission: MockPermission = { status: "granted", granted: true, canAskAgain: true };
+const mockRequestCameraPermission = jest.fn();
 jest.mock("expo-camera", () => ({
-  useCameraPermissions: () => [mockPermission, jest.fn()],
+  useCameraPermissions: () => [mockPermission, mockRequestCameraPermission],
   CameraView: (props: typeof mockCameraProps) => {
     mockCameraProps = props;
     return null;
@@ -40,10 +50,62 @@ jest.mock("@/components/nfc-reader", () => ({
   },
 }));
 
+const originalOS = Platform.OS;
 beforeEach(() => {
   mockNfcSupported = true;
   mockFocused = true;
-  mockPermission = { granted: true, canAskAgain: true };
+  mockPermission = { status: "granted", granted: true, canAskAgain: true };
+  mockRequestCameraPermission.mockReset();
+});
+afterEach(() => {
+  Platform.OS = originalOS;
+});
+
+it("requests camera access only when its scanner surface is focused", async () => {
+  mockPermission = { status: "undetermined", granted: false, canAskAgain: true };
+  mockFocused = false;
+  const view = await render(<QrCamera onValue={jest.fn()} />);
+
+  expect(mockRequestCameraPermission).not.toHaveBeenCalled();
+  mockFocused = true;
+  await view.rerender(<QrCamera onValue={jest.fn()} />);
+  await waitFor(() => expect(mockRequestCameraPermission).toHaveBeenCalledTimes(1));
+});
+
+it("defers camera permission while the activity scanner starts NFC", async () => {
+  mockPermission = { status: "undetermined", granted: false, canAskAgain: true };
+  await render(<QrCamera onValue={jest.fn()} autoStartNfc requestCameraOnFocus={false} />);
+  await waitFor(() => expect(mockReaderProps.visible).toBe(true));
+  expect(mockRequestCameraPermission).not.toHaveBeenCalled();
+});
+
+it("waits for an explicit QR choice after the activity NFC session is canceled", async () => {
+  mockPermission = { status: "undetermined", granted: false, canAskAgain: true };
+  const view = await render(
+    <QrCamera onValue={jest.fn()} autoStartNfc requestCameraOnFocus={false} />,
+  );
+  await waitFor(() => expect(mockReaderProps.visible).toBe(true));
+  await act(() => mockReaderProps.onClose());
+
+  expect(mockRequestCameraPermission).not.toHaveBeenCalled();
+  await fireEvent.press(view.getByRole("button", { name: "scannerCamera" }));
+  expect(mockRequestCameraPermission).toHaveBeenCalledTimes(1);
+});
+
+it("does not automatically retry a denied camera request", async () => {
+  Platform.OS = "android";
+  mockPermission = { status: "denied", granted: false, canAskAgain: true };
+  const view = await render(<QrCamera onValue={jest.fn()} />);
+  expect(mockRequestCameraPermission).not.toHaveBeenCalled();
+  expect(view.getByRole("button", { name: "scannerRetryCamera" })).toBeTruthy();
+});
+
+it("allows an explicit camera retry after denial when the platform permits it", async () => {
+  Platform.OS = "android";
+  mockPermission = { status: "denied", granted: false, canAskAgain: true };
+  const view = await render(<QrCamera onValue={jest.fn()} />);
+  await fireEvent.press(view.getByRole("button", { name: "scannerRetryCamera" }));
+  expect(mockRequestCameraPermission).toHaveBeenCalledTimes(1);
 });
 
 it("opens NFC from the camera, pauses QR decoding and resumes after cancel", async () => {
@@ -73,7 +135,7 @@ it("auto-opens only once after the meal loads and can be reopened manually", asy
 });
 
 it("allows NFC without camera permission", async () => {
-  mockPermission = { granted: false, canAskAgain: false };
+  mockPermission = { status: "denied", granted: false, canAskAgain: false };
   const view = await render(<QrCamera onValue={jest.fn()} />);
   await fireEvent.press(view.getByRole("button", { name: "scannerNfcScan" }));
   await waitFor(() => expect(mockReaderProps.visible).toBe(true));
@@ -116,7 +178,7 @@ it("hides NFC controls and never auto-starts on unsupported hardware", async () 
   expect(view.queryByRole("button", { name: "scannerNfcScan" })).toBeNull();
   expect(mockReaderProps.visible).toBe(false);
   expect(mockCameraProps.onBarcodeScanned).toBeDefined();
-  mockPermission = { granted: false, canAskAgain: false };
+  mockPermission = { status: "denied", granted: false, canAskAgain: false };
   await view.rerender(<QrCamera onValue={jest.fn()} autoStartNfc />);
   expect(view.queryByRole("button", { name: "scannerNfcScan" })).toBeNull();
 });

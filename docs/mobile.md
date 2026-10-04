@@ -835,6 +835,17 @@ Devices without NFC retain QR and manual entry, including badge linking and repl
 The iOS usage description explains reading badge serial numbers for attendee
 identification at check-in, meals, and activities.
 
+The first active QR camera use opens the native camera permission alert directly;
+hidden scanner routes and person profiles do not request it. The profile's QR
+camera is mounted only after QR is chosen. Activity scanners defer camera access
+while their NFC reader is active, and after NFC is canceled they wait for an
+explicit QR choice before requesting camera access. After a denial, the app
+shows the available alternative inputs; it retries permission only after an
+explicit retry action where the platform permits it.
+NFC support checks only inspect hardware availability. A native NFC reader
+session starts when NFC is selected, or when the existing activity scanner
+enters its auto-start flow.
+
 `lib/nfc-reader.ts` serializes native sessions and releases them on completion,
 cancellation, navigation, backgrounding and unmount. iOS uses `MifareIOS` and
 Android uses `NfcA` reader mode with NDEF checking skipped, so blank NTAG213s
