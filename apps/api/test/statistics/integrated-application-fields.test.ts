@@ -4,7 +4,11 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
 import { accessibleStatisticsScopes } from "../../src/modules/statistics/service.js";
-import { createFoodIntolerance, createResponse } from "../applications/fixtures.js";
+import {
+  createApplication,
+  createFoodIntolerance,
+  createResponse,
+} from "../applications/fixtures.js";
 import {
   assignRole,
   asUser,
@@ -227,6 +231,133 @@ describe("application fields integrated into Logistics", () => {
       [nutFree]: 1,
       [glutenFree]: 1,
     });
+  });
+
+  it("filters each application by multiple participant statuses and excludes drafts in queries and CSV", async () => {
+    const viewer = await createUserWithCapabilities([
+      CAPABILITIES.LOGISTICS_STATS,
+      CAPABILITIES.EXPORTS_RUN,
+    ]);
+    const template = [
+      {
+        key: "experience",
+        kind: "select",
+        label: { en: "Experience", es: "Experiencia", gl: "Experiencia" },
+        options: [
+          ...["confirmed", "internal", "sent", "review", "draft", "other-review", "other-sent"].map(
+            (value) => ({ value, label: { en: value, es: value, gl: value } }),
+          ),
+        ],
+        statistics: { enabled: true, visualization: "bar", aggregation: "count" },
+      },
+    ];
+    const firstApplicationId = await createApplication({
+      name: "First participant form",
+      type: "general",
+      template,
+    });
+    const secondApplicationId = await createApplication({
+      name: "Second participant form",
+      type: "general",
+      template,
+    });
+    const firstResponses = [
+      { status: "confirmed", value: "confirmed", shirt: "M" },
+      { status: "accepted_internal", value: "internal", shirt: "L" },
+      { status: "accepted", value: "sent", shirt: "S" },
+      { status: "review", value: "review", shirt: "XL" },
+      { status: "draft", value: "draft", shirt: "XS" },
+    ];
+    const secondResponses = [
+      { status: "review", value: "other-review", shirt: "XXL" },
+      { status: "accepted", value: "other-sent", shirt: "XXXL" },
+      { status: "draft", value: "draft", shirt: "XXS" },
+    ];
+    for (const response of firstResponses) {
+      const userId = await createUser();
+      await createResponse(userId, firstApplicationId, {
+        status: response.status,
+        responses: { experience: response.value },
+      });
+      await pool.query("UPDATE users SET shirt_size = $2 WHERE id = $1", [userId, response.shirt]);
+    }
+    for (const response of secondResponses) {
+      const userId = await createUser();
+      await createResponse(userId, secondApplicationId, {
+        status: response.status,
+        responses: { experience: response.value },
+      });
+      await pool.query("UPDATE users SET shirt_size = $2 WHERE id = $1", [userId, response.shirt]);
+    }
+
+    const scopes = [`application:${firstApplicationId}`, `application:${secondApplicationId}`];
+    const participantFilters = {
+      [`application:${firstApplicationId}`]: ["accepted_internal", "accepted"],
+      [`application:${secondApplicationId}`]: [],
+    };
+    const query = await app.inject({
+      method: "POST",
+      url: "/api/statistics/query",
+      headers: asUser(viewer),
+      payload: {
+        scopes,
+        panel_keys: ["field:experience", "shirt-sizes"],
+        participant_filters: participantFilters,
+      },
+    });
+
+    expect(query.statusCode).toBe(200);
+    const queryBody = query.json() as {
+      field_distributions: Array<{ buckets: Array<{ value: string; n: number }> }>;
+      shirt_sizes_confirmed: Array<{ value: string; n: number }>;
+    };
+    const experienceCounts = Object.fromEntries(
+      (queryBody.field_distributions[0]?.buckets ?? []).map((bucket) => [bucket.value, bucket.n]),
+    );
+    const shirtCounts = Object.fromEntries(
+      queryBody.shirt_sizes_confirmed.map((shirt) => [shirt.value, shirt.n]),
+    );
+    expect(experienceCounts).toMatchObject({
+      internal: 1,
+      sent: 1,
+      "other-review": 1,
+      "other-sent": 1,
+      confirmed: 0,
+      review: 0,
+    });
+    expect(experienceCounts.draft).toBe(0);
+    expect(shirtCounts).toMatchObject({ L: 1, S: 1, XXL: 1, XXXL: 1 });
+    expect(shirtCounts.M).toBeUndefined();
+    expect(shirtCounts.XS).toBeUndefined();
+    expect(shirtCounts.XXS).toBeUndefined();
+    expect(shirtCounts.XL).toBeUndefined();
+
+    const queryWithUnselectedApplicationFilter = await app.inject({
+      method: "POST",
+      url: "/api/statistics/query",
+      headers: asUser(viewer),
+      payload: {
+        scopes: [`application:${firstApplicationId}`],
+        participant_filters: { [`application:${secondApplicationId}`]: [] },
+      },
+    });
+    expect(queryWithUnselectedApplicationFilter.statusCode).toBe(403);
+
+    const exportParams = new URLSearchParams({
+      scopes: scopes.join(","),
+      panels: "field:experience,shirt-sizes",
+      participant_filters: JSON.stringify(participantFilters),
+    });
+    const csv = await app.inject({
+      method: "GET",
+      url: `/api/exports/statistics.csv?${exportParams.toString()}`,
+      headers: asUser(viewer),
+    });
+    expect(csv.statusCode).toBe(200);
+    expect(csv.body).toContain("experience,internal,1,");
+    expect(csv.body).toContain("experience,other-review,1,");
+    expect(csv.body).toContain("experience,draft,0,");
+    expect(csv.body).toContain("shirt-sizes,XXXL,1,");
   });
 
   it("accepts only the canonical field publication and generic endpoints", async () => {

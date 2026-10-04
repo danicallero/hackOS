@@ -14,6 +14,7 @@ import { HandshakeIcon } from "@phosphor-icons/react/dist/ssr/Handshake";
 import { ListNumbersIcon } from "@phosphor-icons/react/dist/ssr/ListNumbers";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/ssr/Megaphone";
 import { PulseIcon } from "@phosphor-icons/react/dist/ssr/Pulse";
+import { QuestionIcon } from "@phosphor-icons/react/dist/ssr/Question";
 import { ScrollIcon } from "@phosphor-icons/react/dist/ssr/Scroll";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/ssr/SealCheck";
 import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
@@ -337,7 +338,7 @@ export const WORKSPACES: Workspace[] = [
       {
         title: "sponsorFaq",
         href: "/sponsor-faq",
-        icon: FileTextIcon,
+        icon: QuestionIcon,
         capability: CAPABILITIES.SPONSORS_MANAGE,
         sponsorVisible: true,
       },

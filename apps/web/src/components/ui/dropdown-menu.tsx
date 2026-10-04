@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { CircleIcon } from "@phosphor-icons/react/dist/csr/Circle";
@@ -245,11 +246,15 @@ function DropdownMenuSub({
 function DropdownMenuSubTrigger({
   className,
   inset,
+  indicatorDirection = "right",
   children,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger> & {
   inset?: boolean
+  indicatorDirection?: "left" | "right"
 }) {
+  const IndicatorIcon = indicatorDirection === "left" ? CaretLeftIcon : CaretRightIcon
+
   return (
     <DropdownMenuPrimitive.SubTrigger
       data-slot="dropdown-menu-sub-trigger"
@@ -261,7 +266,7 @@ function DropdownMenuSubTrigger({
       {...props}
     >
       {children}
-      <CaretRightIcon
+      <IndicatorIcon
         aria-hidden="true"
         className="ml-auto size-3.5 text-muted-foreground/75"
       />

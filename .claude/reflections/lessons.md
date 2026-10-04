@@ -416,3 +416,38 @@ and during final diff/validation review.
 
 ### Exceptions
 None.
+
+## [R014] Keep nested menus flowing in one direction
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-10-04
+
+### Trigger
+Building multi-level dropdowns or filter menus with nested detail panels.
+
+### Mistake
+A child menu opened back toward its parent despite enough room in the
+direction used by the parent submenu, making the menu flow alternate sides.
+
+### Lesson
+Nested menu levels should keep the same opening direction while space allows.
+Let collision handling reverse a submenu only when the preferred side does not
+fit in the viewport.
+
+### Action
+Set direction at the menu root so nested submenus inherit it, and keep text
+direction separate where needed. Check the default side at a wide viewport and
+the collision fallback near the viewport edge. Match directional indicators to
+the preferred opening direction.
+
+### Validation
+Open every level in a real browser with ample space and confirm that each uses
+the same side. Repeat near the viewport edge and confirm only the submenu that
+cannot fit flips, without creating a navigation loop or trapping focus.
+
+### Exceptions
+Menus that intentionally represent independent navigation layers may use
+different directions when their hierarchy and visual design make that choice
+clear.

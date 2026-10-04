@@ -531,11 +531,19 @@ when their response count is zero. Sensitive derived dimensions such as age
 and study level are calculated server-side against the event reference date;
 the raw source value is never included in a statistics response.
 
-Application-scope form and logistics distributions accept
-`participant_filter=confirmed|submitted` on the dashboard query and CSV export.
-The default is `confirmed`; `submitted` includes every non-draft response.
-Drafts never contribute. This filter does not change lifecycle counts,
-confirmation panels, time series, or role-scope distributions.
+Application-scope form and logistics distributions accept a
+`participant_filters` object on the dashboard query and CSV export. Keys are
+selected `application:<id>` scopes. Each value is an array containing any of
+`confirmed`, `accepted_internal`, and `accepted`; an empty array includes every
+non-draft response. Drafts are always excluded. Applications without an entry
+use the confirmed-only default. The legacy
+`participant_filter=confirmed|submitted` parameter remains supported and sets
+the fallback for all selected applications.
+
+These filters do not change application lifecycle counts, confirmation panels,
+time series, or role-scope distributions. The dashboard presents scope and
+participant filters on the Before phase; During and After are event-wide
+operational views.
 
 Personal panel visibility, order, size, chart type, and layout preferences are
 stored through `/api/me/ui-prefs` and therefore follow the account across

@@ -2,6 +2,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
+import type { StatisticsParticipantStatus } from "@hackos/shared/statistics";
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowsClockwise";
 import { BowlFoodIcon } from "@phosphor-icons/react/dist/csr/BowlFood";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
@@ -10,22 +11,21 @@ import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/csr/SquaresFour";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
-import { MultiSelect } from "@/components/common/multi-select";
+import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
-import { TabBar } from "@/components/common/tab-bar";
 import { StatisticsExportPanel } from "@/components/exports/statistics-export-panel";
 import type { PublicEvent } from "@/components/public/public-types";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useLiveQuery } from "@/hooks/use-event-source";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { usePersistedState } from "@/hooks/use-persisted-state";
 import { api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
@@ -48,6 +48,7 @@ import {
   type StatisticsScope,
   type StatisticsScopesResponse,
 } from "./model";
+import { StatisticsToolbar } from "./statistics-toolbar";
 import { StatsVisibility } from "./stats-visibility";
 
 const LOGISTICS_EVENTS = [
@@ -85,9 +86,12 @@ function Freshness({ kind }: { kind: FreshnessKind }) {
 }
 
 const DATA_PHASES: DataPhase[] = ["before", "during", "after"];
+const EMPTY_SCOPE_FILTERS: string[] = [];
+const EMPTY_PARTICIPANT_FILTERS: Record<string, StatisticsParticipantStatus[]> = {};
 
 export default function LogisticsStatsPage() {
   const { t } = useLocale();
+  const isMobile = useIsMobile();
   const me = useMe();
   const canLogisticsStats = useCan(CAPABILITIES.LOGISTICS_STATS);
   const canManageStatistics = useCan(CAPABILITIES.STATISTICS_MANAGE);
@@ -105,8 +109,18 @@ export default function LogisticsStatsPage() {
   const activePhase = canGeneralStats ? phase : "before";
   const phaseWasChosen = useRef(Boolean(requested && DATA_PHASES.includes(requested as DataPhase)));
   const [scopes, setScopes] = useState<StatisticsScope[]>([]);
-  const [selectedScopeKeys, setSelectedScopeKeys] = useState<string[]>([]);
-  const [confirmedParticipantsOnly, setConfirmedParticipantsOnly] = useState(true);
+  const [selectedScopeKeys, setSelectedScopeKeys] = usePersistedState<string[] | null>(
+    "logistics-stats:scope-filters",
+    null,
+  );
+  const activeScopeFilters = selectedScopeKeys ?? EMPTY_SCOPE_FILTERS;
+  const [participantStatusesByApplication, setParticipantStatusesByApplication] =
+    usePersistedState<Record<string, StatisticsParticipantStatus[]> | null>(
+      "logistics-stats:participant-status-filters",
+      null,
+    );
+  const activeParticipantStatusFilters =
+    participantStatusesByApplication ?? EMPTY_PARTICIPANT_FILTERS;
   const [scopesLoading, setScopesLoading] = useState(false);
   const [scopesLoaded, setScopesLoaded] = useState(false);
   const [applicationStats, setApplicationStats] = useState<ApplicationStats | null>(null);
@@ -144,8 +158,8 @@ export default function LogisticsStatsPage() {
       .then(({ scopes: items }) => {
         setScopes(items);
         setSelectedScopeKeys((current) => {
-          const valid = current.filter((key) => items.some((item) => item.key === key));
-          if (valid.length > 0) return valid;
+          const valid = (current ?? []).filter((key) => items.some((item) => item.key === key));
+          if (current !== null) return valid;
           const firstApplication = items.find((item) => item.kind === "application");
           return firstApplication ? [firstApplication.key] : items[0] ? [items[0].key] : [];
         });
@@ -153,19 +167,22 @@ export default function LogisticsStatsPage() {
       })
       .catch((error) => setBeforeError(errorMessage(error, t("couldNotLoadStatistics"))))
       .finally(() => setScopesLoading(false));
-  }, [canStats, t]);
+  }, [canStats, setSelectedScopeKeys, t]);
 
-  const selectedScopes = scopes.filter((scope) => selectedScopeKeys.includes(scope.key));
+  const selectedScopes = useMemo(
+    () => scopes.filter((scope) => activeScopeFilters.includes(scope.key)),
+    [scopes, activeScopeFilters],
+  );
   const selectedApplicationIds = selectedScopes
     .filter((scope) => scope.kind === "application")
     .map((scope) => scope.id);
   const selectedApplicationId =
     selectedApplicationIds.length === 1 ? selectedApplicationIds[0] : null;
-  const layoutKey = selectedScopeKeys.slice().sort().join("|");
+  const layoutKey = activeScopeFilters.slice().sort().join("|");
 
   const loadBefore = useCallback(async () => {
     const requestId = ++beforeRequest.current;
-    if (!scopesLoaded || selectedScopeKeys.length === 0) {
+    if (!scopesLoaded || activeScopeFilters.length === 0) {
       setApplicationStats(null);
       setBeforeLoading(false);
       return;
@@ -174,9 +191,14 @@ export default function LogisticsStatsPage() {
     setBeforeError(null);
     setApplicationStats(null);
     try {
+      const participantFilters = Object.fromEntries(
+        selectedScopes
+          .filter((scope) => scope.kind === "application")
+          .map((scope) => [scope.key, activeParticipantStatusFilters[scope.key] ?? ["confirmed"]]),
+      );
       const next = await api.post<ApplicationStats>("/api/statistics/query", {
-        scopes: selectedScopeKeys,
-        participant_filter: confirmedParticipantsOnly ? "confirmed" : "submitted",
+        scopes: activeScopeFilters,
+        participant_filters: participantFilters,
       });
       if (requestId === beforeRequest.current) setApplicationStats(next);
     } catch (error) {
@@ -185,7 +207,7 @@ export default function LogisticsStatsPage() {
     } finally {
       if (requestId === beforeRequest.current) setBeforeLoading(false);
     }
-  }, [confirmedParticipantsOnly, scopesLoaded, selectedScopeKeys, t]);
+  }, [activeParticipantStatusFilters, activeScopeFilters, scopesLoaded, selectedScopes, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -221,26 +243,60 @@ export default function LogisticsStatsPage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <Tabs value={activePhase} onValueChange={selectPhase}>
-        <PageHeader
-          title={t("logisticsStats")}
-          className="md:flex-col md:items-stretch 2xl:flex-row 2xl:items-start"
-          secondaryActions={
-            <div className="flex flex-wrap items-center gap-2">
-              <StatisticsToolbar
-                activePhase={activePhase}
-                canGeneralStats={canGeneralStats}
-                editMode={editMode}
-                scopes={scopes}
-                selectedScopeKeys={selectedScopeKeys}
-                confirmedParticipantsOnly={confirmedParticipantsOnly}
-                hasApplicationScopes={selectedApplicationIds.length > 0}
-                onScopeChange={setSelectedScopeKeys}
-                onConfirmedParticipantsChange={setConfirmedParticipantsOnly}
-                onEditModeChange={setEditMode}
+      <PageHeader
+        className="flex-row items-center justify-between gap-2 md:items-center"
+        title={t("logisticsStats")}
+        secondaryActions={
+          <>
+            {activePhase === "before" &&
+              (isMobile ? (
+                <IconButton
+                  variant={editMode ? "secondary" : "outline"}
+                  label={t(editMode ? "finishCustomizePanel" : "customizePanel")}
+                  aria-pressed={editMode}
+                  onClick={() => setEditMode(!editMode)}
+                >
+                  <SquaresFourIcon aria-hidden="true" />
+                </IconButton>
+              ) : (
+                <Button
+                  variant={editMode ? "secondary" : "outline"}
+                  size="default"
+                  aria-pressed={editMode}
+                  onClick={() => setEditMode(!editMode)}
+                >
+                  <SquaresFourIcon aria-hidden="true" />
+                  {t(editMode ? "finishCustomizePanel" : "customizePanel")}
+                </Button>
+              ))}
+            {canExport && (
+              <StatisticsExportPanel
+                trigger={
+                  isMobile ? (
+                    <IconButton variant="outline" label={t("export")}>
+                      <DownloadSimpleIcon aria-hidden="true" />
+                    </IconButton>
+                  ) : undefined
+                }
               />
-              {canExport && <StatisticsExportPanel />}
-            </div>
+            )}
+          </>
+        }
+      />
+      <Tabs value={activePhase} onValueChange={selectPhase}>
+        <StatisticsToolbar
+          activePhase={activePhase}
+          canGeneralStats={canGeneralStats}
+          scopes={scopes}
+          selectedScopeKeys={activeScopeFilters}
+          participantStatusesByApplication={activeParticipantStatusFilters}
+          isMobile={isMobile}
+          onScopeChange={setSelectedScopeKeys}
+          onParticipantStatusesChange={(scopeKey, statuses) =>
+            setParticipantStatusesByApplication((current) => ({
+              ...(current ?? {}),
+              [scopeKey]: statuses,
+            }))
           }
         />
         <TabsContent value="before" className="mt-4">
@@ -253,8 +309,8 @@ export default function LogisticsStatsPage() {
             editMode={editMode}
             onRetry={loadBefore}
           />
-          {canManageStatistics && selectedScopeKeys.length === 1 && (
-            <StatsVisibility scopeKey={selectedScopeKeys[0]} />
+          {canManageStatistics && activeScopeFilters.length === 1 && (
+            <StatsVisibility scopeKey={activeScopeFilters[0]} />
           )}
         </TabsContent>
         <TabsContent value="during" className="mt-4">
@@ -264,90 +320,6 @@ export default function LogisticsStatsPage() {
           <AfterPanel hours={hours} loading={afterLoading} error={afterError} onRetry={loadAfter} />
         </TabsContent>
       </Tabs>
-    </div>
-  );
-}
-
-function StatisticsToolbar({
-  activePhase,
-  canGeneralStats,
-  editMode,
-  scopes,
-  selectedScopeKeys,
-  confirmedParticipantsOnly,
-  hasApplicationScopes,
-  onScopeChange,
-  onConfirmedParticipantsChange,
-  onEditModeChange,
-}: {
-  activePhase: DataPhase;
-  canGeneralStats: boolean;
-  editMode: boolean;
-  scopes: StatisticsScope[];
-  selectedScopeKeys: string[];
-  confirmedParticipantsOnly: boolean;
-  hasApplicationScopes: boolean;
-  onScopeChange: (keys: string[]) => void;
-  onConfirmedParticipantsChange: (confirmedOnly: boolean) => void;
-  onEditModeChange: (editing: boolean) => void;
-}) {
-  const { t } = useLocale();
-  const scopeOptions = scopes.map((scope) => ({
-    value: scope.key,
-    label: scope.name,
-    description: scope.kind === "application" ? t("applicationScopeLabel") : t("roleScopeLabel"),
-  }));
-  return (
-    <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto">
-      <TabBar aria-label={t("eventPhaseLabel")} className="w-fit">
-        <TabsTrigger value="before">{t("phaseBefore")}</TabsTrigger>
-        {canGeneralStats && <TabsTrigger value="during">{t("phaseDuring")}</TabsTrigger>}
-        {canGeneralStats && <TabsTrigger value="after">{t("phaseAfter")}</TabsTrigger>}
-      </TabBar>
-      <div className="min-w-56 flex-1 sm:max-w-80">
-        <MultiSelect
-          options={scopeOptions}
-          value={selectedScopeKeys}
-          onChange={onScopeChange}
-          placeholder={t("selectStatisticsScopes")}
-          searchPlaceholder={t("searchStatisticsScopes")}
-          emptyText={t("noStatisticsScopes")}
-          aria-label={t("selectStatisticsScopes")}
-        />
-      </div>
-      {activePhase === "before" && hasApplicationScopes && (
-        <div className="flex min-h-9 items-center gap-2">
-          <Switch
-            id="statistics-confirmed-participants"
-            checked={confirmedParticipantsOnly}
-            onCheckedChange={onConfirmedParticipantsChange}
-          />
-          <Label
-            htmlFor="statistics-confirmed-participants"
-            className="cursor-pointer whitespace-nowrap text-xs"
-          >
-            {t(
-              confirmedParticipantsOnly ? "confirmedParticipantsOnly" : "allSubmittedApplications",
-            )}
-          </Label>
-        </div>
-      )}
-      <span className="text-muted-foreground whitespace-nowrap text-xs" role="status">
-        {selectedScopeKeys.length > 1
-          ? t("aggregatedStatisticsScopes", { count: selectedScopeKeys.length })
-          : t("singleStatisticsScope")}
-      </span>
-      {activePhase === "before" && (
-        <Button
-          variant={editMode ? "secondary" : "outline"}
-          size="sm"
-          aria-pressed={editMode}
-          onClick={() => onEditModeChange(!editMode)}
-        >
-          <SquaresFourIcon className="size-4" aria-hidden="true" />
-          {editMode ? t("finishCustomizePanel") : t("customizePanel")}
-        </Button>
-      )}
     </div>
   );
 }

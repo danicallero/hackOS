@@ -26,14 +26,21 @@ the same configured field is included in the dashboard and its authorized CSV.
 The editor serializes that one statistics object, so a builder round trip
 cannot silently disable an integration.
 
-For application scopes, the dashboard and statistics CSV accept a
-`participant_filter`: `confirmed` (the default) limits form-question and
-application-scope logistics distributions to confirmed responses;
-`submitted` includes every non-draft response. Drafts are excluded in both
-modes. The control affects those distributions only: application status,
-confirmation lifecycle, and submission time-series panels continue to report
-the full non-draft pipeline. Role-scope logistics distributions remain based
-on role membership and are not changed by this application filter.
+For each selected application scope, the dashboard and statistics CSV accept a
+`participant_filters` entry keyed by `application:<id>`. An empty status list
+includes all submitted responses; otherwise the list can include `confirmed`,
+`accepted_internal`, and/or `accepted`. Drafts are always excluded. Applications
+without an entry use the confirmed-only default. The legacy
+`participant_filter=confirmed|submitted` parameter remains available to older
+clients and applies to every selected application when no per-application
+entry overrides it.
+
+The filter affects form-question and application-scope logistics distributions
+only: application status, confirmation lifecycle, and submission time-series
+panels continue to report the full non-draft pipeline. Role-scope logistics
+distributions remain based on role membership and are not changed by the
+application filter. The web dashboard shows scope filters on the Before phase;
+During and After show event-wide operational totals.
 
 Scope keys are stable resource identifiers: `application:<id>` and
 `role:<id>`. The API validates every selected key against the caller's

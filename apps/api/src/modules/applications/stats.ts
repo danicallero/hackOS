@@ -1,3 +1,4 @@
+import type { StatisticsParticipantStatus } from "@hackos/shared/statistics";
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { canonicalStatisticsPanelKey, STATISTICS_BASE_PANEL_KEYS } from "../statistics/catalog.js";
@@ -24,10 +25,24 @@ export const BASE_STAT_PANEL_KEYS = STATISTICS_BASE_PANEL_KEYS;
 
 export const fieldPanelKey = (key: string) => `field:${key.toLowerCase()}`;
 
-export type StatisticsParticipantFilter = "confirmed" | "submitted";
+export type StatisticsParticipantFilter =
+  | "confirmed"
+  | "submitted"
+  | readonly StatisticsParticipantStatus[];
 
-function participantStatusCondition(filter: StatisticsParticipantFilter): string {
-  return filter === "confirmed" ? "r.status = 'confirmed'" : "r.status <> 'draft'";
+export function participantStatusCondition(filter: StatisticsParticipantFilter): string {
+  if (typeof filter === "string") {
+    return filter === "confirmed" ? "r.status = 'confirmed'" : "r.status <> 'draft'";
+  }
+  if (filter.length === 0) return "r.status <> 'draft'";
+  const statusLiterals: Record<StatisticsParticipantStatus, string> = {
+    confirmed: "'confirmed'",
+    accepted_internal: "'accepted_internal'",
+    accepted: "'accepted'",
+  };
+  const statuses = filter.map((status) => statusLiterals[status]);
+  if (statuses.some((status) => !status)) throw new Error("Invalid statistics participant status");
+  return `r.status IN (${statuses.join(", ")})`;
 }
 
 export type StatisticsPanelDecision = {
