@@ -1,6 +1,6 @@
 {
   "mail": {
-    "footer": "Esta é unha mensaxe automática. Non respondas: este enderezo non recibe mensaxes.\nPara contactar coa organización, escribe a hackudc@gpul.org.",
+    "footer": "Se non esperabas este correo, podes ignoralo e non premer ningunha ligazón.\n\nEsta é unha mensaxe automática. Non respondas: este enderezo non recibe mensaxes.\nPara contactar coa organización, escribe a hackudc@gpul.org.",
     "event": {
       "reminder": {
         "subject": "Vémonos en {{eventName}}!",
@@ -31,8 +31,12 @@
         "body": "Ola {{name}},\n\nO teu PIN de seguridade para eliminar a túa conta de hackOS é:\n\n{{pin}}\n\nEste PIN caduca en {{expiresMinutes}} minutos. Se non o pediches ti, podes ignorar este correo."
       },
       "invite": {
-        "subject": "Convidáronte a hackOS",
-        "body": "Ola,\n\nConvidáronte a hackOS. Alégranos contar contigo. Crea a túa conta para aceptar o convite:\n\n[Crear conta]({{claimUrl}})\n\nAo crear a túa conta poderás escoller o teu contrasinal e completar os teus datos."
+        "subject": "Configura a túa conta de hackOS",
+        "body": "Ola,\n\n{{inviterName}} habilitou unha conta para ti en hackOS, o sistema de xestión de {{eventName}}.\n\nSeguintes pasos\n\nSegue esta ligazón para rematar de crear a túa conta e completar os teus datos:\n\n[Configurar a miña conta]({{claimUrl}})\n\n{{accountAccess}}",
+        "organizers": "A organización",
+        "role": "Ao rematar de crear a túa conta, asignarase automaticamente o rol: {{roleNames}}.",
+        "roles": "Ao rematar de crear a túa conta, asignaranse automaticamente os roles: {{roleNames}}.",
+        "enterprise": "A túa conta quedará vinculada a {{enterpriseName}}."
       }
     },
     "project": {

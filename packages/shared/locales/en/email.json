@@ -1,6 +1,6 @@
 {
   "mail": {
-    "footer": "This is an automated message. Please do not reply: this address does not receive incoming messages.\nTo contact the organizers, email hackudc@gpul.org.",
+    "footer": "If you were not expecting this email, you can ignore it and avoid following any links.\n\nThis is an automated message. Please do not reply: this address does not receive incoming messages.\nTo contact the organizers, email hackudc@gpul.org.",
     "event": {
       "reminder": {
         "subject": "See you at {{eventName}}!",
@@ -31,8 +31,12 @@
         "body": "Hi {{name}},\n\nYour security PIN for removing your hackOS account is:\n\n{{pin}}\n\nThis PIN expires in {{expiresMinutes}} minutes. If you didn't request this, you can safely ignore this email."
       },
       "invite": {
-        "subject": "You're invited to hackOS",
-        "body": "Hi,\n\nYou’ve been invited to hackOS. We’re glad to have you joining us. Create your account to accept the invitation:\n\n[Create account]({{claimUrl}})\n\nWhen you create your account, you’ll choose your password and fill in your details."
+        "subject": "Set up your hackOS account",
+        "body": "Hi,\n\n{{inviterName}} has enabled an account for you on hackOS, the management system for {{eventName}}.\n\nNext steps\n\nFollow this link to finish creating your account and complete your details:\n\n[Set up my account]({{claimUrl}})\n\n{{accountAccess}}",
+        "organizers": "The organizers",
+        "role": "When you finish creating your account, you will automatically receive the role: {{roleNames}}.",
+        "roles": "When you finish creating your account, you will automatically receive the roles: {{roleNames}}.",
+        "enterprise": "Your account will be linked to {{enterpriseName}}."
       }
     },
     "project": {

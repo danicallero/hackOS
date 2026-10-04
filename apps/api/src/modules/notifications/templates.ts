@@ -311,13 +311,37 @@ export function renderEmailTemplate(payload: EmailPayload, language: Language): 
   ) {
     templateName = `${templateName}.${payload.vars.decision}`;
   }
-  const vars = {
+  const vars: Record<string, unknown> = {
     subject: payload.subject ?? "hackOS notification",
     body: payload.body ?? "",
     fromAddress: config.MAIL_FROM_ADDRESS,
     eventName: config.APPLE_PASS_ORGANIZATION,
     ...payload.vars,
   };
+  if (templateName === "auth.invite") {
+    const roleNames = Array.isArray(vars.roleNames)
+      ? vars.roleNames.filter((name) => typeof name === "string")
+      : [];
+    Object.assign(vars, {
+      inviterName: vars.inviterName || translateEmail("mail.auth.invite.organizers", language, {}),
+      accountAccess: [
+        roleNames.length > 0
+          ? translateEmail(
+              `mail.auth.invite.${roleNames.length === 1 ? "role" : "roles"}`,
+              language,
+              { roleNames: roleNames.join(", ") },
+            )
+          : "",
+        vars.enterpriseName
+          ? translateEmail("mail.auth.invite.enterprise", language, {
+              enterpriseName: vars.enterpriseName,
+            })
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+    });
+  }
   const subject = translateEmail(`mail.${templateName}.subject`, language, vars);
   const heading = emailTemplateExists(`mail.${templateName}.heading`, language)
     ? translateEmail(`mail.${templateName}.heading`, language, vars)

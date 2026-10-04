@@ -115,9 +115,11 @@ describe("H10 invite creation", () => {
   it("creates a staff invite: token row + outbox email + audit", async () => {
     const a = await getApp();
     const actor = await inviter();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query("UPDATE users SET name = 'Ada', surname = 'Lovelace' WHERE id = $1", [actor]);
+    await pool.query("INSERT INTO event_config (id, name) VALUES (1, 'HackUDC 2027')");
     const invite = await createInvite(a, actor, { email: "staff@example.com", kind: "staff" });
 
-    const { pool } = await import("../../src/db/pool.js");
     const { rows } = await pool.query(`SELECT * FROM email_verification_tokens WHERE id = $1`, [
       invite.id,
     ]);
@@ -131,6 +133,9 @@ describe("H10 invite creation", () => {
     expect(outbox).toHaveLength(1);
     expect(outbox[0].payload.recipient).toBe("staff@example.com");
     expect(outbox[0].payload.vars.claimUrl).toContain(invite.token);
+    expect(outbox[0].payload.vars.inviterName).toBe("Ada Lovelace");
+    expect(outbox[0].payload.vars.eventName).toBe("HackUDC 2027");
+    expect(outbox[0].payload.vars.roleNames).toEqual([]);
 
     const { rows: auditRows } = await pool.query(
       `SELECT * FROM audit_log WHERE entity_type = 'invite' AND action = 'create'`,
