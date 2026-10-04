@@ -22,6 +22,8 @@ import { TabBar } from "@/components/common/tab-bar";
 import { StatisticsExportPanel } from "@/components/exports/statistics-export-panel";
 import type { PublicEvent } from "@/components/public/public-types";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { api } from "@/lib/api";
@@ -104,6 +106,7 @@ export default function LogisticsStatsPage() {
   const phaseWasChosen = useRef(Boolean(requested && DATA_PHASES.includes(requested as DataPhase)));
   const [scopes, setScopes] = useState<StatisticsScope[]>([]);
   const [selectedScopeKeys, setSelectedScopeKeys] = useState<string[]>([]);
+  const [confirmedParticipantsOnly, setConfirmedParticipantsOnly] = useState(true);
   const [scopesLoading, setScopesLoading] = useState(false);
   const [scopesLoaded, setScopesLoaded] = useState(false);
   const [applicationStats, setApplicationStats] = useState<ApplicationStats | null>(null);
@@ -173,6 +176,7 @@ export default function LogisticsStatsPage() {
     try {
       const next = await api.post<ApplicationStats>("/api/statistics/query", {
         scopes: selectedScopeKeys,
+        participant_filter: confirmedParticipantsOnly ? "confirmed" : "submitted",
       });
       if (requestId === beforeRequest.current) setApplicationStats(next);
     } catch (error) {
@@ -181,7 +185,7 @@ export default function LogisticsStatsPage() {
     } finally {
       if (requestId === beforeRequest.current) setBeforeLoading(false);
     }
-  }, [scopesLoaded, selectedScopeKeys, t]);
+  }, [confirmedParticipantsOnly, scopesLoaded, selectedScopeKeys, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -220,7 +224,7 @@ export default function LogisticsStatsPage() {
       <Tabs value={activePhase} onValueChange={selectPhase}>
         <PageHeader
           title={t("logisticsStats")}
-          className="sm:flex-col sm:items-stretch xl:flex-row xl:items-start"
+          className="md:flex-col md:items-stretch 2xl:flex-row 2xl:items-start"
           secondaryActions={
             <div className="flex flex-wrap items-center gap-2">
               <StatisticsToolbar
@@ -229,7 +233,10 @@ export default function LogisticsStatsPage() {
                 editMode={editMode}
                 scopes={scopes}
                 selectedScopeKeys={selectedScopeKeys}
+                confirmedParticipantsOnly={confirmedParticipantsOnly}
+                hasApplicationScopes={selectedApplicationIds.length > 0}
                 onScopeChange={setSelectedScopeKeys}
+                onConfirmedParticipantsChange={setConfirmedParticipantsOnly}
                 onEditModeChange={setEditMode}
               />
               {canExport && <StatisticsExportPanel />}
@@ -267,7 +274,10 @@ function StatisticsToolbar({
   editMode,
   scopes,
   selectedScopeKeys,
+  confirmedParticipantsOnly,
+  hasApplicationScopes,
   onScopeChange,
+  onConfirmedParticipantsChange,
   onEditModeChange,
 }: {
   activePhase: DataPhase;
@@ -275,7 +285,10 @@ function StatisticsToolbar({
   editMode: boolean;
   scopes: StatisticsScope[];
   selectedScopeKeys: string[];
+  confirmedParticipantsOnly: boolean;
+  hasApplicationScopes: boolean;
   onScopeChange: (keys: string[]) => void;
+  onConfirmedParticipantsChange: (confirmedOnly: boolean) => void;
   onEditModeChange: (editing: boolean) => void;
 }) {
   const { t } = useLocale();
@@ -302,6 +315,23 @@ function StatisticsToolbar({
           aria-label={t("selectStatisticsScopes")}
         />
       </div>
+      {activePhase === "before" && hasApplicationScopes && (
+        <div className="flex min-h-9 items-center gap-2">
+          <Switch
+            id="statistics-confirmed-participants"
+            checked={confirmedParticipantsOnly}
+            onCheckedChange={onConfirmedParticipantsChange}
+          />
+          <Label
+            htmlFor="statistics-confirmed-participants"
+            className="cursor-pointer whitespace-nowrap text-xs"
+          >
+            {t(
+              confirmedParticipantsOnly ? "confirmedParticipantsOnly" : "allSubmittedApplications",
+            )}
+          </Label>
+        </div>
+      )}
       <span className="text-muted-foreground whitespace-nowrap text-xs" role="status">
         {selectedScopeKeys.length > 1
           ? t("aggregatedStatisticsScopes", { count: selectedScopeKeys.length })

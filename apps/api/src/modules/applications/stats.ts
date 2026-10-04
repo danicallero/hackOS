@@ -10,9 +10,9 @@ import { requireApplication } from "./service.js";
  * hour-of-day, per day-of-week), time-to-confirm summary, an optional
  * template-field histogram, and shirt-size / food-intolerance distributions.
  *
- * Sensitive rule (H27): shirt sizes and food intolerances count ONLY users
- * who CONFIRMED — non-confirmed applicants' logistics data must not surface
- * in aggregate stats even though it's kept on the user row.
+ * Application-scope panels can select confirmed participants or every submitted
+ * response; draft responses are excluded in both modes. Direct callers retain
+ * the historical confirmed-only logistics default.
  */
 
 interface Counts {
@@ -23,6 +23,12 @@ interface Counts {
 export const BASE_STAT_PANEL_KEYS = STATISTICS_BASE_PANEL_KEYS;
 
 export const fieldPanelKey = (key: string) => `field:${key.toLowerCase()}`;
+
+export type StatisticsParticipantFilter = "confirmed" | "submitted";
+
+function participantStatusCondition(filter: StatisticsParticipantFilter): string {
+  return filter === "confirmed" ? "r.status = 'confirmed'" : "r.status <> 'draft'";
+}
 
 export type StatisticsPanelDecision = {
   panelKey: string;
@@ -115,6 +121,8 @@ export async function applicationStats(
   applicationId: number,
   field?: string,
   allowedPanels?: Set<string>,
+  participantFilter: StatisticsParticipantFilter = "submitted",
+  logisticsFilter: StatisticsParticipantFilter = "confirmed",
 ): Promise<Record<string, unknown>> {
   const app = await requireApplication(pool, applicationId);
   // H8: the retired static `type` is replaced by the name of the form's
@@ -134,7 +142,7 @@ export async function applicationStats(
   const statusCounts = await pool.query(
     `SELECT r.status, count(*)::int AS n FROM application_responses r
      JOIN users u ON u.id = r.user_id AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
-     WHERE r.application_id = $1 GROUP BY r.status`,
+     WHERE r.application_id = $1 AND r.status <> 'draft' GROUP BY r.status`,
     [applicationId],
   );
   const byStatus: Counts = {};
@@ -207,11 +215,12 @@ export async function applicationStats(
     [applicationId],
   );
 
-  // Confirmed-only logistics distributions (H27 sensitive rule).
+  // Legacy direct callers retain confirmed-only logistics statistics. The
+  // application-scope query can explicitly select all submitted applicants.
   const shirtSizes = await pool.query(
     `SELECT u.shirt_size AS value, count(*)::int AS n
      FROM application_responses r JOIN users u ON u.id = r.user_id
-     WHERE r.application_id = $1 AND r.status = 'confirmed' AND u.shirt_size IS NOT NULL
+     WHERE r.application_id = $1 AND ${participantStatusCondition(logisticsFilter)} AND u.shirt_size IS NOT NULL
        AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      GROUP BY u.shirt_size ORDER BY n DESC`,
     [applicationId],
@@ -224,7 +233,7 @@ export async function applicationStats(
      JOIN users u ON u.id = r.user_id
      JOIN LATERAL unnest(u.food_intolerances) AS uid(id) ON true
      JOIN food_intolerances fi ON fi.id = uid.id
-     WHERE r.application_id = $1 AND r.status = 'confirmed' AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
+     WHERE r.application_id = $1 AND ${participantStatusCondition(logisticsFilter)} AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      GROUP BY fi.id, fi.label ORDER BY n DESC`,
     [applicationId],
   );
@@ -269,12 +278,18 @@ export async function applicationStats(
   };
 
   if (field && (!allowedPanels || allowedPanels.has(fieldPanelKey(field)))) {
-    result.field_histogram = await fieldHistogram(applicationId, app.template, field);
+    result.field_histogram = await fieldHistogram(
+      applicationId,
+      app.template,
+      field,
+      participantFilter,
+    );
   }
   result.field_distributions = await reportableFieldDistributions(
     applicationId,
     app.template,
     allowedPanels,
+    participantFilter,
   );
 
   if (allowedPanels) filterStatisticsPanels(result, allowedPanels);
@@ -329,6 +344,7 @@ async function fieldHistogram(
   applicationId: number,
   template: TemplateField[],
   field: string,
+  participantFilter: StatisticsParticipantFilter,
 ): Promise<{ field: string; buckets: Array<{ value: string; n: number }> }> {
   const def = template.find((f) => f.key === field);
   if (!def) throw new NotFoundError(`Template field "${field}" not found`, { field });
@@ -341,6 +357,7 @@ async function fieldHistogram(
       def.kind,
       def.options ?? [],
       def.statistics,
+      participantFilter,
     ),
   };
 }
@@ -353,6 +370,7 @@ async function reportableFieldDistributions(
   applicationId: number,
   template: TemplateField[],
   allowedPanels?: Set<string>,
+  participantFilter: StatisticsParticipantFilter = "submitted",
 ) {
   const fields = template.filter(
     (field) =>
@@ -374,6 +392,7 @@ async function reportableFieldDistributions(
         field.kind,
         field.options ?? [],
         field.statistics,
+        participantFilter,
       ),
     })),
   );
@@ -385,17 +404,19 @@ async function distributionBuckets(
   kind: string,
   options: Array<{ value: string }> = [],
   statistics?: StatisticsConfig,
+  participantFilter: StatisticsParticipantFilter = "submitted",
 ): Promise<Array<{ value: string; n: number }>> {
   if (statistics?.transformation === "age" || statistics?.transformation === "study_level") {
-    return transformedDistributionBuckets(applicationId, key, statistics);
+    return transformedDistributionBuckets(applicationId, key, statistics, participantFilter);
   }
   if (
     kind === "number" &&
     (statistics?.aggregation === "sum" || statistics?.aggregation === "average")
   ) {
-    return numericAggregateBuckets(applicationId, key, statistics.aggregation);
+    return numericAggregateBuckets(applicationId, key, statistics.aggregation, participantFilter);
   }
 
+  const statusCondition = participantStatusCondition(participantFilter);
   let rows: Array<{ value: string; n: number }>;
   if (kind === "multiselect") {
     const result = await pool.query(
@@ -405,7 +426,7 @@ async function distributionBuckets(
          JOIN LATERAL jsonb_array_elements_text(
                 CASE WHEN jsonb_typeof(r.responses -> $2) = 'array'
                      THEN r.responses -> $2 ELSE '[]'::jsonb END) AS elem ON true
-        WHERE r.application_id = $1
+        WHERE r.application_id = $1 AND ${statusCondition}
           AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
         GROUP BY elem ORDER BY n DESC, elem`,
       [applicationId, key],
@@ -420,7 +441,7 @@ async function distributionBuckets(
            WHEN r.responses ->> $2 ~ '^[0-9]+$' THEN (r.responses ->> $2)::integer
            ELSE NULL
          END
-        WHERE r.application_id = $1 AND r.responses ? $2
+        WHERE r.application_id = $1 AND ${statusCondition} AND r.responses ? $2
           AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
         GROUP BY value ORDER BY n DESC, value`,
       [applicationId, key],
@@ -432,7 +453,7 @@ async function distributionBuckets(
               count(*)::int AS n
          FROM application_responses r
          JOIN users u ON u.id = r.user_id
-        WHERE r.application_id = $1
+        WHERE r.application_id = $1 AND ${statusCondition}
           AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
         GROUP BY value ORDER BY value DESC`,
       [applicationId, key],
@@ -443,7 +464,7 @@ async function distributionBuckets(
       `SELECT r.responses ->> $2 AS value, count(*)::int AS n
        FROM application_responses r
        JOIN users u ON u.id = r.user_id
-      WHERE r.application_id = $1 AND r.responses ? $2
+      WHERE r.application_id = $1 AND ${statusCondition} AND r.responses ? $2
         AND r.responses ->> $2 IS NOT NULL AND r.responses ->> $2 <> ''
         AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
       GROUP BY value ORDER BY n DESC, value`,
@@ -479,6 +500,7 @@ async function numericAggregateBuckets(
   applicationId: number,
   key: string,
   aggregation: "sum" | "average",
+  participantFilter: StatisticsParticipantFilter,
 ): Promise<Array<{ value: string; n: number }>> {
   const { rows } = await pool.query(
     `SELECT CASE WHEN $3 = 'sum' THEN 'total' ELSE 'average' END AS value,
@@ -487,7 +509,7 @@ async function numericAggregateBuckets(
             END AS n
        FROM application_responses r
        JOIN users u ON u.id = r.user_id
-      WHERE r.application_id = $1
+      WHERE r.application_id = $1 AND ${participantStatusCondition(participantFilter)}
         AND r.responses ->> $2 ~ '^[-+]?[0-9]+(\\.[0-9]+)?$'
         AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
       HAVING count(*) > 0`,
@@ -510,6 +532,7 @@ async function transformedDistributionBuckets(
   applicationId: number,
   key: string,
   statistics: StatisticsConfig,
+  participantFilter: StatisticsParticipantFilter,
 ): Promise<Array<{ value: string; n: number }>> {
   if (statistics.transformation === "age") {
     const { rows } = await pool.query(
@@ -530,7 +553,7 @@ async function transformedDistributionBuckets(
          FROM application_responses r
          JOIN users u ON u.id = r.user_id
          CROSS JOIN reference
-        WHERE r.application_id = $1
+        WHERE r.application_id = $1 AND ${participantStatusCondition(participantFilter)}
           AND (r.responses ->> $2 ~ '^\\d{4}$' OR r.responses ->> $2 ~ '^\\d{4}-\\d{2}-\\d{2}$')
           AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
         GROUP BY value ORDER BY value`,
@@ -556,7 +579,7 @@ async function transformedDistributionBuckets(
          FROM application_responses r
          JOIN users u ON u.id = r.user_id
          CROSS JOIN reference
-        WHERE r.application_id = $1
+        WHERE r.application_id = $1 AND ${participantStatusCondition(participantFilter)}
           AND r.responses ->> $2 ~ '^\\d{4}$'
           AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      )

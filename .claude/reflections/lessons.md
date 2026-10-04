@@ -383,3 +383,36 @@ Inspect the rendered surface and verify links contain the official badge images.
 
 ### Exceptions
 The plain-text MIME part retains readable labeled links.
+
+## [R013] Check reflections throughout each task
+
+Status: promoted
+Scope: repository
+Source: user-correction
+Date: 2026-10-04
+Promoted-To: CLAUDE.md
+
+### Trigger
+Before and during any code, documentation, test, or configuration change.
+
+### Mistake
+An agent reviewed reflections once but did not keep checking later changes
+against the lessons, so a known mistake could recur while completing the task.
+
+### Lesson
+Reflections are an ongoing check for the entire task, not a one-time startup
+reading.
+
+### Action
+Read the entire lessons file before editing. Compare the intended work with
+applicable active lessons, re-check substantive diffs as work proceeds, and
+apply each lesson's validation before commit or PR. Resolve conflicts
+explicitly when higher-priority instructions or current product requirements
+take precedence.
+
+### Validation
+Confirm applicable lessons were considered at planning, during implementation,
+and during final diff/validation review.
+
+### Exceptions
+None.

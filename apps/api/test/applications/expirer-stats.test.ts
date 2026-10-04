@@ -147,7 +147,11 @@ describe("pre-event stats (H27)", () => {
       method: "POST",
       url: "/api/statistics/query",
       headers: asUser(statsUser),
-      payload: { scopes: [`application:${appId}`], panel_keys: ["field:credits"] },
+      payload: {
+        scopes: [`application:${appId}`],
+        panel_keys: ["overview", "shirt-sizes", "food-intolerances", "field:credits"],
+        participant_filter: "submitted",
+      },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -163,7 +167,7 @@ describe("pre-event stats (H27)", () => {
       still_able_to_confirm: 0,
     });
 
-    // confirmed-only intolerances: nut-free x2, gluten-free x1 (u3 declined, excluded)
+    // The two submissions with dietary data are confirmed: nut-free x2, gluten-free x1.
     const intoleranceMap = Object.fromEntries(
       body.food_intolerances_confirmed.map((r: { intolerance_id: number; n: number }) => [
         r.intolerance_id,
@@ -173,14 +177,14 @@ describe("pre-event stats (H27)", () => {
     expect(intoleranceMap[nutFree]).toBe(2);
     expect(intoleranceMap[glutenFree]).toBe(1);
 
-    // shirt sizes confirmed-only
+    // Both users with shirt sizes are confirmed.
     const shirtMap = Object.fromEntries(
       body.shirt_sizes_confirmed.map((r: { value: string; n: number }) => [r.value, r.n]),
     );
     expect(shirtMap.L).toBe(1);
     expect(shirtMap.M).toBe(1);
 
-    // field histogram across all responses (credits: yes x3, no x1)
+    // Field histogram across non-draft submissions (credits: yes x3, no x1).
     const histMap = Object.fromEntries(
       body.field_distributions[0].buckets.map((r: { value: string; n: number }) => [r.value, r.n]),
     );

@@ -2579,6 +2579,8 @@
   "noStatisticsScopes": "No hay ámbitos autorizados",
   "applicationScopeLabel": "Ámbito de solicitud",
   "roleScopeLabel": "Ámbito de rol",
+  "confirmedParticipantsOnly": "Solo participantes confirmados",
+  "allSubmittedApplications": "Todas las solicitudes enviadas",
   "noApplicationStatistics": "No hay estadísticas de solicitudes",
   "includeInStatistics": "Integrar en estadísticas de Logistics",
   "applicationData": "Datos del formulario",

@@ -2579,6 +2579,8 @@
   "noStatisticsScopes": "No authorized scopes",
   "applicationScopeLabel": "Application scope",
   "roleScopeLabel": "Role scope",
+  "confirmedParticipantsOnly": "Confirmed participants only",
+  "allSubmittedApplications": "All submitted applications",
   "noApplicationStatistics": "No application statistics",
   "includeInStatistics": "Integrate into Logistics statistics",
   "applicationData": "Form data",

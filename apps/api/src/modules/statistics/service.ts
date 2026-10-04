@@ -8,6 +8,7 @@ import {
   applicationStats,
   fieldPanelKey,
   resolveStatisticsPanelDecisions,
+  type StatisticsParticipantFilter,
   statisticsPanelKeys,
 } from "../applications/stats.js";
 import {
@@ -34,6 +35,7 @@ interface InternalScope extends StatisticsScope {
 export interface StatisticsQuery {
   scopes: string[];
   panelKeys?: string[];
+  participantFilter?: StatisticsParticipantFilter;
 }
 
 /**
@@ -380,13 +382,16 @@ async function aggregateUserDistribution(
   applicationIds: number[],
   roleIds: number[],
   dimension: "shirt" | "food",
+  participantFilter: StatisticsParticipantFilter = "confirmed",
 ): Promise<Array<Record<string, unknown>>> {
+  const statusCondition =
+    participantFilter === "confirmed" ? "r.status = 'confirmed'" : "r.status <> 'draft'";
   const scopeUsers = `WITH scope_users AS (
        SELECT DISTINCT r.user_id
          FROM application_responses r
          JOIN users u ON u.id = r.user_id
         WHERE cardinality($1::int[]) > 0
-          AND r.application_id = ANY($1::int[]) AND r.status = 'confirmed'
+          AND r.application_id = ANY($1::int[]) AND ${statusCondition}
           AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
        UNION
        SELECT DISTINCT ur.user_id
@@ -487,9 +492,16 @@ export async function queryStatistics(
       scope.kind === "application" && scope.application !== undefined,
   );
   const roleScopes = selectedScopes.filter((scope) => scope.kind === "role");
+  const participantFilter = query.participantFilter ?? "confirmed";
   const snapshots = await Promise.all(
     applicationScopes.map((scope) =>
-      applicationStats(scope.id, undefined, new Set(scope.panelKeys)),
+      applicationStats(
+        scope.id,
+        undefined,
+        new Set(scope.panelKeys),
+        participantFilter,
+        participantFilter,
+      ),
     ),
   );
   const result = mergeApplicationSnapshots(snapshots);
@@ -505,6 +517,7 @@ export async function queryStatistics(
       shirtApplicationIds,
       shirtRoleIds,
       "shirt",
+      participantFilter,
     );
   }
   if (panelKeys.includes("food-intolerances")) {
@@ -518,6 +531,7 @@ export async function queryStatistics(
       foodApplicationIds,
       foodRoleIds,
       "food",
+      participantFilter,
     );
   }
 

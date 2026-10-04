@@ -26,6 +26,15 @@ the same configured field is included in the dashboard and its authorized CSV.
 The editor serializes that one statistics object, so a builder round trip
 cannot silently disable an integration.
 
+For application scopes, the dashboard and statistics CSV accept a
+`participant_filter`: `confirmed` (the default) limits form-question and
+application-scope logistics distributions to confirmed responses;
+`submitted` includes every non-draft response. Drafts are excluded in both
+modes. The control affects those distributions only: application status,
+confirmation lifecycle, and submission time-series panels continue to report
+the full non-draft pipeline. Role-scope logistics distributions remain based
+on role membership and are not changed by this application filter.
+
 Scope keys are stable resource identifiers: `application:<id>` and
 `role:<id>`. The API validates every selected key against the caller's
 effective permissions. The browser may select several compatible scopes, but it
@@ -52,9 +61,10 @@ data rather than chart logic. `age` uses the event's stable reference date
 (`event_config.event_starts_at`, then the hacking start when needed), and
 `study_level` maps graduation years relative to the event year and configured
 program length. Neither transformation returns its source value. The
-statistics export uses the same authorized aggregate response as the dashboard.
-That export includes headline metrics, visible time series, logistics
-distributions, and integrated application-question distributions.
+statistics export uses the same authorized aggregate response and participant
+filter as the dashboard. That export includes headline metrics, visible time
+series, logistics distributions, and integrated application-question
+distributions.
 
 ## Permission resolution
 

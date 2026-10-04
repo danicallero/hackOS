@@ -34,12 +34,14 @@ const statisticsQueryBody = z
       .array(z.string().regex(/^[a-z0-9:_-]+$/))
       .max(100)
       .optional(),
+    participant_filter: z.enum(["confirmed", "submitted"]).optional(),
   })
   .strict();
 
 const statisticsExportQuery = z.object({
   scopes: z.string().min(1),
   panels: z.string().optional(),
+  participant_filter: z.enum(["confirmed", "submitted"]).optional(),
 });
 
 const statisticsScopeAccessBody = z
@@ -96,16 +98,19 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Query authorized statistics panels",
         description:
-          "Aggregates only the selected authorized scopes and returns panel-ready data. Sensitive source records are never returned.",
+          "Aggregates only the selected authorized scopes and returns panel-ready data. participant_filter applies to application form and logistics distributions; submitted includes every non-draft response. It defaults to confirmed. Sensitive source records are never returned.",
         body: statisticsQueryBody,
       },
     },
-    async (req) =>
-      queryStatistics(
-        req.userId as number,
-        req.body as StatisticsQuery,
-        getRequestAuthorizationContext(req),
-      ),
+    async (req) => {
+      const body = req.body as z.infer<typeof statisticsQueryBody>;
+      const query: StatisticsQuery = {
+        scopes: body.scopes,
+        panelKeys: body.panel_keys,
+        participantFilter: body.participant_filter,
+      };
+      return queryStatistics(req.userId as number, query, getRequestAuthorizationContext(req));
+    },
   );
 
   r.get(
@@ -116,7 +121,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Export authorized statistics aggregates",
         description:
-          "Exports only the same authorized aggregate panels available to the dashboard; raw application answers and derived source fields are excluded.",
+          "Exports only the same authorized aggregate panels available to the dashboard. participant_filter applies to application form and logistics distributions; submitted includes every non-draft response. It defaults to confirmed. Raw application answers and derived source fields are excluded.",
         querystring: statisticsExportQuery,
       },
     },
@@ -129,6 +134,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       const query: StatisticsQuery = {
         scopes: req.query.scopes.split(",").filter(Boolean),
         panelKeys: req.query.panels?.split(",").filter(Boolean),
+        participantFilter: req.query.participant_filter,
       };
       return sendCsv(
         reply,

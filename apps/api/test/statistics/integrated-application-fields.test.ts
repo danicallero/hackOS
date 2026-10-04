@@ -4,6 +4,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
 import { accessibleStatisticsScopes } from "../../src/modules/statistics/service.js";
+import { createFoodIntolerance, createResponse } from "../applications/fixtures.js";
 import {
   assignRole,
   asUser,
@@ -70,7 +71,10 @@ describe("application fields integrated into Logistics", () => {
       method: "POST",
       url: "/api/statistics/query",
       headers: asUser(viewer),
-      payload: { scopes: [`application:${applicationId}`] },
+      payload: {
+        scopes: [`application:${applicationId}`],
+        participant_filter: "submitted",
+      },
     });
 
     expect(query.statusCode).toBe(200);
@@ -119,6 +123,110 @@ describe("application fields integrated into Logistics", () => {
     expect(scopes[0]?.panelKeys).toEqual(["overview"]);
     expect(scopes[1]?.panelKeys).toEqual(["shirt-sizes"]);
     expect(aclQueries).toHaveLength(1);
+  });
+
+  it("filters form and logistics distributions while always excluding drafts", async () => {
+    const viewer = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    const confirmedUser = await createUser();
+    const reviewUser = await createUser();
+    const draftUser = await createUser();
+    const nutFree = await createFoodIntolerance("Nut-free", viewer);
+    const glutenFree = await createFoodIntolerance("Gluten-free", viewer);
+    const template = [
+      {
+        key: "experience",
+        kind: "select",
+        label: { en: "Experience", es: "Experiencia", gl: "Experiencia" },
+        options: [{ value: "first", label: { en: "First", es: "Primera", gl: "Primeira" } }],
+        statistics: { enabled: true, visualization: "bar", aggregation: "count" },
+      },
+    ];
+    const application = await pool.query<{ id: number }>(
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', $1::jsonb) RETURNING id`,
+      [JSON.stringify(template)],
+    );
+    const applicationId = application.rows[0]?.id;
+    if (!applicationId) throw new Error("Application fixture was not created");
+
+    await createResponse(confirmedUser, applicationId, {
+      status: "confirmed",
+      responses: { experience: "first" },
+    });
+    await createResponse(reviewUser, applicationId, {
+      status: "review",
+      responses: { experience: "returning" },
+    });
+    await createResponse(draftUser, applicationId, {
+      status: "draft",
+      responses: { experience: "first" },
+    });
+    await pool.query(`UPDATE users SET shirt_size = $2, food_intolerances = $3 WHERE id = $1`, [
+      confirmedUser,
+      "M",
+      [nutFree],
+    ]);
+    await pool.query(`UPDATE users SET shirt_size = $2, food_intolerances = $3 WHERE id = $1`, [
+      reviewUser,
+      "L",
+      [glutenFree],
+    ]);
+    await pool.query(`UPDATE users SET shirt_size = $2, food_intolerances = $3 WHERE id = $1`, [
+      draftUser,
+      "S",
+      [nutFree],
+    ]);
+
+    const queryStats = (participant_filter: "confirmed" | "submitted") =>
+      app.inject({
+        method: "POST",
+        url: "/api/statistics/query",
+        headers: asUser(viewer),
+        payload: {
+          scopes: [`application:${applicationId}`],
+          panel_keys: ["field:experience", "shirt-sizes", "food-intolerances"],
+          participant_filter,
+        },
+      });
+
+    const confirmedOnly = await queryStats("confirmed");
+    const allSubmitted = await queryStats("submitted");
+    expect(confirmedOnly.statusCode).toBe(200);
+    expect(allSubmitted.statusCode).toBe(200);
+
+    type StatisticsResponse = {
+      field_distributions: Array<{ buckets: Array<{ value: string; n: number }> }>;
+      shirt_sizes_confirmed: Array<{ value: string; n: number }>;
+      food_intolerances_confirmed: Array<{ intolerance_id: number; n: number }>;
+    };
+    const confirmedBody = confirmedOnly.json() as StatisticsResponse;
+    const submittedBody = allSubmitted.json() as StatisticsResponse;
+    const bucketsByMode = (body: StatisticsResponse) => {
+      const distribution = body.field_distributions[0];
+      return Object.fromEntries(
+        (distribution?.buckets ?? []).map((bucket) => [bucket.value, bucket.n]),
+      );
+    };
+    const shirtsByMode = (body: StatisticsResponse) =>
+      Object.fromEntries(body.shirt_sizes_confirmed.map((row) => [row.value, row.n]));
+    const intolerancesByMode = (body: StatisticsResponse) =>
+      Object.fromEntries(
+        body.food_intolerances_confirmed.map((row) => [row.intolerance_id, row.n]),
+      );
+
+    expect(bucketsByMode(confirmedBody)).toMatchObject({ first: 1 });
+    expect(bucketsByMode(confirmedBody).returning).toBeUndefined();
+    expect(bucketsByMode(submittedBody)).toMatchObject({ first: 1, returning: 1 });
+    expect(shirtsByMode(confirmedBody)).toMatchObject({ M: 1 });
+    expect(shirtsByMode(confirmedBody).L).toBeUndefined();
+    expect(shirtsByMode(submittedBody)).toMatchObject({ M: 1, L: 1 });
+    expect(shirtsByMode(submittedBody).S).toBeUndefined();
+    expect(intolerancesByMode(confirmedBody)).toMatchObject({ [nutFree]: 1 });
+    expect(intolerancesByMode(confirmedBody)[glutenFree]).toBeUndefined();
+    expect(intolerancesByMode(submittedBody)).toMatchObject({
+      [nutFree]: 1,
+      [glutenFree]: 1,
+    });
   });
 
   it("accepts only the canonical field publication and generic endpoints", async () => {
@@ -192,7 +300,10 @@ describe("application fields integrated into Logistics", () => {
       method: "POST",
       url: "/api/statistics/query",
       headers: asUser(viewer),
-      payload: { scopes: [`application:${applicationId}`] },
+      payload: {
+        scopes: [`application:${applicationId}`],
+        participant_filter: "submitted",
+      },
     });
     expect(query.statusCode).toBe(200);
     expect(query.json().panel_keys).toContain("field:experience");
@@ -210,7 +321,7 @@ describe("application fields integrated into Logistics", () => {
 
     const csv = await app.inject({
       method: "GET",
-      url: `/api/exports/statistics.csv?scopes=application:${applicationId}`,
+      url: `/api/exports/statistics.csv?scopes=application:${applicationId}&participant_filter=submitted`,
       headers: asUser(viewer),
     });
     expect(csv.statusCode).toBe(200);

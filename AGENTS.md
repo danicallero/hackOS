@@ -76,11 +76,12 @@ out because agents skip them under time pressure:
   `CLAUDE.md` or `docs/`. It's currently empty — most rules already live in
   `CLAUDE.md`, `plan/`, or `docs/DESIGN.md`; check there first.
 - **Reflections** (`.claude/reflections/lessons.md`) are lessons learned from
-  user corrections. Read it when you're unsure how to proceed on something
-  that has plausibly come up before. If the user corrects your approach
-  mid-task, write or update a reflection per `.claude/reflections/README.md`
-  — but only if the lesson generalizes beyond the current task; don't persist
-  one-off instructions.
+  user corrections. Read the entire file before changing code, docs, tests, or
+  configuration, then check the intended change and later diffs against each
+  applicable lesson throughout the task, as required by `CLAUDE.md`. If the
+  user corrects your approach mid-task, write or update a reflection per
+  `.claude/reflections/README.md` — but only if the lesson generalizes beyond
+  the current task; don't persist one-off instructions.
 
 ## Instruction precedence
 
@@ -109,7 +110,7 @@ Identify the affected domain/module
       │
       ├── matching docs/*.md section
       ├── .claude/rules/ (if any apply)
-      ├── .claude/reflections/lessons.md (if a past correction applies)
+      ├── .claude/reflections/lessons.md (read in full; compare applicable lessons throughout)
       └── .claude/skills/ (if a skill covers this workflow)
       │
       ▼

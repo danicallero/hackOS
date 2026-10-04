@@ -7,6 +7,7 @@ import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
@@ -21,6 +22,7 @@ export function StatisticsExportPanel({ trigger }: { trigger?: ReactNode }) {
   const { t } = useLocale();
   const [scopes, setScopes] = useState<StatisticsScope[]>([]);
   const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
+  const [confirmedParticipantsOnly, setConfirmedParticipantsOnly] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,7 +61,14 @@ export function StatisticsExportPanel({ trigger }: { trigger?: ReactNode }) {
       })),
     [scopes, t],
   );
-  const href = `${API_URL}/api/exports/statistics.csv?scopes=${encodeURIComponent(selectedScopes.join(","))}`;
+  const selectedApplicationScopes = scopes.filter(
+    (scope) => scope.kind === "application" && selectedScopes.includes(scope.key),
+  );
+  const exportParams = new URLSearchParams({ scopes: selectedScopes.join(",") });
+  if (selectedApplicationScopes.length > 0) {
+    exportParams.set("participant_filter", confirmedParticipantsOnly ? "confirmed" : "submitted");
+  }
+  const href = `${API_URL}/api/exports/statistics.csv?${exportParams.toString()}`;
 
   return (
     <SidePanelEditor
@@ -111,6 +120,20 @@ export function StatisticsExportPanel({ trigger }: { trigger?: ReactNode }) {
           {t("statisticsScopesSelected", { count: selectedScopes.length })}
         </p>
       </div>
+      {selectedApplicationScopes.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Switch
+            id="statistics-export-confirmed-participants"
+            checked={confirmedParticipantsOnly}
+            onCheckedChange={setConfirmedParticipantsOnly}
+          />
+          <Label htmlFor="statistics-export-confirmed-participants" className="cursor-pointer">
+            {t(
+              confirmedParticipantsOnly ? "confirmedParticipantsOnly" : "allSubmittedApplications",
+            )}
+          </Label>
+        </div>
+      )}
     </SidePanelEditor>
   );
 }
