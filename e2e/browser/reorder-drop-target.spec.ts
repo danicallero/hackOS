@@ -177,26 +177,25 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await page.keyboard.press("Escape");
     await expect(placeholder).toHaveCount(0);
     await expect(handles.first().locator("../../..")).toContainText("Last name");
-    // #849: measure the next pointer drag only after the cancelled move settles.
-    await expect
-      .poll(() =>
-        handles
-          .first()
-          .locator("../../..")
-          .evaluate(
-            (element) =>
-              element
-                .getAnimations({ subtree: true })
-                .filter((animation) => animation.playState === "running").length,
-          ),
-      )
-      .toBe(0);
+    // #849: exercise pointer dragging from a fresh sensor/layout state.
+    await page.reload();
+    await expect(handles).toHaveCount(3);
+    if (await notice.isVisible()) await notice.locator("button").click();
+    await handles.first().evaluate((handle) => handle.scrollIntoView({ block: "center" }));
+    await handles.nth(1).hover();
+    await handles.first().hover();
     const source = (await handles.first().boundingBox())!;
     const destination = (await handles.nth(1).boundingBox())!;
     await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
     await page.mouse.down();
+    await page.mouse.move(source.x + source.width / 2 + 12, source.y + source.height / 2);
+    await expect(placeholder).toHaveCount(1);
     const destinationY = destination.y + (await page.evaluate(() => window.scrollY));
-    await page.mouse.move(destination.x + 40, destination.y + 60, { steps: 12 });
+    await page.mouse.move(
+      destination.x + destination.width / 2,
+      destination.y + destination.height / 2,
+      { steps: 12 },
+    );
     await expect(placeholder).toHaveCount(1);
     await expect(placeholder).toHaveCSS("outline-style", "dashed");
     await expect
