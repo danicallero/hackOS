@@ -74,6 +74,8 @@ Status washes are translucent, not solid fills. Text on a warning wash uses
 the foreground appropriate to the rendered surface: dark text in light mode
 and light text in dark mode. Verify normal text against its composited surface
 at WCAG AA (4.5:1 or higher), including nested controls such as banner buttons.
+Light warning markers derive a darker yellow from edition yellow and ink so
+KPI outlines remain visible on cream; warning text retains the normal foreground.
 
 Each row: value → intent → boundary.
 

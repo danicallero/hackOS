@@ -5,6 +5,7 @@ import {
   DndContext,
   type DragEndEvent,
   DragOverlay,
+  type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -14,6 +15,7 @@ import {
   arrayMove,
   rectSortingStrategy,
   SortableContext,
+  type SortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
 } from "@dnd-kit/sortable";
@@ -87,6 +89,12 @@ const DEFAULT_OVERVIEW_TONES: Record<string, StatTone> = {
   time: "neutral",
 };
 
+// H27: sorting changes each panel's position, never its saved dimensions.
+const sizePreservingRectSortingStrategy: SortingStrategy = (args) => {
+  const transform = rectSortingStrategy(args);
+  return transform ? { ...transform, scaleX: 1, scaleY: 1 } : null;
+};
+
 const BASE_PANEL_LABELS: Record<string, MessageKey> = {
   overview: "statisticsOverviewPanel",
   "shirt-sizes": "shirtSizeDistribution",
@@ -156,6 +164,9 @@ export function BeforePanels({
 }) {
   const reducedDragMotion = useReducedDragMotion();
   const [activePanel, setActivePanel] = useState<string | null>(null);
+  const [activePanelSize, setActivePanelSize] = useState<{ width: number; height: number } | null>(
+    null,
+  );
   const { language, t } = useLocale();
   const resolvedLayoutKey = layoutKey ?? (applicationId ? String(applicationId) : "");
   const availablePanelKeys = useMemo(() => panelKeysForStats(stats), [stats]);
@@ -262,11 +273,23 @@ export function BeforePanels({
 
   const onPanelDragEnd = (event: DragEndEvent) => {
     setActivePanel(null);
+    setActivePanelSize(null);
     if (!editMode || !event.over || event.active.id === event.over.id) return;
     const from = effectiveLayout.order.indexOf(String(event.active.id));
     const to = effectiveLayout.order.indexOf(String(event.over.id));
     if (from === -1 || to === -1) return;
     saveLayout({ ...effectiveLayout, order: arrayMove(effectiveLayout.order, from, to) });
+  };
+
+  const onPanelDragStart = ({ active }: DragStartEvent) => {
+    setActivePanel(String(active.id));
+    const rect = active.rect.current.initial;
+    setActivePanelSize(rect ? { width: rect.width, height: rect.height } : null);
+  };
+
+  const cancelPanelDrag = () => {
+    setActivePanel(null);
+    setActivePanelSize(null);
   };
 
   const resizePanel = (key: string, axis: "width" | "height", delta: -1 | 1) => {
@@ -323,7 +346,7 @@ export function BeforePanels({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="@container space-y-5">
       {editMode && (
         <div className="bg-muted/30 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
           <p className="text-muted-foreground min-w-0 flex-1 text-pretty text-sm" role="status">
@@ -343,11 +366,11 @@ export function BeforePanels({
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={onPanelDragEnd}
-        onDragStart={({ active }) => setActivePanel(String(active.id))}
-        onDragCancel={() => setActivePanel(null)}
+        onDragStart={onPanelDragStart}
+        onDragCancel={cancelPanelDrag}
       >
-        <SortableContext items={renderedKeys} strategy={rectSortingStrategy}>
-          <div className="grid items-start gap-4 xl:grid-cols-2">
+        <SortableContext items={renderedKeys} strategy={sizePreservingRectSortingStrategy}>
+          <div className="grid items-start gap-4 @3xl:grid-cols-2">
             {renderedKeys.map((key) => (
               <SortablePanel
                 key={key}
@@ -372,7 +395,8 @@ export function BeforePanels({
             <div
               inert
               aria-hidden="true"
-              className="bg-background rounded-lg shadow-lg outline-2 outline-primary"
+              className="bg-background overflow-hidden rounded-lg shadow-lg outline-2 outline-primary"
+              style={activePanelSize ?? undefined}
             >
               {renderPanel(activePanel, true)}
             </div>
@@ -420,7 +444,7 @@ function SortablePanel({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "relative flex min-w-0 flex-col motion-reduce:transition-none!",
-        width === 2 && "xl:col-span-2",
+        width === 2 && "@3xl:col-span-2",
         height === 2 && "min-h-[38rem]",
         editMode && "rounded-lg outline outline-1 outline-dashed outline-border",
         hidden && "opacity-60",
@@ -841,11 +865,11 @@ function OverviewPanel({
     <SectionCard
       title={t("statisticsOverviewPanel")}
       icon={SquaresFourIcon}
-      className={cn("h-full", statToneSurfaceClass[tone])}
+      className={cn("@container h-full", statToneSurfaceClass[tone])}
     >
       {loading && !stats ? (
         <div
-          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          className="grid gap-3 @sm:grid-cols-2 @lg:grid-cols-3 @2xl:grid-cols-4"
           role="status"
           aria-label={t("loading")}
         >
@@ -883,8 +907,8 @@ function OverviewPanel({
           onDragStart={({ active }) => setActiveKpi(String(active.id))}
           onDragCancel={() => setActiveKpi(null)}
         >
-          <SortableContext items={kpiOrder} strategy={rectSortingStrategy}>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <SortableContext items={kpiOrder} strategy={sizePreservingRectSortingStrategy}>
+            <div className="grid gap-3 @sm:grid-cols-2 @lg:grid-cols-3 @2xl:grid-cols-4">
               {kpiOrder.map((key) => (
                 <SortableOverviewKpi key={key} id={key} label={key} wide={key === "time"}>
                   {(dragHandle) => cards[key]?.(dragHandle)}
@@ -931,7 +955,7 @@ function SortableOverviewKpi({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "min-w-0 motion-reduce:transition-none!",
-        wide && "sm:col-span-2 lg:col-span-1 xl:col-span-2",
+        wide && "@sm:col-span-2 @lg:col-span-1 @2xl:col-span-2",
         isDragging &&
           "[&>*]:opacity-0 rounded-lg outline-2 outline-dashed outline-primary bg-primary/5",
       )}
@@ -976,7 +1000,11 @@ function Distribution({
           value={chartType}
           onValueChange={(value) => onChartTypeChange(value as StatsChartType)}
         >
-          <SelectTrigger size="sm" className="w-28" aria-label={t("selectChartTypeFor", { title })}>
+          <SelectTrigger
+            size="sm"
+            className="w-auto min-w-36 shrink-0"
+            aria-label={t("selectChartTypeFor", { title })}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

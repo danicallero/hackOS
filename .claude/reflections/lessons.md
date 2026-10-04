@@ -383,3 +383,104 @@ Inspect the rendered surface and verify links contain the official badge images.
 
 ### Exceptions
 The plain-text MIME part retains readable labeled links.
+
+## [R013] Check reflections throughout each task
+
+Status: promoted
+Scope: repository
+Source: user-correction
+Date: 2026-10-04
+Promoted-To: CLAUDE.md
+
+### Trigger
+Before and during any code, documentation, test, or configuration change.
+
+### Mistake
+An agent reviewed reflections once but did not keep checking later changes
+against the lessons, so a known mistake could recur while completing the task.
+
+### Lesson
+Reflections are an ongoing check for the entire task, not a one-time startup
+reading.
+
+### Action
+Read the entire lessons file before editing. Compare the intended work with
+applicable active lessons, re-check substantive diffs as work proceeds, and
+apply each lesson's validation before commit or PR. Resolve conflicts
+explicitly when higher-priority instructions or current product requirements
+take precedence.
+
+### Validation
+Confirm applicable lessons were considered at planning, during implementation,
+and during final diff/validation review.
+
+### Exceptions
+None.
+
+## [R014] Keep nested menus flowing in one direction
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-10-04
+
+### Trigger
+Building multi-level dropdowns or filter menus with nested detail panels.
+
+### Mistake
+A child menu opened back toward its parent despite enough room in the
+direction used by the parent submenu, making the menu flow alternate sides.
+
+### Lesson
+Nested menu levels should keep the same opening direction while space allows.
+Let collision handling reverse a submenu only when the preferred side does not
+fit in the viewport.
+
+### Action
+Set direction at the menu root so nested submenus inherit it, and keep text
+direction separate where needed. Check the default side at a wide viewport and
+the collision fallback near the viewport edge. Match directional indicators to
+the preferred opening direction.
+
+### Validation
+Open every level in a real browser with ample space and confirm that each uses
+the same side. Repeat near the viewport edge and confirm only the submenu that
+cannot fit flips, without creating a navigation loop or trapping focus.
+
+### Exceptions
+Menus that intentionally represent independent navigation layers may use
+different directions when their hierarchy and visual design make that choice
+clear.
+
+## [R015] Reproduce interaction failures before changing rendering layers
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-10-04
+
+### Trigger
+A visual element disappears or flickers during hover, especially after a prior
+attempt to fix the same interaction failed.
+
+### Mistake
+Repeatedly adjusting overlay ordering without inspecting the actual rendered
+state attributed missing chart paint to the wrong cause.
+
+### Lesson
+Reproduce the interaction and inspect the element's paint, geometry, and state
+before choosing a fix. Consult the library's documentation and implementation
+when its automatic interaction behavior is involved.
+
+### Action
+Capture the failing state, identify which property changes, and verify the
+proposed cause against runtime evidence before changing code.
+
+### Validation
+Repeat the same pointer interaction after the change, including related entry
+points such as legend hover, and confirm the element retains valid paint and
+geometry. State which browser was checked.
+
+### Exceptions
+A directly observable code error can be fixed first, but its affected
+interaction still needs runtime verification.

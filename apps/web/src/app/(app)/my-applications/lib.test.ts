@@ -7,6 +7,7 @@ import {
   formTypeLabel,
   isConfirmationExpiredError,
   missingRequiredFields,
+  seedApplicationValues,
   statusLabel,
   type TemplateField,
 } from "./lib";
@@ -92,5 +93,71 @@ describe("missingRequiredFields", () => {
         { agree: "true" },
       ),
     ).toEqual(["agree"]);
+  });
+});
+
+describe("seedApplicationValues", () => {
+  it("prefers saved answers and restores logistics answers from a closed response", () => {
+    expect(
+      seedApplicationValues(
+        {
+          id: 1,
+          user_id: 2,
+          application_id: 3,
+          status: "review",
+          responses: { shirt_size: "L", motivation: "Saved" },
+          submitted_at: "2026-10-01T00:00:00.000Z",
+          created_at: "2026-09-30T00:00:00.000Z",
+          updated_at: "2026-10-01T00:00:00.000Z",
+          decision_sent_at: null,
+          confirmation_expires_at: null,
+          confirmed_at: null,
+          declined_at: null,
+          ask_shirt_size: true,
+          ask_food_intolerances: true,
+          shirt_size: "M",
+          food_intolerances: [7],
+          food_intolerance_notes: "Peanut allergy",
+        },
+        null,
+        { shirtSize: "S", foodIntolerances: [8], foodIntoleranceNotes: "Other" },
+      ),
+    ).toEqual({
+      shirt_size: "L",
+      motivation: "Saved",
+      food_intolerances: ["7"],
+      food_intolerance_notes: "Peanut allergy",
+    });
+  });
+
+  it("prefills an open form from profile data and its DNI field", () => {
+    expect(
+      seedApplicationValues(
+        null,
+        {
+          ask_shirt_size: true,
+          ask_food_intolerances: true,
+          template: [
+            {
+              key: "DNI",
+              label: { en: "DNI", es: "DNI", gl: "DNI" },
+              kind: "text",
+              required: false,
+            },
+          ],
+        },
+        {
+          shirtSize: "M",
+          foodIntolerances: [7],
+          foodIntoleranceNotes: "Peanut allergy",
+          dni: "12345678Z",
+        },
+      ),
+    ).toEqual({
+      shirt_size: "M",
+      food_intolerances: ["7"],
+      food_intolerance_notes: "Peanut allergy",
+      DNI: "12345678Z",
+    });
   });
 });

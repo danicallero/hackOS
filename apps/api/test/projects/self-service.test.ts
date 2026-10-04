@@ -28,6 +28,7 @@ let app: App;
 
 beforeEach(async () => {
   await truncateAll();
+  await pool.query(`UPDATE queue_settings SET schedule_start_at = NULL WHERE id = 1`);
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
 });

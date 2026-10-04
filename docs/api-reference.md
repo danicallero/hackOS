@@ -135,6 +135,9 @@ sharing consent) only when the field kind matches. Old keys remain for
 responses' immutable historical form versions. Draft preparation and
 uploads remain available before verification; submitting or confirming a
 place does not. Decision-makers can return a response to its owner as a draft.
+A response owner can retrieve that immutable form snapshot with their answers
+even after the form closes; the applicant page renders it read-only unless the
+form is open or that returned draft is allowed to resubmit after close.
 A confirmed response keeps its application-granted role and live ticket access
 only when auto-accept is enabled; otherwise those are revoked until a later
 review and confirmation. The decision-maker can optionally allow that one
@@ -527,6 +530,20 @@ added questions do not become statistics automatically. Configured enum options 
 when their response count is zero. Sensitive derived dimensions such as age
 and study level are calculated server-side against the event reference date;
 the raw source value is never included in a statistics response.
+
+Application-scope form and logistics distributions accept a
+`participant_filters` object on the dashboard query and CSV export. Keys are
+selected `application:<id>` scopes. Each value is an array containing any of
+`confirmed`, `accepted_internal`, and `accepted`; an empty array includes every
+non-draft response. Drafts are always excluded. Applications without an entry
+use the confirmed-only default. The legacy
+`participant_filter=confirmed|submitted` parameter remains supported and sets
+the fallback for all selected applications.
+
+These filters do not change application lifecycle counts, confirmation panels,
+time series, or role-scope distributions. The dashboard presents scope and
+participant filters on the Before phase; During and After are event-wide
+operational views.
 
 Personal panel visibility, order, size, chart type, and layout preferences are
 stored through `/api/me/ui-prefs` and therefore follow the account across

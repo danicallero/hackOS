@@ -2,7 +2,12 @@ import "./env.js";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { asUser, buildTestApp, createUser, truncateAll } from "../helpers.js";
-import { createApplication, getUserSensitive } from "./fixtures.js";
+import {
+  createApplication,
+  createFoodIntolerance,
+  getUserSensitive,
+  sampleTemplate,
+} from "./fixtures.js";
 
 /** H12: draft, submit, verified-email gate, sensitive-data-to-user, privacy notice. */
 
@@ -51,6 +56,80 @@ describe("application responses (H12)", () => {
     const edit = await saveDraft(a, appId, user, { motivation: "later" });
     expect(edit.statusCode).toBe(200);
     expect(edit.json().responses.motivation).toBe("later");
+  });
+
+  it("returns the saved form snapshot and answers for drafts and submissions after close", async () => {
+    const a = await getApp();
+    const appId = await createApplication({
+      name: "Closed applications",
+      template: sampleTemplate(),
+    });
+    const draftUser = await createUser();
+    const submittedUser = await createUser({ emailVerified: true });
+    const draftAnswers = { motivation: "Draft answer", credits: "no" };
+    const submittedAnswers = {
+      motivation: "Submitted answer",
+      credits: "yes",
+      shirt_size: "M",
+    };
+    const intoleranceId = await createFoodIntolerance("Peanuts", submittedUser);
+
+    await saveDraft(a, appId, draftUser, draftAnswers);
+    await saveDraft(a, appId, submittedUser, submittedAnswers);
+    const submitted = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(submittedUser),
+      payload: {
+        responses: submittedAnswers,
+        food_intolerances: [intoleranceId],
+        food_intolerance_notes: "Peanut allergy",
+        shirt_size: "M",
+      },
+    });
+    expect(submitted.statusCode).toBe(200);
+
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE applications SET close_at = now() - interval '1 hour' WHERE id = $1`, [
+      appId,
+    ]);
+
+    for (const [userId, answers] of [
+      [draftUser, draftAnswers],
+      [submittedUser, submittedAnswers],
+    ] as const) {
+      const response = await a.inject({
+        method: "GET",
+        url: `/api/applications/${appId}/response`,
+        headers: asUser(userId),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        application_name: "Closed applications",
+        ask_shirt_size: true,
+        ask_food_intolerances: true,
+        responses: answers,
+        template: expect.arrayContaining([
+          expect.objectContaining({
+            key: "motivation",
+            label: { en: "Why", es: "Por qué", gl: "Por que" },
+          }),
+          expect.objectContaining({ key: "credits" }),
+        ]),
+      });
+    }
+
+    const submittedResponse = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/response`,
+      headers: asUser(submittedUser),
+    });
+    expect(submittedResponse.json()).toMatchObject({
+      shirt_size: "M",
+      food_intolerances: [intoleranceId],
+      food_intolerance_notes: "Peanut allergy",
+    });
   });
 
   it("409 when creating a NEW draft after the window closed", async () => {

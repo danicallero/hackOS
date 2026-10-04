@@ -87,7 +87,7 @@
   --info: color-mix(in srgb, var(--brand-ink) 65%, var(--brand-blue));
   --success: #22734f;
   --success-foreground: var(--brand-cream);
-  --warning: var(--brand-yellow);
+  --warning: color-mix(in srgb, var(--brand-ink) 35%, var(--brand-yellow));
   /* Status text is used on translucent washes, not a solid warning fill. */
   --warning-foreground: var(--foreground);
   --chart-1: var(--info);
