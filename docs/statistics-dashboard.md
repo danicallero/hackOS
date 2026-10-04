@@ -56,6 +56,21 @@ Postgres → authorized scope/panel resolver → aggregate/transform service
          → panel-ready response → shared chart/panel components
 ```
 
+The web renders these panels with tree-shaken Apache ECharts using its SVG
+renderer. Charts resize with their panel and use the edition's semantic chart
+tokens in both themes. Root theme class changes refresh the palette after the
+CSS theme is applied, so a light/dark switch cannot retain the previous colors. ECharts keeps its native hover tooltip beside the
+pointer. The axis pointer uses a lower drawing order than each series so its
+guide line stays behind the data. Theme colors are converted to RGBA at the
+ECharts boundary because its emphasis color parser does not support CSS
+`color(srgb …)` values. All chart types include native scrolling legends;
+hovering a legend highlights its series or pie sector. Hovering chart data
+highlights the matching native legend label using a rich-text style; only the
+legend formatter is updated, without replacing series or React state. Bar categories are
+separate overlapping sparse series so each legend item targets its own bar.
+Diagonal decals use thicker stripes, count axes use integer bounds, and a
+screen-reader data list preserves access to every value.
+
 Application status, confirmation, time-series, and question distributions are
 aggregated by `applications/stats.ts`. Role and mixed-scope shirt-size and food
 intolerance results are aggregated by a server-side user union so a person in
@@ -109,11 +124,13 @@ informational roles. Customization mode turns the panel area into a direct
 sortable grid with keyboard-accessible drag handles and resize controls. The
 Overview cards form their own nested sortable grid, so their order can be
 personalized without moving the complete Overview panel. During reordering,
-the active panel or KPI has a floating preview and a dashed destination outline;
-siblings shift to show the resulting order. Keyboard pickup, arrow movement,
-drop, and cancellation use the same feedback. Reduced-motion preferences disable
-sortable transitions and preview drop animations (issue #849). Grid rows grow
-with their content so expanded access settings cannot overlap a panel. Unknown
+the active panel or KPI has a floating preview at its measured size and a
+dashed destination outline; siblings shift to show the resulting order without
+scaling to another item's dimensions. Reordering preserves each panel's saved
+width and height. Keyboard pickup, arrow movement, drop, and cancellation use
+the same feedback. Reduced-motion preferences disable sortable transitions and
+preview drop animations (issue #849). Grid rows grow with their content so
+expanded access settings cannot overlap a panel. Unknown
 panel ids are ignored by the sanitizer and new panels receive catalog defaults,
 so older preferences cannot blank or break a dashboard. The default layout
 gives the composed overview additional width, and users can reset their
@@ -132,3 +149,6 @@ unchanged. Old time-series ACL/layout ids are canonicalized to the descriptive
 Question publication and visualization metadata are stored with the application
 template, so deployment/event configuration remains the source of truth rather
 than introducing a second statistics registry.
+
+The browser regression in `e2e/browser/statistics-chart.spec.ts` checks native
+legend counts and repeated light/dark switches against the running web app.

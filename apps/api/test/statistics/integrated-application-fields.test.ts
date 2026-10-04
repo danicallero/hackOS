@@ -241,14 +241,20 @@ describe("application fields integrated into Logistics", () => {
     const template = [
       {
         key: "experience",
-        kind: "select",
+        kind: "select" as const,
         label: { en: "Experience", es: "Experiencia", gl: "Experiencia" },
+        required: false,
         options: [
           ...["confirmed", "internal", "sent", "review", "draft", "other-review", "other-sent"].map(
             (value) => ({ value, label: { en: value, es: value, gl: value } }),
           ),
         ],
-        statistics: { enabled: true, visualization: "bar", aggregation: "count" },
+        statistics: {
+          enabled: true,
+          visualization: "bar",
+          aggregation: "count",
+          transformation: "none",
+        } as const,
       },
     ];
     const firstApplicationId = await createApplication({

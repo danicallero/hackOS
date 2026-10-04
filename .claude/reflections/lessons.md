@@ -451,3 +451,36 @@ cannot fit flips, without creating a navigation loop or trapping focus.
 Menus that intentionally represent independent navigation layers may use
 different directions when their hierarchy and visual design make that choice
 clear.
+
+## [R015] Reproduce interaction failures before changing rendering layers
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-10-04
+
+### Trigger
+A visual element disappears or flickers during hover, especially after a prior
+attempt to fix the same interaction failed.
+
+### Mistake
+Repeatedly adjusting overlay ordering without inspecting the actual rendered
+state attributed missing chart paint to the wrong cause.
+
+### Lesson
+Reproduce the interaction and inspect the element's paint, geometry, and state
+before choosing a fix. Consult the library's documentation and implementation
+when its automatic interaction behavior is involved.
+
+### Action
+Capture the failing state, identify which property changes, and verify the
+proposed cause against runtime evidence before changing code.
+
+### Validation
+Repeat the same pointer interaction after the change, including related entry
+points such as legend hover, and confirm the element retains valid paint and
+geometry. State which browser was checked.
+
+### Exceptions
+A directly observable code error can be fixed first, but its affected
+interaction still needs runtime verification.

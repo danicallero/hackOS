@@ -177,6 +177,20 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await page.keyboard.press("Escape");
     await expect(placeholder).toHaveCount(0);
     await expect(handles.first().locator("../../..")).toContainText("Last name");
+    // #849: measure the next pointer drag only after the cancelled move settles.
+    await expect
+      .poll(() =>
+        handles
+          .first()
+          .locator("../../..")
+          .evaluate(
+            (element) =>
+              element
+                .getAnimations({ subtree: true })
+                .filter((animation) => animation.playState === "running").length,
+          ),
+      )
+      .toBe(0);
     const source = (await handles.first().boundingBox())!;
     const destination = (await handles.nth(1).boundingBox())!;
     await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
