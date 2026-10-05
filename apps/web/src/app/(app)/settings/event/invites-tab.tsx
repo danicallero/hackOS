@@ -13,6 +13,7 @@ import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
@@ -20,7 +21,6 @@ import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
-import { CategorySaveFooter } from "./category-save-footer";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
 
@@ -94,7 +94,8 @@ export function InvitesTab({
         <SectionCard
           variant="plain"
           footerClassName="justify-start"
-          footer={<CategorySaveFooter pending={formState.isSubmitting} state={saveState} />}
+          stickyFooter
+          footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
         >
           <h3 className="text-balance text-sm font-semibold">{t("invitesSponsorsGroup")}</h3>
           <FormField

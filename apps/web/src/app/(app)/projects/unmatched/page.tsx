@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
@@ -138,7 +139,7 @@ export default function UnmatchedProjectsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         title={t("resolveImports")}
         actions={
@@ -475,6 +476,6 @@ export default function UnmatchedProjectsPage() {
           </ul>
         )}
       </SectionCard>
-    </div>
+    </PageLayout>
   );
 }

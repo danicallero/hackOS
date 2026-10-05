@@ -22,6 +22,7 @@ import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { JudgingPanelBuilder, normalizeQuestions } from "@/components/common/questionnaire-builder";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
@@ -260,7 +261,7 @@ export default function QueueDetailPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <PageLayout width="workspace">
       <PageHeader title={queue.group.display_name} meta={queue.group.enterprise_name} />
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
@@ -534,6 +535,6 @@ export default function QueueDetailPage() {
           )}
         </SectionCard>
       )}
-    </div>
+    </PageLayout>
   );
 }

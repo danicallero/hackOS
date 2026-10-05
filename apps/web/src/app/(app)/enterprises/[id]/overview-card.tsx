@@ -133,7 +133,7 @@ export function EnterpriseOverviewCard({
         : t("enterpriseChallengeBreakdown", challengeCounts);
 
   return (
-    <SectionCard icon={GlobeIcon} title={t("enterpriseOverviewTitle")}>
+    <SectionCard variant="plain" icon={GlobeIcon} title={t("enterpriseOverviewTitle")}>
       <div
         className={cn("grid gap-4 sm:grid-cols-2", canManage ? "xl:grid-cols-4" : "xl:grid-cols-3")}
       >

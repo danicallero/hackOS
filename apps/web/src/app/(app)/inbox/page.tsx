@@ -1,6 +1,7 @@
 "use client";
 
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
@@ -14,10 +15,10 @@ export default function InboxPage() {
     defaultValue: "messages",
   });
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-8">
+    <PageLayout width="reading">
       <PageHeader title={t("inbox")} />
       <Tabs value={tab} onValueChange={setTab}>
-        <TabBar variant="line" className="w-full justify-start border-b">
+        <TabBar>
           <TabsTrigger value="messages">{t("messages")}</TabsTrigger>
           <TabsTrigger value="preferences">{t("preferences")}</TabsTrigger>
         </TabBar>
@@ -28,6 +29,6 @@ export default function InboxPage() {
           <PreferencesTab />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageLayout>
   );
 }

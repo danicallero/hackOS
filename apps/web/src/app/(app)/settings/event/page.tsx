@@ -22,6 +22,7 @@ import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
@@ -112,11 +113,11 @@ export default function EventSettingsPage() {
 
   return (
     <EventConfigProvider>
-      <div className="mx-auto w-full max-w-4xl space-y-8">
+      <PageLayout width="reading">
         <PageHeader title={t("eventSettings")} />
 
         <Tabs value={tab} onValueChange={changeTab}>
-          <TabBar ref={tabBarRef} variant="line" className="w-full justify-start border-b">
+          <TabBar ref={tabBarRef}>
             {canEvent && <TabsTrigger value="event">{t("eventTitle")}</TabsTrigger>}
             {canVenue && <TabsTrigger value="venue">{t("venueSectionTitle")}</TabsTrigger>}
             {canWallet && <TabsTrigger value="wallet">{t("walletPassSectionTitle")}</TabsTrigger>}
@@ -162,7 +163,7 @@ export default function EventSettingsPage() {
             </TabsContent>
           )}
         </Tabs>
-      </div>
+      </PageLayout>
     </EventConfigProvider>
   );
 }

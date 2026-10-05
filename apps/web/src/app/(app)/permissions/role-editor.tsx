@@ -487,7 +487,7 @@ export function RoleEditor({
           {roleHeader}
           {headerActions && <ActionGroup className="justify-end">{headerActions}</ActionGroup>}
         </div>
-        <TabBar aria-label={t("roleSections")} className="max-w-full justify-start">
+        <TabBar aria-label={t("roleSections")}>
           <TabsTrigger value="display">{t("displayTab")}</TabsTrigger>
           <TabsTrigger value="capabilities">{t("capabilitiesLabel")}</TabsTrigger>
           <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>

@@ -216,6 +216,9 @@ function withButton(options: ToastOptions): Omit<SileoOptions, "type"> {
     ...rest,
     ...(action
       ? {
+          // Actions must be discoverable without hover, including on touch.
+          autopilot: rest.autopilot ?? { expand: 150, collapse: 60_000 },
+          duration: rest.duration === undefined ? 8_000 : rest.duration,
           button: {
             title: action.label,
             onClick: action.onClick,
@@ -254,7 +257,7 @@ function normalizePromiseContent(
   const options = { id, ...withButton(content) };
   const spilled = spillLongTitle(state, options, content.compactTitle);
   const hasExpandableContent = Boolean(options.description) || Boolean(options.button);
-  if (hasExpandableContent && content.autopilot === undefined && !spilled)
+  if (hasExpandableContent && options.autopilot === undefined && !spilled)
     options.autopilot = false;
   if (options.duration === undefined && defaultDuration !== undefined) {
     options.duration = defaultDuration;
@@ -306,7 +309,7 @@ function show(
   const existingId = findDedupedToast(key);
   if (existingId) return existingId;
   const hasExpandableContent = Boolean(sileoOptions.description) || Boolean(sileoOptions.button);
-  if (hasExpandableContent && options?.autopilot === undefined && !spilled) {
+  if (hasExpandableContent && sileoOptions.autopilot === undefined && !spilled) {
     sileoOptions.autopilot = false;
   }
   if (sileoOptions.duration === undefined) sileoOptions.duration = DEFAULT_DURATIONS[method];
@@ -333,7 +336,7 @@ function showAction(message: ToastMessage, options?: ToastOptions) {
   const id = nextToastId();
   const sileoOptions = normalizeMessage(message, options, id);
   const spilled = spillLongTitle("action", sileoOptions, options?.compactTitle);
-  if (options?.autopilot === undefined && !spilled) sileoOptions.autopilot = false;
+  if (sileoOptions.autopilot === undefined && !spilled) sileoOptions.autopilot = false;
   if (sileoOptions.duration === undefined) sileoOptions.duration = DEFAULT_DURATIONS.action;
   const result = sileo.action(sileoOptions);
   trackToast(result, sileoOptions, "action");
@@ -345,7 +348,7 @@ function showIcon(message: ToastMessage, options: ToastIconOptions) {
   const sileoOptions = normalizeMessage(message, options, id);
   const spilled = spillLongTitle("success", sileoOptions, options.compactTitle);
   const hasExpandableContent = Boolean(sileoOptions.description) || Boolean(sileoOptions.button);
-  if (hasExpandableContent && options.autopilot === undefined && !spilled)
+  if (hasExpandableContent && sileoOptions.autopilot === undefined && !spilled)
     sileoOptions.autopilot = false;
   if (sileoOptions.duration === undefined) sileoOptions.duration = DEFAULT_DURATIONS.success;
 

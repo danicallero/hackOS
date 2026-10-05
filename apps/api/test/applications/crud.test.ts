@@ -733,6 +733,133 @@ describe("applications CRUD (H11)", () => {
     expect(read.json().sections[0].key).toBe("education");
   });
 
+  it("H11: ungrouped placement anchors survive template-only patches and immutable snapshots", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const section = {
+      key: "education",
+      title: { en: "Education", es: "Educación", gl: "Educación" },
+    };
+    const template = sampleTemplate();
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Ordered form",
+        sections: [section],
+        template: [{ ...template[0], section_key: section.key }, template[1]],
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    const id = create.json().id;
+    const update = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: {
+        template: [
+          { ...template[0], section_key: section.key },
+          { ...template[1], after_section_key: section.key },
+        ],
+      },
+    });
+    expect(update.statusCode).toBe(200);
+    expect(update.json().template[1]).toMatchObject({
+      key: "credits",
+      after_section_key: "education",
+    });
+    expect(update.json().template[1]).not.toHaveProperty("section_key");
+    const read = await a.inject({
+      method: "GET",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+    });
+    expect(read.json().template[1].after_section_key).toBe(section.key);
+    const versions = await pool.query<{
+      version: number;
+      template: Array<Record<string, unknown>>;
+    }>(
+      "SELECT version, template FROM application_form_versions WHERE application_id = $1 ORDER BY version",
+      [id],
+    );
+    expect(versions.rows).toHaveLength(2);
+    expect(versions.rows.map((version) => version.template[1]?.after_section_key)).toEqual([
+      undefined,
+      section.key,
+    ]);
+  });
+
+  it("H11: rejects unknown placement anchors and removing a referenced section on partial patches", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const section = {
+      key: "education",
+      title: { en: "Education", es: "Educación", gl: "Educación" },
+    };
+    const template = sampleTemplate().map((field) => ({
+      ...field,
+      after_section_key: section.key,
+    }));
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: { name: "Anchored form", template, sections: [section] },
+    });
+    expect(create.statusCode).toBe(201);
+    const id = create.json().id;
+    for (const payload of [
+      { template: template.map((field) => ({ ...field, after_section_key: "missing" })) },
+      { sections: [] },
+    ]) {
+      const rejected = await a.inject({
+        method: "PATCH",
+        url: `/api/applications/${id}`,
+        headers: asUser(manager),
+        payload,
+      });
+      expect(rejected.statusCode).toBe(400);
+    }
+    const versions = await pool.query(
+      "SELECT 1 FROM application_form_versions WHERE application_id = $1",
+      [id],
+    );
+    expect(versions.rows).toHaveLength(1);
+    const read = await a.inject({
+      method: "GET",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+    });
+    expect(read.json().sections).toEqual([section]);
+    expect(read.json().template[0].after_section_key).toBe(section.key);
+  });
+
+  it("H11: rejects contradictory grouping and placement anchors and invalid anchor keys", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const id = await createApplication();
+    for (const placement of [
+      { section_key: "education", after_section_key: "education" },
+      { after_section_key: "missing" },
+      { after_section_key: "invalid key" },
+      { after_section_key: "" },
+    ]) {
+      const rejected = await a.inject({
+        method: "PATCH",
+        url: `/api/applications/${id}`,
+        headers: asUser(manager),
+        payload: {
+          template: sampleTemplate().map((field) => ({ ...field, ...placement })),
+          sections: [
+            { key: "education", title: { en: "Education", es: "Educación", gl: "Educación" } },
+          ],
+        },
+      });
+      expect(rejected.statusCode).toBe(400);
+    }
+  });
+
   it("H11: a field's help_text round-trips through create/update", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);

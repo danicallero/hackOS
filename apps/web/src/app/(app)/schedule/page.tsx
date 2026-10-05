@@ -27,6 +27,8 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
+import { PageToolbar } from "@/components/common/page-toolbar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -80,8 +82,6 @@ import {
   ResizableHead,
   useScheduleTableConfig,
 } from "./schedule-table-config";
-
-// --- Page --------------------------------------------------------------
 
 export default function SchedulePage() {
   const { t, language } = useLocale();
@@ -152,8 +152,7 @@ export default function SchedulePage() {
 
   const [moveToDateItem, setMoveToDateItem] = useState<PublicScheduleItem | null>(null);
 
-  // H59: shift both ends in one PATCH, preserving duration and time-of-day;
-  // sending only startsAt would validate it against the old endsAt.
+  // H59: shift both ends in one PATCH to preserve duration and satisfy date validation.
   const moveItemToDate = useCallback(
     async (item: PublicScheduleItem, targetDate: string) => {
       const nextStartsAt = withDate(item.startsAt, targetDate);
@@ -356,11 +355,11 @@ export default function SchedulePage() {
   const allSelected = filtered.length > 0 && filtered.every((item) => selectedIds.has(item.id));
 
   return (
-    <div className="space-y-6" data-wide>
+    <PageLayout width="workspace">
       <PageHeader title={t("manageSchedule")} />
 
       <Surface padding="none" className="overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2 p-4">
+        <PageToolbar label={t("pageDataControls")} className="p-4">
           <div className="relative w-full max-w-xs">
             <MagnifyingGlassIcon
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
@@ -416,7 +415,7 @@ export default function SchedulePage() {
             )}
             <ColumnConfigPopover config={tableConfig} onChange={setTableConfig} />
           </div>
-        </div>
+        </PageToolbar>
 
         <div className="overflow-x-auto">
           <DndContext
@@ -672,7 +671,7 @@ export default function SchedulePage() {
           }}
         />
       )}
-    </div>
+    </PageLayout>
   );
 }
 

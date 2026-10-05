@@ -20,6 +20,7 @@ import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { MultilingualInput } from "@/components/common/questionnaire-builder";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -110,7 +111,7 @@ export default function SponsorFaqPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader title={t("sponsorFaq")} />
       <Surface padding="default">
         {canManage ? (
@@ -120,7 +121,7 @@ export default function SponsorFaqPage() {
         )}
       </Surface>
       <SponsorScheduleCard />
-    </div>
+    </PageLayout>
   );
 }
 

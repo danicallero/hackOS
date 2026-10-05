@@ -9,6 +9,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
@@ -104,7 +105,7 @@ export default function WorkGroupDetailPage() {
     }
   }
   return (
-    <div className="space-y-6">
+    <PageLayout width="reading">
       <PageHeader
         title={group.name}
         meta={`${t("workGroupTiming")}: ${t(group.presentation_timing_preference === "early" ? "workGroupTimingEarly" : group.presentation_timing_preference === "middle" ? "workGroupTimingMiddle" : group.presentation_timing_preference === "late" ? "workGroupTimingLate" : "workGroupTimingNone")}`}
@@ -147,7 +148,7 @@ export default function WorkGroupDetailPage() {
         <Members group={group} onChanged={load} editable={active} />
         <Challenges group={group} challenges={challenges} onChanged={load} editable={active} />
       </div>
-    </div>
+    </PageLayout>
   );
 }
 

@@ -147,6 +147,15 @@ versions, grants and confirmation tokens transactionally; anonymous-retention
 records remain a deliberate deletion boundary. The confirmation-window expirer (`applications/expirer.ts`)
 is a background tick, not a request path.
 
+Form fields can belong to a named section via `section_key`, or remain ungrouped
+and appear immediately after a section via `after_section_key` (H11). These
+properties are mutually exclusive and must reference an existing section.
+Ungrouped fields without an anchor appear before the named sections; within each
+section or anchored group, template array order applies. Create and partial
+update validate the complete resulting template against the sections, and the
+anchor is preserved in the immutable form-version JSON alongside the other
+field definitions. No database migration is needed for this layout metadata.
+
 The form catalogue also supports curated university-degree IDs and public city
 suggestions (Photon/OpenStreetMap). The city picker uses `en` for English and
 `default` for Spanish/Galician, since the public server rejects `es`/`gl`.

@@ -12,6 +12,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { TabBar } from "@/components/common/tab-bar";
@@ -90,7 +91,7 @@ export default function EnterpriseDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         leading={
           <Avatar size="lg">
@@ -110,7 +111,7 @@ export default function EnterpriseDetailPage() {
       />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabBar aria-label={t("enterpriseSections")} className="w-full justify-start">
+        <TabBar aria-label={t("enterpriseSections")}>
           <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
           <TabsTrigger value="profile">{t("enterpriseProfileTab")}</TabsTrigger>
           <TabsTrigger value="challenges">{t("challenges")}</TabsTrigger>
@@ -146,6 +147,6 @@ export default function EnterpriseDetailPage() {
           </TabsContent>
         )}
       </Tabs>
-    </div>
+    </PageLayout>
   );
 }

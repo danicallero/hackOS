@@ -16,6 +16,7 @@ import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -273,7 +274,7 @@ export default function AuditPage() {
   const rangeEnd = Math.min(offset + LIMIT, total);
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader title={t("auditLog")} />
 
       <div className="grid min-w-0 gap-3 sm:flex sm:flex-wrap sm:items-end">
@@ -406,6 +407,6 @@ export default function AuditPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageLayout>
   );
 }

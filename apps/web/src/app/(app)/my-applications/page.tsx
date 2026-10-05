@@ -17,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
@@ -89,19 +90,19 @@ export default function MyApplicationsPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6" aria-busy="true">
+      <PageLayout aria-busy="true">
         <PageHeader title={t("myApplications")} />
         <div role="status" className="space-y-4">
           <span className="sr-only">{t("loading")}</span>
           <div className="h-28 animate-pulse rounded-lg border bg-muted/50 motion-reduce:animate-none" />
           <div className="h-28 animate-pulse rounded-lg border bg-muted/50 motion-reduce:animate-none" />
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader title={t("myApplications")} />
 
       <SectionCard
@@ -175,6 +176,6 @@ export default function MyApplicationsPage() {
           ))
         )}
       </SectionCard>
-    </div>
+    </PageLayout>
   );
 }

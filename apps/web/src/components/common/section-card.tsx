@@ -18,6 +18,7 @@ export function SectionCard({
   footer,
   headerClassName,
   footerClassName,
+  stickyFooter = false,
   className,
   bodyClassName,
   variant = "surface",
@@ -44,6 +45,8 @@ export function SectionCard({
   headerClassName?: string;
   /** Additional classes for the footer row. */
   footerClassName?: string;
+  /** Keep the save owner reachable while a long page form scrolls. */
+  stickyFooter?: boolean;
   className?: string;
   /** className for the body wrapper specifically, separate from the section's own. */
   bodyClassName?: string;
@@ -89,6 +92,7 @@ export function SectionCard({
                   {state && <div className="shrink-0">{state}</div>}
                 </div>
               )}
+              {title === undefined && state && <div>{state}</div>}
               {description && (
                 <p className="text-muted-foreground wrap-break-word text-pretty text-sm">
                   {description}
@@ -99,7 +103,9 @@ export function SectionCard({
           {action && <ActionGroup className="sm:shrink-0">{action}</ActionGroup>}
         </div>
       )}
-      {variant === "surface" && <div className="border-border border-t" />}
+      {variant === "surface" && (hasHeaderText || Icon || leading || state || action) && (
+        <div className="border-border border-t" />
+      )}
       <div
         className={cn(
           "space-y-(--space-within-section)",
@@ -112,9 +118,11 @@ export function SectionCard({
       </div>
       {footer && (
         <ActionGroup
+          data-surface={variant}
           className={cn(
             "justify-end",
             variant === "surface" ? "px-4 pb-4 sm:px-5 sm:pb-5" : "pt-4",
+            stickyFooter && "form-action-footer",
             footerClassName,
           )}
         >

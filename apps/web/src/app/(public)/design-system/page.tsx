@@ -22,6 +22,8 @@ import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 
+import { SurfacesPreview } from "./surfaces-preview";
+
 const actions = [
   ["default", "designSystemPrimary"],
   ["secondary", "designSystemSecondary"],
@@ -62,6 +64,15 @@ export default function DesignSystemPage() {
           </ActionGroup>
         </header>
         <h1 className="type-page-title">{t("designSystemTitle")}</h1>
+        <SectionCard title={t("designSystemLiveActions")} variant="plain">
+          <p className="type-meta">{t("designSystemLiveActionsHelp")}</p>
+          <ActionGroup data-live-actions>
+            {actions.map(([variant, label]) => (
+              <PreviewDialog key={variant} variant={variant} label={label} />
+            ))}
+          </ActionGroup>
+        </SectionCard>
+        <SurfacesPreview />
         <SectionCard title={t("designSystemActions")} variant="plain">
           <p className="type-meta">{t("designSystemButtonStatesHelp")}</p>
           <div className="space-y-6">

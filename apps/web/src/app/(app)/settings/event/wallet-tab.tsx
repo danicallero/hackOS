@@ -20,6 +20,7 @@ import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useCallback, useEffect, useId, useState } from "react";
+import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -30,7 +31,6 @@ import { ApiError, api } from "@/lib/api";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig, PassBackField } from "@/lib/types";
-import { CategorySaveFooter } from "./category-save-footer";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
 
@@ -406,7 +406,8 @@ export function WalletTab({
       <SectionCard
         variant="plain"
         footerClassName="justify-start"
-        footer={<CategorySaveFooter pending={submitting} state={saveState} />}
+        stickyFooter
+        footer={<FormActions pending={submitting} state={saveState} />}
       >
         <div className="space-y-2">
           <p className="text-sm font-medium">{t("passFrontFieldsLabel")}</p>

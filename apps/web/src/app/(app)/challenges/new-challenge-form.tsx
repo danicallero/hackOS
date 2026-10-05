@@ -173,7 +173,7 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
         )}
 
         <Tabs value={step} onValueChange={(value) => setStep(value)}>
-          <TabBar aria-label={t("challengeCreationSteps")} className="w-full justify-start">
+          <TabBar aria-label={t("challengeCreationSteps")}>
             <TabsTrigger value="basics">{t("contentTabLabel")}</TabsTrigger>
             <TabsTrigger value="prizes">{t("prizesTabLabel")}</TabsTrigger>
             <TabsTrigger value="judging">{t("judgingTabLabel")}</TabsTrigger>
@@ -181,7 +181,7 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
           </TabBar>
 
           <TabsContent value="basics" className="space-y-6 pt-4">
-            <SectionCard icon={TrophyIcon} title={t("challengeBasicsTitle")}>
+            <SectionCard variant="plain" icon={TrophyIcon} title={t("challengeBasicsTitle")}>
               <div className="space-y-5">
                 <FormField
                   control={form.control}
@@ -227,10 +227,10 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
           </TabsContent>
 
           <TabsContent value="prizes" className="space-y-6 pt-4">
-            <SectionCard title={t("prizesLabel")}>
+            <SectionCard variant="plain" title={t("prizesLabel")}>
               <PrizeBuilder value={prizes} onChange={setPrizes} />
             </SectionCard>
-            <SectionCard title={t("devpostTagsLabel")}>
+            <SectionCard variant="plain" title={t("devpostTagsLabel")}>
               <DevpostTagsField
                 value={devpostTags}
                 onChange={setDevpostTags}
@@ -248,10 +248,10 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
           </TabsContent>
 
           <TabsContent value="judging" className="space-y-6 pt-4">
-            <SectionCard title={t("judgingPanel")}>
+            <SectionCard variant="plain" title={t("judgingPanel")}>
               <JudgingPanelBuilder value={questions} onChange={setQuestions} />
             </SectionCard>
-            <SectionCard title={t("judgingTimingTitle")}>
+            <SectionCard variant="plain" title={t("judgingTimingTitle")}>
               <div className="grid gap-5 sm:grid-cols-2">
                 <FormField
                   control={form.control}
@@ -284,15 +284,16 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
           </TabsContent>
 
           <TabsContent value="publish" className="pt-4">
-            <SectionCard title={t("publicationTitle")}>
+            <SectionCard variant="plain" title={t("publicationTitle")}>
               <p className="text-sm font-medium">{t("draftStateDesc")}</p>
               <p className="text-muted-foreground mt-4 text-sm">{t("challengeDraftSaveHint")}</p>
             </SectionCard>
           </TabsContent>
         </Tabs>
 
-        <div className="bg-background/95 sticky bottom-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 backdrop-blur-sm">
+        <div className="form-action-footer flex flex-wrap items-center justify-between gap-3">
           <SaveStatus
+            showIcon={!form.formState.isSubmitting}
             state={
               form.formState.isSubmitting
                 ? "saving"

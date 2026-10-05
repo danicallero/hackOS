@@ -1,3 +1,4 @@
+import { groupApplicationFields } from "@/lib/application-field-groups";
 /**
  * Constants shared across the application-detail route's files (H11-H14).
  */
@@ -101,22 +102,10 @@ export interface FieldGroup {
   fields: TemplateField[];
 }
 
-/**
- * Groups a flat field list under its sections, in section order, with any
- * fields whose `section_key` is unset or doesn't match a known section
- * leading as one ungrouped group — matching the builder's own layout, where
- * unassigned questions sit above the section blocks. Shared by the builder
- * preview and the applicant-facing form so both render sections identically.
- */
+/** Shared ordering for section members and standalone questions before/after sections. */
 export function groupFieldsBySections(
   fields: TemplateField[],
   sections: FormSection[],
 ): FieldGroup[] {
-  const knownKeys = new Set(sections.map((s) => s.key));
-  const ungrouped = fields.filter((f) => !f.section_key || !knownKeys.has(f.section_key));
-  const groups: FieldGroup[] = [{ section: null, fields: ungrouped }];
-  for (const section of sections) {
-    groups.push({ section, fields: fields.filter((f) => f.section_key === section.key) });
-  }
-  return groups.filter((g) => g.fields.length > 0);
+  return groupApplicationFields(fields, sections);
 }

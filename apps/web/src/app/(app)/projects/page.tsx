@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { PresentationStatus } from "@/components/projects/presentation-status";
@@ -186,7 +187,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         title={t("projects")}
         actions={
@@ -266,6 +267,6 @@ export default function ProjectsPage() {
           ) : undefined,
         }}
       />
-    </div>
+    </PageLayout>
   );
 }

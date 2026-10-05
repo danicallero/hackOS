@@ -3,6 +3,7 @@
 import { AlertDialog } from "radix-ui";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { overlayVariants } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 
 export function AlertModal({
@@ -45,6 +46,10 @@ export function AlertModal({
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const isOpen = open ?? uncontrolledOpen;
   const setOpen = onOpenChange ?? setUncontrolledOpen;
+  function changeOpen(next: boolean) {
+    if (!next && pending) return;
+    setOpen(next);
+  }
 
   const confirmButton = (
     <AlertDialog.Action asChild>
@@ -63,18 +68,24 @@ export function AlertModal({
   );
 
   return (
-    <AlertDialog.Root open={isOpen} onOpenChange={setOpen}>
+    <AlertDialog.Root open={isOpen} onOpenChange={changeOpen}>
       {trigger && <AlertDialog.Trigger asChild>{trigger}</AlertDialog.Trigger>}
       <AlertDialog.Portal>
-        <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+        <AlertDialog.Overlay
+          className="fixed inset-0 z-50 bg-black/50"
+          onPointerDown={(event) => {
+            if (event.button === 0 && event.target === event.currentTarget) changeOpen(false);
+          }}
+        />
         <AlertDialog.Content
           data-slot="alert-dialog-content"
           className={cn(
-            "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border bg-background p-6 shadow-lg outline-none sm:max-w-lg",
+            overlayVariants({ elevation: "modal" }),
+            "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 max-h-[calc(100dvh-2rem)] gap-4 overflow-y-auto border-border/60 p-6 sm:max-w-(--modal-width-md)",
           )}
         >
           <div className="space-y-2">
-            <AlertDialog.Title className="text-balance text-lg font-semibold">
+            <AlertDialog.Title className="type-section-title text-balance">
               {title}
             </AlertDialog.Title>
             <AlertDialog.Description className="text-muted-foreground text-pretty text-sm">

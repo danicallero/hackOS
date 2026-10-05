@@ -12,6 +12,7 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useState } from "
 import { EmptyState } from "@/components/common/empty-state";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
@@ -114,7 +115,7 @@ export default function MyProjectPage() {
     );
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         title={t("myProjects")}
         primaryAction={canCreate ? <CreateWorkGroup onCreated={load} /> : undefined}
@@ -149,7 +150,7 @@ export default function MyProjectPage() {
             ))}
         </div>
       )}
-    </div>
+    </PageLayout>
   );
 }
 

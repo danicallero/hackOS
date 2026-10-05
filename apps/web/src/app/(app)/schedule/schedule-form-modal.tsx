@@ -302,6 +302,7 @@ export function ScheduleFormModal({
 
   return (
     <SidePanelEditor
+      size="wide"
       open={open}
       onOpenChange={onOpenChange}
       title={title}

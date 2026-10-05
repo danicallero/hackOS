@@ -1,0 +1,39 @@
+/* Shared page and overlay geometry. Colors follow the active edition/theme. */
+:root {
+  --page-width-content: 80rem;
+  --page-width-reading: 56rem;
+  --page-section-gap: 1.5rem;
+  --editor-width: 32rem;
+  --editor-width-wide: 42rem;
+  --editor-width-expanded: 56rem;
+  --modal-width-sm: 24rem;
+  --modal-width-md: 32rem;
+  --modal-width-lg: 42rem;
+  --modal-width-xl: 56rem;
+}
+
+.form-action-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  min-height: 3.5rem;
+  border-top: 1px solid var(--border);
+  background: var(--hackos-shell);
+  padding-block: 1rem calc(1rem + env(safe-area-inset-bottom));
+  /* A focused last field must remain clear of the persistent action row. */
+  scroll-margin-block-end: 6rem;
+}
+
+[data-slot="section"]:has(> .form-action-footer) {
+  overflow: visible;
+}
+
+[data-slot="section"] > .form-action-footer[data-surface="surface"] {
+  background: var(--card);
+  border-end-start-radius: var(--hackos-radius-surface);
+  border-end-end-radius: var(--hackos-radius-surface);
+}
+
+html {
+  scroll-padding-block-end: 6rem;
+}

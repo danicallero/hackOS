@@ -5,8 +5,6 @@ import { ArrowDownIcon } from "@phosphor-icons/react/dist/csr/ArrowDown";
 import { ArrowsDownUpIcon } from "@phosphor-icons/react/dist/csr/ArrowsDownUp";
 import { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
-import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
-import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef } from "react";
@@ -14,10 +12,11 @@ import { ActionGroup } from "@/components/common/action-group";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
+import { PageToolbar } from "@/components/common/page-toolbar";
+import { SearchField } from "@/components/common/search-field";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -249,44 +248,23 @@ export function DataTable<T>({
   }
 
   return (
-    <Card className={cn("gap-0 overflow-hidden py-0", className)}>
+    <div className={cn("min-w-0 space-y-4", className)}>
       {showToolbar && (
-        <div className="flex flex-wrap items-center gap-2 p-4">
+        <PageToolbar label={t("pageDataControls")}>
           {searchable && (
             <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
-              <div className="relative w-full max-w-xs">
-                <label htmlFor={searchId} className="sr-only">
-                  {searchLabel ?? t("searchTable")}
-                </label>
-                <MagnifyingGlassIcon
-                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-                  aria-hidden="true"
-                />
-                <Input
-                  ref={searchInputRef}
-                  id={searchId}
-                  type="search"
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setPage(0);
-                  }}
-                  placeholder={searchPlaceholder ?? t("filterPlaceholder")}
-                  className="pr-9 pl-9"
-                />
-                {query && (
-                  <IconButton
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="absolute top-1/2 right-0.5 -translate-y-1/2"
-                    onClick={clearSearch}
-                    label={t("clearSearch")}
-                  >
-                    <XIcon className="size-4" aria-hidden="true" />
-                  </IconButton>
-                )}
-              </div>
+              <SearchField
+                inputRef={searchInputRef}
+                id={searchId}
+                label={searchLabel ?? t("searchTable")}
+                placeholder={searchPlaceholder ?? t("filterPlaceholder")}
+                value={query}
+                onValueChange={(value) => {
+                  setQuery(value);
+                  setPage(0);
+                }}
+                className="flex-1"
+              />
               <span
                 role="status"
                 aria-live="polite"
@@ -297,246 +275,256 @@ export function DataTable<T>({
             </div>
           )}
           {toolbar && <ActionGroup className="ml-auto">{toolbar}</ActionGroup>}
-        </div>
+        </PageToolbar>
       )}
-      {mutationError && (
-        <ContextualError
-          message={mutationError.message}
-          onRetry={mutationError.onRetry}
-          className="m-4"
-        />
-      )}
-      <div className={cn("overflow-x-auto", renderMobileRow && "hidden md:block")}>
-        {isEmpty ? (
-          <div className="min-w-0">{renderEmptyState()}</div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                {selectable && (
-                  <TableHead className="w-10">
-                    <Checkbox
-                      checked={allSelected}
-                      onCheckedChange={toggleAll}
-                      aria-label={t("selectAll")}
-                    />
-                  </TableHead>
-                )}
-                {columns.map((col) => (
-                  <TableHead
-                    key={col.id}
-                    aria-sort={
-                      sort?.id === col.id
-                        ? sort.dir === "asc"
-                          ? "ascending"
-                          : "descending"
-                        : col.sortValue
-                          ? "none"
-                          : undefined
-                    }
-                    className={cn(alignClass[col.align ?? "left"], col.width, col.headerClassName)}
-                  >
-                    {col.sortValue ? (
-                      <button
-                        type="button"
-                        onClick={() => toggleSort(col.id)}
-                        className="button-interaction text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
-                        aria-label={t("sortBy", {
-                          column:
-                            col.sortLabel ?? (typeof col.header === "string" ? col.header : col.id),
-                        })}
-                      >
-                        {col.header}
-                        {sort?.id === col.id ? (
-                          sort.dir === "asc" ? (
-                            <ArrowUpIcon aria-hidden="true" className="size-3.5" />
-                          ) : (
-                            <ArrowDownIcon aria-hidden="true" className="size-3.5" />
-                          )
-                        ) : (
-                          <ArrowsDownUpIcon aria-hidden="true" className="size-3.5 opacity-50" />
-                        )}
-                      </button>
-                    ) : (
-                      col.header
-                    )}
-                  </TableHead>
-                ))}
-                {rowInteractionCol > 0 && (
-                  <TableHead className="w-12">
-                    <span className="sr-only">{t("openRow")}</span>
-                  </TableHead>
-                )}
-                {rowActions && <TableHead className="w-12" />}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {error ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={colCount} className="p-4">
-                    <ContextualError message={error.message} onRetry={error.onRetry} />
-                  </TableCell>
-                </TableRow>
-              ) : loading ? (
-                Array.from({ length: pageSize ?? 5 }, (_, i) => `skeleton-row-${i}`).map(
-                  (rowKey) => (
-                    <TableRow key={rowKey} className="hover:bg-transparent">
-                      {Array.from({ length: colCount }, (_, j) => `${rowKey}-cell-${j}`).map(
-                        (cellKey) => (
-                          <TableCell key={cellKey}>
-                            <Skeleton className="h-4 w-full max-w-32" />
-                          </TableCell>
-                        ),
-                      )}
-                    </TableRow>
-                  ),
-                )
-              ) : (
-                rows.map((row) => {
-                  const rowId = getRowId(row);
-                  const checked = selectable && selectedIds?.has(rowId);
-                  const rowHref = getRowHref?.(row);
-                  return (
-                    <TableRow
-                      key={rowId}
-                      className={rowInteractionCol > 0 ? "cursor-pointer" : undefined}
-                      onClick={
-                        rowInteractionCol > 0
-                          ? () => (rowHref ? router.push(rowHref) : onRowClick?.(row))
-                          : undefined
-                      }
-                    >
-                      {selectable && (
-                        <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={() => toggleOne(rowId)}
-                            aria-label={t("selectRow")}
-                          />
-                        </TableCell>
-                      )}
-                      {columns.map((col) => (
-                        <TableCell
-                          key={col.id}
-                          className={cn(alignClass[col.align ?? "left"], col.className)}
-                        >
-                          {col.cell(row)}
-                        </TableCell>
-                      ))}
-                      {rowInteractionCol > 0 && (
-                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          {getRowHref ? (
-                            <IconButton
-                              variant="ghost"
-                              size="icon-lg"
-                              className="md:size-[var(--control-height-compact)]"
-                              asChild
-                              label={getRowLabel?.(row) ?? rowId}
-                            >
-                              <Link href={getRowHref(row)} aria-label={getRowLabel?.(row) ?? rowId}>
-                                <CaretRightIcon className="size-4" aria-hidden="true" />
-                              </Link>
-                            </IconButton>
-                          ) : (
-                            <IconButton
-                              type="button"
-                              variant="ghost"
-                              size="icon-lg"
-                              className="md:size-[var(--control-height-compact)]"
-                              onClick={() => onRowClick?.(row)}
-                              label={getRowLabel?.(row) ?? rowId}
-                            >
-                              <CaretRightIcon className="size-4" aria-hidden="true" />
-                            </IconButton>
-                          )}
-                        </TableCell>
-                      )}
-                      {rowActions && (
-                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          {rowActions(row)}
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+      <Card className="gap-0 overflow-hidden py-0">
+        {mutationError && (
+          <ContextualError
+            message={mutationError.message}
+            onRetry={mutationError.onRetry}
+            className="m-4"
+          />
         )}
-      </div>
-      {renderMobileRow && (
-        <div className="md:hidden">
-          {error ? (
-            <div className="p-4">
-              <ContextualError message={error.message} onRetry={error.onRetry} />
-            </div>
-          ) : loading ? (
-            <div className="space-y-3 p-4">
-              {Array.from(
-                { length: Math.min(pageSize ?? 5, 5) },
-                (_, i) => `mobile-skeleton-${i}`,
-              ).map((rowKey) => (
-                <div key={rowKey} className="space-y-2 rounded-md border p-3">
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-3 w-full max-w-56" />
-                  <Skeleton className="h-3 w-2/3" />
-                </div>
-              ))}
-            </div>
-          ) : rows.length === 0 ? (
-            <div className="p-4">{renderEmptyState()}</div>
+        <div className={cn("overflow-x-auto", renderMobileRow && "hidden md:block")}>
+          {isEmpty ? (
+            <div className="min-w-0">{renderEmptyState()}</div>
           ) : (
-            <ul className="divide-border divide-y">
-              {rows.map((row) => (
-                <li key={getRowId(row)}>{renderMobileRow(row)}</li>
-              ))}
-            </ul>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  {selectable && (
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allSelected}
+                        onCheckedChange={toggleAll}
+                        aria-label={t("selectAll")}
+                      />
+                    </TableHead>
+                  )}
+                  {columns.map((col) => (
+                    <TableHead
+                      key={col.id}
+                      aria-sort={
+                        sort?.id === col.id
+                          ? sort.dir === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : col.sortValue
+                            ? "none"
+                            : undefined
+                      }
+                      className={cn(
+                        alignClass[col.align ?? "left"],
+                        col.width,
+                        col.headerClassName,
+                      )}
+                    >
+                      {col.sortValue ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(col.id)}
+                          className="button-interaction text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
+                          aria-label={t("sortBy", {
+                            column:
+                              col.sortLabel ??
+                              (typeof col.header === "string" ? col.header : col.id),
+                          })}
+                        >
+                          {col.header}
+                          {sort?.id === col.id ? (
+                            sort.dir === "asc" ? (
+                              <ArrowUpIcon aria-hidden="true" className="size-3.5" />
+                            ) : (
+                              <ArrowDownIcon aria-hidden="true" className="size-3.5" />
+                            )
+                          ) : (
+                            <ArrowsDownUpIcon aria-hidden="true" className="size-3.5 opacity-50" />
+                          )}
+                        </button>
+                      ) : (
+                        col.header
+                      )}
+                    </TableHead>
+                  ))}
+                  {rowInteractionCol > 0 && (
+                    <TableHead className="w-12">
+                      <span className="sr-only">{t("openRow")}</span>
+                    </TableHead>
+                  )}
+                  {rowActions && <TableHead className="w-12" />}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {error ? (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={colCount} className="p-4">
+                      <ContextualError message={error.message} onRetry={error.onRetry} />
+                    </TableCell>
+                  </TableRow>
+                ) : loading ? (
+                  Array.from({ length: pageSize ?? 5 }, (_, i) => `skeleton-row-${i}`).map(
+                    (rowKey) => (
+                      <TableRow key={rowKey} className="hover:bg-transparent">
+                        {Array.from({ length: colCount }, (_, j) => `${rowKey}-cell-${j}`).map(
+                          (cellKey) => (
+                            <TableCell key={cellKey}>
+                              <Skeleton className="h-4 w-full max-w-32" />
+                            </TableCell>
+                          ),
+                        )}
+                      </TableRow>
+                    ),
+                  )
+                ) : (
+                  rows.map((row) => {
+                    const rowId = getRowId(row);
+                    const checked = selectable && selectedIds?.has(rowId);
+                    const rowHref = getRowHref?.(row);
+                    return (
+                      <TableRow
+                        key={rowId}
+                        className={rowInteractionCol > 0 ? "cursor-pointer" : undefined}
+                        onClick={
+                          rowInteractionCol > 0
+                            ? () => (rowHref ? router.push(rowHref) : onRowClick?.(row))
+                            : undefined
+                        }
+                      >
+                        {selectable && (
+                          <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={() => toggleOne(rowId)}
+                              aria-label={t("selectRow")}
+                            />
+                          </TableCell>
+                        )}
+                        {columns.map((col) => (
+                          <TableCell
+                            key={col.id}
+                            className={cn(alignClass[col.align ?? "left"], col.className)}
+                          >
+                            {col.cell(row)}
+                          </TableCell>
+                        ))}
+                        {rowInteractionCol > 0 && (
+                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                            {getRowHref ? (
+                              <IconButton
+                                variant="ghost"
+                                size="icon-lg"
+                                className="md:size-[var(--control-height-compact)]"
+                                asChild
+                                label={getRowLabel?.(row) ?? rowId}
+                              >
+                                <Link
+                                  href={getRowHref(row)}
+                                  aria-label={getRowLabel?.(row) ?? rowId}
+                                >
+                                  <CaretRightIcon className="size-4" aria-hidden="true" />
+                                </Link>
+                              </IconButton>
+                            ) : (
+                              <IconButton
+                                type="button"
+                                variant="ghost"
+                                size="icon-lg"
+                                className="md:size-[var(--control-height-compact)]"
+                                onClick={() => onRowClick?.(row)}
+                                label={getRowLabel?.(row) ?? rowId}
+                              >
+                                <CaretRightIcon className="size-4" aria-hidden="true" />
+                              </IconButton>
+                            )}
+                          </TableCell>
+                        )}
+                        {rowActions && (
+                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                            {rowActions(row)}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
           )}
         </div>
-      )}
-      {pageSize && sorted.length > pageSize && (
-        <nav
-          className="flex items-center justify-between gap-2 border-t p-3"
-          aria-label={t("tablePagination")}
-        >
-          <span
-            role="status"
-            aria-live="polite"
-            className="text-muted-foreground text-xs tabular-nums"
-          >
-            {t("paginationSummary", {
-              start: current * pageSize + 1,
-              end: Math.min((current + 1) * pageSize, sorted.length),
-              total: sorted.length,
-              page: current + 1,
-              pages: pageCount,
-            })}
-          </span>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={current === 0}
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-            >
-              {t("previous")}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={current >= pageCount - 1}
-              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-            >
-              {t("next")}
-            </Button>
+        {renderMobileRow && (
+          <div className="md:hidden">
+            {error ? (
+              <div className="p-4">
+                <ContextualError message={error.message} onRetry={error.onRetry} />
+              </div>
+            ) : loading ? (
+              <div className="space-y-3 p-4">
+                {Array.from(
+                  { length: Math.min(pageSize ?? 5, 5) },
+                  (_, i) => `mobile-skeleton-${i}`,
+                ).map((rowKey) => (
+                  <div key={rowKey} className="space-y-2 rounded-md border p-3">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-full max-w-56" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
+                ))}
+              </div>
+            ) : rows.length === 0 ? (
+              <div className="p-4">{renderEmptyState()}</div>
+            ) : (
+              <ul className="divide-border divide-y">
+                {rows.map((row) => (
+                  <li key={getRowId(row)}>{renderMobileRow(row)}</li>
+                ))}
+              </ul>
+            )}
           </div>
-        </nav>
-      )}
-      {selectable && (
-        <p role="status" aria-live="polite" className="sr-only">
-          {t("selectionCount", { count: selectedCount })}
-        </p>
-      )}
-    </Card>
+        )}
+        {pageSize && sorted.length > pageSize && (
+          <nav
+            className="flex items-center justify-between gap-2 border-t p-3"
+            aria-label={t("tablePagination")}
+          >
+            <span
+              role="status"
+              aria-live="polite"
+              className="text-muted-foreground text-xs tabular-nums"
+            >
+              {t("paginationSummary", {
+                start: current * pageSize + 1,
+                end: Math.min((current + 1) * pageSize, sorted.length),
+                total: sorted.length,
+                page: current + 1,
+                pages: pageCount,
+              })}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={current === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                {t("previous")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={current >= pageCount - 1}
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              >
+                {t("next")}
+              </Button>
+            </div>
+          </nav>
+        )}
+        {selectable && (
+          <p role="status" aria-live="polite" className="sr-only">
+            {t("selectionCount", { count: selectedCount })}
+          </p>
+        )}
+      </Card>
+    </div>
   );
 }

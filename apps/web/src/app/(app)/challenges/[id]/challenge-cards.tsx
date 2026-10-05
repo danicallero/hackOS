@@ -250,7 +250,7 @@ export function EditCard({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <Tabs value={tab} onValueChange={setTab}>
-          <TabBar className="w-full max-w-2xl">
+          <TabBar>
             <TabsTrigger value="content">{t("contentTabLabel")}</TabsTrigger>
             <TabsTrigger value="prizes">{t("prizesTabLabel")}</TabsTrigger>
             <TabsTrigger value="judging">{t("judgingTabLabel")}</TabsTrigger>
@@ -260,7 +260,7 @@ export function EditCard({
           </TabBar>
 
           <TabsContent value="content" className="pt-4">
-            <SectionCard icon={TrophyIcon} title={t("challengeLabel")}>
+            <SectionCard variant="plain" icon={TrophyIcon} title={t("challengeLabel")}>
               <fieldset disabled={generalDisabled} className="space-y-5 disabled:opacity-60">
                 {generalDisabled && (
                   <p className="text-muted-foreground text-sm">{t("publicContentFrozenDesc")}</p>
@@ -304,13 +304,13 @@ export function EditCard({
           </TabsContent>
 
           <TabsContent value="prizes" className="space-y-6 pt-4">
-            <SectionCard title={t("prizesLabel")}>
+            <SectionCard variant="plain" title={t("prizesLabel")}>
               <fieldset disabled={generalDisabled} className="disabled:opacity-60">
                 <PrizeBuilder value={prizes} onChange={setPrizes} />
               </fieldset>
             </SectionCard>
             {canMapPrizes && (
-              <SectionCard title={t("devpostTagsLabel")}>
+              <SectionCard variant="plain" title={t("devpostTagsLabel")}>
                 <DevpostTagsField
                   value={devpostTags}
                   onChange={setDevpostTags}
@@ -327,7 +327,7 @@ export function EditCard({
               </SectionCard>
             )}
             {canMapPrizes && (
-              <SectionCard title={t("importedDevpostPrizesTitle")}>
+              <SectionCard variant="plain" title={t("importedDevpostPrizesTitle")}>
                 <div className="space-y-2">
                   {devpostPrizes.length === 0 ? (
                     <p className="text-muted-foreground text-sm">{t("noImportedPrizes")}</p>
@@ -361,10 +361,10 @@ export function EditCard({
           </TabsContent>
 
           <TabsContent value="judging" className="space-y-6 pt-4">
-            <SectionCard title={t("judgingPanel")}>
+            <SectionCard variant="plain" title={t("judgingPanel")}>
               <JudgingPanelBuilder value={questions} onChange={setQuestions} />
             </SectionCard>
-            <SectionCard title={t("judgingTimingTitle")}>
+            <SectionCard variant="plain" title={t("judgingTimingTitle")}>
               <div className="grid gap-5 sm:grid-cols-2">
                 <FormField
                   control={form.control}
@@ -406,7 +406,7 @@ export function EditCard({
           </TabsContent>
 
           <TabsContent value="publish" className="space-y-6 pt-4">
-            <SectionCard title={t("publicationTitle")}>
+            <SectionCard variant="plain" title={t("publicationTitle")}>
               <div className="space-y-5">
                 <PublicationControls
                   id="challenge-publication"
@@ -445,7 +445,7 @@ export function EditCard({
               </div>
             </SectionCard>
             {canAdmin && (
-              <SectionCard title={t("dangerZoneTitle")}>
+              <SectionCard variant="plain" title={t("dangerZoneTitle")}>
                 <div className="flex items-center justify-between gap-4">
                   <p className="text-muted-foreground text-sm">{t("deleteChallengeDesc")}</p>
                   <AlertModal
@@ -484,14 +484,19 @@ export function EditCard({
           </TabsContent>
 
           <TabsContent value="history" className="pt-4">
-            <SectionCard icon={ClockCounterClockwiseIcon} title={t("versionHistoryTitle")}>
+            <SectionCard
+              variant="plain"
+              icon={ClockCounterClockwiseIcon}
+              title={t("versionHistoryTitle")}
+            >
               <VersionHistory challengeId={challenge.id} />
             </SectionCard>
           </TabsContent>
         </Tabs>
 
-        <div className="flex items-center justify-end gap-3">
+        <div className="form-action-footer flex flex-wrap items-center justify-end gap-3">
           <SaveStatus
+            showIcon={!form.formState.isSubmitting}
             state={
               form.formState.isSubmitting
                 ? "saving"
@@ -551,7 +556,11 @@ function BulkEnrollmentCard({ challengeId }: { challengeId: number }) {
   const confirmingRemove = confirming === "remove";
 
   return (
-    <SectionCard title={t("bulkEnrollmentTitle")} description={t("bulkEnrollmentDesc")}>
+    <SectionCard
+      variant="plain"
+      title={t("bulkEnrollmentTitle")}
+      description={t("bulkEnrollmentDesc")}
+    >
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
@@ -695,7 +704,12 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
   }
 
   return (
-    <SectionCard title={t("winnersTitle")} description={t("winnersDesc")} icon={TrophyIcon}>
+    <SectionCard
+      variant="plain"
+      title={t("winnersTitle")}
+      description={t("winnersDesc")}
+      icon={TrophyIcon}
+    >
       {loading ? (
         <Spinner className="size-5" />
       ) : (

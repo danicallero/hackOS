@@ -107,7 +107,12 @@ export function ReadOnlyOverview({
   const { t } = useLocale();
   const lang = (LANGS.includes(user.language as Language) ? user.language : "es") as Language;
   return (
-    <SectionCard icon={UserIcon} title={t("profileDetails")} bodyClassName="space-y-4">
+    <SectionCard
+      variant="plain"
+      icon={UserIcon}
+      title={t("profileDetails")}
+      bodyClassName="space-y-4"
+    >
       <dl className="space-y-4">
         <Field
           label={t("secondaryEmailLabel")}
@@ -271,6 +276,7 @@ export function StaffEditForm({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <SectionCard
+          variant="plain"
           icon={UserIcon}
           title={t("profileDetails")}
           footer={

@@ -515,3 +515,47 @@ regression check for the corrected state distinction when appropriate.
 
 ### Exceptions
 Controls deliberately lacking hover behavior, including touch-only surfaces.
+
+## [R017] Validate page patterns with representative compositions
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-10-05
+
+### Trigger
+Building or applying a shared page/surface pattern across web routes.
+
+### Mistake
+A generic reading-width wrapper constrained table tabs; repeated fake fields
+hid missing hierarchy in the playground. Save status was placed after Save
+and duplicated its loading spinner.
+
+### Lesson
+Choose width by the content being shown, not by whether the route is called a
+detail page. Shared patterns need representative content and rendered review.
+
+### Action
+Use the audited Users layout as the dense-list reference. Keep mixed record
+pages wide enough for their table tabs, constrain only text/form groups, and
+verify the last column. Preview meaningful groups instead of filler fields.
+Put save state at the leading edge, secondary actions then Save at the trailing
+edge, and show only one pending spinner per save owner. Panel widths follow
+content needs; multi-domain records remain full pages. Adapt mobile records
+to readable rows and group related actions rather than replacing several
+different actions with indistinguishable icons. Preserve an established viewer
+and its empty state when improving layout; do not remove it because its data
+is empty. Drag previews retain source dimensions and adjacent panes show the
+space they will occupy before the drop is committed. Docking shows a single
+placeholder at the actual active destination; hit-test areas stay invisible.
+Inspect intermediate pointer positions, not only the final edge/drop state. Builders must show section
+ownership, question boundaries and an explicit drop destination.
+
+### Validation
+Inspect actual desktop/narrow screenshots before claiming visual quality.
+Check table geometry, useful field hierarchy, action order, pending feedback
+and panel widths. Recheck each route after a shared pattern changes.
+
+### Exceptions
+Fixed operational workspaces and intentionally compact forms keep their
+established geometry when it still supports their content and interaction.

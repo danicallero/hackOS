@@ -3,6 +3,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
 import { ActivityExportPanel } from "@/components/exports/activity-export-panel";
 import { ActivityScannerCard } from "@/components/logistics/activity-scanner";
@@ -32,13 +33,13 @@ export default function ActivitiesPage() {
   }
 
   return (
-    <div className="space-y-6" data-wide>
+    <PageLayout>
       <PageHeader
         title={t("mealsAndActivities")}
         secondaryActions={canExport ? <ActivityExportPanel /> : undefined}
       />
       <Tabs value={tab} onValueChange={(value) => setTab(value)}>
-        <TabBar aria-label={t("mealsAndActivities")} className="w-full justify-start">
+        <TabBar aria-label={t("mealsAndActivities")}>
           <TabsTrigger value="activity">{t("activities")}</TabsTrigger>
           <TabsTrigger value="meal">{t("meals")}</TabsTrigger>
         </TabBar>
@@ -50,6 +51,6 @@ export default function ActivitiesPage() {
         ) : (
           <ActivityScannerCard category="meal" />
         ))}
-    </div>
+    </PageLayout>
   );
 }

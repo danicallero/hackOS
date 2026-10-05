@@ -72,9 +72,10 @@ layer: API reads remain the authoritative Postgres projection.
 ## Toasts
 
 Use `@/lib/toast` rather than importing Sileo directly. Toasts live in the
-top-right and are compact by default; a `description` or `action` expands only
-when the user hovers or focuses it, keeping feedback from covering the current
-workspace. Any title that exceeds the available header width (measured with the
+top-right and are compact by default; nonessential supplementary `description`
+content expands on hover/focus. Action toasts open expanded, with enough time to
+discover and use the action on touch and keyboard too. Any title that exceeds
+the available header width (measured with the
 app font and current viewport) becomes a description beneath a short localized
 action/event title defined at the call site. It expands on arrival and stays open
 while temporary feedback is visible, with eight seconds to read it. Existing descriptions and actions
@@ -117,6 +118,13 @@ toast arrives.
 Use an action only when it has a real consequence (for example, Undo). Keep
 critical failures inline with a retry path; a toast should confirm or guide,
 not be the only error surface.
+
+Application review's desktop file viewer uses `review-file-docking` and
+`review-file-viewer` over the same dnd-kit sensors and shared `DragHandle`,
+drop animation and reduced-motion hook used by Statistics. The dragged overlay
+preserves the panel's measured dimensions; dock preview moves the adjacent
+modal before drop, cancellation restores placement, and keyboard docking keeps
+focus within the review. Empty file fields still retain their viewer slots.
 
 ## Collaborative judging saves (H36)
 
@@ -241,10 +249,35 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
 `EntityCombobox`, `ActionGroup`, `IconButton`.
 
+`PageLayout` is the authenticated page canvas: `content` (1280 px), `reading`
+(896 px) for focused form/text workflows, and `workspace` only for genuinely
+wide operational data. Users, application management and user/enterprise detail
+use the 1280 px content canvas. Event settings and compact Libraries catalogues
+use the 896 px reading canvas. A full route does not
+imply unlimited width. Mixed record pages keep their table tabs in this canvas;
+constrain only their text/form blocks when needed.
+Use one `PageHeader`, then optional `TabBar`, `PageToolbar`, and content.
+`ListToolbar` provides the Users composition: a broad `SearchField`, shared
+`FilterMenu`, trailing actions and a separate active-chip row. `SearchField` owns
+its label/icon/clear control; pages keep filtering and query semantics.
+`PageToolbar` is a labelled region for specialized search/filter/view controls.
+`TabBar`
+uses the same segmented style everywhere: `width="full"` stretches it and
+`width="content"` fits the tabs beside other controls. Preserve the specialized fixed judging
+workspace and
+role tree/editor layout.
+
+Long page forms use `SectionCard stickyFooter` and `FormActions`, with one
+submit owner and `SaveStatus` for the actual request/dirty state. Panel footers
+are fixed outside their scroll body; short forms remain in normal flow.
+Shared geometry is in `styles/surfaces.css`; the full decisions and exceptions
+are in `docs/DESIGN.md` §4b, with interactive examples in `/design-system`.
+
 `SectionCard variant="plain"` keeps the shared section heading/actions without
 card chrome. Use it when page spacing and columns explain the structure; reserve
 the default bordered surface for genuinely bounded groups. Event settings and My profile use open sections within a constrained reading
-width, with save actions at the start of each section footer. Event settings omit
+width, with save status at the leading edge and secondary actions then Save
+at the trailing edge of the owning form footer. Event settings omit
 headings already supplied by the active tab, pair save status with the submit
 action, and use the shared Sileo toast after saving. Inbox preferences
 use category rows with channel menus; mandatory queue delivery stays read-only.

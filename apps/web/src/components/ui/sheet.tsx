@@ -74,9 +74,9 @@ function SheetContent({
         className={cn(
           "fixed z-50 flex flex-col gap-4 border-border/60 bg-popover/96 shadow-overlay transition ease-out data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:duration-300 motion-reduce:transition-none",
           side === "right" &&
-            "inset-y-0 right-0 h-full w-[min(32rem,calc(100vw-1rem))] border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:inset-y-3 sm:right-3 sm:h-[calc(100dvh-1.5rem)] sm:rounded-overlay sm:border",
+            "inset-y-0 right-0 h-dvh w-full sm:w-[min(var(--editor-width),calc(100vw-1.5rem))] border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:inset-y-3 sm:right-3 sm:h-[calc(100dvh-1.5rem)] sm:rounded-overlay sm:border",
           side === "left" &&
-            "inset-y-0 left-0 h-full w-[min(32rem,calc(100vw-1rem))] border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:inset-y-3 sm:left-3 sm:h-[calc(100dvh-1.5rem)] sm:rounded-overlay sm:border",
+            "inset-y-0 left-0 h-dvh w-full sm:w-[min(var(--editor-width),calc(100vw-1.5rem))] border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:inset-y-3 sm:left-3 sm:h-[calc(100dvh-1.5rem)] sm:rounded-overlay sm:border",
           side === "top" &&
             "inset-x-0 top-0 h-auto border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
           side === "bottom" &&

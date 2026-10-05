@@ -18,6 +18,7 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { StatusBadge } from "@/components/common/status-badge";
 import type { UserOption } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
@@ -214,7 +215,7 @@ export default function AnnouncementsPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         title={t("announcements")}
         primaryAction={
@@ -326,6 +327,6 @@ export default function AnnouncementsPage() {
           }}
         />
       )}
-    </div>
+    </PageLayout>
   );
 }

@@ -32,7 +32,7 @@ export function StatisticsToolbar({
 
   return (
     <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-      <TabBar aria-label={t("eventPhaseLabel")} className="w-fit">
+      <TabBar width="content" aria-label={t("eventPhaseLabel")}>
         <TabsTrigger value="before">{t("phaseBefore")}</TabsTrigger>
         {canGeneralStats && <TabsTrigger value="during">{t("phaseDuring")}</TabsTrigger>}
         {canGeneralStats && <TabsTrigger value="after">{t("phaseAfter")}</TabsTrigger>}

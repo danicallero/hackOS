@@ -22,6 +22,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -439,7 +440,7 @@ export default function MyApplicationDetailPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6" aria-busy="true">
+      <PageLayout aria-busy="true" width="reading">
         <PageHeader title={t("tabApplication")} />
         <div role="status" className="space-y-4">
           <span className="sr-only">{t("loading")}</span>
@@ -447,7 +448,7 @@ export default function MyApplicationDetailPage() {
           <div className="h-28 animate-pulse rounded-lg border bg-muted/50 motion-reduce:animate-none" />
           <div className="h-52 animate-pulse rounded-lg border bg-muted/50 motion-reduce:animate-none" />
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
@@ -456,7 +457,7 @@ export default function MyApplicationDetailPage() {
   // Neither an open form nor an existing response — nothing to show.
   if (!form && !response) {
     return (
-      <div className="space-y-6">
+      <PageLayout width="reading">
         <PageHeader title={t("tabApplication")} />
         {loadError ? (
           <ContextualError message={loadError} onRetry={retry} />
@@ -478,7 +479,7 @@ export default function MyApplicationDetailPage() {
             />
           </Section>
         )}
-      </div>
+      </PageLayout>
     );
   }
 
@@ -492,7 +493,7 @@ export default function MyApplicationDetailPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <PageLayout width="reading">
       <PageHeader
         title={title}
         description={description}
@@ -528,7 +529,11 @@ export default function MyApplicationDetailPage() {
         footer={
           editable ? (
             <div className="flex w-full flex-wrap items-center gap-2">
-              <SaveStatus state={saving || submitting ? "saving" : saveState} className="mr-auto" />
+              <SaveStatus
+                state={saving || submitting ? "saving" : saveState}
+                showIcon={!saving && !submitting}
+                className="mr-auto"
+              />
               <Button
                 type="button"
                 variant="outline"
@@ -664,6 +669,6 @@ export default function MyApplicationDetailPage() {
           </p>
         </div>
       </Modal>
-    </div>
+    </PageLayout>
   );
 }

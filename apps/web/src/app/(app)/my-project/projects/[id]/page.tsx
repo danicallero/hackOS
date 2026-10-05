@@ -8,6 +8,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
@@ -87,7 +88,7 @@ export default function MyProjectDetailPage() {
   if (loadError) return <ContextualError message={loadError} onRetry={load} />;
   if (!project) return <EmptyState icon={FolderSimpleIcon} title={t("projectNotFoundTitle")} />;
   return (
-    <div className="space-y-6">
+    <PageLayout width="reading">
       <PageHeader
         title={project.name}
         meta={
@@ -218,7 +219,7 @@ export default function MyProjectDetailPage() {
           {changeError && <ContextualError message={changeError} />}
         </SectionCard>
       </div>
-    </div>
+    </PageLayout>
   );
 }
 

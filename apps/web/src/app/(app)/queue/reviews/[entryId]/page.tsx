@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
@@ -142,7 +143,7 @@ export default function ReviewDetailPage() {
 
   if (!detail) {
     return (
-      <div className="space-y-6">
+      <PageLayout width="reading">
         <PageHeader title={t("reviewDetailTitle")} />
         <EmptyState
           icon={LockIcon}
@@ -157,13 +158,13 @@ export default function ReviewDetailPage() {
             </Button>
           }
         />
-      </div>
+      </PageLayout>
     );
   }
 
   const { project, review, room, challenge } = detail;
   return (
-    <div className="space-y-6">
+    <PageLayout width="reading">
       <PageHeader
         title={project.name}
         description={textForDisplay(challenge.title)}
@@ -352,6 +353,6 @@ export default function ReviewDetailPage() {
           />
         </div>
       </Modal>
-    </div>
+    </PageLayout>
   );
 }

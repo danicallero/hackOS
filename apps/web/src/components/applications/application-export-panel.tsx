@@ -1,7 +1,7 @@
 "use client";
 
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
-import { type FormEvent, type ReactNode, useCallback, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -102,12 +102,20 @@ function errorMessage(error: unknown, fallback: string): string {
 export function ApplicationExportPanel({
   trigger,
   applicationId,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  onCloseAutoFocus,
 }: {
   trigger?: ReactNode;
   applicationId?: number;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onCloseAutoFocus?: React.ComponentProps<typeof SidePanelEditor>["onCloseAutoFocus"];
 }) {
   const { language, t } = useLocale();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = controlledOnOpenChange ?? setInternalOpen;
   const [catalog, setCatalog] = useState<ExportCatalog | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -136,6 +144,10 @@ export function ApplicationExportPanel({
       setCatalogLoading(false);
     }
   }, [applicationId, t]);
+
+  useEffect(() => {
+    if (controlledOpen && !catalog && !catalogLoading && !catalogError) void loadCatalog();
+  }, [controlledOpen, catalog, catalogLoading, catalogError, loadCatalog]);
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
@@ -331,6 +343,7 @@ export function ApplicationExportPanel({
     <SidePanelEditor
       open={open}
       onOpenChange={onOpenChange}
+      onCloseAutoFocus={onCloseAutoFocus}
       trigger={trigger ?? defaultTrigger}
       title={t("applicationExportTitle")}
       icon={DownloadSimpleIcon}

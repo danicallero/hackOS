@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { Spinner } from "@/components/common/spinner";
 import { TabBar } from "@/components/common/tab-bar";
 import { JudgingExportPanel } from "@/components/exports/judging-export-panel";
@@ -136,19 +137,19 @@ export default function QueueOperationsPage() {
 
   if (canViewRooms && roomViews.error) {
     return (
-      <div className="space-y-6">
+      <PageLayout>
         <PageHeader title={t("queueOperations")} />
         <EmptyState
           icon={TicketIcon}
           title={t("couldNotLoadQueueOps")}
           description={roomViews.error instanceof Error ? roomViews.error.message : t("tryAgain")}
         />
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="space-y-6" data-wide>
+    <PageLayout width="workspace">
       <PageHeader
         title={t("queueOperations")}
         primaryAction={
@@ -235,6 +236,6 @@ export default function QueueOperationsPage() {
           <QueuesPanel />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageLayout>
   );
 }
