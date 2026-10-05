@@ -1,11 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
-import {
-  authClient,
-  closeSessionForEnvironmentChange,
-  configureAuthClient,
-  forceLocalSignOut,
-} from "./auth-client";
+import { configureAuthClient, signOutForEnvironmentChange } from "./auth-client";
 import { DEVELOPMENT_API_URL, PRODUCTION_API_URL, setApiUrl } from "./env";
 import { clearApiEnvironmentData } from "./storage-usage";
 
@@ -61,13 +56,9 @@ export function ApiModeProvider({ children }: { children: ReactNode }) {
   const setMode = useCallback(
     async (nextMode: ApiMode) => {
       if (nextMode === mode) return;
-      // Close the old server-side session before changing API_URL. If this
-      // fails (for example offline), retain the old environment and its queue
-      // rather than risk replaying a scanner operation against a new server.
-      if (authClient.getCookie()) {
-        await closeSessionForEnvironmentChange();
-        forceLocalSignOut();
-      }
+      // The old server may be offline. Clear its local credentials immediately;
+      // server revocation is best effort and must not block changing endpoints.
+      signOutForEnvironmentChange();
       await clearApiEnvironmentData();
       await SecureStore.setItemAsync(STORAGE_KEY, nextMode);
       applyApiMode(nextMode);

@@ -77,7 +77,7 @@
   "apiModeDevelopmentBody": "Queres cambiar ao servidor de desenvolvemento? Pechará a sesión, borrará os datos locais e descartará os escaneos pendentes.",
   "apiModeProductionBody": "Queres cambiar ao servidor de produción? Pechará a sesión, borrará os datos locais e descartará os escaneos pendentes.",
   "apiModeSwitch": "Cambiar",
-  "apiModeSwitchError": "Non se puido pechar a sesión actual. Conéctate a ese servidor e téntao de novo.",
+  "apiModeSwitchError": "Non se puido cambiar o contorno da API. Téntao de novo.",
   "accountAccount": "Conta",
   "statisticsStaffOnly": "As estatísticas só están dispoñibles para contas do persoal.",
   "accountFoodIntolerances": "Intolerancias alimentarias",

@@ -77,7 +77,7 @@
   "apiModeDevelopmentBody": "Switch to the development server? This signs out, clears local data, and discards pending scans.",
   "apiModeProductionBody": "Switch to the production server? This signs out, clears local data, and discards pending scans.",
   "apiModeSwitch": "Switch",
-  "apiModeSwitchError": "Couldn't close the current session. Connect to its server and try again.",
+  "apiModeSwitchError": "Couldn't switch API environment. Try again.",
   "accountAccount": "Account",
   "statisticsStaffOnly": "Statistics are available to staff accounts only.",
   "accountFoodIntolerances": "Food intolerances",

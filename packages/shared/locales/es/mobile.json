@@ -77,7 +77,7 @@
   "apiModeDevelopmentBody": "¿Cambiar al servidor de desarrollo? Cerrará la sesión, borrará los datos locales y descartará los escaneos pendientes.",
   "apiModeProductionBody": "¿Cambiar al servidor de producción? Cerrará la sesión, borrará los datos locales y descartará los escaneos pendientes.",
   "apiModeSwitch": "Cambiar",
-  "apiModeSwitchError": "No se pudo cerrar la sesión actual. Conéctate a ese servidor e inténtalo de nuevo.",
+  "apiModeSwitchError": "No se pudo cambiar el entorno de la API. Inténtalo de nuevo.",
   "accountAccount": "Cuenta",
   "statisticsStaffOnly": "Las estadísticas solo están disponibles para cuentas del personal.",
   "accountFoodIntolerances": "Intolerancias alimentarias",
