@@ -119,7 +119,7 @@ function NavLink({
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={active} tooltip={t(item.title)} className={className}>
-        <Link href={item.href}>
+        <Link href={item.href} className="flex h-full w-full items-center gap-2">
           <span className="relative shrink-0 [&>svg]:size-4">
             <Icon />
             {showUnreadDot && <UnreadIconDot />}
@@ -222,7 +222,7 @@ function WorkspaceGroup({
                 key={item.href}
                 item={item}
                 showUnreadDot={false}
-                className="pl-8 group-data-[collapsible=icon]:p-2!"
+                className="pl-8 group-data-[collapsible=icon]:pl-0"
                 isActive={item.href === activeItem?.href}
               />
             ))}
