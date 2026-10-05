@@ -35,6 +35,7 @@ it("reads a blank tag's UID using the iOS tag session and releases it", async ()
   await expect(startNfcRead("Hold badge").result).resolves.toBe("04AB12CD34EF56");
   expect(NfcManager.requestTechnology).toHaveBeenCalledWith(NfcTech.MifareIOS, {
     alertMessage: "Hold badge",
+    skipTagConnect: true,
   });
   expect(NfcManager.cancelTechnologyRequest).toHaveBeenCalledTimes(1);
 });
