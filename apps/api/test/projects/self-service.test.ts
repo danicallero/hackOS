@@ -28,6 +28,7 @@ let app: App;
 
 beforeEach(async () => {
   await truncateAll();
+  await pool.query(`UPDATE queue_settings SET schedule_start_at = NULL WHERE id = 1`);
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
 });
@@ -518,7 +519,8 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     expect(await valkey.get(`sse:seq:${SSE_TOPICS.QUEUE}`)).toBe(String(queueBefore + 1));
     expect(await valkey.get(`sse:seq:${SSE_TOPICS.PUBLIC_TV}`)).toBe(String(publicTvBefore + 1));
     expect(await valkey.get(`sse:seq:${SSE_TOPICS.USER_PREFIX}${owner}`)).toBe(
-      String(userQueueBefore + 1),
+      // Queue invalidation plus targeted session/navigation refresh (#892).
+      String(userQueueBefore + 2),
     );
 
     const { getQueue } = await import("../../src/lib/queues.js");

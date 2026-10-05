@@ -220,7 +220,7 @@ truth; everything else is derivable or ephemeral.**
 | Store | Owns | Durable? | If it's lost |
 |---|---|---|---|
 | **Postgres** | All domain state, the notification outbox (the *real* queue), audit log, sessions | Yes — back it up | Total loss; restore from snapshot |
-| **Valkey** | BullMQ scheduling, SSE pub/sub + per-topic sequence counters | No (by design) | Transient; ticks re-run, clients refetch |
+| **Valkey** | BullMQ scheduling, SSE pub/sub + seven-day sequence counters, distributed rate limits and ephemeral TV state | No (by design) | Transient; ticks re-run, clients refetch; expiring rate-limit keys may be evicted under the bounded `volatile-lru` policy |
 | **MinIO** | Uploaded files + public logos | Yes — back it up | Files gone; DB rows dangle until re-upload |
 
 This is why the worker subsystem doesn't use BullMQ's own retry/DLQ: durability
@@ -245,13 +245,13 @@ sequenceDiagram
     participant VK as Valkey pub/sub
     participant A2 as api #2 (or worker)
     Client->>A1: GET /…/stream (subscribe topic)
-    A2->>VK: broadcast(topic, EVENT, data) → PUBLISH sse:topic
-    VK-->>A1: pmessage on sse:*
+    A2->>VK: broadcast(topic, EVENT, data) → PUBLISH sse:namespace:topic
+    VK-->>A1: pmessage on sse:<namespace>:*
     A1-->>Client: SSE event (id = per-topic INCR seq)
 ```
 
-`broadcast()` (`src/lib/sse.ts`) `PUBLISH`es to `sse:<topic>`; every instance
-`PSUBSCRIBE`s `sse:*` and relays to its *local* connections. Envelope ids are
+`broadcast()` (`src/lib/sse.ts`) `PUBLISH`es to `sse:<namespace>:<topic>`; every instance
+`PSUBSCRIBE`s `sse:<namespace>:*` and relays to its *local* connections. Envelope ids are
 monotonic per-topic Valkey `INCR` counters, so a client can detect gaps after a
 reconnect and refetch full state (the recovery contract). CRUD writes emit a
 payload-free `domain.changed` event only on their owning topic (`applications`,
@@ -289,10 +289,15 @@ The complete route/topic classification, capacity formula, role examples, and
 edge cases live in [`request-admission.md`](./request-admission.md).
 Long-lived SSE requests bypass this scheduler so they continue to be governed
 only by #540's connection budgets and write backpressure. Monitor
-`hackos_http_requests_total`,
+`hackos_http_requests_total`, `hackos_http_responses_total`,
+`hackos_http_request_duration_seconds`,
 `hackos_http_request_admission_wait_seconds`, and
 `hackos_http_request_admission_queue_size` by lane, plus
 `hackos_sse_local_connections` by lane and normalized topic family.
+HTTP response counters and duration histograms record the final status once in
+`onResponse`, including handled business errors (#891). Aborted connections
+release admission and the in-flight gauge without recording a completed HTTP
+response; a request disconnected while queued cancels its admission wait.
 
 Participant queue invalidations are one delayed BullMQ job per current queue
 group, coalescing all affected challenge transitions in that shared queue;
@@ -391,7 +396,10 @@ Headroom, in order of reach-for:
 4. Partition/prune `notification_outbox` (and audit) for a very large event.
 
 **Valkey / MinIO.** Valkey is single-node and ephemeral — a hackathon never
-needs a cluster; if it dies, restart and ticks resume. MinIO is single-node;
+needs a cluster at this scale; if it dies, restart and ticks resume. Its
+production container has 2 GiB RAM, 1 GiB swap, `maxmemory=1536mb` and
+`volatile-lru`, so only expiring cache/rate-limit keys are eviction candidates;
+BullMQ coordination keys are protected. MinIO is single-node;
 swap it for managed S3/R2/Spaces by repointing `S3_ENDPOINT` + `S3_PUBLIC_URL`
 when object durability/scale matters more than self-hosting.
 

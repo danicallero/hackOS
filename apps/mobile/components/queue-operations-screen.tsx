@@ -68,6 +68,7 @@ export function QueueOperationsScreen() {
   const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const { width } = useWindowDimensions();
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [notifyingEntryId, setNotifyingEntryId] = useState<number | null>(null);
   const [notifiedEntryId, setNotifiedEntryId] = useState<number | null>(null);
@@ -193,9 +194,10 @@ export function QueueOperationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (realtimeConnected) return;
       const id = setInterval(() => void load(), POLL_MS);
       return () => clearInterval(id);
-    }, [load]),
+    }, [load, realtimeConnected]),
   );
 
   // H29/H31: mark a just-called entry so it stands out on the board without
@@ -206,6 +208,7 @@ export function QueueOperationsScreen() {
       const stopStream = startQueueEventStream({
         enabled: canOperate,
         identityKey: me?.id,
+        onConnectionChange: setRealtimeConnected,
         onResync: () => {
           void load();
         },
@@ -233,16 +236,26 @@ export function QueueOperationsScreen() {
         void load();
       };
       const onEntryChanged = () => void load();
-      const unsubscribeCalled = subscribeToServerEvent(EVENTS.QUEUE_TEAM_CALLED, onTeamCalled);
-      const unsubscribeChanged = subscribeToServerEvent(EVENTS.QUEUE_ENTRY_CHANGED, onEntryChanged);
-      const unsubscribeRoom = subscribeToServerEvent(EVENTS.QUEUE_ROOM_CHANGED, onEntryChanged);
-      const unsubscribeResync = subscribeToServerEvent(EVENTS.REALTIME_RESYNC, onEntryChanged);
+      const unsubscribeCalled = subscribeToServerEvent(
+        EVENTS.QUEUE_TEAM_CALLED,
+        onTeamCalled,
+        "queue",
+      );
+      const unsubscribeChanged = subscribeToServerEvent(
+        EVENTS.QUEUE_ENTRY_CHANGED,
+        onEntryChanged,
+        "queue",
+      );
+      const unsubscribeRoom = subscribeToServerEvent(
+        EVENTS.QUEUE_ROOM_CHANGED,
+        onEntryChanged,
+        "queue",
+      );
       return () => {
         stopStream();
         unsubscribeCalled();
         unsubscribeChanged();
         unsubscribeRoom();
-        unsubscribeResync();
         for (const timer of timers.values()) clearTimeout(timer);
       };
     }, [canOperate, load, me?.id]),

@@ -341,6 +341,11 @@ export async function scheduleQueuePump(intervalMs = 5000): Promise<void> {
   await getQueue(QUEUE_PUMP_QUEUE_NAME).add(
     "tick",
     {},
-    { repeat: { every: intervalMs }, jobId: "queue-pump-tick" },
+    {
+      repeat: { every: intervalMs },
+      jobId: "queue-pump-tick",
+      removeOnComplete: true,
+      removeOnFail: { age: 24 * 60 * 60, count: 1_000 },
+    },
   );
 }

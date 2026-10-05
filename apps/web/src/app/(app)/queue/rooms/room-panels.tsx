@@ -98,6 +98,7 @@ export function AssignmentsEditor({
                     setBusy(null);
                   }
                 }}
+                loading={busy === "enterprise"}
               >
                 {t("setEnterprise")}
               </Button>
@@ -124,6 +125,7 @@ export function AssignmentsEditor({
                   setBusy(null);
                 }
               }}
+              loading={busy === "clear"}
             >
               {t("clearEnterprise")}
             </Button>

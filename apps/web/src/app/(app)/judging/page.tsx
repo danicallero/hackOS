@@ -342,6 +342,7 @@ export default function QueuePage() {
                     t("roomResumed"),
                   )
                 }
+                loading={busy === "pause"}
               >
                 <PlayIcon aria-hidden="true" className="size-4" />
                 {t("resume")}
@@ -414,7 +415,7 @@ export default function QueuePage() {
             type="button"
             aria-label={t("dismiss")}
             onClick={() => setActionError(null)}
-            className="shrink-0 opacity-70 transition-opacity hover:opacity-100"
+            className="button-interaction shrink-0 opacity-70 transition-opacity hover:opacity-100"
           >
             <XIcon aria-hidden="true" className="size-4" />
           </button>

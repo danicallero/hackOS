@@ -15,7 +15,6 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { SectionCard } from "@/components/common/section-card";
-import { Spinner } from "@/components/common/spinner";
 import { PersonCardView } from "@/components/logistics/person-card";
 import { PersonSearchResults } from "@/components/logistics/person-search-results";
 import { QrScanButton } from "@/components/logistics/qr-scanner";
@@ -291,8 +290,13 @@ export function ScanTab({
             />
           </div>
           <div className="flex items-end">
-            <Button type="submit" className="w-full md:w-auto" disabled={busy || !query.trim()}>
-              {busy ? <Spinner /> : <ScanIcon aria-hidden="true" className="size-4" />}
+            <Button
+              type="submit"
+              className="w-full md:w-auto"
+              disabled={busy || !query.trim()}
+              loading={busy}
+            >
+              {<ScanIcon aria-hidden="true" className="size-4" />}
               {t("search")}
             </Button>
           </div>
@@ -389,6 +393,7 @@ export function ScanTab({
                   <Button
                     onClick={doRotate}
                     disabled={busy || !newBadgeId.trim() || !reason.trim()}
+                    loading={busy}
                   >
                     <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
                     {t("rotateBadge")}
@@ -424,7 +429,11 @@ export function ScanTab({
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button onClick={doAssign} disabled={busy || !assignBadgeId.trim()}>
+                  <Button
+                    onClick={doAssign}
+                    disabled={busy || !assignBadgeId.trim()}
+                    loading={busy}
+                  >
                     <CheckIcon aria-hidden="true" className="size-4" />
                     {t("checkIn")}
                   </Button>
@@ -449,6 +458,7 @@ export function ScanTab({
                     variant={presCard.openSince ? "outline" : "default"}
                     onClick={() => doPresenceScan("in")}
                     disabled={busy || !!presCard.openSince || presCard.pendingExit === true}
+                    loading={busy}
                   >
                     <SignInIcon aria-hidden="true" className="size-4" />
                     {t("registerEntry")}
@@ -457,6 +467,7 @@ export function ScanTab({
                     variant={presCard.openSince ? "default" : "outline"}
                     onClick={() => doPresenceScan("out")}
                     disabled={busy || !presCard.openSince}
+                    loading={busy}
                   >
                     <SignOutIcon aria-hidden="true" className="size-4" />
                     {t("registerExit")}
@@ -505,6 +516,7 @@ export function ScanTab({
                         !manualScannedAt ||
                         (presCard.pendingExit === true && !presCard.openSince)
                       }
+                      loading={busy}
                     >
                       {t("saveManualRecord")}
                     </Button>

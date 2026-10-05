@@ -374,7 +374,10 @@ export async function addEnterpriseMember(
     return { member: rows[0], user: userRows[0], ticketAccess };
   });
   await publishTicketAccess(userId, ticketAccess);
-  await broadcast(SSE_TOPICS.SPONSORS, EVENTS.DOMAIN_CHANGED, {});
+  await Promise.all([
+    broadcast(SSE_TOPICS.SPONSORS, EVENTS.DOMAIN_CHANGED, {}),
+    broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_SESSION_CHANGED, {}),
+  ]);
   return {
     sponsorId: Number(member.id),
     userId,
@@ -439,7 +442,10 @@ export async function removeEnterpriseMember(
     return ticketAccess;
   });
   await publishTicketAccess(userId, ticketAccess);
-  await broadcast(SSE_TOPICS.SPONSORS, EVENTS.DOMAIN_CHANGED, {});
+  await Promise.all([
+    broadcast(SSE_TOPICS.SPONSORS, EVENTS.DOMAIN_CHANGED, {}),
+    broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_SESSION_CHANGED, {}),
+  ]);
 }
 
 // ── judge roster (DELTA(Hxx): enterprise_judges replaces room_judges) ─────────
@@ -546,7 +552,10 @@ export async function addEnterpriseJudge(
     return { judge: judgeRow(judges[0]), ticketAccess };
   });
   await publishTicketAccess(userId, ticketAccess);
-  await broadcast(SSE_TOPICS.SPONSORS, EVENTS.DOMAIN_CHANGED, {});
+  await Promise.all([
+    broadcast(SSE_TOPICS.SPONSORS, EVENTS.DOMAIN_CHANGED, {}),
+    broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_SESSION_CHANGED, {}),
+  ]);
   return judge;
 }
 
@@ -588,7 +597,10 @@ export async function removeEnterpriseJudge(
     return ticketAccess;
   });
   await publishTicketAccess(userId, ticketAccess);
-  await broadcast(SSE_TOPICS.SPONSORS, EVENTS.DOMAIN_CHANGED, {});
+  await Promise.all([
+    broadcast(SSE_TOPICS.SPONSORS, EVENTS.DOMAIN_CHANGED, {}),
+    broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_SESSION_CHANGED, {}),
+  ]);
 }
 
 /**

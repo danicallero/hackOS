@@ -336,7 +336,7 @@ export function ResizableHead({
         aria-label={t("resizeColumnAria")}
         onPointerDown={onPointerDown}
         onKeyDown={onKeyDown}
-        className="hover:bg-primary/50 active:bg-primary/70 absolute inset-y-0 right-0 w-1.5 cursor-col-resize touch-none focus-visible:bg-primary/60 outline-none"
+        className="button-interaction hover:bg-primary/50 active:bg-primary/70 absolute inset-y-0 right-0 w-1.5 cursor-col-resize touch-none focus-visible:bg-primary/60"
       />
     </TableHead>
   );

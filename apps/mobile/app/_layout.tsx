@@ -4,7 +4,7 @@ import { type Href, useRootNavigationState, useRouter } from "expo-router";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
 import { Stack } from "expo-router/stack";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,11 +20,7 @@ import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
 import { registerForPushNotifications } from "@/lib/push";
-import {
-  startIdentityEventStream,
-  startPersonalEventStream,
-  subscribeToServerEvent,
-} from "@/lib/server-events";
+import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { isOperator } from "@/lib/tabs";
 import { warmWalletCache } from "@/lib/wallet-cache";
 import { colors } from "@/theme/colors";
@@ -86,7 +82,6 @@ function RootLayoutSessionContents() {
       <PushRegistration authenticated={authenticated} />
       <WalletCacheWarmup authenticated={authenticated} />
       <NotificationListeners />
-      <IdentitySessionRefresh authenticated={authenticated} />
       <MobileAccessGate authenticated={authenticated} />
       <PersonalEventStream authenticated={authenticated} />
       <RootLayoutNav
@@ -128,20 +123,50 @@ function useInitialSessionPending(pending: boolean) {
   return waitingForInitialSession && !elapsed;
 }
 
-/** Push-independent foreground updates for queue and wallet state (H28/H38). */
+/** Push-independent queue, wallet and session updates over one personal stream. */
 function PersonalEventStream({ authenticated }: { authenticated: boolean }) {
   const { me, refetch } = useMeContext();
-  const enabled = authenticated && me?.hasEventAccess === true;
+  const enabled = authenticated;
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => {
+      refreshTimer.current = null;
+      void refetch();
+    }, 150);
+  }, [refetch]);
+  useEffect(
+    () => () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!enabled) return;
+    const unsubscribes = [
+      EVENTS.USER_SESSION_CHANGED,
+      EVENTS.USER_QUEUE_CHANGED,
+      EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
+    ].map((event) =>
+      subscribeToServerEvent(event, () => {
+        scheduleRefresh();
+      }),
+    );
+    return () => {
+      for (const unsubscribe of unsubscribes) unsubscribe();
+    };
+  }, [enabled, scheduleRefresh]);
   useEffect(() => {
     if (!enabled) return;
     return startPersonalEventStream({
       enabled,
       identityKey: me?.id,
-      onResync: () => {
-        void refetch();
+      onResync: (context) => {
+        // useMe owns the account facts foreground read; the stream recovers its other scoped models (#892).
+        if (context.reason !== "foreground") scheduleRefresh();
       },
     });
-  }, [enabled, me?.id, refetch]);
+  }, [enabled, me?.id, scheduleRefresh]);
   return null;
 }
 
@@ -152,29 +177,6 @@ function LanguageSync() {
   useEffect(() => {
     if (me && isSupportedLanguage(me.language)) setLanguage(me.language);
   }, [me, setLanguage]);
-  return null;
-}
-
-/** Revalidates the one session/access/profile snapshot after role changes. */
-function IdentitySessionRefresh({ authenticated }: { authenticated: boolean }) {
-  const { me, refetch } = useMeContext();
-  useEffect(() => {
-    if (!authenticated) return;
-    return subscribeToServerEvent(EVENTS.DOMAIN_CHANGED, () => {
-      void refetch();
-    });
-  }, [authenticated, refetch]);
-  useEffect(
-    () =>
-      startIdentityEventStream({
-        enabled: authenticated,
-        identityKey: me?.id,
-        onResync: () => {
-          void refetch();
-        },
-      }),
-    [authenticated, me?.id, refetch],
-  );
   return null;
 }
 

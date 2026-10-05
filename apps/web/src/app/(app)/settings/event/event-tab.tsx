@@ -17,6 +17,7 @@ import { useEffect, useId } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
+import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { TimezonePicker } from "@/components/common/timezone-picker";
 import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
@@ -36,7 +37,6 @@ import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
-import { CategorySaveFooter } from "./category-save-footer";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
 import { ZonedTimePreview } from "./zoned-time-preview";
@@ -213,7 +213,8 @@ export function EventTab({
         <SectionCard
           variant="plain"
           footerClassName="justify-start"
-          footer={<CategorySaveFooter pending={formState.isSubmitting} state={saveState} />}
+          stickyFooter
+          footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
         >
           <FormField
             control={form.control}

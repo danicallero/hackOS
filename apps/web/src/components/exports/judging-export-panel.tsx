@@ -59,7 +59,13 @@ export function JudgingExportPanel({ trigger }: { trigger?: ReactNode }) {
       icon={GavelIcon}
     >
       <div className="flex justify-end">
-        <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void load()}
+          disabled={loading}
+          loading={loading}
+        >
           <ArrowsClockwiseIcon aria-hidden="true" />
           {t("refresh")}
         </Button>

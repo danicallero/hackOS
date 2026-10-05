@@ -7,6 +7,7 @@ environment="${1:-}"
 image_tag="${2:-current}"
 deploy_api="${3:-true}"
 deploy_web="${4:-true}"
+release_action="${5:-manual}"
 current_mode=false
 
 case "$environment" in
@@ -28,6 +29,14 @@ case "$deploy_web" in
   true|false) ;;
   *)
     echo "ERROR: web deployment flag must be true or false" >&2
+    exit 2
+    ;;
+esac
+
+case "$release_action" in
+  manual|automatic|promote|rollback) ;;
+  *)
+    echo "ERROR: release action must be manual, automatic, promote, or rollback" >&2
     exit 2
     ;;
 esac
@@ -169,6 +178,7 @@ compose() {
 }
 
 state_file="${HACKOS_IMAGE_STATE_FILE:-$app_dir/.image-tags}"
+policy_file="${HACKOS_RELEASE_POLICY_FILE:-$app_dir/.release-policy}"
 
 state_value() {
   local key="$1"
@@ -425,6 +435,7 @@ if [[ "$deploy_web" == true ]]; then
   verify_pulled_image_revision web "$web_image_tag"
 fi
 phase "Starting database, queue, and object storage"
+run_compose "initialize container-local metrics reader" run --rm --no-deps metrics-init
 run_compose "start datastores" up --detach postgres valkey minio
 wait_for_health postgres
 wait_for_health valkey
@@ -454,7 +465,9 @@ if [[ "$deploy_web" == true ]]; then
   run_compose "update web" up --detach --no-deps --force-recreate web
   wait_for_health web
 else
-  echo "SKIP: web unchanged"
+  # Retain the image while adopting Compose changes such as metrics volumes.
+  run_compose "refresh retained web configuration" up --detach --no-deps --pull never web
+  wait_for_health web
 fi
 
 state_tmp="$(mktemp "${state_file}.XXXXXX")"
@@ -463,4 +476,26 @@ printf 'API_IMAGE_TAG=%s\nWEB_IMAGE_TAG=%s\n' \
   "$web_image_tag" >"$state_tmp"
 chmod 0600 "$state_tmp"
 mv -f "$state_tmp" "$state_file"
+
+# A successful operator-selected SHA is a deliberate rollback/pin. The
+# production auto-updater must not immediately promote the newer GitHub
+# release on its next five-minute tick. Promoting `latest` explicitly clears
+# the hold; automated deployments never mutate it.
+if [[ "$environment" == production ]]; then
+  case "$release_action" in
+    rollback)
+      policy_tmp="$(mktemp "${policy_file}.XXXXXX")"
+      printf 'mode=hold\ntag=%s\nreason=manual-rollback\nupdated_at=%s\n' \
+        "$image_tag" \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$policy_tmp"
+      chmod 0600 "$policy_tmp"
+      mv -f "$policy_tmp" "$policy_file"
+      echo "OK: production release hold recorded at $image_tag"
+      ;;
+    promote)
+      rm -f "$policy_file"
+      echo "OK: production release hold cleared"
+      ;;
+  esac
+fi
 echo "OK: hackOS $environment deployed"

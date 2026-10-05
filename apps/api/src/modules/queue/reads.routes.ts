@@ -5,15 +5,14 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import {
-  type AuthorizationContext,
   getRequestAuthorizationContext,
   requireAnyCapability,
   requireAuth,
   requireCapability,
-  userHasCapability,
 } from "../../lib/capabilities.js";
-import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
+import { registerRealtimeRoutes } from "../../lib/realtime.routes.js";
 import { subscribe } from "../../lib/sse.js";
+import { requireScopedRefreshAccess, scopedRefreshTopic } from "../../lib/sse-access.js";
 import { logisticsTopicForFixture } from "../logistics/active-broadcast.js";
 import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import { queueTopicForFixture } from "./broadcast.js";
@@ -40,60 +39,12 @@ const tvControlPolicy = {
   capability: CAPABILITIES.TV_CONTROL,
 };
 
-const scopedRefreshTopic = z.enum([
-  SSE_TOPICS.APPLICATIONS,
-  SSE_TOPICS.PROJECTS,
-  SSE_TOPICS.IDENTITY,
-  SSE_TOPICS.SPONSORS,
-  SSE_TOPICS.LOGISTICS,
-  SSE_TOPICS.AUDIT,
-  SSE_TOPICS.TV,
-]);
 const scopedRefreshQuery = z.object({ topic: scopedRefreshTopic });
-
-const logisticsRefreshCapabilities = [
-  CAPABILITIES.ACCREDIT_SCAN,
-  CAPABILITIES.PRESENCE_SCAN,
-  CAPABILITIES.ACTIVITY_SCAN,
-  CAPABILITIES.LOGISTICS_STATS,
-  CAPABILITIES.INTOLERANCES_MANAGE,
-  CAPABILITIES.SCHEDULE_MANAGE,
-] as const;
-
-async function requireScopedRefreshAccess(
-  userId: number | null,
-  topic: z.infer<typeof scopedRefreshTopic>,
-  context: AuthorizationContext,
-): Promise<void> {
-  if (userId == null) throw new UnauthorizedError();
-  if (topic === SSE_TOPICS.AUDIT) {
-    if (!(await userHasCapability(context, CAPABILITIES.AUDIT_READ))) {
-      throw new ForbiddenError(`Missing capability: ${CAPABILITIES.AUDIT_READ}`, {
-        capability: CAPABILITIES.AUDIT_READ,
-      });
-    }
-    return;
-  }
-  if (topic === SSE_TOPICS.TV) {
-    if (!(await userHasCapability(context, CAPABILITIES.TV_CONTROL))) {
-      throw new ForbiddenError(`Missing capability: ${CAPABILITIES.TV_CONTROL}`, {
-        capability: CAPABILITIES.TV_CONTROL,
-      });
-    }
-    return;
-  }
-  if (topic !== SSE_TOPICS.LOGISTICS) return;
-  for (const capability of logisticsRefreshCapabilities) {
-    if (await userHasCapability(context, capability)) return;
-  }
-  throw new ForbiddenError("Missing logistics read capability", {
-    capabilities: logisticsRefreshCapabilities,
-  });
-}
 
 /** Read APIs (H38-H42): scoped queue data, TV snapshots and SSE isolation. */
 export function registerReadsRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+  registerRealtimeRoutes(app);
 
   typed.get(
     "/api/queue/challenges/:challengeId/progress",
@@ -305,7 +256,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Personal queue stream",
         description:
-          "Authenticated SSE stream for the current participant's queue notifications only.",
+          "Authenticated SSE stream for the current participant's queue, inbox and session-refresh notifications only.",
       },
     },
     async (req, reply) => subscribe(`user:${req.userId}`, req, reply),

@@ -383,3 +383,179 @@ Inspect the rendered surface and verify links contain the official badge images.
 
 ### Exceptions
 The plain-text MIME part retains readable labeled links.
+
+## [R013] Check reflections throughout each task
+
+Status: promoted
+Scope: repository
+Source: user-correction
+Date: 2026-10-04
+Promoted-To: CLAUDE.md
+
+### Trigger
+Before and during any code, documentation, test, or configuration change.
+
+### Mistake
+An agent reviewed reflections once but did not keep checking later changes
+against the lessons, so a known mistake could recur while completing the task.
+
+### Lesson
+Reflections are an ongoing check for the entire task, not a one-time startup
+reading.
+
+### Action
+Read the entire lessons file before editing. Compare the intended work with
+applicable active lessons, re-check substantive diffs as work proceeds, and
+apply each lesson's validation before commit or PR. Resolve conflicts
+explicitly when higher-priority instructions or current product requirements
+take precedence.
+
+### Validation
+Confirm applicable lessons were considered at planning, during implementation,
+and during final diff/validation review.
+
+### Exceptions
+None.
+
+## [R014] Keep nested menus flowing in one direction
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-10-04
+
+### Trigger
+Building multi-level dropdowns or filter menus with nested detail panels.
+
+### Mistake
+A child menu opened back toward its parent despite enough room in the
+direction used by the parent submenu, making the menu flow alternate sides.
+
+### Lesson
+Nested menu levels should keep the same opening direction while space allows.
+Let collision handling reverse a submenu only when the preferred side does not
+fit in the viewport.
+
+### Action
+Set direction at the menu root so nested submenus inherit it, and keep text
+direction separate where needed. Check the default side at a wide viewport and
+the collision fallback near the viewport edge. Match directional indicators to
+the preferred opening direction.
+
+### Validation
+Open every level in a real browser with ample space and confirm that each uses
+the same side. Repeat near the viewport edge and confirm only the submenu that
+cannot fit flips, without creating a navigation loop or trapping focus.
+
+### Exceptions
+Menus that intentionally represent independent navigation layers may use
+different directions when their hierarchy and visual design make that choice
+clear.
+
+## [R015] Reproduce interaction failures before changing rendering layers
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-10-04
+
+### Trigger
+A visual element disappears or flickers during hover, especially after a prior
+attempt to fix the same interaction failed.
+
+### Mistake
+Repeatedly adjusting overlay ordering without inspecting the actual rendered
+state attributed missing chart paint to the wrong cause.
+
+### Lesson
+Reproduce the interaction and inspect the element's paint, geometry, and state
+before choosing a fix. Consult the library's documentation and implementation
+when its automatic interaction behavior is involved.
+
+### Action
+Capture the failing state, identify which property changes, and verify the
+proposed cause against runtime evidence before changing code.
+
+### Validation
+Repeat the same pointer interaction after the change, including related entry
+points such as legend hover, and confirm the element retains valid paint and
+geometry. State which browser was checked.
+
+### Exceptions
+A directly observable code error can be fixed first, but its affected
+interaction still needs runtime verification.
+
+## [R016] Verify that interaction feedback is perceptible
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-10-05
+
+### Trigger
+Designing or changing hover, pressed, or other visual action states.
+
+### Mistake
+The primary button changed color on hover and passed text-contrast checks, but
+its small color difference was too subtle for the user to notice.
+
+### Lesson
+Legible labels and different CSS values do not establish a perceptible state
+change. Interaction feedback must remain visible in the actual interface.
+
+### Action
+Compare default, hover and pressed states in a running browser, in both themes.
+Inspect computed paint values and side-by-side captures; strengthen feedback
+when the difference is barely visible while preserving text contrast.
+
+### Validation
+Exercise pointer entry and press, inspect the rendered state change, and verify
+that disabled and touch-only controls do not acquire hover feedback. Keep a
+regression check for the corrected state distinction when appropriate.
+
+### Exceptions
+Controls deliberately lacking hover behavior, including touch-only surfaces.
+
+## [R017] Validate page patterns with representative compositions
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-10-05
+
+### Trigger
+Building or applying a shared page/surface pattern across web routes.
+
+### Mistake
+A generic reading-width wrapper constrained table tabs; repeated fake fields
+hid missing hierarchy in the playground. Save status was placed after Save
+and duplicated its loading spinner.
+
+### Lesson
+Choose width by the content being shown, not by whether the route is called a
+detail page. Shared patterns need representative content and rendered review.
+
+### Action
+Use the audited Users layout as the dense-list reference. Keep mixed record
+pages wide enough for their table tabs, constrain only text/form groups, and
+verify the last column. Preview meaningful groups instead of filler fields.
+Put save state at the leading edge, secondary actions then Save at the trailing
+edge, and show only one pending spinner per save owner. Panel widths follow
+content needs; multi-domain records remain full pages. Adapt mobile records
+to readable rows and group related actions rather than replacing several
+different actions with indistinguishable icons. Preserve an established viewer
+and its empty state when improving layout; do not remove it because its data
+is empty. Drag previews retain source dimensions and adjacent panes show the
+space they will occupy before the drop is committed. Docking shows a single
+placeholder at the actual active destination; hit-test areas stay invisible.
+Inspect intermediate pointer positions, not only the final edge/drop state. Builders must show section
+ownership, question boundaries and an explicit drop destination.
+
+### Validation
+Inspect actual desktop/narrow screenshots before claiming visual quality.
+Check table geometry, useful field hierarchy, action order, pending feedback
+and panel widths. Recheck each route after a shared pattern changes.
+
+### Exceptions
+Fixed operational workspaces and intentionally compact forms keep their
+established geometry when it still supports their content and interaction.

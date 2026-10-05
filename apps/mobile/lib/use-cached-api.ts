@@ -15,6 +15,8 @@ export interface UseCachedApiOptions {
   enabled?: boolean;
   /** Optional safety poll for data normally refreshed by an event stream. */
   pollMs?: number;
+  /** SSE-backed models poll only while their logical scope is disconnected (#892). */
+  pollWhen?: () => boolean;
   /** Set to 0 to opt out of the long-background revalidation. */
   backgroundRevalidationMs?: number;
 }
@@ -31,6 +33,7 @@ export function useCachedApi<T>(
   {
     enabled = true,
     pollMs = 0,
+    pollWhen,
     backgroundRevalidationMs = BACKGROUND_REVALIDATION_MS,
   }: UseCachedApiOptions = {},
 ) {
@@ -164,10 +167,10 @@ export function useCachedApi<T>(
   useEffect(() => {
     if (!enabled || pollMs <= 0) return;
     const interval = setInterval(() => {
-      if (AppState.currentState === "active") void load();
+      if (AppState.currentState === "active" && (pollWhen?.() ?? true)) void load();
     }, pollMs);
     return () => clearInterval(interval);
-  }, [enabled, load, pollMs]);
+  }, [enabled, load, pollMs, pollWhen]);
 
   // A hard error (no cache to fall back to) recovers on its own once
   // connectivity returns, instead of leaving the screen stuck behind a

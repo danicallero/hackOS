@@ -32,7 +32,7 @@ export function PersonSearchResults({
           <button
             key={person.userId}
             type="button"
-            className="hover:bg-muted flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left last:border-b-0"
+            className="button-interaction hover:bg-muted flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left last:border-b-0"
             onClick={() => onSelect(person)}
           >
             <span>

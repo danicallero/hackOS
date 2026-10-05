@@ -127,6 +127,12 @@ export const templateFieldSchema = z
     shareable_with_sponsors: z.boolean().optional(),
     /** Groups this field under a `FormSection.key` (H11 form builder sections). */
     section_key: z.string().optional(),
+    /** H11: ungrouped fields can follow a named section without joining it. */
+    after_section_key: z
+      .string()
+      .min(1)
+      .regex(/^[a-zA-Z0-9_.-]+$/, "section key must be alphanumeric/._-")
+      .optional(),
     /** Small helper text shown under the field (H11), e.g. a privacy note or
      *  formatting hint. Plain text; URLs are auto-linked on render. */
     help_text: i18nSchema.optional(),
@@ -142,6 +148,9 @@ export const templateFieldSchema = z
     statistics: statisticsConfigSchema.optional(),
   })
   .strict()
+  .refine((field) => field.section_key === undefined || field.after_section_key === undefined, {
+    message: "a field cannot have both section_key and after_section_key",
+  })
   .refine(
     (f) => !(f.kind === "select" || f.kind === "multiselect") || (f.options?.length ?? 0) > 0,
     { message: "select/multiselect fields require a non-empty options array" },
@@ -174,10 +183,15 @@ export const sectionsSchema = z
 
 export type FormSection = z.infer<typeof sectionSchema>;
 
-/** Every field's `section_key`, if set, must reference a defined section. */
-function fieldsReferenceKnownSections(fields: TemplateField[], sections: FormSection[]): boolean {
+/** H11: grouping and ungrouped placement anchors must name a defined section. */
+export function fieldsReferenceKnownSections(
+  fields: TemplateField[],
+  sections: FormSection[],
+): boolean {
   const keys = new Set(sections.map((s) => s.key));
-  return fields.every((f) => f.section_key === undefined || keys.has(f.section_key));
+  return fields.every((field) =>
+    [field.section_key, field.after_section_key].every((key) => key === undefined || keys.has(key)),
+  );
 }
 
 const timestampCoerce = z.union([z.string(), z.null()]).optional();
@@ -200,7 +214,7 @@ export const createApplicationSchema = z
   })
   .strict()
   .refine((b) => fieldsReferenceKnownSections(b.template, b.sections), {
-    message: "every field's section_key must reference a defined section",
+    message: "every field's section_key or after_section_key must reference a defined section",
     path: ["template"],
   });
 
@@ -231,7 +245,10 @@ export const updateApplicationSchema = z
       b.template === undefined ||
       b.sections === undefined ||
       fieldsReferenceKnownSections(b.template, b.sections),
-    { message: "every field's section_key must reference a defined section", path: ["template"] },
+    {
+      message: "every field's section_key or after_section_key must reference a defined section",
+      path: ["template"],
+    },
   );
 
 export const idParamSchema = z.object({ id: z.coerce.number().int().positive() });

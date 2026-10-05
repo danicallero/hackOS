@@ -413,6 +413,7 @@ function EnterpriseQueuesCard({
               <Button
                 onClick={() => void toReview()}
                 disabled={busy || picked.length < 2 || !name.trim()}
+                loading={busy}
               >
                 {t("continue")}
               </Button>
@@ -447,7 +448,7 @@ function EnterpriseQueuesCard({
               <Button variant="outline" onClick={() => setStage("pick")} disabled={busy}>
                 {t("back")}
               </Button>
-              <Button onClick={() => void confirm()} disabled={busy}>
+              <Button onClick={() => void confirm()} disabled={busy} loading={busy}>
                 {t("createSharedQueue")}
               </Button>
             </div>

@@ -84,6 +84,8 @@ export interface TemplateField {
   shareable_with_sponsors?: boolean;
   /** Groups this field under a `FormSection.key` (H11 form builder sections). */
   section_key?: string;
+  /** Ungrouped question placed after this section (H11). */
+  after_section_key?: string;
   /** Small helper text shown under the field (H11), e.g. a privacy note or
    *  formatting hint. Plain text; URLs are auto-linked on render. */
   help_text?: I18nText;

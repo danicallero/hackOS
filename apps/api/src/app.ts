@@ -17,11 +17,18 @@ import { pool } from "./db/pool.js";
 import { dbTimeoutsTotal, isTimeoutError } from "./lib/db-errors.js";
 import { AppError } from "./lib/errors.js";
 import { idempotencyOnSend } from "./lib/idempotency.js";
-import { observeHttpRequest, register } from "./lib/metrics.js";
+import {
+  httpRequestsInFlight,
+  observeHttpRequest,
+  observeHttpResponse,
+  register,
+} from "./lib/metrics.js";
+import { refreshOperationalMetrics } from "./lib/operational-metrics.js";
 import { RequestAdmission, type RequestAdmissionLease } from "./lib/request-admission.js";
 import { classifyRequestLane, isSseRequest } from "./lib/request-lanes.js";
 import { findReviewFixtureByUserId } from "./lib/review-fixture-log.js";
 import { openApiSecurityForPolicy, registerRoutePolicyInfrastructure } from "./lib/route-policy.js";
+import { registerSessionInvalidations } from "./lib/session-invalidation.js";
 import { broadcast } from "./lib/sse.js";
 import { mutationDomainForPath, publicContentMutationForPath } from "./lib/sse-routing.js";
 import { valkey } from "./lib/valkey.js";
@@ -310,12 +317,27 @@ export async function buildApp(): Promise<App> {
     maxBestEffortPending: Math.max(16, config.dbPoolMax * 8),
   });
   const admissionLeases = new WeakMap<FastifyRequest, RequestAdmissionLease>();
+  const requestStartedAt = new WeakMap<FastifyRequest, bigint>();
+  const finishedRequests = new WeakSet<FastifyRequest>();
 
-  app.addHook("onRequest", async (req) => {
+  app.addHook("onRequest", async (req, reply) => {
+    const admissionAbort = new AbortController();
     const requestPath = req.url.split("?", 1)[0] ?? req.url;
     const isSessionProbe = requestPath === "/api/auth/get-session";
     const lane = classifyRequestLane({ url: req.url, method: req.method, userId: req.userId });
     observeHttpRequest(lane, req.method);
+    if (!isSseRequest(req.url)) {
+      requestStartedAt.set(req, process.hrtime.bigint());
+      httpRequestsInFlight.inc();
+      // #891: an aborted response has no final HTTP status to count, but
+      // must still release its admission slot and in-flight gauge once.
+      reply.raw.once("close", () => {
+        if (reply.raw.writableFinished) return;
+        admissionAbort.abort();
+        releaseAdmission(req);
+        finishHttpRequest(req);
+      });
+    }
     // A long-lived SSE socket must never hold an admission slot for its whole
     // lifetime. The connection budget/backpressure contract remains entirely
     // owned by sse.ts (#540).
@@ -333,7 +355,12 @@ export async function buildApp(): Promise<App> {
     // the gate is meant to protect. Lane classification already keeps P0/P1
     // operational work ahead of the reserved P2/P3 share; authorization still
     // runs in the route handler.
-    const lease = await requestAdmission.acquire(lane);
+    const lease = await requestAdmission.acquire(lane, admissionAbort.signal);
+    // The connection may have closed while this request awaited admission.
+    if (finishedRequests.has(req)) {
+      lease.release();
+      return;
+    }
     admissionLeases.set(req, lease);
     if (
       req.userId != null &&
@@ -359,6 +386,22 @@ export async function buildApp(): Promise<App> {
   };
   app.addHook("onResponse", async (req) => releaseAdmission(req));
   app.addHook("onError", async (req) => releaseAdmission(req));
+
+  const finishHttpRequest = (req: FastifyRequest, statusCode?: number) => {
+    if (finishedRequests.has(req)) return;
+    const startedAt = requestStartedAt.get(req);
+    if (!startedAt) return;
+    finishedRequests.add(req);
+    httpRequestsInFlight.dec();
+    if (statusCode === undefined) return;
+    const lane = classifyRequestLane({ url: req.url, method: req.method, userId: req.userId });
+    const route = req.routeOptions.url ?? "unmatched";
+    const durationSeconds = Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
+    observeHttpResponse(lane, req.method, route, statusCode, durationSeconds);
+  };
+  app.addHook("onResponse", async (req, reply) => finishHttpRequest(req, reply.statusCode));
+  // #891: onError runs before the error handler chooses the final status.
+  // Record completed responses only in onResponse, including handled errors.
 
   app.addHook("onResponse", async (req, reply) => {
     const fixture = req.reviewFixtureContext;
@@ -387,6 +430,7 @@ export async function buildApp(): Promise<App> {
     );
   });
 
+  registerSessionInvalidations(app);
   app.addHook("onSend", idempotencyOnSend);
   app.addHook("onResponse", async (req, reply) => {
     // Browser diagnostics are intentionally not a domain mutation: emitting
@@ -409,6 +453,9 @@ export async function buildApp(): Promise<App> {
     const broadcasts = [...topics].map((topic) => broadcast(topic, EVENTS.DOMAIN_CHANGED, {}));
     if (publicContentMutationForPath(req.url)) {
       broadcasts.push(broadcast(SSE_TOPICS.PUBLIC_CONTENT, EVENTS.DATA_CHANGED, {}));
+      // TV walls render the same public sponsor/challenge projection as
+      // content-only clients, but hold only the public-TV socket.
+      broadcasts.push(broadcast(SSE_TOPICS.PUBLIC_TV, EVENTS.DATA_CHANGED, {}));
     }
     await Promise.all(broadcasts).catch((err) =>
       logSoftFailure(req, err, "scoped SSE refresh failed"),
@@ -563,6 +610,7 @@ export async function buildApp(): Promise<App> {
       },
     },
     async (_req, reply) => {
+      await refreshOperationalMetrics();
       reply.header("content-type", register.contentType);
       return register.metrics();
     },

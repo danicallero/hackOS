@@ -11,8 +11,17 @@ export const DEVELOPMENT_API_URL = "https://api.dani.md";
 /** The active base URL. Changed only by the persisted developer endpoint mode. */
 export let API_URL = PRODUCTION_API_URL;
 
+const apiUrlListeners = new Set<() => void>();
+export function onApiUrlChange(listener: () => void): () => void {
+  apiUrlListeners.add(listener);
+  return () => {
+    apiUrlListeners.delete(listener);
+  };
+}
 export function setApiUrl(url: string): void {
+  if (API_URL === url) return;
   API_URL = url;
+  for (const listener of apiUrlListeners) listener();
 }
 
 /** Public website where attendees register and review their application. */

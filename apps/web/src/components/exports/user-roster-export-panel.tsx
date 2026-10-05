@@ -108,7 +108,7 @@ export function UserRosterExportPanel({
       title={t("exportUsers")}
       icon={UsersIcon}
       footer={
-        <Button onClick={() => void exportRoster()} disabled={exporting}>
+        <Button onClick={() => void exportRoster()} disabled={exporting} loading={exporting}>
           <DownloadSimpleIcon aria-hidden="true" />
           {t("export")}
         </Button>

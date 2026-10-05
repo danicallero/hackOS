@@ -266,6 +266,7 @@ export function QueuePanel({
                       variant="outline"
                       disabled={busy != null || !canOperate || Boolean(blocked)}
                       onClick={() => onManualCall(entry, "called")}
+                      loading={busy === `manual-${entry.id}`}
                       className="flex-1"
                     >
                       {t("call")}
@@ -274,6 +275,7 @@ export function QueuePanel({
                       size="sm"
                       variant="outline"
                       disabled={busy != null || (!canOperate && !canJudge)}
+                      loading={busy === `skip-${entry.id}`}
                       onClick={() =>
                         onEntryAction(
                           entry,
@@ -341,6 +343,7 @@ export function CalledEntryActions({
         className="min-w-28 flex-1"
         disabled={busy != null || canModerate}
         onClick={() => onEntryAction(entry, "notify-enter", undefined, t("entranceNoticeSent"))}
+        loading={busy === `notify-enter-${entry.id}`}
       >
         <PaperPlaneTiltIcon aria-hidden="true" className="size-4" />
         {t("callIn")}
@@ -350,6 +353,7 @@ export function CalledEntryActions({
         className="min-w-28 flex-1"
         disabled={busy != null || !canJudge}
         onClick={() => onEntryAction(entry, "bring-in", undefined, t("teamBroughtInShort"))}
+        loading={busy === `bring-in-${entry.id}`}
       >
         <DoorOpenIcon aria-hidden="true" className="size-4" />
         {t("bringIn")}
@@ -427,6 +431,7 @@ export function CalledEntryActions({
             </Button>
             <Button
               disabled={busy != null || canModerate || !validPosition}
+              loading={busy === `move-position-${entry.id}`}
               onClick={() => {
                 onMoveToPosition(entry, requestedPosition);
                 setPositionOpen(false);

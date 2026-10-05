@@ -6,6 +6,7 @@ import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
+import { PageLayout } from "@/components/common/page-layout";
 import { Spinner } from "@/components/common/spinner";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
@@ -100,11 +101,11 @@ export default function UserProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <ProfileHeader user={user} />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabBar aria-label={t("profileSections")} className="w-full justify-start">
+        <TabBar aria-label={t("profileSections")}>
           <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
           <TabsTrigger value="access">{t("accessTab")}</TabsTrigger>
           <TabsTrigger value="attendance">{t("attendanceTab")}</TabsTrigger>
@@ -152,6 +153,6 @@ export default function UserProfilePage() {
           <ProjectsTab userId={user.id} />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageLayout>
   );
 }

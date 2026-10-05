@@ -164,6 +164,7 @@ function SignUpInner() {
               className="h-auto px-0 align-baseline"
               disabled={cooldown > 0 || resending}
               onClick={() => void resend()}
+              loading={resending}
             >
               {cooldown > 0 ? t("resendIn", { seconds: cooldown }) : t("resendVerification")}
             </Button>

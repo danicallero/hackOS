@@ -385,11 +385,12 @@ export function ActivityRow({
             type="button"
             onClick={canEdit ? onOpenEdit : undefined}
             disabled={!canEdit}
-            className={
+            className={cn(
+              "button-interaction",
               canEdit
                 ? "hover:bg-muted -mx-1 w-full rounded px-1 py-0.5 text-left disabled:cursor-default"
-                : "-mx-1 w-full px-1 py-0.5 text-left"
-            }
+                : "-mx-1 w-full px-1 py-0.5 text-left",
+            )}
             aria-label={canEdit ? t("editItemAria") : undefined}
           >
             <p className="truncate font-medium">{item.title}</p>
@@ -455,7 +456,7 @@ export function ActivityRow({
               variant="ghost"
               size="icon-sm"
               label={t("dragItemAria")}
-              className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 shrink-0 cursor-grab touch-none active:cursor-grabbing"
+              className="button-static text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 shrink-0 cursor-grab touch-none active:cursor-grabbing"
               {...attributes}
               {...listeners}
             >

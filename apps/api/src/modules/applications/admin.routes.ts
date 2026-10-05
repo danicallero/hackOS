@@ -6,7 +6,7 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
-import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import {
   lockRoleGraph,
@@ -15,7 +15,12 @@ import {
   requireRoleMutationAuthority,
 } from "../identity/role-authority.js";
 import type { TemplateField } from "./schemas.js";
-import { createApplicationSchema, idParamSchema, updateApplicationSchema } from "./schemas.js";
+import {
+  createApplicationSchema,
+  fieldsReferenceKnownSections,
+  idParamSchema,
+  updateApplicationSchema,
+} from "./schemas.js";
 import {
   anonymousRetentionConfiguration,
   isInvitedParticipant,
@@ -246,7 +251,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create an application form",
         description:
-          "Defines a new application form (H11): its template, optional named sections that group template fields under a title/description, open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12, both off by default), and an optional `grants_role_ids` (H8) list of roles granted alongside ticket issuance when a response is confirmed. `grants_role_ids` is also the answer to 'what kind of application is this' — the legacy static `type` classification is retired; a returned form instead carries `granted_role_name`, derived live from the name of its highest-position granted role. Configuring a role into `grants_role_ids` is gated exactly like directly assigning that role (H8): the actor's highest assigned-role position must sit strictly above every requested role's position, and (unless they hold the wildcard) they must already possess every capability that role's own rows explicitly allow.",
+          "Defines a new application form (H11): its template, optional named sections that group template fields under a title/description, ungrouped fields positioned after a section with `after_section_key` (mutually exclusive with `section_key`, and both must reference a defined section), open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12, both off by default), and an optional `grants_role_ids` (H8) list of roles granted alongside ticket issuance when a response is confirmed. `grants_role_ids` is also the answer to 'what kind of application is this' — the legacy static `type` classification is retired; a returned form instead carries `granted_role_name`, derived live from the name of its highest-position granted role. Configuring a role into `grants_role_ids` is gated exactly like directly assigning that role (H8): the actor's highest assigned-role position must sit strictly above every requested role's position, and (unless they hold the wildcard) they must already possess every capability that role's own rows explicitly allow.",
         body: createApplicationSchema,
       },
     },
@@ -318,7 +323,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update an application form",
         description:
-          "Partial update of a form's template, named sections grouping template fields, window, capacity, shirt-size/dietary-restriction toggles (H11, H12), or the roles granted on confirmation (`grants_role_ids`, H8). When a template field key changes, `field_renames` can explicitly map the old key to the new key; existing response values and file-sharing consent are copied to the new key only when the field kind is unchanged, while the old keys remain available to historical form versions. Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
+          "Partial update of a form's template, named sections grouping template fields, ungrouped fields positioned after a section with `after_section_key` (mutually exclusive with `section_key`; references are validated against the merged template and sections even for partial updates), window, capacity, shirt-size/dietary-restriction toggles (H11, H12), or the roles granted on confirmation (`grants_role_ids`, H8). When a template field key changes, `field_renames` can explicitly map the old key to the new key; existing response values and file-sharing consent are copied to the new key only when the field kind is unchanged, while the old keys remain available to historical form versions. Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
         params: idParamSchema,
         body: updateApplicationSchema,
       },
@@ -341,6 +346,11 @@ export function registerAdminRoutes(app: FastifyInstance): void {
           ? normalizeTemplateForStorage(b.template ?? current.template)
           : current.template;
         const nextSections = b.sections ?? current.sections ?? [];
+        if (schemaChanged && !fieldsReferenceKnownSections(nextTemplate, nextSections)) {
+          throw new BadRequestError(
+            "Every field's section_key or after_section_key must reference a defined section",
+          );
+        }
         const nextVersion = Number(current.current_form_version ?? 1) + (schemaChanged ? 1 : 0);
 
         const sets: string[] = [];

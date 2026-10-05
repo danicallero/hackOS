@@ -18,6 +18,7 @@ import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -300,7 +301,7 @@ export default function ImportProjectsPage() {
     // resolution screen, so the link back to it must account for both.
     const hasConflicts = c.participantsUnmatched > 0 || c.prizesUnmapped > 0;
     return (
-      <div className="space-y-6">
+      <PageLayout>
         <PageHeader
           title={t("importCompleteTitle")}
           description={t("batchInline", { id: result.batchId })}
@@ -346,7 +347,7 @@ export default function ImportProjectsPage() {
             </Button>
           </div>
         </SectionCard>
-      </div>
+      </PageLayout>
     );
   }
 
@@ -354,7 +355,7 @@ export default function ImportProjectsPage() {
   if (plan) {
     const totals = plan.totals;
     return (
-      <div className="space-y-6">
+      <PageLayout>
         <PageHeader
           title={t("reviewImport")}
           description={t("reviewImportDesc")}
@@ -507,13 +508,13 @@ export default function ImportProjectsPage() {
             ))}
           </div>
         </Modal>
-      </div>
+      </PageLayout>
     );
   }
 
   // ── phase 1: input ─────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         title={t("importFromDevpost")}
         actions={
@@ -557,6 +558,6 @@ export default function ImportProjectsPage() {
           />
         </div>
       </SectionCard>
-    </div>
+    </PageLayout>
   );
 }

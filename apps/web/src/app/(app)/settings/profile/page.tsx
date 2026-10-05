@@ -6,11 +6,12 @@ import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { ContextualError } from "@/components/common/contextual-error";
+import { FormActions } from "@/components/common/form-actions";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
-import { SubmitButton } from "@/components/common/submit-button";
-import { Badge } from "@/components/ui/badge";
 import {
   Form,
   FormControl,
@@ -34,6 +35,7 @@ import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { Intolerance, Language, Me } from "@/lib/types";
+import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import { DangerZoneCard } from "./danger-zone";
 import { EmailCard } from "./email-card";
 import { PasswordCard } from "./password-card";
@@ -103,8 +105,11 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
   // H7: name and logistics data (shirt size, dietary info) are locked once
   // an application is accepted — staff can still fix them via the user detail page.
   const locked = me.profileLocked;
+  const [saveError, setSaveError] = useState<string | null>(null);
+  useUnsavedChangesGuard(form.formState.isDirty);
 
   async function onSubmit(values: Values) {
+    setSaveError(null);
     try {
       await api.patch<Me>("/api/me", {
         name: values.name,
@@ -114,9 +119,11 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
         foodIntolerances: values.foodIntolerances.map(Number),
         foodIntoleranceNotes: values.foodIntoleranceNotes || null,
       });
+      form.reset(values);
       await refresh();
       toast.success(t("profileUpdated"), { compactTitle: t("toastSaveProfile") });
     } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : t("couldNotSaveProfile"));
       toast.error(
         err instanceof ApiError ? err.message : t("couldNotSaveProfile"),
         t("toastSaveProfile"),
@@ -131,7 +138,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
   }));
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-12">
+    <PageLayout width="reading">
       <PageHeader title={t("myProfile")} />
       {me.roles.length > 0 && (
         <SectionCard
@@ -142,9 +149,9 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
         >
           <div className="flex flex-wrap gap-2">
             {me.roles.map((r) => (
-              <Badge key={r.id} variant="outline">
+              <span key={r.id} className="type-meta">
                 {r.name}
-              </Badge>
+              </span>
             ))}
           </div>
         </SectionCard>
@@ -157,11 +164,16 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
             icon={UserIcon}
             title={t("personalDetails")}
             description={locked ? t("profileLockedNotice") : undefined}
+            stickyFooter
             footer={
-              <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+              <FormActions
+                pending={form.formState.isSubmitting}
+                state={saveError ? "error" : form.formState.isDirty ? "unsaved" : "saved"}
+              />
             }
           >
-            <div className="grid gap-4 sm:grid-cols-2">
+            {saveError && <ContextualError message={saveError} />}
+            <div className="grid items-start gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="name"
@@ -283,6 +295,6 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
       <EmailCard />
       <PasswordCard />
       <DangerZoneCard />
-    </div>
+    </PageLayout>
   );
 }

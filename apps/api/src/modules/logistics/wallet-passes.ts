@@ -300,11 +300,18 @@ export async function ensureGooglePassRecord(
  * up-to-date content too.
  */
 export async function bumpAllAppleWalletUpdateTags(): Promise<number[]> {
-  // Canonical update_tag format is integer epoch milliseconds (0504) — must
-  // match ensurePassRecord's Date.now() so appleChangedSerials compares a
-  // single format.
+  // H28 / #896: a device cursor is the maximum tag across its passes.
+  // Advance beyond all existing Apple tags even when the DB clock lags
+  // issuance's Node clock; the row floor also protects concurrent bumps.
+  // Numeric casts accept fractional legacy tags still written on badge
+  // rotation, while the resulting tag remains integer milliseconds (0504).
   const { rows } = await pool.query(
-    `UPDATE wallet_passes SET update_tag = ((extract(epoch FROM now()) * 1000)::bigint)::text
+    `UPDATE wallet_passes SET update_tag = GREATEST(
+        (extract(epoch FROM clock_timestamp()) * 1000)::bigint,
+        update_tag::numeric::bigint + 1,
+        (SELECT COALESCE(MAX(update_tag::numeric)::bigint, 0) + 1
+           FROM wallet_passes WHERE platform = 'apple')
+      )::text
       WHERE platform = 'apple'
       RETURNING id`,
   );

@@ -16,6 +16,7 @@ jest.mock("@expo/ui/community/menu", () => ({
   },
 }));
 let mockNfcVisible = false;
+let mockQrCameraMountCount = 0;
 jest.mock("@/components/badge-replacement-dialog", () => ({
   BadgeReplacementDialog: ({
     visible,
@@ -126,6 +127,7 @@ jest.mock("@/components/nfc-reader", () => ({
 }));
 jest.mock("@/components/QrCamera", () => ({
   QrCamera: ({ onValue }: { onValue: (code: string) => void }) => {
+    mockQrCameraMountCount += 1;
     const { Pressable, Text } = require("react-native");
     return (
       <Pressable
@@ -169,6 +171,7 @@ beforeEach(() => {
   jest.mocked(apiFetch).mockReset().mockRejectedValue(new Error("Offline"));
   mockSyncState.sync.mockReset().mockResolvedValue(undefined);
   mockNfcVisible = false;
+  mockQrCameraMountCount = 0;
   jest.mocked(submitScannerMutation).mockClear();
 });
 afterEach(() => {
@@ -195,6 +198,14 @@ it("links a manually entered code through the existing accreditation mutation", 
     ),
   );
   expect(submitScannerMutation).toHaveBeenCalledTimes(1);
+});
+
+it("mounts the QR camera only after the operator chooses QR", async () => {
+  await renderMobile(<PersonOperationsScreen />);
+  expect(mockQrCameraMountCount).toBe(0);
+
+  await act(() => mockMenuProps.onPressAction({ nativeEvent: { event: "qr" } }));
+  expect(mockQrCameraMountCount).toBe(1);
 });
 
 it("offers QR in the native iOS replacement dialog and retains the badge being revoked", async () => {

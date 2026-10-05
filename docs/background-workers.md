@@ -167,13 +167,21 @@ policy beside the processor.
 
 ## Queue and public-screen streams
 
+The following legacy endpoints remain for installed-client compatibility;
+current authenticated readers attach these scopes to `/api/realtime/stream`.
+
+`GET /api/queue/me/stream` is the authenticated personal channel. It carries
+only the current account's queue, inbox, and session-refresh signals, so the
+web shell can use one physical connection for all three.
+
 `GET /api/queue/stream` is an authenticated operational channel: only global
 `queue:operate`, `queue:admin`, or `judge:panel` holders can subscribe because
 its events carry room-control and team details. `GET /api/events/stream` is
 authenticated only when a domain topic is supplied (`applications`, `projects`,
 `identity`, `sponsors`, `logistics`, or `audit`); it carries payload-free
 `domain.changed` signals and never acts as a global refresh channel. Public
-`/api/tv/stream` subscribes only to `public-tv` (mirrors `queue` and `tv`) and
+`/api/tv/stream` subscribes only to `public-tv` (mirrors `queue`, `tv`, and
+public `content`) and
 `/api/content/stream` only to `public-content` (mirrors `content` and explicit
 public sponsor/challenge changes). Both mirrors use an empty `data.changed`
 envelope, never the source payload, and neither sees private roster, identity,
@@ -181,3 +189,13 @@ logistics or export writes.
 A public screen refetches `/api/tv/mode`, `/api/tv/rooms`, or its public content
 projection after its relevant invalidation; it never receives operational queue,
 account, project-link, or content-management payloads over SSE.
+
+## Multiplexed realtime transport (#892)
+
+Authenticated web/native readers share `/api/realtime/stream` with independently
+authorized logical scopes, per-topic cursors and scoped authoritative recovery.
+TV retains one public payload-free stream for all rendered domains. Legacy
+endpoints remain available for installed clients. Physical connection budgets
+and gauges count the shared response once; logical attachments and access-check
+load remain separate. See [realtime transport](./realtime-transport.md) for the
+scope/authorization table, lifecycle, revocation, metrics and 600-client results.

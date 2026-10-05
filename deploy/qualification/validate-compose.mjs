@@ -61,15 +61,16 @@ const normalizedLimit = (key, value) => {
     "512m": "536870912",
     "1g": "1073741824",
     "2g": "2147483648",
+    "5g": "5368709120",
   };
   return bytes[value] ?? value;
 };
 const expectedLimits = {
-  api: { cpus: "2.0", memory: "1g" },
+  api: { cpus: "2.0", memory: "2g" },
   runner: { cpus: "2.0", memory: "1g" },
-  worker: { cpus: "2.0", memory: "1g" },
-  postgres: { cpus: "2.0", memory: "2g" },
-  valkey: { cpus: "1.0", memory: "1g" },
+  worker: { cpus: "2.0", memory: "2g" },
+  postgres: { cpus: "2.0", memory: "5g" },
+  valkey: { cpus: "1.0", memory: "2g" },
   migrate: { cpus: "1.0", memory: "512m" },
 };
 for (const [service, expected] of Object.entries(expectedLimits)) {
@@ -86,9 +87,9 @@ const qualificationMemoryBytes = qualificationMemoryServices.reduce((total, serv
   if (!Number.isFinite(memory)) fail(`${service} memory limit is not numeric`);
   return total + (Number.isFinite(memory) ? memory : 0);
 }, 0);
-const qualificationBudgetBytes = 8 * 1024 ** 3;
+const qualificationBudgetBytes = 16 * 1024 ** 3;
 if (qualificationMemoryBytes >= qualificationBudgetBytes) {
-  fail("qualification declared memory budget must remain below the production host budget");
+  fail("qualification declared memory budget must remain below the 16 GiB qualification budget");
 }
 
 if (failures.length) {

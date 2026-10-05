@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Spinner } from "@/components/common/spinner";
 import { ApiError } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
@@ -96,19 +97,21 @@ export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <a href={appleHref} className="inline-flex w-fit">
+      <a href={appleHref} className="button-interaction inline-flex w-fit rounded-md">
         {/* biome-ignore lint/performance/noImgElement: official Apple badge, must not be re-processed by next/image */}
         <img src={appleBadgeSrc} alt={t("addToAppleWallet")} className="h-12 w-auto" />
       </a>
 
       <button
         type="button"
-        className="inline-flex w-fit rounded-md disabled:cursor-not-allowed disabled:opacity-50"
+        className="button-interaction inline-flex w-fit rounded-md disabled:cursor-not-allowed disabled:opacity-50"
         disabled={googleLoading}
+        aria-busy={googleLoading}
         onClick={() => void openGoogleWallet()}
       >
         {/* biome-ignore lint/performance/noImgElement: official Google button, must not be re-processed by next/image */}
         <img src={googleButtonSrc} alt={t("addToGoogleWallet")} className="h-12 w-auto" />
+        {googleLoading && <Spinner className="ml-2" />}
       </button>
     </div>
   );

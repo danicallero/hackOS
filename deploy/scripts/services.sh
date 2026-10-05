@@ -1681,13 +1681,15 @@ validate_published_release() {
 }
 
 deploy_release() {
-  local requested="$1" unit="both" tag api_changed web_changed
+  local requested="$1" unit="both" tag api_changed web_changed release_action_override=""
   shift
   while (($#)); do
     case "$1" in
       --api) unit=api ;;
       --web) unit=web ;;
       --both) unit=both ;;
+      --promote) release_action_override=promote ;;
+      --rollback) release_action_override=rollback ;;
       *) die "unknown deploy option: $1" ;;
     esac
     shift
@@ -1701,12 +1703,18 @@ deploy_release() {
   tag="$(resolve_release_tag "$requested" "$api_changed" "$web_changed")"
   validate_published_release "$tag" "$api_changed" "$web_changed"
   printf 'Environment: %s\nAction: deploy\nAPI/worker: %s\nWeb: %s\n' "$environment" "$tag ($api_changed)" "$tag ($web_changed)"
-  if [[ "$environment" == production ]]; then
-    printf '%s\n' "Production is protected; run: gh workflow run deploy-incus.yml --repo $github_repository -f tag=$tag -f api_changed=$api_changed -f web_changed=$web_changed"
-    return 0
-  fi
   lock_mutation
-  HACKOS_LOCK_HELD=true "$app_dir/deploy.sh" staging "$tag" "$api_changed" "$web_changed"
+  release_action=manual
+  if [[ "$environment" == production ]]; then
+    if [[ -n "$release_action_override" ]]; then
+      release_action="$release_action_override"
+    elif [[ "$requested" == latest ]]; then
+      release_action=promote
+    else
+      release_action=rollback
+    fi
+  fi
+  HACKOS_LOCK_HELD=true "$app_dir/deploy.sh" "$environment" "$tag" "$api_changed" "$web_changed" "$release_action"
 }
 
 deploy_target_shell() {
@@ -1731,7 +1739,9 @@ deploy_target_shell() {
     pause_shell
     return 0
   fi
-  if ! validate_published_release "$tag" "$api_changed" "$web_changed" 2>/dev/null; then
+  # Registry validation calls die(); contain that exit within the menu (#544).
+  if ! (validate_published_release "$tag" "$api_changed" "$web_changed") 2>/dev/null; then
+    last_child_succeeded=false
     printf '%s\n' "${c_red}Release ${tag} is not published in GHCR for the selected units.${c_reset}"
     pause_shell
     return 0
@@ -1741,7 +1751,7 @@ deploy_target_shell() {
   printf 'Environment: %s\nRelease:     %s\nAPI/worker:  %s\nWeb:         %s\n\n' \
     "$environment" "$tag" "$api_changed" "$web_changed"
   if [[ "$environment" == production ]]; then
-    printf '%s\n' "Production opens the protected GitHub workflow; it does not deploy directly from this shell."
+    printf '%s\n' "Production deploys the selected immutable image through the host deployment script and its safety gates."
   else
     printf '%s\n' "This pulls the selected immutable image and recreates only the selected services."
   fi
@@ -1751,7 +1761,13 @@ deploy_target_shell() {
     quit) shell_quit=true; return 0 ;;
   esac
   if [[ "$shell_input" == DEPLOY ]]; then
-    run_action "deploy $tag" deploy "$tag" "$option"
+    if [[ "$environment" == production && "$requested" == latest ]]; then
+      run_action "deploy $tag" deploy "$tag" "$option" --promote
+    elif [[ "$environment" == production ]]; then
+      run_action "deploy $tag" deploy "$tag" "$option" --rollback
+    else
+      run_action "deploy $tag" deploy "$tag" "$option"
+    fi
   else
     printf '%s\n' "${c_dim}Deployment cancelled; no image was pulled.${c_reset}"
     pause_shell

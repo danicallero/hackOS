@@ -135,6 +135,9 @@ sharing consent) only when the field kind matches. Old keys remain for
 responses' immutable historical form versions. Draft preparation and
 uploads remain available before verification; submitting or confirming a
 place does not. Decision-makers can return a response to its owner as a draft.
+A response owner can retrieve that immutable form snapshot with their answers
+even after the form closes; the applicant page renders it read-only unless the
+form is open or that returned draft is allowed to resubmit after close.
 A confirmed response keeps its application-granted role and live ticket access
 only when auto-accept is enabled; otherwise those are revoked until a later
 review and confirmation. The decision-maker can optionally allow that one
@@ -143,6 +146,15 @@ submission with a fresh confirmation email. Form deletion removes its responses,
 versions, grants and confirmation tokens transactionally; anonymous-retention
 records remain a deliberate deletion boundary. The confirmation-window expirer (`applications/expirer.ts`)
 is a background tick, not a request path.
+
+Form fields can belong to a named section via `section_key`, or remain ungrouped
+and appear immediately after a section via `after_section_key` (H11). These
+properties are mutually exclusive and must reference an existing section.
+Ungrouped fields without an anchor appear before the named sections; within each
+section or anchored group, template array order applies. Create and partial
+update validate the complete resulting template against the sections, and the
+anchor is preserved in the immutable form-version JSON alongside the other
+field definitions. No database migration is needed for this layout metadata.
 
 The form catalogue also supports curated university-degree IDs and public city
 suggestions (Photon/OpenStreetMap). The city picker uses `en` for English and
@@ -460,7 +472,7 @@ The complete route classification and durable-side-effect boundary are in
 
 ### Realtime (SSE)
 `broadcast(topic, EVENT, data)` from `lib/sse.ts` publishes to
-`sse:<topic>` in Valkey; every API instance relays to its own locally
+`sse:<namespace>:<topic>` in Valkey; every API instance relays to its own locally
 connected clients, so TVs and operator panels stay live across a
 horizontally-scaled API tier. Event names live in
 [`packages/shared/src/events.ts`](../packages/shared/src/events.ts), never as
@@ -528,6 +540,20 @@ when their response count is zero. Sensitive derived dimensions such as age
 and study level are calculated server-side against the event reference date;
 the raw source value is never included in a statistics response.
 
+Application-scope form and logistics distributions accept a
+`participant_filters` object on the dashboard query and CSV export. Keys are
+selected `application:<id>` scopes. Each value is an array containing any of
+`confirmed`, `accepted_internal`, and `accepted`; an empty array includes every
+non-draft response. Drafts are always excluded. Applications without an entry
+use the confirmed-only default. The legacy
+`participant_filter=confirmed|submitted` parameter remains supported and sets
+the fallback for all selected applications.
+
+These filters do not change application lifecycle counts, confirmation panels,
+time series, or role-scope distributions. The dashboard presents scope and
+participant filters on the Before phase; During and After are event-wide
+operational views.
+
 Personal panel visibility, order, size, chart type, and layout preferences are
 stored through `/api/me/ui-prefs` and therefore follow the account across
 devices. The server treats those preferences as presentation only; scope and
@@ -548,3 +574,13 @@ panel authorization is never delegated to them.
 See root [`README.md`](../README.md) for the full local dev command
 reference (`pnpm infra:up`, migrations, seeding, running the API/web/mobile
 apps together).
+
+## Multiplexed realtime transport (#892)
+
+Authenticated web/native readers share `/api/realtime/stream` with independently
+authorized logical scopes, per-topic cursors and scoped authoritative recovery.
+TV retains one public payload-free stream for all rendered domains. Legacy
+endpoints remain available for installed clients. Physical connection budgets
+and gauges count the shared response once; logical attachments and access-check
+load remain separate. See [realtime transport](./realtime-transport.md) for the
+scope/authorization table, lifecycle, revocation, metrics and 600-client results.

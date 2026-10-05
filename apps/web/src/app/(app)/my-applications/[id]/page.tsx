@@ -4,8 +4,8 @@
 // only after the acceptance decision has been sent.
 //
 // Endpoints (applicant-only):
-//   GET  /api/public/applications/:id          → the open form + template
-//   GET  /api/applications/:id/response         → my saved response (404 = none)
+//   GET  /api/public/applications/:id          → an open form + current template
+//   GET  /api/applications/:id/response         → my saved response + its form snapshot
 //   PUT  /api/applications/:id/response          → create/update my draft
 //   POST /api/applications/:id/response/submit   → submit (returns privacy_notice)
 //   POST /api/me/responses/:responseId/confirm   → confirm my place (H15)
@@ -22,9 +22,9 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
-import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { TemplateFieldControl, templateFieldId } from "@/components/common/template-field-control";
@@ -54,6 +54,7 @@ import {
   type MutationKey,
   type MyResponseDetail,
   type PublicForm,
+  seedApplicationValues,
   statusLabel,
   statusTone,
   withLogisticsSection,
@@ -106,17 +107,19 @@ export default function MyApplicationDetailPage() {
 
   // Mirror the API's enrichment so shirt-size + dietary fields render in the form
   // (participant/mentor) rather than being pulled silently from the profile (H12).
-  const responseTemplate = response?.template ?? form?.template;
+  // The owned response carries the immutable template version used for its
+  // answers, so the form stays readable after the public application closes.
   const template =
-    form && responseTemplate
+    response?.template ??
+    (form
       ? enrichTemplate(
           form.ask_shirt_size,
           form.ask_food_intolerances,
-          responseTemplate,
+          form.template,
           intolerances,
           shirtSizes,
         )
-      : [];
+      : []);
   const { checkRequired, fieldErrors, setFieldErrors, validateOnBlur } =
     useApplicationFieldValidation({
       applicationId: id,
@@ -188,24 +191,7 @@ export default function MyApplicationDetailPage() {
     // Seed answers from the saved response, then prefill the appended shirt-size
     // and dietary fields from the profile so the applicant doesn't re-enter data
     // the API already knows (H12). Saved values always win over the profile.
-    const seeded: Record<string, unknown> = { ...(nextResponse?.responses ?? {}) };
-    if (nextForm?.ask_shirt_size && seeded.shirt_size == null && me?.shirtSize) {
-      seeded.shirt_size = me.shirtSize;
-    }
-    if (nextForm?.ask_food_intolerances) {
-      if (seeded.food_intolerances == null && me?.foodIntolerances?.length) {
-        seeded.food_intolerances = me.foodIntolerances.map(String);
-      }
-      if (seeded.food_intolerance_notes == null && me?.foodIntoleranceNotes) {
-        seeded.food_intolerance_notes = me.foodIntoleranceNotes;
-      }
-    }
-    // Reserved "dni" question (H11/H12): prefill from the profile the same
-    // way, if the builder added one.
-    const dniField = nextForm?.template.find((f) => f.key.trim().toLowerCase() === "dni");
-    if (dniField && seeded[dniField.key] == null && me?.dni) {
-      seeded[dniField.key] = me.dni;
-    }
+    const seeded = seedApplicationValues(nextResponse, nextForm, me);
     // A reload can race with typing (for example, after a session refresh).
     // Keep local answers and their save state until their autosave catches up.
     if (!hasLocalEditsRef.current) {
@@ -249,8 +235,9 @@ export default function MyApplicationDetailPage() {
   const status = confirmationExpired ? "expired" : response?.status; // already masked by the API
   const timelineResponse =
     confirmationExpired && response ? { ...response, status: "expired" } : response;
-  // A form is only present here when its window is open, so a draft/new response
-  // is editable exactly when we have the template and nothing past 'draft'.
+  // Closed forms can still render the saved snapshot. The public form endpoint
+  // is available after close only for invitees or a returned draft with
+  // allow_resubmit_after_close, so editing/submitting remains server-gated.
   const editable = !!form && !formError && !responseError && (!response || status === "draft");
   // editableRef mirrors the editable state so the live-refresh effect can read it
   // without adding editable to its dependency array (which would cause thrashing).
@@ -453,7 +440,7 @@ export default function MyApplicationDetailPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6" aria-busy="true">
+      <PageLayout aria-busy="true" width="reading">
         <PageHeader title={t("tabApplication")} />
         <div role="status" className="space-y-4">
           <span className="sr-only">{t("loading")}</span>
@@ -461,7 +448,7 @@ export default function MyApplicationDetailPage() {
           <div className="h-28 animate-pulse rounded-lg border bg-muted/50 motion-reduce:animate-none" />
           <div className="h-52 animate-pulse rounded-lg border bg-muted/50 motion-reduce:animate-none" />
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
@@ -470,7 +457,7 @@ export default function MyApplicationDetailPage() {
   // Neither an open form nor an existing response — nothing to show.
   if (!form && !response) {
     return (
-      <div className="space-y-6">
+      <PageLayout width="reading">
         <PageHeader title={t("tabApplication")} />
         {loadError ? (
           <ContextualError message={loadError} onRetry={retry} />
@@ -492,17 +479,24 @@ export default function MyApplicationDetailPage() {
             />
           </Section>
         )}
-      </div>
+      </PageLayout>
     );
   }
 
-  const title = form?.name ?? t("yourApplicationFallback");
+  const title = form?.name ?? response?.application_name ?? t("yourApplicationFallback");
+  const description = form?.description ?? response?.application_description ?? undefined;
+  const asksForLogistics = Boolean(
+    response?.ask_shirt_size ||
+      response?.ask_food_intolerances ||
+      form?.ask_shirt_size ||
+      form?.ask_food_intolerances,
+  );
 
   return (
-    <div className="space-y-6">
+    <PageLayout width="reading">
       <PageHeader
         title={title}
-        description={form?.description ?? undefined}
+        description={description}
         actions={
           status ? (
             <StatusBadge tone={statusTone(status)} dot={false}>
@@ -530,20 +524,24 @@ export default function MyApplicationDetailPage() {
 
       <SectionCard
         icon={ClipboardTextIcon}
-        title={editable ? t("yourAnswers") : t("yourSubmittedAnswers")}
+        title={response?.submitted_at ? t("yourSubmittedAnswers") : t("yourAnswers")}
         description={editable ? undefined : t("applicationLockedDesc")}
         footer={
           editable ? (
             <div className="flex w-full flex-wrap items-center gap-2">
-              <SaveStatus state={saving || submitting ? "saving" : saveState} className="mr-auto" />
+              <SaveStatus
+                state={saving || submitting ? "saving" : saveState}
+                showIcon={!saving && !submitting}
+                className="mr-auto"
+              />
               <Button
                 type="button"
                 variant="outline"
                 onClick={handleSaveDraft}
                 disabled={saving || submitting}
                 className="w-full sm:w-auto"
+                loading={saving}
               >
-                {saving && <Spinner />}
                 {t("saveDraft")}
               </Button>
               <SubmitButton
@@ -588,10 +586,7 @@ export default function MyApplicationDetailPage() {
         {template.length > 0 ? (
           groupFieldsBySections(
             template,
-            withLogisticsSection(
-              response?.sections ?? form?.sections ?? [],
-              Boolean(form?.ask_shirt_size || form?.ask_food_intolerances),
-            ),
+            withLogisticsSection(response?.sections ?? form?.sections ?? [], asksForLogistics),
           ).map((group, i) => (
             <div
               key={group.section?.key ?? `ungrouped-${i}`}
@@ -632,8 +627,8 @@ export default function MyApplicationDetailPage() {
               </div>
             </div>
           ))
-        ) : form ? (
-          // Open form with no questions — nothing to fill in but a submit is valid.
+        ) : form || response?.template ? (
+          // An empty saved template is still a valid form snapshot.
           <p className="text-muted-foreground text-sm">{t("formHasNoQuestions")}</p>
         ) : (
           // No template available (closed form): show stored answers read-only.
@@ -674,6 +669,6 @@ export default function MyApplicationDetailPage() {
           </p>
         </div>
       </Modal>
-    </div>
+    </PageLayout>
   );
 }

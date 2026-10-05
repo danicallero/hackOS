@@ -1,3 +1,4 @@
+import { groupApplicationFields } from "@/lib/application-field-groups";
 // Participant-facing "My applications" flow — shared types & helpers (H12–H15).
 //
 // This is the APPLICANT view (distinct from the admin Applications module under
@@ -45,6 +46,8 @@ export interface TemplateField {
   max_file_size_mb?: number;
   /** Groups this field under a `FormSection.key` (H11 form builder sections). */
   section_key?: string;
+  /** Ungrouped question placed after this section (H11). */
+  after_section_key?: string;
   /** Small helper text shown under the field (H11), e.g. a privacy note or
    *  formatting hint. Plain text; URLs are auto-linked on render. */
   help_text?: I18nText;
@@ -122,9 +125,62 @@ export interface MyResponseDetail {
   submitted_at: string | null;
   created_at: string;
   updated_at: string;
+  application_name?: string;
+  application_description?: string | null;
+  open_at?: string | null;
+  close_at?: string | null;
+  ask_shirt_size?: boolean;
+  ask_food_intolerances?: boolean;
+  shirt_size?: string | null;
+  food_intolerances?: number[];
+  food_intolerance_notes?: string | null;
+  allow_resubmit_after_close?: boolean;
+  auto_accept_on_resubmit?: boolean;
   /** Immutable form snapshot the response is validated against. */
   template?: TemplateField[];
   sections?: FormSection[];
+}
+
+/** Seed a form from its saved response, using profile data only for open forms. */
+export function seedApplicationValues(
+  response: MyResponseDetail | null,
+  form: Pick<PublicForm, "ask_shirt_size" | "ask_food_intolerances" | "template"> | null,
+  profile: {
+    shirtSize?: string | null;
+    foodIntolerances?: number[];
+    foodIntoleranceNotes?: string | null;
+    dni?: string | null;
+  } | null,
+): Record<string, unknown> {
+  const values: Record<string, unknown> = { ...(response?.responses ?? {}) };
+  if (values.shirt_size == null) {
+    const responseSize = response?.ask_shirt_size ? response.shirt_size : null;
+    const profileSize = form?.ask_shirt_size ? profile?.shirtSize : null;
+    if (responseSize != null) values.shirt_size = responseSize;
+    else if (profileSize) values.shirt_size = profileSize;
+  }
+  if (values.food_intolerances == null) {
+    const responseIntolerances = response?.ask_food_intolerances
+      ? response.food_intolerances
+      : null;
+    if (responseIntolerances != null) {
+      values.food_intolerances = responseIntolerances.map(String);
+    } else if (form?.ask_food_intolerances && profile?.foodIntolerances?.length) {
+      values.food_intolerances = profile.foodIntolerances.map(String);
+    }
+  }
+  if (values.food_intolerance_notes == null) {
+    const responseNotes = response?.ask_food_intolerances ? response.food_intolerance_notes : null;
+    if (responseNotes != null) values.food_intolerance_notes = responseNotes;
+    else if (form?.ask_food_intolerances && profile?.foodIntoleranceNotes) {
+      values.food_intolerance_notes = profile.foodIntoleranceNotes;
+    }
+  }
+  const dniField = form?.template.find((field) => field.key.trim().toLowerCase() === "dni");
+  if (dniField && values[dniField.key] == null && profile?.dni) {
+    values[dniField.key] = profile.dni;
+  }
+  return values;
 }
 
 /** A single response value, keyed by field.key in the responses object. */
@@ -268,25 +324,12 @@ export interface FieldGroup {
   fields: TemplateField[];
 }
 
-/**
- * Groups a flat field list under its sections, in section order, with any
- * fields whose `section_key` is unset or doesn't match a known section
- * leading as one ungrouped group — matching the builder's own layout, where
- * unassigned questions sit above the section blocks. Mirrors the builder's
- * identically-named helper (apps/web/src/app/(app)/applications/[id]/shared.ts)
- * so both surfaces render sections the same way.
- */
+/** Shared ordering for section members and standalone questions before/after sections. */
 export function groupFieldsBySections(
   fields: TemplateField[],
   sections: FormSection[],
 ): FieldGroup[] {
-  const knownKeys = new Set(sections.map((s) => s.key));
-  const ungrouped = fields.filter((f) => !f.section_key || !knownKeys.has(f.section_key));
-  const groups: FieldGroup[] = [{ section: null, fields: ungrouped }];
-  for (const section of sections) {
-    groups.push({ section, fields: fields.filter((f) => f.section_key === section.key) });
-  }
-  return groups.filter((g) => g.fields.length > 0);
+  return groupApplicationFields(fields, sections);
 }
 
 // ── status presentation (the masked applicant-visible set) ────────────────────

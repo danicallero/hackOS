@@ -4,9 +4,15 @@ import { expect, shellUser, test } from "./fixtures";
 test("can select a city and complete the location while Photon is unavailable", async ({
   page,
 }) => {
-  let savedAnswers: unknown;
+  let savedAnswers: unknown = {};
+  let responseReads = 0;
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    // Exercise lossy-stream recovery while editing: each finite mock stream closes.
+    if (path === "/api/realtime/stream") {
+      await route.fulfill({ contentType: "text/event-stream", body: ": ready\n\n" });
+      return;
+    }
     let body: unknown = {};
     if (path === "/api/me") body = shellUser;
     if (path === "/api/public/applications/1") {
@@ -29,14 +35,14 @@ test("can select a city and complete the location while Photon is unavailable", 
       };
     }
     if (path === "/api/applications/1/response") {
+      if (route.request().method() === "GET") responseReads++;
       if (route.request().method() === "PUT")
         savedAnswers = route.request().postDataJSON().responses;
       body = {
         id: 1,
         application_id: 1,
         status: "draft",
-        responses:
-          route.request().method() === "PUT" ? route.request().postDataJSON().responses : {},
+        responses: savedAnswers,
       };
     }
     if (path === "/api/public/food-intolerances") body = { intolerances: [] };
@@ -87,6 +93,8 @@ test("can select a city and complete the location while Photon is unavailable", 
     "aria-invalid",
     "true",
   );
+  const readsAfterSave = responseReads;
+  await expect.poll(() => responseReads).toBeGreaterThan(readsAfterSave);
   await page.screenshot({ path: "artifacts/city-manual.png" });
   await expect(page.getByRole("textbox", { name: "City", exact: true })).toHaveValue("A Coruña");
 });

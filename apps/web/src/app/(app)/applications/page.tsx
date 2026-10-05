@@ -7,15 +7,18 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApplicationExportPanel } from "@/components/applications/application-export-panel";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
@@ -24,6 +27,7 @@ import { type ApplicationForm, fmtDateTime, grantedRoleNameLabel, windowState } 
 
 export default function ApplicationsPage() {
   const { t } = useLocale();
+  const isMobile = useIsMobile();
   const canManage = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
   const canExport = useCan(CAPABILITIES.EXPORTS_RUN);
   const [forms, setForms] = useState<ApplicationForm[]>([]);
@@ -121,16 +125,31 @@ export default function ApplicationsPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         title={t("applications")}
-        secondaryActions={canExport ? <ApplicationExportPanel /> : undefined}
+        secondaryActions={
+          canExport ? (
+            <ApplicationExportPanel
+              trigger={
+                <Button
+                  variant="outline"
+                  size={isMobile ? "icon" : "default"}
+                  aria-label={t("exportApplicationData")}
+                >
+                  <DownloadSimpleIcon aria-hidden="true" />
+                  {!isMobile && t("exportApplicationData")}
+                </Button>
+              }
+            />
+          ) : undefined
+        }
         primaryAction={
           canManage ? (
-            <Button asChild>
+            <Button asChild size={isMobile ? "icon" : "default"} aria-label={t("newForm")}>
               <Link href="/applications/new">
                 <PlusIcon aria-hidden="true" />
-                {t("newForm")}
+                {!isMobile && t("newForm")}
               </Link>
             </Button>
           ) : undefined
@@ -167,6 +186,6 @@ export default function ApplicationsPage() {
           ) : undefined,
         }}
       />
-    </div>
+    </PageLayout>
   );
 }

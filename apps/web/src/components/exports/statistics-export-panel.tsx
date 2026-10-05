@@ -1,12 +1,12 @@
 "use client";
 
+import type { StatisticsParticipantStatus } from "@hackos/shared/statistics";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { MultiSelect } from "@/components/common/multi-select";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
+import { StatisticsScopeFilterMenu } from "@/components/statistics/statistics-scope-filter-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
@@ -21,6 +21,9 @@ export function StatisticsExportPanel({ trigger }: { trigger?: ReactNode }) {
   const { t } = useLocale();
   const [scopes, setScopes] = useState<StatisticsScope[]>([]);
   const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
+  const [participantStatusesByApplication, setParticipantStatusesByApplication] = useState<
+    Record<string, StatisticsParticipantStatus[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,17 +52,24 @@ export function StatisticsExportPanel({ trigger }: { trigger?: ReactNode }) {
     void load();
   }, [load]);
 
-  const options = useMemo(
-    () =>
-      scopes.map((scope) => ({
-        value: scope.key,
-        label: scope.name,
-        description:
-          scope.kind === "application" ? t("applicationScopeLabel") : t("roleScopeLabel"),
-      })),
-    [scopes, t],
+  const selectedApplicationScopes = scopes.filter(
+    (scope) => scope.kind === "application" && selectedScopes.includes(scope.key),
   );
-  const href = `${API_URL}/api/exports/statistics.csv?scopes=${encodeURIComponent(selectedScopes.join(","))}`;
+  const exportParams = new URLSearchParams({ scopes: selectedScopes.join(",") });
+  if (selectedApplicationScopes.length > 0) {
+    exportParams.set(
+      "participant_filters",
+      JSON.stringify(
+        Object.fromEntries(
+          selectedApplicationScopes.map((scope) => [
+            scope.key,
+            participantStatusesByApplication[scope.key] ?? ["confirmed"],
+          ]),
+        ),
+      ),
+    );
+  }
+  const href = `${API_URL}/api/exports/statistics.csv?${exportParams.toString()}`;
 
   return (
     <SidePanelEditor
@@ -94,23 +104,34 @@ export function StatisticsExportPanel({ trigger }: { trigger?: ReactNode }) {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <div className="space-y-2">
-        <Label htmlFor="statistics-export-scopes">{t("selectStatisticsScopes")}</Label>
-        <MultiSelect
-          id="statistics-export-scopes"
-          options={options}
-          value={selectedScopes}
-          onChange={setSelectedScopes}
-          disabled={loading || scopes.length === 0}
-          placeholder={t("selectStatisticsScopes")}
-          searchPlaceholder={t("searchStatisticsScopes")}
-          emptyText={t("noStatisticsScopes")}
-          aria-label={t("selectStatisticsScopes")}
-        />
+      <section className="space-y-3" aria-labelledby="statistics-export-scope-heading">
+        <div className="flex items-center justify-between gap-3">
+          <h3 id="statistics-export-scope-heading" className="type-label">
+            {t("selectStatisticsScopes")}
+          </h3>
+        </div>
+        {scopes.length > 0 && (
+          <div className="max-h-52 overflow-y-auto rounded-control border border-border bg-muted/20 p-3">
+            <StatisticsScopeFilterMenu
+              scopes={scopes}
+              selectedScopeKeys={selectedScopes}
+              participantStatusesByApplication={participantStatusesByApplication}
+              onScopeChange={setSelectedScopes}
+              onParticipantStatusesChange={(scopeKey, statuses) =>
+                setParticipantStatusesByApplication((current) => ({
+                  ...current,
+                  [scopeKey]: statuses,
+                }))
+              }
+              className="w-full items-start"
+              chipsClassName="flex flex-wrap gap-2"
+            />
+          </div>
+        )}
         <p className="text-muted-foreground text-xs" role="status" aria-live="polite">
           {t("statisticsScopesSelected", { count: selectedScopes.length })}
         </p>
-      </div>
+      </section>
     </SidePanelEditor>
   );
 }

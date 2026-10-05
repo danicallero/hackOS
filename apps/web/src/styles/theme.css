@@ -84,10 +84,22 @@
   --border: color-mix(in srgb, var(--brand-ink) 20%, var(--brand-cream));
   --input: var(--border);
   --ring: var(--brand-ink);
+  /* Shared action states; derived from semantic colors so every edition inherits them. */
+  --button-primary-hover: color-mix(in srgb, var(--primary) 70%, var(--primary-foreground));
+  --button-primary-pressed: color-mix(in srgb, var(--primary) 85%, var(--primary-foreground));
+  --button-secondary-hover: color-mix(in srgb, var(--secondary) 88%, var(--secondary-foreground));
+  --button-secondary-pressed: color-mix(in srgb, var(--secondary) 78%, var(--secondary-foreground));
+  --button-outline-border: color-mix(in srgb, var(--foreground) 60%, var(--background));
+  --button-quiet-hover: var(--accent);
+  --button-quiet-pressed: color-mix(in srgb, var(--accent) 86%, var(--accent-foreground));
+  --button-destructive-hover: color-mix(in srgb, var(--destructive) 90%, var(--brand-ink));
+  --button-destructive-pressed: color-mix(in srgb, var(--destructive) 80%, var(--brand-ink));
+  --button-disabled-opacity: 0.45;
+  --button-feedback-duration: 150ms;
   --info: color-mix(in srgb, var(--brand-ink) 65%, var(--brand-blue));
   --success: #22734f;
   --success-foreground: var(--brand-cream);
-  --warning: var(--brand-yellow);
+  --warning: color-mix(in srgb, var(--brand-ink) 35%, var(--brand-yellow));
   /* Status text is used on translucent washes, not a solid warning fill. */
   --warning-foreground: var(--foreground);
   --chart-1: var(--info);
@@ -117,6 +129,7 @@
   --popover-foreground: var(--foreground);
   --primary: var(--brand-blue);
   --primary-foreground: #171717;
+  --button-primary-pressed: color-mix(in srgb, var(--primary) 60%, var(--primary-foreground));
   --secondary: #242833;
   --secondary-foreground: var(--brand-cream);
   --muted: var(--secondary);
@@ -125,6 +138,8 @@
   --accent-foreground: var(--brand-cream);
   --destructive: color-mix(in srgb, var(--brand-red) 45%, var(--brand-cream));
   --destructive-foreground: var(--brand-ink);
+  --button-destructive-hover: color-mix(in srgb, var(--destructive) 90%, var(--brand-cream));
+  --button-destructive-pressed: color-mix(in srgb, var(--destructive) 80%, var(--brand-cream));
   /* Subtle neutral framing follows shadcn's low-contrast dark border treatment. */
   --border: #292d37;
   --input: var(--border);

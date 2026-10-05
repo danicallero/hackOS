@@ -299,7 +299,7 @@ export function ScheduleTimeline({
                     >
                       <button
                         type="button"
-                        className="min-h-full w-full cursor-pointer px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                        className="button-interaction min-h-full w-full cursor-pointer px-3 py-2 text-left"
                         onClick={() => setSelectedItem(item)}
                       >
                         <div className="flex min-w-0 items-start justify-between gap-3">
@@ -384,7 +384,7 @@ export function ScheduleTimeline({
                   >
                     <button
                       type="button"
-                      className="focus-visible:ring-ring flex w-full items-start gap-3 px-3 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                      className="button-interaction flex w-full items-start gap-3 px-3 py-3 text-left"
                       onClick={() => setSelectedItem(item)}
                     >
                       <span className="text-muted-foreground w-14 shrink-0 text-xs tabular-nums">

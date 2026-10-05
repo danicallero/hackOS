@@ -17,7 +17,10 @@ describe("challenge alerts (#856)", () => {
   beforeAll(async () => {
     app = await buildTestApp();
   });
-  beforeEach(truncateAll);
+  beforeEach(async () => {
+    await truncateAll();
+    await pool.query(`UPDATE queue_settings SET schedule_start_at = NULL WHERE id = 1`);
+  });
   afterAll(async () => app.close());
 
   const payload = {

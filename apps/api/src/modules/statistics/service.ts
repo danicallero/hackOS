@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import type { StatisticsParticipantStatus } from "@hackos/shared/statistics";
 import { pool, type Queryable } from "../../db/pool.js";
 import { type AuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { ForbiddenError } from "../../lib/errors.js";
@@ -7,7 +8,9 @@ import type { ApplicationRow } from "../applications/service.js";
 import {
   applicationStats,
   fieldPanelKey,
+  participantStatusCondition,
   resolveStatisticsPanelDecisions,
+  type StatisticsParticipantFilter,
   statisticsPanelKeys,
 } from "../applications/stats.js";
 import {
@@ -34,6 +37,8 @@ interface InternalScope extends StatisticsScope {
 export interface StatisticsQuery {
   scopes: string[];
   panelKeys?: string[];
+  participantFilter?: StatisticsParticipantFilter;
+  participantFilters?: Record<string, StatisticsParticipantStatus[]>;
 }
 
 /**
@@ -380,23 +385,31 @@ async function aggregateUserDistribution(
   applicationIds: number[],
   roleIds: number[],
   dimension: "shirt" | "food",
+  participantFilter: StatisticsParticipantFilter = "confirmed",
+  participantFilters: ReadonlyMap<number, StatisticsParticipantFilter> = new Map(),
 ): Promise<Array<Record<string, unknown>>> {
-  const scopeUsers = `WITH scope_users AS (
-       SELECT DISTINCT r.user_id
+  const applicationBranches = applicationIds.map((applicationId, index) => {
+    const filter = participantFilters.get(applicationId) ?? participantFilter;
+    return `SELECT DISTINCT r.user_id
          FROM application_responses r
          JOIN users u ON u.id = r.user_id
-        WHERE cardinality($1::int[]) > 0
-          AND r.application_id = ANY($1::int[]) AND r.status = 'confirmed'
-          AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
-       UNION
-       SELECT DISTINCT ur.user_id
+        WHERE r.application_id = $${index + 1} AND ${participantStatusCondition(filter)}
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false`;
+  });
+  const roleIdsParameter = applicationIds.length + 1;
+  const applicationUnion = applicationBranches.length
+    ? `${applicationBranches.join("\n       UNION\n       ")}\n       UNION\n       `
+    : "";
+  const scopeUsers = `WITH scope_users AS (
+       ${applicationUnion}SELECT DISTINCT ur.user_id
          FROM user_roles ur
          JOIN users u ON u.id = ur.user_id
          JOIN roles role ON role.id = ur.role_id AND role.deleted_at IS NULL
-        WHERE cardinality($2::int[]) > 0
-          AND ur.role_id = ANY($2::int[])
+        WHERE cardinality($${roleIdsParameter}::int[]) > 0
+          AND ur.role_id = ANY($${roleIdsParameter}::int[])
           AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      )`;
+  const queryValues = [...applicationIds, roleIds];
   if (dimension === "shirt") {
     const { rows } = await pool.query(
       `${scopeUsers}
@@ -404,7 +417,7 @@ async function aggregateUserDistribution(
          FROM scope_users su JOIN users u ON u.id = su.user_id
         WHERE u.shirt_size IS NOT NULL
         GROUP BY u.shirt_size ORDER BY n DESC, value`,
-      [applicationIds, roleIds],
+      queryValues,
     );
     return rows;
   }
@@ -416,7 +429,7 @@ async function aggregateUserDistribution(
        JOIN LATERAL unnest(u.food_intolerances) AS uid(id) ON true
        JOIN food_intolerances fi ON fi.id = uid.id
       GROUP BY fi.id, fi.label ORDER BY n DESC, fi.id`,
-    [applicationIds, roleIds],
+    queryValues,
   );
   return rows;
 }
@@ -453,6 +466,12 @@ export async function queryStatistics(
   if (scopes.some((scope) => !scope)) throw new ForbiddenError("Statistics scope is not available");
   const selectedScopes = scopes as InternalScope[];
   const scopeKinds = selectedScopes.map((scope) => scope.kind);
+  const requestedParticipantFilters = query.participantFilters ?? {};
+  for (const scopeKey of Object.keys(requestedParticipantFilters)) {
+    if (!selectedScopes.some((scope) => scope.kind === "application" && scope.key === scopeKey)) {
+      throw new ForbiddenError("Participant filter requires a selected application scope");
+    }
+  }
   const dynamicDefinitions = dynamicPanelDefinitions(selectedScopes);
   const definitions = [...STATISTICS_PANEL_CATALOG, ...dynamicDefinitions];
   const definitionByKey = new Map(definitions.map((definition) => [definition.key, definition]));
@@ -487,9 +506,21 @@ export async function queryStatistics(
       scope.kind === "application" && scope.application !== undefined,
   );
   const roleScopes = selectedScopes.filter((scope) => scope.kind === "role");
+  const participantFilter = query.participantFilter ?? "confirmed";
+  const participantFiltersByApplication = new Map(
+    applicationScopes.map(
+      (scope) => [scope.id, requestedParticipantFilters[scope.key] ?? participantFilter] as const,
+    ),
+  );
   const snapshots = await Promise.all(
     applicationScopes.map((scope) =>
-      applicationStats(scope.id, undefined, new Set(scope.panelKeys)),
+      applicationStats(
+        scope.id,
+        undefined,
+        new Set(scope.panelKeys),
+        participantFiltersByApplication.get(scope.id) ?? participantFilter,
+        participantFiltersByApplication.get(scope.id) ?? participantFilter,
+      ),
     ),
   );
   const result = mergeApplicationSnapshots(snapshots);
@@ -505,6 +536,8 @@ export async function queryStatistics(
       shirtApplicationIds,
       shirtRoleIds,
       "shirt",
+      participantFilter,
+      participantFiltersByApplication,
     );
   }
   if (panelKeys.includes("food-intolerances")) {
@@ -518,6 +551,8 @@ export async function queryStatistics(
       foodApplicationIds,
       foodRoleIds,
       "food",
+      participantFilter,
+      participantFiltersByApplication,
     );
   }
 

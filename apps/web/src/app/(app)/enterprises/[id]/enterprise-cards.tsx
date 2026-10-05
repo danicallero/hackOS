@@ -296,6 +296,7 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
               size="lg"
               disabled={busy || !selectedUserId}
               onClick={() => add(Number(selectedUserId))}
+              loading={busy}
             >
               {t("addAction")}
             </Button>
@@ -320,7 +321,13 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
                   <p className="truncate text-sm font-medium">{m.name ?? m.email}</p>
                   <p className="text-muted-foreground truncate text-xs">{m.email}</p>
                 </div>
-                <Button size="sm" variant="ghost" disabled={busy} onClick={() => remove(m.userId)}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => remove(m.userId)}
+                  loading={busy}
+                >
                   {t("remove")}
                 </Button>
               </li>
@@ -396,8 +403,9 @@ export function LogoCard({
             variant="outline"
             onClick={() => defaultInputRef.current?.click()}
             disabled={uploading}
+            loading={uploading}
           >
-            {uploading ? <Spinner /> : <UploadSimpleIcon aria-hidden="true" className="size-4" />}
+            {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
             {enterprise.logo_url ? t("replaceLogo") : t("uploadLogo")}
           </Button>
           <Button
@@ -405,8 +413,9 @@ export function LogoCard({
             variant="outline"
             onClick={() => negativeInputRef.current?.click()}
             disabled={uploading}
+            loading={uploading}
           >
-            {uploading ? <Spinner /> : <UploadSimpleIcon aria-hidden="true" className="size-4" />}
+            {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
             {enterprise.logo_negative_url === enterprise.logo_url
               ? t("uploadDarkLogo")
               : t("replaceDarkLogo")}

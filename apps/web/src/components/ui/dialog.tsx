@@ -5,14 +5,16 @@ import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { overlayVariants } from "@/components/ui/surface"
 import { useLocale } from "@/lib/i18n"
 
 /** Icon-button treatment shared by the dialog's close button and other
  *  icon-only controls placed in the header (e.g. prev/next paging). */
-export const dialogIconButtonClass =
-  "flex size-[var(--control-height-compact)] items-center justify-center rounded-control opacity-70 ring-offset-background transition-[background-color,color,opacity,box-shadow] hover:bg-accent hover:text-accent-foreground hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-30 data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+export const dialogIconButtonClass = cn(
+  buttonVariants({ variant: "ghost", size: "icon-sm" }),
+  "text-muted-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground",
+)
 
 function Dialog({
   ...props

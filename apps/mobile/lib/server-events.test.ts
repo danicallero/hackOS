@@ -1,5 +1,4 @@
 const mockAppStateListeners = new Set<(state: "active" | "background") => void>();
-
 jest.mock("react-native", () => ({
   AppState: {
     currentState: "active",
@@ -16,149 +15,175 @@ jest.mock("./auth-client", () => ({
 jest.mock("./env", () => ({ API_URL: "https://api.hackos.test" }));
 
 import { EVENTS } from "@hackos/shared/events";
-import { authClient } from "./auth-client";
-import { startQueueEventStream, subscribeToServerEvent } from "./server-events";
+import {
+  setServerEventIdentity,
+  startLogisticsEventStream,
+  startPersonalEventStream,
+  startQueueEventStream,
+  subscribeToServerEvent,
+} from "./server-events";
 
-const mockGetCookie = authClient.getCookie as jest.Mock;
-
-describe("operational native event streams", () => {
+const settle = async () => {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+};
+let connections: {
+  signal: AbortSignal;
+  emit: (topic: string, id: number) => void;
+  end: () => void;
+}[];
+const stops: (() => void)[] = [];
+function mockResponse() {
+  let resolve!: (result: { done: boolean; value?: Uint8Array }) => void;
+  const queued: { done: boolean; value?: Uint8Array }[] = [];
+  let waiting = false;
+  const reader = {
+    read: jest.fn(() =>
+      queued.length
+        ? Promise.resolve(queued.shift())
+        : new Promise((done) => {
+            resolve = done;
+            waiting = true;
+          }),
+    ),
+    cancel: jest.fn(async () => undefined),
+  };
+  const push = (result: { done: boolean; value?: Uint8Array }) => {
+    if (waiting) {
+      waiting = false;
+      resolve(result);
+    } else queued.push(result);
+  };
+  return { reader, push };
+}
+describe("multiplexed native events (#892)", () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    mockAppStateListeners.clear();
-    mockGetCookie.mockClear().mockReturnValue("session=restored");
+    connections = [];
+    setServerEventIdentity(101);
     Object.defineProperty(globalThis, "fetch", {
       configurable: true,
-      value: jest.fn(),
       writable: true,
+      value: jest.fn(async (_url, init) => {
+        const response = mockResponse();
+        connections.push({
+          signal: init.signal,
+          emit(topic, id) {
+            response.push({
+              done: false,
+              value: new TextEncoder().encode(
+                `data: ${JSON.stringify({ topic, id: String(id), type: EVENTS.DOMAIN_CHANGED, at: "now", data: {} })}\n\n`,
+              ),
+            });
+          },
+          end: () => response.push({ done: true }),
+        });
+        return {
+          ok: true,
+          body: { getReader: () => response.reader },
+          headers: new Headers({ "content-type": "text/event-stream" }),
+        };
+      }),
     });
   });
-
   afterEach(() => {
-    // Expo exposes fetch through a lazy global accessor. Restoring that
-    // accessor lets Jest's environment teardown import Expo Winter fetch after
-    // the test has ended, which emits a native-module warning and fails the
-    // suite. This Jest file owns its sandbox, so retain the inert mock until
-    // that sandbox is discarded instead.
+    for (const stop of stops.splice(0)) stop();
+    setServerEventIdentity(null);
     jest.clearAllMocks();
     jest.useRealTimers();
   });
-
-  it("does not open the operational stream while its capability gate is disabled", () => {
-    const stop = startQueueEventStream(false);
-
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-    stop();
+  it("does not connect for disabled readers", () => {
+    startQueueEventStream(false)();
+    expect(fetch).not.toHaveBeenCalled();
   });
-
-  it("sends the restored session cookie on the initial connection and reconnect", async () => {
-    const read = jest.fn().mockResolvedValue({ done: true, value: undefined });
-    (globalThis.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      body: { getReader: () => ({ read }) },
-    });
-
-    const stop = startQueueEventStream();
-    await Promise.resolve();
-    await Promise.resolve();
-    await jest.advanceTimersByTimeAsync(1_000);
-
-    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
-    expect(globalThis.fetch).toHaveBeenNthCalledWith(
-      1,
-      "https://api.hackos.test/api/queue/stream",
+  it("shares personal, operational and logistics subscriptions with the restored cookie", async () => {
+    stops.push(startPersonalEventStream(), startQueueEventStream(), startLogisticsEventStream());
+    await jest.advanceTimersByTimeAsync(100);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.hackos.test/api/realtime/stream?scopes=logistics%2Cpersonal%2Cqueue",
       expect.objectContaining({
         headers: { accept: "text/event-stream", cookie: "session=restored" },
       }),
     );
-    expect(globalThis.fetch).toHaveBeenNthCalledWith(
-      2,
-      "https://api.hackos.test/api/queue/stream",
-      expect.objectContaining({
-        headers: { accept: "text/event-stream", cookie: "session=restored" },
-      }),
+    expect(mockAppStateListeners.size).toBe(1);
+  });
+  it("keeps topic gaps and recovery signals scoped", async () => {
+    const queue = jest.fn();
+    const personal = jest.fn();
+    const logistics = jest.fn();
+    stops.push(
+      startPersonalEventStream(),
+      startQueueEventStream({ onResync: queue }),
+      startLogisticsEventStream(),
     );
-    expect(mockGetCookie).toHaveBeenCalledTimes(2);
-
-    stop();
+    stops.push(
+      subscribeToServerEvent(EVENTS.REALTIME_RESYNC, personal),
+      subscribeToServerEvent(EVENTS.REALTIME_RESYNC, logistics, "logistics"),
+    );
+    await jest.advanceTimersByTimeAsync(100);
+    const source = connections[0];
+    source.emit("queue", 10);
+    source.emit("personal", 70);
+    source.emit("queue", 11);
+    source.emit("queue", 13);
+    await settle();
+    expect(queue).toHaveBeenCalledTimes(1);
+    expect(personal).not.toHaveBeenCalled();
+    expect(logistics).not.toHaveBeenCalled();
+  });
+  it("dispatches each event and recovery once even with several owners of one scope", async () => {
+    const events = jest.fn();
+    const recovery = jest.fn();
+    stops.push(
+      startPersonalEventStream(),
+      startPersonalEventStream(),
+      subscribeToServerEvent(EVENTS.DOMAIN_CHANGED, events),
+      subscribeToServerEvent(EVENTS.REALTIME_RESYNC, recovery),
+    );
+    await jest.advanceTimersByTimeAsync(100);
+    connections[0].emit("personal", 1);
+    connections[0].emit("personal", 3);
+    await settle();
+    expect(events).toHaveBeenCalledTimes(1);
+    expect(recovery).toHaveBeenCalledTimes(1);
   });
 
-  it("refetches on reconnect and a real event-id gap", async () => {
-    const encoder = new TextEncoder();
-    const firstReader = {
-      read: jest
-        .fn()
-        .mockResolvedValueOnce({
-          done: false,
-          value: encoder.encode('data: {"type":"queue.changed","id":"10"}\n\n'),
-        })
-        .mockResolvedValueOnce({ done: true, value: undefined }),
-    };
-    const secondReader = {
-      read: jest
-        .fn()
-        .mockResolvedValueOnce({
-          done: false,
-          value: encoder.encode(
-            'data: {"type":"queue.changed","id":"12"}\n\ndata: {"type":"queue.changed","id":"14"}\n\n',
-          ),
-        })
-        .mockResolvedValueOnce({ done: true, value: undefined }),
-    };
-    (globalThis.fetch as jest.Mock)
-      .mockResolvedValueOnce({ ok: true, body: { getReader: () => firstReader } })
-      .mockResolvedValueOnce({ ok: true, body: { getReader: () => secondReader } });
-    const onResync = jest.fn();
-    const syntheticResync = jest.fn();
-    const removeSynthetic = subscribeToServerEvent(EVENTS.REALTIME_RESYNC, syntheticResync);
-
-    const stop = startQueueEventStream({ onResync });
-    await Promise.resolve();
-    await Promise.resolve();
-    await jest.advanceTimersByTimeAsync(1_000);
-
-    expect(onResync).toHaveBeenNthCalledWith(1, {
-      reason: "reconnect",
-      path: "/api/queue/stream",
-      lastEventId: "10",
-    });
-    expect(onResync).toHaveBeenNthCalledWith(2, {
-      reason: "gap",
-      path: "/api/queue/stream",
-      lastEventId: "12",
-    });
-    expect(syntheticResync).toHaveBeenCalledTimes(2);
-    expect((globalThis.fetch as jest.Mock).mock.calls[1][1].headers["last-event-id"]).toBe("10");
-
-    removeSynthetic();
-    stop();
-  });
-
-  it("refetches when the app returns to the foreground", async () => {
-    let resolveRead!: (result: { done: boolean; value?: Uint8Array }) => void;
-    const pendingRead = new Promise<{ done: boolean; value?: Uint8Array }>((resolve) => {
-      resolveRead = resolve;
-    });
-    const firstReader = { read: jest.fn(() => pendingRead) };
-    (globalThis.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      body: { getReader: () => firstReader },
-    });
-    const onResync = jest.fn();
-    const stop = startQueueEventStream({ onResync });
-    await Promise.resolve();
-    await Promise.resolve();
-
+  it("foreground recovery owns one new reader and an aborted reader cannot retry or deliver", async () => {
+    const resync = jest.fn();
+    const events = jest.fn();
+    stops.push(
+      startQueueEventStream({ onResync: resync }),
+      subscribeToServerEvent(EVENTS.DOMAIN_CHANGED, events, "queue"),
+    );
+    await jest.advanceTimersByTimeAsync(100);
+    const old = connections[0];
     for (const listener of mockAppStateListeners) listener("background");
     for (const listener of mockAppStateListeners) listener("active");
-
-    expect(onResync).toHaveBeenCalledWith({
+    await jest.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(old.signal.aborted).toBe(true);
+    expect(resync).toHaveBeenCalledWith({
       reason: "foreground",
       path: "/api/queue/stream",
       lastEventId: null,
     });
-    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
-
-    resolveRead({ done: true });
-    stop();
+    old.emit("queue", 1);
+    await settle();
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(events).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it("account changes drop all old event listeners", async () => {
+    const old = jest.fn();
+    stops.push(startPersonalEventStream(), subscribeToServerEvent(EVENTS.DOMAIN_CHANGED, old));
+    await jest.advanceTimersByTimeAsync(100);
+    setServerEventIdentity(202);
+    stops.push(startPersonalEventStream());
+    await jest.advanceTimersByTimeAsync(100);
+    connections[0].emit("personal", 1);
+    connections[1].emit("personal", 2);
+    await settle();
+    expect(old).not.toHaveBeenCalled();
+    expect(connections[0].signal.aborted).toBe(true);
   });
 });

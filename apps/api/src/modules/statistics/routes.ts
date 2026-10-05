@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { STATISTICS_PARTICIPANT_STATUSES } from "@hackos/shared/statistics";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -34,12 +35,37 @@ const statisticsQueryBody = z
       .array(z.string().regex(/^[a-z0-9:_-]+$/))
       .max(100)
       .optional(),
+    participant_filter: z.enum(["confirmed", "submitted"]).optional(),
+    participant_filters: z
+      .record(
+        z.string().regex(/^application:[0-9]+$/),
+        z
+          .array(z.enum(STATISTICS_PARTICIPANT_STATUSES))
+          .max(STATISTICS_PARTICIPANT_STATUSES.length),
+      )
+      .optional(),
   })
   .strict();
+
+const participantFiltersRecord = z.record(
+  z.string().regex(/^application:[0-9]+$/),
+  z.array(z.enum(STATISTICS_PARTICIPANT_STATUSES)).max(STATISTICS_PARTICIPANT_STATUSES.length),
+);
+
+const participantFiltersQuery = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}, participantFiltersRecord.optional());
 
 const statisticsExportQuery = z.object({
   scopes: z.string().min(1),
   panels: z.string().optional(),
+  participant_filter: z.enum(["confirmed", "submitted"]).optional(),
+  participant_filters: participantFiltersQuery,
 });
 
 const statisticsScopeAccessBody = z
@@ -96,16 +122,20 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Query authorized statistics panels",
         description:
-          "Aggregates only the selected authorized scopes and returns panel-ready data. Sensitive source records are never returned.",
+          "Aggregates only the selected authorized scopes and returns panel-ready data. participant_filters selects confirmed, accepted_internal, and/or accepted responses per application; an empty list includes every non-draft response. Drafts are always excluded. participant_filter remains available for older clients and defaults to confirmed. Sensitive source records are never returned.",
         body: statisticsQueryBody,
       },
     },
-    async (req) =>
-      queryStatistics(
-        req.userId as number,
-        req.body as StatisticsQuery,
-        getRequestAuthorizationContext(req),
-      ),
+    async (req) => {
+      const body = req.body as z.infer<typeof statisticsQueryBody>;
+      const query: StatisticsQuery = {
+        scopes: body.scopes,
+        panelKeys: body.panel_keys,
+        participantFilter: body.participant_filter,
+        participantFilters: body.participant_filters,
+      };
+      return queryStatistics(req.userId as number, query, getRequestAuthorizationContext(req));
+    },
   );
 
   r.get(
@@ -116,7 +146,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Export authorized statistics aggregates",
         description:
-          "Exports only the same authorized aggregate panels available to the dashboard; raw application answers and derived source fields are excluded.",
+          "Exports only the same authorized aggregate panels available to the dashboard. participant_filters selects confirmed, accepted_internal, and/or accepted responses per application; an empty list includes every non-draft response. Drafts are always excluded. participant_filter remains available for older clients and defaults to confirmed. Raw application answers and derived source fields are excluded.",
         querystring: statisticsExportQuery,
       },
     },
@@ -129,6 +159,8 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       const query: StatisticsQuery = {
         scopes: req.query.scopes.split(",").filter(Boolean),
         panelKeys: req.query.panels?.split(",").filter(Boolean),
+        participantFilter: req.query.participant_filter,
+        participantFilters: req.query.participant_filters,
       };
       return sendCsv(
         reply,

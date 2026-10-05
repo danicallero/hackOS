@@ -36,6 +36,7 @@ export function ScaleButtons({
           type="button"
           size="icon-sm"
           variant={value === score ? "default" : "outline"}
+          aria-pressed={value === score}
           className="text-xs font-semibold"
           disabled={disabled}
           onClick={() => onChange(score)}
@@ -43,17 +44,24 @@ export function ScaleButtons({
           {score}
         </Button>
       ))}
-      {value !== null && (
-        <Button
-          type="button"
-          size={clearSize ?? "sm"}
-          variant="ghost"
-          disabled={disabled}
-          onClick={() => onChange(null)}
-        >
-          {t("clear")}
-        </Button>
-      )}
+      <Button
+        type="button"
+        size={clearSize ?? "sm"}
+        variant="ghost"
+        disabled={disabled || value === null}
+        onClick={(event) => {
+          // Keep the composer focus on a permanent score control before
+          // disabling Clear. Its DOM node remains stable for outside-event
+          // detection in a dialog's detached composer.
+          const selected = event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
+            'button[aria-pressed="true"]',
+          );
+          selected?.focus();
+          onChange(null);
+        }}
+      >
+        {t("clear")}
+      </Button>
     </ActionGroup>
   );
 }

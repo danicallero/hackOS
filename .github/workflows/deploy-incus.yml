@@ -17,6 +17,14 @@ on:
         required: true
         default: true
         type: boolean
+      release_action:
+        description: Promotion clears a rollback hold; rollback pins production at this SHA
+        required: true
+        default: promote
+        type: choice
+        options:
+          - promote
+          - rollback
 
 permissions:
   contents: read
@@ -95,6 +103,11 @@ jobs:
             exit 1
           }
 
+          [[ "${{ inputs.release_action }}" == promote || "${{ inputs.release_action }}" == rollback ]] || {
+            echo "release_action must be promote or rollback." >&2
+            exit 1
+          }
+
           echo "Deployment inputs: environment=$DEPLOY_ENVIRONMENT tag=$IMAGE_TAG api=$DEPLOY_API web=$DEPLOY_WEB"
 
       - name: Select release source
@@ -137,4 +150,4 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          incus exec hackos -- env HACKOS_APP_DIR=/opt/hackos /opt/hackos/deploy.sh "$DEPLOY_ENVIRONMENT" "$IMAGE_TAG" "$DEPLOY_API" "$DEPLOY_WEB"
+          incus exec hackos -- env HACKOS_APP_DIR=/opt/hackos /opt/hackos/deploy.sh "$DEPLOY_ENVIRONMENT" "$IMAGE_TAG" "$DEPLOY_API" "$DEPLOY_WEB" "${{ inputs.release_action }}"

@@ -6,6 +6,11 @@
 #   node dist/worker.js    BullMQ worker       (no HTTP listener)
 #   node dist/migrate.js   one-shot migrations (advisory-locked; exits 0)
 
+FROM golang:1.25-alpine AS memory-build
+WORKDIR /src
+COPY deploy/metrics/main.go ./main.go
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /memory-launch main.go
+
 FROM node:22-alpine AS base
 # Pre-install pnpm to avoid corepack's lazy download on every build
 RUN corepack enable && corepack install --global pnpm@10.19.0 && pnpm --version
@@ -55,6 +60,9 @@ COPY --from=build /app /app
 COPY --from=build /repo/apps/api/db/migrations /app/db/migrations
 RUN test -f /app/db/migrations/0001_hackos_baseline.sql
 WORKDIR /app
+
+COPY --from=memory-build /memory-launch /usr/local/bin/memory-launch
+RUN mkdir -p /opt/hackos-metrics && chown node:node /opt/hackos-metrics
 
 # Drop root. node:alpine ships an unprivileged `node` user (uid 1000).
 USER node

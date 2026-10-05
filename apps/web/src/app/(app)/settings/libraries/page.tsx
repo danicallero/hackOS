@@ -7,6 +7,7 @@
 // single ordered list saved as one event_config field).
 
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
@@ -23,11 +24,11 @@ export default function LibrariesSettingsPage() {
     defaultValue: "intolerances",
   });
   return (
-    <div className="space-y-6">
+    <PageLayout width="reading">
       <PageHeader title={t("libraries")} />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabBar className="w-full">
+        <TabBar>
           <TabsTrigger value="intolerances">{t("foodIntolerances")}</TabsTrigger>
           <TabsTrigger value="shirt-sizes">{t("shirtSizesGroup")}</TabsTrigger>
           <TabsTrigger value="universities">{t("universitiesTab")}</TabsTrigger>
@@ -46,6 +47,6 @@ export default function LibrariesSettingsPage() {
           <DegreesManager />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageLayout>
   );
 }

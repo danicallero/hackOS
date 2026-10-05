@@ -4,9 +4,10 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { ChecksIcon } from "@phosphor-icons/react/dist/csr/Checks";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
@@ -16,12 +17,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApplicationExportPanel } from "@/components/applications/application-export-panel";
 import { ReviewModal } from "@/components/applications/review-modal";
+import { ActionGroup } from "@/components/common/action-group";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type Column, DataTable } from "@/components/common/data-table";
-import { IconButton } from "@/components/common/icon-button";
+import { ListToolbar } from "@/components/common/list-toolbar";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,15 +33,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
@@ -59,8 +55,6 @@ import {
   statusesForWorkspace,
 } from "../workflow";
 import { SendDecisionsModal } from "./send-decisions-modal";
-
-const ALL = "__all__";
 
 interface DurableBatchResult {
   label: string;
@@ -98,6 +92,7 @@ export function ResponsesTab({
 }) {
   const { t, language } = useLocale();
   const me = useMe();
+  const isMobile = useIsMobile();
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canExportFiles = useCan(CAPABILITIES.EXPORTS_RUN);
   const fileFields = useMemo(() => (template ?? []).filter((f) => f.kind === "file"), [template]);
@@ -110,7 +105,7 @@ export function ResponsesTab({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
-  const [statusFilter, setStatusFilter] = useState<string>(ALL);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [decisionStatusOverrides, setDecisionStatusOverrides] = useState<Record<number, string>>(
@@ -118,6 +113,8 @@ export function ResponsesTab({
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sendOpen, setSendOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportTriggerRef = useRef<HTMLButtonElement>(null);
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchResult, setBatchResult] = useState<DurableBatchResult | null>(null);
   const [confirmBatchRevoke, setConfirmBatchRevoke] = useState(false);
@@ -126,7 +123,14 @@ export function ResponsesTab({
   // The table's own search/sort-applied row order, for modal prev/next.
   const [visibleRows, setVisibleRows] = useState<ResponseRow[]>([]);
 
-  const rows = useMemo(() => rowsForWorkspace(allRows, workspace), [allRows, workspace]);
+  const rows = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    return rowsForWorkspace(allRows, workspace).filter(
+      (row) =>
+        (statusFilter.length === 0 || statusFilter.includes(row.status)) &&
+        (!query || `${row.name ?? ""} ${row.email}`.toLocaleLowerCase().includes(query)),
+    );
+  }, [allRows, workspace, statusFilter, search]);
 
   const load = useCallback(
     async (force = false) => {
@@ -139,12 +143,6 @@ export function ResponsesTab({
       try {
         const { responses } = await api.get<{ responses: ResponseRow[] }>(
           `/api/applications/${id}/responses`,
-          {
-            query: {
-              status: statusFilter === ALL ? undefined : statusFilter,
-              search: search.trim() || undefined,
-            },
-          },
         );
         setAllRows(responses);
         setDecisionStatusOverrides({});
@@ -158,7 +156,7 @@ export function ResponsesTab({
         setLoading(false);
       }
     },
-    [id, search, selectedId, statusFilter, t],
+    [id, selectedId, t],
   );
 
   // Soft, in-place refresh instead of a hard reload when a response changes
@@ -167,7 +165,7 @@ export function ResponsesTab({
     EVENTS.DOMAIN_CHANGED,
   ]);
 
-  // Debounce so server-side search/filter doesn't fire on every keystroke.
+  // Coalesce live refreshes; categorical filters and search share the loaded snapshot.
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     const handle = setTimeout(() => void load(true), 250);
@@ -275,6 +273,13 @@ export function ResponsesTab({
     });
   }
 
+  function fileLabel(field: TemplateField) {
+    const label = pickText(field.label, language).trim();
+    return label && label !== field.key && !/^field_\d+$/.test(label)
+      ? label
+      : t("exportMenuAttachment", { number: fileFields.indexOf(field) + 1 });
+  }
+
   // Downloads via fetch (not a plain <a href>) so we can read the
   // x-export-file-failures response header and surface it in the UI —
   // browsers give JS no way to inspect headers of a navigation-triggered
@@ -308,7 +313,7 @@ export function ResponsesTab({
         };
         setExportFailures({
           fieldKey: field.key,
-          fieldLabel: pickText(field.label, language) || field.key,
+          fieldLabel: fileLabel(field),
           total: parsed.total,
           items: parsed.items,
         });
@@ -361,116 +366,111 @@ export function ResponsesTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full max-w-xs">
-          <label htmlFor="response-search" className="sr-only">
-            {t("searchResponses")}
-          </label>
-          <Input
-            id="response-search"
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("searchByNameOrEmailPlaceholder")}
-            className="pr-9"
-          />
-          {search && (
-            <IconButton
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="absolute top-1/2 right-0.5 -translate-y-1/2"
-              onClick={() => {
-                setSearch("");
-                document.getElementById("response-search")?.focus();
-              }}
-              label={t("clearSearch")}
-            >
-              <XIcon aria-hidden="true" />
-            </IconButton>
-          )}
-        </div>
-        <span
-          role="status"
-          aria-live="polite"
-          className="text-muted-foreground text-xs tabular-nums"
-        >
-          {t("tableResultCount", { count: rows.length })}
-        </span>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40 capitalize">
-            <SelectValue placeholder={t("allStatuses")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{t("allStatuses")}</SelectItem>
-            {statusesForWorkspace(workspace).map((s) => (
-              <SelectItem key={s} value={s}>
-                {applicationStatusLabel(s, t)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="ml-auto flex items-center gap-2">
-          {canExportFiles && (
-            <ApplicationExportPanel
-              applicationId={id}
-              trigger={
-                <Button variant="outline" size="sm">
-                  <DownloadSimpleIcon aria-hidden="true" />
-                  {t("export")}
-                </Button>
-              }
-            />
-          )}
-          {canExportFiles && fileFields.length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <DownloadSimpleIcon aria-hidden="true" />
-                  {t("exportFiles")}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {fileFields.map((field, index) => (
-                  <div key={field.key}>
-                    {index > 0 && <DropdownMenuSeparator />}
-                    <DropdownMenuLabel>
-                      {pickText(field.label, language) || field.key}
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem
-                      disabled={exportingKey === `${field.key}:all`}
-                      onClick={() => void exportField(field, "all")}
+      <ListToolbar
+        search={{
+          id: "response-search",
+          label: t("searchResponses"),
+          placeholder: t("searchByNameOrEmailPlaceholder"),
+          value: search,
+          onValueChange: (value) => {
+            setSearch(value);
+            setSelectedIds(new Set());
+          },
+        }}
+        filters={[
+          {
+            id: "status",
+            label: t("statusColumn"),
+            icon: ChecksIcon,
+            type: "multiple",
+            value: statusFilter,
+            onChange: (value) => {
+              setStatusFilter(value);
+              setSelectedIds(new Set());
+            },
+            options: statusesForWorkspace(workspace).map((status) => ({
+              value: status,
+              label: applicationStatusLabel(status, t),
+            })),
+          },
+        ]}
+        actions={
+          (canExportFiles || (canDecide && workspace === "outbox")) && (
+            <ActionGroup className="justify-end">
+              {canExportFiles && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size={isMobile ? "icon" : "default"}
+                      aria-label={t("export")}
+                      ref={exportTriggerRef}
                     >
-                      {t("exportAllFiles")}
+                      <DownloadSimpleIcon aria-hidden="true" />
+                      {!isMobile && t("export")}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="max-w-[calc(100vw-2rem)] [&_[data-slot=dropdown-menu-item]]:whitespace-normal"
+                  >
+                    <DropdownMenuLabel>{t("exportMenuDataGroup")}</DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => setExportOpen(true)}>
+                      <DownloadSimpleIcon aria-hidden="true" />
+                      {t("exportMenuApplicationData")}
                     </DropdownMenuItem>
-                    {field.shareable_with_sponsors && (
-                      <DropdownMenuItem
-                        disabled={exportingKey === `${field.key}:shared`}
-                        onClick={() => void exportField(field, "shared")}
-                      >
-                        {t("exportSharedFiles")}
-                      </DropdownMenuItem>
+                    {fileFields.length > 0 && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>{t("exportMenuFilesGroup")}</DropdownMenuLabel>
+                      </>
                     )}
-                  </div>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-          {canDecide && workspace === "outbox" && (
-            <Button variant="outline" onClick={() => setSendOpen(true)}>
-              <PaperPlaneTiltIcon aria-hidden="true" />
-              {t("sendDecisions")}
-            </Button>
-          )}
-        </div>
-      </div>
+                    {fileFields.map((field, index) => (
+                      <div key={field.key}>
+                        {index > 0 && <DropdownMenuSeparator />}
+                        <DropdownMenuItem
+                          disabled={exportingKey === `${field.key}:all`}
+                          onClick={() => void exportField(field, "all")}
+                        >
+                          {t("exportMenuDownloadAttachment", { field: fileLabel(field) })}
+                        </DropdownMenuItem>
+                        {field.shareable_with_sponsors && (
+                          <DropdownMenuItem
+                            disabled={exportingKey === `${field.key}:shared`}
+                            onClick={() => void exportField(field, "shared")}
+                          >
+                            {t("exportMenuDownloadSharedAttachment", { field: fileLabel(field) })}
+                          </DropdownMenuItem>
+                        )}
+                      </div>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {canDecide && workspace === "outbox" && (
+                <Button
+                  size={isMobile ? "icon" : "default"}
+                  aria-label={t("sendDecisions")}
+                  onClick={() => setSendOpen(true)}
+                >
+                  <PaperPlaneTiltIcon aria-hidden="true" />
+                  {!isMobile && t("sendDecisions")}
+                </Button>
+              )}
+            </ActionGroup>
+          )
+        }
+      />
+      <span role="status" aria-live="polite" className="text-muted-foreground text-xs tabular-nums">
+        {t("tableResultCount", { count: rows.length })}
+      </span>
 
       {canDecide && selectedIds.size > 0 && (
-        <div className="flex items-center gap-2 rounded-lg border p-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
           <span className="text-sm font-medium">
             {t("selectedCount", { count: selectedIds.size })}
           </span>
-          <div className="ml-auto flex flex-wrap gap-2">
+          <ActionGroup className="ml-auto justify-end">
             {/* Primary action per workspace (decide / send / resend). Everything
                 else lives under "More" to keep the bar uncluttered. */}
             {workspace === "review" && (
@@ -521,6 +521,7 @@ export function ResponsesTab({
                     }),
                   )
                 }
+                loading={batchBusy}
               >
                 <PaperPlaneTiltIcon aria-hidden="true" />
                 {t("send")}
@@ -538,6 +539,7 @@ export function ResponsesTab({
                     }),
                   )
                 }
+                loading={batchBusy}
               >
                 <PaperPlaneTiltIcon aria-hidden="true" />
                 {t("resend")}
@@ -546,9 +548,14 @@ export function ResponsesTab({
             {workspace === "outbox" && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline" disabled={batchBusy}>
-                    <ArrowCounterClockwiseIcon aria-hidden="true" />
-                    {t("more")}
+                  <Button
+                    size={isMobile ? "icon-sm" : "sm"}
+                    variant="outline"
+                    disabled={batchBusy}
+                    aria-label={t("more")}
+                  >
+                    <DotsThreeIcon aria-hidden="true" />
+                    {!isMobile && t("more")}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -595,9 +602,14 @@ export function ResponsesTab({
             {workspace === "sent" && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline" disabled={batchBusy}>
-                    <ArrowCounterClockwiseIcon aria-hidden="true" />
-                    {t("more")}
+                  <Button
+                    size={isMobile ? "icon-sm" : "sm"}
+                    variant="outline"
+                    disabled={batchBusy}
+                    aria-label={t("more")}
+                  >
+                    <DotsThreeIcon aria-hidden="true" />
+                    {!isMobile && t("more")}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -666,15 +678,16 @@ export function ResponsesTab({
               </DropdownMenu>
             )}
             <Button
-              size="sm"
+              size={isMobile ? "icon-sm" : "sm"}
               variant="ghost"
+              aria-label={t("clear")}
               disabled={batchBusy}
               onClick={() => setSelectedIds(new Set())}
             >
               <XIcon aria-hidden="true" />
-              {t("clear")}
+              {!isMobile && t("clear")}
             </Button>
-          </div>
+          </ActionGroup>
         </div>
       )}
 
@@ -768,7 +781,79 @@ export function ResponsesTab({
         }}
       />
 
+      {canExportFiles && (
+        <ApplicationExportPanel
+          applicationId={id}
+          open={exportOpen}
+          onOpenChange={setExportOpen}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            exportTriggerRef.current?.focus();
+          }}
+          trigger={false}
+        />
+      )}
       <DataTable
+        renderMobileRow={(row) => (
+          <div className="flex items-start gap-3 p-4">
+            {canDecide && (
+              <Checkbox
+                className="mt-1"
+                aria-label={`${t("selectRow")}: ${row.name ?? row.email}`}
+                checked={selectedIds.has(String(row.id))}
+                onCheckedChange={(checked) =>
+                  setSelectedIds((current) => {
+                    const next = new Set(current);
+                    if (checked) next.add(String(row.id));
+                    else next.delete(String(row.id));
+                    return next;
+                  })
+                }
+              />
+            )}
+            <div className="min-w-0 flex-1 space-y-3">
+              <button
+                type="button"
+                onClick={() => setSelectedId(row.id)}
+                className="focus-visible:ring-ring flex min-h-11 w-full items-start gap-2 rounded-sm text-left outline-none focus-visible:ring-2"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block wrap-break-word font-medium">{row.name ?? row.email}</span>
+                  <span className="text-muted-foreground block wrap-break-word text-xs">
+                    {row.email}
+                  </span>
+                </span>
+                <CaretRightIcon
+                  className="mt-1 size-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              </button>
+              <StatusBadge tone={statusTone(row.status)}>
+                {applicationStatusLabel(row.status, t)}
+              </StatusBadge>
+              <dl className="grid gap-2 text-xs">
+                {columns
+                  .filter((column) => {
+                    if (column.id === "applicant" || column.id === "status") return false;
+                    if (column.id === "score") return row.avg_score != null || row.review_count > 0;
+                    if (column.id === "submitted") return Boolean(row.submitted_at);
+                    if (column.id === "communicated") return Boolean(row.decision_sent_at);
+                    if (column.id === "deadline") return Boolean(row.confirmation_expires_at);
+                    return true;
+                  })
+                  .map((column) => (
+                    <div
+                      key={column.id}
+                      className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"
+                    >
+                      <dt className="text-muted-foreground">{column.header}</dt>
+                      <dd>{column.cell(row)}</dd>
+                    </div>
+                  ))}
+              </dl>
+            </div>
+          </div>
+        )}
         columns={columns}
         data={rows}
         getRowId={(r) => String(r.id)}
@@ -790,15 +875,16 @@ export function ResponsesTab({
           icon: FileTextIcon,
           title: t("noResponsesTitle"),
           description:
-            statusFilter === ALL && !search.trim()
+            statusFilter.length === 0 && !search.trim()
               ? t("submissionsAppearHereDesc")
               : t("noResponsesMatchFilterDesc"),
         }}
         filteredEmpty={{
-          active: statusFilter !== ALL || search.trim().length > 0,
+          active: statusFilter.length > 0 || search.trim().length > 0,
           onClear: () => {
-            setStatusFilter(ALL);
+            setStatusFilter([]);
             setSearch("");
+            setSelectedIds(new Set());
             document.getElementById("response-search")?.focus();
           },
         }}

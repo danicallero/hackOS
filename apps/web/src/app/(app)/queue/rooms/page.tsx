@@ -9,6 +9,8 @@ import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
+import { PageToolbar } from "@/components/common/page-toolbar";
 import { TabBar } from "@/components/common/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -304,11 +306,11 @@ export default function QueueRoomsPage() {
   if (!canAdmin) return <AccessDenied ask={t("roomAdminDeniedDesc")} />;
 
   return (
-    <div className="space-y-6" data-wide>
+    <PageLayout>
       <PageHeader title={t("judgingSettingsTitle")} />
 
       <Tabs value={tab} onValueChange={(value) => setTab(value)}>
-        <TabBar aria-label={t("judgingSettingsTitle")} className="w-full justify-start">
+        <TabBar aria-label={t("judgingSettingsTitle")}>
           <TabsTrigger value="rooms">{t("rooms")}</TabsTrigger>
           <TabsTrigger value="window">{t("judgingWindowTitle")}</TabsTrigger>
         </TabBar>
@@ -316,7 +318,10 @@ export default function QueueRoomsPage() {
 
       {tab === "rooms" && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <PageToolbar
+            label={t("pageDataControls")}
+            className="flex flex-wrap items-center justify-end gap-2"
+          >
             <div className="relative w-full max-w-md">
               <MagnifyingGlassIcon
                 className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
@@ -341,7 +346,7 @@ export default function QueueRoomsPage() {
                 <SelectItem value="paused">{t("roomStatusPaused")}</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </PageToolbar>
 
           <RoomsTable
             rooms={filteredRooms}
@@ -392,6 +397,6 @@ export default function QueueRoomsPage() {
           onClearEnterprise={clearRoomEnterprise}
         />
       )}
-    </div>
+    </PageLayout>
   );
 }

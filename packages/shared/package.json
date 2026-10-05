@@ -14,8 +14,10 @@
     "./locales/*": "./locales/*",
     "./questions": "./src/questions.ts",
     "./role-grant-triggers": "./src/role-grant-triggers.ts",
+    "./statistics": "./src/statistics.ts",
     "./ui-test-ids": "./src/ui-test-ids.ts",
-    "./wallet-pass-labels": "./src/wallet-pass-labels.ts"
+    "./wallet-pass-labels": "./src/wallet-pass-labels.ts",
+    "./realtime-client": "./src/realtime-client.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

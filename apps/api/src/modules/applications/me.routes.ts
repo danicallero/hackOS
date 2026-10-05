@@ -46,13 +46,15 @@ export function registerMeRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get my response for one form",
         description:
-          "The caller's own response to a form, including any unsubmitted draft, with the internal accepted/rejected status masked as 'review' until the decision is sent (H12, H14).",
+          "Returns the caller's own answers and the immutable form snapshot they answered, including for a closed form. Internal accepted/rejected status is masked as 'review' until the decision is sent (H12, H14).",
         params: idParamSchema,
       },
     },
     async (req) => {
       const { rows } = await pool.query(
         `SELECT fv.template, fv.sections,
+                a.name AS application_name, a.description AS application_description,
+                a.open_at, a.close_at,
                 a.ask_shirt_size, a.ask_food_intolerances,
                 r.*, t.expires_at AS confirmation_expires_at
          FROM application_responses r
@@ -78,6 +80,8 @@ export function registerMeRoutes(app: FastifyInstance): void {
         status: maskStatus(row.status),
         template: enriched,
         sections,
+        ask_shirt_size,
+        ask_food_intolerances,
         shirt_size: userRows[0]?.shirt_size ?? null,
         food_intolerances: userRows[0]?.food_intolerances ?? [],
         food_intolerance_notes: userRows[0]?.food_intolerance_notes ?? null,

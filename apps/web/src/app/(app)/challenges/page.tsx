@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -170,7 +171,7 @@ export default function ChallengesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         title={canAdmin ? t("challenges") : t("myChallenges")}
         primaryAction={
@@ -211,6 +212,7 @@ export default function ChallengesPage() {
                 size="sm"
                 disabled={bulkBusy}
                 onClick={() => bulkVisibility(true)}
+                loading={bulkBusy}
               >
                 <EyeIcon aria-hidden="true" className="size-4" />
                 {t("makeVisible")}
@@ -220,6 +222,7 @@ export default function ChallengesPage() {
                 size="sm"
                 disabled={bulkBusy}
                 onClick={() => bulkVisibility(false)}
+                loading={bulkBusy}
               >
                 <EyeSlashIcon aria-hidden="true" className="size-4" />
                 {t("hide")}
@@ -233,6 +236,6 @@ export default function ChallengesPage() {
           description: canAdmin ? t("createFirstEnterpriseChallenge") : t("noChallengeAssignedYet"),
         }}
       />
-    </div>
+    </PageLayout>
   );
 }

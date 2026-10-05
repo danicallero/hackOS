@@ -35,6 +35,7 @@ export function PermissionStateControl({
           aria-pressed={state === candidate}
           onClick={() => onChange(candidate)}
           className={cn(
+            "button-interaction",
             "min-h-[var(--control-height-compact)] px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
             index > 0 && "border-l",
             state === candidate

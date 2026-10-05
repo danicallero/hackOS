@@ -28,6 +28,7 @@ capabilities add tools, they never switch identities.
 | [2. Foundation tokens](#2-foundation-tokens) | Spacing, type, controls, radius, elevation — value, intent, boundary |
 | [3. Containers](#3-containers) | `Surface` vs `Section` vs `Overlay` — which wrapper, when |
 | [4. Page & action hierarchy](#4-page-and-action-hierarchy) | `PageHeader` anatomy; primary/secondary/overflow action logic |
+| [4b. Web page surfaces](#4b-web-page-surfaces-and-interaction-patterns) | Page density, editing, overlay sizes, scroll, save ownership and feedback |
 | [5. Component decision logic](#5-component-decision-logic) | Which shared component fits which job |
 | [6. Tables, forms, and states](#6-tables-forms-and-states) | Rules for data display, form UX, loading/empty/error |
 | [7. Information architecture](#7-information-architecture) | Personal area + additive capability workspaces |
@@ -74,6 +75,8 @@ Status washes are translucent, not solid fills. Text on a warning wash uses
 the foreground appropriate to the rendered surface: dark text in light mode
 and light text in dark mode. Verify normal text against its composited surface
 at WCAG AA (4.5:1 or higher), including nested controls such as banner buttons.
+Light warning markers derive a darker yellow from edition yellow and ink so
+KPI outlines remain visible on cream; warning text retains the normal foreground.
 
 Each row: value → intent → boundary.
 
@@ -168,6 +171,77 @@ heading names confirmation, the primary button confirms, and declining is a
 secondary text link. Copy leads with the outcome, shows the exact localized
 expiry in the event timezone before the action, then gives consequences or
 security notes. See [`notifications.md`](./notifications.md#transactional-email-theme-h7-h52).
+
+### Web button standard
+
+The button audit also reviewed the landing at commit
+`5e3b1f743d2bb1e2cc7d7776dcb2a1c113a7cee2`: the header/fixed/sponsor CTAs,
+illustrated hero plaques, gallery/media controls, language selectors, social
+icons, and text links. The platform retains the palette, Inter labels and pill
+actions, adapting the marketing red hover/focus and illustrated plaques to an
+operational interface with semantic danger colors and explicit loading states.
+
+`components/ui/button.tsx` and `styles/buttons.css` own action appearance and
+interaction. `styles/theme.css` owns `--button-*` state tokens, derived from the
+edition's semantic colors. `Button`, `IconButton`, `SubmitButton`, dialog header
+actions and `buttonVariants()` share this contract. The public `/design-system`
+shows every variant, all six states, all eight sizes, icon-only actions,
+link navigation, and working loading demonstrations in es/gl/en and both themes.
+Hover/focus/pressed specimens use `data-preview-state` only to display CSS;
+this attribute must not be used on product controls or to fake keyboard focus.
+
+| Variant | Purpose | Default appearance |
+| --- | --- | --- |
+| `default` | One primary action per scope | Ink/cream in light mode; blue/dark text in dark mode; slight shadow |
+| `secondary` | Supporting action that benefits from a filled surface | Quiet filled semantic secondary surface |
+| `outline` | Supporting action alongside the primary | Canvas surface and a solid, contrasting outline |
+| `ghost` | Toolbar, overflow, and low-emphasis action | Transparent surface; text/icon remains visible |
+| `destructive` | Confirm a destructive operation | Semantic danger fill; keep `AlertModal` for confirmation |
+| `link` | Text action, or navigation composed with `asChild` | Semantic primary text; underline on interaction |
+
+| State | Shared behavior |
+| --- | --- |
+| Default | A visible label or named icon; stable edition geometry |
+| Hover | A small opaque color change; outline strengthens; links underline. Only inside `(hover: hover) and (pointer: fine)`, never required to discover an action |
+| Focus | `:focus-visible`, solid 2 px `--ring` perimeter with 3 px separation. Native rows/cells use an inset perimeter to avoid clipping. Forced colors use `Highlight` |
+| Pressed | A distinct surface and removal of the primary shadow; links thicken their underline. Pill actions scale to 0.96 for tactile feedback only without reduced motion |
+| Loading | `loading={pending}` adds a decorative Phosphor spinner inside the action, preserves its label, sets `aria-busy`, and blocks activation. Existing decorative icons are replaced visually. Loading stays at full contrast |
+| Disabled | Native `disabled`, reduced opacity, no hover/press feedback, no shadow, and an unavailable cursor. `asChild` exposes `aria-disabled` and blocks click, auxiliary click and activation keys |
+
+The primary hover visibly lightens the ink fill in light mode and darkens the
+blue fill in dark mode; pressed is darker than hover in either theme.
+Feedback transitions last 150 ms and target only explicit properties. Reduced
+motion removes transitions and press transforms; the loading glyph stays visible
+without spinning. Drag handles opt out of press scaling with `button-static`.
+Focus follows the platform's ink/blue `--ring`, deliberately adapting the
+landing's red-focus suggestion: red stays reserved for invalid/destructive
+states in this operational product.
+
+Use `loading` on the action performing a request; a neighboring Cancel or menu
+trigger is merely disabled while that request runs. `SubmitButton` maps its
+existing `pending` prop into this same primitive; do not hand-code a spinner in
+another action. Keep labels specific to the action rather than replacing them
+with generic “Loading”. Icon-only actions use `IconButton` with a localized
+`label`; loading replaces the glyph without changing the accessible name.
+
+Native composite controls (editable cells, row disclosures, sort headings,
+permission segments and picker options) use `button-interaction` for cursor,
+hover, pressed and solid focus feedback while retaining their layout and
+keyboard model. Shared dialog icon classes consume `buttonVariants`. Official
+Apple/Google Wallet artwork stays intact; Google adds an adjacent spinner and
+`aria-busy` while fetching its save URL. Do not replace these badges with generic
+pill buttons.
+
+```tsx
+<Button loading={saving} disabled={!hasChanges} onClick={save}>
+  {t("save")}
+</Button>
+<SubmitButton pending={form.formState.isSubmitting}>{t("save")}</SubmitButton>
+<IconButton label={t("remove")} variant="ghost" loading={removing}>
+  <TrashIcon aria-hidden="true" />
+</IconButton>
+<Button asChild variant="outline"><Link href="/schedule">{t("schedule")}</Link></Button>
+```
 
 ### List filter standard
 
@@ -289,8 +363,8 @@ elevated `Overlay` — replacing the overloaded generic "card".**
 sections use `Section`/`SectionCard` so their responsibility is explicit. In
 `app/(app)` the raw `Card`s that are deliberately *not* page sections are the
 centered confirmation/auth cards (`verify-secondary-email/page.tsx`) and the
-my-queue ticket stub. `schedule/page.tsx`'s search/filter bar is a known
-exception still pending migration to `SectionCard`.
+my-queue ticket stub. `schedule/page.tsx` groups its operational toolbar and grid in one bounded
+`Surface`; the toolbar is a `PageToolbar`, not a separately titled section.
 Every dashboard-style panel is a `SectionCard` (#300); a panel that re-builds
 title/description/action out of `CardHeader` also re-invents the spacing and
 re-introduces the description-restates-the-title pattern.
@@ -299,7 +373,7 @@ colour tokens.
 
 Use `SectionCard variant="plain"` for open page sections: it retains the
 heading, actions and semantic section without a border, background, inset
-padding. A quiet heading hairline anchors the section; lists may use
+padding. A quiet heading hairline anchors a titled section; lists may use
 hairlines between rows where separate states need clear boundaries.
 The title row reserves the compact-control height, so adjacent plain sections
 align their hairlines even when only one has an action. A multi-record project
@@ -400,6 +474,266 @@ id) → one `primaryAction` + optional `secondaryActions`.
 />
 ```
 
+## 4b. Web page surfaces and interaction patterns
+
+**The page is a composition, not a stack of cards.** Start with the task,
+reading order and scroll owner, then choose boundaries. The runnable contract
+is `/design-system` → Page patterns; `PageLayout`, `PageHeader`, `PageToolbar`,
+`SearchField`, `ListToolbar`, `SectionCard`, `TabBar`, `FormActions`, `Modal` and `SidePanelEditor` are the
+shared implementations. Geometry lives in `styles/surfaces.css`.
+
+### Choose the page before choosing its containers
+
+| Task / real web examples | Composition | Width / scroll |
+| --- | --- | --- |
+| Scan, filter, compare, select: Users, Applications, Audit, Projects, Challenges, Enterprises, Activities and Accreditation/Presence | Header → optional tabs → search/filter toolbar → count/selection feedback → one table or drill-down list → pagination | `PageLayout` (content), max 1280 px, matching Users. Use `workspace` only when columns require more space. Document scroll. Never constrain a table tab to the width of its sibling form. |
+| Read or edit one subject: challenge/project editors, event/profile settings, compact catalogues | Header → optional category tabs → open sections → one save owner per form | `PageLayout width="reading"`, max 896 px. Fields themselves stay in one or two readable columns; never stretch a single text field across a wide dashboard. Document scroll. |
+| Operate live data: queue operations, schedule grid, logistics analytics | Header → compact scope/data controls → operational surfaces | `width="workspace"`, available shell width. Document scroll unless simultaneous panes require a fixed workspace. |
+| Judge while watching queue and evaluation | Header/scope controls → sibling panes; queue and evaluation are separate bounded units | Existing judging desktop breakpoint (`xl`): fixed viewport, `min-h-0` throughout, scroll only pane bodies, fixed pane actions. Below it, normal document flow. No page-scroll trap on small/zoomed screens. |
+| A small amount of content | Same header and alignment, open content and useful next action | Do not center everything vertically, inflate cards or add filler descriptions. Empty space is acceptable. |
+
+Application management and user/enterprise detail use the same 1280 px content
+canvas as Users. A full route page does not mean unlimited
+width: user detail needs its own route, header and tabs, not a stretched canvas
+or a side editor. Event settings and Libraries use the 896 px reading canvas: related form
+fields and compact one-to-three-column catalogues do not need unlimited
+comparison space. Neither route name nor settings category chooses width.
+Activities and Accreditation/Presence share this 1280 px canvas, including
+their tabs and control alignment. A scanner may be compact within that canvas;
+it does not give the destination a different outer width.
+Reserve the workspace canvas for simultaneous operational panes or columns that
+actually need more room. Restrict individual text/form groups, never table tabs. Verify the last column is visible at
+normal desktop widths before accepting a layout. Horizontal scroll is for a
+genuinely narrow viewport or an exceptionally wide operational grid, not an
+artificial reading-width container.
+
+The shell supplies horizontal margins (16 px mobile, 24 px from `sm`) and top
+clearance. Page blocks share a 24 px rhythm. Within a block use 16 px, between
+closely related values/controls use 8 px; independent form groups may use 32 px.
+Align labels/control tracks, not the bottom of helper text. Rows and tables
+retain their compact established density. Do not add a second inset wrapper
+around a `PageLayout` or override its width for visual guesswork.
+
+### Reusable compositions and ownership
+
+Use the app composition layer over shadcn/Radix primitives. The primitives own
+keyboard navigation, focus, portals and control behavior; compositions own
+alignment, width and slots. Pages retain domain queries, permission checks,
+URL state, validation and mutations. Do not duplicate primitive behavior or
+build a universal page component with domain flags.
+
+| Component | Shared contract |
+| --- | --- |
+| `PageLayout` | Content 1280 px, reading 896 px, or a genuinely wider operational workspace. One canvas; shell owns viewport padding. |
+| `PageHeader` | One page title with optional real identity, metadata/state and page actions. |
+| `SearchField` | Labelled search input, decorative search icon and accessible clear action that returns focus to the input. |
+| `ListToolbar` | Users-style broad search, shared `FilterMenu`, trailing view/export actions and optional feedback; active chips occupy a separate row. |
+| `PageToolbar` | Lower-level labelled control region for specialized operational controls that do not fit the list composition. |
+| `TabBar` | One segmented selector using Radix Tabs. `full` distributes width; `content` hugs labels. Same selection/focus behavior. |
+| `SectionCard` | Common heading/state/actions/body; `plain` for related open sections, bounded default for independent objects. |
+| `FormActions` | Actual save status first, secondary actions then Save last; one pending spinner, owned by the submit button. |
+| `Modal` / `AlertModal` / `SidePanelEditor` | Shared geometry and focus/close behavior; content-driven size. Domain dirty/pending guards remain with the editor. |
+
+Users and application responses consume `ListToolbar`; the generic `DataTable`
+uses `SearchField` within `PageToolbar`. Event settings and profile share
+`FormActions`. Specialized compositions may differ in content while retaining
+these same controls and alignment contracts. The playground uses the actual
+components and local synthetic operations, so examples can be interacted with.
+
+### Form builders and selection groups
+
+A builder distinguishes ownership from presentation: a section bounds its
+questions; each question has a compact toolbar (drag handle, field type and
+secondary actions) above its editable content. A subtle dashed section boundary
+is a drop destination, not an extra decorative card. Empty sections keep a
+visible destination. Use the existing Stats/questionnaire drag primitives,
+keyboard sorting, placeholder and floating preview rather than a second drag
+interaction. The section title editor is its header, with the handle beside it;
+never repeat it in a second title bar. A question opens from its whole card,
+while controls and drag handles retain their own interaction. Expanded editing
+does not duplicate a disabled answer preview; the explicit Preview action
+shows the applicant form. Respect reduced motion and keep input interactions separate from
+the drag handle. Standalone questions can live before all sections or after a
+section: `after_section_key` persists that anchor without assigning ownership.
+It is mutually exclusive with `section_key`. Builder, preview, applicant form
+and reviewer use the same ordering. A drop zone after a section clearly names
+that outside position. Removing a section clears its ownership and anchors.
+
+The reviewer file viewer uses the same dnd-kit sensors, handle, source-size
+preview and reduced-motion drop feedback as the builders. Docking is a fixed
+viewport interaction, so it does not scroll the page while crossing panes.
+The adjacent modal previews its new position during drag; Escape restores the
+committed position. Keep the viewer's empty state available.
+
+Status filters allow multiple values. Within a status group, selections are
+combined with OR; independent groups and the search query combine with AND.
+No selected status means all statuses. Show removable filter chips and a clear
+reset; do not silently replace one selection with another.
+
+On narrow application lists, show one readable record row with identity, status
+and relevant metadata instead of requiring a horizontal scroll through a single
+record. Keep bulk selection separate from the button that opens the record.
+Group related exports under one labelled menu; two identical download icons
+without context are not an adequate mobile adaptation.
+
+### Headers, controls and tabs
+
+- A destination has one `PageHeader` and one `h1`. Title and data start at the
+  same edge; the mobile header reserves the sidebar trigger. The header has
+  no colored band, border, shadow or surrounding card. Use the same hierarchy
+  for lists and records. Keep the title visible when its actions wrap.
+- No decorative page symbol by default. `leading` is a real record identity
+  (logo/photo); section icons are optional scanning aids when several distinct
+  domains appear together, not mandatory decoration. Never fabricate avatars.
+- Status belongs next to the subject it describes. A count is neutral text
+  with tabular numerals; email/date/ownership are metadata. A description only
+  earns space when it explains policy, risk, consequence or an unfamiliar state.
+- Header actions affect the page/record. `PageToolbar` controls affect the data
+  immediately below. Search first, filters next, view/column settings last.
+  On mobile they wrap or become labelled icon controls; filter chips occupy
+  their own horizontally scrollable row. Never hide the only way to clear filters.
+- Selection actions replace/augment the data toolbar only while selection
+  exists, with its count. A row's actions belong to its trailing cell/menu;
+  avoid a second primary action competing with page creation.
+- `TabBar` uses the statistics selector's segmented treatment everywhere.
+  `width="full"` (default) distributes tabs across the useful width;
+  `width="content"` hugs the tab labels and leaves room for adjacent controls.
+  Width is the only visual variant; never reintroduce an underlined second style. Tabs select sibling
+  views of the same subject; they are not headers, filters, or action buttons.
+  Keep the page header above them. The selected tab already names the panel:
+  do not repeat it as an immediate `h2`; give distinct subsections their own
+  headings. Statistics phase uses `width="content"` in its control row. Use a route for a different subject/workflow.
+- Tabs stay on one scrollable line; never wrap or clip their last item. Use
+  meaningful labels and keyboard arrow navigation. Existing deep-linkable
+  settings retain their URL and dirty-category guard.
+
+### Creation, reading and editing
+
+| Interaction | Surface and behavior |
+| --- | --- |
+| Create/edit one bounded record from a list (room, schedule item, invite, announcement) | `SidePanelEditor`; retain list filters/selection/scroll behind it. Its header and action footer stay fixed, its body scrolls. One save/submit owner. |
+| Short creation with a few related fields, a decision, or acknowledgement | `Modal` only if it fits a short interaction. A modal is not a miniature settings page. |
+| Destructive or irreversible operation | `AlertModal`, name the target and consequence; cancel is secondary, only confirmation is destructive. |
+| Multi-section creation/editor, deep detail, version history, shareable workflow | Dedicated route, e.g. challenge creation, project details and application builder. Navigate with a real link where possible; keep native browser history useful. |
+| Secondary explanation/detail attached to a section | Explicit inline disclosure. Large expansion/collapse preserves the trigger's viewport anchor. |
+| Supplementary information on pointer hover | Tooltip for a short nonessential label, or a focus/click-operable popover. Never put required data, row actions, editing or the only explanation of an error behind hover. Touch uses explicit activation. |
+
+Creation and editing share field ordering and save behavior; editing pre-fills
+existing values rather than introducing a second custom form layout. A panel
+may contain open groups, never stacked bordered cards for every field group.
+Keep actual multi-record objects independently bounded when ownership matters.
+
+### Overlay geometry and content ownership
+
+- Modal `sm`: 384 px, short confirmations/decisions; `md` (default): 512 px,
+  compact forms. `lg`: 672 px, exceptional paired fields/review content; `xl`:
+  896 px, existing specialized review tools only. Larger sizes are not a
+  license to move a route into a dialog. Width is always capped by viewport
+  minus 32 px, height by `100dvh - 32px`; body is the only scrolling region.
+- Side editor sizes: `default` 512 px for a compact record; `wide` 672 px for
+  paired fields / rich text (Schedule and Announcements); `expanded` 896 px
+  for an editor with a genuine adjacent preview. Choose by content, not by
+  making every panel wider. Deep multi-domain records such as user detail
+  stay full route pages (`PageLayout`, 1280 px content canvas), never side editors.
+  All panel sizes use a desktop inset of 12 px on top/bottom/trailing edge and
+  8 px overlay radius. Below `sm`, full viewport width and `100dvh` height,
+  no decorative gap or rounded desktop frame. Body has 20 px padding; header
+  and actions stay outside its scroll. Footer respects the bottom safe area.
+- Both use the shared overlay/backdrop, close affordance and focus management.
+  Clicking outside, Escape, X and Cancel all dismiss through the same open
+  change handler and restore focus to the trigger. Alert confirmations treat
+  a backdrop click as Cancel; it never executes the destructive action.
+  A pending confirmation cannot dismiss while its mutation is in flight. A dirty editor must not silently
+  discard input: retain it or use the existing discard guard. Pending writes
+  cannot submit twice. Do not automatically close on a failed save.
+- Essential header controls wrap in header flow on narrow screens rather than
+  covering the title. Menus/comboboxes use the nearest overlay scope and keep
+  their keyboard behavior; no hand-built nested portals or stacked editor modals.
+
+### Persistent actions and save feedback
+
+| Situation | Action placement / feedback |
+| --- | --- |
+| Short form fully visible with its submit action | Normal-flow footer. No floating bar needed. |
+| Long page editor/settings category | Sticky footer inside the owning form/section (`stickyFooter` / `.form-action-footer`), opaque surface and top hairline. Save and persistent `SaveStatus` travel together. Respect safe areas and allow focused final fields to scroll clear. |
+| Side editor / fixed operational pane | Fixed footer outside the scrolling body; no nested sticky bar. |
+| Long, frequently extended operational table | Keep its existing compact trailing sticky create action (Schedule/Rooms). Do not add a floating create button to every short/paginated catalogue. |
+| Immediate cell edit / autosave | Show saving/saved/error at the cell or its shared scope, not a page-level claim that unrelated data is saved. |
+
+`FormActions` places the scope's current save status at the leading edge;
+secondary actions (Cancel/Reset) and the primary Save follow at the trailing
+edge, with Save last. At narrow widths the groups wrap without changing this
+reading order. The button owns the pending spinner; the adjacent state text
+does not duplicate it. Autosave without a button keeps its own indicator.
+This is the shared action-bar anatomy, not a per-page choice.
+The initial loaded data is saved; a real edit becomes unsaved; request start
+becomes saving; only a successful response becomes saved. Failure retains the
+input and shows an inline error, plus optional toast. Never show saved merely
+because the button was clicked. A category's sections share one form,
+transaction and dirty guard; independently saved resources retain their own
+owner. Do not attach an independent save button to each cosmetic subsection.
+Unsaved navigation uses the established guard. Conflict/offline feedback may
+only claim these states when the underlying save flow detects them; it must
+explain the available retry/reload path, never silently overwrite another edit.
+
+### Cards, rows, badges and feedback
+
+- Use an open `SectionCard variant="plain"` for related content or fields on
+  the same subject; spacing and headings supply hierarchy. Use a bounded
+  surface for a selectable object, an independent operational pane, comparative
+  table, metric or object with a distinct lifecycle. Use `StatCard` for a metric.
+- No card inside a card merely to label a subsection. Use open groups, rows,
+  inset spacing, or a quiet hairline/wash when ownership needs a boundary.
+  A headerless `SectionCard` must not render an orphan top separator.
+- Badges communicate a meaningful categorical state (pending, confirmed,
+  published, paused, conflict), with a localized label and semantic tone.
+  Static names, dates, preferences, roles listed as metadata, mandatory flags,
+  descriptions and quantities are text. Filter chips are controls, not badges.
+  Never rely on color alone or turn every attribute into a pill.
+- A collapsed object has a visible disclosure control; essential state and
+  next action stay visible. Actions inside a row stop row navigation and stay
+  keyboard/touch reachable. Hover can strengthen affordances, not reveal the
+  only route to the action.
+- Toasts acknowledge completed actions without moving focus. Brief success
+  may arrive compact; supplementary detail can expand on hover/focus. A toast
+  with an action opens expanded and stays long enough to discover/use it;
+  a long/essential explanation opens expanded too. Touch must not need hover.
+  Use an action only for a real Undo, Retry or relevant destination. No pretend
+  Undo for an irreversible operation. Critical failure, conflict and partial
+  batch results remain inline/durable; a toast is never their only channel.
+- Toast headings identify the action, bodies explain the outcome. Reuse the
+  shared adapter's queue limits, reduced motion, focus behavior and localized
+  copy. Do not add per-page toast renderers.
+
+### Audit coverage and maintained exceptions
+
+The shared page canvas is applied across the list, record, settings, participant,
+sponsor, audit, logistics and queue routes. Users retains its audited desktop
+layout; its toolbar now has the common semantic boundary. Event/profile forms
+use persistent save ownership; challenge editors and application settings use
+open sections and the common sticky footer. Announcement editor groups are
+open inside the side editor. All shared modals/panels consume the same geometry,
+and all shared category tabs use the same presentation.
+
+Judging deliberately keeps its fixed desktop split workspace. Permissions keeps
+its role tree/editor split. Verification keeps a small centered acknowledgement;
+public/auth pages and TV/kiosk surfaces have their own existing contracts.
+Specialized application-review tooling retains its dedicated rich review modal
+and file viewer; this does not establish a default for new detail workflows.
+Its desktop file viewer shares Statistics' dnd-kit sensors, grip, full-size
+DragOverlay, destination placeholder and reduced-motion policy. Dragging previews
+the destination and moves the adjacent modal to make room before drop; cancel
+restores the committed position. Keyboard Space/Enter picks up and drops,
+Left/Right chooses a side and Escape cancels the drag without dismissing the
+review. File fields retain their empty viewer slot when no file was uploaded.
+
+
+Validate any change with multiple adjacent records, empty and filtered states,
+loading/error/saved/dirty states, keyboard and pointer, both themes, and desktop
+and narrow screenshots. Shared geometry is not evidence that every domain flow
+has identical semantics: preserve permissions, state transitions, draft scope,
+and specialized operational behavior.
+
 ## 5. Component decision logic
 
 **Summary: the shared library is canonical — pick by job, extend by props,
@@ -469,7 +803,7 @@ anything else.
 | Pick one row from a table-backed list (users, enterprises, activities, …) | `UserPicker` (server-searched) or `EntityCombobox` (client-filtered, already-fetched list) | A `Select` dumping every row flat — unusable once the table grows past a handful of rows |
 | A set of same-shaped objects users drill into (esp. mobile) | Cards / drill-down list rows | A horizontally scrolling table |
 | Zero-state | `EmptyState` with one direct CTA | Prose explaining where to navigate |
-| Long-form save feedback | `SaveStatus` (`lib/save-state.ts`) | Silent autosave, per-section save buttons |
+| Long-form save feedback | `FormActions` + `SaveStatus` (`lib/save-state.ts`), sticky within the owning form | Silent autosave, per-section save buttons |
 | Application-template fields (any kind) | `TemplateFieldControl` — the single renderer both applicant form and staff review use | A second field renderer |
 | Gate UI by permission | `<CapabilityGate>` / `useCan(cap)` | Checking `me.role` |
 

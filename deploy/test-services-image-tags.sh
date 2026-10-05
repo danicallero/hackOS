@@ -37,9 +37,16 @@ cat >"$test_dir/bin/curl" <<'EOF'
 set -Eeuo pipefail
 
 case "$*" in
+  *api.github.com/repos/danicallero/hackOS/releases/latest*)
+    printf '%s\n' '{"target_commitish":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
+    ;;
   *ghcr.io/token*) printf '%s\n' '{"token":"test"}' ;;
   *hackos-api/tags/list*|*hackos-web/tags/list*)
-    printf '%s\n' '{"tags":["sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}'
+    if [[ "${HACKOS_TEST_MISSING_WEB:-false}" == true && "$*" == *hackos-web/tags/list* ]]; then
+      printf '%s\n' '{"tags":[]}'
+    else
+      printf '%s\n' '{"tags":["sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}'
+    fi
     ;;
   *)
     echo "unexpected curl request: $*" >&2
@@ -80,9 +87,67 @@ env -u API_IMAGE_TAG -u WEB_IMAGE_TAG \
   HACKOS_TEST_DEPLOY_LOG="$test_dir/deploy.log" \
   bash "$services_script" staging deploy sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --both >/dev/null
 
-grep -Fxq 'true staging sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa true true' "$test_dir/deploy.log" || {
+grep -Fxq 'true staging sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa true true manual' "$test_dir/deploy.log" || {
   echo 'services.sh did not pass its deployment lock to deploy.sh.' >&2
   exit 1
 }
+
+# Production uses the same host-local deployment script after the release has
+# been resolved and validated. It must not only print a workflow command and
+# report success without deploying. The explicit SHA form exercises the exact
+# handoff used after latest-release resolution.
+env -u API_IMAGE_TAG -u WEB_IMAGE_TAG \
+  PATH="$test_dir/bin:$PATH" \
+  HACKOS_APP_DIR="$test_dir/app" \
+  HACKOS_COMPOSE_FILE="$test_dir/docker-compose.yml" \
+  HACKOS_CONFIG_FILE="$test_dir/hackos.env" \
+  HACKOS_TEST_DOCKER_LOG="$test_dir/docker.log" \
+  HACKOS_TEST_DEPLOY_LOG="$test_dir/deploy.log" \
+  bash "$services_script" production deploy sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --both >/dev/null
+
+grep -Fxq 'true production sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa true true rollback' "$test_dir/deploy.log" || {
+  echo 'services.sh did not deploy the selected production release.' >&2
+  exit 1
+}
+
+env -u API_IMAGE_TAG -u WEB_IMAGE_TAG \
+  PATH="$test_dir/bin:$PATH" \
+  HACKOS_APP_DIR="$test_dir/app" \
+  HACKOS_COMPOSE_FILE="$test_dir/docker-compose.yml" \
+  HACKOS_CONFIG_FILE="$test_dir/hackos.env" \
+  HACKOS_TEST_DOCKER_LOG="$test_dir/docker.log" \
+  HACKOS_TEST_DEPLOY_LOG="$test_dir/deploy.log" \
+  bash "$services_script" production deploy latest --both >/dev/null
+
+grep -Fxq 'true production sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa true true promote' "$test_dir/deploy.log" || {
+  echo 'services.sh did not deploy the latest production release.' >&2
+  exit 1
+}
+
+# A partial release can have an API image without the matching web tag. The
+# interactive preflight must report that and return, even though die() exits.
+env -u API_IMAGE_TAG -u WEB_IMAGE_TAG \
+  PATH="$test_dir/bin:$PATH" \
+  HACKOS_APP_DIR="$test_dir/app" \
+  HACKOS_COMPOSE_FILE="$test_dir/docker-compose.yml" \
+  HACKOS_CONFIG_FILE="$test_dir/hackos.env" \
+  HACKOS_TEST_DOCKER_LOG="$test_dir/docker.log" \
+  HACKOS_TEST_DEPLOY_LOG="$test_dir/deploy.log" \
+  HACKOS_TEST_MISSING_WEB=true \
+  bash -c '
+    services_source="$1"
+    set -- production status
+    source "$services_source" >/dev/null
+    menu_select() { menu_navigation=select; menu_choice=2; }
+    pause_shell() {
+      [[ "$last_child_succeeded" == false ]] || exit 1
+      printf "failure displayed; returning to menu\n"
+    }
+    deploy_target_shell latest
+    printf "operator shell still alive\n"
+  ' test "$services_script" >"$test_dir/menu.log"
+
+grep -Fq 'is not published in GHCR for the selected units' "$test_dir/menu.log"
+grep -Fxq 'operator shell still alive' "$test_dir/menu.log"
 
 echo 'services image-tag regression test: passed'

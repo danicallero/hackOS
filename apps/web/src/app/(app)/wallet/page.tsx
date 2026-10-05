@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { QrCode } from "@/components/common/qr-code";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -56,27 +57,27 @@ export default function WalletPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <PageLayout>
         <PageHeader title={t("wallet")} />
         <div className="text-muted-foreground flex flex-col items-center gap-3 py-16" role="status">
           <Spinner className="size-6" />
           <span className="text-sm">{t("loading")}</span>
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <div className="space-y-6">
+      <PageLayout>
         <PageHeader title={t("wallet")} />
         <ContextualError message={error} onRetry={retry} />
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader title={t("wallet")} />
 
       <Tabs value={purpose} onValueChange={setPurpose}>
@@ -103,7 +104,7 @@ export default function WalletPage() {
           </div>
         </SectionCard>
       ) : null}
-    </div>
+    </PageLayout>
   );
 }
 

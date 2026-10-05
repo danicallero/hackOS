@@ -18,6 +18,7 @@ describe("planned work groups (#852)", () => {
   });
   beforeEach(async () => {
     await truncateAll();
+    await pool.query(`UPDATE queue_settings SET schedule_start_at = NULL WHERE id = 1`);
     await pool.query(
       `INSERT INTO event_config (id,participants_can_create_projects) VALUES (1,true) ON CONFLICT (id) DO UPDATE SET participants_can_create_projects=true`,
     );

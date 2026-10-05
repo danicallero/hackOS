@@ -56,10 +56,13 @@ describe("scheduled event-access reminder (H45,H52)", () => {
       403,
     );
     const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
-    for (const offset of [-1000, 8 * 86400000])
-      expect((await request(manager, new Date(Date.now() + offset).toISOString())).statusCode).toBe(
-        400,
-      );
+    // H45/H52 / #894: scheduling uses the database clock, which may lag
+    // the application host. Derive both rejected boundaries from that clock.
+    const { rows } = await pool.query(
+      "SELECT clock_timestamp() - interval '1 second' AS past, event_starts_at + interval '1 day' AS after_open FROM event_config WHERE id = 1",
+    );
+    for (const time of [rows[0].past, rows[0].after_open])
+      expect((await request(manager, time.toISOString())).statusCode).toBe(400);
     await pool.query("UPDATE event_config SET event_starts_at = NULL");
     expect((await request(manager, new Date(Date.now() + 86400000).toISOString())).statusCode).toBe(
       400,
@@ -68,13 +71,16 @@ describe("scheduled event-access reminder (H45,H52)", () => {
   it("rolls back event edits when scheduling fails and enforces the field capability", async () => {
     app ??= await buildTestApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
+    // H45/H52 / #895: reject a database-relative past instant so this
+    // exercises transaction rollback independently of host/database skew.
+    const { rows } = await pool.query("SELECT clock_timestamp() - interval '1 second' AS past");
     const invalid = await app.inject({
       method: "PUT",
       url: "/api/event",
       headers: { ...asUser(manager), "Idempotency-Key": crypto.randomUUID() },
       payload: {
         name: "Should roll back",
-        eventReminderScheduledAt: new Date(Date.now() - 1000).toISOString(),
+        eventReminderScheduledAt: rows[0].past.toISOString(),
       },
     });
     expect(invalid.statusCode).toBe(400);

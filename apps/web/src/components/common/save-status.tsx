@@ -9,7 +9,15 @@ import { type SaveState, saveStateLabel } from "@/lib/save-state";
 import { cn } from "@/lib/utils";
 
 /** Icon + label for an autosave field's current state (saved/saving/unsaved/error). */
-export function SaveStatus({ state, className }: { state: SaveState; className?: string }) {
+export function SaveStatus({
+  state,
+  className,
+  showIcon = true,
+}: {
+  state: SaveState;
+  className?: string;
+  showIcon?: boolean;
+}) {
   const { t } = useLocale();
   const Icon = {
     saved: CheckIcon,
@@ -27,10 +35,15 @@ export function SaveStatus({ state, className }: { state: SaveState; className?:
         className,
       )}
     >
-      <Icon
-        aria-hidden="true"
-        className={cn("size-3.5", state === "saving" && "animate-spin motion-reduce:animate-none")}
-      />
+      {showIcon && (
+        <Icon
+          aria-hidden="true"
+          className={cn(
+            "size-3.5",
+            state === "saving" && "animate-spin motion-reduce:animate-none",
+          )}
+        />
+      )}
       {saveStateLabel(state, t)}
     </span>
   );

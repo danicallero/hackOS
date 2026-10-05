@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { StatCard } from "@/components/common/stat-card";
 import { TabBar } from "@/components/common/tab-bar";
 import { PresenceExportPanel } from "@/components/exports/presence-export-panel";
@@ -103,13 +104,13 @@ export default function PresencePage() {
   }
 
   return (
-    <div className="space-y-6" data-wide>
+    <PageLayout>
       <PageHeader
         title={t("accreditationAndPresence")}
         secondaryActions={canStats ? <PresenceExportPanel /> : undefined}
       />
       <Tabs value={tab} onValueChange={(value) => setTab(value)}>
-        <TabBar aria-label={t("presenceSections")} className="w-full justify-start">
+        <TabBar aria-label={t("presenceSections")}>
           <TabsTrigger value="scan">{t("presenceScanTab")}</TabsTrigger>
           <TabsTrigger value="people">{t("peopleTab")}</TabsTrigger>
           {canPresence && <TabsTrigger value="sessions">{t("presenceSessionsTab")}</TabsTrigger>}
@@ -169,6 +170,6 @@ export default function PresencePage() {
           sessionsError={openSessionsError}
         />
       )}
-    </div>
+    </PageLayout>
   );
 }

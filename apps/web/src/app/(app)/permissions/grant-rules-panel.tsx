@@ -275,7 +275,7 @@ export function GrantRulesPanel({
               >
                 <button
                   type="button"
-                  className="min-w-0 flex-1 text-left"
+                  className="button-interaction min-w-0 flex-1 text-left"
                   disabled={disabled}
                   onClick={() => openEdit(rule)}
                 >

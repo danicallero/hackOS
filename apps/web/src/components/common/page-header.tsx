@@ -16,11 +16,14 @@ export function PageHeader({
   secondaryActions,
   actions,
   className,
+  headingLevel = 1,
 }: {
   context?: React.ReactNode;
   /** Visual identity for record pages (an avatar, a logo). Never an action. */
   leading?: React.ReactNode;
   title: string;
+  /** Embedded design specimens use h2; destinations always keep the default h1. */
+  headingLevel?: 1 | 2;
   state?: React.ReactNode;
   /** Identity metadata under the title (email, badge id) — not a description. */
   meta?: React.ReactNode;
@@ -31,6 +34,7 @@ export function PageHeader({
   actions?: React.ReactNode;
   className?: string;
 }) {
+  const Heading = headingLevel === 1 ? "h1" : "h2";
   const actionContent =
     primaryAction || secondaryActions ? (
       <>
@@ -53,12 +57,12 @@ export function PageHeader({
         <div className="min-w-0 space-y-1">
           {context && <div className="type-meta">{context}</div>}
           <div className="flex flex-wrap items-center gap-(--space-related)">
-            <h1 className="type-page-title text-balance">{title}</h1>
+            <Heading className="type-page-title text-balance">{title}</Heading>
             {state && <div className="shrink-0">{state}</div>}
           </div>
           {meta && <div className="flex flex-wrap items-center gap-(--space-related)">{meta}</div>}
           {description && (
-            <p className="text-muted-foreground text-pretty text-sm">{description}</p>
+            <p className="max-w-prose text-muted-foreground text-pretty text-sm">{description}</p>
           )}
         </div>
       </div>

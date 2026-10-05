@@ -148,7 +148,7 @@ export function InsertRowDivider({ colSpan, onInsert }: { colSpan: number; onIns
           onClick={onInsert}
           aria-label={t("insertActivityHere")}
           title={t("insertActivityHere")}
-          className="absolute inset-x-0 top-1/2 flex h-[var(--control-height-tiny)] -translate-y-1/2 cursor-pointer items-center gap-1 px-3 opacity-0 transition-opacity group-hover/insert:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+          className="button-interaction absolute inset-x-0 top-1/2 flex h-[var(--control-height-tiny)] -translate-y-1/2 cursor-pointer items-center gap-1 px-3 opacity-0 transition-opacity group-hover/insert:opacity-100 focus-visible:opacity-100"
         >
           <span className="bg-primary text-primary-foreground flex size-[var(--control-height-tiny)] shrink-0 items-center justify-center rounded-full">
             <PlusIcon aria-hidden="true" className="size-3" />
@@ -206,7 +206,12 @@ export function DraftActivityRow({
             {scheduleTimeOfDay(draft.startsAt, language)}–
             {scheduleTimeOfDay(draft.endsAt, language)}
           </span>
-          <Button size="sm" disabled={!trimmed || saving} onClick={() => onCreate(trimmed)}>
+          <Button
+            size="sm"
+            disabled={!trimmed || saving}
+            onClick={() => onCreate(trimmed)}
+            loading={saving}
+          >
             {t("addAction")}
           </Button>
           <Button size="sm" variant="ghost" onClick={onCancel}>

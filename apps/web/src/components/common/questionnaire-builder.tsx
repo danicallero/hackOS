@@ -42,6 +42,7 @@ import {
   DragHandle,
   dragOverlayDropAnimation,
   SortableItem,
+  useReducedDragMotion,
 } from "@/components/common/drag-handle";
 import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
@@ -231,6 +232,7 @@ export function JudgingPanelBuilder({
   onChange: (value: Question[]) => void;
   disabled?: boolean;
 }) {
+  const reducedDragMotion = useReducedDragMotion();
   const { t } = useLocale();
   const questionTypes = useMemo(() => buildQuestionTypes(t), [t]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -356,7 +358,7 @@ export function JudgingPanelBuilder({
             </SortableItem>
           ))}
         </SortableContext>
-        <DragOverlay dropAnimation={dragOverlayDropAnimation}>
+        <DragOverlay dropAnimation={reducedDragMotion ? null : dragOverlayDropAnimation}>
           {dragId !== null && (
             <Surface padding="compact" className="shadow-floating">
               <QuestionRowPreview
@@ -445,7 +447,12 @@ function JudgingQuestionRow({
     return (
       <Surface padding="compact" className="hover:border-primary/40 space-y-3 transition-colors">
         {topRow}
-        <button type="button" onClick={onActivate} disabled={disabled} className="w-full text-left">
+        <button
+          type="button"
+          onClick={onActivate}
+          disabled={disabled}
+          className="button-interaction w-full text-left"
+        >
           <QuestionRowPreview question={question} index={index} />
         </button>
       </Surface>
@@ -917,7 +924,7 @@ function FieldHint({ text }: { text: string }) {
           <button
             type="button"
             aria-label={t("moreInformationAria")}
-            className="text-muted-foreground hover:text-foreground focus-visible:text-foreground inline-flex"
+            className="button-interaction text-muted-foreground hover:text-foreground focus-visible:text-foreground inline-flex"
           >
             <QuestionMarkIcon className="size-3.5" aria-hidden="true" />
           </button>

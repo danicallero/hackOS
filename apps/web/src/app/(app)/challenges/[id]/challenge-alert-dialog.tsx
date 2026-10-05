@@ -118,7 +118,7 @@ export function ChallengeAlertDialog({
           ))}
         </div>
         <DialogFooter>
-          <Button disabled={sending || !complete} onClick={send}>
+          <Button disabled={sending || !complete} onClick={send} loading={sending}>
             {sending ? t("sending") : t("send")}
           </Button>
         </DialogFooter>

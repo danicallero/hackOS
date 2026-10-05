@@ -270,6 +270,7 @@ function CalledTeamRow({
               variant="outline"
               size="xs"
               disabled={!canOperate || busyAction("remind-waiting")}
+              loading={busyAction("remind-waiting")}
               onClick={() => void onAction(entry, "remind-waiting")}
             >
               <BellRingingIcon aria-hidden="true" className="size-3.5" />

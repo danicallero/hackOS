@@ -186,8 +186,28 @@ async function publishTicketChanges(changes: TicketChanges): Promise<void> {
   }
 }
 
-function announceRoleChange(): void {
-  broadcast(SSE_TOPICS.IDENTITY, EVENTS.DOMAIN_CHANGED, {});
+async function announceRoleChange(roleId?: number, affectedUserIds: number[] = []): Promise<void> {
+  const memberIds =
+    roleId == null
+      ? []
+      : (
+          await pool.query<{ user_id: number }>(
+            `SELECT DISTINCT ur.user_id
+             FROM user_roles ur
+             JOIN users u ON u.id = ur.user_id
+            WHERE ur.role_id = $1
+              AND u.account_state = 'active'
+              AND u.anonymized_at IS NULL`,
+            [roleId],
+          )
+        ).rows.map((row) => row.user_id);
+
+  await Promise.all([
+    broadcast(SSE_TOPICS.IDENTITY, EVENTS.DOMAIN_CHANGED, {}),
+    ...[...new Set([...memberIds, ...affectedUserIds])].map((userId) =>
+      broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_SESSION_CHANGED, {}),
+    ),
+  ]);
 }
 
 export function registerRoleRoutes(app: FastifyInstance): void {
@@ -337,7 +357,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         });
         return created;
       });
-      announceRoleChange();
+      await announceRoleChange();
       return reply.code(201).send(role);
     },
   );
@@ -395,7 +415,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         return { role: await loadRole(client, roleId), ticketChanges };
       });
       await publishTicketChanges(result.ticketChanges);
-      announceRoleChange();
+      await announceRoleChange(roleId, result.ticketChanges.userIds);
       return result.role;
     },
   );
@@ -447,7 +467,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         });
         return loadRole(client, roleId);
       });
-      announceRoleChange();
+      await announceRoleChange(roleId);
       return role;
     },
   );
@@ -507,7 +527,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         if (hadWildcard && !introducesWildcard) await assertActiveWildcardHolder(client);
         return loadRole(client, roleId);
       });
-      announceRoleChange();
+      await announceRoleChange(roleId);
       return result;
     },
   );
@@ -549,7 +569,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         return changes;
       });
       await publishTicketChanges(ticketChanges);
-      announceRoleChange();
+      await announceRoleChange(roleId);
       return { deleted: true as const };
     },
   );
@@ -599,7 +619,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         return { role: await loadRole(client, roleId), ticketChanges };
       });
       await publishTicketChanges(result.ticketChanges);
-      announceRoleChange();
+      await announceRoleChange(roleId, result.ticketChanges.userIds);
       return result.role;
     },
   );
@@ -743,7 +763,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         return { role: await loadRole(client, roleId), ticketChanges };
       });
       await publishTicketChanges(result.ticketChanges);
-      announceRoleChange();
+      await announceRoleChange(roleId, result.ticketChanges.userIds);
       return result.role;
     },
   );
@@ -810,7 +830,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         };
       });
       await publishTicketChanges(result.ticketChanges);
-      announceRoleChange();
+      await announceRoleChange(roleId, result.ticketChanges.userIds);
       return result.role;
     },
   );
@@ -872,7 +892,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         };
       });
       await publishTicketChanges(result.ticketChanges);
-      announceRoleChange();
+      await announceRoleChange(roleId, result.ticketChanges.userIds);
       return result.role;
     },
   );

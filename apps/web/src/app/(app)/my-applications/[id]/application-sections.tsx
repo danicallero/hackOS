@@ -50,7 +50,7 @@ export function ApplicationTimeline({ response }: { response: MyResponseDetail |
   );
 }
 
-/** Fallback for a closed form whose template we can't fetch: raw stored answers. */
+/** Fallback for older responses without an available immutable form snapshot. */
 export function ReadOnlyAnswers({ responses }: { responses: Record<string, unknown> }) {
   const { t } = useLocale();
   const entries = Object.entries(responses);

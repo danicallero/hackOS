@@ -14,6 +14,7 @@ import { z } from "zod";
 import { AccessDenied } from "@/components/common/access-denied";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
 import {
@@ -87,12 +88,13 @@ export default function NewApplicationFormPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout width="reading">
       <PageHeader title={t("newApplicationForm")} />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onCreate)}>
           <SectionCard
+            variant="plain"
             icon={ClipboardTextIcon}
             footer={
               <SubmitButton pending={form.formState.isSubmitting}>{t("createForm")}</SubmitButton>
@@ -150,6 +152,6 @@ export default function NewApplicationFormPage() {
           </SectionCard>
         </form>
       </Form>
-    </div>
+    </PageLayout>
   );
 }

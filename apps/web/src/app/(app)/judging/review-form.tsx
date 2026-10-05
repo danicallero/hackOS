@@ -367,6 +367,7 @@ export function ReviewForm({
             size="sm"
             disabled={!canJudge || !online || saving || loading}
             onClick={() => save(false)}
+            loading={saving}
           >
             {status === "submitted" ? t("saveCorrection") : t("saveDraft")}
           </Button>
@@ -376,6 +377,7 @@ export function ReviewForm({
               size="sm"
               disabled={!canJudge || !online || saving || loading || requiredUnansweredCount > 0}
               onClick={() => save(true)}
+              loading={saving}
             >
               <CheckCircleIcon aria-hidden="true" className="size-4" />
               {t("submitReview")}

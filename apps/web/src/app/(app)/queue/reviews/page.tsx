@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { FilterMenu } from "@/components/common/filter-menu";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { Button } from "@/components/ui/button";
 
@@ -175,7 +176,7 @@ export default function ReviewsOverviewPage() {
   }, [roomFilter, challengeFilter, statusFilter]);
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         title={t("reviewsOverview")}
         description={t("reviewsOverviewDesc")}
@@ -257,6 +258,6 @@ export default function ReviewsOverviewPage() {
         pageSize={20}
         empty={{ icon: ClipboardTextIcon, title: t("noReviewsYet") }}
       />
-    </div>
+    </PageLayout>
   );
 }

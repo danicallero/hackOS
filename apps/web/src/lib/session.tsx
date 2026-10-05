@@ -13,8 +13,10 @@ import {
 } from "react";
 import { useEventSource } from "../hooks/use-event-source";
 import { ApiError, api } from "./api";
+import { API_URL } from "./env";
 import { setServerStateIdentity } from "./server-state";
 import { registerSignOutListener } from "./sign-out-events";
+import { setSseIdentity } from "./sse-broker";
 import type { Me } from "./types";
 
 type SessionStatus = "loading" | "authenticated" | "unauthenticated";
@@ -43,12 +45,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const meRef = useRef<Me | null>(null);
   const requestId = useRef(0);
   const inFlight = useRef<Promise<void> | null>(null);
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clear = useCallback(() => {
     // Ignore an old-cookie response that was already in flight when the
     // browser session ended. The following login starts from no identity.
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = null;
     requestId.current += 1;
     inFlight.current = null;
+    setSseIdentity(null, API_URL);
     setServerStateIdentity(null);
     meRef.current = null;
     setMe(null);
@@ -64,6 +70,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       try {
         const data = await api.get<Me>("/api/me");
         if (currentRequest !== requestId.current) return;
+        setSseIdentity(data.id, API_URL);
         setServerStateIdentity(data.id);
         meRef.current = data;
         setMe(data);
@@ -72,6 +79,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         if (currentRequest !== requestId.current) return;
         if (err instanceof ApiError && err.status === 401) {
+          setSseIdentity(null, API_URL);
           setServerStateIdentity(null);
           meRef.current = null;
           setMe(null);
@@ -101,6 +109,20 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     return tracked;
   }, []);
 
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => {
+      refreshTimer.current = null;
+      void refresh();
+    }, 150);
+  }, [refresh]);
+  useEffect(
+    () => () => {
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    },
+    [],
+  );
+
   // Fetch current session from server on mount; setState is sync, but this is external-system fetch.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -109,21 +131,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => registerSignOutListener(clear), [clear]);
 
-  // Judge assignments are enterprise mutations. Refresh the caller's
-  // association facts as soon as that topic changes so the judging workspace
-  // appears (or disappears) without a full-page reload.
-  useEventSource("/api/events/stream?topic=sponsors", {
-    events: [EVENTS.DOMAIN_CHANGED],
-    onEvent: refresh,
-    onResync: refresh,
-    identityKey: me?.id ?? null,
-    enabled: status === "authenticated",
-  });
-  useEventSource("/api/events/stream?topic=identity", {
-    events: [EVENTS.DOMAIN_CHANGED],
-    onEvent: refresh,
-    onResync: refresh,
-    identityKey: me?.id ?? null,
+  // The authenticated shell already holds the personal stream for queue and
+  // inbox updates. Session changes are addressed to that same user topic,
+  // rather than making every signed-in tab subscribe to the global identity
+  // and sponsors domains. This keeps the normal shell to one SSE connection.
+  useEventSource("/api/queue/me/stream", {
+    events: [
+      EVENTS.USER_SESSION_CHANGED,
+      EVENTS.USER_QUEUE_CHANGED,
+      EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
+    ],
+    onEvent: scheduleRefresh,
+    onResync: scheduleRefresh,
     enabled: status === "authenticated",
   });
 

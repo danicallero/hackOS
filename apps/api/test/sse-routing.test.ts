@@ -1,6 +1,6 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { broadcast, publicInvalidationFor } from "../src/lib/sse.js";
+import { broadcast, publicInvalidationFor, publicInvalidationsFor } from "../src/lib/sse.js";
 import { mutationDomainForPath, publicContentMutationForPath } from "../src/lib/sse-routing.js";
 import { valkey } from "../src/lib/valkey.js";
 
@@ -40,6 +40,21 @@ describe("public SSE invalidation routing", () => {
     ]) {
       expect(publicInvalidationFor(source)).toBeNull();
     }
+  });
+
+  it("also mirrors public content onto the single TV-wall channel", () => {
+    expect(publicInvalidationsFor(SSE_TOPICS.CONTENT)).toEqual([
+      {
+        topic: SSE_TOPICS.PUBLIC_CONTENT,
+        type: EVENTS.DATA_CHANGED,
+        data: {},
+      },
+      {
+        topic: SSE_TOPICS.PUBLIC_TV,
+        type: EVENTS.DATA_CHANGED,
+        data: {},
+      },
+    ]);
   });
 });
 

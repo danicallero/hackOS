@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -100,7 +101,7 @@ export default function ChallengeDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout width="reading">
       <PageHeader
         title={textForDisplay(challenge.title)}
         primaryAction={
@@ -127,6 +128,6 @@ export default function ChallengeDetailPage() {
         devpostPrizes={devpostPrizes}
         onSaved={load}
       />
-    </div>
+    </PageLayout>
   );
 }

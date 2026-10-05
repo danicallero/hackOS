@@ -47,6 +47,17 @@ conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.
    them. When uncertain, prefer less copy. Full writing rules and calibration
    examples: `docs/DESIGN.md` §10 and §15.
 
+## Reflections are a required check
+
+Before changing code, docs, tests, or configuration, read the entire
+`.claude/reflections/lessons.md`. Compare the intended change with every
+applicable active lesson before editing, then re-check the actual diff against
+those lessons after substantial edits and before validation or commit/PR. Apply
+each lesson's validation steps when they fit the change; if a lesson conflicts
+with a higher-priority instruction or the current product requirement, resolve
+that conflict explicitly instead of silently ignoring the lesson. Keep this
+check in the work process for the whole task, not only at startup.
+
 ## Database & migrations
 
 - Migrations: `apps/api/db/migrations/NNNN_name.sql`, applied lexicographically

@@ -161,6 +161,7 @@ export function PendingRemovalScreen({
             variant="outline"
             disabled={refreshing}
             onClick={() => void refresh()}
+            loading={refreshing}
           >
             {t("retry")}
           </Button>
@@ -188,6 +189,7 @@ export function PendingRemovalScreen({
             variant="ghost"
             disabled={signingOut}
             onClick={() => void endSession()}
+            loading={signingOut}
           >
             {t("signOut")}
           </Button>

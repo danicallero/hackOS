@@ -63,7 +63,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow hackOS to scan ticket and badge QR codes.",
+          "cameraPermission": "hackOS scans ticket and badge QR codes for event check-in and attendance.",
           "recordAudioAndroid": false
         }
       ],
