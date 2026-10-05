@@ -1,0 +1,77 @@
+diff --git a/index.d.ts b/index.d.ts
+index a7c4e0dc3ab9f1b38258edd48256682730db842d..328adf6bcd561b4184d97c3f4599a3b000caeb21 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -84,6 +84,7 @@ declare module 'react-native-nfc-manager' {
+     isReaderModeEnabled?: boolean;
+     readerModeFlags?: number;
+     readerModeDelay?: number;
++    skipTagConnect?: boolean;
+   }
+ 
+   export interface CancelTechReqOpts {
+diff --git a/ios/NfcManager.m b/ios/NfcManager.m
+index 5869623c14a2329d5648751cb8e42e47d61e4661..009a3068ccd9c5549dcca789b77f56ce0e105106 100755
+--- a/ios/NfcManager.m
++++ b/ios/NfcManager.m
+@@ -8,6 +8,8 @@
+     NSDictionary *nfcTechTypes;
+     NSArray *techRequestTypes;
+     RCTResponseSenderBlock techRequestCallback;
++    NSDictionary *detectedTagInfo;
++    BOOL skipTagConnect;
+ }
+ 
+ RCT_EXPORT_MODULE()
+@@ -196,6 +198,16 @@ continueUserActivity:(NSUserActivity *)userActivity
+                 if ([tagType isEqualToString:requestType] || [requestType isEqualToString:@"Ndef"]) {
+                     RCTResponseSenderBlock pendingCallback = techRequestCallback;
+ 
++                    if (skipTagConnect) {
++                        detectedTagInfo = [self getRNTag:tag];
++                        techRequestCallback = nil;
++                        pendingCallback(@[[NSNull null], requestType]);
++                        [session invalidateSession];
++                        tagSession = nil;
++                        skipTagConnect = NO;
++                        return;
++                    }
++
+                     [tagSession connectToTag:tag
+                            completionHandler:^(NSError *error) {
+                         if (error != nil) {
+@@ -295,9 +307,11 @@ RCT_EXPORT_METHOD(requestTechnology: (NSArray *)techs options: (NSDictionary *)o
+             tagSession = [[NFCTagReaderSession alloc]
+                           initWithPollingOption:pollFlags delegate:self queue:dispatch_get_main_queue()];
+             tagSession.alertMessage = [options objectForKey:@"alertMessage"];
+-            [tagSession beginSession];
+             techRequestTypes = techs;
+             techRequestCallback = callback;
++            skipTagConnect = [[options objectForKey:@"skipTagConnect"] boolValue];
++            detectedTagInfo = nil;
++            [tagSession beginSession];
+         } else {
+             callback(@[@"Duplicated registration", [NSNull null]]);
+         }
+@@ -405,16 +419,19 @@ RCT_EXPORT_METHOD(invalidateSessionWithError:(NSString *)errorMessage callback:(
+ RCT_EXPORT_METHOD(getTag: (nonnull RCTResponseSenderBlock)callback)
+ {
+     if (@available(iOS 13.0, *)) {
+-        NSMutableDictionary* rnTag = @{}.mutableCopy;
++        NSMutableDictionary* rnTag = detectedTagInfo ? detectedTagInfo.mutableCopy : @{}.mutableCopy;
+         id<NFCNDEFTag> ndefTag = nil;
+         
+-        if (tagSession != nil) {
++        if (detectedTagInfo != nil) {
++            // UID-only scans cache the identifier and invalidate in didDetectTags.
++        } else if (tagSession != nil) {
+             if (tagSession.connectedTag) {
+                 rnTag = [self getRNTag:tagSession.connectedTag].mutableCopy;
+                 ndefTag = [self getNDEFTagHandle:tagSession.connectedTag];
+             }
+         } else {
+             callback(@[@"No session available", [NSNull null]]);
++            return;
+         }
+         
+         if (ndefTag) {
