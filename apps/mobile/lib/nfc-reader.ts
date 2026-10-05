@@ -1,56 +1,113 @@
 import { Platform } from "react-native";
-import NfcManager, { NfcAdapter, NfcError, NfcTech } from "react-native-nfc-manager";
+import NfcManager, { NfcAdapter, NfcError, NfcEvents, NfcTech } from "react-native-nfc-manager";
 import { normalizeNfcUid } from "@/lib/nfc-uid";
 
-// H22–H26: Core NFC owns one session; wait for teardown before another reader starts.
-let previousSession: Promise<unknown> = Promise.resolve();
+// H22–H26: Core NFC owns one session; wait for native invalidation before another starts.
+let previousSession: Promise<void> = Promise.resolve();
 
 export function startNfcRead(message: string) {
   let cancelled = false;
   let requested = false;
   let registered = false;
-  const result = previousSession
+  let cancelRequest: Promise<void> | null = null;
+  let resolveResult!: (uid: string | null) => void;
+  let rejectResult!: (error: unknown) => void;
+  const cancelNativeRequest = () => {
+    if (!requested) return Promise.resolve();
+    cancelRequest ??= NfcManager.cancelTechnologyRequest();
+    return cancelRequest;
+  };
+  const result = new Promise<string | null>((resolve, reject) => {
+    resolveResult = resolve;
+    rejectResult = reject;
+  });
+  const completion = previousSession
     .catch(() => undefined)
     .then(async () => {
-      if (cancelled) return null;
+      if (cancelled) {
+        resolveResult(null);
+        return;
+      }
+      let sessionClose: Promise<void> | null = null;
+      let waitForSessionClose = false;
+      let resolveSessionClose!: () => void;
       try {
         if (!(await NfcManager.isSupported())) throw new Error("scannerNfcUnavailable");
-        if (cancelled) return null;
+        if (cancelled) {
+          resolveResult(null);
+          return;
+        }
         await NfcManager.start();
         if (!(await NfcManager.isEnabled())) throw new Error("scannerNfcDisabled");
-        if (cancelled) return null;
+        if (cancelled) {
+          resolveResult(null);
+          return;
+        }
         if (Platform.OS === "android") {
           await NfcManager.registerTagEvent({
             isReaderModeEnabled: true,
             readerModeFlags: NfcAdapter.FLAG_READER_NFC_A | NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK,
           });
           registered = true;
-          if (cancelled) return null;
+          if (cancelled) {
+            resolveResult(null);
+            return;
+          }
+        }
+        if (Platform.OS === "ios" && typeof NfcManager.setEventListener === "function") {
+          sessionClose = new Promise((resolve) => {
+            resolveSessionClose = resolve;
+          });
+          NfcManager.setEventListener(NfcEvents.SessionClosed, () => resolveSessionClose());
         }
         requested = true;
-        await NfcManager.requestTechnology(
-          Platform.OS === "ios" ? NfcTech.MifareIOS : NfcTech.NfcA,
-          { alertMessage: message },
-        );
-        if (cancelled) return null;
+        try {
+          await NfcManager.requestTechnology(
+            Platform.OS === "ios" ? NfcTech.MifareIOS : NfcTech.NfcA,
+            {
+              alertMessage: message,
+              ...(Platform.OS === "ios" ? { skipTagConnect: true } : {}),
+            },
+          );
+          waitForSessionClose = true;
+        } catch (error) {
+          waitForSessionClose = true;
+          if (cancelled || error instanceof NfcError.UserCancel) {
+            resolveResult(null);
+            return;
+          }
+          throw error;
+        }
+        waitForSessionClose = true;
+        if (cancelled) {
+          resolveResult(null);
+          return;
+        }
         const tag = await NfcManager.getTag();
-        return cancelled ? null : normalizeNfcUid(tag?.id);
+        // Resolve the scan as soon as its UID is available. Teardown continues
+        // below, while the next read remains queued until iOS reports that its
+        // Core NFC sheet has actually closed.
+        resolveResult(cancelled ? null : normalizeNfcUid(tag?.id));
       } catch (error) {
-        if (cancelled || error instanceof NfcError.UserCancel) return null;
-        throw error;
+        if (cancelled || error instanceof NfcError.UserCancel) resolveResult(null);
+        else rejectResult(error);
       } finally {
-        if (requested) await NfcManager.cancelTechnologyRequest();
+        if (requested) await cancelNativeRequest();
         requested = false;
         if (registered) await NfcManager.unregisterTagEvent();
         registered = false;
+        if (sessionClose) {
+          if (waitForSessionClose) await sessionClose;
+          NfcManager.setEventListener(NfcEvents.SessionClosed, null);
+        }
       }
     });
-  previousSession = result;
+  previousSession = completion.catch(() => undefined);
   return {
     result,
     cancel: () => {
       cancelled = true;
-      if (requested) void NfcManager.cancelTechnologyRequest();
+      if (requested) void cancelNativeRequest();
     },
   };
 }

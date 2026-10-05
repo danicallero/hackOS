@@ -408,9 +408,8 @@ function ActivityResultPanel({
     (result.person.intolerances.length > 0 ||
       result.person.foodIntoleranceNotes ||
       result.person.notes);
-  // Long dietary notes can otherwise push the close/confirm buttons off the
-  // bottom of the screen with no way to scroll to them — cap the card and
-  // let its body scroll instead, keeping the buttons always reachable.
+  // Keep the scan feedback centered above the scanner controls. Long dietary
+  // details scroll without moving the decision buttons off screen.
   const cardMaxHeight = windowHeight - insets.top - insets.bottom - tabBarBottomInset - 40;
 
   return (
@@ -427,6 +426,7 @@ function ActivityResultPanel({
         position: "absolute",
         right: 0,
         top: 0,
+        transform: [{ translateY: 50 }],
       }}
     >
       <GlassView
@@ -434,7 +434,7 @@ function ActivityResultPanel({
         glassEffectStyle="regular"
         style={{
           borderCurve: "continuous",
-          borderRadius: 28,
+          borderRadius: 24,
           maxHeight: cardMaxHeight,
           maxWidth: 390,
           overflow: "hidden",
@@ -453,7 +453,7 @@ function ActivityResultPanel({
         <View style={{ flexShrink: 1, maxHeight: cardMaxHeight, overflow: "hidden" }}>
           <ScrollView
             style={{ flexGrow: 0, flexShrink: 1, minHeight: 0 }}
-            contentContainerStyle={{ gap: 18, padding: 20 }}
+            contentContainerStyle={{ gap: 14, padding: 16 }}
           >
             <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 16 }}>
               <View style={{ flex: 1, gap: 5 }}>
@@ -500,7 +500,7 @@ function ActivityResultPanel({
                           : t("scannerStateSaved")}
                   </Text>
                 </View>
-                <Text selectable style={{ color: "white", fontSize: 23, fontWeight: "700" }}>
+                <Text selectable style={{ color: "white", fontSize: 21, fontWeight: "700" }}>
                   {fullName}
                 </Text>
                 <Text selectable style={{ color: "rgba(255,255,255,0.68)", fontSize: 15 }}>
@@ -512,16 +512,16 @@ function ActivityResultPanel({
                   alignItems: "center",
                   backgroundColor: repeatPending ? "rgba(255,149,0,0.18)" : "rgba(52,199,89,0.18)",
                   borderRadius: 18,
-                  height: 64,
+                  height: 56,
                   justifyContent: "center",
-                  width: 64,
+                  width: 56,
                 }}
               >
                 <Text
                   selectable
                   style={{
                     color: repeatPending ? colors.warning : colors.success,
-                    fontSize: 32,
+                    fontSize: 29,
                     fontVariant: ["tabular-nums"],
                     fontWeight: "800",
                   }}
@@ -537,8 +537,8 @@ function ActivityResultPanel({
                   backgroundColor: "rgba(255,255,255,0.09)",
                   borderCurve: "continuous",
                   borderRadius: 16,
-                  gap: 12,
-                  padding: 14,
+                  gap: 9,
+                  padding: 12,
                 }}
               >
                 <Text selectable style={{ color: "rgba(255,255,255,0.62)", fontWeight: "700" }}>
@@ -607,8 +607,8 @@ function ActivityResultPanel({
             style={{
               flexShrink: 0,
               minHeight: 50,
-              paddingBottom: 20,
-              paddingHorizontal: 20,
+              paddingBottom: 16,
+              paddingHorizontal: 16,
               paddingTop: 4,
             }}
           >
