@@ -302,6 +302,7 @@ export function ScheduleFormModal({
 
   return (
     <SidePanelEditor
+      size="wide"
       open={open}
       onOpenChange={onOpenChange}
       title={title}
@@ -468,7 +469,10 @@ export function ScheduleFormModal({
         <Collapsible open={translationsOpen} onOpenChange={setTranslationsOpen}>
           <div className="flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3">
             <CollapsibleTrigger asChild>
-              <button type="button" className="flex items-center gap-2 text-sm font-medium">
+              <button
+                type="button"
+                className="button-interaction flex items-center gap-2 text-sm font-medium"
+              >
                 <CaretDownIcon
                   aria-hidden="true"
                   className={cn("size-4 transition-transform", translationsOpen && "rotate-180")}
@@ -483,8 +487,9 @@ export function ScheduleFormModal({
                 size="sm"
                 disabled={translating || blankTargetLanguages.length === 0}
                 onClick={() => void autoTranslate()}
+                loading={translating}
               >
-                {translating ? t("translatingInProgress") : t("translateAutomatically")}
+                {t("translateAutomatically")}
               </Button>
             ) : null}
           </div>
@@ -792,6 +797,7 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
             variant="outline"
             disabled={busy || !selectedUserId}
             onClick={() => add({ userId: Number(selectedUserId) })}
+            loading={busy}
           >
             {t("addAction")}
           </Button>
@@ -814,6 +820,7 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
             variant="outline"
             disabled={busy || !freeTextName.trim()}
             onClick={() => add({ freeTextName: freeTextName.trim() })}
+            loading={busy}
           >
             {t("addAction")}
           </Button>
@@ -837,6 +844,7 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
                   aria-label={t("remove")}
                   disabled={busy}
                   onClick={() => remove(owner.id)}
+                  loading={busy}
                 >
                   <XIcon aria-hidden="true" className="size-4" />
                 </Button>

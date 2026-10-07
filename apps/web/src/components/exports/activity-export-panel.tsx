@@ -145,14 +145,21 @@ export function ActivityExportPanel({ trigger }: { trigger?: ReactNode }) {
         <Button
           onClick={() => void exportData()}
           disabled={loading || exporting || selectedIds.length === 0}
+          loading={exporting}
         >
           <DownloadSimpleIcon aria-hidden="true" />
-          {exporting ? t("loading") : t("export")}
+          {t("export")}
         </Button>
       }
     >
       <div className="flex justify-end">
-        <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void load()}
+          disabled={loading}
+          loading={loading}
+        >
           <ArrowsClockwiseIcon aria-hidden="true" />
           {t("refresh")}
         </Button>

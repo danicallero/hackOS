@@ -11,14 +11,12 @@
 // gate itself stays in the parent page, this component assumes access.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { SaveStatus } from "@/components/common/save-status";
+import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
-import { SubmitButton } from "@/components/common/submit-button";
 import {
   Form,
   FormControl,
@@ -158,11 +156,14 @@ export function JudgingWindowTab() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <SectionCard
-          icon={GavelIcon}
-          title={t("judgingWindowTitle")}
+          variant="plain"
           description={t("judgingWindowDesc")}
-          state={<SaveStatus state={formState.isSubmitting ? "saving" : saveState} />}
-          footer={<SubmitButton pending={formState.isSubmitting}>{t("saveChanges")}</SubmitButton>}
+          footer={
+            <FormActions
+              pending={formState.isSubmitting}
+              state={saveState === "error" ? "error" : formState.isDirty ? "unsaved" : saveState}
+            />
+          }
         >
           <FormField
             control={form.control}

@@ -9,6 +9,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
@@ -104,7 +105,7 @@ export default function WorkGroupDetailPage() {
     }
   }
   return (
-    <div className="space-y-6">
+    <PageLayout width="reading">
       <PageHeader
         title={group.name}
         meta={`${t("workGroupTiming")}: ${t(group.presentation_timing_preference === "early" ? "workGroupTimingEarly" : group.presentation_timing_preference === "middle" ? "workGroupTimingMiddle" : group.presentation_timing_preference === "late" ? "workGroupTimingLate" : "workGroupTimingNone")}`}
@@ -120,10 +121,15 @@ export default function WorkGroupDetailPage() {
             <WorkGroupEditor key={JSON.stringify(group)} group={group} onSaved={load} />
           ) : (
             <div className="flex flex-wrap gap-2">
-              <Button disabled={responding} onClick={() => respond("accept")}>
+              <Button disabled={responding} onClick={() => respond("accept")} loading={responding}>
                 {t("acceptInvite")}
               </Button>
-              <Button variant="outline" disabled={responding} onClick={() => respond("decline")}>
+              <Button
+                variant="outline"
+                disabled={responding}
+                onClick={() => respond("decline")}
+                loading={responding}
+              >
                 {t("declineInvite")}
               </Button>
             </div>
@@ -142,7 +148,7 @@ export default function WorkGroupDetailPage() {
         <Members group={group} onChanged={load} editable={active} />
         <Challenges group={group} challenges={challenges} onChanged={load} editable={active} />
       </div>
-    </div>
+    </PageLayout>
   );
 }
 
@@ -197,7 +203,7 @@ function Members({
             }
             title={t("inviteMemberTitle")}
             footer={
-              <Button disabled={busy || !email.trim()} onClick={invite}>
+              <Button disabled={busy || !email.trim()} onClick={invite} loading={busy}>
                 {t("inviteMemberCta")}
               </Button>
             }
@@ -251,6 +257,7 @@ function Members({
                       setBusy(false);
                     }
                   }}
+                  loading={busy}
                 >
                   {t("remove")}
                 </Button>
@@ -313,7 +320,11 @@ function Challenges({
               onChange={setSelected}
               disabled={busy}
             />
-            <Button disabled={busy || !selected} onClick={() => change(Number(selected))}>
+            <Button
+              disabled={busy || !selected}
+              onClick={() => change(Number(selected))}
+              loading={busy}
+            >
               {t("addAction")}
             </Button>
           </div>
@@ -337,6 +348,7 @@ function Challenges({
                 variant="outline"
                 disabled={busy}
                 onClick={() => change(challenge.id, true)}
+                loading={busy}
               >
                 {t("remove")}
               </Button>

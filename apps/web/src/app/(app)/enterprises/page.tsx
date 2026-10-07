@@ -15,6 +15,7 @@ import { z } from "zod";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { PublicationControls } from "@/components/common/publication-controls";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
@@ -263,7 +264,7 @@ export default function EnterprisesPage() {
 
   if (!canManage && me?.isSponsorRep && loading) {
     return (
-      <div className="space-y-6">
+      <PageLayout>
         <PageHeader title={t("myEnterprise")} />
         <DataTable
           columns={columns}
@@ -272,13 +273,13 @@ export default function EnterprisesPage() {
           loading
           empty={{ icon: BuildingsIcon, title: t("loadingEnterprise") }}
         />
-      </div>
+      </PageLayout>
     );
   }
 
   if (!canManage && me?.isSponsorRep && loadError) {
     return (
-      <div className="space-y-6">
+      <PageLayout>
         <PageHeader title={t("myEnterprise")} />
         <DataTable
           columns={columns}
@@ -289,7 +290,7 @@ export default function EnterprisesPage() {
             onRetry: () => setSponsorRetryNonce((value) => value + 1),
           }}
         />
-      </div>
+      </PageLayout>
     );
   }
 
@@ -298,7 +299,7 @@ export default function EnterprisesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         title={t("enterprises")}
         primaryAction={
@@ -335,6 +336,7 @@ export default function EnterprisesPage() {
                 size="sm"
                 disabled={bulkBusy}
                 onClick={() => bulkVisibility(true)}
+                loading={bulkBusy}
               >
                 <EyeIcon aria-hidden="true" className="size-4" />
                 {t("makeVisible")}
@@ -344,6 +346,7 @@ export default function EnterprisesPage() {
                 size="sm"
                 disabled={bulkBusy}
                 onClick={() => bulkVisibility(false)}
+                loading={bulkBusy}
               >
                 <EyeSlashIcon aria-hidden="true" className="size-4" />
                 {t("hide")}
@@ -367,7 +370,7 @@ export default function EnterprisesPage() {
           router.push(`/enterprises/${created.id}`);
         }}
       />
-    </div>
+    </PageLayout>
   );
 }
 

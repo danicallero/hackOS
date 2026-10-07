@@ -1,3 +1,4 @@
+import { groupApplicationFields } from "@/lib/application-field-groups";
 // Participant-facing "My applications" flow — shared types & helpers (H12–H15).
 //
 // This is the APPLICANT view (distinct from the admin Applications module under
@@ -45,6 +46,8 @@ export interface TemplateField {
   max_file_size_mb?: number;
   /** Groups this field under a `FormSection.key` (H11 form builder sections). */
   section_key?: string;
+  /** Ungrouped question placed after this section (H11). */
+  after_section_key?: string;
   /** Small helper text shown under the field (H11), e.g. a privacy note or
    *  formatting hint. Plain text; URLs are auto-linked on render. */
   help_text?: I18nText;
@@ -321,25 +324,12 @@ export interface FieldGroup {
   fields: TemplateField[];
 }
 
-/**
- * Groups a flat field list under its sections, in section order, with any
- * fields whose `section_key` is unset or doesn't match a known section
- * leading as one ungrouped group — matching the builder's own layout, where
- * unassigned questions sit above the section blocks. Mirrors the builder's
- * identically-named helper (apps/web/src/app/(app)/applications/[id]/shared.ts)
- * so both surfaces render sections the same way.
- */
+/** Shared ordering for section members and standalone questions before/after sections. */
 export function groupFieldsBySections(
   fields: TemplateField[],
   sections: FormSection[],
 ): FieldGroup[] {
-  const knownKeys = new Set(sections.map((s) => s.key));
-  const ungrouped = fields.filter((f) => !f.section_key || !knownKeys.has(f.section_key));
-  const groups: FieldGroup[] = [{ section: null, fields: ungrouped }];
-  for (const section of sections) {
-    groups.push({ section, fields: fields.filter((f) => f.section_key === section.key) });
-  }
-  return groups.filter((g) => g.fields.length > 0);
+  return groupApplicationFields(fields, sections);
 }
 
 // ── status presentation (the masked applicant-visible set) ────────────────────

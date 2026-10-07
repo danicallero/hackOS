@@ -2,6 +2,17 @@ import "dotenv/config";
 import { z } from "zod";
 
 const hexColor = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+const walletJson = z
+  .string()
+  .default("{}")
+  .refine((value) => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed);
+    } catch {
+      return false;
+    }
+  }, "must be a JSON object");
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -267,6 +278,20 @@ const envSchema = z.object({
     (v) => (v === "" ? undefined : v),
     z.string().regex(hexColor).optional(),
   ),
+  WALLET_FOREGROUND_COLOR: z.string().regex(hexColor).default("#fafafa"),
+  WALLET_LABEL_COLOR: z.string().regex(hexColor).default("#030846"),
+  WALLET_WEBSITE_URL: z.string().url().default("https://os.hackudc.com"),
+  WALLET_SHOW_DIRECTIONS: z.enum(["true", "false"]).default("true"),
+  WALLET_SHOW_SCHEDULE: z.enum(["true", "false"]).default("true"),
+  WALLET_SCHEDULE_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional()),
+  WALLET_ANDROID_PACKAGE_NAME: z.string().default("com.hackudc.os"),
+  WALLET_ANDROID_STORE_URL: z
+    .string()
+    .url()
+    .default("https://play.google.com/store/apps/details?id=com.hackudc.os"),
+  WALLET_APPLE_OPTIONS_JSON: walletJson,
+  WALLET_GOOGLE_CLASS_OPTIONS_JSON: walletJson,
+  WALLET_GOOGLE_OBJECT_OPTIONS_JSON: walletJson,
 
   /**
    * Optional automatic translation for announcement content (H50). Entirely

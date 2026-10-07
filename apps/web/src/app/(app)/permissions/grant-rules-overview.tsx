@@ -115,7 +115,7 @@ export function GrantRulesOverviewModal({
                 <button
                   type="button"
                   onClick={() => onSelectRule(rule)}
-                  className="hover:bg-muted/50 flex w-full flex-wrap items-center justify-between gap-3 p-3 text-left"
+                  className="button-interaction hover:bg-muted/50 flex w-full flex-wrap items-center justify-between gap-3 p-3 text-left"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{ruleTriggerLabel(rule, t)}</p>

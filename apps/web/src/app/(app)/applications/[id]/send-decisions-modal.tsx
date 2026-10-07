@@ -5,7 +5,6 @@
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { useState } from "react";
 import { Modal } from "@/components/common/modal";
-import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -72,8 +71,7 @@ export function SendDecisionsModal({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             {t("cancel")}
           </Button>
-          <Button disabled={busy} onClick={send}>
-            {busy && <Spinner />}
+          <Button disabled={busy} onClick={send} loading={busy}>
             {t("sendNow")}
           </Button>
         </>

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -182,7 +183,7 @@ export default function TvControlPage() {
   const isManuallySelected = current?.source === "manual";
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         title={t("tvControl")}
         primaryAction={
@@ -323,6 +324,6 @@ export default function TvControlPage() {
           </Select>
         </div>
       </SectionCard>
-    </div>
+    </PageLayout>
   );
 }

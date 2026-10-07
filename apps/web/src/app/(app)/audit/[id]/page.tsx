@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { Badge } from "@/components/ui/badge";
@@ -77,7 +78,7 @@ export default function AuditEntryPage() {
   const hasContext = Boolean(row.reason || row.ip || row.user_agent);
 
   return (
-    <div className="space-y-6">
+    <PageLayout width="reading">
       <PageHeader
         title={getActionLabel(row.action, t)}
         meta={
@@ -196,6 +197,6 @@ export default function AuditEntryPage() {
           </div>
         </SectionCard>
       )}
-    </div>
+    </PageLayout>
   );
 }

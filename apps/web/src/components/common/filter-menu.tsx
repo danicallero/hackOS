@@ -84,9 +84,10 @@ export function FilterMenu({
   const active = filters.filter((filter) => activeValues(filter).length > 0);
   const activeCount = active.reduce((total, filter) => total + activeValues(filter).length, 0);
 
-  // Replacing the mobile category list must move focus into its new menu.
+  // A multiple-choice category stays in one menu on every viewport, so
+  // selecting chips cannot move a hover submenu out from under the pointer.
   useEffect(() => {
-    if (!open || !isMobile) return;
+    if (!open || (!isMobile && !mobileFilterId)) return;
     const selector = mobileFilterId ? "[data-filter-menu-back]" : '[role^="menuitem"]';
     contentRef.current?.querySelector<HTMLElement>(selector)?.focus();
   }, [open, isMobile, mobileFilterId]);
@@ -116,12 +117,7 @@ export function FilterMenu({
             <FunnelIcon aria-hidden="true" />
             {!iconOnly && t("filtersLabel")}
             {active.length > 0 && (
-              <span
-                className={cn(
-                  "bg-primary text-primary-foreground flex size-5 items-center justify-center rounded-full text-xs tabular-nums",
-                  iconOnly && "absolute -top-1 -right-1",
-                )}
-              >
+              <span className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs tabular-nums">
                 {activeCount}
               </span>
             )}
@@ -133,7 +129,7 @@ export function FilterMenu({
           collisionPadding={8}
           className="w-64 max-w-[calc(100vw-2rem)]"
         >
-          {isMobile && mobileFilter ? (
+          {mobileFilter ? (
             <>
               <DropdownMenuItem
                 data-filter-menu-back
@@ -170,7 +166,7 @@ export function FilterMenu({
                     )}
                   </>
                 );
-                return isMobile ? (
+                return isMobile || filter.type === "multiple" ? (
                   <DropdownMenuItem
                     key={filter.id}
                     onSelect={(event) => {

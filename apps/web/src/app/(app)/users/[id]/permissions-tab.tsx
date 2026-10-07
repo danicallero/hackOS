@@ -12,6 +12,7 @@ import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { EntityCombobox } from "@/components/common/entity-combobox";
+import { IconButton } from "@/components/common/icon-button";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -101,7 +102,12 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
                   emptyText={t("noRolesYet")}
                 />
               </div>
-              <Button size="sm" onClick={addRoles} disabled={busy || roleIdsToAdd.length === 0}>
+              <Button
+                size="sm"
+                onClick={addRoles}
+                disabled={busy || roleIdsToAdd.length === 0}
+                loading={busy}
+              >
                 {t("addRoles")}
               </Button>
             </div>
@@ -122,15 +128,16 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
                   {r.name}
                 </Link>
                 {canManage && (
-                  <button
-                    type="button"
-                    disabled={busy}
+                  <IconButton
+                    variant="ghost"
+                    size="icon-xs"
+                    loading={busy}
                     onClick={() => removeRole(r.id)}
-                    className="hover:bg-muted text-muted-foreground hover:text-foreground rounded p-0.5"
-                    aria-label={t("removeRoleAria", { name: r.name })}
+                    className="text-muted-foreground"
+                    label={t("removeRoleAria", { name: r.name })}
                   >
                     <XIcon aria-hidden="true" className="size-3" />
-                  </button>
+                  </IconButton>
                 )}
               </Badge>
             ))}

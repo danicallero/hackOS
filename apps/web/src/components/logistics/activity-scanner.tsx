@@ -467,6 +467,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                   className="w-full"
                   onClick={() => void scanNow()}
                   disabled={busy || !activityId || !badgeId.trim()}
+                  loading={busy}
                 >
                   <ScanIcon aria-hidden="true" className="size-4" />
                   {t("scan")}
@@ -493,7 +494,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                   <Button variant="outline" onClick={() => setRepeatPrompt(null)} disabled={busy}>
                     {t("cancel")}
                   </Button>
-                  <Button onClick={() => void scanNow(true)} disabled={busy}>
+                  <Button onClick={() => void scanNow(true)} disabled={busy} loading={busy}>
                     {t("allowRepeat")}
                   </Button>
                 </>
@@ -535,12 +536,8 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                     autoComplete="off"
                     autoFocus
                   />
-                  <Button type="submit" disabled={findBusy || !findQuery.trim()}>
-                    {findBusy ? (
-                      <Spinner />
-                    ) : (
-                      <MagnifyingGlassIcon aria-hidden="true" className="size-4" />
-                    )}
+                  <Button type="submit" disabled={findBusy || !findQuery.trim()} loading={findBusy}>
+                    {<MagnifyingGlassIcon aria-hidden="true" className="size-4" />}
                     {t("search")}
                   </Button>
                 </form>
@@ -569,6 +566,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                     variant="outline"
                     onClick={syncOffline}
                     disabled={busy || offline.length === 0}
+                    loading={busy}
                   >
                     {t("syncPending", { count: offline.length })}
                   </Button>

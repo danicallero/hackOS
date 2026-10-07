@@ -8,8 +8,6 @@ import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
-import { ArrowsInSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsInSimple";
-import { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSimple";
 import { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
@@ -23,10 +21,10 @@ import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import Link from "next/link";
 import {
   type CSSProperties,
-  type DragEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from "react";
@@ -42,13 +40,21 @@ import {
   type ApplicationWorkspace,
   applicationStatusLabel,
 } from "@/app/(app)/applications/workflow";
+import {
+  FileViewerDocking,
+  type FileViewerSide,
+} from "@/components/applications/review-file-docking";
+import {
+  type ApplicationFile,
+  ApplicationFileViewer,
+  ApplicationFileViewerPanel,
+} from "@/components/applications/review-file-viewer";
 import { type ReviewSyncMessage, useReviewSync } from "@/components/applications/review-sync";
 import { AlertModal } from "@/components/common/alert-modal";
 import { fileDownloadUrl } from "@/components/common/file-link";
 import { Modal } from "@/components/common/modal";
 import { SaveStatus } from "@/components/common/save-status";
 import { ScaleButtons } from "@/components/common/scale-buttons";
-import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import {
   type FieldValue,
@@ -71,6 +77,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
+import { groupApplicationFields } from "@/lib/application-field-groups";
 import { fieldErrorsFromApi, validationErrorSummary } from "@/lib/application-validation";
 import { LOCALE_CODES, pickText, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
@@ -150,16 +157,9 @@ interface AnswerGroup {
   fields: TemplateField[];
 }
 
-/** Groups a flat field list under its sections, ungrouped fields leading —
- *  matches the builder's layout. Mirrors the same helper in `applications/[id]/shared.ts`. */
+/** H11: reviewer and applicant share the builder's section/question order. */
 function groupFieldsBySections(fields: TemplateField[], sections: FormSection[]): AnswerGroup[] {
-  const knownKeys = new Set(sections.map((s) => s.key));
-  const ungrouped = fields.filter((f) => !f.section_key || !knownKeys.has(f.section_key));
-  const groups: AnswerGroup[] = [{ section: null, fields: ungrouped }];
-  for (const section of sections) {
-    groups.push({ section, fields: fields.filter((f) => f.section_key === section.key) });
-  }
-  return groups.filter((g) => g.fields.length > 0);
+  return groupApplicationFields(fields, sections);
 }
 
 /** Renders one field's value as plain text for the answers export — mirrors
@@ -286,18 +286,7 @@ function exportAnswers(
   });
 }
 
-interface ApplicationFile {
-  fieldKey: string;
-  label: string;
-  value: string | null;
-  filename: string;
-  href: string | null;
-  preview: "image" | "pdf" | "download" | "empty";
-}
-
-type FileViewerSide = "left" | "right";
 const FILE_VIEWER_SIDE_STORAGE_KEY = "hackos.application-review.file-viewer-side";
-const FILE_VIEWER_DRAG_TYPE = "text/hackos-application-file-viewer";
 const FLOATING_REVIEW_POSITION_STORAGE_KEY = "hackos.application-review.floating-review-position";
 function fileNameFromValue(value: string): string {
   let path = value;
@@ -355,383 +344,6 @@ function applicationFiles(
       },
     ];
   });
-}
-
-/** Minimum pointer travel before the grip's fallback drag engages — small
- *  enough to feel immediate, large enough not to swallow a plain click. */
-const GRIP_DRAG_THRESHOLD_PX = 6;
-
-function ApplicationFileViewer({
-  files,
-  activeIndex,
-  side,
-  onIndexChange,
-  onSideChange,
-  onDragStart,
-  onDragEnd,
-  onPointerDragStart,
-  onPointerDragEnd,
-  className,
-}: {
-  files: ApplicationFile[];
-  activeIndex: number;
-  side: FileViewerSide;
-  onIndexChange: (index: number) => void;
-  onSideChange: (side: FileViewerSide) => void;
-  onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
-  onDragEnd: () => void;
-  /** Pointer-based fallback for browsers/contexts where native HTML5 drag
-   *  doesn't engage reliably on the detached (floating) panel — mirrors
-   *  onDragStart/onDrop but driven by pointer capture instead of dataTransfer. */
-  onPointerDragStart?: () => void;
-  onPointerDragEnd?: (clientX: number, clientY: number) => void;
-  className?: string;
-}) {
-  const { t } = useLocale();
-  const previewRef = useRef<HTMLDivElement>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const gripDragRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    native: boolean;
-    active: boolean;
-  } | null>(null);
-  // A completed pointer-fallback drag still fires a trailing click on the
-  // same button — suppress just that one so it doesn't also toggle the side.
-  const suppressGripClickRef = useRef(false);
-
-  useEffect(() => {
-    function syncFullscreen() {
-      setIsFullscreen(document.fullscreenElement === previewRef.current);
-    }
-    document.addEventListener("fullscreenchange", syncFullscreen);
-    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
-  }, []);
-
-  if (files.length === 0) return null;
-
-  const file = files[activeIndex] ?? files[0];
-  const fileTitle = file.filename ? `${file.label}: ${file.filename}` : file.label;
-  const nextSide = side === "left" ? "right" : "left";
-
-  async function toggleFullscreen() {
-    const preview = previewRef.current;
-    if (!preview) return;
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await preview.requestFullscreen();
-    } catch {
-      // Fullscreen can be denied by the browser or an embedding context.
-    }
-  }
-
-  // Native dragstart takes over the input stream (the browser fires
-  // pointercancel for the pointer that started it), so mark the in-flight
-  // pointer sequence as native and let the real onDragStart run — no double
-  // side-change from both paths firing for the same gesture.
-  function handleGripDragStart(event: DragEvent<HTMLButtonElement>) {
-    if (gripDragRef.current) gripDragRef.current.native = true;
-    onDragStart(event);
-  }
-
-  function handleGripPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
-    gripDragRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      native: false,
-      active: false,
-    };
-  }
-
-  function handleGripPointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
-    const drag = gripDragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId || drag.native || drag.active) return;
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-    if (Math.hypot(dx, dy) < GRIP_DRAG_THRESHOLD_PX) return;
-    drag.active = true;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    onPointerDragStart?.();
-  }
-
-  function handleGripPointerUp(event: ReactPointerEvent<HTMLButtonElement>) {
-    const drag = gripDragRef.current;
-    gripDragRef.current = null;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    if (drag.active && !drag.native) {
-      suppressGripClickRef.current = true;
-      onPointerDragEnd?.(event.clientX, event.clientY);
-    }
-  }
-
-  function handleGripPointerCancel() {
-    gripDragRef.current = null;
-  }
-
-  return (
-    <section
-      aria-label={t("applicationFilesLabel")}
-      className={cn(
-        "border-border bg-card flex min-h-0 flex-col space-y-3 overflow-hidden rounded-xl border p-4 sm:p-5",
-        className,
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <p className="type-section-title min-w-0 truncate text-balance" title={file.label}>
-          {file.label}
-        </p>
-        <div className="flex shrink-0 items-center gap-1">
-          {file.href && (
-            <>
-              <a
-                href={file.href}
-                target="_blank"
-                rel="noreferrer"
-                className={dialogIconButtonClass}
-                aria-label={t("viewFileLabel")}
-                title={t("viewFileLabel")}
-              >
-                <ArrowSquareOutIcon aria-hidden="true" />
-              </a>
-              <button
-                type="button"
-                className={dialogIconButtonClass}
-                onClick={() => void toggleFullscreen()}
-                aria-label={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
-                aria-pressed={isFullscreen}
-                title={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
-              >
-                {isFullscreen ? (
-                  <ArrowsInSimpleIcon aria-hidden="true" />
-                ) : (
-                  <ArrowsOutSimpleIcon aria-hidden="true" />
-                )}
-              </button>
-            </>
-          )}
-          <Button
-            type="button"
-            size="xs"
-            variant="ghost"
-            draggable
-            onDragStart={handleGripDragStart}
-            onDragEnd={onDragEnd}
-            onPointerDown={handleGripPointerDown}
-            onPointerMove={handleGripPointerMove}
-            onPointerUp={handleGripPointerUp}
-            onPointerCancel={handleGripPointerCancel}
-            onClick={() => {
-              if (suppressGripClickRef.current) {
-                suppressGripClickRef.current = false;
-                return;
-              }
-              onSideChange(nextSide);
-            }}
-            className="hidden cursor-grab touch-none px-1.5 active:cursor-grabbing lg:inline-flex"
-            aria-label={t("moveFileViewer", {
-              side: t(nextSide === "left" ? "leftSide" : "rightSide"),
-            })}
-            title={t("moveFileViewer", {
-              side: t(nextSide === "left" ? "leftSide" : "rightSide"),
-            })}
-          >
-            <DotsSixVerticalIcon aria-hidden="true" />
-            <span className="sr-only">{t("moveFileViewerHint")}</span>
-          </Button>
-          {files.length > 1 && (
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className={dialogIconButtonClass}
-                disabled={activeIndex === 0}
-                onClick={() => onIndexChange(Math.max(0, activeIndex - 1))}
-                aria-label={t("previousFile")}
-                title={t("previousFile")}
-              >
-                <CaretLeftIcon aria-hidden="true" />
-              </button>
-              <span
-                className="text-muted-foreground min-w-14 text-center text-xs tabular-nums"
-                aria-live="polite"
-              >
-                {t("filePosition", { current: activeIndex + 1, total: files.length })}
-              </span>
-              <button
-                type="button"
-                className={dialogIconButtonClass}
-                disabled={activeIndex === files.length - 1}
-                onClick={() => onIndexChange(Math.min(files.length - 1, activeIndex + 1))}
-                aria-label={t("nextFile")}
-                title={t("nextFile")}
-              >
-                <CaretRightIcon aria-hidden="true" />
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div
-        ref={previewRef}
-        className={cn(
-          "min-h-0 flex-1 overflow-auto rounded-control border bg-background",
-          isFullscreen &&
-            "flex h-screen w-screen items-center justify-center rounded-none border-0 p-6",
-        )}
-      >
-        {file.preview === "empty" ? (
-          <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-6 text-center">
-            <FileTextIcon className="text-muted-foreground size-8" aria-hidden="true" />
-            <p className="text-muted-foreground text-sm">{t("noFileUploadedPeriod")}</p>
-          </div>
-        ) : file.preview === "pdf" && file.href ? (
-          <iframe
-            key={file.value ?? file.fieldKey}
-            src={file.href}
-            title={fileTitle}
-            className={cn("h-[min(62vh,48rem)] w-full", isFullscreen && "h-full")}
-          />
-        ) : file.preview === "image" && file.href ? (
-          <div
-            className={cn(
-              "flex min-h-64 items-center justify-center bg-muted p-3 sm:p-6",
-              isFullscreen && "h-full w-full min-h-0",
-            )}
-          >
-            {/* biome-ignore lint/performance/noImgElement: private authenticated file proxy cannot be optimized by Next Image */}
-            <img
-              key={file.value ?? file.fieldKey}
-              src={file.href}
-              alt={fileTitle}
-              className={cn("max-h-[62vh] max-w-full object-contain", isFullscreen && "max-h-full")}
-            />
-          </div>
-        ) : (
-          <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-6 text-center">
-            <FileTextIcon className="text-muted-foreground size-8" aria-hidden="true" />
-            <p className="text-muted-foreground text-sm">{t("filePreviewUnavailable")}</p>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function ApplicationFileViewerPanel({
-  files,
-  activeIndex,
-  side,
-  dragging,
-  onIndexChange,
-  onSideChange,
-  onDragStart,
-  onDragEnd,
-  onPointerDragStart,
-  onPointerDragEnd,
-  onDragOver,
-  onDrop,
-  reviewContent,
-}: {
-  files: ApplicationFile[];
-  activeIndex: number;
-  side: FileViewerSide;
-  /** True while the viewer's grip is mid-drag, anywhere in the modal — used
-   *  to show this docked panel as a valid drop target (H: docked viewer+review). */
-  dragging?: boolean;
-  onIndexChange: (index: number) => void;
-  onSideChange: (side: FileViewerSide) => void;
-  onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
-  onDragEnd: () => void;
-  onPointerDragStart?: () => void;
-  onPointerDragEnd?: (clientX: number, clientY: number) => void;
-  onDragOver: (event: DragEvent<HTMLElement>) => void;
-  onDrop: (event: DragEvent<HTMLElement>) => void;
-  reviewContent?: React.ReactNode;
-}) {
-  const { t } = useLocale();
-  const panelOffset = "calc(50% + 13.5rem)";
-  return (
-    <aside
-      data-dialog-floating
-      data-file-viewer-dropzone={side === "left" ? "right" : "left"}
-      className={cn(
-        "pointer-events-auto fixed z-[60] hidden h-[min(90vh,54rem)] w-[min(30rem,calc(100vw-2rem))] 2xl:grid 2xl:gap-4",
-        reviewContent ? "2xl:grid-rows-[minmax(0,1fr)_auto]" : "2xl:grid-rows-[minmax(0,1fr)]",
-        dragging && "2xl:rounded-xl 2xl:ring-2 2xl:ring-primary/50 2xl:ring-offset-2",
-      )}
-      style={{
-        ...(side === "left" ? { right: panelOffset } : { left: panelOffset }),
-        top: "50%",
-        transform: "translateY(-50%)",
-      }}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      aria-label={dragging ? t("dropFileViewerHere") : t("applicationFilesLabel")}
-    >
-      <div className="min-h-0 rounded-xl">
-        <ApplicationFileViewer
-          files={files}
-          activeIndex={activeIndex}
-          side={side}
-          onIndexChange={onIndexChange}
-          onSideChange={onSideChange}
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
-          onPointerDragStart={onPointerDragStart}
-          onPointerDragEnd={onPointerDragEnd}
-          className="h-full"
-        />
-      </div>
-      {reviewContent && <div className="min-h-0 rounded-xl">{reviewContent}</div>}
-    </aside>
-  );
-}
-
-function FileViewerDropZones({
-  onDragOver,
-  onDrop,
-  onSideChange,
-}: {
-  onDragOver: (event: DragEvent<HTMLElement>) => void;
-  onDrop: (side: FileViewerSide, event: DragEvent<HTMLElement>) => void;
-  onSideChange: (side: FileViewerSide) => void;
-}) {
-  const { t } = useLocale();
-  const sides: FileViewerSide[] = ["left", "right"];
-
-  return (
-    <div
-      data-dialog-floating
-      className="pointer-events-none fixed inset-0 z-[80] hidden items-center justify-between px-4 2xl:flex"
-    >
-      {sides.map((side) => (
-        <button
-          key={side}
-          type="button"
-          data-dialog-floating
-          data-file-viewer-dropzone={side}
-          className="border-primary/60 bg-primary/10 text-primary hover:bg-primary/20 focus-visible:ring-ring pointer-events-auto flex h-[min(54vh,32rem)] w-28 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 text-center text-xs font-medium shadow-lg backdrop-blur-sm transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden"
-          onDragOver={onDragOver}
-          onDrop={(event) => onDrop(side, event)}
-          onClick={() => onSideChange(side)}
-          aria-label={t("moveFileViewer", {
-            side: t(side === "left" ? "leftSide" : "rightSide"),
-          })}
-          title={t("moveFileViewer", {
-            side: t(side === "left" ? "leftSide" : "rightSide"),
-          })}
-        >
-          <DotsSixVerticalIcon className="size-5" aria-hidden="true" />
-          <span>{t("dropFileViewerHere")}</span>
-        </button>
-      ))}
-    </div>
-  );
 }
 
 /** Average score, review reveal, and status pills for the active response. */
@@ -879,8 +491,9 @@ export function ReviewModal({
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [reviewPage, setReviewPage] = useState<"application" | "reviews">("application");
   const [modalStatus, setModalStatus] = useState(response.status);
-  const [fileViewerSide, setFileViewerSide] = useState<FileViewerSide>("left");
+  const [fileViewerPreviewSide, setFileViewerPreviewSide] = useState<FileViewerSide | null>(null);
   const [fileViewerDragging, setFileViewerDragging] = useState(false);
+  const [fileViewerSide, setFileViewerSide] = useState<FileViewerSide>("left");
   const [desktopFloating, setDesktopFloating] = useState(false);
   // Only set true for a popup opened by clicking an answer's external link
   // (see openReviewWindow) — a manual open from the panel's own button leaves
@@ -1049,44 +662,6 @@ export function ReviewModal({
   function changeFileViewerSide(side: FileViewerSide) {
     setFileViewerSide(side);
     window.localStorage.setItem(FILE_VIEWER_SIDE_STORAGE_KEY, side);
-  }
-
-  function handleFileViewerDragStart(event: DragEvent<HTMLButtonElement>) {
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData(FILE_VIEWER_DRAG_TYPE, "file-viewer");
-    setFileViewerDragging(true);
-  }
-
-  function handleFileViewerDragEnd() {
-    setFileViewerDragging(false);
-  }
-
-  function handleFileViewerDragOver(event: DragEvent<HTMLElement>) {
-    if (!fileViewerDragging) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-  }
-
-  function handleFileViewerDrop(side: FileViewerSide, event: DragEvent<HTMLElement>) {
-    if (!fileViewerDragging) return;
-    event.preventDefault();
-    changeFileViewerSide(side);
-    setFileViewerDragging(false);
-  }
-
-  function handleFileViewerPointerDragStart() {
-    setFileViewerDragging(true);
-  }
-
-  /** Pointer-fallback counterpart to handleFileViewerDrop — hit-tests the
-   *  release point instead of relying on dataTransfer/dragover. */
-  function handleFileViewerPointerDragEnd(clientX: number, clientY: number) {
-    setFileViewerDragging(false);
-    const target = document.elementFromPoint(clientX, clientY);
-    const zone =
-      target instanceof Element ? target.closest<HTMLElement>("[data-file-viewer-dropzone]") : null;
-    const side = zone?.dataset.fileViewerDropzone;
-    if (side === "left" || side === "right") changeFileViewerSide(side);
   }
 
   useEffect(() => {
@@ -1347,209 +922,217 @@ export function ReviewModal({
     dockSide: files.length > 0 ? fileViewerSide : undefined,
   };
 
+  const effectiveViewerSide = fileViewerPreviewSide ?? fileViewerSide;
+
   return (
-    <Modal
-      open
-      onOpenChange={(o) => !o && onClose()}
-      size="xl"
-      floatingFocus={desktopFloating && (canScore || files.length > 0)}
-      className={cn(
-        "max-h-[90vh] overflow-visible sm:max-w-4xl 2xl:h-[min(90vh,54rem)] 2xl:transition-[left]",
-        files.length > 0 &&
-          (fileViewerSide === "left"
-            ? "2xl:left-[calc(50%+15.5rem)]"
-            : "2xl:left-[calc(50%-15.5rem)]"),
-      )}
-      icon={FileTextIcon}
-      title={response.name ?? response.email}
-      description={response.name ? response.email : undefined}
-      headerActions={
-        (onNavigate || showDecisionMenu || showEditAction || showExportAction) && (
-          <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
-            {onNavigate && (
-              <>
-                <button
-                  type="button"
-                  className={dialogIconButtonClass}
-                  disabled={!canGoPrev}
-                  onClick={() => onNavigate("prev")}
-                  aria-label={t("previousCandidate")}
-                  title={t("previousCandidate")}
-                >
-                  <CaretLeftIcon aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className={dialogIconButtonClass}
-                  disabled={!canGoNext}
-                  onClick={() => onNavigate("next")}
-                  aria-label={t("nextCandidate")}
-                  title={t("nextCandidate")}
-                >
-                  <CaretRightIcon aria-hidden="true" />
-                </button>
-              </>
+    <FileViewerDocking
+      side={fileViewerSide}
+      onSideChange={changeFileViewerSide}
+      onDraggingChange={setFileViewerDragging}
+      onPreviewSideChange={setFileViewerPreviewSide}
+      overlay={
+        files.length > 0 ? (
+          <div
+            className={cn(
+              "grid h-full gap-4",
+              showInlineReview ? "grid-rows-[minmax(0,1fr)_auto]" : "grid-rows-[minmax(0,1fr)]",
             )}
-            {showDecisionMenu && (
-              <DecisionMenu
-                status={st}
-                busy={busy}
-                run={run}
-                responseId={response.id}
-                canOverride={canOverride}
-                onRequestRevoke={() => setConfirmRevoke(true)}
-                onAccepted={showApplicantAcceptedToast}
-              />
-            )}
-            {showEditAction &&
-              (editing ? (
-                <button
-                  type="button"
-                  className={dialogIconButtonClass}
-                  disabled={savingEdit}
-                  onClick={() => void saveEdit()}
-                  aria-label={t("saveAnswers")}
-                  title={t("saveAnswers")}
-                >
-                  {savingEdit ? <Spinner /> : <FloppyDiskIcon aria-hidden="true" />}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className={dialogIconButtonClass}
-                  onClick={startEdit}
-                  aria-label={t("editAnswers")}
-                  title={t("editAnswers")}
-                >
-                  <PencilIcon aria-hidden="true" />
-                </button>
-              ))}
-            {showExportAction && (
-              <button
-                type="button"
-                className={dialogIconButtonClass}
-                onClick={() => void exportAnswers(response, answerFields, answerValues, lang, t)}
-                aria-label={t("exportAnswers")}
-                title={t("exportAnswers")}
-              >
-                <DownloadSimpleIcon aria-hidden="true" />
-              </button>
-            )}
-          </div>
-        )
-      }
-      floatingContent={
-        <>
-          {files.length > 0 && fileViewerDragging && (
-            <FileViewerDropZones
-              onDragOver={handleFileViewerDragOver}
-              onDrop={handleFileViewerDrop}
-              onSideChange={changeFileViewerSide}
-            />
-          )}
-          {files.length > 0 && (
-            <ApplicationFileViewerPanel
+          >
+            <ApplicationFileViewer
               files={files}
               activeIndex={activeFile}
               side={fileViewerSide}
-              dragging={fileViewerDragging}
               onIndexChange={setActiveFileIndex}
               onSideChange={changeFileViewerSide}
-              onDragStart={handleFileViewerDragStart}
-              onDragEnd={handleFileViewerDragEnd}
-              onPointerDragStart={handleFileViewerPointerDragStart}
-              onPointerDragEnd={handleFileViewerPointerDragEnd}
-              onDragOver={handleFileViewerDragOver}
-              onDrop={(event) =>
-                handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
-              }
-              reviewContent={
-                showInlineReview ? <ReviewPanelCard {...reviewComposerProps} /> : undefined
-              }
+              className="h-full"
             />
-          )}
-          {showInlineReview && (
-            <div className={cn("hidden lg:block", files.length > 0 && "2xl:hidden")}>
-              <FloatingReviewPanel {...reviewComposerProps} />
-            </div>
-          )}
-        </>
+            {showInlineReview && <ReviewPanelCard {...reviewComposerProps} />}
+          </div>
+        ) : undefined
       }
     >
-      <section
-        className={cn("space-y-4", fileViewerDragging && "rounded-xl ring-1 ring-primary/30")}
-        aria-label={t("applicationFilesLabel")}
-        tabIndex={-1}
-        data-file-viewer-dropzone={fileViewerSide === "left" ? "right" : "left"}
-        onDragOver={handleFileViewerDragOver}
-        onDrop={(event) =>
-          handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
+      <Modal
+        open
+        onOpenChange={(o) => !o && !fileViewerDragging && onClose()}
+        size="xl"
+        floatingFocus={desktopFloating && (canScore || files.length > 0)}
+        className={cn(
+          "max-h-[90vh] overflow-visible sm:max-w-4xl 2xl:h-[min(90vh,54rem)] 2xl:transition-[left] motion-reduce:transition-none",
+          files.length > 0 &&
+            (effectiveViewerSide === "left"
+              ? "2xl:left-[calc(50%+15.5rem)]"
+              : "2xl:left-[calc(50%-15.5rem)]"),
+        )}
+        icon={FileTextIcon}
+        title={response.name ?? response.email}
+        description={response.name ? response.email : undefined}
+        headerActions={
+          (onNavigate || showDecisionMenu || showEditAction || showExportAction) && (
+            <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
+              {onNavigate && (
+                <>
+                  <button
+                    type="button"
+                    className={dialogIconButtonClass}
+                    disabled={!canGoPrev}
+                    onClick={() => onNavigate("prev")}
+                    aria-label={t("previousCandidate")}
+                    title={t("previousCandidate")}
+                  >
+                    <CaretLeftIcon aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className={dialogIconButtonClass}
+                    disabled={!canGoNext}
+                    onClick={() => onNavigate("next")}
+                    aria-label={t("nextCandidate")}
+                    title={t("nextCandidate")}
+                  >
+                    <CaretRightIcon aria-hidden="true" />
+                  </button>
+                </>
+              )}
+              {showDecisionMenu && (
+                <DecisionMenu
+                  status={st}
+                  busy={busy}
+                  run={run}
+                  responseId={response.id}
+                  canOverride={canOverride}
+                  onRequestRevoke={() => setConfirmRevoke(true)}
+                  onAccepted={showApplicantAcceptedToast}
+                />
+              )}
+              {showEditAction &&
+                (editing ? (
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    className={dialogIconButtonClass}
+                    loading={savingEdit}
+                    onClick={() => void saveEdit()}
+                    aria-label={t("saveAnswers")}
+                    title={t("saveAnswers")}
+                  >
+                    <FloppyDiskIcon aria-hidden="true" />
+                  </Button>
+                ) : (
+                  <button
+                    type="button"
+                    className={dialogIconButtonClass}
+                    onClick={startEdit}
+                    aria-label={t("editAnswers")}
+                    title={t("editAnswers")}
+                  >
+                    <PencilIcon aria-hidden="true" />
+                  </button>
+                ))}
+              {showExportAction && (
+                <button
+                  type="button"
+                  className={dialogIconButtonClass}
+                  onClick={() => void exportAnswers(response, answerFields, answerValues, lang, t)}
+                  aria-label={t("exportAnswers")}
+                  title={t("exportAnswers")}
+                >
+                  <DownloadSimpleIcon aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          )
+        }
+        floatingContent={
+          <>
+            {files.length > 0 && (
+              <ApplicationFileViewerPanel
+                files={files}
+                activeIndex={activeFile}
+                side={fileViewerSide}
+                onIndexChange={setActiveFileIndex}
+                onSideChange={changeFileViewerSide}
+                reviewContent={
+                  showInlineReview ? <ReviewPanelCard {...reviewComposerProps} /> : undefined
+                }
+              />
+            )}
+            {showInlineReview && (
+              <div className={cn("hidden lg:block", files.length > 0 && "2xl:hidden")}>
+                <FloatingReviewPanel {...reviewComposerProps} />
+              </div>
+            )}
+          </>
         }
       >
-        {reviewPage === "reviews" ? (
-          <ReviewsPage
-            reviews={response.reviews}
-            avgScore={response.avg_score}
-            reviewCount={response.review_count}
-            onBack={() => setReviewPage("application")}
-          />
-        ) : (
-          <>
-            <div className="bg-background sticky top-0 z-10 -mx-6 mb-2 px-6 py-2">
-              <StatusPillsRow
-                response={response}
-                st={st}
-                reviewedByMe={reviewedByMe}
-                t={t}
-                canRevealReviews={canRevealReviews}
-                onShowReviews={() => setReviewPage("reviews")}
-              />
-            </div>
+        <section className="space-y-4" aria-label={t("applicationFilesLabel")} tabIndex={-1}>
+          {reviewPage === "reviews" ? (
+            <ReviewsPage
+              reviews={response.reviews}
+              avgScore={response.avg_score}
+              reviewCount={response.review_count}
+              onBack={() => setReviewPage("application")}
+            />
+          ) : (
+            <>
+              <div className="bg-background sticky top-0 z-10 -mx-6 mb-2 px-6 py-2">
+                <StatusPillsRow
+                  response={response}
+                  st={st}
+                  reviewedByMe={reviewedByMe}
+                  t={t}
+                  canRevealReviews={canRevealReviews}
+                  onShowReviews={() => setReviewPage("reviews")}
+                />
+              </div>
 
-            {files.length > 0 && (
-              <div className="grid gap-6 2xl:hidden lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-                <section
-                  className={cn(
-                    "hidden min-w-0 space-y-4 lg:block lg:max-h-[68vh] lg:overflow-y-auto lg:pr-1",
-                    fileViewerSide === "right" && "lg:order-2",
-                  )}
-                  data-file-viewer-dropzone={fileViewerSide}
-                  onDragOver={handleFileViewerDragOver}
-                  onDrop={(event) => handleFileViewerDrop(fileViewerSide, event)}
-                  aria-label={t("applicationFilesLabel")}
-                >
-                  <ApplicationFileViewer
-                    files={files}
-                    activeIndex={activeFile}
-                    side={fileViewerSide}
-                    onIndexChange={setActiveFileIndex}
-                    onSideChange={changeFileViewerSide}
-                    onDragStart={handleFileViewerDragStart}
-                    onDragEnd={handleFileViewerDragEnd}
-                    onPointerDragStart={handleFileViewerPointerDragStart}
-                    onPointerDragEnd={handleFileViewerPointerDragEnd}
-                  />
-                </section>
+              {files.length > 0 && (
+                <div className="grid gap-6 2xl:hidden lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+                  <section
+                    className={cn(
+                      "hidden min-w-0 space-y-4 lg:block lg:max-h-[68vh] lg:overflow-y-auto lg:pr-1",
+                      fileViewerSide === "right" && "lg:order-2",
+                    )}
+                    aria-label={t("applicationFilesLabel")}
+                  >
+                    <ApplicationFileViewer
+                      files={files}
+                      activeIndex={activeFile}
+                      side={fileViewerSide}
+                      onIndexChange={setActiveFileIndex}
+                      onSideChange={changeFileViewerSide}
+                    />
+                  </section>
 
-                <section
-                  className={cn(
-                    "min-w-0 space-y-4 lg:max-h-[68vh] lg:overflow-y-auto lg:pr-1",
-                    fileViewerSide === "left" && "lg:order-2",
-                    fileViewerDragging &&
-                      "lg:rounded-xl lg:border lg:border-dashed lg:border-primary/40 lg:p-3",
-                  )}
-                  data-file-viewer-dropzone={fileViewerSide === "left" ? "right" : "left"}
-                  onDragOver={handleFileViewerDragOver}
-                  onDrop={(event) =>
-                    handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
-                  }
-                  aria-label={fileViewerDragging ? t("dropFileViewerHere") : undefined}
-                >
-                  {fileViewerDragging && (
-                    <p className="hidden rounded-control border border-dashed border-primary/50 px-3 py-2 text-center text-xs text-primary lg:block">
-                      {t("dropFileViewerHere")}
-                    </p>
-                  )}
+                  <section
+                    className={cn(
+                      "min-w-0 space-y-4 lg:max-h-[68vh] lg:overflow-y-auto lg:pr-1",
+                      fileViewerSide === "left" && "lg:order-2",
+                    )}
+                  >
+                    <AnswersSection
+                      applicationId={applicationId}
+                      editing={editing}
+                      setEditing={setEditing}
+                      editValues={editValues}
+                      setEditValues={setEditValues}
+                      editErrors={editErrors}
+                      onEditFieldChange={handleEditFieldChange}
+                      savingEdit={savingEdit}
+                      saveEdit={saveEdit}
+                      answerFields={answerFields}
+                      answerSections={answerSections}
+                      answerValues={answerValues}
+                      response={response}
+                      lang={lang}
+                      onExternalLinkClick={handleAnswerLinkClick}
+                    />
+                  </section>
+                </div>
+              )}
+
+              {files.length > 0 ? (
+                <div className="hidden 2xl:block">
                   <AnswersSection
                     applicationId={applicationId}
                     editing={editing}
@@ -1567,12 +1150,8 @@ export function ReviewModal({
                     lang={lang}
                     onExternalLinkClick={handleAnswerLinkClick}
                   />
-                </section>
-              </div>
-            )}
-
-            {files.length > 0 ? (
-              <div className="hidden 2xl:block">
+                </div>
+              ) : (
                 <AnswersSection
                   applicationId={applicationId}
                   editing={editing}
@@ -1590,61 +1169,43 @@ export function ReviewModal({
                   lang={lang}
                   onExternalLinkClick={handleAnswerLinkClick}
                 />
-              </div>
-            ) : (
-              <AnswersSection
-                applicationId={applicationId}
-                editing={editing}
-                setEditing={setEditing}
-                editValues={editValues}
-                setEditValues={setEditValues}
-                editErrors={editErrors}
-                onEditFieldChange={handleEditFieldChange}
-                savingEdit={savingEdit}
-                saveEdit={saveEdit}
-                answerFields={answerFields}
-                answerSections={answerSections}
-                answerValues={answerValues}
-                response={response}
-                lang={lang}
-                onExternalLinkClick={handleAnswerLinkClick}
-              />
-            )}
+              )}
 
-            {canReview && (
-              <StaffNotesCard
-                staffNotes={staffNotes}
-                setStaffNotes={setStaffNotes}
-                savingNotes={savingNotes}
-                saveStaffNotes={saveStaffNotes}
-              />
-            )}
+              {canReview && (
+                <StaffNotesCard
+                  staffNotes={staffNotes}
+                  setStaffNotes={setStaffNotes}
+                  savingNotes={savingNotes}
+                  saveStaffNotes={saveStaffNotes}
+                />
+              )}
 
-            {showInlineReview && (
-              <div className="lg:hidden">
-                <InlineReviewPanel {...reviewComposerProps} />
-              </div>
-            )}
-          </>
-        )}
+              {showInlineReview && (
+                <div className="lg:hidden">
+                  <InlineReviewPanel {...reviewComposerProps} />
+                </div>
+              )}
+            </>
+          )}
 
-        <AlertModal
-          open={confirmRevoke}
-          onOpenChange={setConfirmRevoke}
-          title={t("revokeSpot")}
-          description={t("revokeSpotWarning")}
-          cancelLabel={t("cancel")}
-          confirmLabel={t("revokeSpot")}
-          destructive
-          pending={busy}
-          onConfirm={() => {
-            void run(t("spotRevoked"), () =>
-              api.post(`/api/responses/${response.id}/revoke-spot`),
-            ).finally(() => setConfirmRevoke(false));
-          }}
-        />
-      </section>
-    </Modal>
+          <AlertModal
+            open={confirmRevoke}
+            onOpenChange={setConfirmRevoke}
+            title={t("revokeSpot")}
+            description={t("revokeSpotWarning")}
+            cancelLabel={t("cancel")}
+            confirmLabel={t("revokeSpot")}
+            destructive
+            pending={busy}
+            onConfirm={() => {
+              void run(t("spotRevoked"), () =>
+                api.post(`/api/responses/${response.id}/revoke-spot`),
+              ).finally(() => setConfirmRevoke(false));
+            }}
+          />
+        </section>
+      </Modal>
+    </FileViewerDocking>
   );
 }
 
@@ -1755,8 +1316,7 @@ function AnswersSection({
               >
                 {t("cancel")}
               </Button>
-              <Button size="sm" disabled={savingEdit} onClick={saveEdit}>
-                {savingEdit && <Spinner />}
+              <Button size="sm" disabled={savingEdit} onClick={saveEdit} loading={savingEdit}>
                 {t("saveAnswers")}
               </Button>
             </div>
@@ -1805,8 +1365,13 @@ function StaffNotesCard({
         placeholder={t("visibleToAllReviewersPlaceholder")}
       />
       <div className="flex justify-end">
-        <Button size="sm" variant="outline" disabled={savingNotes} onClick={saveStaffNotes}>
-          {savingNotes && <Spinner />}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={savingNotes}
+          onClick={saveStaffNotes}
+          loading={savingNotes}
+        >
           {t("saveNotes")}
         </Button>
       </div>
@@ -1895,7 +1460,6 @@ export interface ReviewComposerProps {
 }
 
 export function ReviewComposerFields({
-  responseId,
   myScore,
   onScoreChange,
   myNotes,
@@ -1910,6 +1474,7 @@ export function ReviewComposerFields({
   reviewSaveState: SaveState;
 }) {
   const { t } = useLocale();
+  const notesId = useId();
   return (
     <>
       <div className="space-y-1.5">
@@ -1925,16 +1490,13 @@ export function ReviewComposerFields({
       </div>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <Label
-            htmlFor={`review-notes-${responseId}`}
-            className="text-muted-foreground text-xs uppercase"
-          >
+          <Label htmlFor={notesId} className="text-muted-foreground text-xs uppercase">
             {t("notesLabel")}
           </Label>
           <SaveStatus state={reviewSaveState} />
         </div>
         <Textarea
-          id={`review-notes-${responseId}`}
+          id={notesId}
           rows={3}
           value={myNotes}
           onChange={(e) => onNotesChange(e.target.value)}
@@ -2117,7 +1679,10 @@ function FloatingReviewPanel(props: ReviewComposerProps) {
   const dragHandle = (
     <button
       type="button"
-      className={cn(dialogIconButtonClass, "cursor-grab touch-none active:cursor-grabbing")}
+      className={cn(
+        dialogIconButtonClass,
+        "button-static cursor-grab touch-none active:cursor-grabbing",
+      )}
       onPointerDown={startDragging}
       onPointerMove={moveDragging}
       onPointerUp={stopDragging}

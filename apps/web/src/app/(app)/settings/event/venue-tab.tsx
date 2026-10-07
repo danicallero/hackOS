@@ -12,6 +12,7 @@ import { WifiHighIcon } from "@phosphor-icons/react/dist/csr/WifiHigh";
 import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
+import { FormActions } from "@/components/common/form-actions";
 import { PasswordInput } from "@/components/common/password-input";
 import { SectionCard } from "@/components/common/section-card";
 import {
@@ -29,7 +30,6 @@ import { parseCoordinate, parseCoordinatePair } from "@/lib/coords";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
-import { CategorySaveFooter } from "./category-save-footer";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
 
@@ -256,7 +256,8 @@ export function VenueTab({
           className="mt-6"
           icon={WifiHighIcon}
           title={t("venueWifiSectionTitle")}
-          footer={<CategorySaveFooter pending={formState.isSubmitting} state={saveState} />}
+          stickyFooter
+          footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
         >
           <div className="grid items-start gap-4 sm:grid-cols-2">
             <FormField

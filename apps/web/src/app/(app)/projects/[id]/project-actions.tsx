@@ -172,6 +172,7 @@ export function DevpostParticipantActions({
                 size="sm"
                 disabled={!selectedUserId || busy === "link"}
                 onClick={linkParticipant}
+                loading={busy === "link"}
               >
                 <LinkIcon aria-hidden="true" className="size-4" />
                 {t("link")}
@@ -255,6 +256,7 @@ export function ProjectMemberAdder({
               setBusy(false);
             }
           }}
+          loading={busy}
         >
           {t("addAction")}
         </Button>
@@ -317,6 +319,7 @@ export function ProjectChallengeAdder({
               setBusy(false);
             }
           }}
+          loading={busy}
         >
           {t("addAction")}
         </Button>

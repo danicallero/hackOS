@@ -13,10 +13,10 @@ import {
 import { cn } from "@/lib/utils";
 
 const SIZES = {
-  sm: "sm:max-w-sm",
-  md: "sm:max-w-lg",
-  lg: "sm:max-w-2xl",
-  xl: "sm:max-w-4xl",
+  sm: "sm:max-w-(--modal-width-sm)",
+  md: "sm:max-w-(--modal-width-md)",
+  lg: "sm:max-w-(--modal-width-lg)",
+  xl: "sm:max-w-(--modal-width-xl)",
 } as const;
 
 /**
@@ -68,7 +68,7 @@ export function Modal({
         floatingContent={floatingContent}
         floatingFocus={floatingFocus}
       >
-        <DialogHeader className={cn("shrink-0 pr-10", headerActions && "pr-48 text-left")}>
+        <DialogHeader className={cn("shrink-0 pr-10", headerActions && "sm:pr-48 text-left")}>
           <div className="min-w-0 space-y-1.5">
             <DialogTitle className="flex min-w-0 items-center gap-2">
               {Icon && <Icon className="text-muted-foreground size-5" />}
@@ -81,18 +81,15 @@ export function Modal({
             )}
           </div>
           {headerActions && (
-            // Positioned against DialogContent (the nearest `position` ancestor,
-            // since DialogHeader itself no longer claims `relative`), pinned at
-            // the same `top-3` as the dialog's own close button (`top-3 right-3`)
-            // so the row always stays put next to it. It wraps onto additional
-            // lines — each right-aligned, stacking downward — only once it no
-            // longer fits, rather than dropping into normal header flow.
-            <div className="absolute top-3 right-12 flex max-w-[calc(100%-3.75rem)] flex-wrap items-center justify-end gap-1">
+            // Desktop controls share the close row; narrow screens keep them in header flow.
+            <div className="flex flex-wrap items-center gap-2 pt-2 sm:absolute sm:top-3 sm:right-12 sm:max-w-[calc(100%-3.75rem)] sm:justify-end sm:gap-1 sm:pt-0">
               {headerActions}
             </div>
           )}
         </DialogHeader>
-        <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6">{children}</div>
+        <div className="-mx-6 min-h-0 flex-1 overscroll-contain overflow-y-auto px-6">
+          {children}
+        </div>
         {footer && <DialogFooter className="shrink-0">{footer}</DialogFooter>}
       </DialogContent>
     </Dialog>

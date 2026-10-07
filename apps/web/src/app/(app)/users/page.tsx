@@ -4,19 +4,18 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
-import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
 import { TableIcon } from "@phosphor-icons/react/dist/csr/Table";
 import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
 import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
-import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
-import { type FilterDefinition, FilterMenu } from "@/components/common/filter-menu";
-import { IconButton } from "@/components/common/icon-button";
+import type { FilterDefinition } from "@/components/common/filter-menu";
+import { ListToolbar } from "@/components/common/list-toolbar";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +26,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -549,7 +547,7 @@ export default function UsersPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         className="flex-row items-center justify-between gap-2 md:items-center"
         title={t("users")}
@@ -567,73 +565,38 @@ export default function UsersPage() {
       />
 
       <div className="space-y-4">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
-          <div className="relative min-w-0">
-            <label htmlFor="user-search" className="sr-only">
-              {t("searchUsers")}
-            </label>
-            <MagnifyingGlassIcon
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-              aria-hidden="true"
-            />
-            <Input
-              id="user-search"
-              type="search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={t("searchUsers")}
-              className="pr-9 pl-9"
-            />
-            {q && (
-              <div className="absolute inset-y-0 right-0.5 z-10 flex items-center">
-                <IconButton
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => {
-                    setQ("");
-                    document.getElementById("user-search")?.focus();
-                  }}
-                  label={t("clearSearch")}
+        <ListToolbar
+          search={{ id: "user-search", label: t("searchUsers"), value: q, onValueChange: setQ }}
+          filters={filters}
+          actions={
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size={isMobile ? "icon" : "default"}
+                  aria-label={t(isMobile ? "tagsLabel" : "columnsLabel")}
                 >
-                  <XIcon className="size-4" aria-hidden="true" />
-                </IconButton>
-              </div>
-            )}
-          </div>
-          <FilterMenu
-            iconOnly={isMobile}
-            className="contents"
-            chipsClassName="col-span-full row-start-2 flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain pb-1"
-            filters={filters}
-          />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size={isMobile ? "icon" : "default"}
-                aria-label={t(isMobile ? "tagsLabel" : "columnsLabel")}
-              >
-                {isMobile ? <TagIcon aria-hidden="true" /> : <TableIcon aria-hidden="true" />}
-                {!isMobile && t("columnsLabel")}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>{t("visibleFields")}</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {availableColumnOptions.map((id) => (
-                <DropdownMenuCheckboxItem
-                  key={id}
-                  checked={visibleColumns.has(id)}
-                  onCheckedChange={(checked) => toggleColumn(id, checked === true)}
-                  disabled={visibleColumns.size === 1 && visibleColumns.has(id)}
-                >
-                  {COLUMN_LABEL[id]}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+                  {isMobile ? <TagIcon aria-hidden="true" /> : <TableIcon aria-hidden="true" />}
+                  {!isMobile && t("columnsLabel")}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>{t("visibleFields")}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {availableColumnOptions.map((id) => (
+                  <DropdownMenuCheckboxItem
+                    key={id}
+                    checked={visibleColumns.has(id)}
+                    onCheckedChange={(checked) => toggleColumn(id, checked === true)}
+                    disabled={visibleColumns.size === 1 && visibleColumns.has(id)}
+                  >
+                    {COLUMN_LABEL[id]}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          }
+        />
         {hasFilters && (
           <span
             role="status"
@@ -668,6 +631,6 @@ export default function UsersPage() {
           filteredEmpty={{ active: hasFilters, onClear: clearUserFilters }}
         />
       </div>
-    </div>
+    </PageLayout>
   );
 }

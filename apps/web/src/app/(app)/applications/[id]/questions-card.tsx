@@ -38,6 +38,7 @@ import { HashIcon } from "@phosphor-icons/react/dist/csr/Hash";
 import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { PaperclipIcon } from "@phosphor-icons/react/dist/csr/Paperclip";
+import { PencilSimpleIcon } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { RadioButtonIcon } from "@phosphor-icons/react/dist/csr/RadioButton";
 import { TextAlignLeftIcon } from "@phosphor-icons/react/dist/csr/TextAlignLeft";
@@ -93,7 +94,7 @@ import {
   type TemplateField,
 } from "../lib";
 import { generatedFieldKey } from "../workflow";
-import { AnswerPreviewControl, FieldPreviewRow, FormPreviewModal } from "./form-preview";
+import { FieldPreviewRow, FormPreviewModal } from "./form-preview";
 import {
   DragHandle,
   DroppableBlock,
@@ -165,7 +166,11 @@ interface Block {
 
 function buildBlocks(fields: EditableField[], sections: EditableSection[]): Block[] {
   const knownKeys = new Set(sections.map((s) => s.key));
-  const ungrouped = fields.filter((f) => !f.section_key || !knownKeys.has(f.section_key));
+  const ungrouped = fields.filter(
+    (f) =>
+      (!f.section_key || !knownKeys.has(f.section_key)) &&
+      (!f.after_section_key || !knownKeys.has(f.after_section_key)),
+  );
   const blocks: Block[] = [{ id: "ungrouped", section: null, fields: ungrouped }];
   for (const s of sections) {
     blocks.push({
@@ -173,18 +178,25 @@ function buildBlocks(fields: EditableField[], sections: EditableSection[]): Bloc
       section: s,
       fields: fields.filter((f) => f.section_key === s.key),
     });
+    blocks.push({
+      id: `after-section:${s.key}`,
+      section: null,
+      fields: fields.filter((f) => !f.section_key && f.after_section_key === s.key),
+    });
   }
   return blocks;
 }
 
 function isContainerId(id: string): boolean {
-  return id === "ungrouped" || id.startsWith("section:");
+  return id === "ungrouped" || id.startsWith("section:") || id.startsWith("after-section:");
 }
 
 function blockIdForField(field: EditableField, sections: EditableSection[]): string {
   return field.section_key && sections.some((s) => s.key === field.section_key)
     ? `section:${field.section_key}`
-    : "ungrouped";
+    : field.after_section_key && sections.some((s) => s.key === field.after_section_key)
+      ? `after-section:${field.after_section_key}`
+      : "ungrouped";
 }
 
 export function QuestionsCard({
@@ -362,7 +374,11 @@ export function QuestionsCard({
     // Unassign fields that pointed at the removed section instead of leaving
     // a dangling section_key.
     setFields((prev) =>
-      prev.map((f) => (f.section_key === removedKey ? { ...f, section_key: undefined } : f)),
+      prev.map((f) => ({
+        ...f,
+        ...(f.section_key === removedKey ? { section_key: undefined } : {}),
+        ...(f.after_section_key === removedKey ? { after_section_key: undefined } : {}),
+      })),
     );
   };
 
@@ -409,12 +425,17 @@ export function QuestionsCard({
         );
       }
 
-      const destSectionKey =
-        destBlockId === "ungrouped" ? undefined : destBlockId.slice("section:".length);
-      const movedField: EditableField =
-        activeField.section_key === destSectionKey
-          ? activeField
-          : { ...activeField, section_key: destSectionKey };
+      const destSectionKey = destBlockId.startsWith("section:")
+        ? destBlockId.slice("section:".length)
+        : undefined;
+      const afterSectionKey = destBlockId.startsWith("after-section:")
+        ? destBlockId.slice("after-section:".length)
+        : undefined;
+      const movedField: EditableField = {
+        ...activeField,
+        section_key: destSectionKey,
+        after_section_key: afterSectionKey,
+      };
 
       const withoutActive = prev.filter((f) => f._id !== activeId);
       if (!overFieldId) return [...withoutActive, movedField];
@@ -474,7 +495,10 @@ export function QuestionsCard({
       if (!/^[a-zA-Z0-9_.-]+$/.test(f.key)) return t("keyMustBeAlphanumeric", { key: f.key });
       if (seen.has(f.key)) return t("duplicateKey", { key: f.key });
       seen.add(f.key);
-      if (f.section_key && !sectionSeen.has(f.section_key)) {
+      if (
+        (f.section_key && !sectionSeen.has(f.section_key)) ||
+        (f.after_section_key && !sectionSeen.has(f.after_section_key))
+      ) {
         return t("fieldReferencesMissingSection", { key: f.key });
       }
       if (OPTION_KINDS.includes(f.kind)) {
@@ -545,12 +569,45 @@ export function QuestionsCard({
     }
   }
 
+  function renderFields(block: Block) {
+    return (
+      <SortableContext
+        items={block.fields.map((f) => f._id)}
+        strategy={verticalListSortingStrategy}
+      >
+        {block.fields.map((field, i) => (
+          <SortableField key={field._id} id={field._id}>
+            {(drag) => (
+              <FieldEditor
+                field={field}
+                availableSections={sections}
+                index={i}
+                count={block.fields.length}
+                primaryLocale={language}
+                existingKeys={fields.filter((f) => f._id !== field._id).map((f) => f.key)}
+                dragHandle={<DragHandle {...drag} label={t("dragToReorder")} />}
+                active={activeFieldId === field._id}
+                onActivate={() => setActiveFieldId(field._id)}
+                onDeactivate={() => setActiveFieldId(null)}
+                onChange={(patch) => updateUnsaved(field._id, patch)}
+                onKind={(k) => setKind(field._id, k)}
+                onMove={(dir) => moveWithinBlock(field._id, dir)}
+                onDuplicate={() => duplicateField(field._id)}
+                onRemove={() => remove(field._id)}
+              />
+            )}
+          </SortableField>
+        ))}
+      </SortableContext>
+    );
+  }
+
   return (
     <SectionCard
-      icon={ListChecksIcon}
+      variant="plain"
       title={t("formFields")}
       action={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="outline"
@@ -577,7 +634,11 @@ export function QuestionsCard({
       }
       footer={
         <>
-          <SaveStatus state={saving ? "saving" : saveState} className="mr-auto" />
+          <SaveStatus
+            state={saving ? "saving" : saveState}
+            showIcon={!saving}
+            className="mr-auto"
+          />
           <SubmitButton type="button" pending={saving} onClick={save}>
             {t("saveQuestions")}
           </SubmitButton>
@@ -639,43 +700,19 @@ export function QuestionsCard({
               }}
             >
               <div className="space-y-4">
-                {sections.length > 0 && ungroupedBlock.fields.length > 0 && (
+                {sections.length > 0 && (
                   <p className="text-muted-foreground text-xs font-medium uppercase">
                     {t("noSection")}
                   </p>
                 )}
-                <SortableContext
-                  items={ungroupedBlock.fields.map((f) => f._id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {ungroupedBlock.fields.map((field, i) => (
-                    <SortableField key={field._id} id={field._id}>
-                      {(drag) => (
-                        <FieldEditor
-                          field={field}
-                          index={i}
-                          count={ungroupedBlock.fields.length}
-                          primaryLocale={language}
-                          existingKeys={fields.filter((f) => f._id !== field._id).map((f) => f.key)}
-                          dragHandle={<DragHandle {...drag} label={t("dragToReorder")} />}
-                          active={activeFieldId === field._id}
-                          onActivate={() => setActiveFieldId(field._id)}
-                          onDeactivate={() => setActiveFieldId(null)}
-                          onChange={(patch) => updateUnsaved(field._id, patch)}
-                          onKind={(k) => setKind(field._id, k)}
-                          onMove={(dir) => moveWithinBlock(field._id, dir)}
-                          onDuplicate={() => duplicateField(field._id)}
-                          onRemove={() => remove(field._id)}
-                        />
-                      )}
-                    </SortableField>
-                  ))}
-                </SortableContext>
+                {renderFields(ungroupedBlock)}
                 <DroppableBlock
                   id="ungrouped"
                   className={dragging ? "min-h-6 rounded-lg" : undefined}
                 >
-                  {dragging && ungroupedBlock.fields.length === 0 && <EmptyBlockHint />}
+                  {((sections.length > 0 && ungroupedBlock.fields.length === 0) || dragging) && (
+                    <EmptyBlockHint />
+                  )}
                 </DroppableBlock>
               </div>
 
@@ -689,68 +726,56 @@ export function QuestionsCard({
                   return (
                     <SortableSection key={section._id} id={section._id}>
                       {(sectionDrag) => (
-                        <section className="border-border space-y-4 border-t pt-6">
-                          <SectionEditor
-                            section={section}
-                            index={sectionIdx}
-                            count={sections.length}
-                            primaryLocale={language}
-                            existingKeys={sections
-                              .filter((s) => s._id !== section._id)
-                              .map((s) => s.key)}
-                            dragHandle={
-                              <DragHandle {...sectionDrag} label={t("dragSectionToReorder")} />
-                            }
-                            onChange={(patch) => updateSection(section._id, patch)}
-                            onMove={(dir) => moveSection(section._id, dir)}
-                            onRemove={() => removeSection(section._id)}
-                          />
-                          <SortableContext
-                            items={blockFields.map((f) => f._id)}
-                            strategy={verticalListSortingStrategy}
+                        <div className="space-y-4">
+                          <section
+                            aria-label={section.title[language] || section.key}
+                            className="space-y-4 rounded-lg border border-dashed bg-muted/20 p-3 sm:p-4"
                           >
-                            <div className="space-y-4">
-                              {blockFields.map((field, i) => (
-                                <SortableField key={field._id} id={field._id}>
-                                  {(drag) => (
-                                    <FieldEditor
-                                      field={field}
-                                      index={i}
-                                      count={blockFields.length}
-                                      primaryLocale={language}
-                                      existingKeys={fields
-                                        .filter((f) => f._id !== field._id)
-                                        .map((f) => f.key)}
-                                      dragHandle={
-                                        <DragHandle {...drag} label={t("dragToReorder")} />
-                                      }
-                                      active={activeFieldId === field._id}
-                                      onActivate={() => setActiveFieldId(field._id)}
-                                      onDeactivate={() => setActiveFieldId(null)}
-                                      onChange={(patch) => updateUnsaved(field._id, patch)}
-                                      onKind={(k) => setKind(field._id, k)}
-                                      onMove={(dir) => moveWithinBlock(field._id, dir)}
-                                      onDuplicate={() => duplicateField(field._id)}
-                                      onRemove={() => remove(field._id)}
-                                    />
-                                  )}
-                                </SortableField>
-                              ))}
-                            </div>
-                          </SortableContext>
+                            <SectionEditor
+                              section={section}
+                              index={sectionIdx}
+                              count={sections.length}
+                              primaryLocale={language}
+                              existingKeys={sections
+                                .filter((s) => s._id !== section._id)
+                                .map((s) => s.key)}
+                              dragHandle={
+                                <DragHandle {...sectionDrag} label={t("dragSectionToReorder")} />
+                              }
+                              onChange={(patch) => updateSection(section._id, patch)}
+                              onMove={(dir) => moveSection(section._id, dir)}
+                              onRemove={() => removeSection(section._id)}
+                            />
+                            {block && renderFields(block)}
+                            <DroppableBlock
+                              id={`section:${section.key}`}
+                              className={dragging ? "min-h-6 rounded-lg" : undefined}
+                            >
+                              {(blockFields.length === 0 || dragging) && <EmptyBlockHint />}
+                            </DroppableBlock>
+                            <AddFieldMenu
+                              onSelect={(kind) => addToSection(section.key, kind)}
+                              size="sm"
+                              variant="ghost"
+                              className="text-muted-foreground"
+                            />
+                          </section>
+                          {renderFields(
+                            blocks.find((b) => b.id === `after-section:${section.key}`)!,
+                          )}
                           <DroppableBlock
-                            id={`section:${section.key}`}
-                            className={dragging ? "min-h-6 rounded-lg" : undefined}
+                            id={`after-section:${section.key}`}
+                            className={dragging ? "min-h-12 rounded-lg" : undefined}
                           >
-                            {dragging && blockFields.length === 0 && <EmptyBlockHint />}
+                            {dragging && (
+                              <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                                {t("applicationDropAfterSection", {
+                                  name: section.title[language] || section.key,
+                                })}
+                              </p>
+                            )}
                           </DroppableBlock>
-                          <AddFieldMenu
-                            onSelect={(kind) => addToSection(section.key, kind)}
-                            size="sm"
-                            variant="ghost"
-                            className="text-muted-foreground"
-                          />
-                        </section>
+                        </div>
                       )}
                     </SortableSection>
                   );
@@ -862,6 +887,7 @@ export function serializeApplicationField(field: TemplateField): TemplateField {
         }
       : {}),
     ...(field.section_key ? { section_key: field.section_key } : {}),
+    ...(field.after_section_key ? { after_section_key: field.after_section_key } : {}),
     ...(hasI18nText(field.help_text) ? { help_text: field.help_text } : {}),
     ...(hasI18nText(field.placeholder) ? { placeholder: field.placeholder } : {}),
     ...(field.validation && VALIDATABLE_KINDS.has(field.kind)
@@ -921,6 +947,7 @@ function AddFieldMenu({
 
 export function FieldEditor({
   field,
+  availableSections = [],
   index,
   count,
   primaryLocale,
@@ -936,6 +963,7 @@ export function FieldEditor({
   onRemove,
 }: {
   field: TemplateField;
+  availableSections?: FormSection[];
   index: number;
   count: number;
   primaryLocale: Language;
@@ -968,16 +996,15 @@ export function FieldEditor({
     <div
       ref={active ? expandedHeaderRef : undefined}
       className={cn(
-        "flex items-center gap-1",
-        active && "bg-card sticky top-2 z-10 -mx-2 -mt-2 border-b px-2 py-1",
+        "bg-muted/30 flex items-center gap-1 rounded-control border px-1 py-1",
+        active && "bg-card sticky top-2 z-10",
       )}
     >
       {dragHandle}
-      {active && (
-        <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium">
-          {field.label[primaryLocale] || field.key}
-        </span>
-      )}
+      <FieldKindIcon kind={field.kind} className="size-4 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 wrap-break-word px-1 text-sm font-medium">
+        {active ? fieldKindLabel(field.kind, t) : field.label[primaryLocale] || field.key}
+      </span>
       <IconButton
         type="button"
         variant="ghost"
@@ -1004,6 +1031,17 @@ export function FieldEditor({
       >
         <ArrowDownIcon className="size-3.5" aria-hidden="true" />
       </IconButton>
+      {!active && (
+        <IconButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          label={`${t("edit")}: ${field.label[primaryLocale] || field.key}`}
+          onClick={() => changeActivePreservingPosition(onActivate, cardRef.current)}
+        >
+          <PencilSimpleIcon aria-hidden="true" className="size-4" />
+        </IconButton>
+      )}
       {active && (
         <IconButton
           type="button"
@@ -1023,18 +1061,25 @@ export function FieldEditor({
 
   if (!active) {
     return (
-      <Surface ref={cardRef} padding="compact" className="hover:border-primary/40 space-y-3">
+      <Surface
+        ref={cardRef}
+        padding="compact"
+        className="hover:border-primary/40 cursor-pointer space-y-3"
+        onClick={(event) => {
+          if (
+            (event.target as HTMLElement).closest(
+              "button, a, input, textarea, select, [role=button], [role=combobox]",
+            )
+          )
+            return;
+          changeActivePreservingPosition(onActivate, cardRef.current);
+        }}
+      >
         {topRow}
-        <button
-          type="button"
-          aria-expanded="false"
-          onClick={() => changeActivePreservingPosition(onActivate, cardRef.current)}
-          className="focus-visible:ring-ring w-full rounded-control text-left focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-        >
-          <div className="pointer-events-none">
-            <FieldPreviewRow field={field} locale={primaryLocale} />
-          </div>
-        </button>
+        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>{fieldKindLabel(field.kind, t)}</span>
+          {field.required && <span>{t("required")}</span>}
+        </p>
       </Surface>
     );
   }
@@ -1110,6 +1155,49 @@ export function FieldEditor({
         </div>
       </div>
 
+      {availableSections.length > 0 && (
+        <div className="space-y-1.5">
+          <Label htmlFor={`field-section-${uid}`}>{t("sections")}</Label>
+          <Select
+            value={
+              field.section_key ??
+              (field.after_section_key ? `after-section:${field.after_section_key}` : "__none__")
+            }
+            onValueChange={(value) =>
+              onChange({
+                section_key:
+                  value === "__none__" || value.startsWith("after-section:") ? undefined : value,
+                after_section_key: value.startsWith("after-section:")
+                  ? value.slice("after-section:".length)
+                  : undefined,
+              })
+            }
+          >
+            <SelectTrigger id={`field-section-${uid}`} className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">{t("noSection")}</SelectItem>
+              {availableSections.map((section) => (
+                <SelectItem key={section.key} value={section.key}>
+                  {section.title[primaryLocale] || section.key}
+                </SelectItem>
+              ))}
+              {availableSections.map((section) => (
+                <SelectItem
+                  key={`after-section:${section.key}`}
+                  value={`after-section:${section.key}`}
+                >
+                  {t("applicationDropAfterSection", {
+                    name: section.title[primaryLocale] || section.key,
+                  })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {TYPED_KINDS.has(field.kind) && field.placeholder !== undefined && (
         <Input
           aria-label={t("placeholderTextLabel")}
@@ -1130,14 +1218,12 @@ export function FieldEditor({
         />
       )}
 
-      {OPTION_KINDS.includes(field.kind) ? (
+      {OPTION_KINDS.includes(field.kind) && (
         <OptionsEditor
           options={field.options ?? []}
           primaryLocale={primaryLocale}
           onChange={setOptions}
         />
-      ) : (
-        <AnswerPreviewControl field={field} locale={primaryLocale} />
       )}
 
       <details className="border-t pt-4">
@@ -1739,9 +1825,16 @@ export function SectionEditor({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-1">
+      <div className="flex items-center gap-2">
         {dragHandle}
-        <div className="ml-auto flex items-center gap-1">
+        <Input
+          aria-label={t("sectionTitleLabel")}
+          placeholder={t("sectionTitleLabel")}
+          value={section.title[primaryLocale]}
+          onChange={(e) => setTitle(primaryLocale, e.target.value)}
+          className="min-w-0 flex-1 text-lg font-semibold"
+        />
+        <div className="flex shrink-0 items-center gap-1">
           <IconButton
             type="button"
             variant="ghost"
@@ -1776,13 +1869,6 @@ export function SectionEditor({
       </div>
 
       <div className="space-y-2">
-        <Input
-          aria-label={t("sectionTitleLabel")}
-          placeholder={t("sectionTitleLabel")}
-          value={section.title[primaryLocale]}
-          onChange={(e) => setTitle(primaryLocale, e.target.value)}
-          className="text-lg font-semibold"
-        />
         <Input
           aria-label={t("sectionDescriptionLabel")}
           placeholder={`${t("sectionDescriptionLabel")}${t("optionalSuffix")}`}

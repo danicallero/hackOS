@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Spinner } from "./spinner";
 
 type ButtonProps = React.ComponentProps<typeof Button>;
 
@@ -10,15 +9,13 @@ type ButtonProps = React.ComponentProps<typeof Button>;
 export function SubmitButton({
   pending,
   children,
-  disabled,
   ...props
 }: ButtonProps & {
   /** Shows the spinner and disables the button (in addition to `disabled`). */
   pending?: boolean;
 }) {
   return (
-    <Button type="submit" disabled={pending || disabled} {...props}>
-      {pending && <Spinner />}
+    <Button type="submit" {...props} loading={pending}>
       {children}
     </Button>
   );

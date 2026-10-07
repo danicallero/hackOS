@@ -4,7 +4,6 @@ import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowsClockw
 import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 
 export function GenerateQueuesAction({
   busy,
@@ -24,11 +23,9 @@ export function GenerateQueuesAction({
         disabled={busy}
         aria-busy={busy}
         aria-describedby={busy ? statusId : undefined}
+        loading={busy}
       >
-        <ArrowsClockwiseIcon
-          aria-hidden="true"
-          className={cn("size-4", busy && "motion-safe:animate-spin")}
-        />
+        <ArrowsClockwiseIcon aria-hidden="true" className="size-4" />
         {t("generateQueues")}
       </Button>
       {busy && (

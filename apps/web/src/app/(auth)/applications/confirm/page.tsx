@@ -23,10 +23,9 @@ import { isConfirmExpiredError, useTokenAction } from "../lib";
 // shows the outcome. A second click is idempotent (already_confirmed).
 //
 // The email token is an identity assertion, never a session (issue #369): the
-// page's primary action is putting the ticket in Apple/Google Wallet using the
-// scoped credential the confirm hands back, and any session already open in
-// this browser is closed — whether it belonged to this applicant or to someone
-// else. Reaching the app itself always goes through a fresh sign-in.
+// page offers the ticket in Apple/Google Wallet using the scoped credential
+// the confirm hands back. The holder's current session remains active;
+// a session belonging to another account is closed.
 
 interface ConfirmResult {
   status: string;
@@ -34,12 +33,13 @@ interface ConfirmResult {
   ticket_token: string | null;
   user_id: number;
   masked_email: string;
+  holder_name?: string;
   wallet_token: string;
   wallet_token_expires_at: string;
 }
 
 /** Which notice to show about the session we just ended, if any. */
-type SessionNotice = "none" | "ended" | "other_account";
+type SessionNotice = "none" | "other_account";
 
 function ConfirmInner() {
   const token = useSearchParams().get("token");
@@ -60,29 +60,51 @@ function ConfirmInner() {
     fallbackMessage: t("confirmationFailed"),
   });
   const [sessionNotice, setSessionNotice] = useState<SessionNotice>("none");
-  const [showQr, setShowQr] = useState(false);
+  const [sessionError, setSessionError] = useState(false);
+  const [navigating, setNavigating] = useState(false);
   const endedSession = useRef(false);
 
-  // No session leakage (issue #369): opening the email link ends whatever
-  // session this browser had. If it belonged to a different account, the
-  // ticket added is still the token's owner — we just say so, and the person
-  // is sent to sign in as them.
+  // H15 / #369: preserve the ticket holder’s own session; close a different
+  // account’s session. Scoped Wallet requests always use the token’s owner.
   useEffect(() => {
     if (state !== "done" || sessionStatus !== "authenticated" || endedSession.current) return;
+    if (!me || !result) return;
     endedSession.current = true;
-    const wasOtherAccount = me != null && result != null && me.id !== result.user_id;
+    if (me.id === result.user_id) {
+      void refresh();
+      return;
+    }
     void (async () => {
-      await signOut().catch(() => {});
-      await refresh();
-      setSessionNotice(wasOtherAccount ? "other_account" : "ended");
+      try {
+        const response = await signOut();
+        if (response.error) throw new Error(response.error.message);
+        await refresh();
+        setSessionNotice("other_account");
+      } catch {
+        setSessionError(true);
+      }
     })();
   }, [state, sessionStatus, me, result, refresh]);
 
   const goToApp = useCallback(async () => {
-    await signOut().catch(() => {});
-    await refresh();
-    router.push("/login");
-  }, [refresh, router]);
+    setNavigating(true);
+    try {
+      if (sessionStatus === "authenticated" && me?.id === result?.user_id) {
+        router.push("/schedule");
+        return;
+      }
+      if (sessionStatus === "authenticated") {
+        const response = await signOut();
+        if (response.error) throw new Error(response.error.message);
+        await refresh();
+      }
+      router.push("/login");
+    } catch {
+      setSessionError(true);
+    } finally {
+      setNavigating(false);
+    }
+  }, [sessionStatus, me, result, refresh, router]);
 
   if (state === "loading") {
     return (
@@ -148,68 +170,75 @@ function ConfirmInner() {
   }
 
   const alreadyDone = result?.already_confirmed;
+  const holderName = result?.holder_name || result?.masked_email;
   return (
     <Card>
-      <CardHeader className="items-center justify-items-center text-center">
-        <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-          <CheckCircleIcon aria-hidden="true" className="size-6" />
+      <CardHeader className="gap-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-success/10 text-success grid size-10 shrink-0 -translate-y-1 place-items-center rounded-full">
+            <CheckCircleIcon aria-hidden="true" className="size-5" />
+          </div>
+          <h1 className="type-page-title text-balance">
+            {alreadyDone ? t("alreadyConfirmed") : t("placeConfirmed")}
+          </h1>
         </div>
-        <CardTitle>{alreadyDone ? t("alreadyConfirmed") : t("placeConfirmed")}</CardTitle>
-        <CardDescription>{t("ticketWalletFirstDesc")}</CardDescription>
+        {holderName && (
+          <div className="space-y-1">
+            <p className="type-section-title break-words">{holderName}</p>
+            {result?.holder_name && (
+              <p className="text-muted-foreground text-sm">{result.masked_email}</p>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-6">
-        {sessionNotice !== "none" && (
+        {sessionNotice === "other_account" && (
           <Alert>
             <InfoIcon aria-hidden="true" className="size-4" />
-            <AlertTitle>
-              {sessionNotice === "other_account"
-                ? t("confirmOtherAccountTitle")
-                : t("confirmSessionEndedTitle")}
-            </AlertTitle>
+            <AlertTitle>{t("confirmOtherAccountTitle")}</AlertTitle>
             <AlertDescription>
-              {sessionNotice === "other_account"
-                ? t("confirmOtherAccountDesc", { email: result?.masked_email ?? "" })
-                : t("confirmSessionEndedDesc")}
+              {t("confirmOtherAccountDesc", { email: result?.masked_email ?? "" })}
             </AlertDescription>
           </Alert>
         )}
-
-        {/* Primary action: the pass, not the QR (issue #369). No nested
-            container — this card IS the section (DESIGN.md §3). */}
-        <section className="space-y-3 text-center">
-          <div className="space-y-1">
-            <h2 className="type-section-title text-balance">{t("walletAddTicket")}</h2>
-            <p className="text-muted-foreground text-sm">{t("walletAddTicketHint")}</p>
+        {sessionError && (
+          <Alert variant="destructive">
+            <AlertDescription role="alert">{t("confirmSignOutFailed")}</AlertDescription>
+          </Alert>
+        )}
+        {result?.ticket_token && (
+          <div className="grid items-center gap-8 sm:grid-cols-[minmax(0,1fr)_240px]">
+            <section className="space-y-4">
+              <div className="space-y-2">
+                <h2 className="type-section-title text-balance">{t("walletAddTicket")}</h2>
+                <p className="text-muted-foreground text-sm">{t("confirmTicketAtDoor")}</p>
+              </div>
+              {result.wallet_token && (
+                <WalletButtons
+                  purpose="ticket"
+                  accessToken={result.wallet_token}
+                  className="flex-col items-start"
+                />
+              )}
+              {result.wallet_token && (
+                <p className="text-muted-foreground text-xs">{t("confirmWalletLinkExpiry")}</p>
+              )}
+            </section>
+            <QrCode
+              value={result.ticket_token}
+              label={t("entranceTicket")}
+              variant="plain"
+              showValue={false}
+              className="mx-auto w-full max-w-60"
+            />
           </div>
-          {result?.wallet_token ? (
-            <div className="flex justify-center">
-              <WalletButtons purpose="ticket" accessToken={result.wallet_token} />
-            </div>
-          ) : null}
-        </section>
-
-        {/* The QR stays reachable for anyone who can't use a wallet app. */}
-        <div className="space-y-3 text-center">
+        )}
+        <div className="flex justify-start">
           <Button
             type="button"
-            variant="ghost"
-            className="w-full sm:w-auto"
-            aria-expanded={showQr}
-            onClick={() => setShowQr((open) => !open)}
+            disabled={navigating || sessionStatus === "loading"}
+            onClick={() => void goToApp()}
           >
-            {showQr ? t("hideTicketCode") : t("showTicketCode")}
-          </Button>
-          {showQr && (
-            <QrCode
-              value={result?.ticket_token}
-              label={t("entranceTicket")}
-              className="mx-auto max-w-sm"
-            />
-          )}
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-          <Button type="button" className="w-full sm:w-auto" onClick={() => void goToApp()}>
             {t("goToApp")}
           </Button>
         </div>

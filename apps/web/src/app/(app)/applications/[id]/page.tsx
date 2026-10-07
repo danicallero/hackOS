@@ -27,6 +27,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SaveStatus } from "@/components/common/save-status";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
@@ -201,7 +202,7 @@ export default function ApplicationDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout>
       <PageHeader
         title={form ? form.name : t("applicationNumber", { id })}
         state={
@@ -217,7 +218,7 @@ export default function ApplicationDetailPage() {
                   two local statuses) — this aggregate keeps either one's
                   unsaved edit visible even while looking at the other card,
                   or after switching away to a different tab. */}
-              {builderDirty && <SaveStatus state="unsaved" />}
+              {builderDirty && tab !== "builder" && <SaveStatus state="unsaved" />}
             </div>
           ) : undefined
         }
@@ -246,7 +247,7 @@ export default function ApplicationDetailPage() {
 
       {applicationTabs.length > 0 && (
         <Tabs value={tab} onValueChange={changeTab}>
-          <TabBar className="w-full justify-start">
+          <TabBar>
             {canManage && <TabsTrigger value="builder">{t("formTabLabel")}</TabsTrigger>}
             {canReview && <TabsTrigger value="review">{t("review")}</TabsTrigger>}
             {canSeeDecisions && <TabsTrigger value="outbox">{t("workspaceOutbox")}</TabsTrigger>}
@@ -256,7 +257,7 @@ export default function ApplicationDetailPage() {
           </TabBar>
 
           {canManage && (
-            <TabsContent value="builder" className="space-y-6 pt-2">
+            <TabsContent value="builder" className="max-w-(--page-width-content) space-y-6 pt-2">
               {form ? (
                 <>
                   <MetadataCard form={form} onSaved={loadForm} onDirtyChange={setMetadataDirty} />
@@ -311,7 +312,7 @@ export default function ApplicationDetailPage() {
           )}
         </Tabs>
       )}
-    </div>
+    </PageLayout>
   );
 }
 

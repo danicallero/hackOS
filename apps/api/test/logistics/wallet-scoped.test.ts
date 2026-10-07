@@ -1,3 +1,4 @@
+import { lastGoogleObject, stubGoogleProvider } from "./google-provider-fixtures.js";
 import "./env.js";
 import "./wallet-fixtures.js";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -15,6 +16,7 @@ import { assignBadge, issueTicket } from "./fixtures.js";
 let app: App;
 
 beforeEach(async () => {
+  stubGoogleProvider();
   await truncateAll();
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
@@ -72,7 +74,8 @@ describe("scoped wallet access (issue #369)", () => {
     const jwt = res.json().saveUrl.slice("https://pay.google.com/gp/v/save/".length);
     const claims = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString("utf8"));
     expect(claims.origins).toEqual(["http://localhost:3001"]);
-    expect(claims.payload.eventTicketObjects[0].barcode.value).toBe("ticket-scoped-google");
+    expect(claims.payload.eventTicketObjects[0].id).toBe(lastGoogleObject().id);
+    expect(lastGoogleObject().barcode.value).toBe("ticket-scoped-google");
   });
 
   it("gives the token holder's pass even when someone else is signed in", async () => {
@@ -90,7 +93,8 @@ describe("scoped wallet access (issue #369)", () => {
     expect(res.statusCode).toBe(200);
     const jwt = res.json().saveUrl.slice("https://pay.google.com/gp/v/save/".length);
     const claims = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString("utf8"));
-    expect(claims.payload.eventTicketObjects[0].barcode.value).toBe("ticket-owner");
+    expect(claims.payload.eventTicketObjects[0].id).toBe(lastGoogleObject().id);
+    expect(lastGoogleObject().barcode.value).toBe("ticket-owner");
   });
 
   it("rejects an unknown, expired or wrong-purpose token", async () => {

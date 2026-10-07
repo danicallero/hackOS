@@ -126,6 +126,7 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
               size="lg"
               disabled={busy || !selectedUserId}
               onClick={() => add(Number(selectedUserId))}
+              loading={busy}
             >
               {t("addJudge")}
             </Button>
@@ -153,6 +154,7 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
                     variant="ghost"
                     disabled={busy}
                     onClick={() => remove(judge.userId)}
+                    loading={busy}
                   >
                     {t("remove")}
                   </Button>

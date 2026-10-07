@@ -89,7 +89,10 @@ export function EmailCard() {
           <Label htmlFor="secondary-email">{t("secondaryEmailLabel")}</Label>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button type="button" className="text-muted-foreground hover:text-foreground">
+              <button
+                type="button"
+                className="button-interaction text-muted-foreground hover:text-foreground"
+              >
                 <QuestionIcon aria-hidden="true" className="size-3.5" />
                 <span className="sr-only">{t("whyAddSecondaryEmail")}</span>
               </button>

@@ -16,6 +16,7 @@ import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -242,7 +243,7 @@ export default function LogisticsStatsPage() {
   };
 
   return (
-    <div className="space-y-6" data-wide>
+    <PageLayout width="workspace">
       <PageHeader
         className="flex-row items-center justify-between gap-2 md:items-center"
         title={t("logisticsStats")}
@@ -320,7 +321,7 @@ export default function LogisticsStatsPage() {
           <AfterPanel hours={hours} loading={afterLoading} error={afterError} onRetry={loadAfter} />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageLayout>
   );
 }
 
@@ -543,7 +544,12 @@ function StaffRankingSection() {
       icon={TrophyIcon}
       action={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => void load()} disabled={loading}>
+          <Button
+            variant="outline"
+            onClick={() => void load()}
+            disabled={loading}
+            loading={loading}
+          >
             <ArrowsClockwiseIcon className="size-4" aria-hidden="true" />
             {t("refresh")}
           </Button>

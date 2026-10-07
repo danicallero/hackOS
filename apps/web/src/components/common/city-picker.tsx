@@ -26,7 +26,7 @@ export interface CityValue {
   country: string;
 }
 interface Feature {
-  properties?: { name?: string; city?: string; country?: string; state?: string };
+  properties?: { name?: string; city?: string; county?: string; country?: string; state?: string };
 }
 
 function formatLocation({ city, province, country }: CityValue) {
@@ -62,11 +62,14 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
     let active = true;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
+      // Abort after 8 seconds manually to avoid `AbortSignal.any` compatibility issues in older browsers (e.g. Safari < 17.4).
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       try {
         const response = await fetch(
           `https://photon.komoot.io/api/?limit=6&lang=${language === "en" ? "en" : "default"}&q=${encodeURIComponent(search)}`,
-          { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) },
+          { signal: controller.signal },
         );
+        clearTimeout(timeoutId);
         if (!response.ok) throw new Error(`Photon: ${response.status}`);
         const body = (await response.json()) as { features?: Feature[] };
         if (active) {
@@ -75,7 +78,7 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
               const p = feature.properties ?? {};
               return {
                 city: p.city ?? p.name ?? "",
-                province: p.state ?? "",
+                province: p.state ?? p.county ?? p.city ?? p.name ?? "",
                 country: p.country ?? "",
               };
             })
@@ -92,6 +95,7 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
           setStatus(suggestions.length ? "idle" : "empty");
         }
       } catch {
+        clearTimeout(timeoutId);
         if (active) {
           setOptions([]);
           setStatus("error");
@@ -212,7 +216,7 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
               role="option"
               tabIndex={-1}
               aria-selected={index === activeIndex}
-              className="hover:bg-muted aria-selected:bg-muted w-full px-3 py-2 text-left text-sm"
+              className="button-interaction hover:bg-muted aria-selected:bg-muted w-full px-3 py-2 text-left text-sm"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => selectCity(city)}
             >

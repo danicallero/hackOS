@@ -18,12 +18,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
           <VerificationBanner />
           <main className="flex min-h-0 min-w-0 flex-1 flex-col px-4 pt-3 pb-6 sm:px-6 md:pt-6 lg:pt-8 lg:pb-8 xl:has-data-judging-page:overflow-hidden">
-            {/* Pages opt into a wider column with data-wide (e.g. the judging
-                panel's two-column operator layout). Everything else shares
-                this one width — a page whose content looks sparse here
-                should fix its own layout (a field grid, a two-column
-                arrangement), not shrink the shared column, or the app ends
-                up with three different page widths instead of one. */}
+            {/* PageLayout chooses the reading width; operational workspaces may use the full canvas. */}
             <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col has-data-wide:max-w-none">
               {children}
             </div>

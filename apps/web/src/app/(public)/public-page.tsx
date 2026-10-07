@@ -146,7 +146,7 @@ export function PublicPage() {
             <button
               type="button"
               onClick={() => void load()}
-              className="mt-4 underline underline-offset-4"
+              className="button-interaction mt-4 underline underline-offset-4"
             >
               {t("tryAgain")}
             </button>

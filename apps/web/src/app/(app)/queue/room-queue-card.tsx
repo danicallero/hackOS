@@ -218,6 +218,7 @@ export function RoomQueueCard({
                       t("teamRenotified"),
                     )
                   }
+                  loading={busy === `notify-${entry.id}`}
                 >
                   <BellRingingIcon aria-hidden="true" className="size-4" />
                   {t("renotify")}
@@ -233,6 +234,7 @@ export function RoomQueueCard({
                       t("teamBroughtIn"),
                     )
                   }
+                  loading={busy === `bring-${entry.id}`}
                 >
                   <DoorOpenIcon aria-hidden="true" className="size-4" />
                   {t("bringIn")}
@@ -254,6 +256,7 @@ export function RoomQueueCard({
                       t("teamRequeued"),
                     )
                   }
+                  loading={busy === `requeue-${entry.id}`}
                 >
                   <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
                   {t("requeue")}
@@ -275,6 +278,7 @@ export function RoomQueueCard({
                       t("teamMarkedAbsent"),
                     )
                   }
+                  loading={busy === `noshow-${entry.id}`}
                 >
                   <WarningIcon aria-hidden="true" className="size-4" />
                   {t("absent")}
@@ -311,6 +315,7 @@ export function RoomQueueCard({
                     t("teamAddedWaiting"),
                   )
                 }
+                loading={busy === `call-${entry.id}`}
               >
                 <DoorOpenIcon aria-hidden="true" className="size-4" />
                 {t("addWaiting")}
@@ -364,6 +369,7 @@ export function RoomQueueCard({
                               t("teamMovedTop"),
                             )
                           }
+                          loading={busy === `top-${entry.id}`}
                         >
                           {t("top")}
                         </Button>
@@ -387,6 +393,7 @@ export function RoomQueueCard({
                               t("teamAddedWaiting"),
                             )
                           }
+                          loading={busy === `waiting-${entry.id}`}
                         >
                           <DoorOpenIcon aria-hidden="true" className="size-4" />
                           {t("waiting")}
@@ -424,7 +431,7 @@ function TeamButton({
   return (
     <button
       type="button"
-      className="min-w-0 text-left hover:underline"
+      className="button-interaction min-w-0 text-left hover:underline"
       onClick={() => onSelect(entry)}
     >
       <span className="block truncate text-sm font-medium">{entryLabel(entry, t)}</span>

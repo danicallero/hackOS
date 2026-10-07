@@ -2,7 +2,11 @@ import { pool } from "../../db/pool.js";
 import { ServiceUnavailableError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { ApplePushUnregisteredError, sendApplePush } from "./apple-push.js";
-import { expireGoogleObject, refreshGoogleEventTicketClass } from "./google-wallet.js";
+import {
+  expireGoogleObject,
+  refreshGoogleEventTicketClass,
+  refreshGooglePassObject,
+} from "./google-wallet.js";
 import { PASS_TYPE_IDENTIFIER } from "./wallet.js";
 import type { GoogleObjectType, Purpose } from "./wallet-passes.js";
 
@@ -38,6 +42,8 @@ export async function enqueueWalletSync(
       action,
     } satisfies SyncJobData,
     {
+      attempts: 5,
+      backoff: { type: "exponential", delay: 5_000 },
       removeOnComplete: true,
       removeOnFail: { age: 24 * 60 * 60, count: 1_000 },
     },
@@ -46,6 +52,8 @@ export async function enqueueWalletSync(
 
 interface PassRow {
   id: number;
+  user_id: number;
+  serial_number: string;
   platform: "apple" | "google";
   purpose: Purpose;
   google_object_id: string | null;
@@ -62,10 +70,12 @@ interface DeviceRow {
 export async function processWalletSync(job: { data: SyncJobData }): Promise<void> {
   const action = job.data.action ?? "invalidate";
   const { rows } = await pool.query(
-    `SELECT id, platform, purpose, google_object_id, google_object_type, status
+    `SELECT id, user_id, serial_number, platform, purpose, google_object_id, google_object_type, status
        FROM wallet_passes WHERE id = ANY($1)`,
     [job.data.passIds],
   );
+
+  const failures: unknown[] = [];
 
   if (
     action === "refresh" &&
@@ -83,7 +93,7 @@ export async function processWalletSync(job: { data: SyncJobData }): Promise<voi
       if (err instanceof ServiceUnavailableError) {
         console.warn("wallet: skipping Google class refresh,", err.message);
       } else {
-        throw err;
+        failures.push(err);
       }
     }
   }
@@ -95,7 +105,9 @@ export async function processWalletSync(job: { data: SyncJobData }): Promise<voi
   const devicesByPassId = new Map<number, DeviceRow[]>();
   if (applePassIds.length > 0) {
     const { rows: deviceRows } = await pool.query(
-      `SELECT pass_id, device_library_identifier, push_token FROM wallet_pass_devices WHERE pass_id = ANY($1)`,
+      `SELECT pass_id, device_library_identifier, push_token
+         FROM wallet_pass_devices WHERE pass_id = ANY($1)
+         ORDER BY pass_id, device_library_identifier`,
       [applePassIds],
     );
     for (const device of deviceRows as DeviceRow[]) {
@@ -119,8 +131,14 @@ export async function processWalletSync(job: { data: SyncJobData }): Promise<voi
             );
             continue;
           }
-          throw err;
+          failures.push(err);
         }
+      }
+    } else if (action === "refresh" && pass.platform === "google" && pass.status !== "voided") {
+      try {
+        await refreshGooglePassObject(pass);
+      } catch (err) {
+        failures.push(err);
       }
     } else if (action === "invalidate" && pass.platform === "google" && pass.google_object_id) {
       try {
@@ -133,10 +151,14 @@ export async function processWalletSync(job: { data: SyncJobData }): Promise<voi
           console.warn("wallet: skipping Google sync,", err.message);
           continue;
         }
-        throw err;
+        failures.push(err);
       }
     }
   }
+  // H28: finish the fan-out before failing so one provider/device cannot
+  // block the others. BullMQ retries transient failures with backoff.
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, "Wallet sync failed");
 }
 
 registerWorker(QUEUE_NAME, processWalletSync);

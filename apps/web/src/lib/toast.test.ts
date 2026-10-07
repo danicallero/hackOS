@@ -61,7 +61,7 @@ describe("toast adapter", () => {
         description: "Head to room 3",
         duration: 10_000,
         button: { title: "Undo", onClick: onUndo },
-        autopilot: false,
+        autopilot: { expand: 150, collapse: 60_000 },
       }),
     );
   });
@@ -313,7 +313,8 @@ describe("toast adapter", () => {
       expect.objectContaining({
         title: "Invite sent",
         button: expect.objectContaining({ title: "Copy link" }),
-        autopilot: false,
+        duration: 8_000,
+        autopilot: { expand: 150, collapse: 60_000 },
       }),
     );
   });
@@ -352,7 +353,7 @@ describe("toast adapter", () => {
     expect(promiseOptions.success?.({ id: 1 })).toMatchObject({ autopilot: false });
   });
 
-  it("keeps rich promise outcomes compact until the user explores them", () => {
+  it("opens actionable promise outcomes without requiring hover", () => {
     toast.promise(Promise.resolve("done"), {
       loading: { title: "Working" },
       success: {
@@ -366,6 +367,9 @@ describe("toast adapter", () => {
     const promiseOptions = sileoMock.promise.mock.calls[0]?.[1] as {
       success?: (value: string) => { autopilot?: boolean };
     };
-    expect(promiseOptions.success?.("done")).toMatchObject({ autopilot: false });
+    expect(promiseOptions.success?.("done")).toMatchObject({
+      autopilot: { expand: 150, collapse: 60_000 },
+      duration: 8_000,
+    });
   });
 });

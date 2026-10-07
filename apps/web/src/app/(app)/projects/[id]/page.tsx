@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -149,7 +150,7 @@ export default function ProjectDetailPage() {
 
   if (!repo) {
     return (
-      <div className="space-y-6">
+      <PageLayout width="reading">
         <PageHeader
           title={t("colProject")}
           actions={
@@ -162,12 +163,12 @@ export default function ProjectDetailPage() {
           }
         />
         <EmptyState icon={FolderSimpleIcon} title={t("projectNotFoundTitle")} />
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <PageLayout width="reading">
       <PageHeader
         title={repo.name}
         actions={
@@ -388,6 +389,6 @@ export default function ProjectDetailPage() {
           )}
         </SectionCard>
       </div>
-    </div>
+    </PageLayout>
   );
 }

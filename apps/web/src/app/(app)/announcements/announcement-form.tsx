@@ -341,6 +341,7 @@ export function AnnouncementFormModal({
 
   return (
     <SidePanelEditor
+      size="wide"
       open={open}
       onOpenChange={onOpenChange}
       title={title}
@@ -357,7 +358,7 @@ export function AnnouncementFormModal({
       }
     >
       <div className="space-y-6">
-        <SectionCard title={t("announcementContentSection")}>
+        <SectionCard variant="plain" title={t("announcementContentSection")}>
           <div className="space-y-4">
             <Field id="announcement-title" label={`${t("titleLabel")} · ${t("spanishTag")}`}>
               <Input
@@ -424,8 +425,9 @@ export function AnnouncementFormModal({
                     size="sm"
                     disabled={translating || !canAutoTranslate}
                     onClick={() => void autoTranslate()}
+                    loading={translating}
                   >
-                    {translating ? t("translatingInProgress") : t("translateAutomatically")}
+                    {t("translateAutomatically")}
                   </Button>
                 ) : null}
               </div>
@@ -493,7 +495,7 @@ export function AnnouncementFormModal({
           </div>
         </SectionCard>
 
-        <SectionCard title={t("announcementDeliverySection")}>
+        <SectionCard variant="plain" title={t("announcementDeliverySection")}>
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-lg border p-4">
@@ -675,7 +677,7 @@ export function AnnouncementFormModal({
           </div>
         </SectionCard>
 
-        <SectionCard title={t("announcementPublicationSection")}>
+        <SectionCard variant="plain" title={t("announcementPublicationSection")}>
           <div className="grid gap-5">
             <Field
               id="announcement-publish-at"

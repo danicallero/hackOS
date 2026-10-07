@@ -3,12 +3,7 @@
 // Form metadata editor (H11): trilingual name/description, window, limits.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
-import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
-import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
-import { GearIcon } from "@phosphor-icons/react/dist/csr/Gear";
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
-import { ShieldCheckIcon } from "@phosphor-icons/react/dist/csr/ShieldCheck";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useEffect, useMemo, useState } from "react";
@@ -20,9 +15,14 @@ import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Form,
   FormControl,
@@ -57,42 +57,32 @@ type MetaValues = {
 };
 
 function SettingsGroup({
-  icon: Icon,
   title,
   defaultOpen = false,
   className,
   children,
 }: {
-  icon: PhosphorIcon;
   title: string;
   defaultOpen?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  if (defaultOpen) {
+    return (
+      <section className={cn("space-y-4", className)}>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        {children}
+      </section>
+    );
+  }
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className={cn("border-t", className)}>
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="flex min-h-14 w-full items-center gap-3 px-1 py-3 text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-        >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground shadow-xs">
-            <Icon aria-hidden="true" className="size-4" />
-          </span>
-          <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">{title}</span>
-          <CaretDownIcon
-            aria-hidden="true"
-            className={cn(
-              "size-4 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none",
-              open && "rotate-180",
-            )}
-          />
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="pb-5">{children}</CollapsibleContent>
-    </Collapsible>
+    <Accordion type="single" collapsible className={cn("border-t", className)}>
+      <AccordionItem value="advanced">
+        <AccordionTrigger className="font-semibold">{title}</AccordionTrigger>
+        <AccordionContent>{children}</AccordionContent>
+      </AccordionItem>
+    </Accordion>
   );
 }
 
@@ -201,22 +191,22 @@ export function MetadataCard({
     <Form {...rhf}>
       <form onSubmit={rhf.handleSubmit(onSubmit)}>
         <SectionCard
-          icon={GearIcon}
           title={t("formSettings")}
-          state={<SaveStatus state={currentSaveState} />}
-          bodyClassName="p-4 sm:p-5"
-          footerClassName="sticky bottom-0 z-10 border-t bg-card/95 pt-4"
+          footerClassName="justify-start"
+          stickyFooter
           footer={
-            <SubmitButton pending={rhf.formState.isSubmitting}>{t("saveSettings")}</SubmitButton>
+            <>
+              <SaveStatus
+                state={currentSaveState}
+                showIcon={!rhf.formState.isSubmitting}
+                className="mr-auto"
+              />
+              <SubmitButton pending={rhf.formState.isSubmitting}>{t("saveSettings")}</SubmitButton>
+            </>
           }
         >
-          <div className="grid gap-3 lg:grid-cols-2">
-            <SettingsGroup
-              icon={InfoIcon}
-              title={t("builderBasics")}
-              defaultOpen
-              className="lg:col-span-2"
-            >
+          <div className="grid gap-6 lg:grid-cols-2">
+            <SettingsGroup title={t("builderBasics")} defaultOpen className="lg:col-span-2">
               <div className="grid gap-4 md:grid-cols-2 md:items-start">
                 <FormField
                   control={rhf.control}
@@ -251,12 +241,7 @@ export function MetadataCard({
               </div>
             </SettingsGroup>
 
-            <SettingsGroup
-              icon={CalendarDotsIcon}
-              title={t("builderAvailability")}
-              defaultOpen
-              className="lg:col-span-2"
-            >
+            <SettingsGroup title={t("builderAvailability")} defaultOpen className="lg:col-span-2">
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   control={rhf.control}
@@ -326,14 +311,10 @@ export function MetadataCard({
               </div>
             </SettingsGroup>
 
-            <SettingsGroup
-              icon={ShieldCheckIcon}
-              title={t("advancedFormOptions")}
-              className="lg:col-span-2"
-            >
+            <SettingsGroup title={t("advancedFormOptions")} className="lg:col-span-2">
               <div className="grid gap-6 lg:grid-cols-2">
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium">{t("builderLogistics")}</h3>
+                  <h4 className="text-sm font-medium">{t("builderLogistics")}</h4>
                   <FormField
                     control={rhf.control}
                     name="ask_shirt_size"
@@ -369,7 +350,7 @@ export function MetadataCard({
                   />
                 </div>
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium">{t("builderAccess")}</h3>
+                  <h4 className="text-sm font-medium">{t("builderAccess")}</h4>
                   <FormField
                     control={rhf.control}
                     name="grants_role_ids"
@@ -416,6 +397,7 @@ export function ApplicationDangerZone({ onDelete }: { onDelete: () => void }) {
 
   return (
     <SectionCard
+      variant="plain"
       leading={
         <WarningIcon aria-hidden="true" className="text-destructive mt-0.5 size-5 shrink-0" />
       }

@@ -69,7 +69,7 @@ export function WorkGroupEditor({
       icon={PencilIcon}
       title={t("editProject")}
       footer={
-        <Button disabled={pending || !name.trim()} onClick={save}>
+        <Button disabled={pending || !name.trim()} onClick={save} loading={pending}>
           {t("save")}
         </Button>
       }

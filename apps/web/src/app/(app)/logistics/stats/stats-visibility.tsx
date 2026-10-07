@@ -252,7 +252,7 @@ export function StatsVisibility({ scopeKey }: { scopeKey: string }) {
                     <div className="flex min-h-12 items-center">
                       <button
                         type="button"
-                        className="flex min-h-12 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="button-interaction flex min-h-12 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left hover:bg-muted/50"
                         aria-expanded={expanded}
                         aria-controls={`statistics-role-${role.id}`}
                         onClick={() =>
