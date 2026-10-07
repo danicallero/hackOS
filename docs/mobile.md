@@ -8,10 +8,10 @@ meals, and registrable activities.
 **Developer API mode.** Seven taps on the understated installed-version footer in Account
 or Sign in reveals a confirmation that switches between production
 (`api.hackudc.com`) and development (`api.dani.md`). The choice is persisted
-in SecureStore. A switch must first close the old server session; it then
-clears all endpoint-specific caches, downloaded passes, roster data, and every
-pending scanner queue before enabling the new API. A failed old-server
-sign-out refuses the switch, so no scanner work can cross environments. A fixed
+in SecureStore. A switch clears the local session and all endpoint-specific
+caches, downloaded passes, roster data, and every pending scanner queue before
+enabling the new API. Revoking the old server session is best effort and never
+blocks a switch while offline. A fixed
 red `DEV` badge overlays every screen while development is active. This is
 intentionally undiscoverable during ordinary use.
 
@@ -824,11 +824,17 @@ The general and activity cameras expose a Liquid Glass NFC button above the
 right-hand flashlight control (an opaque fallback on Android/older iOS). Activities and meals
 open the NFC reader once after loading. Dismissing an activity result (Continue
 or Cancel) opens the next NFC session; registering another keeps the result
-open until it is dismissed. Canceling the NFC reader restores camera scanning
-without immediately reopening it; the NFC button can reopen it manually. NFC also works without camera permission.
-Camera decoding pauses while NFC is open and while an activity result awaits
-operator action. Reads reuse the same identity lookup, repeat-confirmation,
-revocation and encrypted offline-queue paths as camera scans.
+open until it is dismissed. The activity result panel sits centered above the
+floating scanner controls, keeps its actions fixed, and scrolls long dietary
+details. On iOS, UID-only scans skip tag connection and NDEF reading; the native
+reader invalidates as soon as the tag is detected. The next Core NFC session
+waits for the native session-closed event so fast consecutive scans do not race
+teardown. Canceling the NFC reader restores camera scanning without immediately
+reopening it; the NFC button can reopen it manually. NFC also works without
+camera permission. Camera decoding pauses while NFC is open and while an activity
+result awaits operator action. Reads reuse the same identity lookup,
+repeat-confirmation, revocation and encrypted offline-queue paths as camera
+scans.
 
 NFC controls and automatic sessions stay hidden until hardware support is confirmed.
 Devices without NFC retain QR and manual entry, including badge linking and replacement.
@@ -849,8 +855,11 @@ enters its auto-start flow.
 `lib/nfc-reader.ts` serializes native sessions and releases them on completion,
 cancellation, navigation, backgrounding and unmount. iOS uses `MifareIOS` and
 Android uses `NfcA` reader mode with NDEF checking skipped, so blank NTAG213s
-work. Unsupported hardware, disabled NFC, malformed UIDs and reader errors
-produce localized feedback; cancellation does not submit a mutation.
+work. The iOS package patch avoids `connectToTag`, caches the detected UID, and
+invalidates the native session immediately; it also skips the package's automatic
+NDEF payload read. Scanners use only the UID. Unsupported hardware, disabled NFC,
+malformed UIDs and reader errors produce localized feedback; cancellation does
+not submit a mutation.
 
 A new native build is required after installing `react-native-nfc-manager`;
 Expo Go and iOS Simulator cannot exercise real NFC reads. Verify on physical

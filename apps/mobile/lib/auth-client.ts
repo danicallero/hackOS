@@ -138,18 +138,16 @@ async function revokeServerSession(sessionCookie: string): Promise<void> {
   }
 }
 
-/**
- * Unlike normal local-first sign-out, an API endpoint transition must confirm
- * that the old server revoked the session before it may point at a new server.
- */
-export async function closeSessionForEnvironmentChange(): Promise<void> {
-  const sessionCookie = authClient.getCookie();
-  if (!sessionCookie) return;
-  const result = (await authClient.$fetch(`${API_URL.replace(/\/+$/, "")}/api/auth/sign-out`, {
-    method: "POST",
-    onRequest: ({ headers }) => headers.set("cookie", sessionCookie),
-  })) as { error?: { message?: string } | null };
-  if (result.error) throw new Error(result.error.message || "Could not close the previous session");
+/** Local-first sign-out for an endpoint switch; server revocation is best effort. */
+export function signOutForEnvironmentChange(): void {
+  let sessionCookie = "";
+  try {
+    sessionCookie = authClient.getCookie();
+  } catch {
+    // Local cleanup still lets the user switch if SecureStore is unavailable.
+  }
+  forceLocalSignOut();
+  if (sessionCookie) void revokeServerSession(sessionCookie);
 }
 
 /**
