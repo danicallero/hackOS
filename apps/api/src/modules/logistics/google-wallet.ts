@@ -528,15 +528,26 @@ export async function refreshGoogleEventTicketClass(): Promise<void> {
   requireConfigured();
   const token = await getAccessToken();
   const { reviewStatus: _reviewStatus, ...body } = eventTicketClass(await readEventConfig());
-  const res = await fetch(`${WALLET_API_BASE}/eventTicketClass/${eventTicketClassId()}`, {
-    method: "PATCH",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const url = `${WALLET_API_BASE}/eventTicketClass/${eventTicketClassId()}`;
+  const request = (payload: unknown) =>
+    fetch(url, {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  let res = await request(body);
   if (res.status === 404) return;
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Google Wallet event ticket class update failed: ${res.status} ${body}`);
+    const responseBody = await res.text().catch(() => "");
+    if (res.status === 400 && /invalid review status ["']?APPROVED["']?/i.test(responseBody)) {
+      res = await request({ ...body, reviewStatus: "UNDER_REVIEW" });
+      if (res.ok) return;
+      const retryBody = await res.text().catch(() => "");
+      throw new Error(`Google Wallet event ticket class update failed: ${res.status} ${retryBody}`);
+    }
+    throw new Error(
+      `Google Wallet event ticket class update failed: ${res.status} ${responseBody}`,
+    );
   }
 }
 
