@@ -362,9 +362,11 @@ function eventTicketObject(
     id: objectId,
     classId: eventTicketClassId(),
     state: "ACTIVE",
-    ...(visible.participant ? { ticketHolderName: content.fullName } : { ticketHolderName: "" }),
+    ...(visible.participant && content.fullName ? { ticketHolderName: content.fullName } : {}),
     ticketNumber: pass.serial_number,
-    ticketType: localized(visible.passType ? labels.ticketValue : ""),
+    ...(visible.passType && labels.ticketValue.trim()
+      ? { ticketType: localized(labels.ticketValue) }
+      : {}),
     hexBackgroundColor: content.event.settings.backgroundColor,
     linksModuleData: { uris: googleLinks(content.event, content.language) },
     barcode: { type: "QR_CODE", value: content.barcode },
