@@ -726,6 +726,38 @@ describe("H28 Apple Wallet PassKit", () => {
 });
 
 describe("H28 Google Wallet", () => {
+  it("retries an approved class refresh with the required review status", async () => {
+    const uid = await createUser();
+    await issueTicket(uid, "ticket-google-approved");
+    let classPatchAttempts = 0;
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "https://oauth2.googleapis.com/token")
+        return new Response(JSON.stringify({ access_token: "test-token", expires_in: 3600 }), {
+          status: 200,
+        });
+      if (url.includes("/eventTicketClass/") && init?.method === "PATCH") {
+        classPatchAttempts += 1;
+        if (classPatchAttempts === 1)
+          return new Response(
+            JSON.stringify({
+              error: {
+                message: 'Invalid review status \\"APPROVED\\". Use \\"UNDER_REVIEW\\" instead.',
+              },
+            }),
+            { status: 400 },
+          );
+        expect(JSON.parse(init.body as string).reviewStatus).toBe("UNDER_REVIEW");
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { buildGoogleSaveUrl } = await import("../../src/modules/logistics/google-wallet.js");
+    await buildGoogleSaveUrl(uid, "ticket");
+
+    expect(classPatchAttempts).toBe(2);
+  });
+
   it("issues a compact save link after synchronizing full pass content through REST", async () => {
     const uid = await createUser({ name: "Wallet" });
     await issueTicket(uid, "ticket-google-1");

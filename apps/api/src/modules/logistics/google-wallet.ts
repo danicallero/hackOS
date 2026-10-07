@@ -539,7 +539,11 @@ export async function refreshGoogleEventTicketClass(): Promise<void> {
   if (res.status === 404) return;
   if (!res.ok) {
     const responseBody = await res.text().catch(() => "");
-    if (res.status === 400 && /invalid review status ["']?APPROVED["']?/i.test(responseBody)) {
+    if (
+      res.status === 400 &&
+      /invalid review status/i.test(responseBody) &&
+      /approved/i.test(responseBody)
+    ) {
       res = await request({ ...body, reviewStatus: "UNDER_REVIEW" });
       if (res.ok) return;
       const retryBody = await res.text().catch(() => "");
