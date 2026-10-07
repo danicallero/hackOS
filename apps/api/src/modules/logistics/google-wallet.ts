@@ -1,13 +1,26 @@
 import { createSign, randomBytes } from "node:crypto";
+import {
+  type PassFieldLabels,
+  type PassFieldVisibility,
+  resolvePassFieldLabels,
+  resolvePassFieldVisibility,
+} from "@hackos/shared/wallet-pass-labels";
+import {
+  WALLET_ACTION_LABELS,
+  type WalletAlert,
+  type WalletSettings,
+} from "@hackos/shared/wallet-settings";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { NotFoundError, ServiceUnavailableError } from "../../lib/errors.js";
+import { getHighestVisibleRoleName } from "../identity/role.js";
 import {
   ensureGooglePassRecord,
   type GoogleObjectType,
   type Purpose,
   resolvePassIdentity,
 } from "./wallet-passes.js";
+import { readWalletSettings, safeWalletLink, venueDirections } from "./wallet-settings.js";
 
 /**
  * Google Wallet (H28). Event tickets use Google's EventTicketClass and
@@ -21,7 +34,6 @@ const WALLET_API_BASE = "https://walletobjects.googleapis.com/walletobjects/v1";
 const OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const OAUTH_SCOPE = "https://www.googleapis.com/auth/wallet_object.issuer";
 const ORGANIZATION_NAME = config.APPLE_PASS_ORGANIZATION;
-const BACKGROUND_COLOR = config.GOOGLE_WALLET_BACKGROUND_COLOR ?? "#1f2430";
 
 function requireConfigured(): void {
   if (!config.googleWalletConfigured) {
@@ -47,13 +59,15 @@ function signJwt(claims: Record<string, unknown>): string {
 }
 
 function classId(purpose: Purpose): string {
-  return `${config.GOOGLE_WALLET_ISSUER_ID}.hackos_${purpose}`;
+  const suffix = config.NODE_ENV === "production" ? "" : "_staging";
+  return `${config.GOOGLE_WALLET_ISSUER_ID}.hackos_${purpose}${suffix}`;
 }
 
 function eventTicketClassId(): string {
+  const suffix = config.NODE_ENV === "production" ? "" : "_staging";
   return (
     config.GOOGLE_WALLET_EVENT_TICKET_CLASS_ID ??
-    `${config.GOOGLE_WALLET_ISSUER_ID}.hackos_event_ticket`
+    `${config.GOOGLE_WALLET_ISSUER_ID}.hackos_event_ticket${suffix}`
   );
 }
 
@@ -70,31 +84,37 @@ function templateItem(fieldPath: string) {
   return { firstValue: { fields: [{ fieldPath }] } };
 }
 
+function customTextModules(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is Record<string, unknown> =>
+          !!item && typeof item === "object" && !Array.isArray(item),
+      )
+    : [];
+}
+function mergeTextModules<T extends { id: string }>(
+  base: T[],
+  extra: unknown,
+): Record<string, unknown>[] {
+  const modules: Record<string, unknown>[] = [...base];
+  for (const item of customTextModules(extra)) {
+    const index = modules.findIndex((module) => module.id === item.id);
+    if (index >= 0) modules[index] = { ...modules[index], ...item };
+    else modules.push(item);
+  }
+  return modules;
+}
+
 function genericClass(purpose: Purpose) {
   return { id: classId(purpose) };
 }
 
-function genericObject(
-  objectId: string,
-  purpose: Purpose,
-  fullName: string,
-  barcodeValue: string,
-  state: "ACTIVE" | "EXPIRED" = "ACTIVE",
-) {
-  return {
-    id: objectId,
-    classId: classId(purpose),
-    state,
-    cardTitle: localized("hackOS"),
-    header: localized(purpose === "ticket" ? "hackOS ticket" : "hackOS badge"),
-    subheader: localized(fullName),
-    hexBackgroundColor: "#1f2430",
-    barcode: { type: "QR_CODE", value: barcodeValue },
-  };
-}
-
 interface GoogleEventConfig {
   name: string | null;
+  pass_back_fields: { label: string; value: string }[];
+  pass_field_labels: PassFieldLabels;
+  pass_field_visibility: PassFieldVisibility;
+  settings: WalletSettings;
   venue_name: string | null;
   venue_latitude: number | null;
   venue_longitude: number | null;
@@ -106,13 +126,16 @@ interface GoogleEventConfig {
 
 async function readEventConfig(): Promise<GoogleEventConfig> {
   const { rows } = await pool.query(
-    `SELECT name, venue_name, venue_latitude, venue_longitude,
+    `SELECT name, pass_back_fields, pass_field_labels, pass_field_visibility, venue_name, venue_latitude, venue_longitude,
             event_starts_at, event_ends_at, hacking_starts_at, hacking_ends_at
        FROM event_config WHERE id = 1`,
   );
-  return (
-    rows[0] ?? {
+  return {
+    ...(rows[0] ?? {
       name: null,
+      pass_back_fields: [],
+      pass_field_labels: {},
+      pass_field_visibility: {},
       venue_name: null,
       venue_latitude: null,
       venue_longitude: null,
@@ -120,8 +143,9 @@ async function readEventConfig(): Promise<GoogleEventConfig> {
       event_ends_at: null,
       hacking_starts_at: null,
       hacking_ends_at: null,
-    }
-  );
+    }),
+    settings: await readWalletSettings(),
+  };
 }
 
 function isoDate(value: string | Date | null): string | null {
@@ -132,7 +156,7 @@ function isoDate(value: string | Date | null): string | null {
 
 function eventDateTime(event: GoogleEventConfig) {
   const doorsOpen = isoDate(event.event_starts_at);
-  const start = isoDate(event.hacking_starts_at ?? event.event_starts_at);
+  const start = isoDate(event.event_starts_at ?? event.hacking_starts_at);
   const end = isoDate(event.event_ends_at ?? event.hacking_ends_at);
   const startMs = start ? Date.parse(start) : null;
   const endMs = end ? Date.parse(end) : null;
@@ -157,44 +181,52 @@ function eventTicketClass(event: GoogleEventConfig) {
   const eventName = event.name?.trim() || ORGANIZATION_NAME;
   const venueName = event.venue_name?.trim();
   const dateTime = eventDateTime(event);
-  const logo = walletImage(config.GOOGLE_WALLET_LOGO_URL, "GPUL logo");
-  const heroImage = walletImage(config.GOOGLE_WALLET_HERO_IMAGE_URL, `${eventName} artwork`);
-  const wideLogo = walletImage(config.GOOGLE_WALLET_WIDE_LOGO_URL, `${eventName} wide logo`);
+  const logo = walletImage(
+    event.settings.artwork.googleLogo?.url ?? config.GOOGLE_WALLET_LOGO_URL,
+    "GPUL logo",
+  );
+  const heroImage = walletImage(
+    event.settings.artwork.googleHero?.url ?? config.GOOGLE_WALLET_HERO_IMAGE_URL,
+    `${eventName} artwork`,
+  );
+  const wideLogo = walletImage(
+    event.settings.artwork.googleWideLogo?.url ?? config.GOOGLE_WALLET_WIDE_LOGO_URL,
+    `${eventName} wide logo`,
+  );
   const hasLocation =
     event.venue_latitude !== null &&
     event.venue_longitude !== null &&
     Number.isFinite(event.venue_latitude) &&
     Number.isFinite(event.venue_longitude);
 
+  const visible = resolvePassFieldVisibility(event.pass_field_visibility);
+  const paths = Object.entries(visible)
+    .filter(([, shown]) => shown)
+    .map(([key]) => `object.textModulesData['${key}']`);
   const cardRowTemplateInfos = [];
-  if (dateTime.start && venueName) {
-    cardRowTemplateInfos.push({
-      twoItems: {
-        startItem: templateItem("class.dateTime.start"),
-        endItem: templateItem("class.venue.name"),
-      },
-    });
-  } else if (dateTime.start) {
-    cardRowTemplateInfos.push({ oneItem: { item: templateItem("class.dateTime.start") } });
-  } else if (venueName) {
-    cardRowTemplateInfos.push({ oneItem: { item: templateItem("class.venue.name") } });
-  }
-  cardRowTemplateInfos.push({
-    twoItems: {
-      startItem: templateItem("object.ticketHolderName"),
-      endItem: templateItem("object.ticketType"),
-    },
-  });
-
+  for (let i = 0; i < paths.length; i += 2)
+    cardRowTemplateInfos.push(
+      paths[i + 1]
+        ? { twoItems: { startItem: templateItem(paths[i]!), endItem: templateItem(paths[i + 1]!) } }
+        : { oneItem: { item: templateItem(paths[i]!) } },
+    );
+  // Google rejects a card template with more than three rows. Remaining
+  // visible fields still appear in the details template below.
+  cardRowTemplateInfos.length = Math.min(cardRowTemplateInfos.length, 3);
   const detailsItemInfos = [
     ...(dateTime.start ? [{ item: templateItem("class.dateTime.start") }] : []),
-    ...(dateTime.doorsOpen && dateTime.doorsOpen !== dateTime.start
-      ? [{ item: templateItem("class.dateTime.doorsOpen") }]
-      : []),
     ...(dateTime.end ? [{ item: templateItem("class.dateTime.end") }] : []),
     ...(venueName ? [{ item: templateItem("class.venue.name") }] : []),
-    { item: templateItem("object.ticketHolderName") },
-    { item: templateItem("object.ticketType") },
+    ...paths.map((path) => ({ item: templateItem(path) })),
+    ...googleBackModules(event).map((module) => ({
+      item: templateItem(`class.textModulesData['${module.id}']`),
+    })),
+    ...customTextModules(event.settings.googleClassOptions.textModulesData)
+      .filter((module) => typeof module.id === "string" && /^[A-Za-z0-9_-]+$/.test(module.id))
+      .map((module) => ({ item: templateItem(`class.textModulesData['${module.id}']`) })),
+    ...googleLinks(event, "en").map((link) => ({
+      item: templateItem(`object.linksModuleData.uris['${link.id}']`),
+    })),
     { item: templateItem("object.ticketNumber") },
   ];
 
@@ -203,19 +235,20 @@ function eventTicketClass(event: GoogleEventConfig) {
     eventName: localized(eventName),
     eventId: eventTicketClassId(),
     issuerName: ORGANIZATION_NAME,
-    localizedIssuerName: localized(ORGANIZATION_NAME),
     reviewStatus: "UNDER_REVIEW",
-    hexBackgroundColor: BACKGROUND_COLOR,
+    hexBackgroundColor: event.settings.backgroundColor,
     countryCode: "ES",
-    ...(Object.keys(dateTime).length > 0 ? { dateTime } : {}),
+    linksModuleData: { uris: [] },
+    appLinkData: googleAppLink(event.settings),
+    dateTime: Object.keys(dateTime).length > 0 ? dateTime : null,
     // EventVenue is what the built-in Wallet template reads for the title and
     // detail sections. The event settings currently store a venue name (not a
     // postal address), so use that value as the required address fallback
     // until a separate postal-address field is introduced.
-    ...(venueName ? { venue: { name: localized(venueName), address: localized(venueName) } } : {}),
-    ...(logo ? { logo } : {}),
-    ...(heroImage ? { heroImage } : {}),
-    ...(wideLogo ? { wideLogo } : {}),
+    venue: venueName ? { name: localized(venueName), address: localized(venueName) } : null,
+    logo: logo ?? null,
+    heroImage: heroImage ?? null,
+    wideLogo: wideLogo ?? null,
     classTemplateInfo: {
       cardTemplateOverride: { cardRowTemplateInfos },
       detailsTemplateOverride: { detailsItemInfos },
@@ -223,48 +256,194 @@ function eventTicketClass(event: GoogleEventConfig) {
     // Google currently marks this legacy field as deprecated, but it remains
     // part of EventTicketClass and is the only location shape represented by
     // hackOS's existing venue model (name + coordinates).
-    ...(hasLocation
-      ? {
-          locations: [{ latitude: event.venue_latitude, longitude: event.venue_longitude }],
-        }
-      : {}),
+    locations: hasLocation
+      ? [{ latitude: event.venue_latitude, longitude: event.venue_longitude }]
+      : [],
+    ...event.settings.googleClassOptions,
+    localizedIssuerName:
+      event.settings.googleClassOptions.localizedIssuerName ??
+      localized(
+        typeof event.settings.googleClassOptions.issuerName === "string"
+          ? event.settings.googleClassOptions.issuerName
+          : ORGANIZATION_NAME,
+      ),
+    textModulesData: mergeTextModules(
+      googleBackModules(event),
+      event.settings.googleClassOptions.textModulesData,
+    ),
   };
 }
 
+interface GooglePassContent {
+  fullName: string;
+  barcode: string;
+  event: GoogleEventConfig;
+  role: string;
+  university: string | null;
+  email: string;
+  language: string;
+}
+function googleBackModules(event: GoogleEventConfig) {
+  const labels = resolvePassFieldLabels(event.pass_field_labels);
+  const fields = [
+    { label: labels.event, value: event.name?.trim() || ORGANIZATION_NAME },
+    ...(event.venue_name ? [{ label: labels.location, value: event.venue_name }] : []),
+    ...event.pass_back_fields.filter((field) => !safeWalletLink(field.value)),
+    { label: labels.organizedBy, value: ORGANIZATION_NAME },
+  ];
+  // H28: Google displays at most ten text modules per class/object. Keep every
+  // configured field; group overflow into the final details block.
+  const modules = fields
+    .slice(0, 9)
+    .map((field, i) => ({ id: `back_${i}`, header: field.label, body: field.value }));
+  if (fields.length > 9)
+    modules.push({
+      id: "back_more",
+      header: fields[9]!.label,
+      body: fields
+        .slice(9)
+        .map((field) => `${field.label}: ${field.value}`)
+        .join("\n\n"),
+    });
+  return modules;
+}
+function googleLinks(event: GoogleEventConfig, language: string) {
+  const labels =
+    WALLET_ACTION_LABELS[language as keyof typeof WALLET_ACTION_LABELS] ?? WALLET_ACTION_LABELS.en;
+  const directions = event.settings.showDirections
+    ? venueDirections(event.venue_latitude, event.venue_longitude, event.venue_name, "google")
+    : null;
+  return [
+    ...(directions ? [{ id: "directions", uri: directions, description: labels.directions }] : []),
+    { id: "website", uri: event.settings.websiteUrl, description: labels.website },
+    { id: "android_app", uri: event.settings.androidStoreUrl, description: "Google Play" },
+    ...(event.settings.showSchedule
+      ? [{ id: "schedule", uri: event.settings.scheduleUrl, description: labels.schedule }]
+      : []),
+    ...event.pass_back_fields.flatMap((field, i) => {
+      const uri = safeWalletLink(field.value);
+      return uri ? [{ id: `custom_${i}`, uri, description: field.label }] : [];
+    }),
+  ];
+}
+function googleAppLink(settings: WalletSettings) {
+  return {
+    androidAppLinkInfo: { appTarget: { packageName: settings.androidPackageName } },
+    webAppLinkInfo: {
+      appTarget: { targetUri: { uri: settings.websiteUrl, description: "Open hackOS" } },
+    },
+    displayText: localized("Open hackOS"),
+  };
+}
+function personalModules(content: GooglePassContent, purpose: Purpose) {
+  const labels = resolvePassFieldLabels(content.event.pass_field_labels);
+  const visible = resolvePassFieldVisibility(content.event.pass_field_visibility);
+  const values = {
+    participant: content.fullName,
+    role: content.role,
+    passType: purpose === "ticket" ? labels.ticketValue : labels.badgeValue,
+    university: content.university,
+    email: content.email,
+  };
+  return Object.entries(values).flatMap(([key, value]) =>
+    visible[key as keyof typeof visible] && value
+      ? [{ id: key, header: labels[key as keyof typeof labels], body: value }]
+      : [],
+  );
+}
 function eventTicketObject(
   objectId: string,
   pass: { serial_number: string },
-  fullName: string,
-  barcodeValue: string,
-  event: GoogleEventConfig,
+  content: GooglePassContent,
 ) {
+  const visible = resolvePassFieldVisibility(content.event.pass_field_visibility);
+  const labels = resolvePassFieldLabels(content.event.pass_field_labels);
   return {
     id: objectId,
     classId: eventTicketClassId(),
     state: "ACTIVE",
-    ticketHolderName: fullName,
+    ...(visible.participant ? { ticketHolderName: content.fullName } : { ticketHolderName: "" }),
     ticketNumber: pass.serial_number,
-    ticketType: localized("Event ticket"),
-    hexBackgroundColor: BACKGROUND_COLOR,
-    barcode: { type: "QR_CODE", value: barcodeValue },
-    ...validTimeInterval(event),
+    ticketType: localized(visible.passType ? labels.ticketValue : ""),
+    hexBackgroundColor: content.event.settings.backgroundColor,
+    linksModuleData: { uris: googleLinks(content.event, content.language) },
+    barcode: { type: "QR_CODE", value: content.barcode },
+    validTimeInterval: validTimeInterval(content.event).validTimeInterval ?? null,
+    appLinkData: googleAppLink(content.event.settings),
+    imageModulesData: content.event.settings.artwork.googleDetail
+      ? [
+          {
+            id: "detail_image",
+            mainImage: walletImage(
+              content.event.settings.artwork.googleDetail.url,
+              "Event details",
+            ),
+          },
+        ]
+      : [],
+    ...content.event.settings.googleObjectOptions,
+    textModulesData: mergeTextModules(
+      personalModules(content, "ticket"),
+      content.event.settings.googleObjectOptions.textModulesData,
+    ),
   };
 }
-
-async function passContent(
-  userId: number,
-  purpose: Purpose,
-): Promise<{ fullName: string; barcode: string; event: GoogleEventConfig }> {
+function genericObject(objectId: string, purpose: Purpose, content: GooglePassContent) {
+  const labels = resolvePassFieldLabels(content.event.pass_field_labels);
+  return {
+    id: objectId,
+    classId: classId(purpose),
+    state: "ACTIVE",
+    cardTitle: localized(content.event.name?.trim() || ORGANIZATION_NAME),
+    header: localized(purpose === "ticket" ? labels.ticketValue : labels.badgeValue),
+    hexBackgroundColor: content.event.settings.backgroundColor,
+    linksModuleData: { uris: googleLinks(content.event, content.language) },
+    logo:
+      walletImage(
+        content.event.settings.artwork.googleLogo?.url ?? config.GOOGLE_WALLET_LOGO_URL,
+        "Logo",
+      ) ?? null,
+    heroImage:
+      walletImage(
+        content.event.settings.artwork.googleHero?.url ?? config.GOOGLE_WALLET_HERO_IMAGE_URL,
+        "Event artwork",
+      ) ?? null,
+    barcode: { type: "QR_CODE", value: content.barcode },
+    appLinkData: googleAppLink(content.event.settings),
+    imageModulesData: content.event.settings.artwork.googleDetail
+      ? [
+          {
+            id: "detail_image",
+            mainImage: walletImage(
+              content.event.settings.artwork.googleDetail.url,
+              "Event details",
+            ),
+          },
+        ]
+      : [],
+    ...content.event.settings.googleObjectOptions,
+    textModulesData: mergeTextModules(
+      personalModules(content, purpose),
+      content.event.settings.googleObjectOptions.textModulesData,
+    ),
+  };
+}
+async function passContent(userId: number, purpose: Purpose): Promise<GooglePassContent> {
   const { rows } = await pool.query(
-    `SELECT u.name, u.surname, u.badge_id, t.token
-       FROM users u
-       LEFT JOIN tickets t ON t.user_id = u.id
-      WHERE u.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
+    `SELECT u.name, u.surname, u.badge_id, un.name AS university, u.email, u.language, t.token
+    FROM users u LEFT JOIN tickets t ON t.user_id=u.id LEFT JOIN universities un ON un.id=u.university_id WHERE u.id=$1 AND u.account_state='active' AND u.anonymized_at IS NULL`,
     [userId],
   );
-  const u = rows[0];
-  if (!u) throw new NotFoundError("User not found");
-  return { ...resolvePassIdentity(u, userId, purpose), event: await readEventConfig() };
+  const user = rows[0];
+  if (!user) throw new NotFoundError("User not found");
+  return {
+    ...resolvePassIdentity(user, userId, purpose),
+    university: user.university,
+    email: user.email,
+    language: user.language,
+    role: (await getHighestVisibleRoleName(pool, userId)) ?? "Unassigned",
+    event: await readEventConfig(),
+  };
 }
 
 /**
@@ -287,25 +466,15 @@ export async function buildGoogleSaveUrl(userId: number, purpose: Purpose): Prom
     const { enqueueWalletSync } = await import("./wallet-sync.js");
     await enqueueWalletSync(retiredPassIds);
   }
-  const { fullName, barcode, event } = await passContent(userId, purpose);
+  const content = await passContent(userId, purpose);
 
+  // H28: materialize full content through REST, then sign an ID-only JWT so
+  // custom fields/artwork cannot exceed Google's recommended URL length.
+  await refreshGooglePassObject(pass, content);
   const payload =
     purpose === "ticket"
-      ? {
-          // The Event Ticket class is created and approved in the Pay &
-          // Wallet Console (or patched through the REST API). Referencing an
-          // existing class keeps the save JWT compact and avoids asking
-          // Google to create a class with an incorrect/legacy ID.
-          eventTicketObjects: [
-            eventTicketObject(pass.google_object_id ?? objectId, pass, fullName, barcode, event),
-          ],
-        }
-      : {
-          genericClasses: [genericClass(purpose)],
-          genericObjects: [
-            genericObject(pass.google_object_id ?? objectId, purpose, fullName, barcode),
-          ],
-        };
+      ? { eventTicketObjects: [{ id: pass.google_object_id ?? objectId }] }
+      : { genericObjects: [{ id: pass.google_object_id ?? objectId }] };
 
   const jwt = signJwt({
     iss: config.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL,
@@ -358,10 +527,11 @@ async function getAccessToken(): Promise<string> {
 export async function refreshGoogleEventTicketClass(): Promise<void> {
   requireConfigured();
   const token = await getAccessToken();
+  const { reviewStatus: _reviewStatus, ...body } = eventTicketClass(await readEventConfig());
   const res = await fetch(`${WALLET_API_BASE}/eventTicketClass/${eventTicketClassId()}`, {
     method: "PATCH",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify(eventTicketClass(await readEventConfig())),
+    body: JSON.stringify(body),
   });
   if (res.status === 404) return;
   if (!res.ok) {
@@ -387,4 +557,102 @@ export async function expireGoogleObject(
     const body = await res.text().catch(() => "");
     throw new Error(`Google Wallet object update failed: ${res.status} ${body}`);
   }
+}
+
+export async function refreshGooglePassObject(
+  pass: {
+    google_object_id: string | null;
+    google_object_type: GoogleObjectType | null;
+    user_id: number;
+    purpose: Purpose;
+    serial_number: string;
+  },
+  content?: GooglePassContent,
+): Promise<void> {
+  requireConfigured();
+  if (!pass.google_object_id) return;
+  const data = content ?? (await passContent(pass.user_id, pass.purpose));
+  if (pass.google_object_type === "event_ticket") {
+    // The approved class belongs to this deployment; refresh before issuance.
+    if (content) await refreshGoogleEventTicketClass();
+    await upsertGoogleResource(
+      "eventTicketObject",
+      pass.google_object_id,
+      eventTicketObject(pass.google_object_id, pass, data),
+    );
+  } else {
+    await upsertGoogleResource("genericClass", classId(pass.purpose), {
+      ...genericClass(pass.purpose),
+      ...data.event.settings.googleClassOptions,
+      textModulesData: mergeTextModules(
+        googleBackModules(data.event),
+        data.event.settings.googleClassOptions.textModulesData,
+      ),
+    });
+    await upsertGoogleResource(
+      "genericObject",
+      pass.google_object_id,
+      genericObject(pass.google_object_id, pass.purpose, data),
+    );
+  }
+}
+async function upsertGoogleResource(resource: string, id: string, body: unknown): Promise<void> {
+  const token = await getAccessToken();
+  const options = {
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  };
+  let response = await fetch(`${WALLET_API_BASE}/${resource}/${encodeURIComponent(id)}`, {
+    ...options,
+    method: "PATCH",
+  });
+  if (response.status === 404) {
+    // Null clears a field on PATCH, but optional nulls are omitted when a new
+    // object is inserted. Keep the same content source for both requests.
+    const insertBody = Object.fromEntries(
+      Object.entries(body as Record<string, unknown>).filter(([, value]) => value !== null),
+    );
+    response = await fetch(`${WALLET_API_BASE}/${resource}`, {
+      ...options,
+      method: "POST",
+      body: JSON.stringify(insertBody),
+    });
+  }
+  if (!response.ok)
+    throw new Error(
+      `Google Wallet ${resource} update failed: ${response.status} ${await response.text()}`,
+    );
+}
+export async function sendGoogleWalletAlert(
+  objectId: string,
+  objectType: GoogleObjectType,
+  messageId: string,
+  alert: WalletAlert[keyof WalletAlert],
+): Promise<void> {
+  requireConfigured();
+  const token = await getAccessToken();
+  const resource = objectType === "event_ticket" ? "eventTicketObject" : "genericObject";
+  const url = `${WALLET_API_BASE}/${resource}/${encodeURIComponent(objectId)}`;
+  const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+  // H28: a retry after an interrupted response must not duplicate an alert.
+  const current = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) });
+  if (!current.ok) throw new Error(`Google Wallet alert lookup failed: ${current.status}`);
+  const saved = (await current.json()) as { messages?: { id?: string }[] };
+  if (saved.messages?.some((message) => message.id === messageId)) return;
+  const response = await fetch(`${url}/addMessage`, {
+    method: "POST",
+    headers,
+    signal: AbortSignal.timeout(15_000),
+    body: JSON.stringify({
+      message: {
+        id: messageId,
+        header: alert.title,
+        body: alert.body,
+        messageType: "TEXT_AND_NOTIFY",
+      },
+    }),
+  });
+  if (!response.ok)
+    throw new Error(`Google Wallet alert failed: ${response.status} ${await response.text()}`);
 }
