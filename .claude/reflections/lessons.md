@@ -559,3 +559,64 @@ and panel widths. Recheck each route after a shared pattern changes.
 ### Exceptions
 Fixed operational workspaces and intentionally compact forms keep their
 established geometry when it still supports their content and interaction.
+
+## [R018] Preserve deployment fallbacks behind runtime editors
+
+Status: active
+Scope: module:wallet
+Source: user-correction
+Date: 2026-10-07
+
+### Trigger
+Adding database-backed runtime settings for a feature previously configured by
+deployment environment.
+
+### Mistake
+Materializing default values in the settings row made deployment values stop
+flowing through after the row was created.
+
+### Lesson
+Store only intentional overrides. An absent override must resolve to that
+deployment's environment value, including after a manager resets it.
+
+### Action
+Keep override columns nullable, resolve defaults in the read path, and leave
+fields equal to environment values unset on save. Expose a reset action.
+
+### Validation
+Save one field, confirm untouched columns remain null, reset, and confirm the
+resolved values again match the deployment environment.
+
+### Exceptions
+Credentials and provider accounts remain deployment-only configuration.
+
+## [R019] Preserve a matching session during token actions
+
+Status: active
+Scope: module:applications
+Source: user-correction
+Date: 2026-10-07
+
+### Trigger
+A public email token action is opened in a browser that already has a session.
+
+### Mistake
+Signing out every session interrupted the ticket holder who was already signed
+in as the account named by the token.
+
+### Lesson
+The token remains scoped to its one action, but a matching existing session
+should stay active. Close a different account's session before offering its app
+entry point.
+
+### Action
+Compare the token result's user ID with the session user ID. Preserve and
+refresh a match; close a mismatch and explain it.
+
+### Validation
+Exercise matching, different-account, and anonymous browser states. Confirm
+Wallet requests still use the scoped token owner.
+
+### Exceptions
+Token endpoints that explicitly require fresh authentication follow their own
+published session contract.

@@ -1110,6 +1110,39 @@ Table wallet_access_tokens {
   user_id integer [not null]
 }
 
+Table wallet_artwork {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  id uuid [pk, not null]
+  slot text [not null]
+}
+
+Table wallet_operation_passes {
+  attempts integer [not null, default: `0`]
+  last_error text
+  next_attempt_at "timestamp with time zone" [not null, default: `now()`]
+  operation_id uuid [not null]
+  pass_id bigint [not null]
+  status text [not null, default: `'queued'::text`]
+
+  indexes {
+  (operation_id, pass_id) [pk]
+  }
+}
+
+Table wallet_operations {
+  actor_id bigint
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  id uuid [pk, not null]
+  is_test_account boolean [not null]
+  kind text [not null]
+  request_key text [not null]
+  translations jsonb
+
+  indexes {
+  (actor_id, request_key) [unique]
+  }
+}
+
 Table wallet_pass_devices {
   device_library_identifier text [not null]
   pass_id integer [not null]
@@ -1134,6 +1167,25 @@ Table wallet_passes {
   status text [not null, default: `'active'::text`]
   update_tag text [not null, default: `(((EXTRACT(epoch FROM now()) * (1000)::numeric))::bigint)::text`]
   user_id integer [not null]
+}
+
+Table wallet_settings {
+  android_package_name text
+  android_store_url text
+  apple_app_store_id bigint
+  apple_options jsonb
+  artwork jsonb [not null, default: `'{}'::jsonb`]
+  background_color text
+  foreground_color text
+  google_class_options jsonb
+  google_object_options jsonb
+  id integer [pk, not null, default: `1`]
+  label_color text
+  schedule_url text
+  show_directions boolean
+  show_schedule boolean
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  website_url text
 }
 
 Ref: account_removal_pin_challenges.user_id > users.id
@@ -1268,5 +1320,8 @@ Ref: user_roles.role_id > roles.id
 Ref: user_roles.user_id > users.id
 Ref: users.university_id > universities.id
 Ref: wallet_access_tokens.user_id > users.id
+Ref: wallet_operation_passes.operation_id > wallet_operations.id
+Ref: wallet_operation_passes.pass_id > wallet_passes.id
+Ref: wallet_operations.actor_id > users.id
 Ref: wallet_pass_devices.pass_id > wallet_passes.id
 Ref: wallet_passes.user_id > users.id

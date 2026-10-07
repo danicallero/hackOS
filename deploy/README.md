@@ -770,3 +770,13 @@ configuración de infraestructura, no por un despliegue de aplicación.
   `R2_BACKUP_FREQUENCY`.
 - [`../docs/env-vars.md`](../docs/env-vars.md): contrato de variables por
   proceso.
+
+### Google Wallet environment isolation (H28)
+
+Set a different approved `GOOGLE_WALLET_EVENT_TICKET_CLASS_ID` in production
+and staging, including when both use the same issuer/service account. Both
+API and worker receive this variable. Recreate both after changing it. Sharing
+a class lets staging event saves overwrite production ticket content.
+`GOOGLE_WALLET_BACKGROUND_COLOR` defaults to Apple's `#a3d5ff`; explicit env
+values take precedence. Recovery for existing passes and image configuration:
+[Wallet architecture](../docs/event-config-wallet.md).

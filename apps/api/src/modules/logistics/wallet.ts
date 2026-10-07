@@ -9,6 +9,7 @@ import {
   resolvePassFieldLabels,
   resolvePassFieldVisibility,
 } from "@hackos/shared/wallet-pass-labels";
+import { WALLET_ACTION_LABELS } from "@hackos/shared/wallet-settings";
 import type { preHandlerHookHandler } from "fastify";
 import { config } from "../../config.js";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -28,6 +29,13 @@ import {
   type Purpose,
   resolvePassIdentity,
 } from "./wallet-passes.js";
+import {
+  hexToRgb,
+  readWalletArtwork,
+  readWalletSettings,
+  safeWalletLink,
+  venueDirections,
+} from "./wallet-settings.js";
 
 // users.language is 'en' | 'es' | 'gl' (0001_initial) — the pass header's
 // month abbreviation follows the holder's language (H28).
@@ -136,6 +144,26 @@ async function passPayload(pass: PassRow) {
        FROM event_config WHERE id = 1`,
   );
   const event = eventRows[0];
+  const settings = await readWalletSettings();
+  const actionLabels =
+    WALLET_ACTION_LABELS[u.language as keyof typeof WALLET_ACTION_LABELS] ??
+    WALLET_ACTION_LABELS.en;
+  const directionsUrl = settings.showDirections
+    ? venueDirections(
+        event?.venue_latitude ?? null,
+        event?.venue_longitude ?? null,
+        event?.venue_name ?? null,
+        "apple",
+      )
+    : null;
+  const scheduleUrl = settings.scheduleUrl;
+  const { rows: alertRows } = revoked
+    ? { rows: [] }
+    : await pool.query(
+        `SELECT o.translations FROM wallet_operation_passes d JOIN wallet_operations o ON o.id=d.operation_id WHERE d.pass_id=$1 AND o.kind='alert' ORDER BY o.created_at DESC, o.id DESC LIMIT 1`,
+        [pass.id],
+      );
+  const alert = alertRows[0]?.translations?.[u.language] ?? alertRows[0]?.translations?.en;
   const eventName = event?.name || ORGANIZATION_NAME;
   // The time printed on the pass is when attendees can arrive (doors open,
   // event_starts_at) — NOT hacking_starts_at, which is the countdown clock.
@@ -204,8 +232,45 @@ async function passPayload(pass: PassRow) {
       key: `custom-${i}`,
       label: field.label,
       value: field.value,
+      ...(safeWalletLink(field.value)
+        ? {
+            attributedValue: `<a href="${escapeHtml(safeWalletLink(field.value)!)}">${escapeHtml(field.label)}</a>`,
+          }
+        : {}),
     })),
     { key: "org", label: labels.organizedBy, value: ORGANIZATION_NAME },
+    ...(directionsUrl
+      ? [
+          {
+            key: "directions",
+            label: actionLabels.directions,
+            value: directionsUrl,
+            attributedValue: `<a href="${escapeHtml(directionsUrl)}">${escapeHtml(actionLabels.directions)}</a>`,
+          },
+        ]
+      : []),
+    ...(settings.showSchedule
+      ? [
+          {
+            key: "schedule",
+            label: actionLabels.schedule,
+            value: scheduleUrl,
+            attributedValue: `<a href="${escapeHtml(scheduleUrl)}">${escapeHtml(actionLabels.schedule)}</a>`,
+          },
+        ]
+      : []),
+    {
+      key: "website",
+      label: actionLabels.website,
+      value: settings.websiteUrl,
+      attributedValue: `<a href="${escapeHtml(settings.websiteUrl)}">${escapeHtml(actionLabels.website)}</a>`,
+    },
+    {
+      key: "wallet-alert",
+      label: alert?.title ?? actionLabels.alert,
+      value: alert ? `${alert.title}: ${alert.body}` : "",
+      changeMessage: "%@",
+    },
   ];
 
   // Top corner of the pass, left-aligned within its field. Tickets: doors-open
@@ -248,8 +313,29 @@ async function passPayload(pass: PassRow) {
           ]
         : [];
 
-  return {
+  const payload = {
     formatVersion: 1,
+    // H28: iOS 27 featured actions; back links remain available on older OS versions.
+    featuredActions: [
+      ...(directionsUrl ? [{ identifier: "venue", type: "place", url: directionsUrl }] : []),
+      ...(settings.showSchedule
+        ? [{ identifier: "schedule", type: "viewSchedule", url: scheduleUrl }]
+        : []),
+    ],
+    ...(pass.purpose === "ticket"
+      ? {
+          semantics: {
+            eventType: "PKEventTypeConference",
+            eventName,
+            ...(venueName ? { venueName } : {}),
+            ...(startsAt ? { eventStartDate: startsAt.toISOString() } : {}),
+            ...(endsAt ? { eventEndDate: endsAt.toISOString() } : {}),
+            ...(venueLatitude !== null && venueLongitude !== null
+              ? { venueLocation: { latitude: venueLatitude, longitude: venueLongitude } }
+              : {}),
+          },
+        }
+      : {}),
     passTypeIdentifier: PASS_TYPE_IDENTIFIER,
     teamIdentifier: TEAM_IDENTIFIER,
     organizationName: ORGANIZATION_NAME,
@@ -267,9 +353,9 @@ async function passPayload(pass: PassRow) {
     // the back of the pass (Open/Get button) and tapping it deep-links via
     // the app scheme. appLaunchURL is ignored by PassKit unless
     // associatedStoreIdentifiers is present, so both ride the same guard.
-    ...(config.APPLE_PASS_APP_STORE_ID
+    ...(settings.appleAppStoreId
       ? {
-          associatedStoreIdentifiers: [config.APPLE_PASS_APP_STORE_ID],
+          associatedStoreIdentifiers: [settings.appleAppStoreId],
           appLaunchURL: `${config.MOBILE_APP_SCHEME}://`,
         }
       : {}),
@@ -307,10 +393,25 @@ async function passPayload(pass: PassRow) {
     // #030846 is used for labels/headers and #fafafa for values such as the
     // attendee name, email, role, and pass type, as specified by the pass
     // design. #a3d5ff is the material background.
-    foregroundColor: "rgb(250,250,250)",
-    backgroundColor: "rgb(163,213,255)",
-    labelColor: "rgb(3,8,70)",
+    foregroundColor: hexToRgb(settings.foregroundColor),
+    backgroundColor: hexToRgb(settings.backgroundColor),
+    labelColor: hexToRgb(settings.labelColor),
     suppressStripShine: true,
+  };
+  const eventOptions = settings.appleOptions.eventTicket as
+    | { backFields?: typeof backFields }
+    | undefined;
+  return {
+    ...payload,
+    ...settings.appleOptions,
+    eventTicket: {
+      ...payload.eventTicket,
+      ...eventOptions,
+      backFields: [
+        ...(eventOptions?.backFields ?? backFields).filter((field) => field.key !== "wallet-alert"),
+        backFields[backFields.length - 1]!,
+      ],
+    },
   };
 }
 
@@ -340,9 +441,34 @@ export async function buildApplePass(
   if (pass.status === "voided" && !lookup) throw new BadRequestError("Pass has been voided");
 
   const passJson = JSON.stringify(await passPayload(pass));
+  const settings = await readWalletSettings();
   const images = await Promise.all(
-    PASS_IMAGE_FILES.map(async (name) => ({ name, data: await readFile(join(ASSETS_DIR, name)) })),
+    PASS_IMAGE_FILES.map(async (name) => {
+      const base = name.split("@")[0]!.split(".")[0];
+      const slot = base === "icon" ? "appleIcon" : base === "logo" ? "appleLogo" : "appleStrip";
+      const scale = name.includes("@3x") ? 3 : name.includes("@2x") ? 2 : 1;
+      const artwork = settings.artwork[slot];
+      return {
+        name,
+        data: artwork
+          ? await readWalletArtwork(artwork.id, scale)
+          : await readFile(join(ASSETS_DIR, name)),
+      };
+    }),
   );
+  for (const [slot, file] of [
+    ["appleBackground", "background"],
+    ["appleThumbnail", "thumbnail"],
+    ["appleFooter", "footer"],
+  ] as const) {
+    const asset = settings.artwork[slot];
+    if (asset)
+      for (const scale of [1, 2, 3])
+        images.push({
+          name: `${file}${scale === 1 ? "" : `@${scale}x`}.png`,
+          data: await readWalletArtwork(asset.id, scale),
+        });
+  }
   const manifest: Record<string, string> = {
     "pass.json": createHash("sha1").update(passJson).digest("hex"),
   };
@@ -500,24 +626,20 @@ export async function unregisterAppleDevice(input: {
 export async function appleChangedSerials(input: {
   deviceLibraryIdentifier: string;
   passTypeIdentifier: string;
-  authorization?: string;
   passesUpdatedSince?: string;
 }) {
-  if (input.passTypeIdentifier !== PASS_TYPE_IDENTIFIER) {
-    return { lastUpdated: Date.now().toString(), serialNumbers: [] };
-  }
-  const token = appleAuthToken(input.authorization);
-  // Apple sends one pass's web-service token when polling a device's changed
-  // registrations. A valid token for a different pass/device cannot enumerate
-  // this device's serial numbers.
+  if (input.passTypeIdentifier !== PASS_TYPE_IDENTIFIER) throw new UnauthorizedError();
+  // H28: Apple sends no pass token for collection polling. The device library
+  // identifier is the shared secret; registration and pass downloads still
+  // require their individual ApplePass credentials.
   const devicePass = await pool.query(
     `SELECT 1
        FROM wallet_pass_devices d
        JOIN wallet_passes wp ON wp.id = d.pass_id
       WHERE d.device_library_identifier = $1
         AND wp.platform = 'apple'
-        AND wp.authentication_token = $2`,
-    [input.deviceLibraryIdentifier, token],
+      LIMIT 1`,
+    [input.deviceLibraryIdentifier],
   );
   if (devicePass.rowCount === 0) throw new UnauthorizedError();
   // update_tag is integer epoch millis (0504) and MUST be compared
@@ -535,6 +657,7 @@ export async function appleChangedSerials(input: {
        FROM wallet_pass_devices d
        JOIN wallet_passes wp ON wp.id = d.pass_id
       WHERE d.device_library_identifier = $1
+        AND wp.platform = 'apple'
         AND ($2::double precision IS NULL OR wp.update_tag::double precision > $2)
       ORDER BY wp.serial_number`,
     [input.deviceLibraryIdentifier, sinceParam],
@@ -629,4 +752,11 @@ function zipStore(files: Array<{ name: string; data: Buffer }>): Buffer {
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(centralOffset, 16);
   return Buffer.concat([...local, ...central, end]);
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!,
+  );
 }

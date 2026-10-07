@@ -10,12 +10,16 @@ export function QrCode({
   value,
   label,
   className,
+  variant = "card",
+  showValue = true,
 }: {
   /** Encoded content; renders a "not available" placeholder card when null/undefined. */
   value: string | null | undefined;
   /** Caption under the code and title on the SVG, e.g. the ticket/badge id. */
   label: string;
   className?: string;
+  variant?: "card" | "plain";
+  showValue?: boolean;
 }) {
   const { t } = useLocale();
   const copyToClipboard = useCopyToClipboard();
@@ -28,7 +32,7 @@ export function QrCode({
   }
 
   return (
-    <div className={cn("rounded-lg border p-4", className)}>
+    <div className={cn(variant === "card" && "rounded-lg border p-4", className)}>
       <div className="flex flex-col items-center gap-3">
         <QRCodeSVG
           value={value}
@@ -42,9 +46,11 @@ export function QrCode({
         />
         <div className="w-full space-y-2">
           <p className="text-muted-foreground text-xs">{label}</p>
-          <code className="bg-muted block overflow-x-auto rounded-md px-2 py-1 font-mono text-xs">
-            {value}
-          </code>
+          {showValue && (
+            <code className="bg-muted block overflow-x-auto rounded-md px-2 py-1 font-mono text-xs">
+              {value}
+            </code>
+          )}
           <Button
             type="button"
             variant="outline"

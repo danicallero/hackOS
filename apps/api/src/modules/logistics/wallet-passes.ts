@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type pg from "pg";
-import { pool, withTransaction } from "../../db/pool.js";
+import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { hasEventAccess } from "../identity/role.js";
@@ -299,13 +299,13 @@ export async function ensureGooglePassRecord(
  * they're still servable via the webservice re-fetch path and should reflect
  * up-to-date content too.
  */
-export async function bumpAllAppleWalletUpdateTags(): Promise<number[]> {
+export async function bumpAllAppleWalletUpdateTags(db: Queryable = pool): Promise<number[]> {
   // H28 / #896: a device cursor is the maximum tag across its passes.
   // Advance beyond all existing Apple tags even when the DB clock lags
   // issuance's Node clock; the row floor also protects concurrent bumps.
   // Numeric casts accept fractional legacy tags still written on badge
   // rotation, while the resulting tag remains integer milliseconds (0504).
-  const { rows } = await pool.query(
+  const { rows } = await db.query(
     `UPDATE wallet_passes SET update_tag = GREATEST(
         (extract(epoch FROM clock_timestamp()) * 1000)::bigint,
         update_tag::numeric::bigint + 1,

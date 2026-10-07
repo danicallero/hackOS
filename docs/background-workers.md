@@ -48,6 +48,8 @@ queue no matter how many times scheduling runs (idempotent scheduling).
 | `scheduled-visibility-publisher` | `challenges/visibility-publisher.ts` | **15 s** | reveals challenge visibility whose scheduled time has passed |
 | `schedule-visibility-publisher` | `logistics/schedule-publisher.ts` | **15 s** | reveals audience-tagged schedule items whose publish time has passed |
 
+| `logistics.wallet-operations` | `logistics/wallet-operations.ts` | **15 s** | claims durable manual Wallet alert/refresh deliveries one at a time, with leases, provider isolation and five per-pass attempts; see [Wallet architecture](./event-config-wallet.md) |
+
 Repeatable jobs use a fixed `jobId`, so scheduling the same tick more than once
 does not create duplicate schedulers.
 
@@ -63,7 +65,7 @@ best-effort and rely on that source record or a later domain sync.
 | `account-removal-retries` | `identity/removal.ts` | retries provider/storage cleanup and H54 finalization; the pending account row remains the operator recovery record |
 | `data-subject-requests` | `exports/requests.service.ts` | builds an export or executes an administrator-requested removal for one DSR row |
 | `logistics.meal-scans` | `logistics/offline-meals.ts` | processes one persisted offline meal-scan batch, keyed by `(device_id, client_scan_id)` |
-| `logistics.wallet-sync` | `logistics/wallet-sync.ts` | sends Apple push updates or expires Google Wallet objects after pass changes |
+| `logistics.wallet-sync` | `logistics/wallet-sync.ts` | sends Apple push updates, refreshes Google event classes, or expires Google objects; completes fan-out before surfacing failures, with five attempts and exponential backoff starting at 5 s |
 | `queue-participant-invalidations` | `queue/notify.ts` | debounced H38 read-model refresh fan-out by current queue group; topology changes carry old/new memberships and called/pre-call notifications remain immediate |
 
 Each tick function is **exported** (e.g. `dispatchOutboxOnce`, `pumpTick`,

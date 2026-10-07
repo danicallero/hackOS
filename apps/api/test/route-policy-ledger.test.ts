@@ -13,8 +13,8 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(386);
-    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(19);
+    expect(rows).toHaveLength(393);
+    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(20);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
     expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(69);
     // +2 (H8): GET .../seed-diff and POST .../reset-to-default, both gated
@@ -33,7 +33,7 @@ describe("final route-policy ledger", () => {
     // degree rows.
     // +6 (H27): the generic scope catalog, aggregate query, safe CSV export,
     // and generic scope visibility GET/PUT/DELETE routes.
-    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(215);
+    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(221);
     expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(71);
     expect(app.routePolicyExemptions).toEqual([
       { url: "/api/auth/*", exemption: "better-auth-generated" },
@@ -59,6 +59,7 @@ describe("final route-policy ledger", () => {
       "GET /api/tv/mode",
       "GET /api/tv/rooms",
       "GET /api/tv/stream",
+      "GET /api/wallet/artwork/:id/:scale.png",
       "GET /healthz",
       "GET /metrics",
       "GET /readyz",

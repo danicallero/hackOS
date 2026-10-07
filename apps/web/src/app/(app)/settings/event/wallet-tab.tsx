@@ -33,6 +33,7 @@ import { toast } from "@/lib/toast";
 import type { EventConfig, PassBackField } from "@/lib/types";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
+import { WalletRuntimeEditor } from "./wallet-runtime-editor";
 
 /**
  * Front inputs are prefilled with the RESOLVED caption (override or default)
@@ -397,81 +398,89 @@ export function WalletTab({
   const liveVenueName = config.venueName?.trim() ?? "";
 
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        void handleSave();
-      }}
-    >
-      <SectionCard
-        variant="plain"
-        footerClassName="justify-start"
-        stickyFooter
-        footer={<FormActions pending={submitting} state={saveState} />}
+    <>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleSave();
+        }}
       >
-        <div className="space-y-2">
-          <p className="text-sm font-medium">{t("passFrontFieldsLabel")}</p>
-          <PassFrontFieldsEditor
-            labels={passFieldLabels}
-            onLabelsChange={markDirty(setPassFieldLabels)}
+        <SectionCard
+          variant="plain"
+          footerClassName="justify-start"
+          stickyFooter
+          footer={<FormActions pending={submitting} state={saveState} />}
+        >
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t("passFrontFieldsLabel")}</p>
+            <PassFrontFieldsEditor
+              labels={passFieldLabels}
+              onLabelsChange={markDirty(setPassFieldLabels)}
+              visibility={passFieldVisibility}
+              onVisibilityChange={markDirty(setPassFieldVisibility)}
+            />
+          </div>
+
+          <PassPreview
             visibility={passFieldVisibility}
-            onVisibilityChange={markDirty(setPassFieldVisibility)}
+            labels={passFieldLabels}
+            eventName={liveEventName}
+            venueName={liveVenueName}
+            organizerName={config.organizerName}
+            backFields={passBackFields}
           />
-        </div>
 
-        <PassPreview
-          visibility={passFieldVisibility}
-          labels={passFieldLabels}
-          eventName={liveEventName}
-          venueName={liveVenueName}
-          organizerName={config.organizerName}
-          backFields={passBackFields}
-        />
-
-        <Collapsible>
-          <CollapsibleTrigger asChild>
-            <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
-              <CaretDownIcon aria-hidden="true" className="size-4" />
-              {t("walletAdvancedFieldsToggle")}
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-4 pt-3">
-            <div className="space-y-2">
-              <p className="text-sm font-medium">{t("passBackBuiltinLabel")}</p>
-              {/* Same order as on the actual pass: event, venue, then "Organized by" last. */}
-              <BuiltinBackFieldRow
-                title={t("eventTitle")}
-                caption={passFieldLabels.event ?? ""}
-                onCaptionChange={(v) =>
-                  markDirty(setPassFieldLabels)({ ...passFieldLabels, event: v })
-                }
-                value={liveEventName || null}
-              />
-              <BuiltinBackFieldRow
-                title={t("venueSectionTitle")}
-                caption={passFieldLabels.location ?? ""}
-                onCaptionChange={(v) =>
-                  markDirty(setPassFieldLabels)({ ...passFieldLabels, location: v })
-                }
-                value={liveVenueName || null}
-              />
-              <BuiltinBackFieldRow
-                title={t("passFieldOrganizerTitle")}
-                caption={passFieldLabels.organizedBy ?? ""}
-                onCaptionChange={(v) =>
-                  markDirty(setPassFieldLabels)({ ...passFieldLabels, organizedBy: v })
-                }
-                value={config.organizerName || null}
-                note={t("passFillOrganizer")}
-              />
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">{t("passBackFieldsLabel")}</p>
-              <BackFieldBuilder value={passBackFields} onChange={markDirty(setPassBackFields)} />
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      </SectionCard>
-    </form>
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground -ml-2"
+              >
+                <CaretDownIcon aria-hidden="true" className="size-4" />
+                {t("walletAdvancedFieldsToggle")}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4 pt-3">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">{t("passBackBuiltinLabel")}</p>
+                {/* Same order as on the actual pass: event, venue, then "Organized by" last. */}
+                <BuiltinBackFieldRow
+                  title={t("eventTitle")}
+                  caption={passFieldLabels.event ?? ""}
+                  onCaptionChange={(v) =>
+                    markDirty(setPassFieldLabels)({ ...passFieldLabels, event: v })
+                  }
+                  value={liveEventName || null}
+                />
+                <BuiltinBackFieldRow
+                  title={t("venueSectionTitle")}
+                  caption={passFieldLabels.location ?? ""}
+                  onCaptionChange={(v) =>
+                    markDirty(setPassFieldLabels)({ ...passFieldLabels, location: v })
+                  }
+                  value={liveVenueName || null}
+                />
+                <BuiltinBackFieldRow
+                  title={t("passFieldOrganizerTitle")}
+                  caption={passFieldLabels.organizedBy ?? ""}
+                  onCaptionChange={(v) =>
+                    markDirty(setPassFieldLabels)({ ...passFieldLabels, organizedBy: v })
+                  }
+                  value={config.organizerName || null}
+                  note={t("passFillOrganizer")}
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">{t("passBackFieldsLabel")}</p>
+                <BackFieldBuilder value={passBackFields} onChange={markDirty(setPassBackFields)} />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </SectionCard>
+      </form>
+      <WalletRuntimeEditor />
+    </>
   );
 }
