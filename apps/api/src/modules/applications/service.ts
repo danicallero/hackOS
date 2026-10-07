@@ -1946,6 +1946,7 @@ export interface ConfirmResult {
  * use the app". Never a session.
  */
 export interface EmailConfirmResult extends ConfirmResult {
+  holderName: string;
   walletToken: string;
   walletTokenExpiresAt: string;
   maskedEmail: string;
@@ -2087,7 +2088,7 @@ export async function confirmByToken(token: string): Promise<EmailConfirmResult>
       ? await issueWalletAccessToken(client, resp.user_id, "ticket")
       : null;
     const { rows: userRows } = await client.query(
-      `SELECT email FROM users
+      `SELECT name, surname, email FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
       [resp.user_id],
     );
@@ -2098,6 +2099,7 @@ export async function confirmByToken(token: string): Promise<EmailConfirmResult>
       // with event access, so there is no scoped Wallet credential to use.
       walletToken: grant?.token ?? "",
       walletTokenExpiresAt: grant?.expiresAt.toISOString() ?? "",
+      holderName: [userRows[0]?.name, userRows[0]?.surname].filter(Boolean).join(" "),
       maskedEmail: maskEmail((userRows[0]?.email as string | undefined) ?? ""),
     };
   });

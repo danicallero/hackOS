@@ -120,6 +120,7 @@ Google tickets use the platform's event-ticket resources, not Generic passes:
   `eventTicketObject` referencing the approved class configured by
   `GOOGLE_WALLET_EVENT_TICKET_CLASS_ID` (currently
   `3388000000023085754.pass.org.gpul.hackudc`).
+  The object is synchronized through REST first; the JWT carries only its ID.
   The object ID is unique and contains no internal user ID.
 - The JWT includes the required `origins` claim, derived from the `WEB_URL`
   origin, and is signed with the configured service-account key using RS256.
@@ -144,14 +145,39 @@ Google tickets use the platform's event-ticket resources, not Generic passes:
   backfilled as `generic` and are retired/expired when their owner next asks
   for a Google ticket; new ticket rows are `event_ticket`.
 
-Google's [add-to flow](https://developers.google.com/wallet/tickets/events/overview/add-to-google-wallet-flow)
-is intentionally asynchronous: generating a link does not call the REST API;
-the class/object are materialized when the holder saves the pass. Event-wide
-configuration updates therefore tolerate a not-yet-materialized class (404)
-and retry all other provider failures through the wallet worker. Before a
-production rollout, complete the issuer's [publishing-access](https://developers.google.com/wallet/tickets/events/test-and-go-live/request-publishing-access)
-requirements; newly-created issuers are limited to configured test users in
-Demo Mode.
+Google ticket classes must be created and approved before issuance. The API
+synchronizes the class and object before issuing an ID-only save JWT; the
+holder's save attaches that object to Wallet. The worker updates existing
+classes and objects after configuration edits. Complete the issuer's
+[publishing-access](https://developers.google.com/wallet/tickets/events/test-and-go-live/request-publishing-access)
+requirements; Demo Mode is limited to configured test users.
+
+### Google deployment isolation and branding (H28)
+
+Production and staging **must use different approved
+`GOOGLE_WALLET_EVENT_TICKET_CLASS_ID` values**, even when they share an issuer
+and service account. Google stores the event name, dates, venue, and template
+on the class. If both environments reference the same class, the last event
+settings save overwrites those shared fields for tickets from both deployments.
+The default class ID is also shared under one issuer; configure explicit IDs.
+
+Create/approve a class for each deployment in the Google Wallet console, set
+its full `<issuer>.<identifier>` ID in that deployment's API and worker env,
+and recreate both services. Production should retain the original class if
+production tickets already reference it; move staging to a new class, then
+save an actual event-setting change in production to restore the original
+class's content. Previously saved staging tickets still reference the old
+class and need replacement objects with new IDs; changing an env var or
+removing/re-adding the same object does not move them.
+
+`GOOGLE_WALLET_BACKGROUND_COLOR` defaults to Apple's light blue `#a3d5ff`.
+An explicit env value overrides it. Google uses its own native layout and text
+colors; logo/hero/wide-logo images must be publicly accessible HTTPS URLs set
+through `GOOGLE_WALLET_LOGO_URL`, `GOOGLE_WALLET_HERO_IMAGE_URL`, and
+`GOOGLE_WALLET_WIDE_LOGO_URL`. Apple bundles its artwork in the pass instead.
+Existing Google objects carry their own background color, so a class color
+change alone does not recolor those objects. The runtime refresh now also
+patches individual objects.
 
 ### How a device learns about a change (H28)
 
@@ -172,10 +198,15 @@ be pushed a fix — holders must re-add the pass.
 2. The `logistics.wallet-sync` worker sends an APNs push per registered device
    (`apple-push.ts`): empty payload, `apns-topic` = pass type id,
    `apns-push-type: alert` (background pushes get throttled/dropped by iOS).
+   Provider/device failures are collected after fan-out, so they do not block
+   other recipients. Failed jobs retry up to five attempts with exponential
+   backoff starting at five seconds; retries can repeat successful pushes.
 3. The device (pushed or pull-to-refresh) polls
    `GET /v1/devices/…/registrations/{ptid}?passesUpdatedSince=X`, where `X` is
    the `lastUpdated` we sent it last time; `appleChangedSerials` compares tags
-   **numerically** and returns the changed serials.
+   **numerically** and returns the changed serials. This collection request has
+   no `Authorization` header: the registered device library identifier is its
+   shared secret. Only that device’s registered Apple passes are returned.
 4. The device refetches each changed pass; the pass GET serves `Last-Modified`
    (from `update_tag`) and answers `304` to a matching `If-Modified-Since`.
 
@@ -188,12 +219,10 @@ phone won't update.
 `GET /api/me/wallet/apple/:purpose.pkpass` and the Google save-url endpoint
 are authenticated self-service routes: a signed-in user can issue only their
 own pass. The `/api/wallet/apple/v1/*` device protocol deliberately does not
-use browser sessions; every endpoint requires `Authorization: ApplePass
-<authenticationToken>`, validates that token against an Apple pass record, and
-the changed-registration poll additionally verifies that the token belongs to
-a pass registered on the requested device. This prevents a valid token for one
-pass from enumerating another device's serial numbers while preserving the
-native PassKit protocol.
+use browser sessions; registration, unregistration, and pass downloads require
+`Authorization: ApplePass <authenticationToken>`. Changed-pass polling authenticates
+with the registered device library identifier, as required by PassKit, and
+returns only that device’s registered Apple serials.
 
 ## 3. The settings page (apps/web/src/app/(app)/settings/event/page.tsx)
 
@@ -250,12 +279,13 @@ around that rule:
   entirely: the pass belongs to the token's user even if a *different* account
   is signed in on that browser. A ticket-scoped token cannot fetch a badge
   pass. Anything else — `/api/me`, `/api/me/wallet/*` — still answers 401.
-- The page's **primary** action is Add to Apple/Google Wallet; the QR is behind
-  a "Show ticket code" toggle for anyone without a wallet app.
-- Opening the link **ends any session in that browser** (Better Auth sign-out
-  from the client), and says so. If the session belonged to another account,
-  the notice names the masked email the ticket belongs to. "Go to app" signs
-  out and routes to `/login`, so reaching the app is always a fresh sign-in.
+- The page shows Add to Apple/Google Wallet alongside a visible QR for scanning
+  at the door.
+- The page shows the holder’s name and masked email, Wallet buttons and the
+  ticket QR together. A session belonging to the holder is preserved and
+  "Go to app" opens the schedule. A different account is signed out with an
+  explicit notice; anonymous visitors continue through `/login`. The token
+  itself never creates a session, and scoped pass requests always use its owner.
 
 `WalletButtons` (`apps/web/src/components/common/wallet-buttons.tsx`) is shared
 by this page and the signed-in wallet page; passing `accessToken` switches it to
@@ -293,3 +323,123 @@ artwork and aspect ratio; Galician uses Spanish artwork. Email buttons open
 `/wallet?add=apple` or `?add=google`, retaining the action through login, then
 request the authenticated recipient's pass. A separate `/wallet` link remains
 available. No long-lived sessionless Wallet credential is issued.
+
+## Runtime editor, artwork, actions, and manual operations (H28/H53)
+
+Settings → Event → Wallet passes now controls both providers. Existing
+`passFieldLabels`, `passFieldVisibility`, and `passBackFields` drive Apple
+fields and Google card/detail templates. Google renders its own native card;
+it shows at most ten text modules per class/object, so overflow back fields
+are grouped in the last details block rather than dropped. URL-valued back
+fields become clickable links. Dates use doors-open time on both platforms.
+
+The separate `wallet_settings` singleton (`0501`, with nullable override
+columns) stores common background,
+Apple value/label colors, website, schedule deep link, action visibility,
+App Store ID, Android package/store link, and native Apple/Google options.
+`GET/PUT /api/event/wallet` requires `WALLET_MANAGE`; writes are audited in
+one transaction with the Apple update-tag bump, then provider refresh is
+queued. The editor groups shared content and actions, Apple-only options,
+Google-only options, then each provider's artwork. Shared front/back fields
+are entered once and reused by both providers. Apple description, logo text,
+sharing, and Google issuer/country have labeled controls; provider JSON is an
+expert-only disclosure for fields without a dedicated control (semantic tags,
+templates, messages, and links). Signing/account identity, pass identifiers, QR credentials,
+authentication tokens, provider review state, and revocation state cannot be
+overridden. Apple always retains its managed alert field. A malformed
+provider-specific option can still be refused by the provider; use the linked
+native schemas and verify on devices before event-wide use.
+Every unsaved setting resolves from its deployment environment: the existing
+`GOOGLE_WALLET_BACKGROUND_COLOR`, `APPLE_PASS_APP_STORE_ID`, Google image URLs,
+and `MOBILE_APP_SCHEME`, plus the `WALLET_*` appearance, link, and native-option
+variables. A Save leaves fields equal to the current deployment value unset,
+so later environment changes still flow through to untouched fields.
+`DELETE /api/event/wallet` clears the field overrides and restores
+those environment values; artwork uses its own per-slot reset. This lets a
+deployment retain its own branding until a manager intentionally saves an
+override, and reverts cleanly when one is removed.
+
+### Artwork served by hackOS
+
+`GET /api/event/wallet` returns the selected artwork and default previews.
+The Apple icon, logo, and strip previews are served from the exact bundled
+files in `apps/api/assets/apple-wallet` by
+`GET /api/wallet/artwork/default/:slot/:scale.png`; the bundled logo currently
+has 1× and 2× files, while the icon and strip have all three scales. Unset
+Google slots preview their deployment image URL, when configured.
+
+`POST /api/event/wallet/artwork/:slot` accepts PNG/JPEG/WebP up to 5 MB per file and
+20 megapixels. Apple uploads can contain `file` (1×), `file2x`, and `file3x`
+in one request. Sharp validates/decodes each image, strips source metadata,
+rotates for orientation, and generates normalized PNG files in S3. Missing
+Apple scales are derived from the largest uploaded variant. Apple slots
+include icon, logo, strip, background, thumbnail, and footer, at 1×/2×/3×.
+Google slots include logo, wide logo, hero, and details image. Strip/hero
+images use cover cropping; the other slots preserve proportions with transparent
+padding. Shared slot dimensions live in `packages/shared/src/wallet-settings.ts`.
+Uploads select the new revision immediately and enqueue pass updates. Reset
+restores bundled Apple artwork or the deployment-configured Google image.
+
+The public `GET /api/wallet/artwork/:id/:scale.png` route serves only published
+artwork IDs, with immutable caching. It never accepts arbitrary storage keys.
+Google receives these API URLs; Apple embeds the S3 bytes in the signed pass.
+Both API and worker need the existing S3 configuration. `BETTER_AUTH_URL`
+must be publicly reachable over HTTPS for Google to fetch the artwork.
+Previously published image revisions remain available because saved passes
+and provider caches can still reference them. Include this prefix in S3 backups.
+
+### Actions and app links
+
+Apple's iOS 27 `featuredActions` supports two native action tiles: `place` for
+venue directions and `viewSchedule` for the configurable app schedule link
+(default `hackos:///schedule`). Older OS versions retain the same actions as
+clickable back fields, plus the website (default `https://os.hackudc.com`).
+Tickets also supply venue/date semantic metadata. This change preserves the
+classic event-ticket artwork; adopting a poster style requires its documented
+semantic fields and image assets through native options.
+
+Google uses directions/website/schedule links and `appLinkData`:
+`androidAppLinkInfo.appTarget.packageName` defaults to `com.hackudc.os` and
+`webAppLinkInfo` points to the website. The Play Store URL is also available
+in pass details. Native JSON overrides can customize these targets. Google
+controls how its client renders the app/open/install affordance.
+
+### Manual alerts and refresh
+
+`POST /api/event/wallet/operations` accepts either `{kind:"refresh"}` or
+`{kind:"alert",translations:{es:{title,body},gl:{title,body},en:{title,body}}}`.
+Both require `WALLET_MANAGE`, are audited, support Idempotency-Key, and return
+202 with a durable operation ID and delivery counts. Recipients are active,
+entitled passes in the operator's real/synthetic scope. Event-wide settings
+and graphics cannot be modified by synthetic operators. A row lock serializes
+the event-wide limit of three alerts per scope per rolling 24 hours.
+
+The `logistics.wallet-operations` tick runs every 15 seconds, claims individual
+pass deliveries with a lease, and retries each independently up to five times
+with exponential backoff. No provider call holds the producer transaction.
+Restarting a worker resumes pending rows. `GET /api/event/wallet/operations/:id`
+reports queued, sent, failed, and skipped counts, scoped to real/test accounts.
+“Sent” means provider acceptance, not a delivery/read receipt.
+
+Apple APNs is a refresh signal, not an arbitrary notification payload. Alerts
+update a persistent back field with `changeMessage:"%@"`; iOS may show the
+changed value after fetching the pass. Identical repeated message text need
+not create a second notification. Google uses object-level
+`addMessage` with `TEXT_AND_NOTIFY`, checking the stable operation message ID
+before retrying to avoid duplicate messages after an interrupted response.
+Notifications depend on provider limits, user preferences, and connectivity.
+
+A manual refresh advances Apple tags and requests a fetch; Google patches the
+class and full individual object, including fields, color, graphics and
+validity. Google Save links now synchronize full class/object content through
+REST and carry only the object ID in the signed JWT, keeping long customization
+out of Google's recommended 1,800-character save URL. Ticket classes must
+already be approved and isolated per environment.
+
+Primary provider references:
+- [Google event pass builder](https://developers.google.com/wallet/tickets/events/resources/pass-builder)
+- [Google card/detail templates](https://developers.google.com/wallet/reference/rest/v1/ClassTemplateInfo)
+- [Google messages and notifications](https://developers.google.com/wallet/tickets/events/use-cases/trigger-push-notifications)
+- [Google app links](https://developers.google.com/wallet/reference/rest/v1/AppLinkData)
+- [Apple featured actions](https://developer.apple.com/videos/play/wwdc2026/209/)
+- [Apple pass fields and change messages](https://developer.apple.com/documentation/walletpasses/passfieldcontent)

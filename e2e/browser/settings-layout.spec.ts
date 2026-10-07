@@ -51,6 +51,24 @@ test.beforeEach(async ({ page }) => {
         judgingStartsAt: null,
         judgingEndsAt: null,
       };
+    if (path === "/api/event/wallet")
+      body = {
+        backgroundColor: "#a3d5ff",
+        foregroundColor: "#000000",
+        labelColor: "#000000",
+        websiteUrl: "https://os.hackudc.com",
+        showDirections: true,
+        showSchedule: true,
+        scheduleUrl: "hackos:///schedule",
+        appleAppStoreId: null,
+        androidPackageName: "com.example.hackos",
+        androidStoreUrl: "https://play.google.com/store/apps/details?id=com.example.hackos",
+        appleOptions: {},
+        googleClassOptions: {},
+        googleObjectOptions: {},
+        artwork: {},
+        artworkDefaults: {},
+      };
     if (path === "/api/me/notification-preferences") {
       body = {
         channels: ["in_app", "email", "push"],
@@ -139,7 +157,9 @@ for (const tab of ["venue", "wallet", "presence", "invites", "danger"] as const)
     const panel = page.getByRole("tabpanel");
     if (tab === "danger") await expect(panel.getByRole("heading").first()).toBeVisible();
     else
-      await expect(panel.getByRole("button", { name: "Save changes", exact: true })).toBeVisible();
+      await expect(
+        panel.getByRole("button", { name: "Save changes", exact: true }).first(),
+      ).toBeVisible();
     await expect
       .poll(async () =>
         page.getByRole("tab", { selected: true }).evaluate((element) => {
@@ -150,7 +170,9 @@ for (const tab of ["venue", "wallet", "presence", "invites", "danger"] as const)
       )
       .toBe(true);
     if (tab !== "danger") {
-      await expect(panel.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(1);
+      await expect(panel.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(
+        tab === "wallet" ? 2 : 1,
+      );
     }
     if (tab === "venue") {
       const ssid = await panel.getByLabel("Network name", { exact: true }).boundingBox();
@@ -206,7 +228,7 @@ for (const [tab, inputLabel] of [
     const input = panel.getByLabel(inputLabel, { exact: true }).first();
     await expect(input).toBeVisible();
     await input.fill("Edited caption");
-    await expect(panel.getByRole("status")).toContainText("Unsaved");
+    await expect(panel.getByRole("status").filter({ hasText: "Unsaved" })).toBeVisible();
     const request = page.waitForRequest(
       (request) => request.method() === "PUT" && new URL(request.url()).pathname === "/api/event",
     );
@@ -215,7 +237,7 @@ for (const [tab, inputLabel] of [
     if (tab === "event") expect(body.name).toBe("Edited caption");
     if (tab === "venue") expect(body.venueName).toBe("Edited caption");
     if (tab === "wallet") expect(body.passFieldLabels.participant).toBe("Edited caption");
-    await expect(panel.getByRole("status")).toContainText("Saved");
+    await expect(panel.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
     await expect(page.locator("[data-sileo-toast]")).toContainText("Saved");
   });
 }

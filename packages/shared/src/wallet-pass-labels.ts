@@ -1,5 +1,5 @@
 /**
- * Customizable caption text shown on the Apple Wallet pass (H28) — e.g.
+ * Customizable caption text shown on Apple/Google Wallet passes (H28) — e.g.
  * "Participant", "Role", "University". Organizers override these from the
  * event settings page instead of a developer editing wallet.ts; add new
  * customizable captions HERE, never as inline string literals in wallet.ts
@@ -48,8 +48,8 @@ export function resolvePassFieldLabels(
 }
 
 /**
- * Per-field show/hide toggles for the auto-filled front fields of the Apple
- * Wallet pass (H28). Every field defaults to visible; organizers can hide
+ * Per-field show/hide toggles for the auto-filled front fields of Apple/Google
+ * Wallet passes (H28). Every field defaults to visible; organizers can hide
  * e.g. the email from the event settings page. Keys match the pass.json
  * field keys built in wallet.ts.
  */

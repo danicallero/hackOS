@@ -43,7 +43,7 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
         body: confirmTokenSchema,
         summary: "Confirm a spot from the acceptance email",
         description:
-          "Public confirm for the token in the acceptance email (H15). The token is a single-purpose identity assertion, NOT a session: this route ignores cookies, issues no session, and grants nothing beyond this action (issue #369). The target account's primary email must be verified before the accepted response can advance to confirmed. Confirmation assigns the roles configured on the form, then returns an entrance ticket and `wallet_token` only when those roles (or another assigned role) grant event access. The historical string fields remain present for the already-published client and are empty when no role grants access; a scoped non-empty credential is valid for one hour and can only fetch THIS user's entrance pass from /api/wallet/scoped/apple/ticket.pkpass or /api/wallet/scoped/google/ticket. The response also includes `user_id` and `masked_email` so the landing page can identify the account and prompt the visitor to sign in as that person. A second confirm is idempotent (`already_confirmed`) and re-evaluates current role access.",
+          "Public confirm for the token in the acceptance email (H15). The token is a single-purpose identity assertion, NOT a session: this route ignores cookies, issues no session, and grants nothing beyond this action (issue #369). The target account's primary email must be verified before the accepted response can advance to confirmed. Confirmation assigns the roles configured on the form, then returns an entrance ticket and `wallet_token` only when those roles (or another assigned role) grant event access. The historical string fields remain present for the already-published client and are empty when no role grants access; a scoped non-empty credential is valid for one hour and can only fetch THIS user's entrance pass from /api/wallet/scoped/apple/ticket.pkpass or /api/wallet/scoped/google/ticket. The response also includes `user_id`, `holder_name`, and `masked_email` so the landing page can identify the account and prompt the visitor to sign in as that person. A second confirm is idempotent (`already_confirmed`) and re-evaluates current role access.",
         response: { 200: confirmByEmailResponseSchema },
       },
     },
@@ -55,6 +55,7 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
         ticket_token: res.ticketToken,
         user_id: res.userId,
         masked_email: res.maskedEmail,
+        holder_name: res.holderName,
         wallet_token: res.walletToken,
         wallet_token_expires_at: res.walletTokenExpiresAt,
       };

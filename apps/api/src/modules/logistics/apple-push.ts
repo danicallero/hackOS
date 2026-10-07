@@ -52,6 +52,9 @@ export async function sendApplePush(pushToken: string, passTypeIdentifier: strin
       // becomes an uncaught EventEmitter error and terminates the whole
       // worker process instead of allowing BullMQ to retry this job.
       req.once("error", reject);
+      req.setTimeout(15_000, () => {
+        req.destroy(new Error("APNs request timed out"));
+      });
       req.setEncoding("utf8");
       let status = 0;
       req.on("response", (headers) => {

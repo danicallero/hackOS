@@ -25,3 +25,9 @@ the handler and therefore emit no second broadcast.
 All web and mobile mutation helpers attach an `Idempotency-Key` when one was
 not supplied. Scanner/offline callers retain their operation key and therefore
 reuse it across transport retries.
+
+Wallet runtime operations (H28): `POST /api/event/wallet/operations` accepts
+Idempotency-Key and retains a unique actor/request key in its durable operation
+record. Retries cannot queue a second alert or consume a second quota slot.
+Artwork uploads use the shared request idempotency guard; immutable published
+image revisions remain available for existing pass/provider caches.

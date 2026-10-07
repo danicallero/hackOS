@@ -1139,7 +1139,6 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     "/api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier",
     {
       ...routeAccess(access.applePasskit),
-      preHandler: requireAppleWebServiceToken,
       schema: {
         params: appleDeviceParams.omit({ serialNumber: true }),
         querystring: appleRegistrationsQuery,
@@ -1148,7 +1147,6 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const r = await appleChangedSerials({
         ...req.params,
-        authorization: req.headers.authorization,
         passesUpdatedSince: req.query.passesUpdatedSince,
       });
       if (r.serialNumbers.length === 0) return reply.code(204).send();

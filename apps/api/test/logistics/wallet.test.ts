@@ -1,3 +1,8 @@
+import {
+  googleProviderFetch,
+  lastGoogleObject,
+  stubGoogleProvider,
+} from "./google-provider-fixtures.js";
 import "./env.js";
 import "./wallet-fixtures.js";
 import { execFileSync } from "node:child_process";
@@ -7,6 +12,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import sharp from "sharp";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
 import {
@@ -29,6 +35,8 @@ const pushState = vi.hoisted(() => ({
   lastRequest: null as { path: string; topic: string; pushType: string } | null,
   status: 200,
   requestError: null as Error | null,
+  requests: [] as string[],
+  failToken: null as string | null,
 }));
 
 vi.mock("node:http2", () => {
@@ -37,6 +45,9 @@ vi.mock("node:http2", () => {
       const session = new EventEmitter() as EventEmitter & Record<string, unknown>;
       session.close = () => {};
       session.request = (headers: Record<string, string>) => {
+        pushState.requests.push(headers[":path"]!);
+        const requestStatus =
+          headers[":path"] === `/3/device/${pushState.failToken}` ? 500 : pushState.status;
         pushState.lastRequest = {
           path: headers[":path"]!,
           topic: headers["apns-topic"]!,
@@ -44,6 +55,7 @@ vi.mock("node:http2", () => {
         };
         const stream = new EventEmitter() as EventEmitter & Record<string, unknown>;
         stream.setEncoding = () => {};
+        stream.setTimeout = () => {};
         stream.end = () => {
           if (pushState.requestError) {
             const error = pushState.requestError;
@@ -51,7 +63,7 @@ vi.mock("node:http2", () => {
             return;
           }
           queueMicrotask(() => {
-            stream.emit("response", { ":status": pushState.status });
+            stream.emit("response", { ":status": requestStatus });
             stream.emit("end");
           });
         };
@@ -65,6 +77,7 @@ vi.mock("node:http2", () => {
 let app: App;
 
 beforeEach(async () => {
+  stubGoogleProvider();
   await truncateAll();
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
@@ -72,6 +85,8 @@ beforeEach(async () => {
   pushState.lastRequest = null;
   pushState.status = 200;
   pushState.requestError = null;
+  pushState.requests = [];
+  pushState.failToken = null;
 });
 
 afterEach(() => {
@@ -289,6 +304,7 @@ describe("H28 Apple Wallet PassKit", () => {
       key: "custom-0",
       label: "Schedule",
       value: "https://example.com/schedule",
+      attributedValue: '<a href="https://example.com/schedule">Schedule</a>',
     });
     expect(pass.locations).toEqual([
       {
@@ -445,13 +461,12 @@ describe("H28 Apple Wallet PassKit", () => {
     const changed = await app.inject({
       method: "GET",
       url: `/api/wallet/apple/v1/devices/device-1/registrations/${PASS_TYPE_IDENTIFIER}`,
-      headers: { authorization: `ApplePass ${token}` },
     });
     expect(changed.statusCode).toBe(200);
     expect(changed.json().serialNumbers).toContain(serial);
   });
 
-  it("rejects missing, forged, and cross-device ApplePass tokens", async () => {
+  it("accepts tokenless polling only for registered device identifiers (H28)", async () => {
     const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
     const { pool } = await import("../../src/db/pool.js");
     const owner = await createUser();
@@ -474,7 +489,6 @@ describe("H28 Apple Wallet PassKit", () => {
       [[owner, other]],
     );
     const ownerPass = passes.rows.find((pass) => pass.user_id === owner)!;
-    const otherPass = passes.rows.find((pass) => pass.user_id === other)!;
     const baseUrl = `/api/wallet/apple/v1/devices/device-token/registrations/${PASS_TYPE_IDENTIFIER}`;
 
     const register = await app.inject({
@@ -485,34 +499,22 @@ describe("H28 Apple Wallet PassKit", () => {
     });
     expect(register.statusCode).toBe(201);
 
-    expect((await app.inject({ method: "GET", url: baseUrl })).statusCode).toBe(401);
+    const poll = await app.inject({ method: "GET", url: baseUrl });
+    expect(poll.statusCode).toBe(200);
+    expect(poll.json().serialNumbers).toEqual([ownerPass.serial_number]);
     expect(
-      (
-        await app.inject({
-          method: "GET",
-          url: baseUrl,
-          headers: { authorization: "ApplePass forged" },
-        })
-      ).statusCode,
+      (await app.inject({ method: "GET", url: baseUrl.replace("device-token", "unknown-device") }))
+        .statusCode,
     ).toBe(401);
     expect(
       (
         await app.inject({
-          method: "GET",
-          url: baseUrl,
-          headers: { authorization: `ApplePass ${otherPass.authentication_token}` },
+          method: "POST",
+          url: `${baseUrl}/${ownerPass.serial_number}`,
+          payload: { pushToken: "forged" },
         })
       ).statusCode,
     ).toBe(401);
-    expect(
-      (
-        await app.inject({
-          method: "GET",
-          url: baseUrl,
-          headers: { authorization: `ApplePass ${ownerPass.authentication_token}` },
-        })
-      ).statusCode,
-    ).toBe(200);
   });
 
   it.each([
@@ -576,7 +578,6 @@ describe("H28 Apple Wallet PassKit", () => {
     const first = await app.inject({
       method: "GET",
       url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}`,
-      headers: { authorization: `ApplePass ${pass.rows[0].authentication_token}` },
     });
     const lastUpdated: string = first.json().lastUpdated;
 
@@ -584,7 +585,6 @@ describe("H28 Apple Wallet PassKit", () => {
     const quiet = await app.inject({
       method: "GET",
       url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}?passesUpdatedSince=${lastUpdated}`,
-      headers: { authorization: `ApplePass ${pass.rows[0].authentication_token}` },
     });
     expect(quiet.statusCode).toBe(204);
 
@@ -609,7 +609,6 @@ describe("H28 Apple Wallet PassKit", () => {
     const afterChange = await app.inject({
       method: "GET",
       url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}?passesUpdatedSince=${lastUpdated}`,
-      headers: { authorization: `ApplePass ${pass.rows[0].authentication_token}` },
     });
     expect(afterChange.statusCode).toBe(200);
     expect(afterChange.json().serialNumbers.sort()).toEqual([serial, otherSerial].sort());
@@ -624,7 +623,6 @@ describe("H28 Apple Wallet PassKit", () => {
     const again = await app.inject({
       method: "GET",
       url: `/api/wallet/apple/v1/devices/device-poll/registrations/${PASS_TYPE_IDENTIFIER}?passesUpdatedSince=${afterChange.json().lastUpdated}`,
-      headers: { authorization: `ApplePass ${pass.rows[0].authentication_token}` },
     });
     expect(again.statusCode).toBe(200);
     expect(again.json().serialNumbers.sort()).toEqual([serial, otherSerial].sort());
@@ -728,7 +726,7 @@ describe("H28 Apple Wallet PassKit", () => {
 });
 
 describe("H28 Google Wallet", () => {
-  it("issues a save link with the object embedded in the JWT payload", async () => {
+  it("issues a compact save link after synchronizing full pass content through REST", async () => {
     const uid = await createUser({ name: "Wallet" });
     await issueTicket(uid, "ticket-google-1");
 
@@ -747,11 +745,12 @@ describe("H28 Google Wallet", () => {
     expect(claims.iss).toBe("test@hackos-test.iam.gserviceaccount.com");
     expect(claims.origins).toEqual(["http://localhost:3001"]);
     expect(claims.payload.eventTicketClasses).toBeUndefined();
-    expect(claims.payload.eventTicketObjects[0]).toMatchObject({
+    expect(lastGoogleObject()).toMatchObject({
       classId: "3388000000022222222.hackos_event_ticket",
       ticketHolderName: "Wallet",
+      hexBackgroundColor: "#a3d5ff",
       ticketNumber: expect.stringMatching(/^ticket-/),
-      ticketType: { defaultValue: { value: "Event ticket" } },
+      ticketType: { defaultValue: { value: "Ticket" } },
       barcode: { value: "ticket-google-1" },
     });
     expect(claims.payload.genericObjects).toBeUndefined();
@@ -794,10 +793,8 @@ describe("H28 Google Wallet", () => {
     const jwt = res.json().saveUrl.slice("https://pay.google.com/gp/v/save/".length);
     const claims = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString("utf8"));
     expect(claims.payload.eventTicketClasses).toBeUndefined();
-    expect(claims.payload.eventTicketObjects[0].classId).toBe(
-      "3388000000022222222.hackos_event_ticket",
-    );
-    expect(claims.payload.eventTicketObjects[0].validTimeInterval).toEqual({
+    expect(lastGoogleObject().classId).toBe("3388000000022222222.hackos_event_ticket");
+    expect(lastGoogleObject().validTimeInterval).toEqual({
       start: { date: "2026-09-06T15:00:00.000Z" },
       end: { date: "2026-09-07T18:00:00.000Z" },
     });
@@ -827,7 +824,7 @@ describe("H28 Google Wallet", () => {
     );
     expect(JSON.parse(patchCall![1]!.body as string).dateTime).toEqual({
       doorsOpen: "2026-09-06T15:00:00.000Z",
-      start: "2026-09-06T19:00:00.000Z",
+      start: "2026-09-06T15:00:00.000Z",
       end: "2026-09-07T18:00:00.000Z",
     });
     expect(JSON.parse(patchCall![1]!.body as string).venue).toEqual({
@@ -837,7 +834,28 @@ describe("H28 Google Wallet", () => {
     expect(
       JSON.parse(patchCall![1]!.body as string).classTemplateInfo.cardTemplateOverride
         .cardRowTemplateInfos,
-    ).toHaveLength(2);
+    ).toHaveLength(3);
+
+    // PATCH must explicitly clear fields removed in the editor; omission
+    // would leave a stale venue/date/image on already saved Google passes.
+    await pool.query(
+      `UPDATE event_config SET event_starts_at=NULL, event_ends_at=NULL,
+         hacking_starts_at=NULL, hacking_ends_at=NULL, venue_name=NULL,
+         venue_latitude=NULL, venue_longitude=NULL WHERE id=1`,
+    );
+    await processWalletSync({ data: { passIds: [pass.rows[0].id], action: "refresh" } } as never);
+    const classPatches = fetchMock.mock.calls.filter(
+      ([url, init]) => url.includes("/eventTicketClass/") && init?.method === "PATCH",
+    );
+    expect(JSON.parse(classPatches.at(-1)![1]!.body as string)).toMatchObject({
+      dateTime: null,
+      venue: null,
+      locations: [],
+    });
+    const objectPatches = fetchMock.mock.calls.filter(
+      ([url, init]) => url.includes("/eventTicketObject/") && init?.method === "PATCH",
+    );
+    expect(JSON.parse(objectPatches.at(-1)![1]!.body as string).validTimeInterval).toBeNull();
   });
 
   it("migrates a legacy generic ticket before issuing an Event Ticket", async () => {
@@ -891,6 +909,162 @@ describe("H28 Google Wallet", () => {
     expect(patchCall?.[0]).toBe(
       `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${legacyObjectId}`,
     );
+  });
+});
+
+describe("H28 Wallet deployment defaults", () => {
+  it("restores environment-backed fields after a runtime customization", async () => {
+    const manager = await createUserWithCapabilities([CAPABILITIES.WALLET_MANAGE]);
+    const initial = await app.inject({
+      method: "GET",
+      url: "/api/event/wallet",
+      headers: asUser(manager),
+    });
+    expect(initial.statusCode).toBe(200);
+    const defaults = initial.json();
+    const { artwork: _artwork, artworkDefaults: _artworkDefaults, ...body } = defaults;
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/api/event/wallet",
+      headers: asUser(manager),
+      payload: {
+        ...body,
+        backgroundColor: "#112233",
+        websiteUrl: "https://event.example.org",
+        scheduleUrl: "hackos:///schedule",
+      },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().backgroundColor).toBe("#112233");
+    const { pool } = await import("../../src/db/pool.js");
+    const overrides = await pool.query(
+      `SELECT background_color, foreground_color, website_url FROM wallet_settings WHERE id=1`,
+    );
+    expect(overrides.rows[0]).toEqual({
+      background_color: "#112233",
+      foreground_color: null,
+      website_url: "https://event.example.org",
+    });
+
+    const restored = await app.inject({
+      method: "DELETE",
+      url: "/api/event/wallet",
+      headers: asUser(manager),
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json()).toMatchObject({
+      backgroundColor: defaults.backgroundColor,
+      websiteUrl: defaults.websiteUrl,
+      scheduleUrl: defaults.scheduleUrl,
+    });
+    const row = await pool.query(
+      `SELECT background_color, website_url, schedule_url, apple_options FROM wallet_settings WHERE id=1`,
+    );
+    expect(row.rows[0]).toEqual({
+      background_color: null,
+      website_url: null,
+      schedule_url: null,
+      apple_options: null,
+    });
+  });
+
+  it("publishes graphics and uses the selected revision in a signed Apple pass", async () => {
+    const manager = await createUserWithCapabilities([CAPABILITIES.WALLET_MANAGE]);
+    const holder = await createUser({ name: "Artwork" });
+    await issueTicket(holder, "ticket-artwork");
+    const { uploadWalletArtwork, readWalletArtwork } = await import(
+      "../../src/modules/logistics/wallet-settings.js"
+    );
+    const image = await sharp({
+      create: { width: 375, height: 98, channels: 4, background: "#112233" },
+    })
+      .png()
+      .toBuffer();
+    const settings = await uploadWalletArtwork(manager, "appleStrip", image);
+    const revision = settings.artwork.appleStrip;
+    expect(revision?.url).toMatch(/\/api\/wallet\/artwork\/[0-9a-f-]+\/1\.png$/);
+    expect(pngDimensions(await readWalletArtwork(revision!.id, 3))).toEqual({
+      width: 1125,
+      height: 294,
+    });
+    const pass = await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/ticket.pkpass",
+      headers: asUser(holder),
+    });
+    expect(pass.statusCode).toBe(200);
+    const entries = readStoredZipEntries(pass.rawPayload);
+    expect(entries["strip.png"]).toEqual(await readWalletArtwork(revision!.id, 1));
+  });
+
+  it("queues a trilingual alert once and delivers it to registered Apple and Google passes", async () => {
+    const manager = await createUserWithCapabilities([CAPABILITIES.WALLET_MANAGE]);
+    const holder = await createUser({ name: "Alert" });
+    await issueTicket(holder, "ticket-alert");
+    await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/ticket.pkpass",
+      headers: asUser(holder),
+    });
+    await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/google/ticket",
+      headers: asUser(holder),
+    });
+    const { pool } = await import("../../src/db/pool.js");
+    const apple = await pool.query(
+      `SELECT id FROM wallet_passes WHERE user_id=$1 AND platform='apple'`,
+      [holder],
+    );
+    await pool.query(
+      `INSERT INTO wallet_pass_devices(pass_id,device_library_identifier,push_token)
+       VALUES($1,'alert-device','alert-push')`,
+      [apple.rows[0].id],
+    );
+    const payload = {
+      kind: "alert",
+      translations: {
+        en: { title: "Doors open", body: "Come to the venue" },
+        es: { title: "Abren las puertas", body: "Ven al recinto" },
+        gl: { title: "Abren as portas", body: "Vén ao recinto" },
+      },
+    };
+    const headers = { ...asUser(manager), "idempotency-key": "wallet-alert-1" };
+    const queued = await app.inject({
+      method: "POST",
+      url: "/api/event/wallet/operations",
+      headers,
+      payload,
+    });
+    expect(queued.statusCode).toBe(202);
+    expect(queued.json().total).toBe(2);
+    const repeated = await app.inject({
+      method: "POST",
+      url: "/api/event/wallet/operations",
+      headers,
+      payload,
+    });
+    expect(repeated.json().id).toBe(queued.json().id);
+    const { processWalletOperations } = await import(
+      "../../src/modules/logistics/wallet-operations.js"
+    );
+    await processWalletOperations();
+    const status = await app.inject({
+      method: "GET",
+      url: `/api/event/wallet/operations/${queued.json().id}`,
+      headers: asUser(manager),
+    });
+    expect(status.json()).toMatchObject({ sent: 2, queued: 0, failed: 0 });
+    expect(pushState.requests).toContain("/3/device/alert-push");
+    const messageCalls = googleProviderFetch.mock.calls.filter(
+      ([url, init]) => url.endsWith("/addMessage") && init?.method === "POST",
+    );
+    expect(messageCalls).toHaveLength(1);
+    expect(JSON.parse(messageCalls[0]![1]!.body as string).message).toMatchObject({
+      header: "Doors open",
+      body: "Come to the venue",
+      messageType: "TEXT_AND_NOTIFY",
+    });
   });
 });
 
@@ -951,6 +1125,70 @@ describe("H28 badge rotation syncs both platforms", () => {
       `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${googleObjectId}`,
     );
     expect(JSON.parse(patchCall![1]!.body as string)).toEqual({ state: "EXPIRED" });
+  });
+
+  it("notifies Apple devices even when the Google class refresh fails (H28)", async () => {
+    const uid = await createUser();
+    await assignBadge(uid, "BADGE-PROVIDER-FAIL");
+    const appleId = await createBadgePass(uid, "apple");
+    await issueTicket(uid, "ticket-provider-fail");
+    const { buildGoogleSaveUrl } = await import("../../src/modules/logistics/google-wallet.js");
+    await buildGoogleSaveUrl(uid, "ticket");
+    const { pool } = await import("../../src/db/pool.js");
+    const google = await pool.query(
+      `SELECT id FROM wallet_passes WHERE user_id = $1 AND platform = 'google'`,
+      [uid],
+    );
+    await pool.query(
+      `INSERT INTO wallet_pass_devices (pass_id, device_library_identifier, push_token) VALUES ($1, 'provider-device', 'provider-push')`,
+      [appleId],
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.includes("oauth2")
+          ? new Response(JSON.stringify({ access_token: "test-token", expires_in: 3600 }), {
+              status: 200,
+            })
+          : new Response("unavailable", { status: 503 }),
+      ),
+    );
+    const { processWalletSync } = await import("../../src/modules/logistics/wallet-sync.js");
+    await expect(
+      processWalletSync({ data: { passIds: [appleId, google.rows[0].id], action: "refresh" } }),
+    ).rejects.toThrow(/Wallet sync failed|503/);
+    expect(pushState.requests).toContain("/3/device/provider-push");
+  });
+
+  it("continues to later devices after a push failure and enqueues retries (H28)", async () => {
+    const uid = await createUser();
+    await assignBadge(uid, "BADGE-DEVICE-FAIL");
+    const passId = await createBadgePass(uid, "apple");
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `INSERT INTO wallet_pass_devices (pass_id, device_library_identifier, push_token) VALUES ($1, 'failed-device', 'failed-push'), ($1, 'healthy-device', 'healthy-push')`,
+      [passId],
+    );
+    pushState.failToken = "failed-push";
+    const { enqueueWalletSync, processWalletSync } = await import(
+      "../../src/modules/logistics/wallet-sync.js"
+    );
+    await expect(processWalletSync({ data: { passIds: [passId] } })).rejects.toThrow("500");
+    expect(pushState.requests).toEqual(
+      expect.arrayContaining(["/3/device/failed-push", "/3/device/healthy-push"]),
+    );
+    await enqueueWalletSync([passId]);
+    const { getQueue } = await import("../../src/lib/queues.js");
+    const jobs = await getQueue("logistics.wallet-sync").getWaiting();
+    expect(
+      jobs.some(
+        (job) =>
+          job.opts.attempts === 5 &&
+          job.opts.backoff &&
+          typeof job.opts.backoff === "object" &&
+          job.opts.backoff.type === "exponential",
+      ),
+    ).toBe(true);
   });
 
   it("drops the device registration when APNs reports it unregistered (410)", async () => {

@@ -202,7 +202,7 @@ Además de las variables de las dependencias anteriores, `api` recibe:
 | Scanners | `RATE_LIMIT_SCAN_MAX`, `RATE_LIMIT_SCAN_WINDOW_SECONDS`, `RATE_LIMIT_MEAL_BATCH_MAX`, `RATE_LIMIT_MEAL_BATCH_WINDOW_SECONDS`, `RATE_LIMIT_SNAPSHOT_MAX`, `RATE_LIMIT_SNAPSHOT_WINDOW_SECONDS` |
 | Push | `LOG_EXPO_PUSH_TICKETS`, `LOG_EXPO_PUSH_TOKENS`, `LOG_EXPO_PUSH_UNSAFE_DEBUG` |
 | Traducción | `TRANSLATE_PROVIDER`, `GOOGLE_TRANSLATE_API_KEY`, `LIBRETRANSLATE_URL`, `LIBRETRANSLATE_API_KEY` |
-| Wallet | `APPLE_PASS_TYPE_IDENTIFIER`, `APPLE_TEAM_IDENTIFIER`, `APPLE_PASS_ORGANIZATION`, `APPLE_PASS_CERTIFICATE_PEM`, `APPLE_PASS_KEY_PEM`, `APPLE_PASS_KEY_PASSPHRASE`, `APPLE_WWDR_CERTIFICATE_PEM`, `APPLE_APNS_ENVIRONMENT`, `APPLE_PASS_APP_STORE_ID`, `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_EVENT_TICKET_CLASS_ID`, `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY_PEM`, `GOOGLE_WALLET_LOGO_URL`, `GOOGLE_WALLET_HERO_IMAGE_URL`, `GOOGLE_WALLET_WIDE_LOGO_URL`, `GOOGLE_WALLET_BACKGROUND_COLOR` |
+| Wallet | `APPLE_PASS_TYPE_IDENTIFIER`, `APPLE_TEAM_IDENTIFIER`, `APPLE_PASS_ORGANIZATION`, `APPLE_PASS_CERTIFICATE_PEM`, `APPLE_PASS_KEY_PEM`, `APPLE_PASS_KEY_PASSPHRASE`, `APPLE_WWDR_CERTIFICATE_PEM`, `APPLE_APNS_ENVIRONMENT`, `APPLE_PASS_APP_STORE_ID`, `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_EVENT_TICKET_CLASS_ID`, `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY_PEM`, `GOOGLE_WALLET_LOGO_URL`, `GOOGLE_WALLET_HERO_IMAGE_URL`, `GOOGLE_WALLET_WIDE_LOGO_URL`, `GOOGLE_WALLET_BACKGROUND_COLOR`, `WALLET_FOREGROUND_COLOR`, `WALLET_LABEL_COLOR`, `WALLET_WEBSITE_URL`, `WALLET_SHOW_DIRECTIONS`, `WALLET_SHOW_SCHEDULE`, `WALLET_SCHEDULE_URL`, `WALLET_ANDROID_PACKAGE_NAME`, `WALLET_ANDROID_STORE_URL`, `WALLET_APPLE_OPTIONS_JSON`, `WALLET_GOOGLE_CLASS_OPTIONS_JSON`, `WALLET_GOOGLE_OBJECT_OPTIONS_JSON` |
 | Fixtures | `REVIEW_FIXTURE_PASSWORD`, `REVIEW_FIXTURE_DELETION_PIN` |
 
 El API no recibe variables de correo ni la cuenta root de MinIO.
@@ -374,3 +374,14 @@ printing values, pulls pinned images, optionally runs the R2 backup and applies
 migrations only for an API-image change, and waits for healthchecks on each
 changed unit. Rollback selects an earlier SHA and does not automatically
 reverse database migrations.
+
+Google Wallet event classes must be isolated per deployment (H28): set distinct
+`GOOGLE_WALLET_EVENT_TICKET_CLASS_ID` values for staging and production in both
+API and worker. A shared issuer/service account is supported, but a shared
+class lets staging overwrite production's event name, dates, and template.
+`GOOGLE_WALLET_BACKGROUND_COLOR` defaults to `#a3d5ff`, matching Apple Wallet;
+runtime Wallet settings inherit these environment values until saved in the
+web editor. “Restore deployment defaults” clears the saved field overrides;
+each image slot can separately restore its bundled/URL fallback. The three
+`WALLET_*_OPTIONS_JSON` values must be JSON objects and default to `{}`.
+explicit values override it. See [Wallet architecture](./event-config-wallet.md).

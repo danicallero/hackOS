@@ -7,6 +7,7 @@ import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 
 /**
  * Apple only ships this badge for "es" and "en_US/en_GB" locales; "gl" falls
@@ -39,12 +40,13 @@ interface WalletButtonsProps {
    * to be signed in on this browser. Omit it for the signed-in wallet page.
    */
   accessToken?: string;
+  className?: string;
 }
 
 /**
  * The pair of official "Add to Wallet" buttons.
  */
-export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
+export function WalletButtons({ purpose, accessToken, className }: WalletButtonsProps) {
   const { t, language } = useLocale();
   const appleBadgeSrc = APPLE_WALLET_BADGE_BY_LOCALE[language] ?? APPLE_WALLET_BADGE_BY_LOCALE.en;
   const googleButtonSrc =
@@ -96,7 +98,7 @@ export function WalletButtons({ purpose, accessToken }: WalletButtonsProps) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className={cn("flex flex-wrap items-center gap-3", className)}>
       <a href={appleHref} className="button-interaction inline-flex w-fit rounded-md">
         {/* biome-ignore lint/performance/noImgElement: official Apple badge, must not be re-processed by next/image */}
         <img src={appleBadgeSrc} alt={t("addToAppleWallet")} className="h-12 w-auto" />
