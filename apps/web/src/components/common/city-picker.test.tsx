@@ -123,16 +123,18 @@ describe("CityPicker (H12)", () => {
   });
 
   it("shows a search failure when the request deadline expires", async () => {
-    const deadline = new AbortController();
-    vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
     fetchMock.mockImplementation(
       (_url, { signal }: { signal: AbortSignal }) =>
         new Promise((_resolve, reject) => {
-          signal.addEventListener("abort", () => reject(signal.reason));
+          signal.addEventListener("abort", () =>
+            reject(new DOMException("The user aborted a request.", "AbortError")),
+          );
         }),
     );
     await search();
-    await act(async () => deadline.abort(new DOMException("Timed out", "TimeoutError")));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8000);
+    });
     expect(container.textContent).toContain("searchFailed");
     expect(container.textContent).toContain("cityEnterManually");
   });
