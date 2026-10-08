@@ -262,10 +262,10 @@ export function ScheduleTimeline({
               {hours.map((hour) => (
                 <div
                   key={hour}
-                  className="border-border/70 absolute inset-x-0 border-t"
+                  className="border-border/70 absolute right-0 left-16 border-t"
                   style={{ top: scale.toY(hour) }}
                 >
-                  <time className="text-muted-foreground absolute -top-2.5 left-0 w-14 pr-2 text-right text-xs tabular-nums">
+                  <time className="text-muted-foreground absolute -top-2.5 -left-16 w-14 bg-shell pr-2 text-right text-xs tabular-nums">
                     {timeFormatter.format(new Date(hour))}
                   </time>
                 </div>

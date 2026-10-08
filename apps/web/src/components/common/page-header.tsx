@@ -56,7 +56,7 @@ export function PageHeader({
         {leading && <div className="shrink-0">{leading}</div>}
         <div className="min-w-0 space-y-1">
           {context && <div className="type-meta">{context}</div>}
-          <div className="flex flex-wrap items-center gap-(--space-related)">
+          <div className="heading-row min-h-(--line-height-page-title) flex flex-wrap items-center gap-(--space-related)">
             <Heading className="type-page-title text-balance">{title}</Heading>
             {state && <div className="shrink-0">{state}</div>}
           </div>

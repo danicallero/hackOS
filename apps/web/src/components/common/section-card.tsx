@@ -82,10 +82,16 @@ export function SectionCard({
               variant === "plain" && "min-h-(--control-height-compact) items-center",
             )}
           >
-            {leading ?? (Icon && <Icon className="text-muted-foreground mt-0.5 size-5 shrink-0" />)}
+            {leading && <div className="shrink-0">{leading}</div>}
+            {title === undefined && Icon && !leading && (
+              <Icon className="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
+            )}
             <div className="min-w-0 space-y-1">
               {title !== undefined && (
-                <div className="flex flex-wrap items-center gap-(--space-related)">
+                <div className="heading-row flex flex-wrap items-center gap-(--space-related)">
+                  {Icon && !leading && (
+                    <Icon className="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
+                  )}
                   <h2 id={titleId} className="type-section-title wrap-break-word text-balance">
                     {title}
                   </h2>

@@ -157,6 +157,26 @@
     line-height: var(--line-height-meta);
   }
 
+  /* Align visible capitals across display titles, icons and sans-serif counts. */
+  .heading-row {
+    min-height: var(--line-height-section-title);
+  }
+
+  .heading-row > :is(h1, h2):not(.heading-row),
+  .heading-row > .heading-label,
+  .heading-row > div > .type-meta {
+    text-box: trim-both cap alphabetic;
+  }
+
+  .heading-row > div {
+    display: flex;
+    align-items: center;
+  }
+
+  .heading-row > div > .type-meta {
+    display: block;
+  }
+
   /* A restrained, themed scrollbar keeps long editor panels from introducing
      platform-coloured chrome into the workspace. */
   * {
