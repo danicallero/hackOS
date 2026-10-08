@@ -1,3 +1,4 @@
+let mockLegacyRosterExists = true;
 const mockExecStatements: string[] = [];
 const mockRunStatements: Array<{ sql: string; args: unknown[] }> = [];
 
@@ -71,21 +72,41 @@ const mockDatabase = new FakeDatabase();
 
 jest.mock("expo-file-system", () => ({
   Directory: class {
-    exists = true;
+    uri: string;
+    constructor(...parts: Array<string | { uri: string }>) {
+      this.uri = parts.map((part) => (typeof part === "string" ? part : part.uri)).join("/");
+    }
+    get exists() {
+      // Android's java.io.File(URI) rejects SQLite's bare absolute path.
+      if (!this.uri.startsWith("file://")) throw new Error("URI is not absolute");
+      return true;
+    }
     create() {}
   },
   File: class {
-    exists = false;
+    uri: string;
+    constructor(...parts: Array<string | { uri: string }>) {
+      this.uri = parts.map((part) => (typeof part === "string" ? part : part.uri)).join("/");
+    }
+    get exists() {
+      if (!this.uri.startsWith("file://")) throw new Error("URI is not absolute");
+      return mockLegacyRosterExists && this.uri.endsWith("/cache/hackos-scanner-roster.db");
+    }
     lastModified = null;
     name = "file";
     async copy() {}
-    delete() {}
+    delete() {
+      mockLegacyRosterExists = false;
+    }
   },
-  Paths: { cache: { uri: "cache://" }, document: { uri: "document://" } },
+  Paths: {
+    cache: { uri: "file:///data/user/0/md.dani.hackos/cache" },
+    document: { uri: "file:///data/user/0/md.dani.hackos/files" },
+  },
 }));
 
 jest.mock("expo-sqlite", () => ({
-  defaultDatabaseDirectory: "database://",
+  defaultDatabaseDirectory: "/data/user/0/md.dani.hackos/files/SQLite",
   deleteDatabaseAsync: jest.fn(),
   openDatabaseAsync: jest.fn(async () => mockDatabase),
 }));
@@ -269,4 +290,18 @@ describe("native scanner roster generation fencing", () => {
     releaseEncryption();
     await write;
   });
+});
+
+it("clears both scanner stores during an environment switch with an older Android roster", async () => {
+  mockLegacyRosterExists = true;
+  mockExecStatements.length = 0;
+  await jest.isolateModulesAsync(async () => {
+    const scanner = jest.requireActual<typeof import("./scanner-db.native")>("./scanner-db.native");
+    await expect(
+      Promise.all([scanner.wipeAttendanceRoster(), scanner.wipeAllOfflineScanQueues()]),
+    ).resolves.toEqual([undefined, undefined]);
+  });
+  expect(mockLegacyRosterExists).toBe(false);
+  expect(mockExecStatements.some((sql) => sql.includes("DELETE FROM scanner_people"))).toBe(true);
+  expect(mockExecStatements.some((sql) => sql.includes("DELETE FROM pending_scans"))).toBe(true);
 });

@@ -44,8 +44,6 @@ import { useCachedApi } from "@/lib/use-cached-api";
 import { type WalletTicketPayload, walletCacheKey } from "@/lib/wallet-cache";
 import {
   ANDROID_PKPASS_MIME_TYPES,
-  ANDROID_VIEW_ACTION,
-  createAndroidPkpassViewIntent,
   PKPASS_MIME_TYPE,
   resolveAppleWalletPass,
   supportsAppleWalletButton,
@@ -174,29 +172,19 @@ export default function WalletScreen() {
     });
 
     if (Platform.OS === "android") {
-      // Load this module after the React context exists. A top-level import is
-      // evaluated while Expo Router validates every route and can run before
-      // the native module registry has been created (H28).
-      let intentLauncher: typeof import("expo-intent-launcher") | null = null;
-      try {
-        intentLauncher = await import("expo-intent-launcher");
-      } catch {
-        // Older development clients may not contain the optional native
-        // module; the generic share handoff below remains usable.
-      }
-      for (const mimeType of ANDROID_PKPASS_MIME_TYPES) {
-        if (!intentLauncher) break;
-        try {
-          await intentLauncher.startActivityAsync(
-            ANDROID_VIEW_ACTION,
-            createAndroidPkpassViewIntent(file.contentUri, mimeType),
-          );
-          return;
-        } catch {
-          // Some pass apps only advertise a legacy MIME alias. Keep trying
-          // before falling back to the generic share/save handoff (H28, #624).
-        }
-      }
+      // H28: resolve all pass MIME aliases in one chooser, including wallets
+      // that do not advertise the canonical Apple type. Older dev clients
+      // without the native module retain the share/save fallback below.
+      const { default: walletHandoff } = await import("@/modules/wallet-handoff");
+      if (
+        walletHandoff &&
+        (await walletHandoff.openPkpass(
+          file.contentUri,
+          [...ANDROID_PKPASS_MIME_TYPES],
+          t("walletDownloadPkpass"),
+        ))
+      )
+        return;
     }
 
     if (!(await Sharing.isAvailableAsync())) {

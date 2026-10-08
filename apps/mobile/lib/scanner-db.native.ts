@@ -45,7 +45,12 @@ const SQLITE_SIDECAR_SUFFIXES = ["-wal", "-shm", "-journal"] as const;
 // hand-built Documents/SQLite URI. The two can differ between native runtime
 // versions; opening one while migrating/checking the other produces the
 // empty-on-restart symptom despite a successful live snapshot (#775).
-const ROSTER_DOCUMENT_DIRECTORY = new Directory(SQLite.defaultDatabaseDirectory);
+// Android returns an absolute filesystem path; FileSystem's native URI
+// adapter needs file:// before it can inspect or migrate the roster (H4).
+const sqliteDirectory = SQLite.defaultDatabaseDirectory;
+const ROSTER_DOCUMENT_DIRECTORY = new Directory(
+  sqliteDirectory.startsWith("/") ? `file://${sqliteDirectory}` : sqliteDirectory,
+);
 // #775's first repair constructed this path directly. Preserve an offline
 // upgrade that wrote there before discovering that a runtime's SQLite default
 // can differ from it.

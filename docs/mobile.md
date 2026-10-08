@@ -11,7 +11,10 @@ or Sign in reveals a confirmation that switches between production
 in SecureStore. A switch clears the local session and all endpoint-specific
 caches, downloaded passes, roster data, and every pending scanner queue before
 enabling the new API. Revoking the old server session is best effort and never
-blocks a switch while offline. A fixed
+blocks a switch while offline. Android's bare SQLite default-directory path is
+converted to a `file://` URI before FileSystem inspects or migrates an older
+cached roster; otherwise that cleanup rejects and prevents the endpoint switch.
+A fixed
 red `DEV` badge overlays every screen while development is active. This is
 intentionally undiscoverable during ordinary use.
 
@@ -417,10 +420,16 @@ distributed to other Expo Router apps without importing hackOS code.
   the system share/save handoff, matching the web wallet's download behavior.
   Google Wallet still goes through
   the existing `saveUrl` endpoint via `Linking.openURL`. On Android, the `.pkpass` download first
-  hands its `expo-file-system` content URI to an `ACTION_VIEW` intent with
-  `application/vnd.apple.pkpass` and `FLAG_GRANT_READ_URI_PERMISSION`, then retries with the
-  legacy MIME aliases used by older importers such as PassAndroid; when no compatible handler
-  is installed, it falls back to the existing Expo share/save sheet.
+  hands its `expo-file-system` content URI to the local Android-only
+  `modules/wallet-handoff` module. One system chooser resolves `ACTION_VIEW`
+  across the canonical MIME type and every supported legacy alias using
+  `EXTRA_ALTERNATE_INTENTS`; a default Google Wallet handler no longer hides
+  an installed importer accepting a different alias. Each intent carries a
+  read grant and URI ClipData. Scoped manifest queries let Android discover
+  those handlers without broad package visibility. No handler (or an older dev
+  client missing this module) falls back to Expo's share/save sheet. The chooser
+  can only offer apps that declare `.pkpass` import support; it does not add
+  support to an OEM wallet. A new Android native build is required.
   `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
   fallback. Participant ranks exclude waiting sibling entries of teams already
@@ -859,8 +868,15 @@ enters its auto-start flow.
 
 `lib/nfc-reader.ts` serializes native sessions and releases them on completion,
 cancellation, navigation, backgrounding and unmount. iOS uses `MifareIOS` and
-Android uses `NfcA` reader mode with NDEF checking skipped, so blank NTAG213s
-work. The iOS package patch avoids `connectToTag`, caches the detected UID, and
+Android uses NFC-A reader mode with NDEF checking skipped and takes the UID
+straight from `DiscoverTag`, without a technology connection or NDEF read.
+The discovery listener is installed before reader mode starts, so an already
+present tag is not lost between registration and a technology request. Cancel
+releases the discovery wait, removes the listener, and unregisters reader mode;
+subsequent reads wait for that cleanup. Blank NTAG213s work on both platforms.
+Physical OEM verification remains required, especially on Oppo Find N6 with
+ColorOS 16/17: pairing, consecutive reads, cancel/reopen, background and folded/
+unfolded states with the same tags used on another working Android device. The iOS package patch avoids `connectToTag`, caches the detected UID, and
 invalidates the native session immediately; it also skips the package's automatic
 NDEF payload read. Scanners use only the UID. Unsupported hardware, disabled NFC,
 malformed UIDs and reader errors produce localized feedback; cancellation does
