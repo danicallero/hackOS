@@ -12,8 +12,11 @@ in SecureStore. A switch clears the local session and all endpoint-specific
 caches, downloaded passes, roster data, and every pending scanner queue before
 enabling the new API. Revoking the old server session is best effort and never
 blocks a switch while offline. Android's bare SQLite default-directory path is
-converted to a `file://` URI before FileSystem inspects or migrates an older
-cached roster; otherwise that cleanup rejects and prevents the endpoint switch.
+converted to a `file://` URI before FileSystem reads the directory URI. That
+native getter validates the path even when no roster exists, so the switch
+could fail on a fresh installation before its first sign-in as well as during
+an older roster migration. Cleanup runs from Sign in too; it does not require
+a previous session or scanner use.
 A fixed
 red `DEV` badge overlays every screen while development is active. This is
 intentionally undiscoverable during ordinary use.

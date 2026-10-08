@@ -72,15 +72,17 @@ const mockDatabase = new FakeDatabase();
 
 jest.mock("expo-file-system", () => ({
   Directory: class {
-    uri: string;
+    private path: string;
     constructor(...parts: Array<string | { uri: string }>) {
-      this.uri = parts.map((part) => (typeof part === "string" ? part : part.uri)).join("/");
+      this.path = parts.map((part) => (typeof part === "string" ? part : part.uri)).join("/");
     }
-    get exists() {
-      // Android's java.io.File(URI) rejects SQLite's bare absolute path.
-      if (!this.uri.startsWith("file://")) throw new Error("URI is not absolute");
-      return true;
+    get uri() {
+      // Android's Directory.uri getter constructs java.io.File(URI), even
+      // when the directory contains no database and nobody has signed in.
+      if (!this.path.startsWith("file://")) throw new Error("URI is not absolute");
+      return this.path;
     }
+    exists = true;
     create() {}
   },
   File: class {
@@ -292,8 +294,11 @@ describe("native scanner roster generation fencing", () => {
   });
 });
 
-it("clears both scanner stores during an environment switch with an older Android roster", async () => {
-  mockLegacyRosterExists = true;
+it.each([
+  ["a fresh Android install before its first sign-in", false],
+  ["an older Android roster", true],
+])("clears both scanner stores during an environment switch with %s", async (_scenario, legacyRosterExists) => {
+  mockLegacyRosterExists = legacyRosterExists;
   mockExecStatements.length = 0;
   await jest.isolateModulesAsync(async () => {
     const scanner = jest.requireActual<typeof import("./scanner-db.native")>("./scanner-db.native");
