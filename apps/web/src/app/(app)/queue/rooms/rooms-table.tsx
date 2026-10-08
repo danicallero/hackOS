@@ -271,7 +271,6 @@ export function RoomsTable({
   error,
   onRetry,
   emptyTitle,
-  emptyDescription,
   emptyAction,
   draftOpen,
   draftSaving,
@@ -288,7 +287,6 @@ export function RoomsTable({
   error: string | null;
   onRetry: () => void;
   emptyTitle: string;
-  emptyDescription?: string;
   emptyAction: React.ReactNode;
   draftOpen: boolean;
   draftSaving: boolean;
@@ -336,12 +334,9 @@ export function RoomsTable({
           ) : rooms.length === 0 && !draftOpen ? (
             <TableRow className="hover:bg-transparent">
               <TableCell colSpan={5} className="p-0">
-                <EmptyState
-                  icon={BuildingsIcon}
-                  title={emptyTitle}
-                  description={emptyDescription}
-                  action={emptyAction}
-                />
+                <div className="sticky left-0 w-full max-w-[calc(100vw-2rem)]">
+                  <EmptyState icon={BuildingsIcon} title={emptyTitle} action={emptyAction} />
+                </div>
               </TableCell>
             </TableRow>
           ) : (
@@ -407,11 +402,13 @@ export function RoomsTable({
           )}
           {!loading && !error && rooms.length > 0 && !draftOpen && (
             <TableRow className="hover:bg-transparent">
-              <TableCell colSpan={5} className="border-t border-dashed py-2 text-center">
-                <Button variant="ghost" size="sm" onClick={onDraftOpen}>
-                  <PlusIcon className="size-3.5" aria-hidden="true" />
-                  {t("addRoomHere")}
-                </Button>
+              <TableCell colSpan={5} className="border-t border-dashed py-2">
+                <div className="sticky left-0 flex w-full max-w-[calc(100vw-2rem)] justify-center">
+                  <Button variant="ghost" size="sm" onClick={onDraftOpen}>
+                    <PlusIcon className="size-3.5" aria-hidden="true" />
+                    {t("addRoomHere")}
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           )}

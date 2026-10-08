@@ -717,8 +717,18 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   // ── H27 stats ────────────────────────────────────────────────────────────
 
-  typed.get("/api/logistics/stats", { ...routeAccess(access.stats), preHandler: stats }, async () =>
-    logisticsStats(),
+  typed.get(
+    "/api/logistics/stats",
+    {
+      ...routeAccess(access.stats),
+      preHandler: stats,
+      schema: {
+        summary: "Live event statistics",
+        description:
+          "H27 aggregate accreditation, estimated current presence, meal servings and activity attendance. Each activity includes presentAttendees: distinct attendees intersected with the current presence estimate, so coverage charts use the same population for numerator and denominator. Requires logistics statistics access; excludes synthetic and inactive accounts.",
+      },
+    },
+    async () => logisticsStats(),
   );
 
   typed.get(

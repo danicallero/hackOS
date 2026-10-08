@@ -322,8 +322,11 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.get(
     "/api/projects/member-candidates",
     {
-      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
-      preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
+      ...access({
+        kind: "capability",
+        anyOf: [CAPABILITIES.PROJECTS_EDIT, CAPABILITIES.PROJECTS_IMPORT],
+      }),
+      preHandler: requireAnyCapability(CAPABILITIES.PROJECTS_EDIT, CAPABILITIES.PROJECTS_IMPORT),
       schema: {
         querystring: z.object({
           q: z.string().trim().min(2),
@@ -331,7 +334,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         }),
         summary: "Search project member candidates",
         description:
-          "Returns minimal account identity fields for an authorized operator adding a project member (H21).",
+          "Returns minimal searchable account identity fields for project editors and Devpost import operators resolving unmatched people (H17, H21).",
         response: {
           200: z.object({
             users: z.array(

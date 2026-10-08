@@ -241,11 +241,7 @@ export const WORKSPACES: Workspace[] = [
         judgeVisible: true,
       },
       {
-        // Rooms and the judging window share one "Judging settings" surface
-        // (H39, H46): a sponsor rep routes their queues to their pooled
-        // rooms from Judging queues, but never assigns a room to an
-        // enterprise or edits the judging window in the first place.
-        title: "judgingSettingsTitle",
+        title: "roomConfigurationTitle",
         href: "/queue/rooms",
         icon: BuildingsIcon,
         anyCapability: [CAPABILITIES.QUEUE_ADMIN],
@@ -359,6 +355,7 @@ export const WORKSPACES: Workspace[] = [
           CAPABILITIES.WALLET_MANAGE,
           CAPABILITIES.PRESENCE_MANAGE,
           CAPABILITIES.INVITES_MANAGE,
+          CAPABILITIES.QUEUE_ADMIN,
         ],
       },
       {

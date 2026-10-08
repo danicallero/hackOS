@@ -105,8 +105,20 @@ export default function WorkGroupDetailPage() {
       setResponding(false);
     }
   }
+  const details = (
+    <SectionCard title={t("projectDetailsTitle")}>
+      <ProjectDescriptionLinks
+        description={group.description}
+        links={{
+          devpostUrl: group.devpost_url,
+          demoUrl: group.demo_url,
+          githubUrl: group.github_url,
+        }}
+      />
+    </SectionCard>
+  );
   return (
-    <PageLayout width="reading">
+    <PageLayout>
       <PageHeader
         className={
           active
@@ -141,16 +153,6 @@ export default function WorkGroupDetailPage() {
           )
         }
       />
-      <SectionCard title={t("projectDetailsTitle")}>
-        <ProjectDescriptionLinks
-          description={group.description}
-          links={{
-            devpostUrl: group.devpost_url,
-            demoUrl: group.demo_url,
-            githubUrl: group.github_url,
-          }}
-        />
-      </SectionCard>
       {active ? (
         <ProjectLifecycle
           key={JSON.stringify(group)}
@@ -161,14 +163,20 @@ export default function WorkGroupDetailPage() {
           code={group.reconciliation_code}
           onChanged={load}
         >
-          <div className="grid items-start gap-4 md:grid-cols-2">
-            <Members group={group} onChanged={load} editable />
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            <div className="min-w-0 space-y-4">
+              {details}
+              <Members group={group} onChanged={load} editable />
+            </div>
             <Challenges group={group} challenges={challenges} onChanged={load} editable />
           </div>
         </ProjectLifecycle>
       ) : (
-        <div className="grid items-start gap-4 md:grid-cols-2">
-          <Members group={group} onChanged={load} editable={false} />
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="min-w-0 space-y-4">
+            {details}
+            <Members group={group} onChanged={load} editable={false} />
+          </div>
           <Challenges group={group} challenges={challenges} onChanged={load} editable={false} />
         </div>
       )}

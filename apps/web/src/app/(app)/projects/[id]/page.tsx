@@ -13,6 +13,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
+import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
@@ -150,7 +151,7 @@ export default function ProjectDetailPage() {
 
   if (!repo) {
     return (
-      <PageLayout width="reading">
+      <PageLayout>
         <PageHeader
           title={t("colProject")}
           actions={
@@ -168,10 +169,17 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <PageLayout width="reading">
+    <PageLayout>
       <PageHeader
         title={repo.name}
-        actions={
+        secondaryActions={
+          <IconButton label={t("projects")} variant="outline" asChild>
+            <Link href="/projects">
+              <ArrowLeftIcon aria-hidden="true" />
+            </Link>
+          </IconButton>
+        }
+        primaryAction={
           /* H18: metadata edit (name, description, links). */
           canEdit ? (
             <ProjectFormDialog
@@ -183,85 +191,86 @@ export default function ProjectDetailPage() {
         }
       />
 
-      <ProjectDescriptionLinks
-        description={repo.description}
-        links={{ devpostUrl: repo.devpost_url, demoUrl: repo.demo_url, githubUrl: repo.github_url }}
-      />
-
-      <div className="grid gap-8 xl:grid-cols-3 xl:gap-12">
-        <SectionCard variant="plain" title={t("teamSectionTitle")} bodyClassName="space-y-4">
-          {repo.members.length === 0 ? (
-            <EmptyState
-              icon={UsersIcon}
-              title={t("noTeamMembersTitle")}
-              description={t("addUserVisibleDesc")}
-            />
-          ) : (
-            <ul className="divide-y divide-border/60">
-              {repo.members.map((member) => (
-                <li key={`${member.userId ?? "devpost"}:${member.email}`} className="py-2">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{memberName(member)}</p>
-                      <p className="text-muted-foreground truncate text-sm">{member.email}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {member.mergeStatus === "manual"
-                          ? t("addedManually")
-                          : member.devpostUsername
-                            ? `@${member.devpostUsername}`
-                            : memberMatchLabel(member, t)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge tone={mergeStatusTone(member.mergeStatus)}>
-                        {memberMatchLabel(member, t)}
-                      </StatusBadge>
-                      {canEdit && member.userId !== null && (
-                        <MemberRemoveButton
-                          repoId={repo.id}
-                          userId={member.userId}
-                          email={member.email}
-                          imported={member.mergeStatus !== "manual"}
-                          secondaryLinked={member.matchType === "secondary_email"}
-                          onRemoved={load}
-                        />
-                      )}
-                      {member.userId === null &&
-                        member.email !== null &&
-                        (canEdit || canImport) && (
-                          <DevpostParticipantActions
-                            repoId={repo.id}
-                            email={member.email}
-                            canDelete={canEdit}
-                            canLink={canImport}
-                            onChanged={load}
-                          />
-                        )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {canEdit && (
-            <ProjectMemberAdder
-              repoId={repo.id}
-              currentMembers={repo.members}
-              onAdd={async (userId) => {
-                await addRepoMember(repo.id, userId, crypto.randomUUID());
-                await load();
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="min-w-0 space-y-4">
+          <SectionCard title={t("projectDetailsTitle")}>
+            <ProjectDescriptionLinks
+              description={repo.description}
+              links={{
+                devpostUrl: repo.devpost_url,
+                demoUrl: repo.demo_url,
+                githubUrl: repo.github_url,
               }}
             />
-          )}
-        </SectionCard>
+          </SectionCard>
+          <SectionCard title={t("teamSectionTitle")} bodyClassName="space-y-4">
+            {repo.members.length === 0 ? (
+              <EmptyState
+                icon={UsersIcon}
+                title={t("noTeamMembersTitle")}
+                description={t("addUserVisibleDesc")}
+              />
+            ) : (
+              <ul className="divide-y divide-border/60">
+                {repo.members.map((member) => (
+                  <li key={`${member.userId ?? "devpost"}:${member.email}`} className="py-2">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{memberName(member)}</p>
+                        <p className="text-muted-foreground truncate text-sm">{member.email}</p>
+                        <p className="text-muted-foreground text-xs">
+                          {member.mergeStatus === "manual"
+                            ? t("addedManually")
+                            : member.devpostUsername
+                              ? `@${member.devpostUsername}`
+                              : memberMatchLabel(member, t)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <StatusBadge tone={mergeStatusTone(member.mergeStatus)}>
+                          {memberMatchLabel(member, t)}
+                        </StatusBadge>
+                        {canEdit && member.userId !== null && (
+                          <MemberRemoveButton
+                            repoId={repo.id}
+                            userId={member.userId}
+                            email={member.email}
+                            imported={member.mergeStatus !== "manual"}
+                            secondaryLinked={member.matchType === "secondary_email"}
+                            onRemoved={load}
+                          />
+                        )}
+                        {member.userId === null &&
+                          member.email !== null &&
+                          (canEdit || canImport) && (
+                            <DevpostParticipantActions
+                              repoId={repo.id}
+                              email={member.email}
+                              canDelete={canEdit}
+                              canLink={canImport}
+                              onChanged={load}
+                            />
+                          )}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-        <SectionCard
-          variant="plain"
-          className="xl:col-span-2"
-          title={t("challenges")}
-          bodyClassName="space-y-4"
-        >
+            {canEdit && (
+              <ProjectMemberAdder
+                repoId={repo.id}
+                currentMembers={repo.members}
+                onAdd={async (userId) => {
+                  await addRepoMember(repo.id, userId, crypto.randomUUID());
+                  await load();
+                }}
+              />
+            )}
+          </SectionCard>
+        </div>
+        <SectionCard title={t("challenges")} bodyClassName="space-y-4">
           {unifiedEntries.length === 0 ? (
             <EmptyState
               icon={TrophyIcon}

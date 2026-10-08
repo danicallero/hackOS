@@ -147,7 +147,7 @@ sponsor; no implicit cross-challenge win is created.
 | `POST /api/devpost/prizes/:prizeName/map` | `projects:import` | H16 | append prize to a challenge's `devpost_tags` |
 | `GET /api/repos` | contextual `repository-list` | H20/queue | repos + members + prizes + mapped challenges within global or relationship-derived scope |
 | `GET /api/repos/:id` | contextual `repository-access` | H20/queue | one repo, same shape, after the exact repository scope check |
-| `GET /api/projects/member-candidates` | `projects:edit` | H21 | minimal account search for team editors |
+| `GET /api/projects/member-candidates` | `projects:edit` or `projects:import` | H17/H21 | minimal accent-insensitive account search for team editors and identity resolution |
 | `POST /api/repos` | `projects:edit` + idempotency | H18 | native creation: metadata + members + challenge lineup in one transaction |
 | `PATCH /api/repos/:id` | `projects:edit` | H18 | metadata edit (name, description, links), audited before/after |
 | `DELETE /api/repos/:id` | `projects:edit` + idempotency | H18/H21 | administrator deletion of any project; cascades roster, queue and judging rows transactionally, then invalidates affected queue reads |
@@ -481,8 +481,9 @@ Queue calls reuse H30 advisory locks and resolved identity membership, plus this
 eligibility guard; an unsubmitted/blocked project keeps its records and positions
 but cannot be called.
 
-The existing Projects area now opens `/projects/reconciliation`; it prioritizes
-identity/membership/size/edit-request decisions and can display all projects,
+The Projects list opens `/projects`; its secondary menu opens
+`/projects/reconciliation`, which prioritizes identity/membership/size/edit-request
+decisions and can display all projects,
 including native-only and unsubmitted planning records. The existing Unmatched
 screen remains the exact-email identity correction/invitation tool.
 `/api/projects/reconciliation` uses project-edit scope rather than leaking this
@@ -503,3 +504,32 @@ submissions cannot be identified reliably without another stable external key.
 Judging is a dynamic collision-safe queue, not a fixed-slot appointment scheduler.
 
 Organizer `POST /api/projects/:id/unlink` corrects a mistaken relationship with a required audited reason, retains native snapshots and external records, and prevents automatic restoration on a later import. Existing judged records require correction through organizer tools rather than relinking.
+
+### Project web presentation (H17, H20, H38)
+
+Participant and management details use the content-width canvas with description
+and external links above team rows in the leading column, and challenges in the
+other column. The same bounded sections stack on narrow screens. Project lists
+retain their table surface with concise challenge/state rows, reserving full
+ETA/room details for project detail; the participant back arrow opens the
+complete list directly. Presentation rows align status, queue position and ETA; longer estimates
+use hours and minutes, and the row adapts to its available column width.
+
+The participant submission section leads with the submission state. Submitted
+entries additionally show authoritative judging eligibility or a review state
+from the submission read model, with concrete identity/team review notices below.
+Submission remains visible independently of participant-difference rendering.
+An unlocked, submitted Devpost entry is submitted, not reopened; reopening is a
+draft with a prior submission timestamp. Drafts retain the Devpost-first path, with
+native submission grouped as the secondary alternative beneath it. Metadata,
+demo, repository and Devpost links remain available. Linked imports retain the
+compact project code/copy action without instructions to link them again.
+
+Unmatched people are searchable by name, email, project or username and paginated
+in groups of ten. Opening the account picker suggests complete-name or exact
+email-handle matches, with accents normalized for ranking, without linking
+automatically. Manual name/email search remains available. The minimal
+`GET /api/projects/member-candidates` read is authorized for either project editing
+or Devpost importing, rather than requiring general user-management access.
+Direct linking, secondary-email confirmation and account-claim mail remain
+separate explicit actions with their existing mutation authorization and audit.

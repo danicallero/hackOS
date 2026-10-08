@@ -120,6 +120,17 @@ export async function logisticsStats() {
   const meals = await scannableActivities("meal");
   const activities = await scannableActivities("activity");
   const accreditedByRole = await accreditationCountsByRole();
+  // H24/H27: intersect attendees with the same presence estimate as the denominator.
+  const presentAttendance = await pool.query<{ activity_id: number; people: number }>(
+    `SELECT activity_id, count(DISTINCT user_id)::int AS people
+       FROM activity_logs
+      WHERE user_id = ANY($1::int[])
+      GROUP BY activity_id`,
+    [occ.present],
+  );
+  const presentByActivity = new Map(
+    presentAttendance.rows.map((row) => [row.activity_id, row.people]),
+  );
 
   return {
     accreditedCount: accredited.rows[0].n as number,
@@ -131,6 +142,7 @@ export async function logisticsStats() {
       served: m.count,
       distinctPeople: m.distinctPeople,
       repeats: m.repeats,
+      presentAttendees: presentByActivity.get(m.activityId) ?? 0,
     })),
     activities: activities.map((a) => ({
       activityId: a.activityId,
@@ -139,6 +151,7 @@ export async function logisticsStats() {
       scans: a.count,
       attendees: a.distinctPeople,
       repeats: a.repeats,
+      presentAttendees: presentByActivity.get(a.activityId) ?? 0,
     })),
   };
 }

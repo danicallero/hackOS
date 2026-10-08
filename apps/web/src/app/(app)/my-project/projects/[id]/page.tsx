@@ -89,7 +89,7 @@ export default function MyProjectDetailPage() {
   if (loadError) return <ContextualError message={loadError} onRetry={load} />;
   if (!project) return <EmptyState icon={FolderSimpleIcon} title={t("projectNotFoundTitle")} />;
   return (
-    <PageLayout width="reading">
+    <PageLayout>
       <PageHeader
         className="flex-row items-center justify-between gap-2 md:items-center [&>[data-slot=action-group]]:shrink-0 [&>[data-slot=action-group]]:flex-nowrap"
         title={project.name}
@@ -119,16 +119,6 @@ export default function MyProjectDetailPage() {
           )
         }
       />
-      <SectionCard title={t("projectDetailsTitle")}>
-        <ProjectDescriptionLinks
-          description={project.description}
-          links={{
-            devpostUrl: project.devpost_url,
-            demoUrl: project.demo_url,
-            githubUrl: project.github_url,
-          }}
-        />
-      </SectionCard>
       <ProjectLifecycle
         key={JSON.stringify([project.locked_at, project.submission_status])}
         id={project.id}
@@ -137,27 +127,40 @@ export default function MyProjectDetailPage() {
         code={project.reconciliation_code}
         onChanged={load}
       >
-        <div className="grid items-start gap-4 md:grid-cols-2">
-          <SectionCard
-            title={t("teamSectionTitle")}
-            headerClassName={PAIRED_HEADER_CLASS}
-            action={
-              !project.locked_at ? (
-                <InviteMember projectId={project.id} onInvited={load} />
-              ) : undefined
-            }
-          >
-            <ul className="divide-y divide-border/60">
-              {project.members.map((member, index) => (
-                <li
-                  className="py-2 text-sm font-medium"
-                  key={`${member.userId ?? "devpost"}:${member.email ?? index}`}
-                >
-                  {memberName(member) || t("unnamedTeamMember")}
-                </li>
-              ))}
-            </ul>
-          </SectionCard>
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="min-w-0 space-y-4">
+            <SectionCard title={t("projectDetailsTitle")}>
+              <ProjectDescriptionLinks
+                description={project.description}
+                links={{
+                  devpostUrl: project.devpost_url,
+                  demoUrl: project.demo_url,
+                  githubUrl: project.github_url,
+                }}
+              />
+            </SectionCard>
+
+            <SectionCard
+              title={t("teamSectionTitle")}
+              headerClassName={PAIRED_HEADER_CLASS}
+              action={
+                !project.locked_at ? (
+                  <InviteMember projectId={project.id} onInvited={load} />
+                ) : undefined
+              }
+            >
+              <ul className="divide-y divide-border/60">
+                {project.members.map((member, index) => (
+                  <li
+                    className="py-2 text-sm font-medium"
+                    key={`${member.userId ?? "devpost"}:${member.email ?? index}`}
+                  >
+                    {memberName(member) || t("unnamedTeamMember")}
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          </div>
           <SectionCard
             title={t("challenges")}
             headerClassName={PAIRED_HEADER_CLASS}
@@ -173,10 +176,10 @@ export default function MyProjectDetailPage() {
             <ul className="divide-y divide-border/60">
               {project.challenges.map((challenge) => (
                 <li
-                  className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-2 py-4 first:pt-0 last:pb-0"
                   key={challenge.id}
                 >
-                  <div className="min-w-0 space-y-2">
+                  <div className="contents">
                     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                       <h3 className="text-base font-medium text-balance">
                         {challengeTitleText(challenge.title)}
@@ -187,14 +190,17 @@ export default function MyProjectDetailPage() {
                         </span>
                       )}
                     </div>
-                    {challenge.status ? (
-                      <PresentationStatus {...challenge} />
-                    ) : (
-                      <p className="text-sm text-muted-foreground">{t("plannedChallenge")}</p>
-                    )}
+                    <div className="col-span-full row-start-2 min-w-0">
+                      {challenge.status ? (
+                        <PresentationStatus {...challenge} />
+                      ) : (
+                        <p className="text-sm text-muted-foreground">{t("plannedChallenge")}</p>
+                      )}
+                    </div>
                   </div>
                   {challenge.mandatory || project.locked_at ? null : (
                     <Button
+                      className="col-start-2 row-start-1"
                       size="sm"
                       variant="outline"
                       disabled={removingChallenge !== null}

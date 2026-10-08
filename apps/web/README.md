@@ -252,8 +252,8 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `PageLayout` is the authenticated page canvas: `content` (1280 px), `reading`
 (896 px) for focused form/text workflows, and `workspace` only for genuinely
 wide operational data. Users, application management and user/enterprise detail
-use the 1280 px content canvas. Event settings and compact Libraries catalogues
-use the 896 px reading canvas. A full route does not
+use the 1280 px content canvas. Event settings and profile use the 1280 px content canvas; compact Libraries
+catalogues use the 896 px reading canvas. A full route does not
 imply unlimited width. Mixed record pages keep their table tabs in this canvas;
 constrain only their text/form blocks when needed.
 Use one `PageHeader`, then optional `TabBar`, `PageToolbar`, and content.
@@ -279,12 +279,16 @@ stay in the title row, independently of descriptions.
 
 `SectionCard variant="plain"` keeps the shared section heading/actions without
 card chrome. Use it when page spacing and columns explain the structure; reserve
-the default bordered surface for genuinely bounded groups. Event settings and My profile use open sections within a constrained reading
-width, with save status at the leading edge and secondary actions then Save
+the default bordered surface for genuinely bounded groups. Event settings use bounded category surfaces on the content canvas with a
+desktop category rail and narrow-screen tabs. Wallet separates Fields,
+Appearance, Images and Delivery by their distinct save/action owners. My profile
+uses the content canvas with bordered section surfaces (personal details beside
+roles, email and password on desktop; danger zone then terms/privacy links
+below), with save status at the leading edge and secondary actions then Save
 at the trailing edge of the owning form footer. Event settings omit
 headings already supplied by the active tab, pair save status with the submit
 action, and use the shared Sileo toast after saving. Inbox preferences
-use category rows with channel menus; mandatory queue delivery stays read-only.
+use category rows with channel menus; mandatory queue delivery stays read-only, with a lock in the menu-caret gutter.
 Password changes open a focused modal from the profile section. Static metadata is
 text, not a badge. See `docs/DESIGN.md` §3.
 
@@ -541,7 +545,7 @@ The project reconciliation workspace follows Users/Responses: `ListToolbar` + `F
 
 Controlled list review dialogs can pass `Modal.onCloseAutoFocus` to restore their opening row or search field. Keep persistent review utilities in `Modal.footer`, outside the scrolling body.
 
-Participant project detail pages keep compact edit/overflow controls inline with the title using the Users header composition. Project details, team, challenges/judging preference and a final submission section use separate SectionCard surfaces in that order; the submission section leads with Devpost (code and link status) and offers "Submit without Devpost" as a secondary action below an "or" divider; team/challenge members stay plain rows inside their section. Both planning and reconciled projects use the same Add challenge editor instead of separate inline selection controls. Ordinary event rule settings record audit metadata automatically without asking for a justification; explicit project exceptions retain their reason.
+Participant project detail pages use the content canvas with a direct back arrow and compact edit controls inline with the title. Desktop places project details and team in the main column and challenges/judging in the adjacent column; narrow screens stack the sections. Participant and staff details reuse ProjectDescriptionLinks for Devpost, demo and repository links. Project details, team, challenges/judging preference and a final submission section use separate SectionCard surfaces in that order; the submission section leads with Devpost (code and link status) and offers "Submit without Devpost" as a secondary action below an "or" divider; team/challenge members stay plain rows inside their section. Both planning and reconciled projects use the same Add challenge editor instead of separate inline selection controls. Ordinary event rule settings record audit metadata automatically without asking for a justification; explicit project exceptions retain their reason.
 
 ## Invitation onboarding (H7/H9/H10)
 

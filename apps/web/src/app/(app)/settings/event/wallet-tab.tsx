@@ -19,14 +19,18 @@ import {
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
+import { TabBar } from "@/components/common/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
@@ -89,7 +93,7 @@ function PassFrontFieldsEditor({
               <div>
                 <Label htmlFor={`pass-visible-${key}`}>{t(titleKey)}</Label>
                 {key === "university" && (
-                  <p className="text-muted-foreground text-sm">{t("passFillUniversity")}</p>
+                  <p className="text-muted-foreground mt-1 text-sm">{t("passFillUniversity")}</p>
                 )}
               </div>
               <Switch
@@ -338,6 +342,28 @@ export function WalletTab({
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { t } = useLocale();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedView = searchParams.get("wallet");
+  const resolvedView =
+    requestedView === "appearance" || requestedView === "artwork" || requestedView === "delivery"
+      ? requestedView
+      : "fields";
+  const [view, setView] = useState<"fields" | "appearance" | "artwork" | "delivery">(resolvedView);
+  const [trackedView, setTrackedView] = useState(resolvedView);
+  if (resolvedView !== trackedView) {
+    setTrackedView(resolvedView);
+    setView(resolvedView);
+  }
+  function changeView(next: string) {
+    if (next !== "fields" && next !== "appearance" && next !== "artwork" && next !== "delivery")
+      return;
+    setView(next);
+    if (requestedView === next || (!requestedView && next === "fields")) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("wallet", next);
+    router.replace(`/settings/event?${params}`, { scroll: false });
+  }
   const { config, status, applyConfig } = useEventConfig();
   const [passBackFields, setPassBackFields] = useState<PassBackField[]>([]);
   const [passFieldLabels, setPassFieldLabels] = useState<PassFieldLabels>({
@@ -345,8 +371,14 @@ export function WalletTab({
   });
   const [passFieldVisibility, setPassFieldVisibility] = useState<PassFieldVisibility>({});
   const [dirty, setDirty] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [saveState, setSaveState] = useCategorySaveState(dirty, onDirtyChange);
+  const [runtimeDirty, setRuntimeDirty] = useState(false);
+  const runtimeSave = useRef<(() => Promise<void>) | null>(null);
+  const registerSave = useCallback((save: (() => Promise<void>) | null) => {
+    runtimeSave.current = save;
+  }, []);
+  const [saveState, setSaveState] = useCategorySaveState(dirty || runtimeDirty, onDirtyChange);
 
   const applyFromConfig = useCallback((cfg: EventConfig) => {
     setPassBackFields(cfg.passBackFields);
@@ -368,9 +400,13 @@ export function WalletTab({
   }
 
   async function handleSave() {
+    if (submitting) return;
+    setSaveError(null);
     setSaveState("saving");
     setSubmitting(true);
     try {
+      if (!runtimeSave.current) throw new Error(t("couldNotLoadEventSettings"));
+      await runtimeSave.current();
       const next = await api.put<EventConfig>("/api/event", {
         passBackFields: normalizeBackFields(passBackFields),
         passFieldLabels: normalizeFieldLabels(passFieldLabels),
@@ -382,6 +418,13 @@ export function WalletTab({
       toast.success(t("saved"), { compactTitle: t("toastWalletSettings") });
     } catch (err) {
       setSaveState("error");
+      setSaveError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof SyntaxError
+            ? t("walletInvalidOptions")
+            : t("couldNotSaveEventSettings"),
+      );
       toast.error(
         err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
         t("toastWalletSettings"),
@@ -398,89 +441,115 @@ export function WalletTab({
   const liveVenueName = config.venueName?.trim() ?? "";
 
   return (
-    <>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void handleSave();
-        }}
-      >
-        <SectionCard
-          variant="plain"
-          footerClassName="justify-start"
-          stickyFooter
-          footer={<FormActions pending={submitting} state={saveState} />}
+    <Tabs value={view} onValueChange={changeView}>
+      <TabBar className="[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] sm:[mask-image:none] flex-row! h-(--control-height-default)! [&_[data-slot=tabs-trigger]]:w-auto! [&_[data-slot=tabs-trigger]]:justify-center!">
+        <TabsTrigger value="fields">{t("walletFieldsTab")}</TabsTrigger>
+        <TabsTrigger value="appearance">{t("walletAppearanceTab")}</TabsTrigger>
+        <TabsTrigger value="artwork">{t("walletArtworkTab")}</TabsTrigger>
+        <TabsTrigger value="delivery">{t("walletDeliveryTitle")}</TabsTrigger>
+      </TabBar>
+      <TabsContent value="fields" forceMount hidden={view !== "fields"}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSave();
+          }}
         >
-          <div className="space-y-2">
-            <p className="text-sm font-medium">{t("passFrontFieldsLabel")}</p>
-            <PassFrontFieldsEditor
-              labels={passFieldLabels}
-              onLabelsChange={markDirty(setPassFieldLabels)}
-              visibility={passFieldVisibility}
-              onVisibilityChange={markDirty(setPassFieldVisibility)}
-            />
-          </div>
-
-          <PassPreview
-            visibility={passFieldVisibility}
-            labels={passFieldLabels}
-            eventName={liveEventName}
-            venueName={liveVenueName}
-            organizerName={config.organizerName}
-            backFields={passBackFields}
-          />
-
-          <Collapsible>
-            <CollapsibleTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground -ml-2"
-              >
-                <CaretDownIcon aria-hidden="true" className="size-4" />
-                {t("walletAdvancedFieldsToggle")}
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-4 pt-3">
+          <button type="submit" hidden />
+          <fieldset disabled={submitting}>
+            <SectionCard variant="plain">
               <div className="space-y-2">
-                <p className="text-sm font-medium">{t("passBackBuiltinLabel")}</p>
-                {/* Same order as on the actual pass: event, venue, then "Organized by" last. */}
-                <BuiltinBackFieldRow
-                  title={t("eventTitle")}
-                  caption={passFieldLabels.event ?? ""}
-                  onCaptionChange={(v) =>
-                    markDirty(setPassFieldLabels)({ ...passFieldLabels, event: v })
-                  }
-                  value={liveEventName || null}
-                />
-                <BuiltinBackFieldRow
-                  title={t("venueSectionTitle")}
-                  caption={passFieldLabels.location ?? ""}
-                  onCaptionChange={(v) =>
-                    markDirty(setPassFieldLabels)({ ...passFieldLabels, location: v })
-                  }
-                  value={liveVenueName || null}
-                />
-                <BuiltinBackFieldRow
-                  title={t("passFieldOrganizerTitle")}
-                  caption={passFieldLabels.organizedBy ?? ""}
-                  onCaptionChange={(v) =>
-                    markDirty(setPassFieldLabels)({ ...passFieldLabels, organizedBy: v })
-                  }
-                  value={config.organizerName || null}
-                  note={t("passFillOrganizer")}
+                <p className="text-sm font-medium">{t("passFrontFieldsLabel")}</p>
+                <PassFrontFieldsEditor
+                  labels={passFieldLabels}
+                  onLabelsChange={markDirty(setPassFieldLabels)}
+                  visibility={passFieldVisibility}
+                  onVisibilityChange={markDirty(setPassFieldVisibility)}
                 />
               </div>
-              <div className="space-y-2">
-                <p className="text-sm font-medium">{t("passBackFieldsLabel")}</p>
-                <BackFieldBuilder value={passBackFields} onChange={markDirty(setPassBackFields)} />
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        </SectionCard>
-      </form>
-      <WalletRuntimeEditor />
-    </>
+
+              <PassPreview
+                visibility={passFieldVisibility}
+                labels={passFieldLabels}
+                eventName={liveEventName}
+                venueName={liveVenueName}
+                organizerName={config.organizerName}
+                backFields={passBackFields}
+              />
+
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground -ml-2"
+                  >
+                    <CaretDownIcon aria-hidden="true" className="size-4" />
+                    {t("walletAdvancedFieldsToggle")}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-4 pt-3">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">{t("passBackBuiltinLabel")}</p>
+                    {/* Same order as on the actual pass: event, venue, then "Organized by" last. */}
+                    <BuiltinBackFieldRow
+                      title={t("eventTitle")}
+                      caption={passFieldLabels.event ?? ""}
+                      onCaptionChange={(v) =>
+                        markDirty(setPassFieldLabels)({ ...passFieldLabels, event: v })
+                      }
+                      value={liveEventName || null}
+                    />
+                    <BuiltinBackFieldRow
+                      title={t("venueSectionTitle")}
+                      caption={passFieldLabels.location ?? ""}
+                      onCaptionChange={(v) =>
+                        markDirty(setPassFieldLabels)({ ...passFieldLabels, location: v })
+                      }
+                      value={liveVenueName || null}
+                    />
+                    <BuiltinBackFieldRow
+                      title={t("passFieldOrganizerTitle")}
+                      caption={passFieldLabels.organizedBy ?? ""}
+                      onCaptionChange={(v) =>
+                        markDirty(setPassFieldLabels)({ ...passFieldLabels, organizedBy: v })
+                      }
+                      value={config.organizerName || null}
+                      note={t("passFillOrganizer")}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">{t("passBackFieldsLabel")}</p>
+                    <BackFieldBuilder
+                      value={passBackFields}
+                      onChange={markDirty(setPassBackFields)}
+                    />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </SectionCard>
+          </fieldset>
+        </form>
+      </TabsContent>
+      <WalletRuntimeEditor
+        onSave={() => void handleSave()}
+        registerSave={registerSave}
+        onDirtyChange={setRuntimeDirty}
+        pending={submitting}
+        view={view}
+      />
+      {saveError && <ContextualError message={saveError} onRetry={() => void handleSave()} />}
+      {(view === "fields" || view === "appearance") && (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSave();
+          }}
+        >
+          <FormActions pending={submitting} state={saveState} />
+        </form>
+      )}
+    </Tabs>
   );
 }

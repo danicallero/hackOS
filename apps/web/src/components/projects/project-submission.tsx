@@ -8,6 +8,7 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
+import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
@@ -111,6 +112,34 @@ export function ProjectLifecycle({
       {children}
       <SectionCard
         title={t("projectSubmission")}
+        state={
+          state ? (
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge
+                tone={
+                  state.status === "submitted"
+                    ? "success"
+                    : state.status === "not_submitted"
+                      ? "warning"
+                      : "neutral"
+                }
+              >
+                {t(
+                  state.status === "submitted"
+                    ? "projectSubmittedStatus"
+                    : state.status === "not_submitted"
+                      ? "projectNotSubmitted"
+                      : "projectDraft",
+                )}
+              </StatusBadge>
+              {state.status === "submitted" && (
+                <StatusBadge tone={state.eligible ? "success" : "warning"}>
+                  {t(state.eligible ? "projectEligible" : "projectNeedsReview")}
+                </StatusBadge>
+              )}
+            </div>
+          ) : undefined
+        }
         headerClassName="flex-row items-center justify-between gap-2 sm:items-center"
         action={
           state?.lockedAt && !pending ? (
@@ -139,13 +168,8 @@ export function ProjectLifecycle({
               </p>
             ) : null}
           </div>
-        ) : state?.submittedAt || state?.status === "not_submitted" ? (
-          <div className="mb-6 space-y-2">
-            {state.submittedAt && <p className="text-sm">{t("projectReopened")}</p>}
-            {state.status === "not_submitted" && (
-              <p className="text-sm">{t("projectNotSubmitted")}</p>
-            )}
-          </div>
+        ) : state?.status === "draft" && state.submittedAt ? (
+          <p className="mb-6 text-sm">{t("projectReopened")}</p>
         ) : null}
         {state && (state.membershipDiffers || state.unresolvedCount > 0) && (
           <div className="mb-6 space-y-4">
@@ -167,12 +191,16 @@ export function ProjectLifecycle({
           </p>
         )}
         <div className="space-y-3">
-          <h3 className="font-medium text-balance">{t("projectDevpostOptional")}</h3>
+          <h3 className="font-medium text-balance">
+            {t(state?.devpostUrl ? "projectDevpostSource" : "projectDevpostOptional")}
+          </h3>
           {displayCode && (
             <div className="space-y-3">
-              <p className="text-sm text-pretty">
-                {t("projectDevpostCode", { code: displayCode })}
-              </p>
+              {!state?.devpostUrl && (
+                <p className="text-sm text-pretty">
+                  {t("projectDevpostCode", { code: displayCode })}
+                </p>
+              )}
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <code className="rounded-md border bg-muted/40 px-3 py-2 font-mono text-sm font-medium tabular-nums">
                   {displayCode}
@@ -213,9 +241,9 @@ export function ProjectLifecycle({
             />
           )}
         </div>
-        {!state?.lockedAt && (
-          <>
-            <div className="my-6 flex items-center gap-3 text-sm text-muted-foreground">
+        {!state?.lockedAt && (stage === "work-groups" || state?.status === "draft") && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <span className="h-px flex-1 bg-border" />
               {t("projectOr")}
               <span className="h-px flex-1 bg-border" />
@@ -235,7 +263,7 @@ export function ProjectLifecycle({
                 {t("submitProjectNative")}
               </Button>
             </div>
-          </>
+          </div>
         )}
         {error && !requestOpen && !confirm && <ContextualError message={error} onRetry={load} />}
       </SectionCard>
@@ -332,7 +360,7 @@ export function ImportedProjectClaim({
   }
   return (
     <div className="mt-4 space-y-3">
-      <p className="text-sm">{t("projectClaimIntro")}</p>
+      {!state.devpostUrl && <p className="text-sm">{t("projectClaimIntro")}</p>}
       <ActionGroup className="[&>button]:grow sm:[&>button]:grow-0">
         <Button loading={busy} onClick={() => claim()}>
           {t("projectConfirmNew")}

@@ -39,8 +39,16 @@ The filter affects form-question and application-scope logistics distributions
 only: application status, confirmation lifecycle, and submission time-series
 panels continue to report the full non-draft pipeline. Role-scope logistics
 distributions remain based on role membership and are not changed by the
-application filter. The web dashboard shows scope filters on the Before phase;
-During and After show event-wide operational totals.
+application filter. The web dashboard keeps authorized scope filters and the same configurable
+charts available in all three phases. During and After also show event-wide
+operational totals. Selecting a meal or activity opens a full-window detail with
+live servings/scans, distinct people, repeats, and two ring charts. The coverage
+chart intersects activity attendees with the current presence estimate: both
+segments refer to people currently at the event, rather than subtracting all
+historical attendees from current occupancy. Presence remains explicitly
+estimated. The second chart separates first visits from repeat scans or
+servings. Exact counts are visible beside the charts. Logistics SSE events
+refresh both operational totals and scoped charts during the event.
 
 Scope keys are stable resource identifiers: `application:<id>` and
 `role:<id>`. The API validates every selected key against the caller's

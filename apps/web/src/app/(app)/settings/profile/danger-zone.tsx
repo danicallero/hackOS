@@ -235,12 +235,7 @@ export function DangerZoneCard() {
   const canConfirm = eligibility !== null;
 
   return (
-    <SectionCard
-      variant="plain"
-      footerClassName="justify-start"
-      icon={WarningIcon}
-      title={t("dangerZone")}
-    >
+    <SectionCard footerClassName="justify-start" icon={WarningIcon} title={t("dangerZone")}>
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">

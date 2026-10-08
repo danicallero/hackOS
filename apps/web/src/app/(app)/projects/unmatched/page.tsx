@@ -11,9 +11,10 @@ import { LinkIcon } from "@phosphor-icons/react/dist/csr/Link";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListToolbar } from "@/components/common/list-toolbar";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
@@ -21,6 +22,11 @@ import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
+import {
+  matchingQueries,
+  rankMatchingUsers,
+  searchableIdentity,
+} from "@/components/projects/identity-matches";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,7 +51,6 @@ import {
 } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import type { UserList } from "@/lib/types";
 import { challengeTitleText, memberName, toUnmatchedRow, type UnmatchedRow } from "../shared";
 
 interface PublicChallenge {
@@ -67,6 +72,21 @@ export default function UnmatchedProjectsPage() {
   const [selectedPrizeChallenges, setSelectedPrizeChallenges] = useState<Record<string, string>>(
     {},
   );
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const filteredRows = useMemo(
+    () =>
+      rows.filter((row) =>
+        searchableIdentity(
+          `${row.name ?? ""} ${row.surname ?? ""} ${row.email} ${row.repo_name} ${row.devpost_username ?? ""}`,
+        ).includes(searchableIdentity(query)),
+      ),
+    [rows, query],
+  );
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visibleRows = filteredRows.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
   const [prizeName, setPrizeName] = useState("");
   const [challengeId, setChallengeId] = useState("");
 
@@ -98,12 +118,27 @@ export default function UnmatchedProjectsPage() {
     }
   }, [canImport, t]);
 
-  const searchUsers = useCallback(async (query: string): Promise<UserOption[]> => {
-    const res = await api.get<UserList>("/api/users", {
-      query: { q: query || undefined, limit: 25 },
-    });
-    return res.users;
-  }, []);
+  const searchUsers = useCallback(
+    async (query: string, row: UnmatchedRow): Promise<UserOption[]> => {
+      if (query.trim() && query.trim().length < 2) return [];
+      const queries = query.trim() ? [query.trim()] : matchingQueries(row);
+      if (!queries.length) return [];
+      const results = await Promise.all(
+        queries.map((q) =>
+          api.get<{ users: UserOption[] }>("/api/projects/member-candidates", {
+            query: { q, limit: 25 },
+          }),
+        ),
+      );
+      const users = [
+        ...new Map(
+          results.flatMap((result) => result.users).map((user) => [user.id, user]),
+        ).values(),
+      ];
+      return rankMatchingUsers(row, users, !query.trim()).slice(0, 25);
+    },
+    [],
+  );
 
   // Soft, in-place refresh instead of a hard reload when a project/repo
   // changes elsewhere.
@@ -170,6 +205,17 @@ export default function UnmatchedProjectsPage() {
       )}
 
       <SectionCard title={t("unmatchedParticipantsTitle")} icon={UserPlusIcon}>
+        <ListToolbar
+          search={{
+            label: t("searchUsersNameEmailPlaceholder"),
+            value: query,
+            onValueChange: (value) => {
+              setQuery(value);
+              setPage(0);
+              setSelectedUsers({});
+            },
+          }}
+        />
         {loading && !hasLoadedRef.current ? (
           <Spinner />
         ) : rows.length === 0 ? (
@@ -179,94 +225,144 @@ export default function UnmatchedProjectsPage() {
             description={t("allImportedLinkedDesc")}
           />
         ) : (
-          <ul className="space-y-3">
-            {rows.map((row) => {
-              const key = `${row.repo_id}:${row.email}`;
-              const selectedUserId = selectedUsers[key] ?? "";
-              return (
-                <li key={key} className="rounded-md border p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{memberName(row)}</p>
-                      <p className="text-muted-foreground truncate text-sm">{row.email}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {t("repoNameBatchInline", { repo: row.repo_name, batch: row.import_batch })}
-                      </p>
+          <>
+            {filteredRows.length === 0 && (
+              <p className="text-sm text-muted-foreground">{t("noResultsLabel")}</p>
+            )}
+            <ul className="divide-y divide-border">
+              {visibleRows.map((row) => {
+                const key = `${row.repo_id}:${row.email}`;
+                const selectedUserId = selectedUsers[key] ?? "";
+                return (
+                  <li key={key} className="py-4 first:pt-0 last:pb-0">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{memberName(row)}</p>
+                        <p className="text-muted-foreground truncate text-sm">{row.email}</p>
+                        <p className="text-muted-foreground text-xs">
+                          {t("repoNameBatchInline", {
+                            repo: row.repo_name,
+                            batch: row.import_batch,
+                          })}
+                        </p>
+                      </div>
+                      {row.claim_email_sent_at ? (
+                        <StatusBadge tone="info">{t("claimEmailSent")}</StatusBadge>
+                      ) : (
+                        <StatusBadge tone="warning">{t("unmatchedBadge")}</StatusBadge>
+                      )}
                     </div>
-                    {row.claim_email_sent_at ? (
-                      <StatusBadge tone="info">{t("claimEmailSent")}</StatusBadge>
-                    ) : (
-                      <StatusBadge tone="warning">{t("unmatchedBadge")}</StatusBadge>
-                    )}
-                  </div>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end">
-                    <div className="space-y-2">
-                      <Label htmlFor={`user-${key}`}>{t("linkToUserLabel")}</Label>
-                      <UserPicker
-                        id={`user-${key}`}
-                        value={selectedUserId}
-                        onChange={(value) =>
-                          setSelectedUsers((current) => ({ ...current, [key]: value }))
-                        }
-                        search={searchUsers}
-                        className="rounded-button"
-                      />
-                    </div>
-                    <Button
-                      variant="outline"
-                      disabled={!selectedUserId || busy === key}
-                      onClick={() =>
-                        mutate(
-                          key,
-                          () => linkParticipant(row.repo_id, row.email, Number(selectedUserId)),
-                          t("participantLinked"),
-                        )
-                      }
-                      loading={busy === key}
-                    >
-                      <LinkIcon aria-hidden="true" className="size-4" />
-                      {t("linkDirectlyButton")}
-                    </Button>
-                    {/* H6: link by adding this email as the account's secondary and
+                    <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+                      <div className="space-y-2">
+                        <Label htmlFor={`user-${key}`}>{t("linkToUserLabel")}</Label>
+                        <UserPicker
+                          id={`user-${key}`}
+                          value={selectedUserId}
+                          onChange={(value) =>
+                            setSelectedUsers((current) => ({ ...current, [key]: value }))
+                          }
+                          placeholder={t("projectSuggestedMatches")}
+                          search={(query) => searchUsers(query, row)}
+                          disabled={busy !== null}
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          disabled={!selectedUserId || busy !== null}
+                          onClick={() =>
+                            mutate(
+                              key,
+                              () => linkParticipant(row.repo_id, row.email, Number(selectedUserId)),
+                              t("participantLinked"),
+                            )
+                          }
+                          loading={busy === key}
+                        >
+                          <LinkIcon aria-hidden="true" className="size-4" />
+                          {t("linkDirectlyButton")}
+                        </Button>
+                        {/* H6: link by adding this email as the account's secondary and
                         triggering the platform's secondary-email verification —
                         distinct from the immediate admin-asserted match above, so
                         the two buttons need distinct labels, not just distinct
                         icons (issue reported: "hard to understand"). */}
-                    <Button
-                      variant="outline"
-                      disabled={!selectedUserId || busy === `${key}:secondary`}
-                      onClick={() =>
-                        mutate(
-                          `${key}:secondary`,
-                          () => linkSecondaryEmail(row.repo_id, row.email, Number(selectedUserId)),
-                          t("verificationEmailSentLinked"),
-                        )
-                      }
-                      loading={busy === `${key}:secondary`}
-                    >
-                      <UserPlusIcon aria-hidden="true" className="size-4" />
-                      {t("requestConfirmationButton")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      disabled={busy === `${key}:claim`}
-                      onClick={() =>
-                        mutate(
-                          `${key}:claim`,
-                          () => sendClaimEmail(row.repo_id, row.email),
-                          t("claimEmailQueued"),
-                        )
-                      }
-                      loading={busy === `${key}:claim`}
-                    >
-                      <EnvelopeSimpleIcon aria-hidden="true" className="size-4" />
-                      {t("claimEmail")}
-                    </Button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                        <Button
+                          variant="outline"
+                          disabled={!selectedUserId || busy !== null}
+                          onClick={() =>
+                            mutate(
+                              `${key}:secondary`,
+                              () =>
+                                linkSecondaryEmail(row.repo_id, row.email, Number(selectedUserId)),
+                              t("verificationEmailSentLinked"),
+                            )
+                          }
+                          loading={busy === `${key}:secondary`}
+                        >
+                          <UserPlusIcon aria-hidden="true" className="size-4" />
+                          {t("requestConfirmationButton")}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          disabled={busy !== null}
+                          onClick={() =>
+                            mutate(
+                              `${key}:claim`,
+                              () => sendClaimEmail(row.repo_id, row.email),
+                              t("claimEmailQueued"),
+                            )
+                          }
+                          loading={busy === `${key}:claim`}
+                        >
+                          <EnvelopeSimpleIcon aria-hidden="true" className="size-4" />
+                          {t("claimEmail")}
+                        </Button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <nav
+              className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4"
+              aria-label={t("tablePagination")}
+            >
+              <p role="status" className="text-xs text-muted-foreground tabular-nums">
+                {t("paginationSummary", {
+                  start: filteredRows.length ? currentPage * pageSize + 1 : 0,
+                  end: Math.min((currentPage + 1) * pageSize, filteredRows.length),
+                  total: filteredRows.length,
+                  page: currentPage + 1,
+                  pages: pageCount,
+                })}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === 0}
+                  onClick={() => {
+                    setPage(currentPage - 1);
+                    setSelectedUsers({});
+                  }}
+                >
+                  {t("previous")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= pageCount - 1}
+                  onClick={() => {
+                    setPage(currentPage + 1);
+                    setSelectedUsers({});
+                  }}
+                >
+                  {t("next")}
+                </Button>
+              </div>
+            </nav>
+          </>
         )}
       </SectionCard>
 
@@ -376,107 +472,6 @@ export default function UnmatchedProjectsPage() {
             </Select>
           </div>
         </div>
-      </SectionCard>
-
-      <SectionCard title={t("unmatchedParticipantsTitle")} icon={UserPlusIcon}>
-        {loading && !hasLoadedRef.current ? (
-          <Spinner />
-        ) : rows.length === 0 ? (
-          <EmptyState
-            icon={UserPlusIcon}
-            title={t("noUnmatchedParticipantsTitle")}
-            description={t("allImportedLinkedDesc")}
-          />
-        ) : (
-          <ul className="space-y-3">
-            {rows.map((row) => {
-              const key = `${row.repo_id}:${row.email}`;
-              const selectedUserId = selectedUsers[key] ?? "";
-              return (
-                <li key={key} className="rounded-md border p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{memberName(row)}</p>
-                      <p className="text-muted-foreground truncate text-sm">{row.email}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {t("repoNameBatchInline", { repo: row.repo_name, batch: row.import_batch })}
-                      </p>
-                    </div>
-                    {row.claim_email_sent_at ? (
-                      <StatusBadge tone="info">{t("claimEmailSent")}</StatusBadge>
-                    ) : (
-                      <StatusBadge tone="warning">{t("unmatchedBadge")}</StatusBadge>
-                    )}
-                  </div>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end">
-                    <div className="space-y-2">
-                      <Label htmlFor={`user-${key}`}>{t("linkToUserLabel")}</Label>
-                      <UserPicker
-                        id={`user-${key}`}
-                        value={selectedUserId}
-                        onChange={(value) =>
-                          setSelectedUsers((current) => ({ ...current, [key]: value }))
-                        }
-                        search={searchUsers}
-                        className="rounded-button"
-                      />
-                    </div>
-                    <Button
-                      variant="outline"
-                      disabled={!selectedUserId || busy === key}
-                      onClick={() =>
-                        mutate(
-                          key,
-                          () => linkParticipant(row.repo_id, row.email, Number(selectedUserId)),
-                          t("participantLinked"),
-                        )
-                      }
-                      loading={busy === key}
-                    >
-                      <LinkIcon aria-hidden="true" className="size-4" />
-                      {t("linkDirectlyButton")}
-                    </Button>
-                    {/* H6: link by adding this email as the account's secondary and
-                        triggering the platform's secondary-email verification —
-                        distinct from the immediate admin-asserted match above, so
-                        the two buttons need distinct labels, not just distinct
-                        icons (issue reported: "hard to understand"). */}
-                    <Button
-                      variant="outline"
-                      disabled={!selectedUserId || busy === `${key}:secondary`}
-                      onClick={() =>
-                        mutate(
-                          `${key}:secondary`,
-                          () => linkSecondaryEmail(row.repo_id, row.email, Number(selectedUserId)),
-                          t("verificationEmailSentLinked"),
-                        )
-                      }
-                      loading={busy === `${key}:secondary`}
-                    >
-                      <UserPlusIcon aria-hidden="true" className="size-4" />
-                      {t("requestConfirmationButton")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      disabled={busy === `${key}:claim`}
-                      onClick={() =>
-                        mutate(
-                          `${key}:claim`,
-                          () => sendClaimEmail(row.repo_id, row.email),
-                          t("claimEmailQueued"),
-                        )
-                      }
-                      loading={busy === `${key}:claim`}
-                    >
-                      <EnvelopeSimpleIcon aria-hidden="true" className="size-4" />
-                      {t("claimEmail")}
-                    </Button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
       </SectionCard>
     </PageLayout>
   );

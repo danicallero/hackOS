@@ -24,7 +24,7 @@ import { StatisticsExportPanel } from "@/components/exports/statistics-export-pa
 import type { PublicEvent } from "@/components/public/public-types";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { useLiveQuery } from "@/hooks/use-event-source";
+import { useEventSource, useLiveQuery } from "@/hooks/use-event-source";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { api } from "@/lib/api";
@@ -38,6 +38,7 @@ import {
 } from "@/lib/logistics";
 import { useCan, useMe } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
+import { ActivityStatisticsDetail } from "./activity-statistics-detail";
 import { BeforePanels } from "./before-panels";
 import {
   type ApplicationStats,
@@ -137,7 +138,7 @@ export default function LogisticsStatsPage() {
     logisticsApi.stats,
     "/api/logistics/stream",
     LOGISTICS_EVENTS,
-    { enabled: canGeneralStats && activePhase === "during" },
+    { enabled: canGeneralStats && activePhase !== "before" },
   );
 
   useEffect(() => {
@@ -181,39 +182,52 @@ export default function LogisticsStatsPage() {
     selectedApplicationIds.length === 1 ? selectedApplicationIds[0] : null;
   const layoutKey = activeScopeFilters.slice().sort().join("|");
 
-  const loadBefore = useCallback(async () => {
-    const requestId = ++beforeRequest.current;
-    if (!scopesLoaded || activeScopeFilters.length === 0) {
-      setApplicationStats(null);
-      setBeforeLoading(false);
-      return;
-    }
-    setBeforeLoading(true);
-    setBeforeError(null);
-    setApplicationStats(null);
-    try {
-      const participantFilters = Object.fromEntries(
-        selectedScopes
-          .filter((scope) => scope.kind === "application")
-          .map((scope) => [scope.key, activeParticipantStatusFilters[scope.key] ?? ["confirmed"]]),
-      );
-      const next = await api.post<ApplicationStats>("/api/statistics/query", {
-        scopes: activeScopeFilters,
-        participant_filters: participantFilters,
-      });
-      if (requestId === beforeRequest.current) setApplicationStats(next);
-    } catch (error) {
-      if (requestId === beforeRequest.current)
-        setBeforeError(errorMessage(error, t("couldNotLoadStatistics")));
-    } finally {
-      if (requestId === beforeRequest.current) setBeforeLoading(false);
-    }
-  }, [activeParticipantStatusFilters, activeScopeFilters, scopesLoaded, selectedScopes, t]);
+  const loadBefore = useCallback(
+    async (background = false) => {
+      const requestId = ++beforeRequest.current;
+      if (!scopesLoaded || activeScopeFilters.length === 0) {
+        setApplicationStats(null);
+        setBeforeLoading(false);
+        return;
+      }
+      setBeforeLoading(true);
+      setBeforeError(null);
+      if (!background) setApplicationStats(null);
+      try {
+        const participantFilters = Object.fromEntries(
+          selectedScopes
+            .filter((scope) => scope.kind === "application")
+            .map((scope) => [
+              scope.key,
+              activeParticipantStatusFilters[scope.key] ?? ["confirmed"],
+            ]),
+        );
+        const next = await api.post<ApplicationStats>("/api/statistics/query", {
+          scopes: activeScopeFilters,
+          participant_filters: participantFilters,
+        });
+        if (requestId === beforeRequest.current) setApplicationStats(next);
+      } catch (error) {
+        if (requestId === beforeRequest.current)
+          setBeforeError(errorMessage(error, t("couldNotLoadStatistics")));
+      } finally {
+        if (requestId === beforeRequest.current) setBeforeLoading(false);
+      }
+    },
+    [activeParticipantStatusFilters, activeScopeFilters, scopesLoaded, selectedScopes, t],
+  );
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadBefore();
   }, [loadBefore]);
+
+  useEventSource("/api/logistics/stream", {
+    events: LOGISTICS_EVENTS,
+    enabled: canGeneralStats && activePhase === "during",
+    onEvent: () => void loadBefore(true),
+    onResync: () => void loadBefore(true),
+  });
 
   const loadAfter = useCallback(async () => {
     if (!canGeneralStats || activePhase !== "after") return;
@@ -249,27 +263,26 @@ export default function LogisticsStatsPage() {
         title={t("logisticsStats")}
         secondaryActions={
           <>
-            {activePhase === "before" &&
-              (isMobile ? (
-                <IconButton
-                  variant={editMode ? "secondary" : "outline"}
-                  label={t(editMode ? "finishCustomizePanel" : "customizePanel")}
-                  aria-pressed={editMode}
-                  onClick={() => setEditMode(!editMode)}
-                >
-                  <SquaresFourIcon aria-hidden="true" />
-                </IconButton>
-              ) : (
-                <Button
-                  variant={editMode ? "secondary" : "outline"}
-                  size="default"
-                  aria-pressed={editMode}
-                  onClick={() => setEditMode(!editMode)}
-                >
-                  <SquaresFourIcon aria-hidden="true" />
-                  {t(editMode ? "finishCustomizePanel" : "customizePanel")}
-                </Button>
-              ))}
+            {isMobile ? (
+              <IconButton
+                variant={editMode ? "secondary" : "outline"}
+                label={t(editMode ? "finishCustomizePanel" : "customizePanel")}
+                aria-pressed={editMode}
+                onClick={() => setEditMode(!editMode)}
+              >
+                <SquaresFourIcon aria-hidden="true" />
+              </IconButton>
+            ) : (
+              <Button
+                variant={editMode ? "secondary" : "outline"}
+                size="default"
+                aria-pressed={editMode}
+                onClick={() => setEditMode(!editMode)}
+              >
+                <SquaresFourIcon aria-hidden="true" />
+                {t(editMode ? "finishCustomizePanel" : "customizePanel")}
+              </Button>
+            )}
             {canExport && (
               <StatisticsExportPanel
                 trigger={
@@ -300,7 +313,7 @@ export default function LogisticsStatsPage() {
             }))
           }
         />
-        <TabsContent value="before" className="mt-4">
+        <TabsContent value={activePhase} className="mt-4 space-y-4">
           <BeforePanel
             applicationId={selectedApplicationId}
             layoutKey={layoutKey}
@@ -313,12 +326,15 @@ export default function LogisticsStatsPage() {
           {canManageStatistics && activeScopeFilters.length === 1 && (
             <StatsVisibility scopeKey={activeScopeFilters[0]} />
           )}
-        </TabsContent>
-        <TabsContent value="during" className="mt-4">
-          <DuringPanel stats={liveStats} />
-        </TabsContent>
-        <TabsContent value="after" className="mt-4">
-          <AfterPanel hours={hours} loading={afterLoading} error={afterError} onRetry={loadAfter} />
+          {activePhase !== "before" && <DuringPanel stats={liveStats} />}
+          {activePhase === "after" && (
+            <AfterPanel
+              hours={hours}
+              loading={afterLoading}
+              error={afterError}
+              onRetry={loadAfter}
+            />
+          )}
         </TabsContent>
       </Tabs>
     </PageLayout>
@@ -358,6 +374,9 @@ function BeforePanel({
 function DuringPanel({ stats }: { stats: LiveStatsState }) {
   const { t } = useLocale();
   const data = stats.data;
+  const [selectedActivity, setSelectedActivity] = useState<{ id: number; meal: boolean } | null>(
+    null,
+  );
   const freshness: FreshnessKind = stats.error
     ? "incomplete"
     : stats.connected
@@ -444,6 +463,7 @@ function DuringPanel({ stats }: { stats: LiveStatsState }) {
             columns={mealColumns}
             data={data?.meals ?? []}
             getRowId={(row) => String(row.activityId)}
+            onRowClick={(row) => setSelectedActivity({ id: row.activityId, meal: true })}
             loading={stats.loading}
             error={
               stats.error
@@ -469,9 +489,17 @@ function DuringPanel({ stats }: { stats: LiveStatsState }) {
                 : undefined
             }
             empty={{ icon: PulseIcon, title: t("noActivityScansYet") }}
+            onRowClick={(row) => setSelectedActivity({ id: row.activityId, meal: false })}
           />
         </SectionCard>
       </div>
+      <ActivityStatisticsDetail
+        selected={selectedActivity}
+        stats={data}
+        connected={stats.connected}
+        error={stats.error}
+        onClose={() => setSelectedActivity(null)}
+      />
       <StaffRankingSection />
     </div>
   );

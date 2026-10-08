@@ -1,5 +1,6 @@
 "use client";
 
+import { activityKindLabelKey, toActivityKind } from "@hackos/shared/activity-kinds";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
@@ -70,7 +71,16 @@ export function buildTimeScale(
   const renderedHeights: number[] = [];
   for (let i = 1; i < boundaries.length; i++) {
     const realHeight = ((boundaries[i] - boundaries[i - 1]) / 3_600_000) * HOUR_HEIGHT;
-    const rendered = Math.min(realHeight, MAX_SEGMENT_HEIGHT);
+    let rendered = Math.min(realHeight, MAX_SEGMENT_HEIGHT);
+    // H47: reserve readable space within each actual interval so adjacent
+    // activities share a column without their minimum-height cards colliding.
+    for (const item of items) {
+      if (Date.parse(item.endsAt) !== boundaries[i]) continue;
+      const startIndex = boundaries.indexOf(Date.parse(item.startsAt));
+      if (startIndex >= 0 && startIndex < i) {
+        rendered = Math.max(rendered, offsets[startIndex] + MIN_ITEM_HEIGHT + 4 - offsets[i - 1]);
+      }
+    }
     renderedHeights.push(rendered);
     offsets.push(offsets[i - 1] + rendered);
   }
@@ -89,9 +99,8 @@ export function buildTimeScale(
 }
 
 /**
- * Calendar entries are absolutely positioned, so their collision lanes must
- * be based on rendered pixels (including the minimum readable card height),
- * not only on their timestamps.
+ * H47: half-open time intervals share a lane when one ends as the next
+ * starts. buildTimeScale reserves minimum card space within those intervals.
  */
 export function positionDayItems(
   items: PublicScheduleItem[],
@@ -106,9 +115,11 @@ export function positionDayItems(
         item,
         top,
         height: Math.max(MIN_ITEM_HEIGHT, toY(ends) - top - 4),
+        starts,
+        ends,
       };
     })
-    .sort((a, b) => a.top - b.top || b.height - a.height);
+    .sort((a, b) => a.starts - b.starts || b.ends - a.ends);
 
   const result: PositionedItem[] = [];
   let group: typeof positioned = [];
@@ -118,9 +129,9 @@ export function positionDayItems(
     if (!group.length) return;
     const laneEnds: number[] = [];
     const placed = group.map((entry) => {
-      let lane = laneEnds.findIndex((end) => end <= entry.top);
+      let lane = laneEnds.findIndex((end) => end <= entry.starts);
       if (lane === -1) lane = laneEnds.length;
-      laneEnds[lane] = entry.top + entry.height;
+      laneEnds[lane] = entry.ends;
       return { ...entry, lane };
     });
     const laneCount = laneEnds.length;
@@ -128,13 +139,13 @@ export function positionDayItems(
   };
 
   for (const entry of positioned) {
-    if (group.length && entry.top >= groupBottom) {
+    if (group.length && entry.starts >= groupBottom) {
       placeGroup();
       group = [];
       groupBottom = Number.NEGATIVE_INFINITY;
     }
     group.push(entry);
-    groupBottom = Math.max(groupBottom, entry.top + entry.height);
+    groupBottom = Math.max(groupBottom, entry.ends);
   }
   placeGroup();
   return result;
@@ -275,8 +286,8 @@ export function ScheduleTimeline({
                 {positionedItems.map(({ item, top, height: itemHeight, lane, laneCount }) => {
                   const starts = Date.parse(item.startsAt);
                   const ends = Date.parse(item.endsAt);
-                  const active = starts <= now && ends >= now;
-                  const passed = ends < now;
+                  const active = starts <= now && ends > now;
+                  const passed = ends <= now;
                   const shouldFocus = active || (!showNow && item.id === firstFutureId);
                   const width = `calc(${100 / laneCount}% - ${(LANE_GAP * (laneCount - 1)) / laneCount}px)`;
                   const left = `calc(${(lane * 100) / laneCount}% + ${(lane * LANE_GAP) / laneCount}px)`;
@@ -363,8 +374,8 @@ export function ScheduleTimeline({
               {dayItems.map((item) => {
                 const starts = Date.parse(item.startsAt);
                 const ends = Date.parse(item.endsAt);
-                const active = starts <= now && ends >= now;
-                const passed = ends < now;
+                const active = starts <= now && ends > now;
+                const passed = ends <= now;
                 const shouldFocus = active || (!showNow && item.id === firstFutureId);
                 return (
                   <li
@@ -437,19 +448,42 @@ export function ScheduleTimeline({
               </p>
             )}
             {selectedItem.type && (
-              <p className="text-muted-foreground capitalize">{selectedItem.type}</p>
+              <p className="text-muted-foreground capitalize">
+                {toActivityKind(selectedItem.type)
+                  ? t(activityKindLabelKey(toActivityKind(selectedItem.type)!))
+                  : selectedItem.type}
+              </p>
             )}
             {selectedItem.description && (
               <p className="whitespace-pre-wrap text-pretty">{selectedItem.description}</p>
             )}
-            {showResponsible && (selectedItem.owners?.length || selectedItem.contactNote) && (
-              <p className="text-muted-foreground text-pretty">
-                {t("contactLabel")}:{" "}
-                {selectedItem.contactNote ??
-                  selectedItem.owners
-                    ?.map((o) => [o.name, o.surname].filter(Boolean).join(" "))
+            {showResponsible && selectedItem.owners && selectedItem.owners.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium">{t("ownersLabel")}</h3>
+                <p className="text-muted-foreground whitespace-pre-wrap text-pretty">
+                  {selectedItem.owners
+                    .map(
+                      (owner) =>
+                        owner.freeTextName || [owner.name, owner.surname].filter(Boolean).join(" "),
+                    )
+                    .filter(Boolean)
                     .join(", ")}
-              </p>
+                </p>
+              </div>
+            )}
+            {showResponsible && selectedItem.contactNote && (
+              <div>
+                <h3 className="text-sm font-medium">{t("contactNoteLabel")}</h3>
+                <p className="text-muted-foreground whitespace-pre-wrap text-pretty">
+                  {selectedItem.contactNote}
+                </p>
+              </div>
+            )}
+            {showResponsible && selectedItem.notes && (
+              <div>
+                <h3 className="text-sm font-medium">{t("internalNotesLabel")}</h3>
+                <p className="whitespace-pre-wrap text-pretty">{selectedItem.notes}</p>
+              </div>
             )}
           </div>
         )}

@@ -243,16 +243,7 @@ export interface PlannedWorkGroup {
 }
 export const myWorkGroups = () =>
   api.get<{ groups: PlannedWorkGroup[]; canCreate: boolean }>("/api/me/work-groups");
-export interface ParticipationEstimate {
-  challengeId: number;
-  title: string;
-  groupCount: number;
-  projectCount: number;
-  expectedCount: number;
-  participantCount: number;
-}
-export const workGroupEstimates = () =>
-  api.get<{ estimates: ParticipationEstimate[] }>("/api/work-groups/estimates");
+
 export const getMyWorkGroup = (id: number) =>
   api.get<PlannedWorkGroup>(`/api/me/work-groups/${id}`);
 export const createWorkGroup = (

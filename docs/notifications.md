@@ -277,14 +277,16 @@ through `resolveActivityText` (`lib/scanner-types.ts`, mirroring
 
 ## Web participant UI
 
-The inbox uses message rows separated by quiet hairlines and an alternating
-neutral wash. Subjects lead each row, timestamps sit beside them on desktop
+The inbox renders each message as its own bordered row surface (unread rows get
+a faint primary tint). Subjects lead each row, timestamps sit beside them on desktop
 and below on narrow screens, and previews stay muted. Unread dots and subject
 weight distinguish unread messages. Opening a row
 marks it read and reveals selectable body text, optional payload details and a
 delete action with confirmation. Preferences use one row per category with
 a checkbox menu for the existing in-app, email and push channels. Queue calls
-remain read-only and always enabled (H51). Activity and kind reminders share a
+remain read-only and always enabled (H51): their row shows "always on" beside
+the label and a lock in the same trailing gutter the menu rows use for their
+caret, so values align down the column. Activity and kind reminders share a
 separate open section. Its Add reminder action opens a dialog with searchable
 activity and activity-kind comboboxes; selecting an option subscribes immediately
 on the existing default channels and closes the dialog after success. Active

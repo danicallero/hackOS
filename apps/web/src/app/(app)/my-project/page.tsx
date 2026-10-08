@@ -296,8 +296,8 @@ function ChallengeRow({
 }) {
   const { t } = useLocale();
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 py-2">
-      <span className="min-w-0 truncate font-medium">{title}</span>
+    <div className="grid min-w-0 gap-2 py-3">
+      <span className="min-w-0 font-medium wrap-break-word">{title}</span>
       {presentation?.status ? (
         <PresentationStatus {...presentation} />
       ) : (
@@ -309,8 +309,8 @@ function ChallengeRow({
 
 function QueueChallengeRow({ entry }: { entry: MyQueueEntry }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 py-2">
-      <span className="min-w-0 truncate font-medium">
+    <div className="grid min-w-0 gap-2 py-3">
+      <span className="min-w-0 font-medium wrap-break-word">
         {challengeTitleText(entry.challengeTitle)}
       </span>
       <PresentationStatus {...entry} assignedRoomName={entry.room?.name} />
@@ -346,10 +346,7 @@ function PendingInvitesCard({
     <SectionCard variant="plain" title={t("pendingInvitesTitle")} icon={EnvelopeSimpleIcon}>
       <ul className="space-y-3">
         {invites.map((invite) => (
-          <li
-            className="flex flex-wrap items-center justify-between gap-3 py-2"
-            key={invite.repoId}
-          >
+          <li className="grid min-w-0 gap-2 py-3" key={invite.repoId}>
             <p className="min-w-0 truncate text-sm">
               {t("invitedToProjectLabel", {
                 inviterName: invite.invitedByName ?? "",
