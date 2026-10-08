@@ -25,6 +25,11 @@ again when upgrading the SDK.
 NFC accreditation reads require a rebuilt development/production client and
 physical NFC hardware; Expo Go and Simulator cannot read NTAG213 badges.
 The config plugin supplies iOS TAG entitlements and Android NFC permission.
+Android's `.pkpass` chooser also requires a new native build after changes to
+`modules/wallet-handoff`; reloading JavaScript alone keeps the older client's
+share/save fallback. Confirm multiple installed importers appear, including
+an importer supporting only a legacy MIME alias.
+
 Enable NFC Tag Reading on the Apple App ID and regenerate signing profiles
 before a device/EAS build. See [NFC accreditations](./mobile.md#nfc-accreditations-h22h26).
 

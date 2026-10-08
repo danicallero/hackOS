@@ -541,4 +541,12 @@ The project reconciliation workspace follows Users/Responses: `ListToolbar` + `F
 
 Controlled list review dialogs can pass `Modal.onCloseAutoFocus` to restore their opening row or search field. Keep persistent review utilities in `Modal.footer`, outside the scrolling body.
 
-Participant project detail pages keep compact edit/overflow controls inline with the title using the Users header composition. Project details, team, challenges/judging preference, submission and optional Devpost linkage use separate SectionCard surfaces in that order; team/challenge members stay plain rows inside their section. Both planning and reconciled projects use the same Add challenge editor instead of separate inline selection controls. Ordinary event rule settings record audit metadata automatically without asking for a justification; explicit project exceptions retain their reason.
+Participant project detail pages keep compact edit/overflow controls inline with the title using the Users header composition. Project details, team, challenges/judging preference and a final submission section use separate SectionCard surfaces in that order; the submission section leads with Devpost (code and link status) and offers "Submit without Devpost" as a secondary action below an "or" divider; team/challenge members stay plain rows inside their section. Both planning and reconciled projects use the same Add challenge editor instead of separate inline selection controls. Ordinary event rule settings record audit metadata automatically without asking for a justification; explicit project exceptions retain their reason.
+
+## Invitation onboarding (H7/H9/H10)
+
+The claim-account form follows the active web language, including dietary
+restriction options and selected labels. Changing either the web language
+switcher or the form language selector updates both and saves that language
+as the new account preference. Dietary restrictions are submitted as dictionary
+IDs, so changing language preserves the selection and other entered data.

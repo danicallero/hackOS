@@ -60,7 +60,9 @@ The Chromium project is the required pull-request smoke subset. It includes
 the judging-room transition scenario, whose API read model and SSE connection
 are deterministic in-process fixtures. Firefox, WebKit, and mobile Chromium
 remain local/release coverage; scenarios wait for observable UI state rather
-than fixed delays.
+than fixed delays. Invitation-language scenarios seed the language and the
+cookie-notice dismissal preference before hydration; they test onboarding
+language synchronization without racing the unrelated cookie overlay.
 
 ## Native mobile tests
 

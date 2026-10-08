@@ -631,3 +631,35 @@ Wallet requests still use the scoped token owner.
 ### Exceptions
 Token endpoints that explicitly require fresh authentication follow their own
 published session contract.
+
+## [R020] Cover fresh installs when diagnosing native storage failures
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-10-08
+
+### Trigger
+Diagnosing a mobile failure attributed to cached data, migration, or cleanup.
+
+### Mistake
+Attributed an Android environment-switch failure only to an older roster,
+although it also occurred before the first sign-in. The test double treated a
+native directory URI getter as an inert string, hiding its path validation.
+
+### Lesson
+Storage initialization and native property getters can fail before any stored
+data exists. A migration-shaped call path does not prove a migration-only bug.
+
+### Action
+Inspect the native adapter behind the failing operation and model the relevant
+getter behavior in regression tests. Cover both a fresh install without prior
+sign-in and an upgrade with existing data before narrowing the diagnosis.
+
+### Validation
+Verify that both cases fail against the previous implementation and pass with
+the correction. Keep physical-device confirmation separate from mocked tests.
+
+### Exceptions
+A failure explicitly requiring an existing record may use that prerequisite,
+provided the fresh-install path has been checked and does not access it.
