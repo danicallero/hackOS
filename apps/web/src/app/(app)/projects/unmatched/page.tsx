@@ -209,6 +209,7 @@ export default function UnmatchedProjectsPage() {
                           setSelectedUsers((current) => ({ ...current, [key]: value }))
                         }
                         search={searchUsers}
+                        className="rounded-button"
                       />
                     </div>
                     <Button
@@ -417,6 +418,7 @@ export default function UnmatchedProjectsPage() {
                           setSelectedUsers((current) => ({ ...current, [key]: value }))
                         }
                         search={searchUsers}
+                        className="rounded-button"
                       />
                     </div>
                     <Button
