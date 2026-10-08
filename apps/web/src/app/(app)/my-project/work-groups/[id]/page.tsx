@@ -10,11 +10,12 @@ import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { SectionCard } from "@/components/common/section-card";
+import { PAIRED_HEADER_CLASS, SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
 import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
+import { ProjectLifecycle } from "@/components/projects/project-submission";
 import { WorkGroupField as Field, WorkGroupEditor } from "@/components/projects/work-group-editor";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -107,8 +108,12 @@ export default function WorkGroupDetailPage() {
   return (
     <PageLayout width="reading">
       <PageHeader
+        className={
+          active
+            ? "flex-row items-center justify-between gap-2 md:items-center [&>[data-slot=action-group]]:shrink-0 [&>[data-slot=action-group]]:flex-nowrap"
+            : undefined
+        }
         title={group.name}
-        meta={`${t("workGroupTiming")}: ${t(group.presentation_timing_preference === "early" ? "workGroupTimingEarly" : group.presentation_timing_preference === "middle" ? "workGroupTimingMiddle" : group.presentation_timing_preference === "late" ? "workGroupTimingLate" : "workGroupTimingNone")}`}
         secondaryActions={
           active && !group.linked_repo_id ? (
             <DeleteGroup group={group} onDeleted={() => router.replace("/my-project")} />
@@ -136,18 +141,37 @@ export default function WorkGroupDetailPage() {
           )
         }
       />
-      <ProjectDescriptionLinks
-        description={group.description}
-        links={{
-          devpostUrl: group.devpost_url,
-          demoUrl: group.demo_url,
-          githubUrl: group.github_url,
-        }}
-      />
-      <div className="grid gap-8 xl:grid-cols-3 xl:gap-12">
-        <Members group={group} onChanged={load} editable={active} />
-        <Challenges group={group} challenges={challenges} onChanged={load} editable={active} />
-      </div>
+      <SectionCard title={t("projectDetailsTitle")}>
+        <ProjectDescriptionLinks
+          description={group.description}
+          links={{
+            devpostUrl: group.devpost_url,
+            demoUrl: group.demo_url,
+            githubUrl: group.github_url,
+          }}
+        />
+      </SectionCard>
+      {active ? (
+        <ProjectLifecycle
+          key={JSON.stringify(group)}
+          id={group.id}
+          name={group.name}
+          stage="work-groups"
+          canSubmit={group.can_submit}
+          code={group.reconciliation_code}
+          onChanged={load}
+        >
+          <div className="grid items-start gap-4 md:grid-cols-2">
+            <Members group={group} onChanged={load} editable />
+            <Challenges group={group} challenges={challenges} onChanged={load} editable />
+          </div>
+        </ProjectLifecycle>
+      ) : (
+        <div className="grid items-start gap-4 md:grid-cols-2">
+          <Members group={group} onChanged={load} editable={false} />
+          <Challenges group={group} challenges={challenges} onChanged={load} editable={false} />
+        </div>
+      )}
     </PageLayout>
   );
 }
@@ -190,8 +214,8 @@ function Members({
   }
   return (
     <SectionCard
-      variant="plain"
       title={t("teamSectionTitle")}
+      headerClassName={PAIRED_HEADER_CLASS}
       action={
         editable ? (
           <SidePanelEditor
@@ -283,6 +307,7 @@ function Challenges({
 }) {
   const { t } = useLocale();
   const [selected, setSelected] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function change(challengeId: number, remove = false) {
@@ -292,6 +317,7 @@ function Challenges({
       if (remove) await removeWorkGroupChallenge(group.id, challengeId, crypto.randomUUID());
       else await addWorkGroupChallenge(group.id, challengeId, crypto.randomUUID());
       setSelected("");
+      if (!remove) setAddOpen(false);
       await onChanged();
     } catch (error) {
       setError(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
@@ -304,33 +330,53 @@ function Challenges({
   );
   return (
     <SectionCard
-      variant="plain"
-      className="xl:col-span-2"
       title={t("challenges")}
-      footer={
+      headerClassName={PAIRED_HEADER_CLASS}
+      action={
         editable && available.length ? (
-          <div className="flex gap-2">
-            <EntityCombobox
-              className="min-w-0 flex-1"
-              options={available}
-              getId={(challenge) => challenge.id}
-              getLabel={(challenge) => challengeTitleText(challenge.title)}
-              value={selected}
-              placeholder={t("selectChallengePlaceholder")}
-              onChange={setSelected}
-              disabled={busy}
-            />
-            <Button
-              disabled={busy || !selected}
-              onClick={() => change(Number(selected))}
-              loading={busy}
-            >
-              {t("addAction")}
-            </Button>
-          </div>
+          <SidePanelEditor
+            open={addOpen}
+            onOpenChange={setAddOpen}
+            trigger={
+              <Button size="sm" variant="outline">
+                {t("addChallenge")}
+              </Button>
+            }
+            title={t("addChallenge")}
+            footer={
+              <Button
+                disabled={busy || !selected}
+                onClick={() => change(Number(selected))}
+                loading={busy}
+              >
+                {t("addChallenge")}
+              </Button>
+            }
+          >
+            <div className="space-y-2">
+              <label className="type-label" htmlFor="group-challenge">
+                {t("challenges")}
+              </label>
+              <EntityCombobox
+                inDialog
+                id="group-challenge"
+                options={available}
+                getId={(challenge) => challenge.id}
+                getLabel={(challenge) => challengeTitleText(challenge.title)}
+                value={selected}
+                placeholder={t("selectChallengePlaceholder")}
+                onChange={setSelected}
+                disabled={busy}
+              />
+              {error && <ContextualError message={error} />}
+            </div>
+          </SidePanelEditor>
         ) : undefined
       }
     >
+      {group.challenges.length === 0 && (
+        <p className="text-sm text-muted-foreground">{t("noChallenges")}</p>
+      )}
       <ul className="divide-y divide-border/60">
         {group.challenges.map((challenge) => (
           <li
@@ -356,7 +402,21 @@ function Challenges({
           </li>
         ))}
       </ul>
-      {error && <ContextualError message={error} />}
+      <dl className="flex flex-wrap justify-between gap-2 border-t border-border pt-4 text-sm">
+        <dt className="text-muted-foreground">{t("workGroupTiming")}</dt>
+        <dd className="font-medium">
+          {t(
+            group.presentation_timing_preference === "early"
+              ? "workGroupTimingEarly"
+              : group.presentation_timing_preference === "middle"
+                ? "workGroupTimingMiddle"
+                : group.presentation_timing_preference === "late"
+                  ? "workGroupTimingLate"
+                  : "workGroupTimingNone",
+          )}
+        </dd>
+      </dl>
+      {error && !addOpen && <ContextualError message={error} />}
     </SectionCard>
   );
 }

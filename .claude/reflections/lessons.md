@@ -199,8 +199,10 @@ Inspect real desktop and narrow screenshots, including a single record,
 multiple records, and independent simultaneous states.
 
 ### Exceptions
-Dense operational tables, overlays and truly selectable/bounded objects still
-justify surfaces; meaningful changing states still justify status badges.
+Distinct participant contexts (project details, team, judging and delivery)
+justify section surfaces when open sections fail to communicate ownership.
+Keep their contents as rows rather than nested cards. Dense operational tables,
+overlays and truly selectable/bounded objects still justify surfaces; meaningful changing states still justify status badges.
 
 ## [R007] Review feedback copy at its call sites
 
@@ -346,7 +348,10 @@ in status copy.
 
 ### Action
 Use the existing category form and save transaction. Match adjacent sections'
-heading hierarchy and control spacing. Keep audience copy brief.
+heading hierarchy and control spacing. Keep audience copy brief. Auditing ordinary
+configuration must not create a mandatory justification field: record actor,
+time and changed values automatically. Reserve requested reasons for actual
+exceptions or decisions whose policy requires them.
 
 ### Validation
 Capture the section with the common Save changes footer and test that an
@@ -521,7 +526,7 @@ Controls deliberately lacking hover behavior, including touch-only surfaces.
 Status: active
 Scope: module:web
 Source: user-correction
-Date: 2026-10-05
+Date: 2026-10-08
 
 ### Trigger
 Building or applying a shared page/surface pattern across web routes.
@@ -536,7 +541,9 @@ Choose width by the content being shown, not by whether the route is called a
 detail page. Shared patterns need representative content and rendered review.
 
 ### Action
-Use the audited Users layout as the dense-list reference. Keep mixed record
+Use the audited Users and application Responses layouts as the dense-list references.
+Reuse their actual ListToolbar, FilterMenu and DataTable compositions rather
+than reproducing them with loosely aligned buttons and repeated detail blocks. Keep mixed record
 pages wide enough for their table tabs, constrain only text/form groups, and
 verify the last column. Preview meaningful groups instead of filler fields.
 Put save state at the leading edge, secondary actions then Save at the trailing
@@ -553,6 +560,10 @@ ownership, question boundaries and an explicit drop destination.
 
 ### Validation
 Inspect actual desktop/narrow screenshots before claiming visual quality.
+Compare new screens directly with those maintained references; passing flows
+and having screenshots are not evidence that hierarchy or alignment is good.
+Also compare the narrow header action row with Users; preserve its inline
+layout, reducing labelled edit actions to accessible icons when necessary.
 Check table geometry, useful field hierarchy, action order, pending feedback
 and panel widths. Recheck each route after a shared pattern changes.
 
@@ -652,3 +663,65 @@ the correction. Keep physical-device confirmation separate from mocked tests.
 ### Exceptions
 A failure explicitly requiring an existing record may use that prerequisite,
 provided the fresh-install path has been checked and does not access it.
+
+## [R021] Attach PR screenshots with the GitHub CLI
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-10-08
+
+### Trigger
+Posting screenshots or video on a pull request or issue comment.
+
+### Mistake
+The agent stopped at "gh cannot upload images" and left screenshots in a local
+folder, following stale repository docs that described a branch-hosting
+workaround.
+
+### Lesson
+`gh` 2.101+ uploads images and video itself. Do not host files on a throwaway
+branch or ask the user to drag them in.
+
+### Action
+Run `gh pr comment <n> --body … --attach '<abs path>#<alt text>'`, repeating the
+flag for each file. Describe in the text what each image shows. Fix any doc
+that claims otherwise.
+
+### Validation
+Open the returned comment URL's content and confirm the images render.
+
+### Exceptions
+If `gh --version` is older than 2.101, report that blocker.
+
+## [R022] Let a section's layout explain its primary path and alternatives
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-10-08
+
+### Trigger
+Designing a card that offers a main workflow plus an optional alternative
+(for example Devpost submission versus native submission).
+
+### Mistake
+A secondary-styled alternative sat in the card header, away from the main path,
+so the relationship between the two was not visible and prose had to cover it.
+
+### Lesson
+Order and grouping should show which path is primary and which is the optional
+side route. Explain consequences only where they apply, with no restating text.
+
+### Action
+Lead with the primary path's content, then a quiet "or" divider, then the
+alternative's action beside its consequence. Keep the header for post-state
+actions (such as Request edits). After any reorder, update specs that index
+sections by position.
+
+### Validation
+Check desktop and mobile screenshots of every state (draft, linked, submitted)
+and confirm a reader can tell the primary path without reading helper copy.
+
+### Exceptions
+Two equal-weight choices may share a chooser instead.

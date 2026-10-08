@@ -126,6 +126,23 @@ test("keeps one participant project before and after import, with live presentat
       };
     else if (path === "/api/me/work-groups") body = { groups: [currentGroup], canCreate: true };
     else if (path === "/api/me/work-groups/1") body = currentGroup;
+    else if (path === "/api/me/projects/10/submission")
+      body = {
+        id: 10,
+        name: group.name,
+        code: "CODE10",
+        status: "draft",
+        submittedVia: null,
+        submittedAt: null,
+        lockedAt: null,
+        devpostUrl: group.devpost_url,
+        membershipDiffers: false,
+        unresolvedCount: 0,
+        internal: [{ userId: 1, name: "Alex", surname: "Fernández" }],
+        external: [],
+        requests: [],
+        canSubmit: true,
+      };
     else if (path === "/api/me/projects/invites") body = { invites: [] };
     else if (path === "/api/public/challenges") body = { items: [{ id: 1, title: "Best hack" }] };
     else if (path === "/api/queue/me") body = [];
@@ -158,7 +175,8 @@ test("keeps one participant project before and after import, with live presentat
   await expect(page.getByRole("heading", { name: group.name, level: 1 })).toBeVisible();
   await expect(page.getByText("Alex Fernández", { exact: true })).toBeVisible();
   await expect(page.locator(`a[href="${group.github_url}"]`)).toBeVisible();
-  await expect(page.getByText(/Judging preference: Early/)).toBeVisible();
+  await expect(page.getByText("Judging preference", { exact: true })).toBeVisible();
+  await expect(page.getByText("Early", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Delete project", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "More actions", exact: true }).click();
   await page.getByRole("menuitem", { name: "Delete project", exact: true }).click();

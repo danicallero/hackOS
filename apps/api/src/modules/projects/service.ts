@@ -29,8 +29,10 @@ import { compactQueueGroupPositions, nextBottomPosition } from "../queue/orderin
 import { linkDevpostImports } from "../work-groups/service.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
 import { resolveDevpostUrls } from "./devpost-url.js";
+import { finalizeDevpostImport } from "./lifecycle.js";
 import { buildImportPlan, type ImportPlan } from "./plan.js";
 import { reconcileDevpostParticipantsForUser } from "./reconciliation.js";
+import { assertProjectEditable, assertProjectParticipantWindow } from "./submission-state.js";
 
 const CLAIM_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -90,6 +92,37 @@ export async function confirmImport(
           [url, canonical],
         );
     }
+    for (const repo of plan.repos) {
+      if (
+        !repo.projectCode ||
+        !repo.url ||
+        plan.repos.filter((p) => p.projectCode === repo.projectCode).length !== 1
+      )
+        continue;
+      const known = await client.query(
+        `SELECT id FROM repos WHERE devpost_import_url=$1 FOR UPDATE`,
+        [repo.url],
+      );
+      if (known.rows[0]) continue;
+      const target = await client.query(
+        `SELECT id,devpost_import_url FROM repos WHERE reconciliation_code=$1 AND is_test_account=false AND NOT EXISTS(SELECT 1 FROM audit_log a WHERE a.entity_type='repo' AND a.entity_id=repos.id::text AND a.action='unlink_project') FOR UPDATE`,
+        [repo.projectCode],
+      );
+      if (target.rows[0] && !target.rows[0].devpost_import_url) {
+        await client.query(`UPDATE repos SET devpost_url=$2,devpost_import_url=$2 WHERE id=$1`, [
+          target.rows[0].id,
+          repo.url,
+        ]);
+        await audit(client, {
+          actorId,
+          entityType: "repo",
+          entityId: target.rows[0].id,
+          action: "link_project_code",
+          after: { devpostUrl: repo.url },
+          source: "admin",
+        });
+      }
+    }
     const batchId = `dp_${randomUUID()}`;
 
     await persistPreviewTagMappings(client, actorId, plan, tagMappings);
@@ -107,19 +140,20 @@ export async function confirmImport(
       const { rows } = await client.query(
         `WITH incoming AS (
            SELECT * FROM jsonb_to_recordset($1::jsonb)
-             AS v(ordinal int, name text, description text, devpost_url text, demo_url text, github_url text, devpost_canonical_url text)
+             AS v(ordinal int, name text, description text, devpost_url text, demo_url text, github_url text, devpost_canonical_url text, imported_project_code text)
          )
-         INSERT INTO repos (name, description, devpost_url, demo_url, github_url, devpost_canonical_url)
-         SELECT name, description, devpost_url, demo_url, github_url, devpost_canonical_url FROM incoming
-         ON CONFLICT (devpost_url) WHERE devpost_url IS NOT NULL DO UPDATE
-           SET name = EXCLUDED.name,
-               description = EXCLUDED.description,
-               demo_url = EXCLUDED.demo_url,
-               github_url = COALESCE(EXCLUDED.github_url, repos.github_url),
+         INSERT INTO repos (name, description, devpost_url, devpost_import_url, demo_url, github_url, devpost_canonical_url, imported_project_code)
+         SELECT name, description, devpost_url, devpost_url, demo_url, github_url, devpost_canonical_url, imported_project_code FROM incoming
+         ON CONFLICT (devpost_import_url) WHERE devpost_import_url IS NOT NULL DO UPDATE
+           SET name = CASE WHEN repos.submitted_via='native' THEN repos.name ELSE EXCLUDED.name END,
+               description = CASE WHEN repos.submitted_via='native' THEN repos.description ELSE EXCLUDED.description END,
+               demo_url = CASE WHEN repos.submitted_via='native' THEN repos.demo_url ELSE EXCLUDED.demo_url END,
+               github_url = CASE WHEN repos.submitted_via='native' THEN repos.github_url ELSE COALESCE(EXCLUDED.github_url, repos.github_url) END,
+               imported_project_code=COALESCE(repos.imported_project_code,EXCLUDED.imported_project_code),
                devpost_canonical_url = COALESCE(EXCLUDED.devpost_canonical_url, repos.devpost_canonical_url),
                updated_at = now()
            WHERE repos.is_test_account = false
-         RETURNING id, devpost_url, (xmax = 0) AS was_insert`,
+         RETURNING id, devpost_import_url AS devpost_url, (xmax = 0) AS was_insert`,
         [
           JSON.stringify(
             reposWithUrl.map((repo) => ({
@@ -130,6 +164,7 @@ export async function confirmImport(
               demo_url: repo.demoUrl,
               github_url: repo.githubUrl,
               devpost_canonical_url: identities.get(repo.url as string) ?? null,
+              imported_project_code: repo.projectCode,
             })),
           ),
         ],
@@ -282,6 +317,28 @@ export async function confirmImport(
       participantsUnmatched = rows[0].unmatched;
     }
 
+    // H16: updated exports replace only automatic external staging data.
+    // Explicit operator identity corrections remain stable; internal members
+    // are never overwritten. Snapshot/audit retain the prior import roster.
+    const importedIds = repoResults.map((r) => r.id);
+    const stale = await client.query(
+      `DELETE FROM devpost_participants WHERE repo_id=ANY($1::int[]) AND import_batch<>$2 AND merge_status<>'manually_linked' RETURNING *`,
+      [importedIds, batchId],
+    );
+    if (stale.rows.length)
+      await audit(client, {
+        actorId,
+        entityType: "devpost_import",
+        entityId: batchId,
+        action: "refresh_external_roster",
+        before: stale.rows,
+        source: "admin",
+      });
+    await client.query(
+      `DELETE FROM submissions s WHERE s.repo_id=ANY($1::int[]) AND s.imported_from='devpost' AND NOT EXISTS(SELECT 1 FROM devpost_participants dp WHERE dp.repo_id=s.repo_id AND dp.user_id=s.user_id)`,
+      [importedIds],
+    );
+
     // #854 runs after both the roster and prize-to-challenge data are durable.
     // The matcher itself accepts only exact valid URLs or one unambiguous,
     // complete roster plus intended-challenge match.
@@ -289,6 +346,12 @@ export async function confirmImport(
       client,
       actorId,
       repoResults.map((repo) => repo.id),
+    );
+
+    await finalizeDevpostImport(
+      client,
+      actorId,
+      repoResults.map((r) => r.id),
     );
 
     // H17: surface how many of the prizes this import saw still have no
@@ -887,6 +950,15 @@ async function attachMembersAndPrizes(
       ORDER BY s.repo_id, u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC`,
     [ids, fixtureMarker],
   );
+  const planningMembers = await pool.query(
+    `SELECT g.linked_repo_id AS repo_id,u.id AS user_id,u.email,u.name,u.surname
+    FROM planned_work_groups g JOIN planned_work_group_members m ON m.group_id=g.id AND m.status='active'
+    JOIN users u ON u.id=m.user_id JOIN repos r ON r.id=g.linked_repo_id
+    WHERE g.linked_repo_id=ANY($1::int[]) AND r.membership_resolution IS DISTINCT FROM 'devpost'
+      AND u.account_state='active' AND u.anonymized_at IS NULL AND u.is_test_account=$2`,
+    [ids, fixtureMarker],
+  );
+  manualMembersRes.rows.push(...planningMembers.rows);
   const prizesRes = await pool.query(
     `SELECT p.repo_id, p.prize
        FROM repo_devpost_prizes p
@@ -951,7 +1023,7 @@ async function attachMembersAndPrizes(
        LEFT JOIN ranked ON ranked.queue_group_id = qgc.queue_group_id AND ranked.repo_id = qe.repo_id
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(jsonb_build_object('id', rm.id, 'name', rm.name, 'location', rm.location) ORDER BY rm.name) AS rooms,
-                COALESCE(avg(rqs.desired_minutes_per_team) FILTER (WHERE NOT rqs.is_paused), 8) /
+                (SELECT estimated_cycle_minutes FROM queue_group_timing(qgc.queue_group_id)) /
                   greatest(1, count(rqs.room_id) FILTER (WHERE NOT rqs.is_paused)) AS minutes
            FROM room_queue_groups rqg
            JOIN rooms rm ON rm.id = rqg.room_id
@@ -1017,7 +1089,34 @@ async function attachMembersAndPrizes(
     });
     membersByRepo.set(row.repo_id, arr);
   }
+  for (const [repoId, members] of membersByRepo) {
+    const seen = new Set<string>();
+    membersByRepo.set(
+      repoId,
+      members.filter((m) => {
+        const key = m.userId === null ? `email:${m.email}` : `user:${m.userId}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }),
+    );
+  }
 
+  const resolvedRosters = await pool.query(
+    `SELECT id,internal_ids,external_ids,membership_resolution FROM project_reconciliation_state WHERE id=ANY($1::int[])`,
+    [ids],
+  );
+  for (const r of resolvedRosters.rows) {
+    if (!r.membership_resolution) continue;
+    const selected: number[] =
+      r.membership_resolution === "internal" ? r.internal_ids : r.external_ids;
+    membersByRepo.set(
+      r.id,
+      (membersByRepo.get(r.id) ?? []).filter((m) =>
+        m.userId !== null ? selected.includes(m.userId) : r.membership_resolution === "devpost",
+      ),
+    );
+  }
   const prizesByRepo = new Map<number, string[]>();
   for (const p of prizesRes.rows as Array<{ repo_id: number; prize: string }>) {
     const arr = prizesByRepo.get(p.repo_id) ?? [];
@@ -1129,13 +1228,14 @@ async function attachMembersAndPrizes(
   });
 }
 
-const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url, source, presentation_timing_preference FROM repos`;
+const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url, source, presentation_timing_preference, reconciliation_code, submission_status, submitted_at, submitted_via, locked_at, lock_reason FROM repos`;
 
 /** PROJECTS_READ: repos with members, prizes, and mapped challenges. */
 export async function listRepos(fixtureMarker = false): Promise<RepoWithExtras[]> {
-  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = $1 ORDER BY name`, [
-    fixtureMarker,
-  ]);
+  const { rows } = await pool.query(
+    `${REPO_SELECT} WHERE is_test_account = $1 AND reconciled_into_repo_id IS NULL ORDER BY name`,
+    [fixtureMarker],
+  );
   return attachMembersAndPrizes(rows, "all", fixtureMarker);
 }
 
@@ -1228,15 +1328,20 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
   const fixtureMarker = userRows[0]?.is_test_account === true;
   const { rows } = await pool.query(
     `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url, r.source,
-            r.presentation_timing_preference
+            r.presentation_timing_preference, r.reconciliation_code, r.submission_status, r.submitted_at, r.submitted_via, r.locked_at, r.lock_reason
      FROM repos r
-     WHERE r.is_test_account = $2 AND r.id IN (
+     WHERE r.is_test_account = $2 AND r.reconciled_into_repo_id IS NULL
+       AND (NOT EXISTS(SELECT 1 FROM project_claim_decisions pc WHERE pc.repo_id=r.id AND pc.user_id=$1 AND pc.status='rejected')
+         OR EXISTS(SELECT 1 FROM submissions s WHERE s.repo_id=r.id AND s.user_id=$1 AND s.status='active' AND s.imported_from<>'devpost')
+         OR EXISTS(SELECT 1 FROM planned_work_groups g JOIN planned_work_group_members m ON m.group_id=g.id AND m.status='active' WHERE g.linked_repo_id=r.id AND m.user_id=$1))
+       AND r.id IN (
        -- H19/H20: a project the caller was merely invited to (status='invited')
        -- is not "my project" yet — it only shows via myPendingInvites until
        -- they accept it.
        SELECT repo_id FROM submissions WHERE user_id = $1 AND status = 'active'
        UNION
        SELECT repo_id FROM devpost_participants WHERE user_id = $1
+       UNION SELECT g.linked_repo_id FROM planned_work_groups g JOIN planned_work_group_members m ON m.group_id=g.id WHERE m.user_id=$1 AND m.status='active' AND g.linked_repo_id IS NOT NULL
      )
      ORDER BY r.name`,
     [userId, fixtureMarker],
@@ -1290,6 +1395,7 @@ export async function isActiveProjectMember(
             AND u.account_state = 'active' AND u.anonymized_at IS NULL
             AND r.is_test_account = u.is_test_account
        )
+       OR EXISTS (SELECT 1 FROM planned_work_groups g JOIN planned_work_group_members m ON m.group_id=g.id WHERE g.linked_repo_id=$1 AND m.user_id=$2 AND m.status='active')
      ) AS member`,
     [repoId, userId],
   );
@@ -1387,6 +1493,10 @@ export async function removeRepoMember(actorId: number, repoId: number, userId: 
       userId,
     ]);
 
+    await client.query(
+      `DELETE FROM planned_work_group_members m USING planned_work_groups g WHERE m.group_id=g.id AND g.linked_repo_id=$1 AND m.user_id=$2`,
+      [repoId, userId],
+    );
     await audit(client, {
       actorId,
       entityType: "submission",
@@ -1512,7 +1622,7 @@ interface EnqueueOutcome {
  * see `bulkAddRepoChallenge`. Single-repo callers omit them and get the
  * original per-call behavior unchanged.
  */
-async function enqueueRepoOnChallenge(
+export async function enqueueRepoOnChallenge(
   client: Queryable,
   actorId: number,
   repoId: number,
@@ -1648,6 +1758,7 @@ export async function addMyProjectChallenge(userId: number, repoId: number, chal
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
     }
+    await assertProjectEditable(client, repoId);
     await assertJudgingHasNotStarted(client);
     const challenge = await client.query(
       `SELECT id FROM challenges WHERE id = $1 AND visibility = 'visible'`,
@@ -1726,7 +1837,7 @@ export async function removeRepoChallenge(
 ) {
   const result = await withTransaction(async (client) => {
     if (participant) {
-      await client.query(`SELECT id FROM repos WHERE id=$1 FOR UPDATE`, [repoId]);
+      await assertProjectEditable(client, repoId);
       if (!(await isActiveProjectMember(client, repoId, actorId)))
         throw new ForbiddenError("Not a member of this project");
       await assertJudgingHasNotStarted(client);
@@ -2050,8 +2161,8 @@ async function insertNativeRepo(
   fixtureMarker = false,
 ): Promise<RepoRow> {
   const { rows } = await client.query(
-    `INSERT INTO repos (name, description, github_url, demo_url, source, created_by, is_test_account)
-     VALUES ($1, $2, $3, $4, 'native', $5, $6)
+    `INSERT INTO repos (name, description, github_url, demo_url, source, created_by, is_test_account,submitted_via,submitted_at)
+     VALUES ($1, $2, $3, $4, 'native', $5, $6,'admin',now())
      RETURNING id, name, description, github_url, devpost_url, demo_url, source, presentation_timing_preference`,
     [input.name, input.description, input.githubUrl, input.demoUrl, createdBy, fixtureMarker],
   );
@@ -2208,6 +2319,7 @@ export async function updateLinkedWorkGroupProject(
   patch: UpdateRepoPatch,
 ) {
   if (!(await isActiveProjectMember(client, repoId, userId))) return;
+  await assertProjectEditable(client, repoId);
   const { before, after } = await applyRepoUpdate(client, repoId, patch);
   await audit(client, {
     actorId: userId,
@@ -2250,6 +2362,7 @@ export async function updateMyProject(
   patch: UpdateRepoPatch,
 ): Promise<RepoRow> {
   return withTransaction(async (client) => {
+    await assertProjectEditable(client, repoId);
     const { rows: userRows } = await client.query(
       `SELECT id FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
@@ -2259,7 +2372,7 @@ export async function updateMyProject(
     if (!userRows[0]) throw new NotFoundError("User not found");
     await assertFixtureSubjectScope(client, userId, userId);
     await assertFixtureQueueScope(client, userId, "repo", repoId);
-    await assertWithinHackingWindow(client);
+    await assertProjectParticipantWindow(client, repoId);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
     }
@@ -2412,6 +2525,7 @@ export async function inviteProjectMember(
   email: string,
 ): Promise<{ invited: true }> {
   return withTransaction(async (client) => {
+    await assertProjectEditable(client, repoId);
     const inviterUser = await client.query(
       `SELECT id FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
@@ -2421,7 +2535,7 @@ export async function inviteProjectMember(
     if (!inviterUser.rows[0]) throw new NotFoundError("User not found");
     await assertFixtureSubjectScope(client, userId, userId);
     await assertFixtureQueueScope(client, userId, "repo", repoId);
-    await assertWithinHackingWindow(client);
+    await assertProjectParticipantWindow(client, repoId);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
     }
@@ -2553,7 +2667,8 @@ export async function acceptProjectInvite(
     if (!user.rows[0]) throw new NotFoundError("User not found");
     await assertFixtureSubjectScope(client, userId, userId);
     await assertFixtureQueueScope(client, userId, "repo", repoId);
-    await assertWithinHackingWindow(client);
+    await assertProjectParticipantWindow(client, repoId);
+    await assertProjectEditable(client, repoId);
     const { rows } = await client.query(
       `UPDATE submissions SET status = 'active', responded_at = now()
         WHERE repo_id = $1 AND user_id = $2 AND status = 'invited'
@@ -2561,6 +2676,12 @@ export async function acceptProjectInvite(
       [repoId, userId],
     );
     if (!rows[0]) throw new NotFoundError(`No pending invite to repo ${repoId}`);
+    await client.query(
+      `INSERT INTO planned_work_group_members(group_id,user_id,status,responded_at)
+      SELECT id,$2,'active',now() FROM planned_work_groups WHERE linked_repo_id=$1
+      ON CONFLICT(group_id,user_id) DO UPDATE SET status='active',responded_at=now()`,
+      [repoId, userId],
+    );
     await audit(client, {
       actorId: userId,
       entityType: "repo",
@@ -2588,7 +2709,8 @@ export async function declineProjectInvite(
     if (!user.rows[0]) throw new NotFoundError("User not found");
     await assertFixtureSubjectScope(client, userId, userId);
     await assertFixtureQueueScope(client, userId, "repo", repoId);
-    await assertWithinHackingWindow(client);
+    await assertProjectParticipantWindow(client, repoId);
+    await assertProjectEditable(client, repoId);
     const { rows } = await client.query(
       `DELETE FROM submissions WHERE repo_id = $1 AND user_id = $2 AND status = 'invited'
        RETURNING repo_id`,
@@ -2614,6 +2736,7 @@ export async function declineProjectInvite(
  */
 export async function leaveMyProject(userId: number, repoId: number): Promise<{ left: true }> {
   return withTransaction(async (client) => {
+    await assertProjectEditable(client, repoId);
     const user = await client.query(
       `SELECT id FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
@@ -2623,7 +2746,7 @@ export async function leaveMyProject(userId: number, repoId: number): Promise<{ 
     if (!user.rows[0]) throw new NotFoundError("User not found");
     await assertFixtureSubjectScope(client, userId, userId);
     await assertFixtureQueueScope(client, userId, "repo", repoId);
-    await assertWithinHackingWindow(client);
+    await assertProjectParticipantWindow(client, repoId);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
     }
@@ -2643,6 +2766,10 @@ export async function leaveMyProject(userId: number, repoId: number): Promise<{ 
       ]);
     }
 
+    await client.query(
+      `DELETE FROM planned_work_group_members m USING planned_work_groups g WHERE m.group_id=g.id AND g.linked_repo_id=$1 AND m.user_id=$2`,
+      [repoId, userId],
+    );
     await audit(client, {
       actorId: userId,
       entityType: "repo",
@@ -2777,7 +2904,16 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
     if (!user.rows[0]) throw new NotFoundError("User not found");
     await assertFixtureSubjectScope(client, userId, userId);
     await assertQueueRepoScope(client, userId, repoId);
-    await assertWithinHackingWindow(client);
+    await assertProjectParticipantWindow(client, repoId);
+    await assertProjectEditable(client, repoId);
+    const history = await client.query(
+      `SELECT 1 FROM project_submission_versions WHERE repo_id=$1 LIMIT 1`,
+      [repoId],
+    );
+    if (history.rows[0])
+      throw new ConflictError(
+        "A previously submitted project must be retained; ask organizers to withdraw it",
+      );
     await assertJudgingHasNotStarted(client);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");

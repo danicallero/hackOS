@@ -131,6 +131,10 @@ export interface ChallengeProgress {
 
 /** GET /api/queue/rooms/:id/pace (H39). */
 export interface RoomPace {
+  estimatedCycleMinutes?: number;
+  judgingClosesAt?: string | null;
+  estimatedFinishAt?: string | null;
+  exceedsJudgingClose?: boolean;
   roomId: number;
   desiredMinutesPerTeam: number;
   /** The challenge's own max_presentation_seconds, in minutes; null if unset. */
@@ -374,8 +378,11 @@ export const getAllRoomViews = () => api.get<RoomView[]>("/api/tv/rooms");
 // TV display state and the live-screen config live in lib/tv.ts.
 export const getChallengeProgress = (challengeId: number, signal?: AbortSignal) =>
   api.get<ChallengeProgress>(`/api/queue/challenges/${challengeId}/progress`, { signal });
-export const getRoomPace = (roomId: number, signal?: AbortSignal) =>
-  api.get<RoomPace>(`/api/queue/rooms/${roomId}/pace`, { signal });
+export const getRoomPace = (roomId: number, signal?: AbortSignal, challengeId?: number | null) =>
+  api.get<RoomPace>(
+    `/api/queue/rooms/${roomId}/pace${challengeId ? `?challengeId=${challengeId}` : ""}`,
+    { signal },
+  );
 export const getRoomAssignments = (roomId: number) =>
   api.get<RoomAssignments>(`/api/queue/rooms/${roomId}/assignments`);
 /** GET /api/queue/repos/:id/challenges — every challenge queue a repo belongs to (H40). */

@@ -482,7 +482,7 @@ export async function bringIn(entryId: number, actorId: number): Promise<QueueEn
     try {
       const res = await client.query(
         `UPDATE queue_entries
-            SET status = 'in_room', precalled_at = NULL
+            SET status = 'in_room', room_entered_at=now(), precalled_at = NULL
           WHERE id = $1
           RETURNING *`,
         [entryId],
@@ -575,7 +575,7 @@ export async function sendBackToWaiting(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'called', position = $1, called_at = now(), precalled_at = NULL,
-              presentation_started_at = NULL
+              presentation_started_at = NULL, room_entered_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -644,7 +644,7 @@ export async function reEnter(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL, completed_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL, room_entered_at = NULL, completed_at = NULL
         WHERE id = $2
         RETURNING *`,
       [pos, entryId],
@@ -690,7 +690,7 @@ export async function markNoShow(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL, call_count = call_count + 1
+              precalled_at = NULL, presentation_started_at = NULL, room_entered_at = NULL, call_count = call_count + 1
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -733,7 +733,7 @@ export async function moveToPosition(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL, room_entered_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -768,7 +768,7 @@ export async function skipToEnd(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL, room_entered_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -867,7 +867,7 @@ export async function moveToTop(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL, room_entered_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -977,7 +977,7 @@ export async function removeRepoFromChallenge(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = $1, assigned_room_id = NULL, position = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL, completed_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL, room_entered_at = NULL, completed_at = NULL
         WHERE id = $2
         RETURNING *`,
       [nextStatus, entryId],
@@ -1250,7 +1250,7 @@ async function enqueueQueueRepo(
     const revived = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', assigned_room_id = NULL,
-              called_at = NULL, presentation_started_at = NULL, completed_at = NULL,
+              called_at = NULL, presentation_started_at = NULL, room_entered_at = NULL, completed_at = NULL,
               precalled_at = NULL
         WHERE id = $1
         RETURNING *`,

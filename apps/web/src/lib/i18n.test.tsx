@@ -162,6 +162,37 @@ describe("LocaleProvider hydration", () => {
     "es",
     "gl",
     "en",
+  ] as const)("interpolates project codes and judging estimates in %s", async (language) => {
+    window.__hackosInitialLanguage = language;
+    const container = document.createElement("div");
+    document.body.append(container);
+    function LifecycleCopy() {
+      const { t } = useLocale();
+      return (
+        <div>
+          {t("projectDevpostCode", { code: "K7M4Q" })} {t("judgingClosesAt", { time: "18:00" })}{" "}
+          {t("judgingEstimatedCycle", { minutes: "12", count: "3" })}
+        </div>
+      );
+    }
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <LocaleProvider>
+          <LifecycleCopy />
+        </LocaleProvider>,
+      );
+    });
+    expect(container.textContent).toContain("K7M4Q");
+    expect(container.textContent).toContain("18:00");
+    expect(container.textContent).toContain("12");
+    expect(container.textContent).not.toMatch(/[{}]/);
+  });
+
+  it.each([
+    "es",
+    "gl",
+    "en",
   ] as const)("hydrates the static Spanish shell, clears the visibility gate, then transitions to %s", async (language) => {
     const browserWindow = globalThis.window;
     Object.defineProperty(globalThis, "window", { configurable: true, value: undefined });

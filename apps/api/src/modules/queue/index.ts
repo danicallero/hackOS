@@ -8,6 +8,7 @@ import { scheduleQueuePump } from "./pump.js";
 import { registerReadsRoutes } from "./reads.routes.js";
 import { registerQueueResetRoutes } from "./reset.routes.js";
 import { registerRoomsRoutes } from "./rooms.routes.js";
+import { registerTimingRoutes } from "./timing.routes.js";
 
 /**
  * WS-B2 — queue & judging core (H29-H42). Routes are split by surface:
@@ -17,6 +18,7 @@ import { registerRoomsRoutes } from "./rooms.routes.js";
  * directly.
  */
 export async function registerQueueModule(app: FastifyInstance): Promise<void> {
+  registerTimingRoutes(app);
   registerRoomsRoutes(app);
   registerQueueGroupRoutes(app);
   registerEntriesRoutes(app);

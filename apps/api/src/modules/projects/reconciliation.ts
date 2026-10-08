@@ -1,4 +1,5 @@
 import type { Queryable } from "../../db/pool.js";
+import { linkDevpostImports } from "../work-groups/service.js";
 
 /**
  * Reconcile imported Devpost participants against both account identities:
@@ -11,7 +12,7 @@ export async function reconcileDevpostParticipantsForUser(
   userId: number,
 ): Promise<number> {
   const { rows: identityRows } = await client.query(
-    `SELECT lower(email) AS primary_email,
+    `SELECT CASE WHEN email_verified THEN lower(email) END AS primary_email,
             CASE WHEN secondary_email_verified_at IS NOT NULL
                  THEN lower(secondary_email) END AS verified_secondary_email
        FROM users
@@ -20,7 +21,7 @@ export async function reconcileDevpostParticipantsForUser(
     [userId],
   );
   const identity = identityRows[0] as
-    | { primary_email: string; verified_secondary_email: string | null }
+    | { primary_email: string | null; verified_secondary_email: string | null }
     | undefined;
   if (!identity) return 0;
   const emails = [identity.primary_email, identity.verified_secondary_email].filter(
@@ -95,5 +96,12 @@ export async function reconcileDevpostParticipantsForUser(
       [userId, removedRepoIds],
     );
   }
+  await linkDevpostImports(
+    client,
+    userId,
+    [...new Set(linked.map((row) => Number(row.repo_id)))],
+    undefined,
+    "participant",
+  );
   return linked.length;
 }

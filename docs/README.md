@@ -166,3 +166,5 @@ this folder), [`apps/web/README.md`](../apps/web/README.md) for web frontend
 conventions and the component library, and
 [`deploy/README.md`](../deploy/README.md) for the full deployment story
 (networking, secrets, Caddy and rollout order).
+
+- [Project lifecycle audit and timing clarifications](./project-lifecycle-audit.md) — existing architecture, gaps, submission/reconciliation adaptation and track timing requirements.

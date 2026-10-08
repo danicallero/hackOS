@@ -18,6 +18,7 @@ import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
+import { TrackTiming } from "@/components/projects/track-timing";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -116,27 +117,30 @@ export default function QueuePage() {
     },
   );
 
-  const pace = useLiveQuery<RoomPace>(
-    (signal) => (activeRoomId ? getRoomPace(activeRoomId, signal) : Promise.resolve(null as never)),
-    "/api/queue/stream",
-    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
-    {
-      enabled: canUse && activeRoomId != null,
-      queryKey: [activeRoomId],
-      resourceKey: ["judging", "room-pace", activeRoomId],
-      identityKey: me?.id ?? null,
-    },
-  );
-
   // The room judges a single challenge (read-only label in the panel); fall
   // back to whatever a live entry reports so a freshly seeded room still works.
   const effectiveChallengeId =
-    roomView.data?.challenge?.id ??
     roomView.data?.active?.challenge_id ??
+    roomView.data?.challenge?.id ??
     roomView.data?.called[0]?.challenge_id ??
     roomView.data?.next[0]?.challenge_id ??
     challenges[0]?.id ??
     null;
+
+  const pace = useLiveQuery<RoomPace>(
+    (signal) =>
+      activeRoomId
+        ? getRoomPace(activeRoomId, signal, effectiveChallengeId)
+        : Promise.resolve(null as never),
+    "/api/queue/stream",
+    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
+    {
+      enabled: canUse && activeRoomId != null,
+      queryKey: [activeRoomId, effectiveChallengeId],
+      resourceKey: ["judging", "room-pace", activeRoomId],
+      identityKey: me?.id ?? null,
+    },
+  );
 
   const progress = useLiveQuery<ChallengeProgress>(
     (signal) =>
@@ -440,6 +444,14 @@ export default function QueuePage() {
         <div className="grid min-h-0 gap-5 xl:h-0 xl:flex-1 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="xl:h-full xl:min-h-0">
             <QueuePanel
+              timingAction={
+                effectiveChallengeId && (
+                  <TrackTiming
+                    challengeId={effectiveChallengeId}
+                    onSaved={() => void refreshLive()}
+                  />
+                )
+              }
               view={view}
               progress={progress.data}
               pace={pace.data}

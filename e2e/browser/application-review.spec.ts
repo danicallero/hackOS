@@ -96,6 +96,8 @@ test("staff can upload a CV while editing an application response", async ({ pag
   const cookieNotice = page.locator('aside[aria-labelledby="cookie-notice-title"]');
   if (await cookieNotice.isVisible()) await cookieNotice.locator("button").click();
 
+  await expect(page.getByRole("button", { name: "Avery Applicant" })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("application-response-list.png") });
   await page.getByRole("button", { name: "Avery Applicant" }).click();
   await expect(page.getByRole("button", { name: "Edit answers" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("application-response-before-edit.png") });

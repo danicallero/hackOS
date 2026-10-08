@@ -43,7 +43,7 @@ describe("planning/import merge (#854)", () => {
     expect((await getMine(actor, Number(group))).presentation_timing_preference).toBe("middle");
   });
 
-  it("merges aliases, inherited preference and active roster without changing queue positions", async () => {
+  it("links aliases and preference without unioning source rosters or changing queue positions", async () => {
     const actor = await createUser();
     const matched = await createUser();
     const extra = await createUser();
@@ -104,15 +104,12 @@ describe("planning/import merge (#854)", () => {
           [repo],
         )
       ).rows,
-    ).toEqual([
-      { user_id: matched, status: "active" },
-      { user_id: extra, status: "active" },
-    ]);
+    ).toEqual([{ user_id: matched, status: "active" }]);
     await withTransaction((db) => linkDevpostImports(db, actor, [repo]));
     expect(
       (await pool.query(`SELECT count(*)::int n FROM submissions WHERE repo_id=$1`, [repo])).rows[0]
         .n,
-    ).toBe(2);
+    ).toBe(1);
     expect(
       (await pool.query(`SELECT position FROM queue_entries WHERE repo_id=$1`, [repo])).rows[0]
         .position,

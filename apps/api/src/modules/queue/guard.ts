@@ -41,6 +41,11 @@ export async function isRepoBlockedByBusyMember(
     fixtureMarker?: boolean;
   } = {},
 ): Promise<boolean> {
+  const eligibility = await client.query(
+    `SELECT eligible FROM project_reconciliation_state WHERE id=$1`,
+    [repoId],
+  );
+  if (eligibility.rows[0]?.eligible === false) return true;
   const statuses = opts.statuses ?? ["called", "in_room", "presenting"];
   const fixtureMarker = opts.fixtureMarker ?? null;
   await client.query(`SELECT pg_advisory_xact_lock($1::int, $2::int)`, [
