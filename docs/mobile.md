@@ -142,7 +142,9 @@ through the rollout. `push_tokens` (already existed in
   ranking (web `/logistics/stats`, "Staff ranking" section), and `GET
   /api/exports/staff-scan-stats.csv` (`exports:run`) exports the same data.
 - `GET /api/scanner/role-stats` — Confirmed/Accredited/Inside counts for the
-  scanner home screen's stats tiles, broken down by the same role
+  scanner home screen's stats tiles, broken down by role and capability-holder
+  status (people sharing a role remain separate buckets when only some hold
+  capabilities), using the same role
   classification `/api/scanner/snapshot` uses (`apps/api/src/modules/logistics/stats.ts`).
   "Confirmed" means accreditation-eligible, not the raw application
   `confirmed` flag: it is the person's live role-derived `eventAccess` bit
@@ -156,16 +158,16 @@ through the rollout. `push_tokens` (already existed in
   (`lib/server-events.ts#startLogisticsEventStream`) and refetches on any
   `LOGISTICS_ACCREDITED`/`LOGISTICS_PRESENCE_SCAN`/`LOGISTICS_ACTIVITY_SCAN`/
   `LOGISTICS_MEAL_SCAN_BATCH` event, so one device's scan updates every other
-  device's tiles within about a second without polling. If the request fails
-  (offline), the screen falls back to computing the same three numbers from
-  the local SQLite roster — an approximation, since a stale snapshot's
+  device's tiles within about a second without polling. If the request fails,
+  the previous server counts are discarded and the screen falls back to
+  computing the same three numbers from the local SQLite roster — an approximation, since a stale snapshot's
   `lastPresenceKind` can lag the authoritative server-side occupancy
-  estimate. The screen also gained a persisted, multi-select role-group
-  filter (participants/mentors/staff incl. admins/sponsors — a custom
-  always-open-until-outside-tap panel next to the people-finder button, not
-  a native menu; see the component's doc comments for why) that scopes which
-  rows get summed into the tiles, saved via `expo-secure-store` so it
-  survives app restarts.
+  estimate. The scanner uses the same roster-derived role options and exact
+  role matching as the People directory, including custom roles. Its persisted
+  multi-select role filter stays open across taps, scrolls within the available
+  screen height, and scopes which rows get summed into the tiles. The selection
+  is saved via `expo-secure-store` so it
+  survives app restarts. Scanner and personal scan statistics refresh on focus.
 - `idempotencyGuard` (`apps/api/src/lib/idempotency.ts`) now reclaims a
   first-execution record whose `response_status` has been NULL for more
   than 30s, instead of 409ing "still in flight" forever. Mobile scanners
@@ -421,7 +423,10 @@ distributed to other Expo Router apps without importing hackOS code.
   is installed, it falls back to the existing Expo share/save sheet.
   `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
-  fallback. On the first visit to My queue for each account, the app shows a
+  fallback. Participant ranks exclude waiting sibling entries of teams already
+  called, in a room, presenting or completed in the same shared queue. My queue
+  refreshes when the tab regains focus. On the first visit to My queue for each
+  account, the app shows a
   persisted native tutorial explaining the three participant-facing stages:
   get ready (do not go to the room), wait outside the door, and enter only
   after the explicit entry notice or staff instruction. The tutorial shows one

@@ -65,6 +65,23 @@ async function createNamedStaff(capabilities: string[]): Promise<number> {
 }
 
 describe("scanner role stats", () => {
+  it("separates staff from non-staff people sharing the same visible role (H8, H27)", async () => {
+    const participant = await createUser();
+    const staffParticipant = await createUser();
+    await grantAttendeeRole(participant, "participant");
+    await grantAttendeeRole(staffParticipant, "participant");
+    const hiddenStaff = await createRole([CAPABILITIES.ACTIVITY_SCAN], { isVisible: false });
+    await assignRole(staffParticipant, hiddenStaff);
+    await assignBadge(participant, "PAX-REGULAR");
+    await assignBadge(staffParticipant, "PAX-STAFF");
+
+    const rows = (await getStats(app, scanner)).filter((row) => row.role === "Participant");
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.hasCapabilities)).toMatchObject({ eligible: 1, accredited: 1 });
+    expect(rows.find((row) => !row.hasCapabilities)).toMatchObject({ eligible: 1, accredited: 1 });
+    expect(rows.reduce((sum, row) => sum + row.eligible, 0)).toBe(2);
+  });
+
   it("treats staff as always eligible regardless of application status", async () => {
     const staff = await createNamedStaff([CAPABILITIES.ACTIVITY_SCAN]);
     await assignBadge(staff, "STF-1");

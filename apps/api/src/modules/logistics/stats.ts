@@ -146,8 +146,8 @@ export async function logisticsStats() {
 /**
  * Per-role scanner stats tile (mobile scanner home screen): eligible
  * (accreditable), accredited, and currently-inside counts, broken down by
- * role name (H8 full-replacement — no separate admin/judge/sponsor/staff
- * bucket; `Unassigned` covers anyone with no visible role), so the client
+ * role name and capability-holder status (H8: `Unassigned` covers anyone
+ * with no visible role), so the client
  * can sum whatever combination of role groups the operator has filtered to.
  * "Eligible" is the same role-derived `hasEventAccess` fact used by
  * session/app entry: any assigned, non-deleted role with `event_access = true` is eligible,
@@ -163,9 +163,8 @@ export async function scannerRoleStats(actorId?: number): Promise<
     eligible: number;
     accredited: number;
     inside: number;
-    /** H8: at least one member of this role bucket is a real capability
-     * holder — the mobile scanner's "staff" grouping key, since role names
-     * no longer have a fixed admin/staff spelling to match on. */
+    /** H8: uniform capability-holder status within this bucket, retained
+     * for installed clients that still offer the operational staff filter. */
     hasCapabilities: boolean;
   }>
 > {
@@ -199,10 +198,10 @@ export async function scannerRoleStats(actorId?: number): Promise<
             count(*) FILTER (WHERE has_event_access)::int AS eligible,
             count(*) FILTER (WHERE badge_id IS NOT NULL)::int AS accredited,
             array_agg(id) AS user_ids,
-            bool_or(has_capabilities) AS has_capabilities
+            has_capabilities
        FROM classified
-      GROUP BY role
-      ORDER BY role`,
+      GROUP BY role, has_capabilities
+      ORDER BY role, has_capabilities`,
   );
 
   const occ = await occupancyEstimate(undefined, actorId);

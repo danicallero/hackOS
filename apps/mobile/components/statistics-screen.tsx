@@ -1,5 +1,5 @@
-import { useRouter, useScrollToTop } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect, useRouter, useScrollToTop } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -50,9 +50,11 @@ export default function StatisticsScreen() {
     }
   }, [canViewStats]);
 
-  useEffect(() => {
-    void loadStats();
-  }, [loadStats]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadStats();
+    }, [loadStats]),
+  );
 
   // No connection yet when this screen first loaded — keep checking instead
   // of leaving the error on screen until the user manually retries.

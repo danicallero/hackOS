@@ -853,6 +853,17 @@ export async function myQueueStatus(userId: number) {
           AND qgc.queue_group_id IN (
             SELECT DISTINCT queue_key FROM my_entries
           )
+          -- H38/H46: a sibling already called or judged consumes this team's
+          -- shared-queue turn, just as in waitingQueueView/callNextForRoom.
+          AND NOT EXISTS (
+            SELECT 1 FROM queue_entries sibling
+            JOIN queue_group_challenges sibling_group
+              ON sibling_group.challenge_id = sibling.challenge_id
+             AND sibling_group.queue_group_id = qgc.queue_group_id
+            WHERE sibling.repo_id = qe.repo_id
+              AND sibling.id <> qe.id
+              AND sibling.status IN ('called', 'in_room', 'presenting', 'completed')
+          )
      ), waiting_ranks AS (
        SELECT id,
               CASE WHEN position IS NULL THEN 1

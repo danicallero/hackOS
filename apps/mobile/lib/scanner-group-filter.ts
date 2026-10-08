@@ -1,103 +1,36 @@
 import * as SecureStore from "expo-secure-store";
-import type { RoleFilterIcon } from "@/lib/role-filters";
 import type { ScannerPerson } from "@/lib/scanner-types";
 
-/**
- * The scanner stats/people filter groups shown to the operator. "staff"
- * includes admins — they're the same operational group on the ground even
- * though they may hold different role names (or none at all).
- *
- * H8: `badge_category` is retired, and with it went the fixed "admin"/
- * "staff" role-name spelling — role names are now free text an admin could
- * rename to anything (the default seed doesn't even use those words; real
- * admin/staff roles are named things like "Event Director" or "Day Staff").
- * So "staff" can no longer be identified by matching a role name string —
- * it now matches the real underlying signal the server already used for
- * accreditation-eligibility purposes (stats.ts's `is_operational`):
- * `hasCapabilities` (scanner-sync.ts). `sponsor`/`mentor`/`participant` stay
- * real, reliably-named seeded roles (Sponsor is auto-granted by
- * role_grant_rules; Mentor/Participant are the two attendee roles
- * identity/role.ts's ATTENDEE_ROLE_NAMES names explicitly), so those are
- * still matched by role name (case-insensitively, since names are editable
- * free text). Enterprise judges are intentionally excluded from every group
- * here — door scanners don't badge-scan them.
- */
-export type ScannerGroup = "participant" | "mentor" | "staff" | "sponsor";
+const STORAGE_KEY = "scanner-role-filter";
 
-const STORAGE_KEY = "scanner-group-filter";
-
-function normalizedRole(role: ScannerPerson["role"]): string {
-  return role?.toLocaleLowerCase() ?? "";
+/** H8/H27: use the same exact visible role names as the People directory. */
+export function matchesScannerRole(person: Pick<ScannerPerson, "role">, roles: string[]): boolean {
+  return roles.length === 0 || (person.role !== null && roles.includes(person.role));
 }
 
-export function matchesScannerGroup(
-  person: Pick<ScannerPerson, "role" | "hasCapabilities">,
-  groups: ScannerGroup[],
-): boolean {
-  // An empty selection means "All" — no filtering.
-  if (groups.length === 0) return true;
-  const normalized = normalizedRole(person.role);
-  return groups.some((group) =>
-    group === "staff" ? person.hasCapabilities : normalized === group,
-  );
-}
-
-/**
- * "Confirmed" for the stats tile means "eligible to be accredited". The
- * server and scanner roster both use the same role-derived event entitlement;
- * application status, capabilities, and sponsor relationships are only
- * descriptive fields and do not grant a ticket on their own.
- */
+/** H22: eligibility follows the live event entitlement, not application status. */
 export function isAccreditationEligible(person: Pick<ScannerPerson, "eventAccess">): boolean {
   return person.eventAccess;
 }
 
-export async function loadScannerGroupFilter(): Promise<ScannerGroup[]> {
+export async function loadScannerRoleFilter(): Promise<string[]> {
   try {
     const stored = await SecureStore.getItemAsync(STORAGE_KEY);
     if (!stored) return [];
     const parsed: unknown = JSON.parse(stored);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((value): value is ScannerGroup =>
-      SCANNER_GROUP_VALUES.includes(value as ScannerGroup),
-    );
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string")
+      : [];
   } catch {
     return [];
   }
 }
 
-// Callers (e.g. rapid taps on general-scanner-screen.tsx's group chips) can
-// fire several of these before the previous SecureStore write settles.
-// Chaining onto this queue keeps writes applied in call order instead of
-// whichever setItemAsync happens to resolve first, which could otherwise
-// persist a stale filter after fast toggling.
 let writeQueue: Promise<void> = Promise.resolve();
 
-export function saveScannerGroupFilter(groups: ScannerGroup[]): Promise<void> {
+export function saveScannerRoleFilter(roles: string[]): Promise<void> {
   writeQueue = writeQueue
     .catch(() => {})
-    .then(() => {
-      return SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(groups));
-    });
+    .then(() => SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(roles)));
   return writeQueue;
 }
-
-export const SCANNER_GROUP_VALUES: ScannerGroup[] = ["participant", "mentor", "staff", "sponsor"];
-
-/**
- * Fixed 4-row filter catalogue for the scanner's own operational grouping —
- * unlike `lib/role-filters.ts`'s roster-derived list (which covers every
- * role name that can appear on `people-directory-screen.tsx`), this stays a
- * small compile-time set because it's not "every role", it's the four
- * door-scanning-relevant operational groups (see `ScannerGroup` above).
- */
-export const SCANNER_GROUP_OPTIONS: Array<{
-  value: ScannerGroup;
-  labelKey: "roleParticipants" | "roleMentor" | "roleStaff" | "roleSponsor";
-  icon: RoleFilterIcon;
-}> = [
-  { value: "participant", labelKey: "roleParticipants", icon: "person" },
-  { value: "mentor", labelKey: "roleMentor", icon: "person.2" },
-  { value: "staff", labelKey: "roleStaff", icon: "person.crop.circle.badge.checkmark" },
-  { value: "sponsor", labelKey: "roleSponsor", icon: "briefcase" },
-];
