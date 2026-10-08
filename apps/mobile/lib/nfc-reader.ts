@@ -1,5 +1,11 @@
 import { Platform } from "react-native";
-import NfcManager, { NfcAdapter, NfcError, NfcEvents, NfcTech } from "react-native-nfc-manager";
+import NfcManager, {
+  NfcAdapter,
+  NfcError,
+  NfcEvents,
+  NfcTech,
+  type TagEvent,
+} from "react-native-nfc-manager";
 import { normalizeNfcUid } from "@/lib/nfc-uid";
 
 // H22–H26: Core NFC owns one session; wait for native invalidation before another starts.
@@ -9,6 +15,7 @@ export function startNfcRead(message: string) {
   let cancelled = false;
   let requested = false;
   let registered = false;
+  let resolveAndroidTag: ((tag: TagEvent | null) => void) | null = null;
   let cancelRequest: Promise<void> | null = null;
   let resolveResult!: (uid: string | null) => void;
   let rejectResult!: (error: unknown) => void;
@@ -44,15 +51,23 @@ export function startNfcRead(message: string) {
           return;
         }
         if (Platform.OS === "android") {
+          // H22–H26: the discovery event already contains the UID. Connecting
+          // to NfcA adds an unnecessary hardware-dependent failure and can miss
+          // a tag discovered before requestTechnology has installed its callback.
+          const discoveredTag = new Promise<TagEvent | null>((resolve) => {
+            resolveAndroidTag = resolve;
+          });
+          NfcManager.setEventListener(NfcEvents.DiscoverTag, (tag: TagEvent) => {
+            resolveAndroidTag?.(tag);
+          });
           await NfcManager.registerTagEvent({
             isReaderModeEnabled: true,
             readerModeFlags: NfcAdapter.FLAG_READER_NFC_A | NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK,
           });
           registered = true;
-          if (cancelled) {
-            resolveResult(null);
-            return;
-          }
+          const tag = cancelled ? null : await discoveredTag;
+          resolveResult(cancelled || !tag ? null : normalizeNfcUid(tag.id));
+          return;
         }
         if (Platform.OS === "ios" && typeof NfcManager.setEventListener === "function") {
           sessionClose = new Promise((resolve) => {
@@ -94,6 +109,10 @@ export function startNfcRead(message: string) {
       } finally {
         if (requested) await cancelNativeRequest();
         requested = false;
+        if (Platform.OS === "android" && resolveAndroidTag) {
+          NfcManager.setEventListener(NfcEvents.DiscoverTag, null);
+          resolveAndroidTag = null;
+        }
         if (registered) await NfcManager.unregisterTagEvent();
         registered = false;
         if (sessionClose) {
@@ -107,6 +126,7 @@ export function startNfcRead(message: string) {
     result,
     cancel: () => {
       cancelled = true;
+      resolveAndroidTag?.(null);
       if (requested) void cancelNativeRequest();
     },
   };
