@@ -8,6 +8,9 @@ for (const initial of ["es", "gl", "en"] as const) {
   }, testInfo) => {
     await page.addInitScript((language) => {
       localStorage.setItem("hackos-language", language);
+      // H7/H10: seed unrelated notice state before hydration, so a delayed
+      // cookie banner cannot cover the form after an early visibility check.
+      localStorage.setItem("hackos.cookie-notice.dismissed", "true");
     }, initial);
     await page.route("**/api/me", (route) => route.fulfill({ status: 401, json: {} }));
     await page.route("**/api/public/event", (route) =>
@@ -34,8 +37,6 @@ for (const initial of ["es", "gl", "en"] as const) {
       await route.fulfill({ json: {} });
     });
     await page.goto("/claim-account?token=language-test");
-    const notice = page.locator('aside[aria-labelledby="cookie-notice-title"]');
-    if (await notice.isVisible()) await notice.locator("button").click();
     const form = page.locator("form");
     await expect(form.getByRole("combobox").first()).toHaveText(
       { es: "Castellano", gl: "Galego", en: "English" }[initial],
