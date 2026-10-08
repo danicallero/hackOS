@@ -5,7 +5,7 @@ import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PasswordInput } from "@/components/common/password-input";
@@ -84,7 +84,7 @@ function localizedClaimError(error: ApiError, t: Translate): string {
 }
 
 function ClaimInner() {
-  const { t } = useLocale();
+  const { t, language, setLanguage } = useLocale();
   const schema = useMemo(() => claimSchema(t), [t]);
   const token = useSearchParams().get("token");
   const router = useRouter();
@@ -101,14 +101,18 @@ function ClaimInner() {
       surname: "",
       password: "",
       confirmPassword: "",
-      language: "es",
+      language,
       shirtSize: NONE,
       foodIntolerances: [],
       foodIntoleranceNotes: "",
     },
   });
 
-  const language = useWatch({ control: form.control, name: "language" });
+  const { setValue } = form;
+  useEffect(() => {
+    // H7/H10: the account preference follows language changes during onboarding.
+    setValue("language", language);
+  }, [language, setValue]);
 
   useEffect(() => {
     if (!token) {
@@ -148,7 +152,7 @@ function ClaimInner() {
         name: values.name,
         surname: values.surname,
         password: values.password,
-        language: values.language,
+        language,
         ...(values.shirtSize !== NONE ? { shirtSize: values.shirtSize } : {}),
         foodIntolerances: values.foodIntolerances.map(Number),
         ...(values.foodIntoleranceNotes.trim()
@@ -215,7 +219,7 @@ function ClaimInner() {
 
   const intoleranceOptions = intolerances.map((i) => ({
     value: String(i.id),
-    label: pickText(i.label, language as Language),
+    label: pickText(i.label, language),
   }));
   const inviteRole =
     lookup.kind === "staff"
@@ -325,7 +329,13 @@ function ClaimInner() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t("language")}</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      setLanguage(value as Language);
+                    }}
+                    value={language}
+                  >
                     <FormControl>
                       <SelectTrigger className="w-full">
                         <SelectValue />
