@@ -534,3 +534,11 @@ while retaining a dashed destination outline and the item's dimensions as
 siblings shift (issue #849). Use `useReducedDragMotion` to disable overlay drop
 animations, and `motion-reduce:transition-none!` on sortable wrappers. Keyboard
 sensors retain pickup, arrow movement, drop, and Escape cancellation.
+
+## Invitation onboarding (H7/H9/H10)
+
+The claim-account form follows the active web language, including dietary
+restriction options and selected labels. Changing either the web language
+switcher or the form language selector updates both and saves that language
+as the new account preference. Dietary restrictions are submitted as dictionary
+IDs, so changing language preserves the selection and other entered data.
