@@ -1,5 +1,4 @@
 import { roleDisplayName, roleFilterOptionsFromRoster } from "./role-filters";
-import { SCANNER_GROUP_OPTIONS } from "./scanner-group-filter";
 
 const t = (key: string) => `t:${key}`;
 
@@ -55,20 +54,10 @@ describe("roleDisplayName", () => {
   });
 });
 
-describe("SCANNER_GROUP_OPTIONS", () => {
-  it("only ever contains the scanner's four operational groups (never admin or judge)", () => {
-    const values = SCANNER_GROUP_OPTIONS.map((option) => option.value);
-    expect(values.sort()).toEqual(["mentor", "participant", "sponsor", "staff"]);
-    expect(values).not.toContain("admin");
-    expect(values).not.toContain("judge");
-  });
-});
-
 /**
  * Regression guard against re-drift (H8): every screen that renders or
  * filters by a person's role must derive it through this module (or
- * scanner-group-filter.ts's roster-fact-based grouping for the scanner's own
- * coarser staff/sponsor buckets) instead of quietly growing its own
+ * scanner-group-filter.ts's exact role matching) instead of quietly growing its own
  * hardcoded badge_category-era enum again. A prior round already unified
  * these screens onto the shared derivation; this locks that in at the
  * source-text level so a future change can't reintroduce a second,
@@ -94,14 +83,10 @@ describe("role-derivation consistency across screens", () => {
     expect(source).toMatch(/roleDisplayName/);
   });
 
-  it("general-scanner-screen derives its operational grouping from the shared scanner-group-filter module", () => {
+  it("general-scanner-screen uses the People directory catalogue and matching", () => {
     const source = read("general-scanner-screen.tsx");
-    expect(source).toMatch(/SCANNER_GROUP_OPTIONS/);
-    expect(source).toMatch(/matchesScannerGroup/);
-    // The old badge_category-era rework this replaced kept its own
-    // "ScannerGroup"-shaped literal array inline instead of importing
-    // SCANNER_GROUP_VALUES/SCANNER_GROUP_OPTIONS — guard against that
-    // reappearing as a second, divergent source of the same four groups.
+    expect(source).toMatch(/roleFilterOptionsFromRoster/);
+    expect(source).toMatch(/matchesScannerRole/);
     expect(source).not.toMatch(/\["participant",\s*"mentor",\s*"staff",\s*"sponsor"\]/);
   });
 

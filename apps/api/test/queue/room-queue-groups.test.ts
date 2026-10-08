@@ -176,6 +176,33 @@ describe("1:1 group parity", () => {
 });
 
 describe("merged N>1 group", () => {
+  it("excludes consumed sibling turns from participant position and ETA (H38, H46)", async () => {
+    const { myQueueStatus, roomView } = await import("../../src/modules/queue/reads.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const first = challengeIds[0]!;
+    const second = challengeIds[1]!;
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const roomId = await createRoom({ desiredMinutesPerTeam: 8 });
+    await assignQueueGroupToRoom(roomId, groupId);
+    const userId = await createUser();
+    const mine = await createRepoWithTeam([userId]);
+    const consumed = await createRepoWithTeam();
+    await enqueueRepo(first, consumed.repoId, 1);
+    const siblingId = await enqueueRepo(second, consumed.repoId, 2);
+    await enqueueRepo(first, mine.repoId, 3);
+    await enqueueRepo(second, mine.repoId, 4);
+
+    for (const status of ["called", "in_room", "presenting", "completed"]) {
+      await pool.query("UPDATE queue_entries SET status = $1 WHERE id = $2", [status, siblingId]);
+      const rows = await myQueueStatus(userId);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ position: 1, etaMinutes: 8 });
+      const view = await roomView(roomId);
+      expect(view.next.map((entry: { repo_id: number }) => entry.repo_id)).toEqual([mine.repoId]);
+    }
+  });
+
   it("calls a room's whole group and expands possible_rooms to the group's rooms", async () => {
     const { myQueueStatus, roomView } = await import("../../src/modules/queue/reads.js");
     const { challengeIds } = await createEnterpriseChallenges(2);

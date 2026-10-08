@@ -1,8 +1,8 @@
 import { EVENTS } from "@hackos/shared/events";
-import { usePathname, useRouter } from "expo-router";
+import { useFocusEffect, usePathname, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { QrCamera } from "@/components/QrCamera";
@@ -13,15 +13,18 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
-import { ROLE_FILTER_ALL_ICON } from "@/lib/role-filters";
+import {
+  ROLE_FILTER_ALL_ICON,
+  type RoleFilterOption,
+  roleDisplayName,
+  roleFilterOptionsFromRoster,
+} from "@/lib/role-filters";
 import { findPersonByBadge, findPersonByTicket, listScannerPeople } from "@/lib/scanner-db";
 import {
   isAccreditationEligible,
-  loadScannerGroupFilter,
-  matchesScannerGroup,
-  SCANNER_GROUP_OPTIONS,
-  type ScannerGroup,
-  saveScannerGroupFilter,
+  loadScannerRoleFilter,
+  matchesScannerRole,
+  saveScannerRoleFilter,
 } from "@/lib/scanner-group-filter";
 import type { ScannerPerson } from "@/lib/scanner-types";
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
@@ -52,14 +55,18 @@ export function GeneralScannerScreen() {
   const sync = useScannerSync();
   const { me } = useMeContext();
   const [people, setPeople] = useState<ScannerPerson[]>([]);
-  const [groups, setGroups] = useState<ScannerGroup[]>([]);
+  const [groups, setGroups] = useState<string[]>([]);
   const [roleStats, setRoleStats] = useState<ScannerRoleStat[] | null>(null);
   // SQLite is only the offline roster. Once the server has answered, use its
   // people for both the counters and QR resolution.
   const directory = sync.serverSnapshot?.people ?? people;
+  const roleOptions = useMemo(
+    () => roleFilterOptionsFromRoster(directory, (role) => roleDisplayName(role, t)),
+    [directory, t],
+  );
 
   useEffect(() => {
-    void loadScannerGroupFilter().then(setGroups);
+    void loadScannerRoleFilter().then(setGroups);
   }, []);
 
   const loadPeople = useCallback(() => {
@@ -78,12 +85,18 @@ export function GeneralScannerScreen() {
     void apiFetch<{ byRole: ScannerRoleStat[] }>("/api/scanner/role-stats")
       .then((res) => setRoleStats(res.byRole))
       .catch(() => {
+        setRoleStats(null);
         // Offline or request failed — the local-roster fallback in `stats`
         // below keeps the tiles usable, just without cross-device accuracy.
       });
   }, []);
 
-  useEffect(() => loadRoleStats(), [loadRoleStats]);
+  useFocusEffect(
+    useCallback(() => {
+      loadRoleStats();
+      return undefined;
+    }, [loadRoleStats]),
+  );
   useEffect(() => {
     if (sync.lastSync) loadRoleStats();
   }, [loadRoleStats, sync.lastSync]);
@@ -113,31 +126,31 @@ export function GeneralScannerScreen() {
     };
   }, [loadRoleStats]);
 
-  const toggleGroup = useCallback((group: ScannerGroup) => {
+  const toggleGroup = useCallback((group: string) => {
     setGroups((current) => {
       const next = current.includes(group)
         ? current.filter((value) => value !== group)
         : [...current, group];
-      void saveScannerGroupFilter(next);
+      void saveScannerRoleFilter(next);
       return next;
     });
   }, []);
 
   const clearGroups = useCallback(() => {
     setGroups([]);
-    void saveScannerGroupFilter([]);
+    void saveScannerRoleFilter([]);
   }, []);
 
   const stats = useMemo(() => {
     if (roleStats) {
-      const filtered = roleStats.filter((row) => matchesScannerGroup(row, groups));
+      const filtered = roleStats.filter((row) => matchesScannerRole(row, groups));
       return {
         accredited: filtered.reduce((sum, row) => sum + row.accredited, 0),
         confirmed: filtered.reduce((sum, row) => sum + row.eligible, 0),
         inside: filtered.reduce((sum, row) => sum + row.inside, 0),
       };
     }
-    const filtered = directory.filter((person) => matchesScannerGroup(person, groups));
+    const filtered = directory.filter((person) => matchesScannerRole(person, groups));
     return {
       accredited: filtered.filter((person) => person.badgeId !== null).length,
       confirmed: filtered.filter((person) => isAccreditationEligible(person)).length,
@@ -180,6 +193,7 @@ export function GeneralScannerScreen() {
       />
       <ScannerToolbarActions
         top={insets.top + 4}
+        options={roleOptions}
         groups={groups}
         onToggle={toggleGroup}
         onClear={clearGroups}
@@ -301,6 +315,7 @@ const FILTER_PANEL_Z_INDEX = 1000;
  * action instead of one being buried inside the other's menu.
  */
 function ScannerToolbarActions({
+  options,
   top,
   groups,
   onToggle,
@@ -309,14 +324,16 @@ function ScannerToolbarActions({
   peopleLabel,
 }: {
   top: number;
-  groups: ScannerGroup[];
-  onToggle: (group: ScannerGroup) => void;
+  options: RoleFilterOption[];
+  groups: string[];
+  onToggle: (group: string) => void;
   onClear: () => void;
   onOpenPeople: () => void;
   peopleLabel: string;
 }) {
   return (
     <ScannerGroupFilterButton
+      options={options}
       top={top}
       groups={groups}
       onToggle={onToggle}
@@ -337,6 +354,7 @@ function ScannerToolbarActions({
  * go); right zone navigates straight to the people finder, one tap.
  */
 function ScannerGroupFilterButton({
+  options,
   top,
   groups,
   onToggle,
@@ -345,20 +363,20 @@ function ScannerGroupFilterButton({
   peopleLabel,
 }: {
   top: number;
-  groups: ScannerGroup[];
-  onToggle: (group: ScannerGroup) => void;
+  options: RoleFilterOption[];
+  groups: string[];
+  onToggle: (group: string) => void;
   onClear: () => void;
   onOpenPeople: () => void;
   peopleLabel: string;
 }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const filterIcon =
     groups.length === 0 ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill";
-  const rows = [
-    { value: null, label: t("roleAll"), icon: ROLE_FILTER_ALL_ICON },
-    ...SCANNER_GROUP_OPTIONS.map((option) => ({ ...option, label: t(option.labelKey) })),
-  ];
+  const rows = [{ value: null, label: t("roleAll"), icon: ROLE_FILTER_ALL_ICON }, ...options];
 
   return (
     <>
@@ -450,48 +468,50 @@ function ScannerGroupFilterButton({
               shadowRadius: 16,
             }}
           >
-            {rows.map((row, index) => {
-              const selected =
-                row.value === null ? groups.length === 0 : groups.includes(row.value);
-              return (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  key={row.value ?? "all"}
-                  onPress={() => {
-                    void haptic("selection");
-                    if (row.value === null) onClear();
-                    else onToggle(row.value);
-                  }}
-                  style={{
-                    alignItems: "center",
-                    borderTopColor: "rgba(255,255,255,0.12)",
-                    borderTopWidth: index === 0 ? 0 : 0.5,
-                    flexDirection: "row",
-                    gap: 10,
-                    paddingHorizontal: 14,
-                    paddingVertical: 12,
-                  }}
-                >
-                  <SymbolView accessible={false} name={row.icon} tintColor="white" size={16} />
-                  <Text
-                    selectable={false}
-                    style={{ color: "white", flex: 1, fontSize: 15, fontWeight: "600" }}
+            <ScrollView style={{ maxHeight: Math.max(44, height - top - 68 - insets.bottom) }}>
+              {rows.map((row, index) => {
+                const selected =
+                  row.value === null ? groups.length === 0 : groups.includes(row.value);
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    key={row.value ?? "all"}
+                    onPress={() => {
+                      void haptic("selection");
+                      if (row.value === null) onClear();
+                      else onToggle(row.value);
+                    }}
+                    style={{
+                      alignItems: "center",
+                      borderTopColor: "rgba(255,255,255,0.12)",
+                      borderTopWidth: index === 0 ? 0 : 0.5,
+                      flexDirection: "row",
+                      gap: 10,
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                    }}
                   >
-                    {row.label}
-                  </Text>
-                  {selected ? (
-                    <SymbolView
-                      accessible={false}
-                      name="checkmark"
-                      tintColor={colors.accent}
-                      size={15}
-                      weight="bold"
-                    />
-                  ) : null}
-                </Pressable>
-              );
-            })}
+                    <SymbolView accessible={false} name={row.icon} tintColor="white" size={16} />
+                    <Text
+                      selectable={false}
+                      style={{ color: "white", flex: 1, fontSize: 15, fontWeight: "600" }}
+                    >
+                      {row.label}
+                    </Text>
+                    {selected ? (
+                      <SymbolView
+                        accessible={false}
+                        name="checkmark"
+                        tintColor={colors.accent}
+                        size={15}
+                        weight="bold"
+                      />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </GlassView>
         </View>
       ) : null}

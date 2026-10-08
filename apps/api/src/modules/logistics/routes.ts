@@ -281,7 +281,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Scanner stats by role",
         description:
-          "Per-role counts of accreditation-eligible, already-accredited, and currently-inside people, broken down by the same role classification the scanner roster uses. Eligible means the person currently holds at least one assigned active role with eventAccess enabled. The client sums whatever role groups it has filtered to.",
+          "Per-role counts of accreditation-eligible, already-accredited, and currently-inside people, broken down by role and individual capability-holder status so staff filters do not include non-staff people sharing a role. Eligible means the person currently holds at least one assigned active role with eventAccess enabled. The client sums whatever role groups it has filtered to.",
         response: { 200: scannerRoleStatsResponse },
       },
     },

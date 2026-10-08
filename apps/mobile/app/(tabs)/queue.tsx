@@ -133,6 +133,7 @@ export default function QueueScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      void load();
       const id = setInterval(() => {
         if (!isServerEventConnected()) void load();
       }, POLL_MS);

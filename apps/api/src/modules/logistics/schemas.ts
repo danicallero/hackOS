@@ -157,7 +157,7 @@ export const scannerRoleStatsResponse = z.object({
       // H8 full-replacement: the role's own name ("Unassigned" for anyone
       // with no visible role) — no separate admin/judge/sponsor/staff bucket.
       role: z.string(),
-      /** At least one member of this role bucket is a real capability holder — the scanner's "staff" filter key. */
+      /** Every member of this role/capability bucket is a real capability holder — the scanner's "staff" filter key. */
       hasCapabilities: z.boolean(),
       /** Eligible to be accredited when at least one assigned active role grants event access. */
       eligible: z.number().int(),
