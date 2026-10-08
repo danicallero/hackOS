@@ -457,6 +457,7 @@ export const updateRoom = (
   roomId: number,
   body: Partial<Pick<Room, "name" | "location" | "status">>,
 ) => api.patch<Room>(`/api/queue/rooms/${roomId}`, body);
+export const deleteRoom = (roomId: number) => api.delete(`/api/queue/rooms/${roomId}`);
 export const updateRoomState = (
   roomId: number,
   body: { maxInWaitingArea?: number; desiredMinutesPerTeam?: number },

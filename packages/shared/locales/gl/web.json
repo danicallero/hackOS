@@ -3380,5 +3380,9 @@
   "walletGoogleDetail": "Google imaxe de detalles",
   "confirmSignOutFailed": "Non se puido pechar a outra sesión. Volve intentar Ir á app.",
   "confirmTicketAtDoor": "Amosa este QR na entrada ou garda o pase en Wallet.",
-  "confirmWalletLinkExpiry": "A ligazón para gardar o pase caduca nunha hora."
+  "confirmWalletLinkExpiry": "A ligazón para gardar o pase caduca nunha hora.",
+  "deleteRoom": "Eliminar sala",
+  "deleteRoomDesc": "Eliminar {room} permanentemente e quitar as súas asignacións de empresa e cola. Non se poden eliminar salas con equipos asignados ou historial de avaliación.",
+  "roomDeleted": "Sala eliminada.",
+  "couldNotDeleteRoom": "Non se puido eliminar a sala."
 }

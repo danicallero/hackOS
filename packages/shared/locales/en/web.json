@@ -3380,5 +3380,9 @@
   "walletGoogleDetail": "Google details image",
   "confirmSignOutFailed": "Unable to sign out the other account. Try Go to app again.",
   "confirmTicketAtDoor": "Show this QR at the door or save the ticket to Wallet.",
-  "confirmWalletLinkExpiry": "The Wallet download link expires in one hour."
+  "confirmWalletLinkExpiry": "The Wallet download link expires in one hour.",
+  "deleteRoom": "Delete room",
+  "deleteRoomDesc": "Permanently delete {room} and remove its enterprise and queue assignments. Rooms with assigned teams or judging history cannot be deleted.",
+  "roomDeleted": "Room deleted.",
+  "couldNotDeleteRoom": "Could not delete room."
 }

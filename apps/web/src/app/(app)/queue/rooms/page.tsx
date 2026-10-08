@@ -28,6 +28,7 @@ import { useLocale } from "@/lib/i18n";
 import {
   assignRoomEnterprise,
   createRoom,
+  deleteRoom,
   getRoomAssignments,
   listEnterprises,
   listRooms,
@@ -238,31 +239,40 @@ export default function QueueRoomsPage() {
     closePanel();
   };
 
-  const setRoomEnterprise = async (enterpriseId: number) => {
-    if (!selectedRoom) return;
-    await assignRoomEnterprise(selectedRoom.id, enterpriseId, crypto.randomUUID());
+  const assignEnterprise = async (room: Room, enterpriseId: number | null) => {
+    if (enterpriseId === null) await removeRoomEnterprise(room.id);
+    else await assignRoomEnterprise(room.id, enterpriseId, crypto.randomUUID());
     const enterprise = enterprises.find((item) => item.id === enterpriseId);
     setRooms((current) =>
-      current.map((room) =>
-        room.id === selectedRoom.id
-          ? { ...room, enterprise_id: enterpriseId, enterprise_name: enterprise?.name ?? null }
-          : room,
+      current.map((item) =>
+        item.id === room.id
+          ? { ...item, enterprise_id: enterpriseId, enterprise_name: enterprise?.name ?? null }
+          : item,
       ),
     );
-    await loadRoomDetails(selectedRoom.id);
+    setAssignments((current) => ({ ...current, [room.id]: null }));
+    if (selectedRoomId === room.id) await loadRoomDetails(room.id);
+  };
+
+  const setRoomEnterprise = async (enterpriseId: number) => {
+    if (selectedRoom) await assignEnterprise(selectedRoom, enterpriseId);
   };
 
   const clearRoomEnterprise = async () => {
+    if (selectedRoom) await assignEnterprise(selectedRoom, null);
+  };
+
+  const removeSelectedRoom = async () => {
     if (!selectedRoom) return;
-    await removeRoomEnterprise(selectedRoom.id);
-    setRooms((current) =>
-      current.map((room) =>
-        room.id === selectedRoom.id
-          ? { ...room, enterprise_id: null, enterprise_name: null }
-          : room,
-      ),
-    );
-    await loadRoomDetails(selectedRoom.id);
+    await deleteRoom(selectedRoom.id);
+    setRooms((current) => current.filter((room) => room.id !== selectedRoom.id));
+    setAssignments((current) => {
+      const next = { ...current };
+      delete next[selectedRoom.id];
+      return next;
+    });
+    closePanel();
+    toast.success(t("roomDeleted"), { compactTitle: t("deleteRoom") });
   };
 
   const filteredRooms = useMemo(() => {
@@ -350,6 +360,8 @@ export default function QueueRoomsPage() {
 
           <RoomsTable
             rooms={filteredRooms}
+            enterprises={enterprises}
+            onAssignEnterprise={assignEnterprise}
             loading={loading && !hasLoadedRef.current}
             error={loadError}
             onRetry={() => void load()}
@@ -393,6 +405,7 @@ export default function QueueRoomsPage() {
             if (!open) closePanel();
           }}
           onSubmit={submitRoomPanel}
+          onDelete={removeSelectedRoom}
           onSetEnterprise={setRoomEnterprise}
           onClearEnterprise={clearRoomEnterprise}
         />
