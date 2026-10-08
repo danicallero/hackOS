@@ -221,6 +221,8 @@ export const deleteMyProject = (repoId: number, idempotencyKey?: string) =>
   api.delete(`/api/me/projects/${repoId}`, idem(idempotencyKey));
 
 export interface PlannedWorkGroup {
+  reconciliation_code?: string;
+  can_submit?: boolean;
   id: number;
   name: string;
   description: string;
@@ -312,3 +314,101 @@ export const removeRepoChallenge = (repoId: number, challengeId: number) =>
   api.delete(`/api/repos/${repoId}/challenges/${challengeId}`);
 export const removeRepoPrize = (repoId: number, prizeName: string) =>
   api.delete(`/api/repos/${repoId}/prizes/${encodeURIComponent(prizeName)}`);
+
+export interface SubmissionParticipant {
+  key?: string;
+  userId: number | null;
+  name: string | null;
+  surname: string | null;
+  email?: string | null;
+}
+export interface ProjectSubmission {
+  id: number;
+  name: string;
+  code: string;
+  status: "draft" | "submitted" | "not_submitted";
+  submittedVia: "native" | "devpost" | "admin" | null;
+  submittedAt: string | null;
+  lockedAt: string | null;
+  lockReason: string | null;
+  devpostUrl: string | null;
+  eligible: boolean;
+  membershipDiffers: boolean;
+  membershipResolution: "internal" | "devpost" | null;
+  unresolvedCount: number;
+  participantCount: number;
+  maxTeamSize: number | null;
+  teamSizeViolation: boolean;
+  teamSizeException: boolean;
+  eligibilityOverride: boolean | null;
+  internal: SubmissionParticipant[];
+  external: SubmissionParticipant[];
+  requests: Array<{
+    id: number;
+    reason: string;
+    status: "pending" | "approved" | "denied";
+    created_at: string;
+    decision_reason: string | null;
+  }>;
+  canSubmit: boolean;
+  claimStatus?: "confirmed" | "rejected" | null;
+  rejectedClaims?: number;
+  possibleDuplicates?: Array<{
+    externalKey: string;
+    candidateUserId: number;
+    name: string | null;
+    surname: string | null;
+  }>;
+}
+export const projectSubmission = (id: number) =>
+  api.get<ProjectSubmission>(`/api/me/projects/${id}/submission`);
+export const submitProject = (id: number, stage: "projects" | "work-groups") =>
+  api.post<{ repoId: number }>(`/api/me/${stage}/${id}/submit`, {}, idem(crypto.randomUUID()));
+export const requestProjectEdits = (id: number, reason: string) =>
+  api.post(`/api/me/projects/${id}/edit-requests`, { reason }, idem(crypto.randomUUID()));
+export const claimProject = (
+  id: number,
+  groupId?: number,
+  admin = false,
+  kind: "group" | "repo" = "group",
+) =>
+  api.post<{ confirmed: boolean; repoId?: number }>(
+    `${admin ? "/api/projects" : "/api/me/projects"}/${id}/claim`,
+    kind === "repo" ? { targetRepoId: groupId } : { groupId },
+    idem(crypto.randomUUID()),
+  );
+export interface LinkCandidate {
+  kind?: "group" | "repo";
+  id: number;
+  name: string;
+  code: string;
+  members: SubmissionParticipant[];
+  overlap: number;
+}
+export const projectLinkCandidates = (id: number, admin = false) =>
+  api.get<{ groups: LinkCandidate[] }>(
+    `${admin ? "/api/projects" : "/api/me/projects"}/${id}/link-candidates`,
+  );
+export const projectReconciliation = () =>
+  api.get<{
+    projects: ProjectSubmission[];
+    planned: Array<{ id: number; name: string; code: string; status: string }>;
+    config: { maxTeamSize: number | null; deadline: string | null };
+  }>("/api/projects/reconciliation");
+export const decideProjectEdits = (
+  id: number,
+  decision: "approve" | "deny" | "unlock",
+  reason: string,
+) => api.post(`/api/projects/${id}/unlock`, { decision, reason }, idem(crypto.randomUUID()));
+export const resolveProjectException = (
+  id: number,
+  body: {
+    reason: string;
+    membership?: "internal" | "devpost";
+    teamSizeException?: boolean;
+    eligibilityOverride?: boolean | null;
+  },
+) => api.post(`/api/projects/${id}/resolve`, body, idem(crypto.randomUUID()));
+
+export const unlinkDevpostProject = (id: number, reason: string) =>
+  api.post(`/api/projects/${id}/unlink`, { reason });

@@ -148,7 +148,7 @@ describe("1:1 group parity", () => {
     await assignChallengeToRoom(activeRoom, challengeId);
     await assignChallengeToRoom(pausedRoom, challengeId);
 
-    expect(await challengeEtaMinutesPerSlot(challengeId)).toBe(8);
+    expect(await challengeEtaMinutesPerSlot(challengeId)).toBe(10);
     expect((await roomPace(activeRoom)).roomCount).toBe(1);
   });
 
@@ -197,7 +197,7 @@ describe("merged N>1 group", () => {
       await pool.query("UPDATE queue_entries SET status = $1 WHERE id = $2", [status, siblingId]);
       const rows = await myQueueStatus(userId);
       expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({ position: 1, etaMinutes: 8 });
+      expect(rows[0]).toMatchObject({ position: 1, etaMinutes: 10 });
       const view = await roomView(roomId);
       expect(view.next.map((entry: { repo_id: number }) => entry.repo_id)).toEqual([mine.repoId]);
     }
@@ -255,7 +255,7 @@ describe("merged N>1 group", () => {
     expect((await roomPace(roomId)).pendingCount).toBe(2);
   });
 
-  it("uses the limit belonging to the lowest challenge id in a merged group", async () => {
+  it("uses the strictest presentation limit in a merged judging group", async () => {
     const { roomPace } = await import("../../src/modules/queue/reads.js");
     const { pool } = await import("../../src/db/pool.js");
     const { challengeIds } = await createEnterpriseChallenges(2);
@@ -273,7 +273,7 @@ describe("merged N>1 group", () => {
       120,
     ]);
 
-    expect((await roomPace(roomId)).challengeMaxMinutes).toBe(10);
+    expect((await roomPace(roomId)).challengeMaxMinutes).toBe(2);
   });
 
   it("calls the merged team once, not once per entry", async () => {

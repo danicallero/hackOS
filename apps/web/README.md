@@ -534,3 +534,11 @@ while retaining a dashed destination outline and the item's dimensions as
 siblings shift (issue #849). Use `useReducedDragMotion` to disable overlay drop
 animations, and `motion-reduce:transition-none!` on sortable wrappers. Keyboard
 sensors retain pickup, arrow movement, drop, and Escape cancellation.
+
+Project submission controls reuse `SectionCard`, `SidePanelEditor` and `AlertModal`; the latter accepts `confirmDisabled` for required decision reasons without displaying a pending spinner. See the [project lifecycle audit](../../docs/project-lifecycle-audit.md) for submission, reconciliation and track timing behavior.
+
+The project reconciliation workspace follows Users/Responses: `ListToolbar` + `FilterMenu` + `DataTable`, with mobile drill-down rows and one review overlay per project. Submission actions use `SectionCard.action`; do not place a SidePanelEditor trigger wrapper inside reading content, where its automatic right alignment creates a detached action.
+
+Controlled list review dialogs can pass `Modal.onCloseAutoFocus` to restore their opening row or search field. Keep persistent review utilities in `Modal.footer`, outside the scrolling body.
+
+Participant project detail pages keep compact edit/overflow controls inline with the title using the Users header composition. Project details, team, challenges/judging preference, submission and optional Devpost linkage use separate SectionCard surfaces in that order; team/challenge members stay plain rows inside their section. Both planning and reconciled projects use the same Add challenge editor instead of separate inline selection controls. Ordinary event rule settings record audit metadata automatically without asking for a justification; explicit project exceptions retain their reason.

@@ -253,7 +253,13 @@ async function claimPreCall(queueGroupId: number, repoId: number): Promise<PreCa
         WHERE rqg.queue_group_id = $1`,
       [queueGroupId],
     );
-    const averageMinutes = Number(paceRows[0]?.avg ?? 8);
+    const timing = await client.query(
+      `SELECT estimated_cycle_minutes FROM queue_group_timing($1)`,
+      [queueGroupId],
+    );
+    const averageMinutes = Number(
+      timing.rows[0]?.estimated_cycle_minutes ?? paceRows[0]?.avg ?? 10,
+    );
     const roomCount = Math.max(1, Number(paceRows[0]?.rooms ?? 0));
     const etaMinutes = canonical.rank * (averageMinutes / roomCount);
     const threshold = Number(settings.pre_call_notification_eta_minutes ?? 10);

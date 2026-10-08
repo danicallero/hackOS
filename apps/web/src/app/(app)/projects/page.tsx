@@ -5,19 +5,28 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { PresentationStatus } from "@/components/projects/presentation-status";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -189,27 +198,40 @@ export default function ProjectsPage() {
   return (
     <PageLayout>
       <PageHeader
+        className="flex-row items-center justify-between gap-2 md:items-center [&>[data-slot=action-group]]:shrink-0 [&>[data-slot=action-group]]:flex-nowrap"
         title={t("projects")}
-        actions={
+        secondaryActions={
           canImport || canEdit ? (
-            <div className="flex flex-wrap gap-2">
-              {/* H18: native creation, so an event can run without Devpost. */}
-              {canImport && (
-                <Button
-                  variant={canEdit ? "outline" : "default"}
-                  onClick={() => router.push("/projects/import")}
-                >
-                  <UploadSimpleIcon aria-hidden="true" className="size-4" />
-                  {t("importFromDevpost")}
-                </Button>
-              )}
-              {canEdit && (
-                <ProjectFormDialog
-                  mode={{ kind: "create" }}
-                  onSaved={(repoId) => router.push(`/projects/${repoId}`)}
-                />
-              )}
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton label={t("moreActions")} variant="outline">
+                  <DotsThreeIcon aria-hidden="true" />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {canEdit && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/projects/reconciliation">{t("projectReconciliation")}</Link>
+                  </DropdownMenuItem>
+                )}
+                {canImport && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/projects/import">
+                      <UploadSimpleIcon aria-hidden="true" />
+                      {t("importFromDevpost")}
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : undefined
+        }
+        primaryAction={
+          canEdit ? (
+            <ProjectFormDialog
+              mode={{ kind: "create" }}
+              onSaved={(repoId) => router.push(`/projects/${repoId}`)}
+            />
           ) : undefined
         }
       />

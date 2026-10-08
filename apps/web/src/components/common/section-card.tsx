@@ -4,6 +4,10 @@ import { ActionGroup } from "@/components/common/action-group";
 import { Section } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 
+/** Header for side-by-side sections so one without an action still aligns with its neighbour. */
+export const PAIRED_HEADER_CLASS =
+  "flex-row items-center justify-between gap-2 sm:items-center [&>div:first-child]:min-h-(--control-height-compact) [&>div:first-child]:items-center";
+
 /**
  * Semantic, border-only domain section with an optional state, action, or
  * exceptional description. It intentionally has no inline elevation.

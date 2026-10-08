@@ -138,9 +138,15 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "roomId" },
         },
       },
-      schema: { params: roomIdParam },
+      schema: {
+        params: roomIdParam,
+        querystring: z.object({ challengeId: z.coerce.number().int().positive().optional() }),
+        summary: "Read track pacing in a room",
+        description:
+          "A track-wide target, learned presentation/preparation cycle, scheduled judging close and realistic finish. An optional challengeId selects a served track in a multi-track room; ETA is never clipped to the advisory judge goal (H38/H39).",
+      },
     },
-    async (req) => roomPace(req.params.roomId),
+    async (req) => roomPace(req.params.roomId, req.query.challengeId),
   );
 
   typed.get(

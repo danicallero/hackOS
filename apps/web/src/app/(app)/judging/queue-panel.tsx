@@ -14,7 +14,7 @@ import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGl
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { SkipForwardIcon } from "@phosphor-icons/react/dist/csr/SkipForward";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Modal } from "@/components/common/modal";
 import { Button } from "@/components/ui/button";
@@ -46,19 +46,19 @@ import { TeamSearch } from "./team-search";
 export function QueueStatsCard({
   progress,
   pace,
+  timingAction,
 }: {
   progress: ChallengeProgress | null;
   pace: RoomPace | null;
+  timingAction?: ReactNode;
 }) {
   const { t } = useLocale();
-  // Track current time to calculate ETA; update every 30s since it's an estimate.
+  // H29: refresh only the legacy ETA fallback; authoritative projections come from pace.
   const [now, setNow] = useState(() => Date.now());
-
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
-
   const total = progress
     ? progress.waiting +
       progress.called +
@@ -67,61 +67,94 @@ export function QueueStatsCard({
       progress.disqualified +
       progress.other
     : 0;
-  // Pending teams are split across every room sharing this challenge's queue.
-  const estFinishLabel =
-    pace && pace.pendingCount > 0
+  const estFinishLabel = pace?.estimatedFinishAt
+    ? new Date(pace.estimatedFinishAt).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : pace && pace.pendingCount > 0
       ? new Date(
-          now + (pace.pendingCount / pace.roomCount) * pace.effectiveMinutesPerTeam * 60_000,
+          now +
+            (pace.pendingCount / pace.roomCount) *
+              (pace.estimatedCycleMinutes ?? pace.desiredMinutesPerTeam) *
+              60_000,
         ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : "—";
-
   return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-4 px-5 pt-5 pb-4">
-      <div>
-        <p className="text-muted-foreground text-xs font-semibold uppercase">
-          {t("queueStatsEvaluated")}
-        </p>
-        <p className="mt-0.5 text-lg font-semibold tabular-nums">
-          {progress ? `${progress.evaluated} / ${total}` : "—"}
-        </p>
-      </div>
-      <div>
-        <p className="text-muted-foreground text-xs font-semibold uppercase">
-          {t("queueStatsAvgTime")}
-        </p>
-        <p className="mt-0.5 text-lg font-semibold tabular-nums">
-          {progress?.avgEvaluationMinutes != null
-            ? t("queueStatsMinutes", { count: Math.round(progress.avgEvaluationMinutes) })
-            : "—"}
-        </p>
-      </div>
-      <div>
-        <p className="text-muted-foreground text-xs font-semibold uppercase">
-          {t("queueStatsEstFinish")}
-        </p>
-        <p className="mt-0.5 text-lg font-semibold tabular-nums">{estFinishLabel}</p>
-      </div>
-      <div>
-        <p className="text-muted-foreground text-xs font-semibold uppercase">
-          {t("queueStatsPacingTarget")}
-        </p>
-        <p
-          className={cn(
-            "mt-0.5 text-lg font-semibold tabular-nums",
-            pace?.autoAdjusted && "text-warning",
-          )}
-        >
-          {pace ? t("queueStatsMinutes", { count: Math.round(pace.effectiveMinutesPerTeam) }) : "—"}
-        </p>
-        {pace?.autoAdjusted && (
-          <p className="text-warning text-xs">{t("queueStatsAdjustedHint")}</p>
+    <div className="space-y-4 px-5 pt-5 pb-4">
+      <dl className="grid grid-cols-2 gap-4">
+        <div>
+          <dt className="type-meta">{t("queueStatsEvaluated")}</dt>
+          <dd className="mt-1 text-lg font-semibold tabular-nums">
+            {progress ? `${progress.evaluated} / ${total}` : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="type-meta">{t("queueStatsAvgTime")}</dt>
+          <dd className="mt-1 text-lg font-semibold tabular-nums">
+            {progress?.avgEvaluationMinutes != null
+              ? t("queueStatsMinutes", { count: Math.round(progress.avgEvaluationMinutes) })
+              : "—"}
+          </dd>
+        </div>
+      </dl>
+      <div className="space-y-3 border-t border-border pt-4">
+        <dl className="grid grid-cols-2 gap-4">
+          <div>
+            <dt className="type-meta">{t("queueStatsEstFinish")}</dt>
+            <dd
+              className={cn(
+                "mt-1 text-lg font-semibold tabular-nums",
+                pace?.exceedsJudgingClose && "text-destructive",
+              )}
+            >
+              {estFinishLabel}
+            </dd>
+          </div>
+          <div>
+            <dt className="type-meta">{t("judgingCloseLabel")}</dt>
+            <dd className="mt-1 text-lg font-semibold tabular-nums">
+              {pace?.judgingClosesAt
+                ? new Date(pace.judgingClosesAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "—"}
+            </dd>
+          </div>
+        </dl>
+        {pace?.exceedsJudgingClose && (
+          <p className="flex items-start gap-2 text-xs text-destructive">
+            <WarningIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            {t("judgingEstimatedOverrun")}
+          </p>
         )}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+        <div>
+          <p className="type-meta">{t("queueStatsPacingTarget")}</p>
+          <p
+            className={cn(
+              "mt-1 text-lg font-semibold tabular-nums",
+              pace?.autoAdjusted && "text-warning",
+            )}
+          >
+            {pace
+              ? t("queueStatsMinutes", { count: Math.round(pace.effectiveMinutesPerTeam) })
+              : "—"}
+          </p>
+          {pace?.autoAdjusted && (
+            <p className="text-warning text-xs">{t("queueStatsAdjustedHint")}</p>
+          )}
+        </div>
+        {timingAction}
       </div>
     </div>
   );
 }
 
 export function QueuePanel({
+  timingAction,
   view,
   progress,
   pace,
@@ -142,6 +175,7 @@ export function QueuePanel({
   onReEnter,
   onOpenReview,
 }: {
+  timingAction?: ReactNode;
   view: RoomView;
   progress: ChallengeProgress | null;
   pace: RoomPace | null;
@@ -176,7 +210,7 @@ export function QueuePanel({
 
   return (
     <Surface padding="none" className="flex h-full min-h-0 flex-col overflow-hidden">
-      <QueueStatsCard progress={progress} pace={pace} />
+      <QueueStatsCard progress={progress} pace={pace} timingAction={timingAction} />
       <Separator />
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5 scrollbar-none [&::-webkit-scrollbar]:hidden">
         <QueueList

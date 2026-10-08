@@ -53,6 +53,9 @@ export interface RepoChallenge {
 }
 
 export interface ProjectRepo {
+  locked_at?: string | null;
+  reconciliation_code?: string;
+  submission_status?: string;
   id: number;
   name: string;
   description: string | null;

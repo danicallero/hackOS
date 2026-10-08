@@ -18,7 +18,7 @@ export function ProjectNavigation({ onDelete }: { onDelete?: () => void }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <IconButton label={t("moreActions")} variant="ghost">
+        <IconButton label={t("moreActions")} variant="outline">
           <DotsThreeIcon aria-hidden="true" />
         </IconButton>
       </DropdownMenuTrigger>

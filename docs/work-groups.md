@@ -92,11 +92,10 @@ the database transaction; successful identities are cached on both records.
 Unavailable or unsafe redirects never block an import or trigger a guessed link. A valid
 stored URL never falls back to inference.
 
-When an exact URL link is established, active work-group members who are not
-already project members are copied as active members: they already accepted
-membership in the planning group. Imported primary/verified-secondary email
-matches are preserved without duplicates; pending planning invitations are not
-copied. Imported name and description win when linking. Saving a group URL also
+When a code or exact URL link is established, planning membership remains
+separate from the imported roster. Participant differences are surfaced rather
+than unioned. Accepted planning members retain relationship access; pending
+invitations never confer membership. Verified email aliases count as one person. Imported name and description win when linking. Saving a group URL also
 reconciles existing imports, including records imported before identity caching.
 
 Without a valid URL, the importer may link only when one and only one planned
@@ -110,3 +109,17 @@ are audited in the same transaction. Projects store their own presentation
 preference, defaulting to `no_preference` and inheriting the group's on linking.
 It remains editable until the first queue entries for that
 project are generated; then it is locked.
+
+
+## Native submission and recovery
+
+Planning projects now have a stable, copyable reconciliation code. Participants
+can Submit project without Devpost; this creates the linked operational repo,
+preserves the code and preference, copies accepted membership and intended
+challenges, and saves a locked submission snapshot. All participant mutations
+respect the linked repo's explicit lock. Request edits sends an organizer
+request; approval reopens the project with history retained and requires a new
+submission. See [Projects lifecycle](./challenges-devpost.md#project-submission-lifecycle-h6-h16h21-h30-h53)
+and [the audit](./project-lifecycle-audit.md). Existing links are never replaced
+by heuristic matching on a later import. After the deadline, planning records
+with no submission remain visible as not submitted; they are not deleted.

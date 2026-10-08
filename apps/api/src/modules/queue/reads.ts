@@ -625,7 +625,11 @@ export async function challengeEtaMinutesPerSlot(
   );
   const avg = Number(rows[0].avg);
   const roomCount = Math.max(1, Number(rows[0].rooms));
-  return avg / roomCount;
+  const timing = await pool.query(
+    `SELECT t.estimated_cycle_minutes FROM queue_group_challenges qgc CROSS JOIN LATERAL queue_group_timing(qgc.queue_group_id) t WHERE qgc.challenge_id=$1`,
+    [challengeId],
+  );
+  return Number(timing.rows[0]?.estimated_cycle_minutes ?? avg) / roomCount;
 }
 
 /** Same ETA formula as myQueueStatus (H38), applied to an arbitrary set of waiting entries. */
@@ -691,7 +695,7 @@ WITH viewer AS (
     WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
       AND u.is_test_account = v.is_test_account
       AND er.is_test_account = v.is_test_account
-      AND (lower(dp.email) = lower(u.email)
+      AND ((u.email_verified AND lower(dp.email) = lower(u.email))
        OR (u.secondary_email_verified_at IS NOT NULL
            AND lower(dp.email) = lower(u.secondary_email)))
  ), enterprise_markers AS (
@@ -876,8 +880,8 @@ export async function myQueueStatus(userId: number) {
          FROM waiting_order
      ), queue_pace AS (
        SELECT qgc.challenge_id,
-              COALESCE(AVG(rqs.desired_minutes_per_team), 8) /
-                GREATEST(1, COUNT(rqs.room_id)) AS minutes_per_slot
+              (SELECT t.estimated_cycle_minutes FROM queue_group_challenges timing_group CROSS JOIN LATERAL queue_group_timing(timing_group.queue_group_id) t WHERE timing_group.challenge_id=qgc.challenge_id) /
+                GREATEST(1, COUNT(rqs.room_id) FILTER (WHERE NOT rqs.is_paused)) AS minutes_per_slot
          FROM queue_group_challenges qgc
          JOIN visible_queue_groups vq ON vq.queue_group_id = qgc.queue_group_id
          JOIN (SELECT DISTINCT challenge_id FROM my_entries) mine
@@ -986,7 +990,7 @@ export async function myQueueStatus(userId: number) {
  * this challenge's queue (they work the queue in parallel, so N rooms means
  * N× the throughput for the same remaining time).
  */
-export async function roomPace(roomId: number) {
+export async function roomPace(roomId: number, requestedChallengeId?: number) {
   const state = (await pool.query(`SELECT * FROM room_queue_state WHERE room_id = $1`, [roomId]))
     .rows[0];
   if (!state) throw new NotFoundError("Room not found", { roomId });
@@ -999,18 +1003,27 @@ export async function roomPace(roomId: number) {
   const primaryChallenge = (
     await pool.query(
       `SELECT qgc.challenge_id::int AS id,
-              c.max_presentation_seconds::int AS max_presentation_seconds
+              (SELECT min(sc.max_presentation_seconds) FROM queue_group_challenges sg JOIN challenges sc ON sc.id=sg.challenge_id WHERE sg.queue_group_id=rqg.queue_group_id)::int AS max_presentation_seconds
          FROM room_queue_groups rqg
          JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
          JOIN challenges c ON c.id = qgc.challenge_id AND c.is_test_account = false
-         WHERE rqg.room_id = $1
-         ORDER BY qgc.challenge_id ASC
+         WHERE rqg.room_id = $1 AND ($2::int IS NULL OR qgc.challenge_id=$2)
+         ORDER BY EXISTS(SELECT 1 FROM queue_entries active JOIN queue_group_challenges ag ON ag.challenge_id=active.challenge_id WHERE ag.queue_group_id=rqg.queue_group_id AND active.assigned_room_id=$1 AND active.status IN ('in_room','presenting')) DESC,qgc.challenge_id ASC
          LIMIT 1`,
-      [roomId],
+      [roomId, requestedChallengeId ?? null],
     )
   ).rows[0] as { id: number; max_presentation_seconds: number | null } | undefined;
 
-  const challengeIds = await roomChallengeIds(pool, roomId);
+  if (requestedChallengeId && !primaryChallenge)
+    throw new NotFoundError("This room does not judge the requested track");
+  const challengeIds = primaryChallenge
+    ? (
+        await pool.query(
+          `SELECT sibling.challenge_id FROM queue_group_challenges anchor JOIN queue_group_challenges sibling ON sibling.queue_group_id=anchor.queue_group_id WHERE anchor.challenge_id=$1`,
+          [primaryChallenge.id],
+        )
+      ).rows.map((r) => Number(r.challenge_id))
+    : [];
 
   // Distinct teams, not rows: a repo merged across two of the group's
   // challenges is one team still to be judged (the "call once" view).
@@ -1019,7 +1032,7 @@ export async function roomPace(roomId: number) {
         await pool.query(
           `SELECT COUNT(DISTINCT repo_id)::int AS n FROM queue_entries
             WHERE challenge_id = ANY($1) AND status IN ('waiting', 'called')
-              AND repo_id IN (SELECT id FROM repos WHERE is_test_account = false)`,
+              AND repo_id IN (SELECT id FROM project_reconciliation_state WHERE is_test_account = false AND eligible)`,
           [challengeIds],
         )
       ).rows[0].n
@@ -1044,27 +1057,66 @@ export async function roomPace(roomId: number) {
       )
     : 1;
 
+  const timing = primaryChallenge
+    ? (
+        await pool.query(
+          `SELECT t.* FROM queue_group_challenges qgc CROSS JOIN LATERAL queue_group_timing(qgc.queue_group_id) t WHERE qgc.challenge_id=$1`,
+          [primaryChallenge.id],
+        )
+      ).rows[0]
+    : null;
+  const targetMinutes = Number(timing?.target_minutes ?? state.desired_minutes_per_team);
+  const estimatedCycleMinutes = Number(timing?.estimated_cycle_minutes ?? targetMinutes + 2);
+  const samples = Number(timing?.sample_count ?? 0);
+  const estimatedPresentationMinutes =
+    (5 * targetMinutes + samples * Number(timing?.observed_presentation_minutes ?? targetMinutes)) /
+    (5 + samples);
+  const preparationMinutes = estimatedCycleMinutes - estimatedPresentationMinutes;
+  const activeEntries = challengeIds.length
+    ? (
+        await pool.query(
+          `SELECT DISTINCT ON(repo_id) status,presentation_started_at,room_entered_at,called_at FROM queue_entries WHERE challenge_id=ANY($1::int[]) AND status IN ('in_room','presenting') ORDER BY repo_id,presentation_started_at DESC NULLS LAST`,
+          [challengeIds],
+        )
+      ).rows
+    : [];
+  const now = Date.now();
+  const activeMinutes = activeEntries.map((entry) => {
+    if (entry.status === "presenting") {
+      const elapsed = entry.presentation_started_at
+        ? Math.max(0, (now - new Date(entry.presentation_started_at).getTime()) / 60000)
+        : 0;
+      return Math.max(0, estimatedPresentationMinutes - elapsed);
+    }
+    const entered = entry.room_entered_at ?? entry.called_at;
+    const elapsed = entered ? Math.max(0, (now - new Date(entered).getTime()) / 60000) : 0;
+    return estimatedPresentationMinutes + Math.max(0, preparationMinutes - elapsed);
+  });
+  const activeWork = activeMinutes.reduce((total, minutes) => total + minutes, 0);
   const challengeMaxMinutes = primaryChallenge?.max_presentation_seconds
     ? primaryChallenge.max_presentation_seconds / 60
     : null;
   const baselineMinutesPerTeam =
-    challengeMaxMinutes != null
-      ? Math.min(state.desired_minutes_per_team, challengeMaxMinutes)
-      : state.desired_minutes_per_team;
+    challengeMaxMinutes != null ? Math.min(targetMinutes, challengeMaxMinutes) : targetMinutes;
 
   const remainingMinutes = settings.schedule_end_at
     ? Math.max(0, (new Date(settings.schedule_end_at).getTime() - Date.now()) / 60_000)
     : null;
-  const requiredMinutes = (pendingCount / roomCount) * baselineMinutesPerTeam;
+  const requiredMinutes = Math.max(
+    (pendingCount * estimatedCycleMinutes + activeWork) / roomCount,
+    ...activeMinutes,
+    0,
+  );
   const insufficientTime = remainingMinutes !== null && requiredMinutes > remainingMinutes;
   const suggestedMinutesPerTeam =
     remainingMinutes !== null && pendingCount > 0
-      ? (remainingMinutes * roomCount) / pendingCount
+      ? Math.max(0, (remainingMinutes * roomCount - activeWork) / pendingCount - preparationMinutes)
       : null;
 
   // H39: honour the judging end time. When the desired pace won't fit every
   // pending team before schedule_end_at, the effective time per team is
-  // squeezed down to what does fit — so judging finishes on time. Never
+  // squeezed down to what would fit. The learned finish estimate can still
+  // exceed the close while judges adapt to that goal. Never
   // stretches beyond the challenge-capped baseline pace.
   //
   // This is ADVISORY ONLY: `effectiveMinutesPerTeam` is the target the judge's
@@ -1078,7 +1130,24 @@ export async function roomPace(roomId: number) {
 
   return {
     roomId,
-    desiredMinutesPerTeam: state.desired_minutes_per_team,
+    desiredMinutesPerTeam: targetMinutes,
+    judgingClosesAt: settings.schedule_end_at,
+    estimatedFinishAt:
+      pendingCount > 0 || activeEntries.length > 0
+        ? new Date(now + requiredMinutes * 60000).toISOString()
+        : null,
+    exceedsJudgingClose: insufficientTime,
+    estimatedCycleMinutes,
+    preparationMinutes,
+    timingSampleCount: Number(timing?.sample_count ?? 0),
+    observedPresentationMinutes:
+      timing?.observed_presentation_minutes == null
+        ? null
+        : Number(timing.observed_presentation_minutes),
+    observedPreparationMinutes:
+      timing?.observed_preparation_minutes == null
+        ? null
+        : Number(timing.observed_preparation_minutes),
     challengeMaxMinutes,
     roomCount,
     pendingCount,

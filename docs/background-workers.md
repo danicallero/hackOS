@@ -201,3 +201,28 @@ endpoints remain available for installed clients. Physical connection budgets
 and gauges count the shared response once; logical attachments and access-check
 load remain separate. See [realtime transport](./realtime-transport.md) for the
 scope/authorization table, lifecycle, revocation, metrics and 600-client results.
+
+
+## Shared track timing and ETA (H32/H38/H39)
+
+Track targets are stored on `challenges.target_seconds_per_team`, not per room.
+The migration backfills the strictest historical serving-room goal into each track.
+All rooms serving a challenge use one target; admins and assigned judges edit it
+before or during judging via `/api/queue/challenges/:challengeId/timing`.
+The legacy room target column remains for old clients, but is not the owner of
+new track pacing. A compatibility room-target PATCH updates the served tracks,
+so all of their rooms share the change rather than retaining independent goals. `preparation_seconds` is the initial setup allowance. Actual
+setup is Start presentation minus bring-in, falling back to call time for legacy
+entries. Bring-in stamps `queue_entries.room_entered_at`; reset transitions clear
+it. Completed presentation duration and setup averages are pooled across the
+shared queue's rooms, with at most 20 recent clean samples and a five-team prior.
+Merged challenges use the strictest target and largest setup allowance.
+
+`queue_group_timing()` owns the learned cycle estimate consumed by project,
+participant queue, pump notification and operator ETA paths. Active parallel
+rooms divide throughput. A shortened advisory judge goal due to closing-time
+pressure does not shorten this estimate. The judge sees the actual estimated
+finish, scheduled judging close and an overrun warning. Nothing automatically
+ends a presentation when its target expires. No new worker or cadence is added.
+The complete product clarifications live in the
+[project lifecycle audit](./project-lifecycle-audit.md).

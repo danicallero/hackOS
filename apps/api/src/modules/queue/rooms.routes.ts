@@ -583,7 +583,13 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
       config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
-      schema: { params: roomIdParam, body: roomQueueStateBody },
+      schema: {
+        params: roomIdParam,
+        body: roomQueueStateBody,
+        summary: "Update room waiting quota or shared track target",
+        description:
+          "Compatibility API: desiredMinutesPerTeam updates the target of every track served by this room, shared across all of their rooms. New clients set the track target directly (H29/H39/H53).",
+      },
     },
     async (req) => {
       const userId = actor(req.userId);
@@ -611,6 +617,37 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
             req.params.roomId,
           ],
         );
+        if (req.body.desiredMinutesPerTeam !== undefined) {
+          const tracks = await client.query(
+            `SELECT c.id,c.target_seconds_per_team FROM room_queue_groups rqg JOIN queue_group_challenges qgc ON qgc.queue_group_id=rqg.queue_group_id JOIN challenges c ON c.id=qgc.challenge_id WHERE rqg.room_id=$1 ORDER BY c.id FOR UPDATE OF c`,
+            [req.params.roomId],
+          );
+          for (const track of tracks.rows) {
+            const targetSeconds = req.body.desiredMinutesPerTeam * 60;
+            await client.query(`UPDATE challenges SET target_seconds_per_team=$2 WHERE id=$1`, [
+              track.id,
+              targetSeconds,
+            ]);
+            await audit(client, {
+              actorId: userId,
+              entityType: "challenge",
+              entityId: track.id,
+              action: "judging_timing",
+              before: { targetSeconds: track.target_seconds_per_team },
+              after: { targetSeconds },
+              source: "admin",
+            });
+          }
+        }
+        await audit(client, {
+          actorId: userId,
+          entityType: "room",
+          entityId: req.params.roomId,
+          action: "queue_state",
+          before: existing,
+          after: rows[0],
+          source: "admin",
+        });
         return rows[0];
       });
     },
