@@ -273,6 +273,10 @@ are fixed outside their scroll body; short forms remain in normal flow.
 Shared geometry is in `styles/surfaces.css`; the full decisions and exceptions
 are in `docs/DESIGN.md` §4b, with interactive examples in `/design-system`.
 
+Shared page, section, modal and panel headers use `heading-row` to align
+visible title capitals with icons and `type-meta` counters. Section icons
+stay in the title row, independently of descriptions.
+
 `SectionCard variant="plain"` keeps the shared section heading/actions without
 card chrome. Use it when page spacing and columns explain the structure; reserve
 the default bordered surface for genuinely bounded groups. Event settings and My profile use open sections within a constrained reading

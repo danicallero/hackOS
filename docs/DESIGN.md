@@ -98,6 +98,12 @@ Each row: value → intent → boundary.
 | Overlays | 8 px radius; small shadow (menus/popovers), large shadow (modals) | Elevation communicates "floating above the page" and nothing else. |
 | Full radius | buttons, status pills, avatars | Not for fields or content surfaces. |
 
+Shared page and section title rows align icons and counters to the visible
+capital height (`heading-row`), rather than the different fonts’ line boxes.
+Section icons belong in the title row so descriptions never shift them.
+Schedule grid lines start after the hour-label gutter; labels use the shell
+background to keep the time axis clear in both themes.
+
 Uppercase/letter-spacing is not a hierarchy tool — use scale, weight, and
 colour; reserve uppercase for real codes (badge IDs, room codes).
 
