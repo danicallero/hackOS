@@ -187,7 +187,7 @@ export function MultiSelect({
               aria-invalid={ariaInvalid}
               className={cn(
                 buttonVariants({ variant: "ghost", size: "default" }),
-                "min-w-0 flex-1 rounded-control! px-1 text-left font-normal",
+                "min-w-0 flex-1 rounded-control px-1 text-left font-normal",
                 // With badges the label is sr-only, so the chevron is the only
                 // visible child: pin it to the far edge of the control instead
                 // of leaving it floating where the label used to start.

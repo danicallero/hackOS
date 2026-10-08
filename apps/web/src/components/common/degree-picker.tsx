@@ -121,7 +121,7 @@ export function DegreePicker({
           aria-expanded={open}
           aria-haspopup="listbox"
           {...aria}
-          className="w-full justify-between rounded-control! font-normal"
+          className="w-full justify-between rounded-control font-normal"
         >
           <span className="truncate">{currentLabel ?? t("selectDegreePlaceholder")}</span>
           <CaretUpDownIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
