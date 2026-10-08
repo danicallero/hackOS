@@ -142,8 +142,8 @@ export function MultiSelect({
         <div
           ref={boxRef}
           className={cn(
-            "relative flex min-h-[var(--control-height-default)] w-full items-center gap-2 rounded-control border bg-background px-2",
-            value.length > 0 && "py-1",
+            "relative flex min-h-[var(--control-height-default)] w-full items-center gap-2 rounded-control border bg-background",
+            value.length > 0 && "px-2 py-1",
             disabled && "opacity-50",
             className,
           )}
@@ -193,7 +193,7 @@ export function MultiSelect({
                 // of leaving it floating where the label used to start.
                 value.length > 0
                   ? "absolute inset-0 h-full w-full justify-end rounded-control px-3"
-                  : "justify-between",
+                  : "justify-between px-3",
               )}
             >
               <span className={cn(value.length > 0 && "sr-only", "truncate")}>
