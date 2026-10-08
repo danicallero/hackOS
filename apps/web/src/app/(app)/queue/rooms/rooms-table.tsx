@@ -1,7 +1,7 @@
 "use client";
 
 // The room administration grid (H29, H46): the small, high-frequency fields
-// stay editable in place while enterprise routing remains in the room editor.
+// and enterprise assignments stay editable in place.
 
 import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
@@ -16,6 +16,7 @@ import {
   refocusEditableTableCell,
 } from "@/components/common/editable-table-grid";
 import { EmptyState } from "@/components/common/empty-state";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import { useLocale } from "@/lib/i18n";
 import type { Room } from "@/lib/queue";
+import type { EnterpriseSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const GRID_PREFIX = "room";
@@ -144,6 +146,56 @@ function EditableRoomTextCell({
   );
 }
 
+function RoomEnterpriseCell({
+  room,
+  enterprises,
+  onAssign,
+}: {
+  room: Room;
+  enterprises: EnterpriseSummary[];
+  onAssign: (room: Room, enterpriseId: number | null) => Promise<void>;
+}) {
+  const { t } = useLocale();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const labelId = `room-enterprise-inline-${room.id}`;
+
+  return (
+    <div className="max-w-56 space-y-2">
+      <span id={labelId} className="sr-only">
+        {t("editRoomAssignmentsAria", { room: room.name })}
+      </span>
+      <EntityCombobox
+        options={[{ id: "", name: t("noEnterpriseAssigned") }, ...enterprises]}
+        value={room.enterprise_id ? String(room.enterprise_id) : ""}
+        getId={(enterprise) => enterprise.id}
+        getLabel={(enterprise) => enterprise.name}
+        aria-labelledby={labelId}
+        searchPlaceholder={t("searchEnterprisesPlaceholder")}
+        disabled={pending}
+        onChange={async (value) => {
+          const enterpriseId = value ? Number(value) : null;
+          if (enterpriseId === (room.enterprise_id ?? null) || pending) return;
+          setPending(true);
+          setError(null);
+          try {
+            await onAssign(room, enterpriseId);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : t("couldNotAssignEnterprise"));
+          } finally {
+            setPending(false);
+          }
+        }}
+      />
+      {error && (
+        <p role="alert" className="text-destructive text-sm">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function DraftRoomRow({
   saving,
   onCancel,
@@ -213,6 +265,8 @@ export function DraftRoomRow({
 
 export function RoomsTable({
   rooms,
+  enterprises,
+  onAssignEnterprise,
   loading,
   error,
   onRetry,
@@ -228,6 +282,8 @@ export function RoomsTable({
   onOpenEdit,
 }: {
   rooms: Room[];
+  enterprises: EnterpriseSummary[];
+  onAssignEnterprise: (room: Room, enterpriseId: number | null) => Promise<void>;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -310,16 +366,11 @@ export function RoomsTable({
                     />
                   </TableCell>
                   <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => onOpenEdit(room.id)}
-                      className="button-interaction hover:bg-muted -mx-1 block max-w-56 truncate rounded px-1 py-0.5 text-left"
-                      aria-label={t("editRoomAssignmentsAria", { room: room.name })}
-                    >
-                      {room.enterprise_name ?? (
-                        <span className="text-muted-foreground">{t("noEnterpriseAssigned")}</span>
-                      )}
-                    </button>
+                    <RoomEnterpriseCell
+                      room={room}
+                      enterprises={enterprises}
+                      onAssign={onAssignEnterprise}
+                    />
                   </TableCell>
                   <TableCell>
                     <span className="inline-flex items-center gap-2">

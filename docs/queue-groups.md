@@ -26,7 +26,16 @@ split "which enterprise a room belongs to" off from "which queue it serves".
 
 The Rooms admin page uses the room name and optional location as its human-facing
 fields. The numeric room id is only the stable internal identifier; rooms do not
-carry a separate public slug.
+carry a separate public slug. The enterprise column is a searchable dropdown:
+selecting an enterprise immediately saves the pool assignment, and selecting
+"No enterprise assigned" removes it without opening the room editor.
+
+The room editor offers confirmed deletion. `DELETE /api/queue/rooms/:roomId`
+is queue-admin-only, audited in the deletion transaction, and accepts an
+idempotency key. It removes the room's enterprise/queue assignments and control
+state, but returns a conflict if any queue entry or judging session references
+the room; historical judging records are preserved. Successful deletion
+invalidates the room and the previously served queue's read models.
 
 ## Why
 
