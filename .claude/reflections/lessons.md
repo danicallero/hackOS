@@ -663,3 +663,65 @@ the correction. Keep physical-device confirmation separate from mocked tests.
 ### Exceptions
 A failure explicitly requiring an existing record may use that prerequisite,
 provided the fresh-install path has been checked and does not access it.
+
+## [R021] Attach PR screenshots with the GitHub CLI
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-10-08
+
+### Trigger
+Posting screenshots or video on a pull request or issue comment.
+
+### Mistake
+The agent stopped at "gh cannot upload images" and left screenshots in a local
+folder, following stale repository docs that described a branch-hosting
+workaround.
+
+### Lesson
+`gh` 2.101+ uploads images and video itself. Do not host files on a throwaway
+branch or ask the user to drag them in.
+
+### Action
+Run `gh pr comment <n> --body … --attach '<abs path>#<alt text>'`, repeating the
+flag for each file. Describe in the text what each image shows. Fix any doc
+that claims otherwise.
+
+### Validation
+Open the returned comment URL's content and confirm the images render.
+
+### Exceptions
+If `gh --version` is older than 2.101, report that blocker.
+
+## [R022] Let a section's layout explain its primary path and alternatives
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-10-08
+
+### Trigger
+Designing a card that offers a main workflow plus an optional alternative
+(for example Devpost submission versus native submission).
+
+### Mistake
+A secondary-styled alternative sat in the card header, away from the main path,
+so the relationship between the two was not visible and prose had to cover it.
+
+### Lesson
+Order and grouping should show which path is primary and which is the optional
+side route. Explain consequences only where they apply, with no restating text.
+
+### Action
+Lead with the primary path's content, then a quiet "or" divider, then the
+alternative's action beside its consequence. Keep the header for post-state
+actions (such as Request edits). After any reorder, update specs that index
+sections by position.
+
+### Validation
+Check desktop and mobile screenshots of every state (draft, linked, submitted)
+and confirm a reader can tell the primary path without reading helper copy.
+
+### Exceptions
+Two equal-weight choices may share a chooser instead.
