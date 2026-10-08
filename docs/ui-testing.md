@@ -219,22 +219,13 @@ when you would otherwise repeat the same manual drive on every revision.
 
 ### Posting them
 
-GitHub only accepts image uploads through the web UI, so a CLI agent has to
-host the files itself. Push them to a throwaway `assets/<slug>` branch and
-link the raw URLs:
+Attach the files straight to the PR comment with the GitHub CLI (2.101+):
 
 ```sh
-gh api repos/<owner>/<repo>/git/refs \
-  -f ref=refs/heads/assets/<slug> -f sha="$(git rev-parse HEAD)"
-# Build the payload with a script: a shell "$(base64 …)" argument is large
-# enough that gh rejects it as invalid Base64 (422).
-gh api -X PUT repos/<owner>/<repo>/contents/.screenshots/<name>.png --input payload.json
-gh pr comment <number> --body-file comment.md
+gh pr comment <number> --body "What the screenshots show" \
+  --attach './desktop.png#Desktop, draft' --attach './mobile.png#Mobile, draft'
 ```
 
-Resize to ~600px wide before uploading and lay the states out in a table with
-`<img … width="260">` so the comment stays readable. **The raw links break the
-moment that branch is deleted**, so keep it alive until the PR is merged and
-reviewers are done — then delete it knowing the images in the comment go with
-it. Write the comment so its text still says what each screenshot showed.
-Screenshots never belong on the code branch itself.
+Alt text follows `#`; up to 50 files per call. Write the comment so its text
+still says what each screenshot showed. Screenshots never belong on the code
+branch, and no throwaway `assets/<slug>` branch is needed.
