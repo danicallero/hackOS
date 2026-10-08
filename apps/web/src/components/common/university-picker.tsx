@@ -272,7 +272,7 @@ export function UniversityPicker({
           aria-describedby={ariaDescribedBy}
           aria-invalid={ariaInvalid}
           aria-required={ariaRequired}
-          className={cn("w-full justify-between font-normal", className)}
+          className={cn("w-full justify-between rounded-control! font-normal", className)}
         >
           <span className={cn("flex-1 truncate text-left", !label && "text-muted-foreground")}>
             {label ?? t("selectYourUniversityPlaceholder")}
