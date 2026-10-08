@@ -3,6 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
 import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -138,50 +139,118 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
   }));
 
   return (
-    <PageLayout width="reading">
+    <PageLayout width="content">
       <PageHeader title={t("myProfile")} />
-      {me.roles.length > 0 && (
-        <SectionCard
-          variant="plain"
-          footerClassName="justify-start"
-          icon={ShieldIcon}
-          title={t("rolesTitle")}
-        >
-          <div className="flex flex-wrap gap-2">
-            {me.roles.map((r) => (
-              <span key={r.id} className="type-meta">
-                {r.name}
-              </span>
-            ))}
-          </div>
-        </SectionCard>
-      )}
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
-          <SectionCard
-            variant="plain"
-            footerClassName="justify-start"
-            icon={UserIcon}
-            title={t("personalDetails")}
-            description={locked ? t("profileLockedNotice") : undefined}
-            stickyFooter
-            footer={
-              <FormActions
-                pending={form.formState.isSubmitting}
-                state={saveError ? "error" : form.formState.isDirty ? "unsaved" : "saved"}
-              />
-            }
-          >
-            {saveError && <ContextualError message={saveError} />}
-            <div className="grid items-start gap-4 sm:grid-cols-2">
+      <div className="grid items-start gap-(--space-between-sections) lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            <SectionCard
+              footerClassName="justify-start"
+              icon={UserIcon}
+              title={t("personalDetails")}
+              description={locked ? t("profileLockedNotice") : undefined}
+              stickyFooter
+              footer={
+                <FormActions
+                  pending={form.formState.isSubmitting}
+                  state={saveError ? "error" : form.formState.isDirty ? "unsaved" : "saved"}
+                />
+              }
+            >
+              {saveError && <ContextualError message={saveError} />}
+              <div className="grid items-start gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("firstName")}</FormLabel>
+                      <FormControl>
+                        <Input autoComplete="given-name" disabled={locked} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="surname"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("lastName")}</FormLabel>
+                      <FormControl>
+                        <Input autoComplete="family-name" disabled={locked} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="language"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("language")}</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {LANGS.map((language) => (
+                            <SelectItem key={language} value={language}>
+                              {languageName(language)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="shirtSize"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("shirtSize")}</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={locked}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder={t("notSet")} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value={NONE}>{t("notSet")}</SelectItem>
+                          {shirtSizes.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <FormField
                 control={form.control}
-                name="name"
+                name="foodIntolerances"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t("firstName")}</FormLabel>
+                    <FormLabel>{t("foodIntolerances")}</FormLabel>
                     <FormControl>
-                      <Input autoComplete="given-name" disabled={locked} {...field} />
+                      <MultiSelect
+                        options={intoleranceOptions}
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder={t("selectIntolerances")}
+                        searchPlaceholder={t("searchIntolerances")}
+                        emptyText={t("noIntolerances")}
+                        disabled={locked}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -189,112 +258,53 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
               />
               <FormField
                 control={form.control}
-                name="surname"
+                name="foodIntoleranceNotes"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t("lastName")}</FormLabel>
+                    <FormLabel>{t("otherDietaryNotes")}</FormLabel>
                     <FormControl>
-                      <Input autoComplete="family-name" disabled={locked} {...field} />
+                      <Textarea
+                        rows={3}
+                        placeholder={t("cateringNotes")}
+                        disabled={locked}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="language"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("language")}</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {LANGS.map((language) => (
-                          <SelectItem key={language} value={language}>
-                            {languageName(language)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="shirtSize"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("shirtSize")}</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={locked}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder={t("notSet")} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value={NONE}>{t("notSet")}</SelectItem>
-                        {shirtSizes.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <FormField
-              control={form.control}
-              name="foodIntolerances"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("foodIntolerances")}</FormLabel>
-                  <FormControl>
-                    <MultiSelect
-                      options={intoleranceOptions}
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder={t("selectIntolerances")}
-                      searchPlaceholder={t("searchIntolerances")}
-                      emptyText={t("noIntolerances")}
-                      disabled={locked}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="foodIntoleranceNotes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("otherDietaryNotes")}</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      rows={3}
-                      placeholder={t("cateringNotes")}
-                      disabled={locked}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </SectionCard>
-        </form>
-      </Form>
-      <EmailCard />
-      <PasswordCard />
+            </SectionCard>
+          </form>
+        </Form>
+        <div className="space-y-(--space-between-sections)">
+          {me.roles.length > 0 && (
+            <SectionCard icon={ShieldIcon} title={t("rolesTitle")}>
+              <ul className="flex flex-wrap gap-x-4 gap-y-1">
+                {me.roles.map((r) => (
+                  <li key={r.id} className="type-meta">
+                    {r.name}
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          )}
+          <EmailCard />
+          <PasswordCard />
+        </div>
+      </div>
       <DangerZoneCard />
+      <nav
+        aria-label={t("legalLinksLabel")}
+        className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-sm"
+      >
+        <Link className="underline underline-offset-4 hover:text-foreground" href="/terms">
+          {t("termsAndConditions")}
+        </Link>
+        <Link className="underline underline-offset-4 hover:text-foreground" href="/privacy">
+          {t("privacyPolicy")}
+        </Link>
+      </nav>
     </PageLayout>
   );
 }

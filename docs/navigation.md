@@ -78,11 +78,11 @@ workspace never over-grants access.
 | --- | --- | --- |
 | Applications | Applications | `applications:review`, `applications:decide`, or `applications:manage` |
 | Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
-| Live judging | Queue operations (tabs: Rooms · Queues), Judging, Judging settings (tabs: Rooms · Judging window), Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); Judging settings is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from Judging settings |
+| Live judging | Queue operations (tabs: All rooms overview · Judging queues · Room configuration), Judging, Room configuration (stable direct link), Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); Room configuration is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from room administration |
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | `schedule:manage`, `tv:control`, or `announcements:manage` |
 | Sponsors | Enterprises, Challenges, Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
-| Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage` (each tab within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
+| Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours) (each tab within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
 | Access and audit | Users, Permissions, Audit log | `users:read`, `permissions:manage`, `audit:read` |
 
 `/users/invites` is a focused child workspace reached from Users for holders of
@@ -125,7 +125,7 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
   appears alongside it whenever the feed spans more than one `ACTIVITY_KINDS`
   value, mirroring the mobile app's kind filter (open to everyone there too —
   `docs/mobile.md`'s Schedule/Horario section). The Manage Schedule table
-  (`app/(app)/schedule/schedule-dialogs.tsx`'s `KindFilterPopover`) offers the
+  (`app/(app)/schedule/schedule-dialogs.tsx`'s `useScheduleFilters`) offers the
   same filter over the full, unfiltered `ACTIVITY_KINDS` list rather than what
   happens to be present, since a staff editor also needs to find kinds with
   zero items scheduled yet.
@@ -273,10 +273,15 @@ despite a working API.
   `apps/web/src/app/(app)/enterprises/page.tsx` gate on `isSponsorRep`.
   `apps/web/src/app/(app)/queue/rooms/page.tsx` does not (0413): pooling a
   room into an enterprise is `queue:admin` only.
-- Queue operations (`/queue`) is one destination with two tabs (`?tab=rooms`
-  the default, `?tab=queues`), not two nav items: rooms working queues, and
-  the queues themselves (H46). The Queues tab is the only place a judging
+- Queue operations (`/queue`) is one destination with three tabs (`?tab=rooms`
+  the default, `?tab=queues`, and administrator-only `?tab=configuration`):
+  all rooms overview, the queues themselves, and room editing (H46). The Queues tab is the only place a judging
   queue that no room serves is reachable, and the only place a queue is named
   or merged into a shared one. Its scope is the caller's own —
   `GET /api/queue/groups` returns every queue for `queue:admin`/
   `sponsors:manage` and only their own enterprises' for a sponsor rep.
+
+Judging hours are in Event settings (`/settings/event?tab=judging`) and retain
+the `queue:admin` gate. `/queue/settings` preserves saved links by directing
+them there. `/queue/rooms` remains available as the room configuration page;
+it is also embedded in Queue operations, with the existing stable direct sidebar link.

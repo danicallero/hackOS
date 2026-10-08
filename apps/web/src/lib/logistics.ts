@@ -226,6 +226,7 @@ export interface LogisticsStats {
     served: number;
     distinctPeople: number;
     repeats: number;
+    presentAttendees: number;
   }>;
   activities: Array<{
     activityId: number;
@@ -234,6 +235,7 @@ export interface LogisticsStats {
     scans: number;
     attendees: number;
     repeats: number;
+    presentAttendees: number;
   }>;
 }
 

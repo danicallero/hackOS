@@ -369,8 +369,9 @@ elevated `Overlay` — replacing the overloaded generic "card".**
 sections use `Section`/`SectionCard` so their responsibility is explicit. In
 `app/(app)` the raw `Card`s that are deliberately *not* page sections are the
 centered confirmation/auth cards (`verify-secondary-email/page.tsx`) and the
-my-queue ticket stub. `schedule/page.tsx` groups its operational toolbar and grid in one bounded
-`Surface`; the toolbar is a `PageToolbar`, not a separately titled section.
+my-queue ticket stub. `schedule/page.tsx` uses the Users `ListToolbar` above its bounded editable
+grid. Search, filters and columns share a control row; active chips have their
+own row and do not push the filter control out of alignment.
 Every dashboard-style panel is a `SectionCard` (#300); a panel that re-builds
 title/description/action out of `CardHeader` also re-invents the spacing and
 re-introduces the description-restates-the-title pattern.
@@ -457,9 +458,9 @@ id) → one `primaryAction` + optional `secondaryActions`.
   appearance controls stay together below navigation; language is a quick
   setting in the account menu. The top bar is reserved for orientation and the
   sidebar control.
-- **Don't add an in-page back navigator.** Browser history and the persistent
-  sidebar already provide return paths; record headers keep the title aligned
-  with their leading identity instead of placing a back control above it.
+- **Keep return navigation direct.** Project detail headers provide a labelled
+  back arrow to their project list. Do not hide this primary return path in an
+  overflow menu. Other records retain browser history and sidebar navigation.
 - **Descriptions are exceptional.** Add one only for a policy, risk,
   consequence, or unfamiliar state — never to restate the title or enumerate
   the content visible below.
@@ -493,7 +494,7 @@ shared implementations. Geometry lives in `styles/surfaces.css`.
 | Task / real web examples | Composition | Width / scroll |
 | --- | --- | --- |
 | Scan, filter, compare, select: Users, Applications, Audit, Projects, Challenges, Enterprises, Activities and Accreditation/Presence | Header → optional tabs → search/filter toolbar → count/selection feedback → one table or drill-down list → pagination | `PageLayout` (content), max 1280 px, matching Users. Use `workspace` only when columns require more space. Document scroll. Never constrain a table tab to the width of its sibling form. |
-| Read or edit one subject: challenge/project editors, event/profile settings, compact catalogues | Header → optional category tabs → open sections → one save owner per form | `PageLayout width="reading"`, max 896 px. Fields themselves stay in one or two readable columns; never stretch a single text field across a wide dashboard. Document scroll. |
+| Read or edit one subject: challenge editors, compact catalogues | Header → optional category tabs → open sections → one save owner per form | `PageLayout width="reading"`, max 896 px. Fields themselves stay in one or two readable columns; never stretch a single text field across a wide dashboard. Document scroll. |
 | Operate live data: queue operations, schedule grid, logistics analytics | Header → compact scope/data controls → operational surfaces | `width="workspace"`, available shell width. Document scroll unless simultaneous panes require a fixed workspace. |
 | Judge while watching queue and evaluation | Header/scope controls → sibling panes; queue and evaluation are separate bounded units | Existing judging desktop breakpoint (`xl`): fixed viewport, `min-h-0` throughout, scroll only pane bodies, fixed pane actions. Below it, normal document flow. No page-scroll trap on small/zoomed screens. |
 | A small amount of content | Same header and alignment, open content and useful next action | Do not center everything vertically, inflate cards or add filler descriptions. Empty space is acceptable. |
@@ -501,9 +502,12 @@ shared implementations. Geometry lives in `styles/surfaces.css`.
 Application management and user/enterprise detail use the same 1280 px content
 canvas as Users. A full route page does not mean unlimited
 width: user detail needs its own route, header and tabs, not a stretched canvas
-or a side editor. Event settings and Libraries use the 896 px reading canvas: related form
-fields and compact one-to-three-column catalogues do not need unlimited
-comparison space. Neither route name nor settings category chooses width.
+or a side editor. Libraries use the 896 px reading canvas. Profile, project details and event
+settings use the 1280 px content canvas: desktop columns group personal details
+and account utilities, project content and challenges, or category navigation
+and settings. Keep individual form fields and descriptions readable within
+that canvas. These contexts use bounded SectionCard surfaces with plain rows
+inside; avoid nested cards around each person, link or challenge. Neither route name nor settings category chooses width.
 Activities and Accreditation/Presence share this 1280 px canvas, including
 their tabs and control alignment. A scanner may be compact within that canvas;
 it does not give the destination a different outer width.
@@ -609,7 +613,9 @@ without context are not an adequate mobile adaptation.
   Keep the page header above them. The selected tab already names the panel:
   do not repeat it as an immediate `h2`; give distinct subsections their own
   headings. Statistics phase uses `width="content"` in its control row. Use a route for a different subject/workflow.
-- Tabs stay on one scrollable line; never wrap or clip their last item. Use
+- Tabs stay on one scrollable line; never wrap or clip their last item. Event
+  settings uses a vertical category rail on desktop and horizontal tabs on
+  narrow screens, with keyboard orientation matching the visible layout. Use
   meaningful labels and keyboard arrow navigation. Existing deep-linkable
   settings retain their URL and dirty-category guard.
 
@@ -631,6 +637,9 @@ Keep actual multi-record objects independently bounded when ownership matters.
 
 ### Overlay geometry and content ownership
 
+- The live statistics activity chart can expand to the viewport minus 32 px,
+  using the shared modal focus and close controls. This is a focused read-only
+  chart view, not a record editor.
 - Modal `sm`: 384 px, short confirmations/decisions; `md` (default): 512 px,
   compact forms. `lg`: 672 px, exceptional paired fields/review content; `xl`:
   896 px, existing specialized review tools only. Larger sizes are not a
@@ -748,7 +757,8 @@ dialog. Inventory: `apps/web/README.md`; representative live examples in
 `/design-system`.**
 
 Shared dialogs and sheets (H55) use the shadcn New York/Radix backdrop:
-`bg-black/50`, without backdrop blur. Both backdrop and content use
+`bg-black/50`, without backdrop blur. Dialog content uses the opaque `bg-popover`
+surface so underlying page text cannot interfere with the dialog. Both backdrop and content use
 `z-index: 50`; the portal renders the content after the backdrop.
 
 ### Is it a dialog at all?

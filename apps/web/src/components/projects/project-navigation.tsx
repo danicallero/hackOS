@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import Link from "next/link";
 import { IconButton } from "@/components/common/icon-button";
@@ -7,7 +8,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLocale } from "@/lib/i18n";
@@ -16,25 +16,26 @@ import { useLocale } from "@/lib/i18n";
 export function ProjectNavigation({ onDelete }: { onDelete?: () => void }) {
   const { t } = useLocale();
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <IconButton label={t("moreActions")} variant="outline">
-          <DotsThreeIcon aria-hidden="true" />
-        </IconButton>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem asChild>
-          <Link href="/my-project?view=all">{t("myProjects")}</Link>
-        </DropdownMenuItem>
-        {onDelete && (
-          <>
-            <DropdownMenuSeparator />
+    <>
+      <IconButton label={t("myProjects")} variant="outline" asChild>
+        <Link href="/my-project?view=all">
+          <ArrowLeftIcon aria-hidden="true" />
+        </Link>
+      </IconButton>
+      {onDelete && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton label={t("moreActions")} variant="outline">
+              <DotsThreeIcon aria-hidden="true" />
+            </IconButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
             <DropdownMenuItem variant="destructive" onSelect={onDelete}>
               {t("deleteWorkGroupCta")}
             </DropdownMenuItem>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </>
   );
 }

@@ -1,10 +1,12 @@
 # Queue operator console
 
-The **Rooms** tab in Queue operations is the room-first console for queue
+The **All rooms overview** tab in Queue operations is the room-first console for queue
 operators. It shows only unpaused rooms, then answers the operational questions
 in order: which teams are in each waiting room, and which team is coming next?
 Sponsor queue configuration remains in the **Queues** tab and the queue detail
-route.
+route. Administrators edit room definitions and enterprise pooling in the
+**Room configuration** tab; `/queue/rooms` remains the standalone stable URL.
+Event-wide judging hours belong to Event settings → Judging window.
 
 Each room card contains the room name, its queue name, one numbered **Waiting
 room** list, and a single **Coming next** entry. Room state, location, waiting

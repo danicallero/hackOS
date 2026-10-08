@@ -100,3 +100,23 @@ describe("buildTimeScale", () => {
     expect(first.laneCount).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("adjacent activities", () => {
+  it("shares one lane and reserves readable space for back-to-back short activities", () => {
+    const items = [
+      item({ endsAt: new Date(DAY_START + HOUR / 6).toISOString() }),
+      item({
+        id: 2,
+        startsAt: new Date(DAY_START + HOUR / 6).toISOString(),
+        endsAt: new Date(DAY_START + HOUR / 3).toISOString(),
+      }),
+    ];
+    const scale = buildTimeScale(items, DAY_START, DAY_START + HOUR);
+    const placed = positionDayItems(items, scale.toY);
+    expect(placed.map(({ lane, laneCount }) => [lane, laneCount])).toEqual([
+      [0, 1],
+      [0, 1],
+    ]);
+    expect(placed[0].top + placed[0].height).toBeLessThan(placed[1].top);
+  });
+});

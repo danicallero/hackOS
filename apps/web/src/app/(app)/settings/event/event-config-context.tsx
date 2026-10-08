@@ -25,7 +25,13 @@ interface EventConfigContextValue {
 
 const EventConfigContext = createContext<EventConfigContextValue | null>(null);
 
-export function EventConfigProvider({ children }: { children: React.ReactNode }) {
+export function EventConfigProvider({
+  children,
+  enabled = true,
+}: {
+  children: React.ReactNode;
+  enabled?: boolean;
+}) {
   const { t } = useLocale();
   const [config, setConfig] = useState<EventConfig | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -41,6 +47,7 @@ export function EventConfigProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const load = useCallback(async () => {
+    if (!enabled) return;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setStatus("loading");
@@ -55,7 +62,7 @@ export function EventConfigProvider({ children }: { children: React.ReactNode })
       setError(err instanceof ApiError ? err.message : t("couldNotLoadEventSettings"));
       setStatus("error");
     }
-  }, [t]);
+  }, [t, enabled]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching event config from API is a legitimate external-system sync on mount.

@@ -142,7 +142,7 @@ action may intentionally change scroll position.
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-09-15
+Date: 2026-10-09
 
 ### Trigger
 When the user asks for delegated subagents with a named Codex model.
@@ -156,8 +156,13 @@ Delegation is part of the requested workflow: use the named model and launch
 mode exactly, while keeping each delegated task narrowly scoped.
 
 ### Action
-Launch delegated Luna work with `codex --yolo -m gpt-5.6-luna` and verify the
-session reports that model before relying on its result.
+Match the user’s requested model and effort and verify the effective launch
+receipt before relying on the worker. Sol workers must use `low` effort: higher
+effort exhausts the shared token budget. Choose a current lightweight model for
+reading and inventory tasks. Do not carry an old model generation forward
+when the user asks for the latest available generation. For an already running
+Codex worker, interrupt and use `/model` to change model or effort in place;
+do not kill and relaunch the session just to change these settings.
 
 ### Validation
 Inspect the spawned session header or command output for the requested model,

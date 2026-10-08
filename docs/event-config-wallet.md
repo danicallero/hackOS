@@ -443,3 +443,16 @@ Primary provider references:
 - [Google app links](https://developers.google.com/wallet/reference/rest/v1/AppLinkData)
 - [Apple featured actions](https://developer.apple.com/videos/play/wwdc2026/209/)
 - [Apple pass fields and change messages](https://developer.apple.com/documentation/walletpasses/passfieldcontent)
+
+## Web category ownership
+
+Event settings uses a desktop category rail and narrow horizontal tabs, with
+one bounded capability-gated category visible at a time. Judging hours live at `?tab=judging`, require `queue:admin`,
+and save the separate queue settings resource. Wallet has one Save changes
+action shared by its Fields and Appearance views. Images and delivery are
+separate views; `?tab=wallet&wallet=appearance|artwork|delivery` preserves
+shareable subview links and browser history. It saves the two
+existing resources in sequence; failures remain visible for retry, rather than
+claiming an atomic cross-resource update. Artwork upload/reset and pass delivery
+are immediate operations with their own lifecycle. Nullable runtime overrides
+and deployment fallback resolution remain unchanged.

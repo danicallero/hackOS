@@ -1,14 +1,6 @@
 "use client";
 
-// Judging window (QUEUE_ADMIN): the window that sizes room pace (H39) — a
-// separate resource (queue_settings) from event_config, so it lives in the
-// Live Judging workspace next to rooms/reviews rather than in Event
-// Settings, where it was only ever visually co-located before. Previews the
-// live phase and total window duration; the actual per-team minutes budget
-// is computed per room on the queue workspace, not editable from here.
-//
-// Merged into /queue/rooms as a tab (same QUEUE_ADMIN gate as rooms) — the
-// gate itself stays in the parent page, this component assumes access.
+// H39: event-wide judging hours; access is gated by QUEUE_ADMIN in Event settings.
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
@@ -106,7 +98,7 @@ function PacePreview({ startsAt, endsAt }: { startsAt: string; endsAt: string })
   );
 }
 
-export function JudgingWindowTab() {
+export function JudgingWindowTab({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
   const { t } = useLocale();
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -129,6 +121,11 @@ export function JudgingWindowTab() {
         ),
       );
   }, [reset, t]);
+
+  useEffect(() => {
+    onDirtyChange?.(formState.isDirty);
+    return () => onDirtyChange?.(false);
+  }, [formState.isDirty, onDirtyChange]);
 
   async function onSubmit(values: Values) {
     setSaveState("saving");
@@ -157,7 +154,6 @@ export function JudgingWindowTab() {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <SectionCard
           variant="plain"
-          description={t("judgingWindowDesc")}
           footer={
             <FormActions
               pending={formState.isSubmitting}

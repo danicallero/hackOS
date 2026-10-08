@@ -7,7 +7,7 @@ import { FunnelSimpleIcon } from "@phosphor-icons/react/dist/csr/FunnelSimple";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { FilterMenu } from "@/components/common/filter-menu";
+import type { FilterDefinition } from "@/components/common/filter-menu";
 import { Modal } from "@/components/common/modal";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ import { SCHEDULE_AUDIENCES, scheduleAudienceLabel, scheduleTypeLabel } from "./
 // "new date" strip opens. Extracted from page.tsx, which the page-size ratchet
 // keeps to the page itself.
 
-export function ScheduleFilterMenu({
+export function useScheduleFilters({
   audiences,
   staffOnly,
   kinds,
@@ -36,44 +36,40 @@ export function ScheduleFilterMenu({
   onKindChange: (selected: Set<ActivityKind>) => void;
 }) {
   const { t } = useLocale();
-  return (
-    <FilterMenu
-      filters={[
-        {
-          id: "audience",
-          label: t("audienceFilterAction"),
-          icon: UsersIcon,
-          type: "multiple",
-          value: [...audiences, ...(staffOnly ? ["staffOnly"] : [])],
-          onChange: (values) =>
-            onAudienceChange(
-              new Set(SCHEDULE_AUDIENCES.filter((audience) => values.includes(audience))),
-              values.includes("staffOnly"),
-            ),
-          options: [
-            ...SCHEDULE_AUDIENCES.map((audience) => ({
-              value: audience,
-              label: scheduleAudienceLabel(audience, t),
-            })),
-            { value: "staffOnly", label: t("audienceFilterStaffOnly") },
-          ],
-        },
-        {
-          id: "kind",
-          label: t("kindFilterAction"),
-          icon: FunnelSimpleIcon,
-          type: "multiple",
-          value: [...kinds],
-          onChange: (values) =>
-            onKindChange(new Set(ACTIVITY_KINDS.filter((kind) => values.includes(kind)))),
-          options: ACTIVITY_KINDS.map((kind) => ({
-            value: kind,
-            label: scheduleTypeLabel(kind, t),
-          })),
-        },
-      ]}
-    />
-  );
+  return [
+    {
+      id: "audience",
+      label: t("audienceFilterAction"),
+      icon: UsersIcon,
+      type: "multiple",
+      value: [...audiences, ...(staffOnly ? ["staffOnly"] : [])],
+      onChange: (values) =>
+        onAudienceChange(
+          new Set(SCHEDULE_AUDIENCES.filter((audience) => values.includes(audience))),
+          values.includes("staffOnly"),
+        ),
+      options: [
+        ...SCHEDULE_AUDIENCES.map((audience) => ({
+          value: audience,
+          label: scheduleAudienceLabel(audience, t),
+        })),
+        { value: "staffOnly", label: t("audienceFilterStaffOnly") },
+      ],
+    },
+    {
+      id: "kind",
+      label: t("kindFilterAction"),
+      icon: FunnelSimpleIcon,
+      type: "multiple",
+      value: [...kinds],
+      onChange: (values) =>
+        onKindChange(new Set(ACTIVITY_KINDS.filter((kind) => values.includes(kind)))),
+      options: ACTIVITY_KINDS.map((kind) => ({
+        value: kind,
+        label: scheduleTypeLabel(kind, t),
+      })),
+    },
+  ] satisfies FilterDefinition[];
 }
 
 export function MoveToDateModal({

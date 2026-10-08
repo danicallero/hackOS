@@ -6,7 +6,7 @@ import { act } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LocaleProvider, useLocale } from "./i18n";
+import { LocaleProvider, translateMessage, useLocale } from "./i18n";
 import { useMe } from "./session";
 import type { Language } from "./types";
 
@@ -271,5 +271,35 @@ describe("LocaleProvider kiosk guard", () => {
     const container = await renderLocalized();
 
     expect(container.textContent).toBe(welcome.en);
+  });
+});
+
+// H28: Wallet values must be interpolated rather than exposing template braces.
+describe("Wallet setting interpolation", () => {
+  it.each(["es", "gl", "en"] as const)("renders artwork dimensions in %s", (language) => {
+    expect(
+      translateMessage(language, "walletArtworkScale", { scale: 2, width: 640, height: 240 }),
+    ).toBe("2× · 640 × 240 px");
+    const delivery = translateMessage(language, "walletDeliveryCounts", {
+      sent: 3,
+      total: 8,
+      queued: 2,
+      failed: 1,
+      skipped: 2,
+    });
+    expect(delivery).not.toMatch(/[{}]/);
+    expect(delivery).toContain("3");
+    expect(delivery).toContain("8");
+  });
+});
+
+describe("result count grammar", () => {
+  it.each(["es", "gl", "en"] as const)("distinguishes one result in %s", (language) => {
+    expect(translateMessage(language, "tableResultCount", { count: 1 })).toBe(
+      language === "en" ? "1 result" : "1 resultado",
+    );
+    expect(translateMessage(language, "tableResultCount", { count: 2 })).toBe(
+      language === "en" ? "2 results" : "2 resultados",
+    );
   });
 });

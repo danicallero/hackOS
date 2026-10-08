@@ -65,7 +65,6 @@ export function EmailCard() {
 
   return (
     <SectionCard
-      variant="plain"
       footerClassName="justify-start"
       icon={EnvelopeSimpleIcon}
       title={t("emailAddressesTitle")}

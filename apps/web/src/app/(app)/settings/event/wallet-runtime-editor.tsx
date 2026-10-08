@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { type MessageKey, useLocale } from "@/lib/i18n";
@@ -184,10 +185,23 @@ function ArtworkSlotEditor({
     </div>
   );
 }
-export function WalletRuntimeEditor() {
+export function WalletRuntimeEditor({
+  registerSave,
+  onDirtyChange,
+  view,
+  pending,
+  onSave,
+}: {
+  pending: boolean;
+  view: "fields" | "appearance" | "artwork" | "delivery";
+  onSave: () => void;
+  registerSave: (save: (() => Promise<void>) | null) => void;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
   const { t } = useLocale();
   const id = useId();
   const [settings, setSettings] = useState<WalletSettings | null>(null);
+  const [savedSnapshot, setSavedSnapshot] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [optionText, setOptionText] = useState({
@@ -214,6 +228,7 @@ export function WalletRuntimeEditor() {
       .then((value) => {
         if (!active) return;
         setSettings(value);
+        setSavedSnapshot(JSON.stringify({ ...value, artwork: null, artworkDefaults: null }));
         setError(null);
         setOptionText({
           appleOptions: JSON.stringify(value.appleOptions, null, 2),
@@ -254,32 +269,41 @@ export function WalletRuntimeEditor() {
       err instanceof ApiError ? err.message : t("walletOperationError"),
       t("toastWalletSettings"),
     );
-  async function save(event: React.FormEvent) {
-    event.preventDefault();
-    if (!settings) return;
-    setBusy(true);
-    try {
-      const { artwork: _artwork, artworkDefaults: _artworkDefaults, ...body } = settings;
-      const options = {
-        appleOptions: JSON.parse(optionText.appleOptions),
-        googleClassOptions: JSON.parse(optionText.googleClassOptions),
-        googleObjectOptions: JSON.parse(optionText.googleObjectOptions),
-      };
-      setSettings(await api.put<WalletSettings>("/api/event/wallet", { ...body, ...options }));
-      toast.success(t("saved"), { compactTitle: t("toastWalletSettings") });
-    } catch (err) {
-      if (err instanceof SyntaxError)
-        toast.error(t("walletInvalidOptions"), t("toastWalletSettings"));
-      else report(err);
-    } finally {
-      setBusy(false);
-    }
-  }
+  // H28: the Wallet category owns one Save; artwork and delivery retain their distinct lifecycle.
+  useEffect(() => {
+    const dirty =
+      !!settings &&
+      (JSON.stringify({ ...settings, artwork: null, artworkDefaults: null }) !== savedSnapshot ||
+        optionText.appleOptions !== JSON.stringify(settings.appleOptions, null, 2) ||
+        optionText.googleClassOptions !== JSON.stringify(settings.googleClassOptions, null, 2) ||
+        optionText.googleObjectOptions !== JSON.stringify(settings.googleObjectOptions, null, 2));
+    onDirtyChange(dirty);
+    registerSave(
+      settings
+        ? async () => {
+            const { artwork: _artwork, artworkDefaults: _defaults, ...body } = settings;
+            const next = await api.put<WalletSettings>("/api/event/wallet", {
+              ...body,
+              appleOptions: JSON.parse(optionText.appleOptions),
+              googleClassOptions: JSON.parse(optionText.googleClassOptions),
+              googleObjectOptions: JSON.parse(optionText.googleObjectOptions),
+            });
+            setSettings(next);
+            setSavedSnapshot(JSON.stringify({ ...next, artwork: null, artworkDefaults: null }));
+          }
+        : null,
+    );
+    return () => {
+      registerSave(null);
+      onDirtyChange(false);
+    };
+  }, [settings, savedSnapshot, optionText, registerSave, onDirtyChange]);
   async function restoreDefaults() {
     setBusy(true);
     try {
       const value = await api.delete<WalletSettings>("/api/event/wallet");
       setSettings(value);
+      setSavedSnapshot(JSON.stringify({ ...value, artwork: null, artworkDefaults: null }));
       setOptionText({
         appleOptions: JSON.stringify(value.appleOptions, null, 2),
         googleClassOptions: JSON.stringify(value.googleClassOptions, null, 2),
@@ -345,284 +369,291 @@ export function WalletRuntimeEditor() {
     );
   if (!settings) return <p role="status">{t("loading")}</p>;
   return (
-    <div className="space-y-8 pt-8">
-      <form onSubmit={(event) => void save(event)} className="space-y-8">
-        <SectionCard title={t("walletAppearanceTitle")} variant="plain">
-          <fieldset disabled={busy} className="space-y-6">
-            <div className="space-y-2 sm:max-w-72">
-              <Label htmlFor={`${id}-backgroundColor`}>{t("walletBackgroundColor")}</Label>
-              <Input
-                id={`${id}-backgroundColor`}
-                type="color"
-                value={settings.backgroundColor}
-                onChange={(event) =>
-                  setSettings({ ...settings, backgroundColor: event.target.value })
-                }
-              />
-            </div>
-            <div className="grid items-start gap-4 sm:grid-cols-2">
-              {(
-                [
-                  ["websiteUrl", "walletWebsiteUrl"],
-                  ["scheduleUrl", "walletScheduleUrl"],
-                ] as const
-              ).map(([key, label]) => (
-                <div key={key} className="space-y-2">
-                  <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
-                  <Input
-                    id={`${id}-${key}`}
-                    value={settings[key]}
-                    onChange={(event) => setSettings({ ...settings, [key]: event.target.value })}
-                    required
-                  />
-                </div>
-              ))}
-            </div>
-            {(
-              [
-                ["showDirections", "walletDirectionsAction"],
-                ["showSchedule", "walletScheduleAction"],
-              ] as const
-            ).map(([key, label]) => (
-              <div key={key} className="flex items-center justify-between gap-4">
-                <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
-                <Switch
-                  id={`${id}-${key}`}
-                  checked={settings[key]}
-                  onCheckedChange={(value) => setSettings({ ...settings, [key]: value })}
-                  disabled={busy}
-                />
-              </div>
-            ))}
-          </fieldset>
-        </SectionCard>
-        <SectionCard title={t("walletAppleDetailsTitle")} variant="plain">
-          <fieldset disabled={busy} className="space-y-6">
-            <div className="grid items-start gap-4 sm:grid-cols-2">
-              {(
-                [
-                  ["foregroundColor", "walletForegroundColor"],
-                  ["labelColor", "walletLabelColor"],
-                ] as const
-              ).map(([key, label]) => (
-                <div key={key} className="space-y-2">
-                  <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
-                  <Input
-                    id={`${id}-${key}`}
-                    type="color"
-                    value={settings[key]}
-                    onChange={(event) => setSettings({ ...settings, [key]: event.target.value })}
-                  />
-                </div>
-              ))}
-              <div className="space-y-2">
-                <Label htmlFor={`${id}-store`}>{t("walletAppleAppStore")}</Label>
-                <Input
-                  id={`${id}-store`}
-                  type="number"
-                  min="1"
-                  value={settings.appleAppStoreId ?? ""}
-                  onChange={(event) =>
-                    setSettings({
-                      ...settings,
-                      appleAppStoreId: event.target.value ? Number(event.target.value) : null,
-                    })
-                  }
-                />
-              </div>
-            </div>
-            <ApplePassOptions
-              options={options.appleOptions}
-              onChange={(value) => changeOptions("appleOptions", value)}
-            />
-          </fieldset>
-          <details className="space-y-4">
-            <summary className="cursor-pointer text-sm font-medium">
-              {t("walletNativeOptions")}
-            </summary>
-            <p className="text-muted-foreground text-sm">{t("walletNativeOptionsHelp")}</p>
-            <Label htmlFor={`${id}-appleOptions`}>{t("walletAppleOptions")}</Label>
-            <Textarea
-              id={`${id}-appleOptions`}
-              value={optionText.appleOptions}
-              onChange={(event) =>
-                setOptionText({ ...optionText, appleOptions: event.target.value })
-              }
-              className="min-h-40 font-mono text-sm"
-              spellCheck={false}
-            />
-          </details>
-        </SectionCard>
-        <SectionCard
-          title={t("walletGoogleDetailsTitle")}
-          variant="plain"
-          footer={
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={() => void restoreDefaults()}
-              >
-                {t("walletResetDefaults")}
-              </Button>
-              <Button type="submit" disabled={busy}>
-                {t("saveChanges")}
-              </Button>
-            </>
-          }
-          footerClassName="justify-start"
-        >
-          <fieldset disabled={busy} className="space-y-6">
-            <div className="grid items-start gap-4 sm:grid-cols-2">
-              {(
-                [
-                  ["androidPackageName", "walletAndroidPackage"],
-                  ["androidStoreUrl", "walletAndroidStore"],
-                ] as const
-              ).map(([key, label]) => (
-                <div key={key} className="space-y-2">
-                  <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
-                  <Input
-                    id={`${id}-${key}`}
-                    value={settings[key]}
-                    onChange={(event) => setSettings({ ...settings, [key]: event.target.value })}
-                    required
-                  />
-                </div>
-              ))}
-            </div>
-            <GooglePassOptions
-              options={options.googleClassOptions}
-              onChange={(value) => changeOptions("googleClassOptions", value)}
-            />
-          </fieldset>
-          <details className="space-y-4">
-            <summary className="cursor-pointer text-sm font-medium">
-              {t("walletNativeOptions")}
-            </summary>
-            <p className="text-muted-foreground text-sm">{t("walletNativeOptionsHelp")}</p>
-            {(
-              [
-                ["googleClassOptions", "walletGoogleClassOptions"],
-                ["googleObjectOptions", "walletGoogleObjectOptions"],
-              ] as const
-            ).map(([key, label]) => (
-              <div key={key} className="space-y-2">
-                <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
-                <Textarea
-                  id={`${id}-${key}`}
-                  value={optionText[key]}
-                  onChange={(event) => setOptionText({ ...optionText, [key]: event.target.value })}
-                  className="min-h-40 font-mono text-sm"
-                  spellCheck={false}
-                />
-              </div>
-            ))}
-          </details>
-        </SectionCard>
-      </form>
-      <SectionCard title={t("walletAppleArtworkTitle")} variant="plain">
-        <p className="text-muted-foreground text-sm">{t("walletArtworkAppleHelp")}</p>
-        <div className="space-y-6">
-          {WALLET_ARTWORK_SLOTS.filter((slot) => slot.startsWith("apple")).map((slot) => (
-            <ArtworkSlotEditor
-              key={slot}
-              slot={slot}
-              settings={settings}
-              busy={busy}
-              onUpload={upload}
-              onReset={reset}
-            />
-          ))}
-        </div>
-      </SectionCard>
-      <SectionCard title={t("walletGoogleArtworkTitle")} variant="plain">
-        <p className="text-muted-foreground text-sm">{t("walletArtworkHelp")}</p>
-        <div className="space-y-6">
-          {WALLET_ARTWORK_SLOTS.filter((slot) => slot.startsWith("google")).map((slot) => (
-            <ArtworkSlotEditor
-              key={slot}
-              slot={slot}
-              settings={settings}
-              busy={busy}
-              onUpload={upload}
-              onReset={reset}
-            />
-          ))}
-        </div>
-      </SectionCard>
-      <SectionCard title={t("walletDeliveryTitle")} variant="plain">
-        <p className="text-muted-foreground text-sm">{t("walletDeliveryHelp")}</p>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={() => void send("refresh")}
-        >
-          {t("walletRefreshPasses")}
-        </Button>
+    <fieldset disabled={pending} hidden={view === "fields"} className="space-y-8 pt-8">
+      <TabsContent value="appearance" forceMount hidden={view !== "appearance"}>
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            setConfirm(true);
+            onSave();
           }}
-          className="space-y-4"
+          hidden={view !== "appearance"}
+          className="space-y-8"
         >
-          <div className="grid gap-4 sm:grid-cols-3">
-            {(["es", "gl", "en"] as const).map((language) => (
-              <fieldset key={language} disabled={busy} className="space-y-3">
-                <legend className="mb-2 text-sm font-medium">{language.toUpperCase()}</legend>
+          <button type="submit" hidden />
+          <SectionCard title={t("walletAppearanceTitle")} variant="plain">
+            <fieldset disabled={busy} className="space-y-6">
+              <div className="space-y-2 sm:max-w-72">
+                <Label htmlFor={`${id}-backgroundColor`}>{t("walletBackgroundColor")}</Label>
+                <Input
+                  id={`${id}-backgroundColor`}
+                  type="color"
+                  value={settings.backgroundColor}
+                  onChange={(event) =>
+                    setSettings({ ...settings, backgroundColor: event.target.value })
+                  }
+                />
+              </div>
+              <div className="grid items-start gap-4 sm:grid-cols-2">
+                {(
+                  [
+                    ["websiteUrl", "walletWebsiteUrl"],
+                    ["scheduleUrl", "walletScheduleUrl"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key} className="space-y-2">
+                    <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
+                    <Input
+                      id={`${id}-${key}`}
+                      value={settings[key]}
+                      onChange={(event) => setSettings({ ...settings, [key]: event.target.value })}
+                      required
+                    />
+                  </div>
+                ))}
+              </div>
+              {(
+                [
+                  ["showDirections", "walletDirectionsAction"],
+                  ["showSchedule", "walletScheduleAction"],
+                ] as const
+              ).map(([key, label]) => (
+                <div key={key} className="flex items-center justify-between gap-4">
+                  <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
+                  <Switch
+                    id={`${id}-${key}`}
+                    checked={settings[key]}
+                    onCheckedChange={(value) => setSettings({ ...settings, [key]: value })}
+                    disabled={busy}
+                  />
+                </div>
+              ))}
+            </fieldset>
+          </SectionCard>
+          <SectionCard title={t("walletAppleDetailsTitle")} variant="plain">
+            <fieldset disabled={busy} className="space-y-6">
+              <div className="grid items-start gap-4 sm:grid-cols-2">
+                {(
+                  [
+                    ["foregroundColor", "walletForegroundColor"],
+                    ["labelColor", "walletLabelColor"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key} className="space-y-2">
+                    <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
+                    <Input
+                      id={`${id}-${key}`}
+                      type="color"
+                      value={settings[key]}
+                      onChange={(event) => setSettings({ ...settings, [key]: event.target.value })}
+                    />
+                  </div>
+                ))}
                 <div className="space-y-2">
-                  <Label htmlFor={`${id}-alert-title-${language}`}>{t("walletAlertTitle")}</Label>
+                  <Label htmlFor={`${id}-store`}>{t("walletAppleAppStore")}</Label>
                   <Input
-                    id={`${id}-alert-title-${language}`}
-                    required
-                    maxLength={100}
-                    value={alert[language].title}
+                    id={`${id}-store`}
+                    type="number"
+                    min="1"
+                    value={settings.appleAppStoreId ?? ""}
                     onChange={(event) =>
-                      setAlert({
-                        ...alert,
-                        [language]: { ...alert[language], title: event.target.value },
+                      setSettings({
+                        ...settings,
+                        appleAppStoreId: event.target.value ? Number(event.target.value) : null,
                       })
                     }
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`${id}-alert-body-${language}`}>{t("walletAlertBody")}</Label>
+              </div>
+              <ApplePassOptions
+                options={options.appleOptions}
+                onChange={(value) => changeOptions("appleOptions", value)}
+              />
+            </fieldset>
+            <details className="space-y-4">
+              <summary className="cursor-pointer text-sm font-medium">
+                {t("walletNativeOptions")}
+              </summary>
+              <p className="text-muted-foreground text-sm">{t("walletNativeOptionsHelp")}</p>
+              <Label htmlFor={`${id}-appleOptions`}>{t("walletAppleOptions")}</Label>
+              <Textarea
+                id={`${id}-appleOptions`}
+                value={optionText.appleOptions}
+                onChange={(event) =>
+                  setOptionText({ ...optionText, appleOptions: event.target.value })
+                }
+                className="min-h-40 font-mono text-sm"
+                spellCheck={false}
+              />
+            </details>
+          </SectionCard>
+          <SectionCard title={t("walletGoogleDetailsTitle")} variant="plain">
+            <fieldset disabled={busy} className="space-y-6">
+              <div className="grid items-start gap-4 sm:grid-cols-2">
+                {(
+                  [
+                    ["androidPackageName", "walletAndroidPackage"],
+                    ["androidStoreUrl", "walletAndroidStore"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key} className="space-y-2">
+                    <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
+                    <Input
+                      id={`${id}-${key}`}
+                      value={settings[key]}
+                      onChange={(event) => setSettings({ ...settings, [key]: event.target.value })}
+                      required
+                    />
+                  </div>
+                ))}
+              </div>
+              <GooglePassOptions
+                options={options.googleClassOptions}
+                onChange={(value) => changeOptions("googleClassOptions", value)}
+              />
+            </fieldset>
+            <details className="space-y-4">
+              <summary className="cursor-pointer text-sm font-medium">
+                {t("walletNativeOptions")}
+              </summary>
+              <p className="text-muted-foreground text-sm">{t("walletNativeOptionsHelp")}</p>
+              {(
+                [
+                  ["googleClassOptions", "walletGoogleClassOptions"],
+                  ["googleObjectOptions", "walletGoogleObjectOptions"],
+                ] as const
+              ).map(([key, label]) => (
+                <div key={key} className="space-y-2">
+                  <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
                   <Textarea
-                    id={`${id}-alert-body-${language}`}
-                    required
-                    maxLength={500}
-                    value={alert[language].body}
+                    id={`${id}-${key}`}
+                    value={optionText[key]}
                     onChange={(event) =>
-                      setAlert({
-                        ...alert,
-                        [language]: { ...alert[language], body: event.target.value },
-                      })
+                      setOptionText({ ...optionText, [key]: event.target.value })
                     }
+                    className="min-h-40 font-mono text-sm"
+                    spellCheck={false}
                   />
                 </div>
-              </fieldset>
+              ))}
+            </details>
+          </SectionCard>
+        </form>
+        <div hidden={view !== "appearance"} className="space-y-3">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void restoreDefaults()}
+          >
+            {t("walletResetDefaults")}
+          </Button>
+        </div>
+      </TabsContent>
+      <TabsContent value="artwork" forceMount hidden={view !== "artwork"} className="space-y-8">
+        <SectionCard title={t("walletAppleArtworkTitle")} variant="plain">
+          <p className="text-muted-foreground text-sm">{t("walletArtworkAppleHelp")}</p>
+          <div className="space-y-6">
+            {WALLET_ARTWORK_SLOTS.filter((slot) => slot.startsWith("apple")).map((slot) => (
+              <ArtworkSlotEditor
+                key={slot}
+                slot={slot}
+                settings={settings}
+                busy={busy}
+                onUpload={upload}
+                onReset={reset}
+              />
             ))}
           </div>
-          <Button type="submit" disabled={busy}>
-            {t("walletSendAlert")}
+        </SectionCard>
+        <SectionCard title={t("walletGoogleArtworkTitle")} variant="plain">
+          <p className="text-muted-foreground text-sm">{t("walletArtworkHelp")}</p>
+          <div className="space-y-6">
+            {WALLET_ARTWORK_SLOTS.filter((slot) => slot.startsWith("google")).map((slot) => (
+              <ArtworkSlotEditor
+                key={slot}
+                slot={slot}
+                settings={settings}
+                busy={busy}
+                onUpload={upload}
+                onReset={reset}
+              />
+            ))}
+          </div>
+        </SectionCard>
+      </TabsContent>
+      <TabsContent value="delivery" forceMount hidden={view !== "delivery"}>
+        <SectionCard title={t("walletDeliveryTitle")} variant="plain">
+          <p className="text-muted-foreground text-sm">{t("walletDeliveryHelp")}</p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void send("refresh")}
+          >
+            {t("walletRefreshPasses")}
           </Button>
-        </form>
-        <div role="status" aria-live="polite" className="text-sm">
-          {operation
-            ? t("walletDeliveryCounts", {
-                sent: operation.sent,
-                total: operation.total,
-                queued: operation.queued,
-                failed: operation.failed,
-                skipped: operation.skipped,
-              })
-            : ""}
-        </div>
-        {error && <p role="alert">{error}</p>}
-      </SectionCard>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              setConfirm(true);
+            }}
+            className="space-y-4"
+          >
+            <div className="grid gap-4 sm:grid-cols-3">
+              {(["es", "gl", "en"] as const).map((language) => (
+                <fieldset key={language} disabled={busy} className="space-y-3">
+                  <legend className="mb-2 text-sm font-medium">{language.toUpperCase()}</legend>
+                  <div className="space-y-2">
+                    <Label htmlFor={`${id}-alert-title-${language}`}>{t("walletAlertTitle")}</Label>
+                    <Input
+                      id={`${id}-alert-title-${language}`}
+                      required
+                      maxLength={100}
+                      value={alert[language].title}
+                      onChange={(event) =>
+                        setAlert({
+                          ...alert,
+                          [language]: { ...alert[language], title: event.target.value },
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`${id}-alert-body-${language}`}>{t("walletAlertBody")}</Label>
+                    <Textarea
+                      id={`${id}-alert-body-${language}`}
+                      required
+                      maxLength={500}
+                      value={alert[language].body}
+                      onChange={(event) =>
+                        setAlert({
+                          ...alert,
+                          [language]: { ...alert[language], body: event.target.value },
+                        })
+                      }
+                    />
+                  </div>
+                </fieldset>
+              ))}
+            </div>
+            <Button type="submit" disabled={busy}>
+              {t("walletSendAlert")}
+            </Button>
+          </form>
+          <div role="status" aria-live="polite" className="text-sm">
+            {operation
+              ? t("walletDeliveryCounts", {
+                  sent: operation.sent,
+                  total: operation.total,
+                  queued: operation.queued,
+                  failed: operation.failed,
+                  skipped: operation.skipped,
+                })
+              : ""}
+          </div>
+          {error && <p role="alert">{error}</p>}
+        </SectionCard>
+      </TabsContent>
       <Dialog
         open={confirm}
         onOpenChange={(open) => {
@@ -644,6 +675,6 @@ export function WalletRuntimeEditor() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </fieldset>
   );
 }

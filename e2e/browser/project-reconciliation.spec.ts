@@ -394,6 +394,7 @@ for (const origin of ["project", "group"] as const) {
     const catalogue = [selected, { id: 10, title: "Innovación abierta", mandatory: false }];
     const state = project(1, name, {
       status: "draft",
+      eligible: false,
       submittedVia: null,
       submittedAt: null,
       lockedAt: null,
@@ -449,12 +450,12 @@ for (const origin of ["project", "group"] as const) {
       await route.fulfill({ json: body });
     });
     await page.goto(origin === "project" ? "/my-project/projects/1" : "/my-project/work-groups/8");
-    const header = page.locator('[data-page-layout="reading"] > header');
+    const header = page.locator('[data-page-layout="content"] > header');
     await expect(header.getByRole("heading", { name, exact: true })).toBeVisible();
     const edit = header.getByRole("button", { name: webEs.editProject, exact: true });
-    const more = header.getByRole("button", { name: webEs.moreActions, exact: true });
+    const back = header.getByRole("link", { name: webEs.myProjects, exact: true });
     await expect(edit).toBeVisible();
-    await expect(more).toBeVisible();
+    await expect(back).toBeVisible();
     if (testInfo.project.name === "mobile-chromium") {
       const geometry = await edit.evaluate((element) => {
         const box = element.getBoundingClientRect();
@@ -468,13 +469,13 @@ for (const origin of ["project", "group"] as const) {
       expect(geometry.radius).toBeGreaterThanOrEqual(geometry.width / 2);
     }
     const titleBox = await header.getByRole("heading").boundingBox();
-    for (const control of [edit, more]) {
+    for (const control of [edit, back]) {
       const box = await control.boundingBox();
       expect(
         titleBox && box && Math.abs(titleBox.y + titleBox.height / 2 - box.y - box.height / 2),
       ).toBeLessThanOrEqual(8);
     }
-    const sections = page.locator('[data-page-layout="reading"] section');
+    const sections = page.locator('[data-page-layout="content"] section');
     await expect(sections.locator("h2")).toHaveText([
       webEs.projectDetailsTitle,
       webEs.teamSectionTitle,
@@ -495,7 +496,7 @@ for (const origin of ["project", "group"] as const) {
       await page.setViewportSize({ width: 320, height: 800 });
       await noOverflow(page);
       const narrowTitle = await header.getByRole("heading").boundingBox();
-      for (const control of [edit, more]) {
+      for (const control of [edit, back]) {
         const box = await control.boundingBox();
         expect(
           narrowTitle &&
@@ -524,7 +525,7 @@ for (const origin of ["project", "group"] as const) {
       .click();
     await expect(page.getByRole("alertdialog")).toBeVisible();
     await page.keyboard.press("Escape");
-    await more.click();
-    await expect(page.getByRole("menuitem", { name: webEs.myProjects, exact: true })).toBeVisible();
+    await back.click();
+    await expect(page).toHaveURL(/\/my-project\?view=all$/);
   });
 }

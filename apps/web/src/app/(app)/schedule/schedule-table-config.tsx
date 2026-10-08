@@ -62,7 +62,7 @@ export const COLUMN_LABEL_KEYS: Record<ColumnId, MessageKey> = {
 const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
   starts: 72,
   ends: 72,
-  duration: 64,
+  duration: 96,
   type: 124,
   audience: 150,
   scannable: 96,
@@ -73,6 +73,9 @@ const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
   notes: 220,
   status: 110,
 };
+
+/** Columns whose header label must never truncate, whatever width was saved. */
+const COLUMN_FLOOR_WIDTHS: Partial<Record<ColumnId, number>> = { duration: 96 };
 
 const MIN_COLUMN_WIDTH = 56;
 const MAX_COLUMN_WIDTH = 480;
@@ -145,7 +148,10 @@ function sanitizeWidths(raw: unknown): Record<ColumnId, number> {
   const widths = { ...DEFAULT_COLUMN_WIDTHS };
   for (const id of DEFAULT_COLUMN_ORDER) {
     const value = obj[id];
-    if (typeof value === "number" && Number.isFinite(value)) widths[id] = clampWidth(value);
+    if (typeof value === "number" && Number.isFinite(value)) {
+      // Saved widths from before the header needed room for its full label.
+      widths[id] = Math.max(clampWidth(value), COLUMN_FLOOR_WIDTHS[id] ?? 0);
+    }
   }
   return widths;
 }

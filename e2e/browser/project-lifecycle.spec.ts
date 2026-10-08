@@ -7,6 +7,8 @@ test("keeps one participant project before and after import, with live presentat
   let imported = false;
   let multipleProjects = false;
   let firstCalled = false;
+  let eligible = true;
+  let staffMode = false;
   const group = {
     id: 1,
     name: "Neural Beans",
@@ -52,7 +54,7 @@ test("keeps one participant project before and after import, with live presentat
         mandatory: true,
         status: "waiting",
         position: 2,
-        etaMinutes: 12,
+        etaMinutes: 968,
         assignedRoomId: null,
         assignedRoomName: null,
         rooms: [
@@ -111,7 +113,9 @@ test("keeps one participant project before and after import, with live presentat
     if (path === "/api/me")
       body = {
         ...shellUser,
-        capabilities: [CAPABILITIES.PROJECTS_READ],
+        capabilities: staffMode
+          ? [CAPABILITIES.PROJECTS_READ, CAPABILITIES.PROJECTS_EDIT]
+          : [CAPABILITIES.PROJECTS_READ],
         hasProject: true,
         language: "en",
       };
@@ -131,19 +135,21 @@ test("keeps one participant project before and after import, with live presentat
         id: 10,
         name: group.name,
         code: "CODE10",
-        status: "draft",
-        submittedVia: null,
-        submittedAt: null,
+        status: "submitted",
+        submittedVia: "devpost",
+        submittedAt: "2026-10-09T08:00:00Z",
+        eligible,
         lockedAt: null,
         devpostUrl: group.devpost_url,
-        membershipDiffers: false,
-        unresolvedCount: 0,
+        membershipDiffers: !eligible,
+        unresolvedCount: eligible ? 0 : 1,
         internal: [{ userId: 1, name: "Alex", surname: "Fernández" }],
-        external: [],
+        external: eligible ? [] : [{ userId: null, name: "Dana", surname: "Review" }],
         requests: [],
         canSubmit: true,
       };
     else if (path === "/api/me/projects/invites") body = { invites: [] };
+    else if (path === "/api/challenges") body = { challenges: [{ id: 1, title: "Best hack" }] };
     else if (path === "/api/public/challenges") body = { items: [{ id: 1, title: "Best hack" }] };
     else if (path === "/api/queue/me") body = [];
     else if (path === "/api/repos") body = { repos: [currentProject] };
@@ -194,7 +200,8 @@ test("keeps one participant project before and after import, with live presentat
       .boundingBox();
     expect(team).not.toBeNull();
     expect(challenges).not.toBeNull();
-    expect(Math.abs(team!.y - challenges!.y)).toBeLessThan(1);
+    expect(team!.x).toBeLessThan(challenges!.x);
+    expect(challenges!.y).toBeLessThan(team!.y);
   }
   await page.screenshot({ path: testInfo.outputPath("project-before-import.png"), fullPage: true });
   await page.getByRole("button", { name: "Edit project", exact: true }).click();
@@ -206,7 +213,7 @@ test("keeps one participant project before and after import, with live presentat
   await expect(page).toHaveURL(/\/my-project\/projects\/10$/);
   await expect(page.getByRole("heading", { name: group.name, level: 1 })).toBeVisible();
   await expect(page.getByText("Position 2", { exact: true })).toBeVisible();
-  await expect(page.getByText("About 12 min", { exact: true })).toBeVisible();
+  await expect(page.getByText("About 16 h 8 min", { exact: true })).toBeVisible();
   await expect(page.getByText("Room A, Room B", { exact: true })).toBeVisible();
   const firstQueue = page
     .getByRole("listitem")
@@ -219,20 +226,59 @@ test("keeps one participant project before and after import, with live presentat
   await expect(secondQueue.getByText("Position 5", { exact: true })).toBeVisible();
   await expect(secondQueue.getByText("About 30 min", { exact: true })).toBeVisible();
   await expect(secondQueue.getByText("Room C, Room D", { exact: true })).toBeVisible();
+  const firstPosition = await firstQueue.getByText("Position 2", { exact: true }).boundingBox();
+  const secondPosition = await secondQueue.getByText("Position 5", { exact: true }).boundingBox();
+  expect(Math.abs(firstPosition!.x - secondPosition!.x)).toBeLessThan(1);
   await expect(page.getByText("Imported project linked", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Eligible for judging", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Add code CODE10 to your Devpost submission to help match this project.", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(page.getByText("CODE10", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reopened: edit and submit again.", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Submit without Devpost", exact: true }),
+  ).toHaveCount(0);
+  for (const href of [group.github_url, group.devpost_url, group.demo_url])
+    await expect(page.locator(`a[href="${href}"]`)).toBeVisible();
+  eligible = false;
+  await page.reload();
+  await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Needs review", { exact: true })).toBeVisible();
+  await expect(page.getByText("Participant lists differ", { exact: true })).toBeVisible();
+  await expect(page.getByText("Not eligible for judging", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("project-ineligible.png"), fullPage: true });
+  eligible = true;
+  await page.reload();
+  await expect(page.getByText("Eligible for judging", { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("project-after-import.png"), fullPage: true });
+  if (testInfo.project.name === "chromium") {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    const first = await firstQueue.getByText("Position 2", { exact: true }).boundingBox();
+    const second = await secondQueue.getByText("Position 5", { exact: true }).boundingBox();
+    expect(Math.abs(first!.x - second!.x)).toBeLessThan(1);
+    await page.screenshot({ path: testInfo.outputPath("project-1024.png"), fullPage: true });
+    await page.setViewportSize(testInfo.project.use.viewport!);
+  }
   await page.getByRole("button", { name: "Edit project", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Judging preference" })).toBeDisabled();
   await page.keyboard.press("Escape");
 
   await page.goto("/my-project");
   await expect(page).toHaveURL(/\/my-project\/projects\/10$/);
-  await page.getByRole("button", { name: "More actions", exact: true }).click();
-  await page.getByRole("menuitem", { name: "My projects", exact: true }).click();
+  await page
+    .getByRole("link", { name: "My projects", exact: true })
+    .and(page.locator('a[href="/my-project?view=all"]'))
+    .click();
   await expect(page).toHaveURL(/\/my-project\?view=all$/);
   await expect(page.getByRole("heading", { name: group.name, exact: true })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Create my project", exact: true })).toBeVisible();
-  await expect(page.getByText("About 12 min", { exact: true })).toBeVisible();
+  await expect(page.getByText("About 16 h 8 min", { exact: true })).toBeVisible();
   await expect(page.getByText("About 30 min", { exact: true })).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("participant-project-list.png"),
@@ -254,8 +300,11 @@ test("keeps one participant project before and after import, with live presentat
   await expect(page).toHaveURL(/\/my-project\/projects\/10$/);
   await expect(firstQueue.getByText("Waiting at the door", { exact: true })).toBeVisible();
   await expect(firstQueue.getByText("Room A", { exact: true })).toBeVisible();
-  await expect(firstQueue.getByText("About 12 min", { exact: true })).toHaveCount(0);
+  await expect(firstQueue.getByText("About 16 h 8 min", { exact: true })).toHaveCount(0);
   await expect(secondQueue.getByText("Position 5", { exact: true })).toBeVisible();
+  await expect(secondQueue.getByText("About 30 min", { exact: true })).toBeVisible();
+  await page.evaluate(() => localStorage.setItem("theme", "dark"));
+  await page.reload();
   await expect(secondQueue.getByText("About 30 min", { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("simultaneous-queues.png"), fullPage: true });
   await page.evaluate(() => localStorage.setItem("theme", "light"));
@@ -277,13 +326,23 @@ test("keeps one participant project before and after import, with live presentat
   await page.setViewportSize(testInfo.project.use.viewport!);
   firstCalled = false;
 
+  staffMode = true;
   await page.goto("/projects");
-  await expect(page.getByRole("heading", { name: "Challenge participation" })).toBeVisible();
-  await expect(page.getByText("About 12 min", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Challenge participation" })).toHaveCount(0);
+  await expect(page.getByText("About 16 h 8 min", { exact: true })).toHaveCount(0);
+  if (testInfo.project.name === "chromium") {
+    const row = await page.getByRole("row").filter({ hasText: group.name }).boundingBox();
+    expect(row!.height).toBeLessThan(140);
+    await expect(
+      page.getByRole("columnheader", { name: "Presentations", exact: true }),
+    ).toHaveCount(0);
+  }
   await page.screenshot({ path: testInfo.outputPath("projects-overview.png"), fullPage: true });
-  await page.goto("/projects/10");
+  await page.getByRole("link", { name: group.name, exact: true }).click();
+  await expect(page).toHaveURL(/\/projects\/10$/);
   await expect(page.getByRole("heading", { name: group.name, level: 1 })).toBeVisible();
   await expect(firstQueue.getByText("Position 2", { exact: true })).toBeVisible();
   await expect(secondQueue.getByText("Position 5", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit project", exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("staff-project-detail.png"), fullPage: true });
 });

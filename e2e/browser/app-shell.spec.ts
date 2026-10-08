@@ -26,5 +26,8 @@ test("keeps mobile shell notifications and page heading visible together", async
   expect(triggerBox).not.toBeNull();
   expect(headingBox).not.toBeNull();
   expect(headingBox?.x).toBeGreaterThan((triggerBox?.x ?? 0) + (triggerBox?.width ?? 0));
-  expect(Math.abs((headingBox?.y ?? 0) - (triggerBox?.y ?? 0))).toBeLessThanOrEqual(2);
+  // Heading rows trim the h1 box to cap height (H47), so compare vertical centres.
+  const centre = (box: { y: number; height: number } | null) =>
+    (box?.y ?? 0) + (box?.height ?? 0) / 2;
+  expect(Math.abs(centre(headingBox) - centre(triggerBox))).toBeLessThanOrEqual(2);
 });

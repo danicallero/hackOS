@@ -5,6 +5,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
@@ -17,9 +18,8 @@ import { type Column, DataTable } from "@/components/common/data-table";
 import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { SectionCard } from "@/components/common/section-card";
+import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { StatusBadge } from "@/components/common/status-badge";
-import { PresentationStatus } from "@/components/projects/presentation-status";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -30,14 +30,14 @@ import {
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
-import { listRepos, type ParticipationEstimate, workGroupEstimates } from "@/lib/projects";
+import { listRepos } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { ProjectFormDialog } from "./project-form-dialog";
 import { type ProjectRepo, toProjectRepo } from "./shared";
 
-function manualCount(repo: ProjectRepo): number {
-  return repo.members.filter((m) => m.mergeStatus === "manual").length;
+function unmatchedCount(repo: ProjectRepo): number {
+  return repo.members.filter((m) => m.userId === null).length;
 }
 
 function buildColumns(t: Translate): Column<ProjectRepo>[] {
@@ -68,29 +68,15 @@ function buildColumns(t: Translate): Column<ProjectRepo>[] {
         r.challenges.length === 0 ? (
           <span className="text-muted-foreground text-sm">—</span>
         ) : (
-          <div className="space-y-1 text-sm">
-            {r.challenges.map((c) => (
-              <p key={c.id}>{c.title}</p>
+          <ul className="space-y-2 text-sm">
+            {r.challenges.map((challenge) => (
+              <li key={challenge.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="wrap-break-word">{challenge.title}</span>
+                {challenge.status && <QueueStatusBadge status={challenge.status} />}
+              </li>
             ))}
-          </div>
+          </ul>
         ),
-    },
-    {
-      id: "presentations",
-      header: t("projectPresentations"),
-      cell: (repo) => (
-        <div className="space-y-3">
-          {repo.challenges
-            .filter((challenge) => challenge.status)
-            .map((challenge) => (
-              <div key={challenge.id} className="space-y-1">
-                <p className="text-xs text-muted-foreground">{challenge.title}</p>
-                <PresentationStatus {...challenge} />
-              </div>
-            ))}
-          {!repo.challenges.some((challenge) => challenge.status) && "—"}
-        </div>
-      ),
     },
     {
       id: "prizes",
@@ -113,15 +99,15 @@ function buildColumns(t: Translate): Column<ProjectRepo>[] {
       id: "matched",
       header: t("colLinking"),
       align: "center",
-      sortValue: (r) => manualCount(r),
+      sortValue: (r) => unmatchedCount(r),
       cell: (r) => {
-        const manual = manualCount(r);
+        const unmatched = unmatchedCount(r);
         if (r.members.length === 0)
           return <span className="text-muted-foreground text-sm">{t("noMembers")}</span>;
-        return manual === 0 ? (
+        return unmatched === 0 ? (
           <StatusBadge tone="success">{t("allLinked")}</StatusBadge>
         ) : (
-          <StatusBadge tone="warning">{t("manualCountBadge", { count: manual })}</StatusBadge>
+          <StatusBadge tone="warning">{t("unmatchedCount", { count: unmatched })}</StatusBadge>
         );
       },
     },
@@ -146,8 +132,6 @@ export default function ProjectsPage() {
     Boolean(me?.isEnterpriseJudge) ||
     Boolean(me?.isSponsorRep);
   const [repos, setRepos] = useState<ProjectRepo[]>([]);
-  const [estimates, setEstimates] = useState<ParticipationEstimate[]>([]);
-  const canEstimate = can(CAPABILITIES.PROJECTS_READ) || Boolean(me?.isSponsorRep);
   const [loading, setLoading] = useState(true);
   const hasLoadedRef = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -160,13 +144,9 @@ export default function ProjectsPage() {
     if (!hasLoadedRef.current) setLoading(true);
     setLoadError(null);
     try {
-      const [res, planned] = await Promise.all([
-        listRepos(),
-        canEstimate ? workGroupEstimates() : Promise.resolve({ estimates: [] }),
-      ]);
+      const res = await listRepos();
       hasLoadedRef.current = true;
       setRepos(res.repos.map(toProjectRepo));
-      setEstimates(planned.estimates);
     } catch (err) {
       setRepos([]);
       const message = err instanceof ApiError ? err.message : t("couldNotLoadProjects");
@@ -175,7 +155,7 @@ export default function ProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, canEstimate, t]);
+  }, [canView, t]);
 
   // Soft, in-place refresh instead of a hard reload when a project changes
   // elsewhere.
@@ -236,32 +216,6 @@ export default function ProjectsPage() {
         }
       />
 
-      {canEstimate && (
-        <SectionCard variant="plain" title={t("projectParticipationForecast")}>
-          <DataTable
-            data={estimates}
-            getRowId={(item) => String(item.challengeId)}
-            loading={loading}
-            columns={[
-              { id: "challenge", header: t("challenges"), cell: (item) => item.title },
-              {
-                id: "expected",
-                header: t("projectExpectedCount"),
-                align: "right",
-                cell: (item) => (
-                  <span className="tabular-nums font-medium">{item.expectedCount}</span>
-                ),
-              },
-              {
-                id: "imported",
-                header: t("projectSubmittedCount"),
-                align: "right",
-                cell: (item) => <span className="tabular-nums">{item.projectCount}</span>,
-              },
-            ]}
-          />
-        </SectionCard>
-      )}
       <DataTable
         columns={columns}
         data={repos}
@@ -276,7 +230,41 @@ export default function ProjectsPage() {
             .join(" ")}`
         }
         searchPlaceholder={t("searchProjectsPlaceholder")}
+        stateKey="projects-list"
         pageSize={15}
+        renderMobileRow={(repo) => (
+          <Link
+            href={`/projects/${repo.id}`}
+            aria-label={repo.name}
+            className="button-interaction flex min-w-0 items-start gap-3 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          >
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="font-medium wrap-break-word">{repo.name}</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm text-muted-foreground">
+                  {t("workGroupMembers", { count: repo.members.length })}
+                </p>
+                {unmatchedCount(repo) > 0 && (
+                  <StatusBadge tone="warning">
+                    {t("unmatchedCount", { count: unmatchedCount(repo) })}
+                  </StatusBadge>
+                )}
+              </div>
+              <div className="space-y-2">
+                {repo.challenges.map((challenge) => (
+                  <div key={challenge.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <p className="text-sm wrap-break-word">{challenge.title}</p>
+                    {challenge.status && <QueueStatusBadge status={challenge.status} />}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <CaretRightIcon
+              aria-hidden="true"
+              className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+            />
+          </Link>
+        )}
         empty={{
           icon: FolderSimpleIcon,
           title: t("noProjectsYet"),

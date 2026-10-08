@@ -25,6 +25,7 @@ import { GenerateQueuesAction } from "./generate-queues-action";
 import { QueueOperatorConsole } from "./operator-console";
 import { queueOperationsAccess } from "./queue-access";
 import { QueuesPanel } from "./queues-panel";
+import QueueRoomsPage from "./rooms/page";
 import { TeamQueueSearch } from "./team-queue-search";
 
 export default function QueueOperationsPage() {
@@ -43,14 +44,19 @@ export default function QueueOperationsPage() {
   // another nav item): rooms working queues, and the queues themselves. A
   // queue no room serves is only reachable from the second.
   const { tab: requestedTab, setTab } = useUrlTab({
-    values: ["rooms", "queues"] as const,
+    values: canAdmin
+      ? (["rooms", "queues", "configuration"] as const)
+      : (["rooms", "queues"] as const),
     defaultValue: defaultTab,
   });
   const tab = canViewRooms ? requestedTab : "queues";
+  const tabsRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [arrivalHints, setArrivalHints] = useState(
-    () => window.localStorage.getItem("queue-ops-arrival-hints") === "1",
+    () =>
+      typeof window !== "undefined" &&
+      window.localStorage.getItem("queue-ops-arrival-hints") === "1",
   );
   const arrivalHintsRef = useRef(arrivalHints);
 
@@ -106,6 +112,17 @@ export default function QueueOperationsPage() {
   );
 
   const rooms = useMemo(() => roomViews.data ?? [], [roomViews.data]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tab and loading only retrigger keeping the active tab visible.
+  useEffect(() => {
+    const bar = tabsRef.current;
+    const selected = bar?.querySelector<HTMLElement>('[data-state="active"]');
+    if (!bar || !selected) return;
+    const bounds = bar.getBoundingClientRect();
+    const active = selected.getBoundingClientRect();
+    if (active.right > bounds.right) bar.scrollLeft += active.right - bounds.right;
+    else if (active.left < bounds.left) bar.scrollLeft -= bounds.left - active.left;
+  }, [tab, roomViews.loading]);
 
   const onGenerate = useCallback(async () => {
     setBusy(true);
@@ -183,11 +200,18 @@ export default function QueueOperationsPage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <div className="flex items-center gap-2">
-          <TabBar aria-label={t("queueOperations")} className="min-w-0 flex-1 justify-start">
-            {canViewRooms && <TabsTrigger value="rooms">{t("rooms")}</TabsTrigger>}
+          <TabBar
+            ref={tabsRef}
+            aria-label={t("queueOperations")}
+            className="min-w-0 flex-1 justify-start"
+          >
+            {canViewRooms && <TabsTrigger value="rooms">{t("allRoomsOverview")}</TabsTrigger>}
             <TabsTrigger value="queues">{t("judgingQueues")}</TabsTrigger>
+            {canAdmin && (
+              <TabsTrigger value="configuration">{t("roomConfigurationTitle")}</TabsTrigger>
+            )}
           </TabBar>
-          {canViewRooms && (
+          {canViewRooms && tab !== "configuration" && (
             <Button
               variant={searchOpen ? "secondary" : "outline"}
               size="icon-sm"
@@ -235,6 +259,11 @@ export default function QueueOperationsPage() {
         <TabsContent value="queues" className="pt-2">
           <QueuesPanel />
         </TabsContent>
+        {canAdmin && (
+          <TabsContent value="configuration" className="pt-2">
+            <QueueRoomsPage embedded />
+          </TabsContent>
+        )}
       </Tabs>
     </PageLayout>
   );

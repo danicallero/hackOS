@@ -84,10 +84,33 @@ describe("H27 logistics stats", () => {
     expect(lunch.served).toBe(3);
     expect(lunch.distinctPeople).toBe(2);
     expect(lunch.repeats).toBe(1);
+    expect(lunch.presentAttendees).toBe(2);
 
     const talk = body.activities.find((x: { name: string }) => x.name === "Talk");
     expect(talk.scans).toBe(1);
     expect(talk.attendees).toBe(1);
+    expect(talk.presentAttendees).toBe(1);
+
+    // H24/H27: leaving the venue changes coverage, not historical servings.
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at) VALUES ($1, 'out', NOW())`,
+      [a],
+    );
+    const afterExit = await app.inject({
+      method: "GET",
+      url: "/api/logistics/stats",
+      headers: asUser(statsStaff),
+    });
+    const after = afterExit.json();
+    expect(after.currentlyPresent).toBe(1);
+    expect(after.meals[0]).toMatchObject({
+      served: 3,
+      distinctPeople: 2,
+      repeats: 1,
+      presentAttendees: 1,
+    });
+    expect(after.activities[0]).toMatchObject({ attendees: 1, presentAttendees: 0 });
   });
 
   it("excludes anonymized profiles from accredited counts (H54)", async () => {

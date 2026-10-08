@@ -81,6 +81,11 @@ const createSchema = (t: Translate) =>
       }
     });
 
+// Once a value is set the time input gains right padding for the clear button,
+// skewing the date/time split against empty rows (R010); reserving it on both
+// inputs keeps every row identical.
+const EQUAL_SPLIT = "pr-9";
+
 type Values = z.infer<ReturnType<typeof createSchema>>;
 
 function fromConfig(cfg: EventConfig): Values {
@@ -112,7 +117,6 @@ function CountdownPreview({
   judgingStartsAt: string | null;
   judgingEndsAt: string | null;
 }) {
-  const { t } = useLocale();
   const phase = useEventPhase({
     name: null,
     tagline: null,
@@ -124,13 +128,12 @@ function CountdownPreview({
     judgingEndsAt,
   });
 
+  // No hacking window yet: nothing to preview, so no empty box.
+  if (phase.kind === "none") return null;
+
   return (
     <div className="rounded-lg border p-4">
-      {phase.kind === "none" ? (
-        <p className="text-muted-foreground text-sm">{t("countdownPreviewEmpty")}</p>
-      ) : (
-        <EventPhaseDisplay phase={phase} className="type-page-title tabular-nums" />
-      )}
+      <EventPhaseDisplay phase={phase} className="type-page-title tabular-nums" />
     </div>
   );
 }
@@ -213,48 +216,49 @@ export function EventTab({
         <SectionCard
           variant="plain"
           footerClassName="justify-start"
-          stickyFooter
           footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
         >
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("name")}</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="tagline"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("taglineLabel")}</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="timezone"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("timezoneLabel")}</FormLabel>
-                <FormControl>
-                  <TimezonePicker value={field.value} onChange={field.onChange} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="grid items-start gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("name")}</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="tagline"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("taglineLabel")}</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="timezone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("timezoneLabel")}</FormLabel>
+                  <FormControl>
+                    <TimezonePicker value={field.value} onChange={field.onChange} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
           <FormField
             control={form.control}
             name="participantsCanCreateProjects"
@@ -297,7 +301,11 @@ export function EventTab({
                   <FormItem>
                     <FormLabel>{t(date.label)}</FormLabel>
                     <FormControl>
-                      <DateTimeInput value={field.value} onChange={field.onChange} />
+                      <DateTimeInput
+                        value={field.value}
+                        onChange={field.onChange}
+                        className={EQUAL_SPLIT}
+                      />
                     </FormControl>
                     <ZonedTimePreview value={field.value} timezone={timezone} />
                     {"description" in date && (
@@ -350,7 +358,11 @@ export function EventTab({
                 <FormItem>
                   <FormLabel>{t("participantSelfServiceStartsLabel")}</FormLabel>
                   <FormControl>
-                    <DateTimeInput value={field.value} onChange={field.onChange} />
+                    <DateTimeInput
+                      value={field.value}
+                      onChange={field.onChange}
+                      className={EQUAL_SPLIT}
+                    />
                   </FormControl>
                   <ZonedTimePreview value={field.value} timezone={timezone} />
                   <FormMessage />
@@ -364,7 +376,11 @@ export function EventTab({
                 <FormItem>
                   <FormLabel>{t("participantSelfServiceEndsLabel")}</FormLabel>
                   <FormControl>
-                    <DateTimeInput value={field.value} onChange={field.onChange} />
+                    <DateTimeInput
+                      value={field.value}
+                      onChange={field.onChange}
+                      className={EQUAL_SPLIT}
+                    />
                   </FormControl>
                   <ZonedTimePreview value={field.value} timezone={timezone} />
                   <FormMessage />
@@ -400,26 +416,29 @@ export function EventTab({
                 }
               />
             </div>
-            <p className="text-muted-foreground text-sm">{t("eventReminderAudience")}</p>
             {values.eventReminderScheduledAt && (
-              <FormField
-                control={form.control}
-                name="eventReminderScheduledAt"
-                render={({ field }) => (
-                  <FormItem className="max-w-md">
-                    <FormLabel>{t("eventReminderSendAt")}</FormLabel>
-                    <FormControl>
-                      <DateTimeInput
-                        value={field.value}
-                        onChange={field.onChange}
-                        max={values.eventStartsAt}
-                      />
-                    </FormControl>
-                    <ZonedTimePreview value={field.value} timezone={timezone} />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <>
+                <p className="text-muted-foreground text-sm">{t("eventReminderAudience")}</p>
+                <FormField
+                  control={form.control}
+                  name="eventReminderScheduledAt"
+                  render={({ field }) => (
+                    <FormItem className="max-w-md">
+                      <FormLabel>{t("eventReminderSendAt")}</FormLabel>
+                      <FormControl>
+                        <DateTimeInput
+                          value={field.value}
+                          onChange={field.onChange}
+                          max={values.eventStartsAt}
+                          className={EQUAL_SPLIT}
+                        />
+                      </FormControl>
+                      <ZonedTimePreview value={field.value} timezone={timezone} />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
             )}
             {config.eventReminder?.status === "queued" && (
               <p className="text-sm">
