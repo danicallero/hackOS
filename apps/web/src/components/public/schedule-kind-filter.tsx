@@ -68,7 +68,7 @@ export function ScheduleKindFilterPopover({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" className="rounded-control!">
           <FunnelSimpleIcon aria-hidden="true" className="size-4" />
           {t("kindFilterAction")}
           {selected.size > 0 && (

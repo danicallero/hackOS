@@ -112,7 +112,7 @@ export function FilterMenu({
             type="button"
             size={iconOnly ? "icon" : "default"}
             aria-label={iconOnly ? t("filtersLabel") : undefined}
-            className="relative"
+            className="relative rounded-control!"
           >
             <FunnelIcon aria-hidden="true" />
             {!iconOnly && t("filtersLabel")}

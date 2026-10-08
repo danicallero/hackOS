@@ -85,7 +85,7 @@ export function ScheduleAudienceFilterPopover({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" className="rounded-control!">
           <FunnelIcon aria-hidden="true" className="size-4" />
           {t("audienceFilterAction")}
           {selected.size > 0 && (
