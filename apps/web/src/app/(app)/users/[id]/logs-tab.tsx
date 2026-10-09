@@ -3,7 +3,7 @@
 // Audit trail for this person (H53).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
+import { LogIcon } from "@phosphor-icons/react/dist/csr/Log";
 import { useEffect, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
@@ -75,7 +75,7 @@ export function AuditLogSection({ userId }: { userId: number }) {
   if (state === "forbidden") {
     return (
       <EmptyState
-        icon={FileTextIcon}
+        icon={LogIcon}
         title={t("auditLogUnavailableTitle")}
         description={t("needAuditReadCap")}
       />
@@ -89,7 +89,7 @@ export function AuditLogSection({ userId }: { userId: number }) {
     );
   }
   if (state === "error") {
-    return <EmptyState icon={FileTextIcon} title={t("couldNotLoadAuditLog")} />;
+    return <EmptyState icon={LogIcon} title={t("couldNotLoadAuditLog")} />;
   }
 
   const columns: Column<AuditRow>[] = [
@@ -128,14 +128,14 @@ export function AuditLogSection({ userId }: { userId: number }) {
   ];
 
   return (
-    <SectionCard icon={FileTextIcon} title={t("auditLog")} bodyClassName="p-0">
+    <SectionCard icon={LogIcon} title={t("auditLog")} bodyClassName="p-0">
       <DataTable
         columns={columns}
         data={items}
         getRowId={(r) => String(r.id)}
         pageSize={15}
         empty={{
-          icon: FileTextIcon,
+          icon: LogIcon,
           title: t("noAuditEntriesYet"),
           description: t("auditEntriesAppearHere"),
         }}

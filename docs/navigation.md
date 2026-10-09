@@ -85,6 +85,9 @@ workspace never over-grants access.
 | Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours) (each tab within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
 | Access and audit | Users, Permissions, Audit log | `users:read`, `permissions:manage`, `audit:read` |
 
+The web navigation uses Phosphor concept icons: `Package` for the Logistics
+workspace, `ClipboardText` for Activities, and `Log` for the Audit log.
+
 `/users/invites` is a focused child workspace reached from Users for holders of
 `invites:manage`; it deliberately does not add a second sidebar destination.
 The invitation list and its record inspector stay together on that route (#777).
