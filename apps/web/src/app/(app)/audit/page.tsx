@@ -8,7 +8,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
-import { ScrollIcon } from "@phosphor-icons/react/dist/csr/Scroll";
+import { LogIcon } from "@phosphor-icons/react/dist/csr/Log";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -375,7 +375,7 @@ export default function AuditPage() {
         getRowLabel={(r) => `${getActionLabel(r.action, t)} ${r.entity_type} ${r.entity_id}`}
         renderMobileRow={(r) => <AuditMobileRow row={r} t={t} />}
         empty={{
-          icon: ScrollIcon,
+          icon: LogIcon,
           title: t("noAuditEntriesTitle"),
           description: hasFilters ? t("noEntriesMatchFilters") : t("sensitiveActionsAppearDesc"),
         }}

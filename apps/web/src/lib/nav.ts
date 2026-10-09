@@ -1,7 +1,6 @@
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { BooksIcon } from "@phosphor-icons/react/dist/ssr/Books";
-import { BowlFoodIcon } from "@phosphor-icons/react/dist/ssr/BowlFood";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/ssr/CalendarDots";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
@@ -11,10 +10,10 @@ import { GavelIcon } from "@phosphor-icons/react/dist/ssr/Gavel";
 import { GearIcon } from "@phosphor-icons/react/dist/ssr/Gear";
 import { HandshakeIcon } from "@phosphor-icons/react/dist/ssr/Handshake";
 import { ListNumbersIcon } from "@phosphor-icons/react/dist/ssr/ListNumbers";
+import { LogIcon } from "@phosphor-icons/react/dist/ssr/Log";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/ssr/Megaphone";
-import { PulseIcon } from "@phosphor-icons/react/dist/ssr/Pulse";
+import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package";
 import { QuestionIcon } from "@phosphor-icons/react/dist/ssr/Question";
-import { ScrollIcon } from "@phosphor-icons/react/dist/ssr/Scroll";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/ssr/SealCheck";
 import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { TelevisionSimpleIcon } from "@phosphor-icons/react/dist/ssr/TelevisionSimple";
@@ -251,7 +250,7 @@ export const WORKSPACES: Workspace[] = [
   {
     id: "logistics",
     label: "workspaceLogistics",
-    icon: BowlFoodIcon,
+    icon: PackageIcon,
     items: [
       // Logistics is split per physical station (H22-H27); each entry shows
       // only for operators who hold that station's capability (H55).
@@ -268,7 +267,7 @@ export const WORKSPACES: Workspace[] = [
         // a meal/activity tab), so this single entry covers both (H22-H27).
         title: "mealsAndActivities",
         href: "/logistics/activities",
-        icon: PulseIcon,
+        icon: ClipboardTextIcon,
         capability: CAPABILITIES.ACTIVITY_SCAN,
       },
       {
@@ -379,7 +378,7 @@ export const WORKSPACES: Workspace[] = [
       {
         title: "auditLog",
         href: "/audit",
-        icon: ScrollIcon,
+        icon: LogIcon,
         capability: CAPABILITIES.AUDIT_READ,
       },
     ],

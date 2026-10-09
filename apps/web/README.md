@@ -554,3 +554,14 @@ restriction options and selected labels. Changing either the web language
 switcher or the form language selector updates both and saves that language
 as the new account preference. Dietary restrictions are submitted as dictionary
 IDs, so changing language preserves the selection and other entered data.
+
+## Personal profile layout (H6/H7/H8)
+
+The profile uses the content canvas with two equal columns from the `xl`
+breakpoint: personal details and their save footer beside email and password
+settings. Narrower viewports stack these sections. Assigned roles occupy a
+separate full-width section below the editable settings, so their count cannot
+change the account column's height. A full-width role card starts collapsed
+and shows the visible role. It reveals all assigned role names, marking the
+visible role with a badge. Effective capabilities are grouped by area; each
+group opens on demand and shows capability names without descriptions.

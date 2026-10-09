@@ -102,7 +102,7 @@ export function EmailCard() {
 
         {me.secondaryEmail && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm">{me.secondaryEmail}</span>
+            <span className="min-w-0 wrap-anywhere text-sm">{me.secondaryEmail}</span>
             {me.secondaryEmailVerified ? (
               <StatusBadge tone="success">{t("verified")}</StatusBadge>
             ) : (
@@ -147,7 +147,7 @@ export function EmailCard() {
                 ? t("changeSecondaryEmailPlaceholder")
                 : t("devpostEmailPlaceholder")
             }
-            className="max-w-md"
+            className="min-w-0 flex-1 basis-full sm:basis-0"
           />
           <SubmitButton
             type="button"
