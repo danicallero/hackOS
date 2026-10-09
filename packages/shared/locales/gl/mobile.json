@@ -744,6 +744,7 @@
   "scannerNfcDisabled": "Activa NFC nos axustes do teléfono.",
   "scannerNfcInvalidTag": "Usa unha acreditación cun número de serie NFC de sete bytes.",
   "scannerNfcError": "Non se puido ler a acreditación. Téntao de novo.",
+  "scannerNfcWriteFailed": "Acreditación vinculada, pero non se puido preparar a etiqueta para Android.",
   "personEnterBadgeCode": "Introducir código",
   "personScanBadgeCode": "Escanear código QR",
   "personLinkBadgeNfc": "Vincular con NFC",

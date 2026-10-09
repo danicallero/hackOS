@@ -877,6 +877,40 @@ The discovery listener is installed before reader mode starts, so an already
 present tag is not lost between registration and a technology request. Cancel
 releases the discovery wait, removes the listener, and unregisters reader mode;
 subsequent reads wait for that cleanup. Blank NTAG213s work on both platforms.
+
+Android also claims NFC-A tags while the app is closed
+(`plugins/withAndroidNfcTagClaim.js`, H22–H26): the main activity declares an
+`android.nfc.action.TECH_DISCOVERED` filter with a single `NfcA` tech list.
+NTAG213 badges carry a factory NDEF Capability Container in page 3 (OTP,
+`E1 10 12 00`, not erasable) and no records, so without a claimant Pixel phones
+show the system "New tag / Tag empty" screen; with it Android starts hackOS
+instead. Tapping a badge therefore opens the app. Limits: another app claiming
+NfcA produces the chooser; Android 16+ lets the user disallow tag intents per
+app; apps targeting an SDK above Baklava need `DISPATCH_NFC_MESSAGE` on the
+activity. Pixel behavior still needs physical verification.
+
+While the app is in the foreground on Android, `setNfcShield(true)` (root
+layout) keeps NFC-A reader mode registered between scans with no listener, so
+tapping a badge outside a scan is swallowed by the app instead of reaching the
+system tag dispatch ("New tag" screen or another activity). A scan replaces
+that registration and `syncShield()` restores it when the scan finishes; the
+shield is released on unmount and is best effort (if NFC is off or unsupported
+Android falls back to the claim filter above). It never reads or writes tags.
+
+Linking a badge by NFC (`person-operations-screen`, H22/H23) additionally
+writes the tag: `startNfcRead(message, { claimBadge: true })` follows the UID
+read with an NDEF message holding one Android Application Record for the
+release package (`lib/nfc-badge-claim.ts`; debug builds drop their `.debug`
+suffix), so any Android phone with hackOS opens it directly and one without it
+is sent to the Play Store instead of the system "New tag" screen. It contains
+no attendee data and the tag is never locked. Writes use raw MIFARE Ultralight
+page commands on both platforms (`mifareUltralightWritePage` on Android,
+`sendMifareCommandIOS` on iOS), so the iOS entitlements stay `TAG` only. The
+header page is written last and every page is read back. The write
+is best effort: the badge is linked by its UID anyway and the screen shows
+`scannerNfcWriteFailed` after the link succeeds. Scans for
+activities, meals and check-in never write. The Capability Container (page 3)
+is OTP and cannot be erased, which is why a record is written instead.
 Physical OEM verification remains required, especially on Oppo Find N6 with
 ColorOS 16/17: pairing, consecutive reads, cancel/reopen, background and folded/
 unfolded states with the same tags used on another working Android device. The iOS package patch avoids `connectToTag`, caches the detected UID, and
