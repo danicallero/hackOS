@@ -249,7 +249,6 @@ describe("route stability (deep links, issue #187)", () => {
       "/projects",
       "/queue",
       "/judging",
-      "/queue/rooms",
       // /my-queue, /logistics/accreditation and /logistics/meals are deliberately
       // gone from here: their content was merged into a single destination and the old hrefs now
       // redirect server-side (see their page.tsx files) instead of being

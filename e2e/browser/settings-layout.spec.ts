@@ -1,3 +1,4 @@
+import webEn from "../../packages/shared/locales/en/web.json" with { type: "json" };
 import { CAPABILITIES } from "../../packages/shared/src/capabilities";
 import { expect, shellUser, test } from "./fixtures";
 
@@ -199,11 +200,7 @@ for (const tab of ["venue", "wallet", "presence", "invites", "danger"] as const)
       );
     }
     if (tab === "presence") {
-      await expect(
-        panel.getByText(
-          "Without an exit or activity in this window, provisional time stops counting.",
-        ),
-      ).toBeVisible();
+      await expect(panel.getByText(webEn.certaintyWindowDesc)).toBeVisible();
     }
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

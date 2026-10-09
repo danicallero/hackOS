@@ -127,8 +127,12 @@ export default function EnterpriseDetailPage() {
           />
         </TabsContent>
         <TabsContent value="profile" className="space-y-6 pt-2">
-          <LogoCard enterprise={enterprise} onChanged={load} />
-          <EditCard enterprise={enterprise} canManage={canManage} onSaved={load} />
+          <EditCard
+            enterprise={enterprise}
+            canManage={canManage}
+            onSaved={load}
+            logoUploader={<LogoCard enterprise={enterprise} onChanged={load} />}
+          />
         </TabsContent>
         <TabsContent value="challenges" className="pt-2">
           <ChallengesSummaryCard enterprise={enterprise} canManage={canManage} />

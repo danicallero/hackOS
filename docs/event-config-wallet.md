@@ -237,8 +237,11 @@ move neighboring labels or controls. The danger zone keeps the three-stage event
 confirmation (H16–H40/H53). Judging timing lives in Queue → Rooms, on the separate
 `/api/queue/settings` resource (`QUEUE_ADMIN`).
 
-Event groups identity, paired event/hacking dates, the countdown preview, and
-participant editing dates in that order. Every populated date shows the event
+Event is split into General (identity), Schedule (paired event/hacking dates,
+countdown preview, email reminder) and Participants (project creation and
+editing dates) views that share one save; a validation error on a hidden view
+reveals it. A form inside a settings card sets `--form-footer-bg` so its sticky
+footer matches the card instead of the shell. Every populated date shows the event
 timezone; previews follow the draft timezone before saving. Venue and Wi-Fi
 share one save action at the end. Presence-policy consequences stay beside the
 two controls, rather than behind a disclosure. Invite toggles distinguish a

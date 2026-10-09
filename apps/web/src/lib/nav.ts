@@ -2,7 +2,6 @@ import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { BooksIcon } from "@phosphor-icons/react/dist/ssr/Books";
 import { BowlFoodIcon } from "@phosphor-icons/react/dist/ssr/BowlFood";
-import { BuildingsIcon } from "@phosphor-icons/react/dist/ssr/Buildings";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/ssr/CalendarDots";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
@@ -239,12 +238,6 @@ export const WORKSPACES: Workspace[] = [
           CAPABILITIES.JUDGE_PANEL,
         ],
         judgeVisible: true,
-      },
-      {
-        title: "roomConfigurationTitle",
-        href: "/queue/rooms",
-        icon: BuildingsIcon,
-        anyCapability: [CAPABILITIES.QUEUE_ADMIN],
       },
       {
         title: "reviewsOverview",

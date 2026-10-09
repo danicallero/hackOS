@@ -87,7 +87,7 @@ challenge content and judging panel under the H44/H45 rules below.
 | Method & path | Capability | Story | Behaviour |
 |---|---|---|---|
 | `GET /api/challenges` | contextual `challenge-directory` | H44/H46 | global challenge admins see all; sponsor representatives and assigned judges see their scoped challenges |
-| `POST /api/challenges` | `sponsors:manage` OR `queue:admin` | H43/H44 | create hidden draft template bound to an enterprise |
+| `POST /api/challenges` | `sponsors:manage` OR `queue:admin` | H43/H44 | create hidden draft template bound to an enterprise; the creation form's Publication step sets it hidden, scheduled (`availableFrom`) or visible (follow-up `publish`) |
 | `GET /api/challenges/mine` | authenticated + sponsor row | H44/H46 | challenges owned by the caller's enterprise |
 | `GET /api/challenges/:id` | contextual `challenge-access` | H44/H46 | global admins, `JUDGE_PANEL`/`QUEUE_OPERATE`, the owning sponsor enterprise, or an assigned judge |
 | `PATCH /api/challenges/:id` | contextual `challenge-edit` | H44 | global admins or the owning sponsor enterprise may edit within the panel/public-field locks; every edit gets a version snapshot + audit |
