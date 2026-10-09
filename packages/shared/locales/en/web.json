@@ -650,6 +650,7 @@
   "shirtSizesGroup": "T-shirt sizes",
   "addSize": "Add size",
   "shirtSizesDuplicateError": "Sizes can't repeat.",
+  "shirtSizesInUseError": "Sizes in use can't be removed: {sizes}.",
   "invitesSponsorsGroup": "Sponsors",
   "invitesStaffGroup": "Staff",
   "requireSponsorShirtSizeLabel": "Require shirt size",

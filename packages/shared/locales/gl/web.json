@@ -650,6 +650,7 @@
   "shirtSizesGroup": "Tallas de camiseta",
   "addSize": "Engadir talla",
   "shirtSizesDuplicateError": "As tallas non poden repetirse.",
+  "shirtSizesInUseError": "Non se poden eliminar tallas en uso: {sizes}.",
   "invitesSponsorsGroup": "Patrocinadores",
   "invitesStaffGroup": "Persoal",
   "requireSponsorShirtSizeLabel": "Esixir talla de camiseta",
