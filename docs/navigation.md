@@ -78,7 +78,7 @@ workspace never over-grants access.
 | --- | --- | --- |
 | Applications | Applications | `applications:review`, `applications:decide`, or `applications:manage` |
 | Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
-| Live judging | Queue operations (tabs: All rooms overview · Judging queues · Room configuration), Judging, Room configuration (stable direct link), Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); Room configuration is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from room administration |
+| Live judging | Queue operations (tabs: All rooms overview · Judging queues · Room configuration), Judging, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); The Room configuration tab is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from room administration |
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | `schedule:manage`, `tv:control`, or `announcements:manage` |
 | Sponsors | Enterprises, Challenges, Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
@@ -284,4 +284,4 @@ despite a working API.
 Judging hours are in Event settings (`/settings/event?tab=judging`) and retain
 the `queue:admin` gate. `/queue/settings` preserves saved links by directing
 them there. `/queue/rooms` remains available as the room configuration page;
-it is also embedded in Queue operations, with the existing stable direct sidebar link.
+it is embedded in Queue operations' Room configuration tab and has no sidebar entry of its own.

@@ -111,11 +111,9 @@ export function EnterpriseOverviewCard({
   const visibilityLabel =
     enterprise.visibility === "visible" ? t("visibleLabel") : t("hiddenOption");
   const visibilityHint =
-    enterprise.visibility === "visible"
-      ? t("enterpriseVisibilityVisibleHint")
-      : scheduled && revealDate
-        ? t("enterpriseVisibilityHiddenUntil", { date: revealDate })
-        : t("enterpriseVisibilityHiddenHint");
+    enterprise.visibility !== "visible" && scheduled && revealDate
+      ? t("enterpriseVisibilityHiddenUntil", { date: revealDate })
+      : undefined;
 
   const challengeCounts = (challenges ?? []).reduce(
     (counts, challenge) => {
@@ -167,7 +165,7 @@ export function EnterpriseOverviewCard({
           <StatCard
             label={t("membersTitle")}
             value={memberCount === null ? "—" : memberCount}
-            hint={memberError ? t("enterpriseMembersUnavailable") : t("enterpriseMembersHint")}
+            hint={memberError ? t("enterpriseMembersUnavailable") : undefined}
             icon={UsersIcon}
           />
         )}

@@ -17,8 +17,8 @@
   bottom: 0;
   z-index: 10;
   min-height: 3.5rem;
-  border-top: 1px solid var(--border);
-  background: var(--hackos-shell);
+  /* Pages sit on the shell; a form inside a card sets --form-footer-bg to the card. */
+  background: var(--form-footer-bg, var(--hackos-shell));
   padding-block: 1rem calc(1rem + env(safe-area-inset-bottom));
   /* A focused last field must remain clear of the persistent action row. */
   scroll-margin-block-end: 6rem;

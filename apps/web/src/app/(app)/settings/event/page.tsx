@@ -146,7 +146,7 @@ export default function EventSettingsPage() {
           {canEvent && (
             <TabsContent
               value="event"
-              className="min-w-0 rounded-lg border bg-card p-4 sm:p-6 md:mt-0"
+              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
             >
               <EventTab icon={TagIcon} onDirtyChange={(dirty) => setDirty("event", dirty)} />
             </TabsContent>
@@ -154,7 +154,7 @@ export default function EventSettingsPage() {
           {canVenue && (
             <TabsContent
               value="venue"
-              className="min-w-0 rounded-lg border bg-card p-4 sm:p-6 md:mt-0"
+              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
             >
               <VenueTab icon={MapPinIcon} onDirtyChange={(dirty) => setDirty("venue", dirty)} />
             </TabsContent>
@@ -162,7 +162,7 @@ export default function EventSettingsPage() {
           {canWallet && (
             <TabsContent
               value="wallet"
-              className="min-w-0 rounded-lg border bg-card p-4 sm:p-6 md:mt-0"
+              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
             >
               <WalletTab icon={WalletIcon} onDirtyChange={(dirty) => setDirty("wallet", dirty)} />
             </TabsContent>
@@ -170,7 +170,7 @@ export default function EventSettingsPage() {
           {canPresence && (
             <TabsContent
               value="presence"
-              className="min-w-0 rounded-lg border bg-card p-4 sm:p-6 md:mt-0"
+              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
             >
               <PresenceTab
                 icon={UserCheckIcon}
@@ -181,7 +181,7 @@ export default function EventSettingsPage() {
           {canInvites && (
             <TabsContent
               value="invites"
-              className="min-w-0 rounded-lg border bg-card p-4 sm:p-6 md:mt-0"
+              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
             >
               <InvitesTab
                 icon={EnvelopeSimpleIcon}
@@ -192,7 +192,7 @@ export default function EventSettingsPage() {
           {canJudging && (
             <TabsContent
               value="judging"
-              className="min-w-0 rounded-lg border bg-card p-4 sm:p-6 md:mt-0"
+              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
             >
               <JudgingWindowTab onDirtyChange={(dirty) => setDirty("judging", dirty)} />
             </TabsContent>
@@ -200,7 +200,7 @@ export default function EventSettingsPage() {
           {canDanger && (
             <TabsContent
               value="danger"
-              className="min-w-0 rounded-lg border bg-card p-4 sm:p-6 md:mt-0"
+              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
             >
               <ResetJudgingDataTab icon={WarningIcon} />
             </TabsContent>

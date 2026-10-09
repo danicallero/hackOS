@@ -423,3 +423,24 @@ input[type="time"]::-webkit-date-and-time-value {
   text-align: left;
   color: var(--field-foreground);
 }
+
+/*
+ * Native picker icons default to the far right edge, detached from the value
+ * text. Lead the field with them instead, muted, so each input reads as one
+ * unit; the Clear button keeps the trailing edge to itself.
+ */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  order: -1;
+  margin: 0 0.5rem 0 0;
+  padding: 0;
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
