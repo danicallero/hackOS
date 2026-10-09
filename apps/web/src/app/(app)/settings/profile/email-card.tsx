@@ -72,13 +72,15 @@ export function EmailCard() {
       {/* Primary */}
       <div className="space-y-2">
         <Label htmlFor="primary-email">{t("primaryEmailLabel")}</Label>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input id="primary-email" value={me.email} disabled readOnly className="max-w-md" />
-          {me.emailVerified ? (
-            <StatusBadge tone="success">{t("verified")}</StatusBadge>
-          ) : (
-            <StatusBadge tone="warning">{t("unverified")}</StatusBadge>
-          )}
+        <div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
+          <Input id="primary-email" value={me.email} disabled readOnly />
+          <div>
+            {me.emailVerified ? (
+              <StatusBadge tone="success">{t("verified")}</StatusBadge>
+            ) : (
+              <StatusBadge tone="warning">{t("unverified")}</StatusBadge>
+            )}
+          </div>
         </div>
       </div>
 
@@ -136,7 +138,7 @@ export function EmailCard() {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
           <Input
             id="secondary-email"
             type="email"
@@ -147,10 +149,10 @@ export function EmailCard() {
                 ? t("changeSecondaryEmailPlaceholder")
                 : t("devpostEmailPlaceholder")
             }
-            className="min-w-0 flex-1 basis-full sm:basis-0"
           />
           <SubmitButton
             type="button"
+            className="w-full"
             pending={saving}
             disabled={!secondary.includes("@")}
             onClick={() => sendSecondaryVerification(secondary.trim().toLowerCase())}
