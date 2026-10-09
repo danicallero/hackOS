@@ -1,6 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
 import {
@@ -518,9 +518,12 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     ).toBe(0);
     expect(await valkey.get(`sse:seq:${SSE_TOPICS.QUEUE}`)).toBe(String(queueBefore + 1));
     expect(await valkey.get(`sse:seq:${SSE_TOPICS.PUBLIC_TV}`)).toBe(String(publicTvBefore + 1));
-    expect(await valkey.get(`sse:seq:${SSE_TOPICS.USER_PREFIX}${owner}`)).toBe(
-      // Queue invalidation plus targeted session/navigation refresh (#892).
-      String(userQueueBefore + 2),
+    // Queue invalidation plus targeted session/navigation refresh (#892). The
+    // latter is broadcast from the onResponse hook, after inject() may resolve.
+    await vi.waitFor(async () =>
+      expect(await valkey.get(`sse:seq:${SSE_TOPICS.USER_PREFIX}${owner}`)).toBe(
+        String(userQueueBefore + 2),
+      ),
     );
 
     const { getQueue } = await import("../../src/lib/queues.js");
