@@ -725,7 +725,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Live event statistics",
         description:
-          "H27 aggregate accreditation, estimated current presence, meal servings and activity attendance. Each activity includes presentAttendees: distinct attendees intersected with the current presence estimate, so coverage charts use the same population for numerator and denominator. Requires logistics statistics access; excludes synthetic and inactive accounts.",
+          "H27 aggregate accreditation, estimated current presence, meal servings and activity attendance, plus `hourly` (UTC-hour buckets of accreditations, meal servings and activity scans) for peak-load and attendance-curve charts. Each activity includes presentAttendees: distinct attendees intersected with the current presence estimate, so coverage charts use the same population for numerator and denominator. Requires logistics statistics access; excludes synthetic and inactive accounts.",
       },
     },
     async () => logisticsStats(),

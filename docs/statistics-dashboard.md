@@ -39,16 +39,33 @@ The filter affects form-question and application-scope logistics distributions
 only: application status, confirmation lifecycle, and submission time-series
 panels continue to report the full non-draft pipeline. Role-scope logistics
 distributions remain based on role membership and are not changed by the
-application filter. The web dashboard keeps authorized scope filters and the same configurable
-charts available in all three phases. During and After also show event-wide
-operational totals. Selecting a meal or activity opens a full-window detail with
+application filter. Each phase serves one organizing moment:
+
+- **Before** (preparation): the configurable application panels and charts
+  (overview, applications over time, by hour/day, shirt sizes, dietary and
+  form-question distributions). They appear only here.
+- **During** (operations): event-wide live totals, flow by hour, accredited by
+  role, meals served, and the meal/activity and staff-scan tables. Application
+  figures are not loaded in this phase.
+- **After** (results): participation funnel (confirmed → accredited →
+  attended), attendance rate, hours on site and their distribution, the hourly
+  curve, accredited by role, meals served, attendance by activity, and the
+  attendance-hours table. Confirmed comes from the selected application scopes;
+  the other figures are event-wide.
+
+Every chart in all three phases has a full-screen view (`ChartCard`). The
+hourly series come from `hourly` in `GET /api/logistics/stats`: UTC-hour
+buckets of accreditations (`users.badge_assigned_at`), meal servings and
+activity scans, which the client localizes.
+
+Selecting a meal or activity opens a full-window detail with
 live servings/scans, distinct people, repeats, and two ring charts. The coverage
 chart intersects activity attendees with the current presence estimate: both
 segments refer to people currently at the event, rather than subtracting all
 historical attendees from current occupancy. Presence remains explicitly
 estimated. The second chart separates first visits from repeat scans or
 servings. Exact counts are visible beside the charts. Logistics SSE events
-refresh both operational totals and scoped charts during the event.
+refresh the operational totals and charts during the event.
 
 Scope keys are stable resource identifiers: `application:<id>` and
 `role:<id>`. The API validates every selected key against the caller's

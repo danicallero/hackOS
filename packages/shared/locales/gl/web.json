@@ -3491,5 +3491,15 @@
   "allRoomsOverview": "Vista de todas as salas",
   "projectSuggestedMatches": "Coincidencias suxeridas",
   "tableResultCount_one": "{count} resultado",
-  "tableResultCount_other": "{count} resultados"
+  "tableResultCount_other": "{count} resultados",
+  "chartFullscreen": "Ver «{title}» a pantalla completa",
+  "hourlyFlow": "Fluxo por hora",
+  "accreditedByRole": "Acreditados por rol",
+  "activityAttendance": "Asistencia por actividade",
+  "participationFunnel": "Funil de participación",
+  "hoursPerPerson": "Horas por persoa",
+  "attendedStat": "Asistiron",
+  "attendanceRate": "Taxa de asistencia",
+  "averageHoursOnSite": "Media de horas no evento",
+  "totalHours": "Horas totais"
 }

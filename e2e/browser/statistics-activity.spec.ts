@@ -2,8 +2,9 @@ import { CAPABILITIES } from "../../packages/shared/src/capabilities";
 import { EVENTS } from "../../packages/shared/src/events";
 import { expect, shellUser, test } from "./fixtures";
 
-// H24/H27: current occupancy and historical servings are separate populations.
-test("activity charts retain scope panels and show live meal coverage", async ({
+// H24/H27: current occupancy and historical servings are separate populations;
+// application (scope) charts belong to Before only.
+test("application charts stay in Before while During shows live meal coverage", async ({
   page,
 }, testInfo) => {
   let extraServing = 0;
@@ -86,9 +87,10 @@ test("activity charts retain scope panels and show live meal coverage", async ({
     await page.goto("/logistics/stats?tab=during");
     const notice = page.locator('aside[aria-labelledby="cookie-notice-title"]');
     if (await notice.isVisible()) await notice.locator("button").click();
+    await expect(page.getByRole("row").filter({ hasText: "Lunch" })).toBeVisible();
     await expect(
       page.getByRole("img", { name: "T-shirt size distribution", exact: true }),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await page.getByRole("row").filter({ hasText: "Lunch" }).click();
     const detail = page.getByRole("dialog", { name: "Lunch" });
     await expect(detail).toBeVisible();
@@ -118,6 +120,11 @@ test("activity charts retain scope panels and show live meal coverage", async ({
     });
     await detail.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("tab", { name: "After", exact: true }).click();
+    await expect(page.getByText("Participation funnel", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("img", { name: "T-shirt size distribution", exact: true }),
+    ).toHaveCount(0);
+    await page.getByRole("tab", { name: "Before", exact: true }).click();
     await expect(
       page.getByRole("img", { name: "T-shirt size distribution", exact: true }),
     ).toBeVisible();

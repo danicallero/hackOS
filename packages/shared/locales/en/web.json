@@ -3491,5 +3491,15 @@
   "allRoomsOverview": "All rooms overview",
   "projectSuggestedMatches": "Suggested matches",
   "tableResultCount_one": "{count} result",
-  "tableResultCount_other": "{count} results"
+  "tableResultCount_other": "{count} results",
+  "chartFullscreen": "View “{title}” full screen",
+  "hourlyFlow": "Flow by hour",
+  "accreditedByRole": "Accredited by role",
+  "activityAttendance": "Attendance by activity",
+  "participationFunnel": "Participation funnel",
+  "hoursPerPerson": "Hours per person",
+  "attendedStat": "Attended",
+  "attendanceRate": "Attendance rate",
+  "averageHoursOnSite": "Average hours on site",
+  "totalHours": "Total hours"
 }
