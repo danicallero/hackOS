@@ -47,6 +47,7 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
       "expo-status-bar",
       "expo-web-browser",
       "./plugins/withAndroidResConfigs.js",
+      "./plugins/withAndroidNfcTagClaim.js",
     ],
     name: isDevelopmentBuild ? `${config.name} (Debug)` : config.name,
     ios: {

@@ -18,6 +18,7 @@ import { signOut } from "@/lib/auth-client";
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
 import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
+import { setNfcShield } from "@/lib/nfc-reader";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
 import { registerForPushNotifications } from "@/lib/push";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
@@ -41,6 +42,12 @@ export default function RootLayout() {
   useEffect(() => {
     if (error) throw error;
   }, [error]);
+
+  // H22–H26: Android only; keeps system tag dispatch off while the app is open.
+  useEffect(() => {
+    setNfcShield(true);
+    return () => setNfcShield(false);
+  }, []);
 
   useEffect(() => {
     if (loaded) {

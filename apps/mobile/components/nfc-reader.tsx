@@ -8,11 +8,13 @@ import { colors } from "@/theme/colors";
 
 export function NfcReader({
   visible,
+  claimBadge = false,
   onValue,
   onClose,
 }: {
   visible: boolean;
-  onValue: (uid: string) => void;
+  claimBadge?: boolean;
+  onValue: (uid: string, info: { claimFailed: boolean }) => void;
   onClose: () => void;
 }) {
   const { t } = useLocale();
@@ -27,7 +29,7 @@ export function NfcReader({
       return;
     }
     let active = true;
-    const session = startNfcRead(message);
+    const session = startNfcRead(message, { claimBadge });
     const background = AppState.addEventListener("change", (state) => {
       if (state === "background") {
         active = false;
@@ -38,7 +40,7 @@ export function NfcReader({
     void session.result
       .then((uid) => {
         if (!active) return;
-        if (uid) callbacks.current.onValue(uid);
+        if (uid) callbacks.current.onValue(uid, { claimFailed: session.claimFailed() });
         callbacks.current.onClose();
       })
       .catch((error: unknown) => {
@@ -58,7 +60,7 @@ export function NfcReader({
       background.remove();
       session.cancel();
     };
-  }, [visible, focused, message, t]);
+  }, [visible, focused, claimBadge, message, t]);
 
   return (
     <Modal

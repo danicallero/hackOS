@@ -325,7 +325,11 @@ export function PersonOperationsScreen() {
     }, [load]),
   );
 
-  async function saveBadge(nextBadge: string, attendeeRole?: "participant" | "mentor") {
+  async function saveBadge(
+    nextBadge: string,
+    attendeeRole?: "participant" | "mentor",
+    claimFailed = false,
+  ) {
     if (!person || ownerUserId === undefined || !nextBadge || badgeMutationInFlight.current) return;
     badgeMutationInFlight.current = true;
     setBusy(true);
@@ -357,6 +361,7 @@ export function PersonOperationsScreen() {
       // cannot turn a successful server assignment into an error state.
       const snapshot = await sync.sync().catch(() => undefined);
       await load(snapshot);
+      if (claimFailed) Alert.alert(t("personLinkBadge"), t("scannerNfcWriteFailed"));
     } catch (cause) {
       void haptic("error");
       const message = cause instanceof Error ? cause.message : t("requestError");
@@ -883,8 +888,11 @@ export function PersonOperationsScreen() {
         ) : null}
       </Modal>
       <NfcReader
+        claimBadge
         visible={badgeReaderVisible}
-        onValue={(uid) => void saveBadge(uid, attendeeRole ?? undefined)}
+        onValue={(uid, { claimFailed }) =>
+          void saveBadge(uid, attendeeRole ?? undefined, claimFailed)
+        }
         onClose={() => setBadgeReaderVisible(false)}
       />
       <View

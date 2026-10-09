@@ -744,6 +744,7 @@
   "scannerNfcDisabled": "Enable NFC in your phone settings.",
   "scannerNfcInvalidTag": "Use a badge with a seven-byte NFC serial number.",
   "scannerNfcError": "Could not read the badge. Try again.",
+  "scannerNfcWriteFailed": "Badge linked, but the tag could not be prepared for Android.",
   "personEnterBadgeCode": "Enter code",
   "personScanBadgeCode": "Scan QR code",
   "personLinkBadgeNfc": "Link with NFC",

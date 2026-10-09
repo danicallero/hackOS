@@ -26,6 +26,7 @@ beforeEach(() => {
       resolveRead = resolve;
       rejectRead = reject;
     }),
+    claimFailed: () => false,
     cancel,
   }));
 });
@@ -41,7 +42,7 @@ it("shows a cancelable Android overlay and submits one UID", async () => {
   expect(view.getByRole("header")).toHaveTextContent("scannerNfcScan");
   await act(() => resolveRead("04AB12CD34EF56"));
   expect(onValue).toHaveBeenCalledTimes(1);
-  expect(onValue).toHaveBeenCalledWith("04AB12CD34EF56");
+  expect(onValue).toHaveBeenCalledWith("04AB12CD34EF56", { claimFailed: false });
   expect(onClose).toHaveBeenCalledTimes(1);
 });
 
