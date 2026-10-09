@@ -59,7 +59,14 @@ export function ApiModeProvider({ children }: { children: ReactNode }) {
       // The old server may be offline. Clear its local credentials immediately;
       // server revocation is best effort and must not block changing endpoints.
       signOutForEnvironmentChange();
-      await clearApiEnvironmentData();
+      // A native cache/SQLite wipe can reject (notably on Android). That must
+      // not strand the user on the old endpoint: always persist and apply the
+      // new mode, then log the cleanup failure.
+      try {
+        await clearApiEnvironmentData();
+      } catch (error) {
+        console.warn("API environment cleanup failed", error);
+      }
       await SecureStore.setItemAsync(STORAGE_KEY, nextMode);
       applyApiMode(nextMode);
       setModeState(nextMode);

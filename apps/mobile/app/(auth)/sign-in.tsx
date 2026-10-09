@@ -177,8 +177,11 @@ export default function SignInScreen() {
         {
           text: t("apiModeSwitch"),
           onPress: () => {
-            void setMode(mode === "development" ? "production" : "development").catch(() => {
-              Alert.alert(t("apiModeTitle"), t("apiModeSwitchError"));
+            void setMode(mode === "development" ? "production" : "development").catch((error) => {
+              Alert.alert(
+                t("apiModeTitle"),
+                `${t("apiModeSwitchError")}\n${error instanceof Error ? error.message : String(error)}`,
+              );
             });
           },
         },
