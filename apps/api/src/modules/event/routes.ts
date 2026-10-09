@@ -17,7 +17,7 @@ import {
   requireAnyCapability,
   userHasCapability,
 } from "../../lib/capabilities.js";
-import { BadRequestError, ForbiddenError } from "../../lib/errors.js";
+import { BadRequestError, ConflictError, ForbiddenError } from "../../lib/errors.js";
 import { requireIdempotencyKey } from "../../lib/idempotency.js";
 import {
   type RouteAccessPolicy,
@@ -458,6 +458,23 @@ export function registerEventRoutes(app: FastifyInstance): void {
           new Date(next.hacking_ends_at).getTime() <= new Date(next.hacking_starts_at).getTime()
         ) {
           throw new BadRequestError("hackingEndsAt must be after hackingStartsAt");
+        }
+        // H12: shirt sizes are stored as plain text on users, so dropping (or
+        // renaming) one still in use would orphan those people's value.
+        // Reordering is always safe — order is just array position.
+        const removedSizes = current.shirt_sizes.filter((s) => !next.shirt_sizes.includes(s));
+        if (removedSizes.length > 0) {
+          const { rows: inUse } = await client.query<{ shirt_size: string; n: number }>(
+            `SELECT shirt_size, count(*)::int AS n FROM users
+              WHERE shirt_size = ANY($1::text[]) GROUP BY shirt_size ORDER BY shirt_size`,
+            [removedSizes],
+          );
+          if (inUse.length > 0) {
+            throw new ConflictError(
+              `Shirt sizes in use can't be removed: ${inUse.map((r) => `${r.shirt_size} (${r.n})`).join(", ")}`,
+              { shirtSizesInUse: inUse.map((r) => ({ value: r.shirt_size, count: r.n })) },
+            );
+          }
         }
         if (
           next.participant_self_service_starts_at !== null &&
