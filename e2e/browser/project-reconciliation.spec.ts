@@ -423,6 +423,7 @@ for (const origin of ["project", "group"] as const) {
     await page.route("**/api/**", async (route) => {
       const path = new URL(route.request().url()).pathname;
       let body: unknown = { items: [], groups: [] };
+      if (path === "/api/queue/me") body = [];
       if (path === "/api/me")
         body = { ...shellUser, id: 12, language: "es", capabilities: [], hasProject: true };
       if (path === "/api/me/projects")
