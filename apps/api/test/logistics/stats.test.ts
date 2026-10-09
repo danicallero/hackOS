@@ -91,6 +91,12 @@ describe("H27 logistics stats", () => {
     expect(talk.attendees).toBe(1);
     expect(talk.presentAttendees).toBe(1);
 
+    // H27: hourly flow totals match the scans and accreditations above.
+    const sum = (rows: Array<{ n: number }>) => rows.reduce((total, row) => total + row.n, 0);
+    expect(sum(body.hourly.accreditations)).toBe(2);
+    expect(sum(body.hourly.meals)).toBe(3);
+    expect(sum(body.hourly.activities)).toBe(1);
+
     // H24/H27: leaving the venue changes coverage, not historical servings.
     const { pool } = await import("../../src/db/pool.js");
     await pool.query(

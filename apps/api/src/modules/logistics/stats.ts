@@ -105,6 +105,43 @@ export async function accreditationCountsByRole() {
 }
 
 /**
+ * H27: hourly flow of accreditations, meal servings and activity scans, so
+ * organisers can see peaks (door staffing, kitchen load) while the event runs
+ * and justify the attendance curve afterwards. Buckets are UTC hour instants;
+ * the client localises them. Same account filters as the totals above.
+ */
+export async function hourlyFlow() {
+  const accreditations = await pool.query<{ bucket: Date; n: number }>(
+    `SELECT date_trunc('hour', badge_assigned_at) AS bucket, count(*)::int AS n
+       FROM users
+      WHERE badge_id IS NOT NULL AND account_state = 'active' AND anonymized_at IS NULL
+        AND is_test_account = false
+      GROUP BY 1 ORDER BY 1`,
+  );
+  const scans = await pool.query<{ bucket: Date; meal: boolean; n: number }>(
+    `SELECT date_trunc('hour', al.logged_at) AS bucket,
+            (a.category = ANY($1::text[])) AS meal,
+            count(*)::int AS n
+       FROM activity_logs al
+       JOIN activities a ON a.id = al.activity_id
+       JOIN users u ON u.id = al.user_id
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
+      WHERE a.category = ANY($1::text[]) OR a.requires_scan = true
+      GROUP BY 1, 2 ORDER BY 1`,
+    [[...MEAL_ACTIVITY_KINDS]],
+  );
+  const toRow = (row: { bucket: Date; n: number }) => ({
+    bucket: row.bucket.toISOString(),
+    n: row.n,
+  });
+  return {
+    accreditations: accreditations.rows.map(toRow),
+    meals: scans.rows.filter((row) => row.meal).map(toRow),
+    activities: scans.rows.filter((row) => !row.meal).map(toRow),
+  };
+}
+
+/**
  * H27 operational logistics panel (LOGISTICS_STATS): accredited count,
  * currently-present estimate, per-meal served/repeats, per-activity
  * attendance. The pre-event applications funnel belongs to the applications
@@ -120,6 +157,7 @@ export async function logisticsStats() {
   const meals = await scannableActivities("meal");
   const activities = await scannableActivities("activity");
   const accreditedByRole = await accreditationCountsByRole();
+  const hourly = await hourlyFlow();
   // H24/H27: intersect attendees with the same presence estimate as the denominator.
   const presentAttendance = await pool.query<{ activity_id: number; people: number }>(
     `SELECT activity_id, count(DISTINCT user_id)::int AS people
@@ -136,6 +174,7 @@ export async function logisticsStats() {
     accreditedCount: accredited.rows[0].n as number,
     currentlyPresent: occ.presentCount,
     accreditedByRole,
+    hourly,
     meals: meals.map((m) => ({
       activityId: m.activityId,
       name: m.name,

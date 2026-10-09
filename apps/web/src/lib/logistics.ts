@@ -213,6 +213,12 @@ export interface StaffScanRankingRow {
   total: number;
 }
 
+/** UTC-hour instant (ISO) and its count. */
+export interface HourlyBucket {
+  bucket: string;
+  n: number;
+}
+
 export interface LogisticsStats {
   accreditedCount: number;
   currentlyPresent: number;
@@ -220,6 +226,11 @@ export interface LogisticsStats {
     role: string | null;
     count: number;
   }>;
+  hourly: {
+    accreditations: HourlyBucket[];
+    meals: HourlyBucket[];
+    activities: HourlyBucket[];
+  };
   meals: Array<{
     activityId: number;
     name: string;

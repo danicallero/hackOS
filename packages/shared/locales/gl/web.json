@@ -650,6 +650,7 @@
   "shirtSizesGroup": "Tallas de camiseta",
   "addSize": "Engadir talla",
   "shirtSizesDuplicateError": "As tallas non poden repetirse.",
+  "shirtSizesInUseError": "Non se poden eliminar tallas en uso: {sizes}.",
   "invitesSponsorsGroup": "Patrocinadores",
   "invitesStaffGroup": "Persoal",
   "requireSponsorShirtSizeLabel": "Esixir talla de camiseta",
@@ -3484,5 +3485,15 @@
   "eventGeneralTab": "Xeral",
   "eventParticipantsTab": "Participantes",
   "createChallenge": "Crear reto",
-  "enterpriseDetailsTab": "Datos"
+  "enterpriseDetailsTab": "Datos",
+  "chartFullscreen": "Ver «{title}» a pantalla completa",
+  "hourlyFlow": "Fluxo por hora",
+  "accreditedByRole": "Acreditados por rol",
+  "activityAttendance": "Asistencia por actividade",
+  "participationFunnel": "Funil de participación",
+  "hoursPerPerson": "Horas por persoa",
+  "attendedStat": "Asistiron",
+  "attendanceRate": "Taxa de asistencia",
+  "averageHoursOnSite": "Media de horas no evento",
+  "totalHours": "Horas totais"
 }

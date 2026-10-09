@@ -650,6 +650,7 @@
   "shirtSizesGroup": "Tallas de camiseta",
   "addSize": "Añadir talla",
   "shirtSizesDuplicateError": "Las tallas no pueden repetirse.",
+  "shirtSizesInUseError": "No se pueden quitar tallas en uso: {sizes}.",
   "invitesSponsorsGroup": "Patrocinadores",
   "invitesStaffGroup": "Personal",
   "requireSponsorShirtSizeLabel": "Exigir talla de camiseta",
@@ -3484,5 +3485,15 @@
   "eventGeneralTab": "General",
   "eventParticipantsTab": "Participantes",
   "createChallenge": "Crear reto",
-  "enterpriseDetailsTab": "Datos"
+  "enterpriseDetailsTab": "Datos",
+  "chartFullscreen": "Ver «{title}» en pantalla completa",
+  "hourlyFlow": "Flujo por hora",
+  "accreditedByRole": "Acreditados por rol",
+  "activityAttendance": "Asistencia por actividad",
+  "participationFunnel": "Embudo de participación",
+  "hoursPerPerson": "Horas por persona",
+  "attendedStat": "Asistieron",
+  "attendanceRate": "Tasa de asistencia",
+  "averageHoursOnSite": "Media de horas en el evento",
+  "totalHours": "Horas totales"
 }

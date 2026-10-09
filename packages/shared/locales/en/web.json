@@ -650,6 +650,7 @@
   "shirtSizesGroup": "T-shirt sizes",
   "addSize": "Add size",
   "shirtSizesDuplicateError": "Sizes can't repeat.",
+  "shirtSizesInUseError": "Sizes in use can't be removed: {sizes}.",
   "invitesSponsorsGroup": "Sponsors",
   "invitesStaffGroup": "Staff",
   "requireSponsorShirtSizeLabel": "Require shirt size",
@@ -3484,5 +3485,15 @@
   "eventGeneralTab": "General",
   "eventParticipantsTab": "Participants",
   "createChallenge": "Create challenge",
-  "enterpriseDetailsTab": "Details"
+  "enterpriseDetailsTab": "Details",
+  "chartFullscreen": "View “{title}” full screen",
+  "hourlyFlow": "Flow by hour",
+  "accreditedByRole": "Accredited by role",
+  "activityAttendance": "Attendance by activity",
+  "participationFunnel": "Participation funnel",
+  "hoursPerPerson": "Hours per person",
+  "attendedStat": "Attended",
+  "attendanceRate": "Attendance rate",
+  "averageHoursOnSite": "Average hours on site",
+  "totalHours": "Total hours"
 }

@@ -43,7 +43,7 @@ sending `null` clears a nullable field.
 | `pass_field_visibility` | jsonb map of show/hide toggles for the pass's auto-filled front fields (`PASS_FIELD_VISIBILITY_KEYS`: participant, role, passType, university, email). Missing keys default to **visible**. |
 | `presence_auto_entry_at`, `presence_certainty_window_minutes` | H24 automatic-presence policy: an optional common entry instant for people accredited earlier, and the estimator's certainty window. `PRESENCE_MANAGE`. |
 | `require_sponsor_shirt_size`, `require_sponsor_dietary`, `require_staff_shirt_size`, `require_staff_dietary` | H10: whether an invited sponsor/staff account must supply a shirt size, and whether their claim form shows dietary-restriction fields at all. Off by default. `INVITES_MANAGE`, edited from Settings → Event → Invited accounts. |
-| `shirt_sizes` | H12: the options offered by every shirt-size picker in the app (applications, invite claim, profile self-edit, staff user-edit) — a single event-wide catalogue instead of a hardcoded list per screen. `INTOLERANCES_MANAGE`, edited from Settings → Libraries alongside food intolerances and universities. |
+| `shirt_sizes` | H12: the options offered by every shirt-size picker in the app (applications, invite claim, profile self-edit, staff user-edit) — a single event-wide catalogue instead of a hardcoded list per screen. `INTOLERANCES_MANAGE`, edited from Settings → Libraries alongside food intolerances and universities. Array order is the dropdown order (drag to reorder; people's stored `users.shirt_size` text is untouched). Saved sizes can't be renamed in place, and `PUT` answers 409 (`error.details.shirtSizesInUse`) when it would drop a size some user still holds. |
 
 Three distinct time windows, deliberately not one:
 

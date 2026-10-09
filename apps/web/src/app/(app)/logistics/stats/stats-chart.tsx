@@ -152,7 +152,13 @@ export function StatsChart({
 
   return (
     <div className="@container min-w-0">
-      <div className={type === "bar" ? "max-h-[32rem] min-w-0 overflow-y-auto" : "min-w-0"}>
+      <div
+        className={
+          type === "bar" && height === undefined
+            ? "max-h-[32rem] min-w-0 overflow-y-auto"
+            : "min-w-0"
+        }
+      >
         <div
           ref={chartElement}
           role="img"

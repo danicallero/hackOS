@@ -25,9 +25,6 @@ import { ArrowDownIcon } from "@phosphor-icons/react/dist/csr/ArrowDown";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
-import { ChartBarIcon } from "@phosphor-icons/react/dist/csr/ChartBar";
-import { ChartLineIcon } from "@phosphor-icons/react/dist/csr/ChartLine";
-import { ChartPieIcon } from "@phosphor-icons/react/dist/csr/ChartPie";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
@@ -59,8 +56,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { LOCALE_CODES, type MessageKey, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { uiPrefsApi } from "@/lib/logistics";
 import { cn } from "@/lib/utils";
+import { ChartCard } from "./chart-card";
 import type { ApplicationStats } from "./model";
-import { StatsChart, type StatsChartDatum, type StatsChartType } from "./stats-chart";
+import type { StatsChartDatum, StatsChartType } from "./stats-chart";
 import {
   defaultStatsChartType,
   defaultStatsPanelSize,
@@ -990,51 +988,13 @@ function Distribution({
   onChartTypeChange: (chartType: StatsChartType) => void;
   tone: StatTone;
 }) {
-  const { t } = useLocale();
   return (
-    <SectionCard
+    <ChartCard
       title={title}
-      className={cn("h-full", statToneSurfaceClass[tone])}
-      action={
-        <Select
-          value={chartType}
-          onValueChange={(value) => onChartTypeChange(value as StatsChartType)}
-        >
-          <SelectTrigger
-            size="sm"
-            className="w-auto min-w-36 shrink-0"
-            aria-label={t("selectChartTypeFor", { title })}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="bar">
-              <span className="flex items-center gap-2">
-                <ChartBarIcon aria-hidden="true" />
-                {t("chartTypeBar")}
-              </span>
-            </SelectItem>
-            <SelectItem value="pie">
-              <span className="flex items-center gap-2">
-                <ChartPieIcon aria-hidden="true" />
-                {t("chartTypePie")}
-              </span>
-            </SelectItem>
-            <SelectItem value="line">
-              <span className="flex items-center gap-2">
-                <ChartLineIcon aria-hidden="true" />
-                {t("chartTypeLine")}
-              </span>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      }
-    >
-      {rows.length === 0 ? (
-        <p className="text-muted-foreground text-pretty text-sm">{t("noDistributionData")}</p>
-      ) : (
-        <StatsChart data={rows} type={chartType} title={title} />
-      )}
-    </SectionCard>
+      rows={rows}
+      chartType={chartType}
+      onChartTypeChange={onChartTypeChange}
+      tone={tone}
+    />
   );
 }
