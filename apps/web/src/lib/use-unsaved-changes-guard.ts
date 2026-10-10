@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { type Translate, useLocale } from "@/lib/i18n";
 
 /**
@@ -10,12 +10,21 @@ import { type Translate, useLocale } from "@/lib/i18n";
  * trigger `beforeunload` and must call `confirmDiscard()` themselves before
  * switching away from a dirty category.
  *
+ * Browser Back / swipe-back is covered with a sentinel history entry pushed
+ * while dirty: Back first pops the sentinel (same URL, nothing unmounts), and
+ * the popstate handler either confirms and steps back once more or re-arms the
+ * sentinel. It is pushed once per dirty period, never on rerender (R003); after
+ * a save the spent entry stays, so one extra Back lands on the same URL.
+ *
  * Internal links intercepted at the document's capture phase: stopping
  * propagation there keeps the event from ever reaching the link's own click
  * handler (Next.js `Link`), so a cancelled confirm leaves navigation as a no-op.
  */
 export function useUnsavedChangesGuard(dirty: boolean) {
   const { t } = useLocale();
+  // Read through a ref so a locale change never re-runs the effect and re-arms history.
+  const tRef = useRef(t);
+  tRef.current = t;
 
   useEffect(() => {
     if (!dirty) return;
@@ -35,19 +44,35 @@ export function useUnsavedChangesGuard(dirty: boolean) {
       if (url.origin !== window.location.origin) return;
       if (url.pathname === window.location.pathname && url.search === window.location.search)
         return;
-      if (!window.confirm(t("unsavedChangesConfirm"))) {
+      if (!window.confirm(tRef.current("unsavedChangesConfirm"))) {
         event.preventDefault();
         event.stopPropagation();
       }
     }
 
+    function arm() {
+      window.history.pushState(window.history.state, "", window.location.href);
+    }
+
+    function onPopState() {
+      if (window.confirm(tRef.current("unsavedChangesConfirm"))) {
+        window.removeEventListener("popstate", onPopState);
+        window.history.back();
+      } else {
+        arm();
+      }
+    }
+
+    arm();
+    window.addEventListener("popstate", onPopState);
     window.addEventListener("beforeunload", onBeforeUnload);
     document.addEventListener("click", onClickCapture, true);
     return () => {
+      window.removeEventListener("popstate", onPopState);
       window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("click", onClickCapture, true);
     };
-  }, [dirty, t]);
+  }, [dirty]);
 }
 
 /** Category-switch guard: returns false (and blocks the switch) when the user cancels. */

@@ -616,10 +616,11 @@ without context are not an adequate mobile adaptation.
 - Tabs stay on one scrollable line; never wrap or clip their last item. Event
   settings does not add a second vertical rail beside the app sidebar:
   `/settings/event` is a plain list of the sections the caller may manage, and
-  `?tab=<section>` opens one section with a back control; a section's own views
+  `?tab=<section>` opens one section with a back link in the header context slot; a section's own views
   stay horizontal tabs. The same layout serves desktop and mobile. Use
   meaningful labels and keyboard arrow navigation. Deep links, per-category save
-  scope and the dirty-category guard are retained (#932).
+  scope and the dirty-section guard (links, browser Back and unload) are
+  retained (#932).
 
 ### Creation, reading and editing
 

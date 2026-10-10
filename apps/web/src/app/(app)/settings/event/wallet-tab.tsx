@@ -16,7 +16,6 @@ import {
   resolvePassFieldLabels,
   resolvePassFieldVisibility,
 } from "@hackos/shared/wallet-pass-labels";
-import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -334,13 +333,7 @@ function PassPreview({
   );
 }
 
-export function WalletTab({
-  icon,
-  onDirtyChange,
-}: {
-  icon: PhosphorIcon;
-  onDirtyChange: (dirty: boolean) => void;
-}) {
+export function WalletTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
   const { t } = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -435,7 +428,7 @@ export function WalletTab({
   }
 
   if (status !== "ready" || !config) {
-    return <EventConfigLoadState icon={icon} title={t("walletPassSectionTitle")} />;
+    return <EventConfigLoadState />;
   }
   const liveEventName = config.name?.trim() ?? "";
   const liveVenueName = config.venueName?.trim() ?? "";

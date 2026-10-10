@@ -19,9 +19,9 @@ import { WalletIcon } from "@phosphor-icons/react/dist/csr/Wallet";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { useCallback, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
-import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { useLocale } from "@/lib/i18n";
@@ -57,6 +57,17 @@ const CATEGORY_ICONS = {
   danger: WarningIcon,
 } as const;
 
+// One renderer per category: the section body, wired to the shared dirty report.
+const SECTIONS: Record<Category, (onDirtyChange: (dirty: boolean) => void) => ReactNode> = {
+  event: (onDirtyChange) => <EventTab onDirtyChange={onDirtyChange} />,
+  venue: (onDirtyChange) => <VenueTab onDirtyChange={onDirtyChange} />,
+  wallet: (onDirtyChange) => <WalletTab onDirtyChange={onDirtyChange} />,
+  presence: (onDirtyChange) => <PresenceTab onDirtyChange={onDirtyChange} />,
+  invites: (onDirtyChange) => <InvitesTab onDirtyChange={onDirtyChange} />,
+  judging: (onDirtyChange) => <JudgingWindowTab onDirtyChange={onDirtyChange} />,
+  danger: () => <ResetJudgingDataTab icon={WarningIcon} />,
+};
+
 const SECTION_CLASS = "min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6";
 
 export default function EventSettingsPage() {
@@ -90,42 +101,40 @@ export default function EventSettingsPage() {
   };
 
   // The URL is the only source of truth: no local mirror, so there is nothing
-  // to write back and nothing to loop on (R003). A single visible section has
-  // no list to return to and opens directly.
+  // to write back and nothing to loop on (R003). A `?tab=` the caller cannot
+  // manage shows the list; a lone visible section opens directly when no tab
+  // is requested, since there is no list to return to.
   const requested = searchParams.get("tab");
-  const active: Category | null =
-    visibleCategories.length === 1
+  const active: Category | null = requested
+    ? (visibleCategories.find((c) => c === requested) ?? null)
+    : visibleCategories.length === 1
       ? visibleCategories[0]
-      : (visibleCategories.find((c) => c === requested) ?? null);
+      : null;
 
-  // Tracked per category so the beforeunload/link guard knows whether the
-  // open category owns an unsaved edit (R011).
-  const dirtyRef = useRef<Record<Category, boolean>>({
-    event: false,
-    venue: false,
-    wallet: false,
-    presence: false,
-    invites: false,
-    judging: false,
-    danger: false,
+  // Dirtiness belongs to the open section only (keyed by `active`), so it is
+  // dropped in the same render the section unmounts and a back/sidebar exit can
+  // never leave a stale flag behind (R011). Re-keying on `active` resets it
+  // during render, before the next form mounts.
+  const [dirtyState, setDirtyState] = useState<{ category: Category | null; dirty: boolean }>({
+    category: null,
+    dirty: false,
   });
-  const [anyDirty, setAnyDirty] = useState(false);
+  const [trackedActive, setTrackedActive] = useState(active);
+  if (trackedActive !== active) {
+    setTrackedActive(active);
+    setDirtyState({ category: null, dirty: false });
+  }
+  const onDirtyChange = useCallback(
+    (dirty: boolean) =>
+      setDirtyState((prev) =>
+        prev.category === active && prev.dirty === dirty ? prev : { category: active, dirty },
+      ),
+    [active],
+  );
+  const activeDirty = active !== null && dirtyState.category === active && dirtyState.dirty;
 
-  const setDirty = useCallback((category: Category, dirty: boolean) => {
-    dirtyRef.current[category] = dirty;
-    setAnyDirty(Object.values(dirtyRef.current).some(Boolean));
-  }, []);
-
-  // Leaving a category unmounts its form, which discards its edits.
-  useEffect(() => {
-    for (const category of CATEGORIES) {
-      if (category !== active) dirtyRef.current[category] = false;
-    }
-    setAnyDirty(Object.values(dirtyRef.current).some(Boolean));
-  }, [active]);
-
-  // Links out of a dirty category (back, sidebar) are confirmed by this guard.
-  useUnsavedChangesGuard(anyDirty);
+  // Links, browser Back and unload out of a dirty section are confirmed here.
+  useUnsavedChangesGuard(activeDirty);
 
   if (visibleCategories.length === 0) {
     return <AccessDenied ask={t("noEventSettingsAccessDesc")} />;
@@ -138,18 +147,20 @@ export default function EventSettingsPage() {
       <PageLayout width="content">
         <PageHeader
           title={active ? labels[active] : t("eventSettings")}
-          secondaryActions={
+          context={
             showBack ? (
-              <IconButton label={t("eventSettings")} variant="outline" asChild>
-                <Link href="/settings/event">
-                  <ArrowLeftIcon aria-hidden="true" />
-                </Link>
-              </IconButton>
+              <Link
+                href="/settings/event"
+                className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
+                {t("backToEventSettings")}
+              </Link>
             ) : undefined
           }
         />
 
-        {active === null && (
+        {active === null ? (
           <ul className="divide-y rounded-lg border bg-card">
             {visibleCategories.map((category) => {
               const Icon = CATEGORY_ICONS[category];
@@ -167,48 +178,8 @@ export default function EventSettingsPage() {
               );
             })}
           </ul>
-        )}
-
-        {active === "event" && (
-          <section className={SECTION_CLASS}>
-            <EventTab icon={TagIcon} onDirtyChange={(dirty) => setDirty("event", dirty)} />
-          </section>
-        )}
-        {active === "venue" && (
-          <section className={SECTION_CLASS}>
-            <VenueTab icon={MapPinIcon} onDirtyChange={(dirty) => setDirty("venue", dirty)} />
-          </section>
-        )}
-        {active === "wallet" && (
-          <section className={SECTION_CLASS}>
-            <WalletTab icon={WalletIcon} onDirtyChange={(dirty) => setDirty("wallet", dirty)} />
-          </section>
-        )}
-        {active === "presence" && (
-          <section className={SECTION_CLASS}>
-            <PresenceTab
-              icon={UserCheckIcon}
-              onDirtyChange={(dirty) => setDirty("presence", dirty)}
-            />
-          </section>
-        )}
-        {active === "invites" && (
-          <section className={SECTION_CLASS}>
-            <InvitesTab
-              icon={EnvelopeSimpleIcon}
-              onDirtyChange={(dirty) => setDirty("invites", dirty)}
-            />
-          </section>
-        )}
-        {active === "judging" && (
-          <section className={SECTION_CLASS}>
-            <JudgingWindowTab onDirtyChange={(dirty) => setDirty("judging", dirty)} />
-          </section>
-        )}
-        {active === "danger" && (
-          <section className={SECTION_CLASS}>
-            <ResetJudgingDataTab icon={WarningIcon} />
-          </section>
+        ) : (
+          <section className={SECTION_CLASS}>{SECTIONS[active](onDirtyChange)}</section>
         )}
       </PageLayout>
     </EventConfigProvider>
