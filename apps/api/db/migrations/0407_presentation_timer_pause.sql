@@ -14,4 +14,5 @@ SET presentation_total_seconds = (
   JOIN challenges c ON c.id = sibling.challenge_id
   WHERE own.challenge_id = qe.challenge_id
 )
-WHERE qe.presentation_started_at IS NOT NULL;
+WHERE qe.status = 'presenting' AND qe.presentation_started_at IS NOT NULL;
+

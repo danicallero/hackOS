@@ -19,7 +19,11 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
 import { useLocale } from "@/lib/i18n";
-import { preparationElapsedSeconds, presentationTimerState } from "@/lib/judging-workspace";
+import {
+  canTransition,
+  preparationElapsedSeconds,
+  presentationTimerState,
+} from "@/lib/judging-workspace";
 import {
   collapseRepoQueueMemberships,
   getRepoChallenges,
@@ -70,6 +74,12 @@ export function PresentationPanel({
   // back to the top of the waiting room. This is a judging decision, so it only
   // lives here in the Judging Panel — never in the Queue Operations view.
   const canSendBack = isPresenting || isReady;
+  // #926: one derivation of the clock action, gated by the shared state machine.
+  const nextTimerAction = entry?.presentation_paused_at ? "resume-timer" : "pause-timer";
+  const timerAction =
+    entry && canTransition(entry.status, nextTimerAction) ? nextTimerAction : null;
+  const timerLabel =
+    timerAction === "resume-timer" ? "resumePresentationTimer" : "pausePresentationTimer";
 
   return (
     <Surface
@@ -171,37 +181,19 @@ export function PresentationPanel({
             )}
 
             <div className="grid gap-2 sm:grid-cols-2">
-              {isPresenting ? (
+              {timerAction ? (
                 <Button
                   variant="outline"
                   disabled={!canJudge || busy != null}
-                  loading={
-                    busy ===
-                    `${entry.presentation_paused_at ? "resume-timer" : "pause-timer"}-${entry.id}`
-                  }
-                  onClick={() =>
-                    onEntryAction(
-                      entry,
-                      entry.presentation_paused_at ? "resume-timer" : "pause-timer",
-                      undefined,
-                      t(
-                        entry.presentation_paused_at
-                          ? "resumePresentationTimer"
-                          : "pausePresentationTimer",
-                      ),
-                    )
-                  }
+                  loading={busy === `${timerAction}-${entry.id}`}
+                  onClick={() => onEntryAction(entry, timerAction, undefined, t(timerLabel))}
                 >
-                  {entry.presentation_paused_at ? (
+                  {timerAction === "resume-timer" ? (
                     <PlayIcon aria-hidden="true" className="size-4" />
                   ) : (
                     <PauseIcon aria-hidden="true" className="size-4" />
                   )}
-                  {t(
-                    entry.presentation_paused_at
-                      ? "resumePresentationTimer"
-                      : "pausePresentationTimer",
-                  )}
+                  {t(timerLabel)}
                 </Button>
               ) : (
                 <Button

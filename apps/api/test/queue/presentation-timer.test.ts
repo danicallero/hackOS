@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
@@ -25,6 +26,7 @@ let operator: number;
 let room: number;
 let entry: number;
 let challenge: number;
+let repo: number;
 
 beforeEach(async () => {
   await truncateAll();
@@ -42,6 +44,7 @@ beforeEach(async () => {
   room = await createRoom();
   await assignChallengeToRoom(room, challenge);
   const { repoId } = await createRepoWithTeam();
+  repo = repoId;
   entry = await enqueueRepo(challenge, repoId, 1);
   await pool.query(
     "UPDATE queue_entries SET status='called',assigned_room_id=$2,called_at=now() WHERE id=$1",
@@ -239,5 +242,112 @@ describe("presentation clock #926/#927", () => {
     expect((await action("pause-timer")).statusCode).toBe(200);
     expect((await action("complete")).statusCode).toBe(200);
     expect((await action("resume-timer")).statusCode).toBe(409);
+  });
+  it("starts with the group target when the room pace cannot be computed", async () => {
+    await pool.query(
+      "UPDATE challenges SET target_seconds_per_team=420,max_presentation_seconds=360 WHERE id=$1",
+      [challenge],
+    );
+    expect((await action("bring-in")).statusCode).toBe(200);
+    await pool.query("DELETE FROM room_queue_state WHERE room_id=$1", [room]);
+    const started = await action("start");
+    expect(started.statusCode, started.body).toBe(200);
+    expect(started.json().presentation_total_seconds).toBe(360);
+  });
+
+  it("does not charge the starting team's own preparation against a tight schedule", async () => {
+    await pool.query(
+      "UPDATE challenges SET target_seconds_per_team=600,max_presentation_seconds=600 WHERE id=$1",
+      [challenge],
+    );
+    await pool.query("UPDATE repos SET eligibility_override=true");
+    const waiting = await createRepoWithTeam();
+    await pool.query("UPDATE repos SET eligibility_override=true WHERE id=$1", [waiting.repoId]);
+    await enqueueRepo(challenge, waiting.repoId, 2);
+    await pool.query(
+      "UPDATE queue_settings SET schedule_end_at=now()+interval '15 minutes' WHERE id=1",
+    );
+    expect((await action("bring-in")).statusCode).toBe(200);
+    const { roomPace } = await import("../../src/modules/queue/reads.js");
+    const withOwnSetup = (await roomPace(room, challenge)).effectiveMinutesPerTeam;
+    const started = await action("start");
+    expect(started.statusCode, started.body).toBe(200);
+    const goalMinutes = started.json().presentation_total_seconds / 60;
+    // 15 min left: 10 min own talk + 2 min next setup leaves ~3 min, not ~1.
+    expect(goalMinutes).toBeGreaterThan(withOwnSetup + 1.5);
+    expect(goalMinutes).toBeCloseTo(3, 0);
+  });
+
+  it("stamps every write of a transition with the transaction clock", async () => {
+    await active();
+    const paused = await action("pause-timer");
+    const { rows } = await pool.query(
+      `SELECT action, created_at FROM queue_history WHERE queue_entry_id=$1 AND action IN ('start','pause_timer')`,
+      [entry],
+    );
+    const at = Object.fromEntries(rows.map((r) => [r.action, r.created_at.toISOString()]));
+    const row = (await pool.query("SELECT * FROM queue_entries WHERE id=$1", [entry])).rows[0];
+    expect(row.presentation_started_at.toISOString()).toBe(at.start);
+    expect(paused.json().presentation_paused_at).toBe(at.pause_timer);
+  });
+
+  it("folds an open pause into the total when completing", async () => {
+    await active();
+    expect((await action("pause-timer")).statusCode).toBe(200);
+    await pool.query(
+      "UPDATE queue_entries SET presentation_paused_at=now()-interval '30 seconds' WHERE id=$1",
+      [entry],
+    );
+    const done = await action("complete");
+    expect(done.statusCode, done.body).toBe(200);
+    expect(done.json().presentation_paused_at).toBeNull();
+    expect(done.json().presentation_paused_seconds).toBeGreaterThanOrEqual(30);
+  });
+
+  it("clears the clock when a project edit revives or removes the entry", async () => {
+    const dirty = `presentation_paused_at=now(), presentation_paused_seconds=45,
+                   presentation_total_seconds=300, presentation_started_at=now()`;
+    await pool.query(
+      `UPDATE queue_entries SET status='completed', completed_at=now(), ${dirty} WHERE id=$1`,
+      [entry],
+    );
+    const { enqueueRepoOnChallenge, removeRepoChallenge } = await import(
+      "../../src/modules/projects/service.js"
+    );
+    await enqueueRepoOnChallenge(pool, operator, repo, challenge, "test");
+    const clock = async () =>
+      (
+        await pool.query(
+          "SELECT presentation_paused_at, presentation_paused_seconds, presentation_total_seconds FROM queue_entries WHERE id=$1",
+          [entry],
+        )
+      ).rows[0];
+    const clean = {
+      presentation_paused_at: null,
+      presentation_paused_seconds: 0,
+      presentation_total_seconds: null,
+    };
+    expect(await clock()).toEqual(clean);
+    await pool.query(`UPDATE queue_entries SET status='presenting', ${dirty} WHERE id=$1`, [entry]);
+    await removeRepoChallenge(operator, repo, challenge);
+    expect(await clock()).toEqual(clean);
+  });
+
+  it("backfills a goal only for presentations still running", async () => {
+    await active();
+    await pool.query(
+      "UPDATE queue_entries SET status='completed', completed_at=now(), presentation_total_seconds=NULL WHERE id=$1",
+      [entry],
+    );
+    const migration = readFileSync(
+      new URL("../../db/migrations/0407_presentation_timer_pause.sql", import.meta.url),
+      "utf8",
+    );
+    const backfill = migration.match(/UPDATE queue_entries qe[\s\S]*?;/)?.[0] as string;
+    await pool.query(backfill);
+    const row = (
+      await pool.query("SELECT presentation_total_seconds FROM queue_entries WHERE id=$1", [entry])
+    ).rows[0];
+    expect(row.presentation_total_seconds).toBeNull();
   });
 });

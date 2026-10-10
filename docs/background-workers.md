@@ -229,7 +229,10 @@ The complete product clarifications live in the
 
 Presentation clocks (#926/#927) are entry-owned, independent of H35 room pause.
 Start captures the current effective room goal in `presentation_total_seconds`;
-the browser no longer freezes a goal that can change on reload. Pause/resume
+the browser no longer freezes a goal that can change on reload. The goal is
+computed before the entry lock and no longer charges the starting team's own
+setup; if the room changed or its pace cannot be read, start falls back to the
+group's capped track target instead of failing. Pause/resume
 routes keep `presenting` and room occupancy, lock the entry, and persist
 `presentation_paused_at` plus accumulated `presentation_paused_seconds`.
 Elapsed presentation time is pause timestamp (or current time) minus the
@@ -239,9 +242,11 @@ state transitions conflict; the same idempotency key replays its response.
 Room pause still lets the current presentation finish and never stops its clock.
 The panel counts setup from `room_entered_at` while in-room and freezes that
 value at the original start, including after timer resumes. Unknown legacy
-entry times are omitted. Reset transitions clear the clock and setup fields.
+entry times are omitted. Reset transitions, including project re-enqueue and challenge removal, clear
+the clock and setup fields. Completion (manual or by review submit) folds an
+open timer pause into `presentation_paused_seconds`.
 Learned cycle durations retain wall time, including interruptions, because
 those interruptions consume room throughput; active presentation estimates
-subtract paused duration. Migration 0407 initializes existing presentations
+subtract paused duration. Migration 0407 initializes presentations still in `presenting`
 with the current capped track target, since their former browser-only goal
 cannot be recovered. No timer automatically ends a presentation.

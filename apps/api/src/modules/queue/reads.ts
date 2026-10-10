@@ -995,6 +995,7 @@ export async function roomPace(
   requestedChallengeId?: number,
   db: Queryable = pool,
   fixtureMarker = false,
+  startingEntryId?: number,
 ) {
   const state = (await db.query(`SELECT * FROM room_queue_state WHERE room_id = $1`, [roomId]))
     .rows[0];
@@ -1080,13 +1081,16 @@ export async function roomPace(
   const activeEntries = challengeIds.length
     ? (
         await db.query(
-          `SELECT DISTINCT ON(repo_id) status,presentation_started_at,presentation_paused_at,presentation_paused_seconds,room_entered_at,called_at FROM queue_entries WHERE challenge_id=ANY($1::int[]) AND status IN ('in_room','presenting') ORDER BY repo_id,presentation_started_at DESC NULLS LAST`,
+          `SELECT DISTINCT ON(repo_id) id,status,presentation_started_at,presentation_paused_at,presentation_paused_seconds,room_entered_at,called_at FROM queue_entries WHERE challenge_id=ANY($1::int[]) AND status IN ('in_room','presenting') ORDER BY repo_id,presentation_started_at DESC NULLS LAST`,
           [challengeIds],
         )
       ).rows
     : [];
   const now = Date.now();
   const activeMinutes = activeEntries.map((entry) => {
+    // #926: the entry being started has finished preparing; only its own
+    // presentation still occupies the room.
+    if (entry.id === startingEntryId) return estimatedPresentationMinutes;
     if (entry.status === "presenting") {
       const elapsed = entry.presentation_started_at
         ? Math.max(

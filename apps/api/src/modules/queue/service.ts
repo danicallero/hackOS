@@ -30,6 +30,7 @@ import {
   placeEntryAtWaitingRank,
   type RequeuePosition,
 } from "./ordering.js";
+import { CLOSE_PRESENTATION_PAUSE_SQL } from "./presentation-clock.js";
 import { roomPace } from "./reads.js";
 import type { QueueEntryRow } from "./types.js";
 
@@ -509,21 +510,53 @@ export async function bringIn(entryId: number, actorId: number): Promise<QueueEn
 }
 
 export async function startPresentation(entryId: number, actorId: number): Promise<QueueEntryRow> {
+  // #926: the frozen goal is computed before taking any lock, from an
+  // unlocked snapshot, and never blocks the start: a reassigned room or a
+  // pace failure falls back to the group's capped target inside the lock.
+  const snapshot = (
+    await pool.query<{ assigned_room_id: number | null; challenge_id: number; marker: boolean }>(
+      `SELECT qe.assigned_room_id, qe.challenge_id, r.is_test_account AS marker
+         FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
+        WHERE qe.id = $1`,
+      [entryId],
+    )
+  ).rows[0];
+  const pacedSeconds = snapshot?.assigned_room_id
+    ? await roomPace(
+        snapshot.assigned_room_id,
+        snapshot.challenge_id,
+        pool,
+        snapshot.marker,
+        entryId,
+      )
+        .then((pace) => Math.round(pace.effectiveMinutesPerTeam * 60))
+        .catch(() => null)
+    : null;
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
-    const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
+    await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["in_room"], "start");
-    const pace = entry.assigned_room_id
-      ? await roomPace(entry.assigned_room_id, entry.challenge_id, client, fixtureMarker)
-      : null;
+    const totalSeconds =
+      pacedSeconds !== null && entry.assigned_room_id === snapshot?.assigned_room_id
+        ? pacedSeconds
+        : ((
+            await client.query<{ seconds: number | null }>(
+              `SELECT LEAST(min(c.target_seconds_per_team), min(c.max_presentation_seconds))::int AS seconds
+                 FROM queue_group_challenges own
+                 JOIN queue_group_challenges sibling ON sibling.queue_group_id = own.queue_group_id
+                 JOIN challenges c ON c.id = sibling.challenge_id
+                WHERE own.challenge_id = $1`,
+              [entry.challenge_id],
+            )
+          ).rows[0]?.seconds ?? null);
     const res = await client.query(
       `UPDATE queue_entries
-          SET status = 'presenting', presentation_started_at = clock_timestamp(), precalled_at = NULL,
+          SET status = 'presenting', presentation_started_at = now(), precalled_at = NULL,
               presentation_paused_at = NULL, presentation_paused_seconds = 0,
               presentation_total_seconds = $2
         WHERE id = $1
         RETURNING *`,
-      [entryId, pace ? Math.round(pace.effectiveMinutesPerTeam * 60) : null],
+      [entryId, totalSeconds],
     );
     await writeQueueHistory(client, {
       entryId,
@@ -564,10 +597,10 @@ export async function setPresentationPaused(
     }
     const { rows } = await client.query(
       paused
-        ? `UPDATE queue_entries SET presentation_paused_at = clock_timestamp() WHERE id = $1 RETURNING *`
+        ? `UPDATE queue_entries SET presentation_paused_at = now() WHERE id = $1 RETURNING *`
         : `UPDATE queue_entries
               SET presentation_paused_seconds = presentation_paused_seconds +
-                    GREATEST(0, EXTRACT(EPOCH FROM (clock_timestamp() - presentation_paused_at))),
+                    GREATEST(0, EXTRACT(EPOCH FROM (now() - presentation_paused_at))),
                   presentation_paused_at = NULL
             WHERE id = $1 RETURNING *`,
       [entryId],
@@ -605,7 +638,8 @@ export async function completePresentation(
     assertFrom(entry, ["presenting"], "complete");
     const res = await client.query(
       `UPDATE queue_entries
-          SET status = 'completed', completed_at = now(), precalled_at = NULL
+          SET status = 'completed', completed_at = now(), precalled_at = NULL,
+              ${CLOSE_PRESENTATION_PAUSE_SQL}
         WHERE id = $1
         RETURNING *`,
       [entryId],
