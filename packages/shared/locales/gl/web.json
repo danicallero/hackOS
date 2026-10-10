@@ -435,6 +435,7 @@
   "accreditationAndPresence": "Acreditacións",
   "peopleTab": "Directorio",
   "peopleSearchPlaceholder": "Nome, apelidos, correo, DNI ou acreditación",
+  "peopleAccessDeniedDesc": "Pídelle a un administrador acceso ao directorio.",
   "couldNotLoadPeople": "Non se puido cargar o directorio.",
   "noPeopleYet": "Aínda non hai ninguén",
   "minHoursLabel": "Horas mínimas",
@@ -3518,5 +3519,7 @@
   "publicProfileSaved": "Perfil público actualizado.",
   "toastSavePublicProfile": "Gardar perfil público",
   "couldNotSavePublicProfile": "Non se puido gardar o perfil público.",
-  "couldNotLoadPublicProfile": "Non se puido cargar o perfil público."
+  "couldNotLoadPublicProfile": "Non se puido cargar o perfil público.",
+  "searchPeople": "Buscar persoas",
+  "colLocation": "Localización"
 }

@@ -435,6 +435,7 @@
   "accreditationAndPresence": "Badges",
   "peopleTab": "Directory",
   "peopleSearchPlaceholder": "Name, surname, email, DNI or badge",
+  "peopleAccessDeniedDesc": "Ask an administrator for directory access.",
   "couldNotLoadPeople": "Could not load the directory.",
   "noPeopleYet": "No one yet",
   "minHoursLabel": "Minimum hours",
@@ -3518,5 +3519,7 @@
   "publicProfileSaved": "Public profile updated.",
   "toastSavePublicProfile": "Save public profile",
   "couldNotSavePublicProfile": "Could not save the public profile.",
-  "couldNotLoadPublicProfile": "Could not load the public profile."
+  "couldNotLoadPublicProfile": "Could not load the public profile.",
+  "searchPeople": "Search people",
+  "colLocation": "Location"
 }

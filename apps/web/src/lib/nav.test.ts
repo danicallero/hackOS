@@ -56,7 +56,8 @@ function visibleDestinationLabels(ctx: NavVisibilityContext, language: (typeof L
 describe("stable personal area (audit §3.1)", () => {
   it("is visible to every authenticated account regardless of capability", () => {
     const ctx = contextFor([]);
-    for (const item of PERSONAL_NAV) {
+    // People is the one capability-gated personal entry (#934).
+    for (const item of PERSONAL_NAV.filter((entry) => entry.href !== "/people")) {
       expect(isNavItemVisible(item, ctx)).toBe(true);
     }
   });
@@ -113,6 +114,23 @@ describe("accounts without current role-derived event access", () => {
     }
     expect(visibleWorkspaceIds(judge)).toContain("liveJudging");
     expect(visibleWorkspaceIds(sponsor)).toContain("sponsors");
+  });
+});
+
+describe("people directory (#934)", () => {
+  it("shows People only with directory:read", () => {
+    const hrefs = (ctx: NavVisibilityContext) =>
+      PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map((item) => item.href);
+    expect(hrefs(contextFor([CAPABILITIES.DIRECTORY_READ]))).toContain("/people");
+    expect(hrefs(contextFor([CAPABILITIES.ADMIN_ALL]))).toContain("/people");
+    expect(hrefs(contextFor([]))).not.toContain("/people");
+  });
+
+  it("hides People without current event access, even with directory:read", () => {
+    const ctx = contextFor([CAPABILITIES.DIRECTORY_READ], { isPureApplicant: true });
+    expect(
+      PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map((i) => i.href),
+    ).not.toContain("/people");
   });
 });
 
