@@ -95,11 +95,10 @@ the person or the other company being named.
 
 Every tag has a link, `https://<web host>/s/<code>`, where the code is the
 tag's own code (the UID or the `STAND-` token), so a link resolves to exactly
-one tag. Printed QR codes hold the link, staff write it onto NFC tags when
-linking them on mobile, and the app and the web both open it (see
-[Tag links](#tag-links)). A separate per-tag token was not added: the UID is
-readable by any phone and the link written on the tag is readable too, so a
-second secret would protect nothing. The web host is the API's `WEB_URL` and
+one tag. Printed QR codes hold the link, which the app and the web both open (see
+[Tag links](#tag-links)); NFC tags are collected by serial number and carry no
+link. A separate per-tag token was not added: the UID is readable by any
+phone, so a second secret would protect nothing. The web host is the API's `WEB_URL` and
 must be the app's associated domain.
 
 `enterprises.stand_scannable` (migration `0703_enterprise_stand_scannable.sql`)
@@ -193,8 +192,8 @@ the enterprise list:
   (the web serves `/.well-known/apple-app-site-association`, `applinks` for
   `/s/*`), Android through a verified App Link (`/.well-known/assetlinks.json`
   from `ANDROID_APP_CERT_SHA256`, [`deploy/README.md`](../deploy/README.md))
-  and, for a tapped tag, the NDEF records staff wrote
-  ([`mobile.md`](./mobile.md#company-tags-935)). The app route
+  (NFC tags carry no link: they are collected by serial number,
+  [`mobile.md`](./mobile.md#company-tags-935)). The app route
   `app/s/[code].tsx` hands the code to the Diary, which collects it like a
   scan and celebrates on the Companies album; signed out, it waits for
   sign-in and resumes;
@@ -263,7 +262,9 @@ since. A company that is not scannable and not collected is neither listed
 nor counted. **A collected one stays in both `collected` and `total`**, as
 with removed tags: progress never goes backwards and the ring never shows more
 collected than total. A sponsor hidden again drops out of both counts. Items
-come collected first (newest first), then by name; tag codes are never
+follow the public logo grid's order (`enterprises.priority`, 1 first and unset
+last, then name), collected or not, so uncollected companies sit among the
+collected ones as a nudge to scan them; tag codes are never
 included.
 
 The enterprise page has a Tags tab (`stand-tags-card.tsx`, `?tab=stand`) for
@@ -305,7 +306,7 @@ The Diary destination (People with search, favourites and
 full profiles; Companies as a collectible stand album) and its scan flow are
 described in [`mobile.md`](./mobile.md#event-diary-935). Staff with
 `sponsors:manage` link NFC tags and wristbands to companies by tapping them
-from Account → Staff → Company tags, which also writes the tag link
+from Account → Staff → Company tags, the same tap that accredits a badge
 ([`mobile.md`](./mobile.md#company-tags-935)).
 
 ## Account removal (H54)

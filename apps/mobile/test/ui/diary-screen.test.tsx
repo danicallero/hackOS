@@ -512,6 +512,25 @@ describe("Companies", () => {
     expect(screen.queryByRole("button", { name: "Zeta" })).toBeNull();
   });
 
+  it("keeps the API's priority order and shows only logo and name for locked companies", async () => {
+    collection = {
+      total: 3,
+      collected: 1,
+      items: [company(11, "Zeta", null), company(9, "Acme", 3), company(12, "Beta", null)],
+    };
+    mockParams = { view: "companies" };
+    await renderMobile(<DiaryScreen />);
+    await screen.findByLabelText("diaryCompaniesProgress:1/3");
+    const names = screen
+      .getAllByText(/^(Acme|Beta|Zeta)$/)
+      .map((node) => String(node.props.children));
+    expect(names).toEqual(["Zeta", "Acme", "Beta"]);
+    // Nothing else of a locked company reaches the screen.
+    expect(screen.queryByText("Zeta description")).toBeNull();
+    expect(screen.queryByText("Vision")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Beta" })).toBeNull();
+  });
+
   it("opens a company sheet and favourites it without a person layout", async () => {
     mockParams = { view: "companies" };
     await renderMobile(<DiaryScreen />);

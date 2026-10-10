@@ -126,7 +126,8 @@ export const templateFieldSchema = z
      *  upload with sponsors; see sponsorShareKey for the response convention. */
     shareable_with_sponsors: z.boolean().optional(),
     /** File fields only (#935): this upload is the applicant's public-profile
-     *  CV. At most one per form; see directory/service.ts formCvSql. */
+     *  CV. At most one per form; see directory/service.ts formCvSql. Optional:
+     *  a file field named CV/curriculum/resume is picked up automatically. */
     profile_cv: z.boolean().optional(),
     /** Groups this field under a `FormSection.key` (H11 form builder sections). */
     section_key: z.string().optional(),

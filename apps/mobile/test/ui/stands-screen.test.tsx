@@ -5,32 +5,34 @@ jest.mock("@/lib/use-nfc-supported", () => ({
 }));
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { Alert, type AlertButton } from "react-native";
+import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { Alert } from "react-native";
 import { StandsScreen } from "@/components/stands-screen";
 import { ApiError, apiFetch } from "@/lib/api";
-import type { CompanyTagSessionOptions, CompanyTagWrite } from "@/lib/company-tag-nfc";
 import type { StandSummary } from "@/lib/stands";
 import { renderMobile } from "./render";
 
 /**
- * The NFC session is mocked: a "tap" runs the screen's `link` callback with
- * the UID, then answers with the given write outcome. Real reads and NDEF
- * writes are covered by lib/company-tag-nfc.test.ts and need a physical
- * device.
+ * The NFC read is mocked: a "tap" runs the screen's `beforeClaim` callback
+ * with the UID, as the real reader does before it writes the claim. Reads and
+ * claim writes are covered by lib/nfc-reader.test.ts and need a physical device.
  */
-let mockTap: { uid: string; write: CompanyTagWrite } | null = null;
-const mockSessions: CompanyTagSessionOptions[] = [];
-jest.mock("@/lib/company-tag-nfc", () => ({
-  startCompanyTagSession: (options: CompanyTagSessionOptions) => {
-    mockSessions.push(options);
+let mockTap: { uid: string; claimFailed: boolean } | null = null;
+const mockReads: { claimBadge?: boolean; beforeClaim?: (uid: string) => Promise<void> }[] = [];
+jest.mock("@/lib/nfc-reader", () => ({
+  startNfcRead: (
+    _message: string,
+    options: { claimBadge?: boolean; beforeClaim?: (uid: string) => Promise<void> },
+  ) => {
+    mockReads.push(options);
     const tap = mockTap;
     return {
       cancel: jest.fn(),
+      claimFailed: () => tap?.claimFailed === true,
       result: (async () => {
         if (!tap) return null;
-        if (options.link) await options.link(tap.uid);
-        return tap;
+        await options.beforeClaim?.(tap.uid);
+        return tap.uid;
       })(),
     };
   },
@@ -107,8 +109,8 @@ let stands: StandSummary[];
 let linkResult: () => Promise<unknown>;
 
 beforeEach(() => {
-  mockTap = { uid: "04A1B2C3D4E5F6", write: "written" };
-  mockSessions.length = 0;
+  mockTap = { uid: "04A1B2C3D4E5F6", claimFailed: false };
+  mockReads.length = 0;
   mockNfcStatus = "supported";
   mockCapabilities = [CAPABILITIES.SPONSORS_MANAGE];
   stands = [
@@ -140,14 +142,39 @@ describe("StandsScreen (#935)", () => {
     const names = screen.getAllByText(/^(Acme|Zeta)$/).map((node) => node.props.children);
     expect(names).toEqual(["Acme", "Zeta"]);
     expect(screen.getByText("standsCounts:0/1")).toBeTruthy();
-    expect(screen.getByText("standsNotScannable · standsCounts:0/0")).toBeTruthy();
+    expect(screen.getByLabelText("standsScannableFor:Zeta").props.value).toBe(false);
+    expect(screen.getByLabelText("standsScannableFor:Acme").props.value).toBe(true);
   });
 
-  it("links a tag by its serial on tap and says it now opens the app", async () => {
+  it("turns scanning on for a company and keeps the new state", async () => {
+    await renderMobile(<StandsScreen />);
+    await fireEvent(await screen.findByLabelText("standsScannableFor:Zeta"), "valueChange", true);
+    expect(screen.getByLabelText("standsScannableFor:Zeta").props.value).toBe(true);
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([path]) => path === "/api/enterprises/2/stand-scannable",
+      );
+      expect(call?.[1]).toMatchObject({ method: "PUT", body: JSON.stringify({ scannable: true }) });
+      expect((call?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
+    });
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it("rolls the switch back and alerts when the change fails", async () => {
+    linkResult = () => Promise.reject(new Error("boom"));
+    await renderMobile(<StandsScreen />);
+    await fireEvent(await screen.findByLabelText("standsScannableFor:Acme"), "valueChange", false);
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith("standsTitle", "standsScannableFailed"),
+    );
+    expect(screen.getByLabelText("standsScannableFor:Acme").props.value).toBe(true);
+  });
+
+  it("links a tag by its serial on tap, as the badge flow claims it", async () => {
     await renderMobile(<StandsScreen />);
     await tapLink("Acme");
-    expect(await screen.findByText("standsLinkedOpens:Acme")).toBeTruthy();
-    expect(mockSessions[0]).toMatchObject({ prompt: "standsNfcPrompt" });
+    expect(await screen.findByText("standsLinked:Acme")).toBeTruthy();
+    expect(mockReads[0]).toMatchObject({ claimBadge: true });
     const call = fetchMock.mock.calls.find(([path]) => path === "/api/enterprises/1/stand-tags");
     expect(call?.[1]).toMatchObject({
       method: "POST",
@@ -161,18 +188,18 @@ describe("StandsScreen (#935)", () => {
   it("links several tags in a row for the same company without leaving the screen", async () => {
     await renderMobile(<StandsScreen />);
     await tapLink("Acme");
-    await screen.findByText("standsLinkedOpens:Acme");
-    mockTap = { uid: "04A1B2C3D4E5F7", write: "written" };
+    await screen.findByText("standsLinked:Acme");
+    mockTap = { uid: "04A1B2C3D4E5F7", claimFailed: false };
     await fireEvent.press(screen.getByText("standsLinkAnother"));
     await waitFor(() => expect(screen.getByText("standsCounts:2/1")).toBeTruthy());
-    expect(mockSessions).toHaveLength(2);
+    expect(mockReads).toHaveLength(2);
   });
 
-  it("says when a locked or read-only wristband was linked without the app link", async () => {
-    mockTap = { uid: "04A1B2C3D4E5F6", write: "readOnly" };
+  it("says when the tag could not be prepared but is linked by serial", async () => {
+    mockTap = { uid: "04A1B2C3D4E5F6", claimFailed: true };
     await renderMobile(<StandsScreen />);
     await tapLink("Acme");
-    expect(await screen.findByText("standsLinkedReadOnly:Acme")).toBeTruthy();
+    expect(await screen.findByText("standsLinkedWriteFailed:Acme")).toBeTruthy();
   });
 
   it("refuses a wristband that is a badge and a tag of another company", async () => {
@@ -188,39 +215,6 @@ describe("StandsScreen (#935)", () => {
       expect(Alert.alert).toHaveBeenLastCalledWith("standsLinkNfc", "standsTagIsStand"),
     );
     expect(screen.queryByText(/standsLinked/)).toBeNull();
-  });
-
-  it("asks before replacing other data and writes on a second tap of the same tag", async () => {
-    mockTap = { uid: "04A1B2C3D4E5F6", write: "needsOverwrite" };
-    await renderMobile(<StandsScreen />);
-    await tapLink("Acme");
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
-    const [title, , buttons] = jest.mocked(Alert.alert).mock.calls[0] as [
-      string,
-      string,
-      AlertButton[],
-    ];
-    expect(title).toBe("standsOverwriteTitle");
-    mockTap = { uid: "04A1B2C3D4E5F6", write: "written" };
-    await act(async () => buttons.find((b) => b.text === "standsOverwrite")?.onPress?.());
-    expect(await screen.findByText("standsLinkedOpens:Acme")).toBeTruthy();
-    expect(mockSessions[1]).toMatchObject({
-      prompt: "standsTapAgain",
-      expectedUid: "04A1B2C3D4E5F6",
-      overwrite: true,
-      link: undefined,
-    });
-  });
-
-  it("keeps the tag's data when staff decline to replace it", async () => {
-    mockTap = { uid: "04A1B2C3D4E5F6", write: "needsOverwrite" };
-    await renderMobile(<StandsScreen />);
-    await tapLink("Acme");
-    await waitFor(() => expect(Alert.alert).toHaveBeenCalled());
-    const buttons = jest.mocked(Alert.alert).mock.calls[0]?.[2] as AlertButton[];
-    await act(async () => buttons.find((b) => b.text === "standsKeep")?.onPress?.());
-    expect(await screen.findByText("standsLinkedKept:Acme")).toBeTruthy();
-    expect(mockSessions).toHaveLength(1);
   });
 
   it("explains a device without NFC and keeps the action disabled", async () => {

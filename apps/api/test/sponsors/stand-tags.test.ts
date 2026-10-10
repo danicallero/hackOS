@@ -65,6 +65,29 @@ describe("stand tags", () => {
     expect(audits.rows.map((r) => r.action)).toEqual(["stand_tag.added", "stand_tag.added"]);
   });
 
+  it("collects the company by the linked serial as the badge scanners read it (#935)", async () => {
+    // The mobile read hands over the serial exactly as for a badge: any case,
+    // optional separators; the Diary scan sends it normalized.
+    expect((await addTag({ kind: "nfc", uid: "04:a1:b2:c3:d4:e5:f6" })).statusCode).toBe(201);
+    const attendee = await createUserWithCapabilities([]);
+    const scan = (code: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/me/diary/scan",
+        headers: { ...asUser(attendee), "idempotency-key": `scan-${++keySeq}` },
+        payload: { code },
+      });
+    // A new company is not scannable until staff turn scanning on.
+    const off = await scan("04A1B2C3D4E5F6");
+    expect(off.statusCode).toBe(409);
+    expect(off.json().error.code).toBe("stand_unavailable");
+    await pool.query(`UPDATE enterprises SET stand_scannable = true, visibility = 'visible'`);
+    const on = await scan("04A1B2C3D4E5F6");
+    expect(on.statusCode).toBe(201);
+    expect(on.json().sponsor).toMatchObject({ enterpriseId });
+    expect((await scan("04a1b2c3d4e5f6")).statusCode).toBe(200);
+  });
+
   it("rejects malformed UIDs and codes already used by a stand, badge or ticket", async () => {
     expect((await addTag({ kind: "nfc", uid: "04A1" })).statusCode).toBe(400);
     expect((await addTag({ kind: "qr", uid: "04A1B2C3D4E5F6" })).statusCode).toBe(400);

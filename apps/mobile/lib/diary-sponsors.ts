@@ -22,7 +22,7 @@ export interface SponsorCollectionItem {
 export interface SponsorCollection {
   total: number;
   collected: number;
-  /** Collected first (most recent), then the rest by name. */
+  /** Sponsor priority (1 first, unset last), then name; collected or not. */
   items: SponsorCollectionItem[];
 }
 

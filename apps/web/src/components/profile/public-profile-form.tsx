@@ -133,11 +133,13 @@ export function SwitchRow({
 export function TextField({
   label,
   max,
+  placeholder,
   value,
   onChange,
 }: {
   label: string;
   max: number;
+  placeholder?: string;
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -145,7 +147,13 @@ export function TextField({
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <Input id={id} maxLength={max} value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input
+        id={id}
+        maxLength={max}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </div>
   );
 }
@@ -190,8 +198,8 @@ export function LinksEditor({
   const replace = (id: string, patch: Partial<SocialLink>) =>
     onChange(links.map((link) => (link.id === id ? { ...link, ...patch } : link)));
   return (
-    <fieldset className="min-w-0 space-y-2" aria-labelledby={headingId}>
-      <span id={headingId} className="text-sm font-medium">
+    <fieldset className="min-w-0 space-y-3" aria-labelledby={headingId}>
+      <span id={headingId} className="block text-sm font-medium">
         {t("publicProfileLinks")}
       </span>
       {links.length > 0 && (

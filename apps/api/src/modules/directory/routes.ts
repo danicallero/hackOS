@@ -70,7 +70,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my public profile",
         description:
-          "Public profile opt-in settings shown on My profile for an event attendee, including bio, social links, `shareCv` and the CV (`cv.source`: `application` when it comes from the file field the organizer marked as the profile CV in the person's latest submitted application, which then wins over any upload; otherwise `upload`), with `preview`: the card exactly as people who scan the owner would see it if visible (its `cvUrl` points at the owner's own CV route). Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown, no CV shared) (#934, #935).",
+          "Public profile opt-in settings shown on My profile for an event attendee, including bio, social links, `shareCv` and the CV (`cv.source`: `application` when the person's latest submitted application has a PDF in the file question marked as the profile CV or, failing that, in a file question named CV/curriculum/resume, which then wins over any upload and is read-only here; otherwise `upload`), the switches `showSurname`, `showPhoto`, `showProject` and `shareCv` that decide what scanners receive (hidden data is omitted from the response, not just from the UI), with `preview`: the card exactly as people who scan the owner would see it if visible (its `cvUrl` points at the owner's own CV route). Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown, no CV shared) (#934, #935).",
       },
     },
     async (req) => getMyPublicProfile(req.userId as number),
@@ -84,7 +84,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         body: publicProfileBody,
         summary: "Update my public profile",
         description:
-          "Replaces the caller's public profile settings. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded or application CV (400 otherwise). `bio`, `socials` and `shareCv` may be omitted to keep their stored values. consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
+          "Replaces the caller's public profile settings. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded or application CV (400 otherwise). `bio`, `socials`, and `shareCv` may be omitted to keep their stored values. consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
       },
     },
     async (req) => {
@@ -102,7 +102,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         params: userParams,
         summary: "Read a saved person's public profile",
         description:
-          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared), project and challenges. Only attendees who saved this person in their diary (by scanning their badge or ticket) may read it. A missing or hidden profile, and a person the caller has not saved, all answer 404, so visibility cannot be probed (#934, #935).",
+          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared), project and challenges (when `showProject`). Only attendees who saved this person in their diary (by scanning their badge or ticket) may read it. A missing or hidden profile, and a person the caller has not saved, all answer 404, so visibility cannot be probed (#934, #935).",
       },
     },
     async (req) => getDirectoryEntry(req.userId as number, req.params.userId),

@@ -369,7 +369,7 @@ describe("the sponsor stand collection", () => {
     return app.inject({ method: "GET", url: "/api/me/diary/sponsors", headers: asUser(as) });
   }
 
-  it("counts revealed tagged stands, collected ones first, without exposing codes", async () => {
+  it("counts revealed tagged stands, in name order, without exposing codes", async () => {
     const acme = await enterprise("Acme");
     const beta = await enterprise("Beta");
     const zeta = await enterprise("Zeta");
@@ -398,6 +398,32 @@ describe("the sponsor stand collection", () => {
     expect(res.body).not.toContain("STAND-");
     expect(res.body).not.toContain("Stealth");
     expect(res.body).not.toContain("Untagged");
+  });
+
+  it("orders the album by sponsor priority, then name, collected or not", async () => {
+    const acme = await enterprise("Acme");
+    const beta = await enterprise("Beta");
+    const gold = await enterprise("Gold");
+    const noTier = await enterprise("Aardvark");
+    await pool.query(`UPDATE enterprises SET priority = 1 WHERE id = $1`, [gold]);
+    await pool.query(`UPDATE enterprises SET priority = 2 WHERE id = ANY($1::int[])`, [
+      [acme, beta],
+    ]);
+    await standTag(acme, "04ACAC00000001");
+    await standTag(beta, "04ACAC00000002");
+    await standTag(gold, "04ACAC00000003");
+    await standTag(noTier, "04ACAC00000004");
+    await scan("04ACAC00000002");
+
+    const body = (await collection()).json();
+    expect(body.items.map((item: { name: string }) => item.name)).toEqual([
+      "Gold",
+      "Acme",
+      "Beta",
+      "Aardvark",
+    ]);
+    expect(body.items[2].entry).not.toBeNull();
+    expect(body.items[0].entry).toBeNull();
   });
 
   it("keeps a collected stand after its tags are removed, but not once it is hidden", async () => {

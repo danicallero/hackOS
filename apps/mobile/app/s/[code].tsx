@@ -7,8 +7,8 @@ import { useMeContext } from "@/lib/me-context";
 import { colors } from "@/theme/colors";
 
 /**
- * #935 company-tag link `https://<event host>/s/<code>`, opened by tapping an
- * NFC tag or wristband (NDEF URI record), a printed QR code, or any app link.
+ * #935 company-tag link `https://<event host>/s/<code>`, opened from a
+ * printed QR code or any app link.
  * Signed in, it hands the code to the Diary, which collects it like a scan
  * and celebrates on the Companies album. Signed out, the code waits for
  * sign-in (`RootLayout` resumes it). Not behind the session guard, so the

@@ -730,12 +730,30 @@ expose the Dynamic Island frame to apps: the iPhone 17 Pro target is centered at
 125.33 × 36.67 pt with a 14 pt top offset, and the iPhone 15 class uses 125 ×
 36.67 pt with an 11.33 pt top offset. The avatar and target are both measured in
 the same `measureInWindow` coordinate space, so the collapsed mask lines up with
-the cutout instead of drifting by the host view's safe-area inset. Android uses
-common punch-hole model names and tall display-cutout insets. The target remains
-configurable with `cameraCutoutFrame` for OEM camera placements that Expo does
-not expose. Devices without a detected cutout and landscape layouts finish as a
-compact circle below the safe area. Reduced Motion keeps the circular mask and
-uses the simpler position/scale transition.
+the cutout instead of drifting by the host view's safe-area inset.
+The morph only runs where a real camera cutout exists:
+
+- **iPhone with Dynamic Island** (safe-area top >= 55 pt, portrait): the island
+  geometry above, unchanged.
+- **Android with a hole punch**: the target is the actual cutout, read at
+  runtime from `WindowInsets.getDisplayCutout().boundingRects` (API 28+) through
+  `CameraCapabilities.getDisplayCutoutRects()` in `modules/camera-capabilities`
+  (rects in dp, window coordinates, re-read on rotation/resize). On Android 12+
+  (API 31) each rect is tightened to the cutout's own shape
+  (`DisplayCutout.getCutoutPath()` clipped to that rect), because OEMs often pad
+  the reported rects. The target is a circle (a hole punch is round): the largest
+  circle centred in the measured rect, so its diameter sets the morph width. A rect is a hole
+  punch when both sides are <= 72 dp and it sits in the top 96 dp, so centered
+  and off-center punches (and small waterdrops) work; the topmost one wins. Wide
+  notches and side cutouts are ignored. **This needs a new native Android build**
+  (development client and store build); on an older build the module lacks the
+  function and Android uses the plain collapse.
+- **No cutout, unknown, API < 28, iPhone notch / no Dynamic Island, landscape**:
+  no morph. The avatar shrinks into a compact circle below the safe area with no
+  black backing or cover (`hasCutout: false`).
+
+`cameraCutoutFrame` still overrides the target for OEM placements. Reduced Motion
+keeps the circular mask and uses the simpler position/scale transition.
 The CV route needs the session, so it is
 downloaded with the session cookie (`expo-file-system`) into the cache and shown
 in the in-app viewer (`components/cv-viewer.tsx`): a page-sheet modal titled
@@ -756,11 +774,13 @@ memory (Android's image pipeline drops a `Cookie` header), never from disk.
 
 **Companies** is a sticker album (`components/company-album.tsx`) from
 `GET /api/me/diary/sponsors`: a progress ring with collected / total, then a
-three-column grid. Collected companies are full-colour logos on a white disc
+three-column grid in the API's order (sponsor priority, then name, as the public logo grid; collected and uncollected interleaved). Collected companies are full-colour logos on a white disc
 and open a company sheet (logo, collected date, Favourite / Note (or Edit
 note) / Web, the
 description, challenges, note and "Remove from collection"); companies still to
-find are dashed slots with a silhouette of the logo, a lock and their name.
+find are dashed slots with a silhouette of the logo, a lock and their name
+only (never opened; the sheet and its description, challenges and website
+exist only once collected).
 Stand favourites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.
 
 Scanning follows R008: the primary "Scan with NFC" control opens the existing
@@ -800,41 +820,41 @@ serial number, and printed QR codes. Staff with `sponsors:manage`
 page) open Account → Staff → Company tags (`components/stands-screen.tsx`,
 routed as `app/(tabs)/others/stands.tsx`). The screen lists
 `GET /api/enterprises/stands` alphabetically with a name search (accent- and
-case-insensitive), each row showing the logo, the NFC and QR counts and "Not
-scannable" when staff have not turned scanning on.
+case-insensitive), each row showing the logo, the NFC and QR counts and a
+native switch that turns the company's scanning on or off (`PUT
+/api/enterprises/:id/stand-scannable` `{ scannable }`, the web Company tags
+call, with a fresh `Idempotency-Key`). The switch flips at once and rolls
+back with an alert if the request fails.
 
 **Provisioning a tag.** Each row's "Link tag" starts reading at once (R008).
-One tap (`startCompanyTagSession` in `lib/company-tag-nfc.ts`, serialized with
-the other scanners by `runExclusiveNfcSession`):
+It is the same tap as accrediting a badge: `startNfcRead` with `claimBadge`
+(`lib/nfc-reader.ts`, serialized with the other scanners) plus a `beforeClaim`
+hook:
 
-1. reads the UID (iOS tag-reader session; Android NDEF or NFC-A);
+1. reads the UID (`lib/nfc-uid.ts`, the encoding every scanner uses);
 2. links it: `POST /api/enterprises/:id/stand-tags` `{ kind: "nfc", uid }`
-   with a fresh `Idempotency-Key`. A 409 stops here with nothing written and
-   says whether the wristband is already someone's badge ("use an unassigned
-   one") or already a company tag (`standLinkErrorKey`, from `usedBy`);
-3. writes an NDEF message with a URI record
-   `https://<EXPO_PUBLIC_EVENT_WEBSITE_URL host>/s/<UID>` and an Android
-   Application Record for the release package, then reads it back and
-   compares the bytes.
+   with a fresh `Idempotency-Key`, before anything is written. A 409 rejects
+   the read with nothing written and says whether the wristband is already
+   someone's badge ("use an unassigned one") or already a company tag
+   (`standLinkErrorKey`, from `usedBy`);
+3. writes only the Android package claim of the badge flow
+   (`nfc-badge-claim.ts`: MifareUltralight pages on Android, the iOS
+   tag-reader session on iOS), so Android hands the tag to hackOS. No
+   `/s/<code>` link is written: the company is identified by the linked
+   serial and the Diary collects it by serial like any scanned UID. A failed
+   claim write still leaves the serial linked and says so
+   (`claimFailed()`).
 
-Writing is safe by construction: a tag that is empty or only holds the badge
-claim record (`nfc-badge-claim.ts`) is written directly; one that already
-holds this link is left alone; one holding other data is linked and then
-asks "Replace the data on this tag?" — Replace needs a second tap of the same
-tag (a different UID writes nothing), Keep leaves the data and says the tag
-won't open hackOS by itself. A read-only or locked tag, or one without NDEF
-support, stays linked by serial and says scanning it from the Diary still
-works; so does a write that fails its read-back. A failed read of existing
-records skips writing rather than treating unreadable content as empty.
-Cancellation while the server links the serial also skips the subsequent write.
-On iOS the next scanner waits for Core NFC's session-closed event after a
-company-tag session, just as it does after a badge read.
+A company must also be scannable before its tags award the medal: a new
+company is not (its row switch is off), and scanning answers
+`stand_unavailable` until staff turn it on (the row switch, or web Company
+tags).
 The result line offers "Link another" for the same company, so several tags or wristbands are linked in a
 row without leaving the screen. On hardware without NFC the actions stay
 disabled and one line points to serial-number entry on the web. QR codes are
 generated and printed from the web.
 
-**Opening the app from a tag.** The link opens `app/s/[code].tsx`, which is
+**Opening the app from a QR code.** The printed link opens `app/s/[code].tsx`, which is
 outside the session guard: signed in, it sends the code to the Diary
 (`?view=companies&collect=<code>`, `collectCompanyTagHref`), which collects it
 through `POST /api/me/diary/scan` once and celebrates on the Companies album;
@@ -842,20 +862,20 @@ signed out, it keeps the code (`lib/company-tag-link.ts`, in memory) and
 `RootLayout` resumes it after sign-in. Native wiring in `app.config.ts`:
 
 - iOS: the `react-native-nfc-manager` plugin with `includeNdefEntitlement:
-  true` (NDEF and TAG reader formats) and `applinks:<host>` next to
+  false` (TAG reader format only; the claim is written through the tag-reader
+  session, never an NDEF reader session) and `applinks:<host>` next to
   `webcredentials` in `associatedDomains`; the web serves the matching
   `apple-app-site-association` (`applinks` for `/s/*`);
 - Android: `plugins/withAndroidCompanyTagLinks.js` adds a VIEW + BROWSABLE
-  `autoVerify` filter and an `NDEF_DISCOVERED` filter for
-  `https://<host>/s/…` to the main activity, so a tapped tag hands its link to
-  the app; the badge `TECH_DISCOVERED` filter (`withAndroidNfcTagClaim.js`) is
-  unchanged. App Link verification needs `ANDROID_APP_CERT_SHA256` on the web
-  ([`deploy/README.md`](../deploy/README.md)). The AAR makes Android open the
-  app even before verification.
+  `autoVerify` filter for `https://<host>/s/…` to the main activity; the
+  badge `TECH_DISCOVERED` filter (`withAndroidNfcTagClaim.js`) is unchanged
+  and is what opens the app from a linked NFC tag. App Link verification
+  needs `ANDROID_APP_CERT_SHA256` on the web
+  ([`deploy/README.md`](../deploy/README.md)).
 
 These native changes need a new build. The flow is covered by
-`lib/company-tag-nfc.test.ts` (NDEF message, write, read-back, overwrite and
-locked-tag paths with `react-native-nfc-manager` mocked),
+`lib/nfc-reader.test.ts` (`beforeClaim` runs before the claim write and a
+refusal writes nothing, with `react-native-nfc-manager` mocked),
 `test/ui/stands-screen.test.tsx`, `test/ui/company-tag-link.test.tsx`,
 `lib/company-tag-link.test.ts`, `test/company-tag-links-plugin.test.tsx`, the
 Diary `collect` test and `lib/tabs.test.ts`. It has not been tested on NFC

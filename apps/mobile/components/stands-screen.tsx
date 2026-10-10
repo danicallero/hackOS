@@ -10,6 +10,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Switch,
   Text,
   TextInput,
   useColorScheme,
@@ -18,16 +19,12 @@ import {
 import { AndroidStatusBarScrim, EmptyState, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
-import { apiFetch } from "@/lib/api";
-import {
-  type CompanyTagSession,
-  type CompanyTagWrite,
-  startCompanyTagSession,
-} from "@/lib/company-tag-nfc";
+import { ApiError, apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
+import { startNfcRead } from "@/lib/nfc-reader";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { filterStands, type StandSummary, type StandTag, standLinkErrorKey } from "@/lib/stands";
 import { canManageStands } from "@/lib/tabs";
@@ -42,19 +39,15 @@ interface Outcome {
   text: string;
 }
 
-const WRITE_MESSAGE: Record<Exclude<CompanyTagWrite, "needsOverwrite" | "wrongTag">, MessageKey> = {
-  written: "standsLinkedOpens",
-  already: "standsLinkedOpens",
-  readOnly: "standsLinkedReadOnly",
-  failed: "standsLinkedWriteFailed",
-};
+type NfcRead = ReturnType<typeof startNfcRead>;
 
 const NFC_ERRORS = new Set(["scannerNfcUnavailable", "scannerNfcDisabled", "scannerNfcInvalidTag"]);
 
 /**
  * #935 staff flow: pick a company and tap an NFC tag or wristband to link it
- * by its serial number, then write the company-tag link so tapping it opens
- * hackOS (`lib/company-tag-nfc.ts`). `sponsors:manage` only, like the web
+ * by its serial number, the same read-and-claim tap as accrediting a badge
+ * (`startNfcRead` with `claimBadge`; the Diary then collects the company by
+ * that serial). `sponsors:manage` only, like the web
  * Company tags page. R008: "Link tag" starts reading immediately, and after a
  * tag the result offers "Link another" for the same company, so several tags
  * are linked in a row without leaving the screen. QR codes are printed from
@@ -77,7 +70,8 @@ export function StandsScreen() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<{ stand: StandSummary; prompt: string } | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const session = useRef<CompanyTagSession | null>(null);
+  const [scanBusy, setScanBusy] = useState<Set<number>>(() => new Set());
+  const session = useRef<NfcRead | null>(null);
 
   const load = useCallback(async () => {
     if (!allowed) return;
@@ -116,87 +110,78 @@ export function StandsScreen() {
     );
   }
 
-  function finish(stand: StandSummary, write: Exclude<CompanyTagWrite, "needsOverwrite">) {
-    if (write === "wrongTag") {
+  /** Optimistic: flips the row at once and rolls back with an alert on failure. */
+  async function setScannable(stand: StandSummary, scannable: boolean) {
+    if (scanBusy.has(stand.enterpriseId)) return;
+    const patch = (value: boolean) =>
+      setStands((current) =>
+        (current ?? []).map((item) =>
+          item.enterpriseId === stand.enterpriseId ? { ...item, scannable: value } : item,
+        ),
+      );
+    setScanBusy((current) => new Set(current).add(stand.enterpriseId));
+    patch(scannable);
+    try {
+      await apiFetch(`/api/enterprises/${stand.enterpriseId}/stand-scannable`, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": createIdempotencyKey(),
+        },
+        body: JSON.stringify({ scannable }),
+      });
+      void haptic("light");
+    } catch (err) {
+      patch(stand.scannable);
       void haptic("error");
-      setOutcome({ stand, tone: "warning", text: t("standsWrongTag") });
-      return;
+      Alert.alert(
+        t("standsTitle"),
+        err instanceof ApiError ? err.message : t("standsScannableFailed"),
+      );
+    } finally {
+      setScanBusy((current) => {
+        const next = new Set(current);
+        next.delete(stand.enterpriseId);
+        return next;
+      });
     }
-    void haptic(write === "written" || write === "already" ? "success" : "warning");
-    setOutcome({
-      stand,
-      tone: write === "written" || write === "already" ? "success" : "warning",
-      text: t(WRITE_MESSAGE[write], { name: stand.name }),
-    });
   }
 
-  async function run(
-    stand: StandSummary,
-    options: { prompt: MessageKey; expectedUid?: string; overwrite?: boolean },
-  ) {
+  async function run(stand: StandSummary) {
     if (session.current) return;
     setOutcome(null);
-    setActive({ stand, prompt: t(options.prompt) });
-    const current = startCompanyTagSession({
-      prompt: t(options.prompt),
-      expectedUid: options.expectedUid,
-      overwrite: options.overwrite,
-      link: options.expectedUid
-        ? undefined
-        : async (uid) => {
-            const tag = await apiFetch<StandTag>(
-              `/api/enterprises/${stand.enterpriseId}/stand-tags`,
-              {
-                method: "POST",
-                headers: {
-                  "content-type": "application/json",
-                  "Idempotency-Key": createIdempotencyKey(),
-                },
-                body: JSON.stringify({ kind: "nfc", uid }),
-              },
-            );
-            addTag(stand, tag);
+    setActive({ stand, prompt: t("standsNfcPrompt") });
+    // #935: the serial is linked before anything is written to the tag, so a
+    // refused one (409: a badge or another company's tag) leaves it untouched.
+    const current = startNfcRead(t("standsNfcPrompt"), {
+      claimBadge: true,
+      beforeClaim: async (uid) => {
+        const tag = await apiFetch<StandTag>(`/api/enterprises/${stand.enterpriseId}/stand-tags`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "Idempotency-Key": createIdempotencyKey(),
           },
+          body: JSON.stringify({ kind: "nfc", uid }),
+        });
+        addTag(stand, tag);
+      },
     });
     session.current = current;
     try {
-      const result = await current.result;
-      if (!result) return;
-      if (result.write !== "needsOverwrite") {
-        finish(stand, result.write);
-        return;
-      }
-      // Linked by serial already; replacing other data needs a decision.
-      Alert.alert(t("standsOverwriteTitle"), t("standsOverwriteBody"), [
-        {
-          text: t("standsKeep"),
-          style: "cancel",
-          onPress: () =>
-            setOutcome({
-              stand,
-              tone: "warning",
-              text: t("standsLinkedKept", { name: stand.name }),
-            }),
-        },
-        {
-          text: t("standsOverwrite"),
-          onPress: () =>
-            void run(stand, { prompt: "standsTapAgain", expectedUid: result.uid, overwrite: true }),
-        },
-      ]);
+      const uid = await current.result;
+      if (!uid) return;
+      const prepared = !current.claimFailed();
+      void haptic(prepared ? "success" : "warning");
+      setOutcome({
+        stand,
+        tone: prepared ? "success" : "warning",
+        text: t(prepared ? "standsLinked" : "standsLinkedWriteFailed", { name: stand.name }),
+      });
     } catch (err) {
       void haptic("error");
       const key = err instanceof Error && NFC_ERRORS.has(err.message) ? err.message : null;
-      Alert.alert(
-        t("standsLinkNfc"),
-        t(
-          key
-            ? (key as MessageKey)
-            : options.expectedUid
-              ? "scannerNfcError"
-              : standLinkErrorKey(err),
-        ),
-      );
+      Alert.alert(t("standsLinkNfc"), t(key ? (key as MessageKey) : standLinkErrorKey(err)));
     } finally {
       if (session.current === current) session.current = null;
       setActive(null);
@@ -362,7 +347,7 @@ export function StandsScreen() {
               accessibilityRole="button"
               accessibilityLabel={t("standsLinkNfcFor", { name: outcome.stand.name })}
               disabled={!nfcSupported || active !== null}
-              onPress={() => void run(outcome.stand, { prompt: "standsNfcPrompt" })}
+              onPress={() => void run(outcome.stand)}
               style={({ pressed }) => ({
                 alignItems: "center",
                 alignSelf: "flex-start",
@@ -400,7 +385,9 @@ export function StandsScreen() {
                   stand={stand}
                   busy={active?.stand.enterpriseId === stand.enterpriseId}
                   disabled={!nfcSupported || active !== null}
-                  onLink={() => void run(stand, { prompt: "standsNfcPrompt" })}
+                  scanBusy={scanBusy.has(stand.enterpriseId)}
+                  onLink={() => void run(stand)}
+                  onScannable={(value) => void setScannable(stand, value)}
                 />
               </View>
             ))}
@@ -416,20 +403,19 @@ function StandRow({
   stand,
   busy,
   disabled,
+  scanBusy,
   onLink,
+  onScannable,
 }: {
   stand: StandSummary;
   busy: boolean;
   disabled: boolean;
+  scanBusy: boolean;
   onLink: () => void;
+  onScannable: (scannable: boolean) => void;
 }) {
   const { t } = useLocale();
-  const detail = stand.scannable
-    ? t("standsCounts", { nfc: String(stand.nfcCount), qr: String(stand.qrCount) })
-    : `${t("standsNotScannable")} · ${t("standsCounts", {
-        nfc: String(stand.nfcCount),
-        qr: String(stand.qrCount),
-      })}`;
+  const detail = t("standsCounts", { nfc: String(stand.nfcCount), qr: String(stand.qrCount) });
   return (
     <View
       style={{
@@ -508,6 +494,12 @@ function StandRow({
           {t("standsLinkNfc")}
         </Text>
       </Pressable>
+      <Switch
+        accessibilityLabel={t("standsScannableFor", { name: stand.name })}
+        disabled={scanBusy}
+        onValueChange={onScannable}
+        value={stand.scannable}
+      />
     </View>
   );
 }

@@ -373,6 +373,7 @@ describe("application CV (#935, H11)", () => {
       filename?: string;
       template?: Record<string, unknown>[];
       submittedAt?: string;
+      field?: string;
     } = {},
   ) {
     const { ensureApplicationFormVersion } = await import("../helpers.js");
@@ -382,7 +383,7 @@ describe("application CV (#935, H11)", () => {
       [`Form ${++keySeq}`, JSON.stringify(options.template ?? [CV_FIELD])],
     );
     const applicationId = rows[0].id as number;
-    const key = `uploads/${applicationId}/${userId}/cv/${crypto.randomUUID()}/${options.filename ?? "Ana CV.pdf"}`;
+    const key = `uploads/${applicationId}/${userId}/${options.field ?? "cv"}/${crypto.randomUUID()}/${options.filename ?? "Ana CV.pdf"}`;
     await putObject(key, PDF, "application/pdf");
     const status = options.status ?? "confirmed";
     await pool.query(
@@ -394,7 +395,7 @@ describe("application CV (#935, H11)", () => {
         applicationId,
         await ensureApplicationFormVersion(applicationId),
         status,
-        JSON.stringify({ cv: key }),
+        JSON.stringify({ [options.field ?? "cv"]: key }),
         status === "draft" ? null : (options.submittedAt ?? new Date().toISOString()),
       ],
     );
@@ -449,12 +450,57 @@ describe("application CV (#935, H11)", () => {
     const me = await person();
     await applicationCv(me, { status: "draft" });
     await applicationCv(me, { filename: "cv.docx" });
-    await applicationCv(me, { template: [{ ...CV_FIELD, profile_cv: undefined }] });
+    // A file question that does not name a CV is never taken as one.
+    await applicationCv(me, {
+      template: [
+        {
+          key: "passport",
+          label: { en: "ID document", es: "DNI", gl: "DNI" },
+          kind: "file",
+        },
+      ],
+      field: "passport",
+    });
     expect((await get("/api/me/public-profile", me)).json().cv).toBeNull();
     expect((await putProfile(me, { ...VISIBLE, shareCv: true })).statusCode).toBe(400);
     const up = await upload("/api/me/public-profile/cv", me, PDF, "mine.pdf", "application/pdf");
     expect(up.statusCode).toBe(200);
     expect(up.json().cv).toMatchObject({ filename: "mine.pdf", source: "upload" });
+  });
+
+  it("picks up a CV file question without the organizer marking it (#935)", async () => {
+    const me = await person();
+    await applicationCv(me, {
+      template: [
+        {
+          key: "dni_photo",
+          label: { en: "ID photo", es: "Foto DNI", gl: "Foto DNI" },
+          kind: "file",
+        },
+        {
+          key: "doc_2",
+          label: { en: "Your résumé", es: "Tu currículum", gl: "O teu currículo" },
+          kind: "file",
+        },
+      ],
+      field: "doc_2",
+      filename: "Mi cv.pdf",
+    });
+    const profile = (await get("/api/me/public-profile", me)).json();
+    expect(profile.cv).toMatchObject({ filename: "Mi cv.pdf", source: "application" });
+    // Read-only on the profile.
+    const up = await upload("/api/me/public-profile/cv", me, PDF, "x.pdf", "application/pdf");
+    expect(up.statusCode).toBe(409);
+    expect((await remove("/api/me/public-profile/cv", me)).statusCode).toBe(409);
+    // A field keyed `cv_upload` matches too, and the marked field wins over a CV-named one.
+    const other = await person("Eva", "Ruiz");
+    await applicationCv(other, {
+      template: [
+        { key: "cv_upload", label: { en: "Upload", es: "Sube", gl: "Sube" }, kind: "file" },
+      ],
+      field: "cv_upload",
+    });
+    expect((await get("/api/me/public-profile", other)).json().cv.source).toBe("application");
   });
 
   it("takes the most recently submitted application", async () => {

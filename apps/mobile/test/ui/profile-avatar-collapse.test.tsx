@@ -7,6 +7,7 @@ import {
 } from "@/components/profile-avatar-collapse";
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
+  pickHolePunchCutout,
   profileAvatarCoverOpacity,
   profileAvatarMaskFrame,
   profileAvatarMorphPath,
@@ -15,6 +16,10 @@ import {
 import { renderMobile } from "./render";
 
 jest.mock("@/components/person-avatar", () => ({ useApiImage: () => null }));
+jest.mock("@/modules/camera-capabilities", () => ({
+  __esModule: true,
+  default: { getDisplayCutoutRects: () => [] },
+}));
 jest.mock("@/lib/diary", () => ({ diaryInitials: () => "AH" }));
 jest.mock("@react-native-masked-view/masked-view", () => {
   const { View } = require("react-native");
@@ -110,19 +115,22 @@ describe("profile avatar collapse geometry", () => {
   });
 });
 
-describe("profile camera target fallbacks", () => {
+describe("profile camera target", () => {
   const base = {
     height: 852,
-    manufacturer: "Apple",
-    modelId: "iPhone15,2",
-    modelName: "iPhone 15 Pro",
     platform: "ios",
     safeAreaTop: 59,
     screenWidth: 393,
-    statusBarHeight: 0,
   };
+  const plain = (left: number, top: number) => ({
+    left,
+    top,
+    width: 40,
+    height: 40,
+    hasCutout: false,
+  });
 
-  it("targets a Dynamic Island using model and safe-area geometry", () => {
+  it("targets a Dynamic Island using safe-area geometry", () => {
     expect(resolveProfileCameraTarget(base)).toEqual({
       left: 134,
       top: expect.closeTo(11.33),
@@ -136,8 +144,6 @@ describe("profile camera target fallbacks", () => {
     const target = resolveProfileCameraTarget({
       ...base,
       height: 874,
-      modelId: "iPhone18,1",
-      modelName: "iPhone 17 Pro",
       safeAreaTop: 62,
       screenWidth: 402,
     });
@@ -148,50 +154,89 @@ describe("profile camera target fallbacks", () => {
     expect(target.hasCutout).toBe(true);
   });
 
-  it("targets a notch on older iPhones", () => {
-    expect(
-      resolveProfileCameraTarget({
-        ...base,
-        modelId: "iPhone14,7",
-        modelName: "iPhone 14",
-        safeAreaTop: 47,
-      }),
-    ).toEqual({ left: 108.5, top: 0, width: 176, height: 34, hasCutout: true });
+  it("does not morph on notch iPhones or iPhones without a cutout", () => {
+    expect(resolveProfileCameraTarget({ ...base, safeAreaTop: 47 })).toEqual(plain(176.5, 53));
+    expect(resolveProfileCameraTarget({ ...base, safeAreaTop: 20 })).toEqual(plain(176.5, 26));
   });
 
-  it("supports a centered Android punch-hole fallback and a compact no-cutout avatar", () => {
-    const android = {
-      ...base,
-      manufacturer: "Google",
-      modelId: null,
-      modelName: "Pixel 8",
-      platform: "android",
-      safeAreaTop: 24,
-      statusBarHeight: 24,
-    };
-    expect(resolveProfileCameraTarget(android)).toEqual({
-      left: 184.5,
-      top: 0,
-      width: 24,
-      height: 24,
-      hasCutout: true,
+  describe("android", () => {
+    const android = { ...base, platform: "android", safeAreaTop: 32, screenWidth: 400 };
+
+    it("morphs into the real centered hole punch", () => {
+      expect(
+        resolveProfileCameraTarget({
+          ...android,
+          displayCutoutRects: [{ left: 189, top: 10, width: 22, height: 22 }],
+        }),
+      ).toEqual({ left: 189, top: 10, width: 22, height: 22, hasCutout: true });
     });
-    expect(
-      resolveProfileCameraTarget({
-        ...android,
-        modelName: "Pixel 3",
-      }),
-    ).toEqual({ left: 176.5, top: 30, width: 40, height: 40, hasCutout: false });
+
+    it("morphs into an off-center (left) hole punch", () => {
+      expect(
+        resolveProfileCameraTarget({
+          ...android,
+          displayCutoutRects: [{ left: 36, top: 12, width: 20, height: 20 }],
+        }),
+      ).toEqual({ left: 36, top: 12, width: 20, height: 20, hasCutout: true });
+    });
+
+    it("skips wide notches, side cutouts and malformed rects", () => {
+      for (const rect of [
+        { left: 120, top: 0, width: 160, height: 34 },
+        { left: 0, top: 150, width: 30, height: 30 },
+        { left: 390, top: 8, width: 30, height: 30 },
+        { left: 100, top: 8, width: 0, height: 0 },
+      ]) {
+        expect(
+          resolveProfileCameraTarget({ ...android, displayCutoutRects: [rect] }).hasCutout,
+        ).toBe(false);
+      }
+    });
+
+    it("uses the plain collapse without a cutout, rects, API 28 or the native module", () => {
+      const expected = plain(180, 38);
+      expect(resolveProfileCameraTarget({ ...android, displayCutoutRects: [] })).toEqual(expected);
+      expect(resolveProfileCameraTarget({ ...android, displayCutoutRects: null })).toEqual(
+        expected,
+      );
+      expect(resolveProfileCameraTarget(android)).toEqual(expected);
+    });
+
+    it("prefers the topmost narrow rect", () => {
+      expect(
+        pickHolePunchCutout(
+          [
+            { left: 100, top: 40, width: 20, height: 20 },
+            { left: 190, top: 8, width: 20, height: 20 },
+          ],
+          400,
+        ),
+      ).toEqual({ left: 190, top: 8, width: 20, height: 20 });
+    });
+
+    it("morphs into a circle centred in a padded or oval cutout", () => {
+      expect(pickHolePunchCutout([{ left: 180, top: 6, width: 40, height: 24 }], 400)).toEqual({
+        left: 188,
+        top: 6,
+        width: 24,
+        height: 24,
+      });
+    });
   });
 
   it("falls back below the safe area in landscape and accepts explicit OEM geometry", () => {
+    expect(resolveProfileCameraTarget({ ...base, height: 393, screenWidth: 852 })).toEqual(
+      plain(406, 65),
+    );
     expect(
       resolveProfileCameraTarget({
         ...base,
+        platform: "android",
         height: 393,
         screenWidth: 852,
-      }),
-    ).toEqual({ left: 406, top: 65, width: 40, height: 40, hasCutout: false });
+        displayCutoutRects: [{ left: 0, top: 150, width: 30, height: 30 }],
+      }).hasCutout,
+    ).toBe(false);
     expect(
       resolveProfileCameraTarget({
         ...base,

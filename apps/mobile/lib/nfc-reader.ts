@@ -98,7 +98,20 @@ const iosPageIo: TagPageIo = {
  * tag also gets the NDEF application record from `nfc-badge-claim.ts`. A failed
  * write never fails the read; it is reported through `claimFailed()`.
  */
-export function startNfcRead(message: string, { claimBadge = false } = {}) {
+export function startNfcRead(
+  message: string,
+  {
+    claimBadge = false,
+    beforeClaim,
+  }: {
+    claimBadge?: boolean;
+    /**
+     * #935 company tags: runs with the UID before the claim is written.
+     * Throwing (the API refused the serial) rejects the read and writes nothing.
+     */
+    beforeClaim?: (uid: string) => Promise<void>;
+  } = {},
+) {
   let cancelled = false;
   let claimFailed = false;
   let requested = false;
@@ -172,6 +185,7 @@ export function startNfcRead(message: string, { claimBadge = false } = {}) {
           requested = connected !== null;
           const tag = cancelled ? null : await discoveredTag;
           const uid = cancelled || !tag ? null : normalizeNfcUid(tag.id);
+          if (uid && beforeClaim) await beforeClaim(uid);
           if (uid && connected) {
             const outcome = await connected;
             if (cancelled) {
@@ -217,6 +231,7 @@ export function startNfcRead(message: string, { claimBadge = false } = {}) {
         }
         const tag = await NfcManager.getTag();
         const uid = normalizeNfcUid(tag?.id);
+        if (beforeClaim && !cancelled) await beforeClaim(uid);
         if (claimBadge && !cancelled) {
           await claim(() => writeBadgeClaim(iosPageIo, claimPackageName()));
         }
