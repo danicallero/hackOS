@@ -18,7 +18,7 @@ account's photo everywhere, not only on the public profile.
 The "Public profile" section (`settings/profile/public-profile-card.tsx`)
 shows only the opt-in switch ("Share my profile"), with one line saying that
 only people who scan the person's badge will see it, until the person opts in; then it reveals the surname, photo and project switches, the
-headline and location note, the bio (with a character count), up to six links
+headline and location note (placeholder "Room 2.1", so people know which classroom to enter), the bio (with a character count), up to six links
 (type + address rows; empty rows are not saved), the CV and a preview card.
 The preview is the server's `preview` until something changes; then name
 (surname initial by code point, as the API), photo, text, links and the
@@ -101,14 +101,17 @@ session cookie travels with the image request.
 
 ### CV from the application
 
-Application file fields are defined per form, so there is no implicit "CV"
-field. An organizer marks one file question per form as the profile CV
-(`profile_cv: true` in the template, H11; the form builder's "Use as profile
-CV" switch, file questions only, at most one per form). When the person has a
-submitted (non-draft) response to a form whose live template marks that field,
-and the stored upload is a PDF under that response's own
-`uploads/<application>/<user>/` prefix, the most recently submitted one is
-their profile CV:
+The profile picks the CV up from the application automatically. Application
+file fields are defined per form, so the field is found in this order: the
+file question the organizer marked as the profile CV (`profile_cv: true` in
+the template, H11; the form builder's "Use as profile CV" switch, at most one
+per form) and, with no mark needed, a file question whose key or label names a
+CV (whole word `cv`, `curriculum`/`currículum`/`currículo`, `resume`/`résumé`;
+other file questions such as ID documents are never taken). When the person
+has a submitted (non-draft) response to such a form, and the stored upload is
+a PDF under that response's own `uploads/<application>/<user>/` prefix, the
+most recently submitted one (a marked field before a name match) is their
+profile CV:
 
 - it wins over any CV they uploaded on the profile, which stays stored but
   unused; `GET /api/me/public-profile` reports `cv.source: "application"`
@@ -118,7 +121,7 @@ their profile CV:
   scanned them stays the person's own consent: the H56 sponsor consent does not
   imply it;
 - both CV download routes stream the application object, named after the
-  uploaded file. Unmarking the field in the form, or a non-PDF upload, falls
+  uploaded file. Removing the field from the form, or a non-PDF upload, falls
   back to the profile upload.
 
 Application objects are removed with the application responses on H54

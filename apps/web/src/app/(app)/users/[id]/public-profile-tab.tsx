@@ -225,6 +225,7 @@ export function PublicProfileTab({
                 <TextField
                   label={t("publicProfileLocation")}
                   max={LOCATION_MAX}
+                  placeholder={t("publicProfileLocationPlaceholder")}
                   value={settings.locationNote}
                   onChange={(locationNote) => update({ locationNote })}
                 />

@@ -49,7 +49,8 @@ describe("ProfilePhoto (#934)", () => {
   it("uploads a photo and refreshes the session", async () => {
     vi.mocked(apiUpload).mockResolvedValue({ image: "/api/users/7/photo?v=abc" });
     await act(async () => root.render(<ProfilePhoto />));
-    expect(buttons()).toEqual(["uploadPhoto"]);
+    expect(buttons()).toEqual([""]);
+    expect(container.querySelector("button")?.getAttribute("aria-label")).toBe("uploadPhoto");
 
     const user = userEvent.setup();
     const file = new File(["png"], "me.png", { type: "image/png" });
@@ -71,16 +72,21 @@ describe("ProfilePhoto (#934)", () => {
     expect(container.querySelector("[role=alert]")?.textContent).toBe("photoFileHint");
   });
 
-  it("offers change and removal for a stored photo", async () => {
+  it("opens a change/remove menu from the camera button for a stored photo", async () => {
     session.me.image = "/api/users/7/photo?v=abc";
     vi.mocked(api.delete).mockResolvedValue({ image: null });
     await act(async () => root.render(<ProfilePhoto />));
-    expect(buttons()).toEqual(["changePhoto", "removePhoto"]);
+    expect(buttons()).toEqual([""]);
 
-    const remove = [...container.querySelectorAll("button")].find(
-      (b) => b.textContent === "removePhoto",
-    );
-    await act(async () => remove?.click());
+    const user = userEvent.setup();
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    expect(trigger.getAttribute("aria-label")).toBe("changePhoto");
+    await act(async () => user.click(trigger));
+    const items = [...document.querySelectorAll("[role=menuitem]")].map((i) => i.textContent);
+    expect(items).toEqual(["changePhoto", "removePhoto"]);
+
+    const remove = [...document.querySelectorAll("[role=menuitem]")][1] as HTMLElement;
+    await act(async () => user.click(remove));
     expect(api.delete).toHaveBeenCalledWith("/api/me/photo");
     expect(session.refresh).toHaveBeenCalled();
   });

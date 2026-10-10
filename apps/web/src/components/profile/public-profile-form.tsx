@@ -133,11 +133,13 @@ export function SwitchRow({
 export function TextField({
   label,
   max,
+  placeholder,
   value,
   onChange,
 }: {
   label: string;
   max: number;
+  placeholder?: string;
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -145,7 +147,13 @@ export function TextField({
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <Input id={id} maxLength={max} value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input
+        id={id}
+        maxLength={max}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </div>
   );
 }

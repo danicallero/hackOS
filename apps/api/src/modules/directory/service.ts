@@ -95,28 +95,45 @@ function challengeOfProject(repoId: string, groupId: string): string {
 }
 
 /**
- * The person's application CV (#935, H11): the PDF uploaded to the file field
- * the organizer marked `profile_cv` in the live form, from their most recent
- * submitted response. It replaces any CV the person uploaded on their profile
- * and cannot be changed there; sharing it stays the person's own choice. The
- * key must sit under that response's own upload prefix.
+ * Labels or keys that name a CV in the three event languages (#935): "cv",
+ * "curriculum", "currículum", "currículo", "resume", "résumé". Whole words
+ * only (an underscore or digit may border them, as in `cv_file`), so "resumen"
+ * does not match.
+ */
+const CV_NAME_PATTERN =
+  "(^|[^[:alpha:]])(cv|curriculum|curr[ií]culum|curr[ií]culo|resume|r[eé]sum[eé])([^[:alpha:]]|$)";
+
+/**
+ * The person's application CV (#935, H11): a PDF uploaded to a file field of
+ * their most recent submitted response, automatically, without any setup by
+ * the organizer. The field the organizer marked `profile_cv` wins; otherwise
+ * the first file field whose key or label names a CV. Other file fields (ID
+ * documents, certificates) are never picked. It replaces any CV the person
+ * uploaded on their profile and cannot be changed there; sharing it stays the
+ * person's own choice. The key must sit under that response's own upload prefix.
  */
 function formCvSql(userId: string): string {
   return `
   SELECT r.responses ->> f.key AS key, r.submitted_at
     FROM application_responses r
     JOIN applications a ON a.id = r.application_id
-    CROSS JOIN LATERAL jsonb_to_recordset(
-      CASE WHEN jsonb_typeof(a.template) = 'array' THEN a.template ELSE '[]'::jsonb END
-    ) AS f(key text, kind text, profile_cv boolean)
+    CROSS JOIN LATERAL ROWS FROM (
+      jsonb_to_recordset(
+        CASE WHEN jsonb_typeof(a.template) = 'array' THEN a.template ELSE '[]'::jsonb END
+      ) AS (key text, kind text, profile_cv boolean, label jsonb)
+    ) WITH ORDINALITY AS f
    WHERE r.user_id = ${userId}
      AND r.status <> 'draft'
      AND r.submitted_at IS NOT NULL
      AND f.kind = 'file'
-     AND f.profile_cv
+     AND (
+       COALESCE(f.profile_cv, false)
+       OR f.key ~* '${CV_NAME_PATTERN}'
+       OR COALESCE(f.label::text, '') ~* '${CV_NAME_PATTERN}'
+     )
      AND r.responses ->> f.key LIKE 'uploads/' || r.application_id || '/' || r.user_id || '/%'
      AND lower(r.responses ->> f.key) LIKE '%.pdf'
-   ORDER BY r.submitted_at DESC, r.id DESC
+   ORDER BY COALESCE(f.profile_cv, false) DESC, r.submitted_at DESC, r.id DESC, f.ordinality
    LIMIT 1`;
 }
 
