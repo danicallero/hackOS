@@ -403,6 +403,19 @@ function RootLayoutNav({
             }}
           />
           <Stack.Screen
+            name="people/[id]"
+            options={{
+              // #935 directory profile: Android draws its own back button;
+              // iOS keeps a translucent native bar over the centered avatar,
+              // so scrolled text never runs under the status bar.
+              headerShown: process.env.EXPO_OS === "ios",
+              headerTransparent: true,
+              headerBlurEffect: "systemChromeMaterial",
+              headerShadowVisible: false,
+              title: "",
+            }}
+          />
+          <Stack.Screen
             name="profile-tasks"
             options={{ headerShown: false, presentation: "modal" }}
           />

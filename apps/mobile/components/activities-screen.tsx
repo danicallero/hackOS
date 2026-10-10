@@ -9,8 +9,8 @@ import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   AndroidFilterMenu,
   EmptyState,
-  LegacyHeaderIconButton,
   LegacyScreenHeader,
+  MenuTriggerIcon,
   StatusPill,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -328,7 +328,7 @@ export function ActivitiesScreen() {
                     setKind(nativeEvent.event === "all" ? null : nativeEvent.event)
                   }
                 >
-                  <LegacyHeaderIconButton
+                  <MenuTriggerIcon
                     icon={
                       kind === null
                         ? "line.3.horizontal.decrease"
@@ -337,7 +337,6 @@ export function ActivitiesScreen() {
                     accessibilityLabel={t("scheduleFilter")}
                     accessibilityState={{ selected: kind !== null }}
                     tintColor={kind === null ? colors.label : colors.accent}
-                    onPress={() => undefined}
                   />
                 </MenuView>
               </GlassView>

@@ -518,6 +518,56 @@ export function LegacyHeaderIconButton({
   );
 }
 
+/**
+ * The visible trigger inside a `MenuView`. The menu owns the press: on
+ * Android it wraps its child in its own Pressable, and on iOS a SwiftUI Menu
+ * hosts it, so a Pressable child takes the touch first and the menu never
+ * opens. Keep this a plain accessible view (#935).
+ */
+export function MenuTriggerIcon({
+  icon,
+  accessibilityLabel,
+  accessibilityState,
+  tintColor,
+  disabled = false,
+  size = 44,
+  iconSize = 19,
+  weight = "semibold",
+}: {
+  icon: SymbolViewProps["name"];
+  accessibilityLabel: string;
+  accessibilityState?: { expanded?: boolean; selected?: boolean };
+  tintColor?: ColorValue;
+  disabled?: boolean;
+  size?: number;
+  iconSize?: number;
+  weight?: SymbolViewProps["weight"];
+}) {
+  return (
+    <View
+      accessible
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      accessibilityState={{ ...accessibilityState, disabled }}
+      style={{
+        alignItems: "center",
+        height: size,
+        justifyContent: "center",
+        opacity: disabled ? 0.45 : 1,
+        width: size,
+      }}
+    >
+      <SymbolView
+        accessible={false}
+        name={icon}
+        tintColor={tintColor ?? colors.label}
+        size={iconSize}
+        weight={weight}
+      />
+    </View>
+  );
+}
+
 /** Android fallback for H25/H26 roster filtering: native menu triggers are not
  * consistently clickable inside the legacy header's composed glass surface. */
 export function AndroidFilterMenu({

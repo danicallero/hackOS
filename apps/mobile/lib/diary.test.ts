@@ -48,6 +48,20 @@ describe("diary ordering (#935)", () => {
     expect(sorted.map((item) => item.id)).toEqual([2, 3, 1]);
   });
 
+  it("sorts timestamps the API client revived into Date objects", () => {
+    const revived = [entry(1), entry(2, { starred: true })].map((item) => ({
+      ...item,
+      createdAt: new Date(item.createdAt) as unknown as string,
+    }));
+    expect(sortDiaryEntries(revived).map((item) => item.id)).toEqual([2, 1]);
+    // Un-favouriting keeps the entry; only its position changes.
+    const updated = upsertDiaryEntry(revived, { ...revived[1], starred: false });
+    expect(updated.map((item) => [item.id, item.starred])).toEqual([
+      [2, false],
+      [1, false],
+    ]);
+  });
+
   it("replaces an updated entry in place of the old copy and re-sorts", () => {
     const list = [entry(1), entry(2)];
     const updated = upsertDiaryEntry(list, { ...entry(1), starred: true, note: "hi" });
