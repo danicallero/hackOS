@@ -236,6 +236,7 @@ describe("RoleEditor members panel", () => {
       emailVerified: true,
       name,
       surname: null,
+      image: null,
       badgeId: null,
       visibleRoleName: null,
       language: "en",

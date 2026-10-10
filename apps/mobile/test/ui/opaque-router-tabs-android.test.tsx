@@ -140,6 +140,8 @@ jest.mock("expo-symbols", () => ({
   },
 }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
+jest.mock("@/lib/api", () => ({ getCurrentSessionCookie: () => "session=abc" }));
+jest.mock("@/lib/env", () => ({ API_URL: "https://api.example" }));
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({
     language: "en",
@@ -282,5 +284,34 @@ describe("OpaqueRouterTabs — Android unread notification indicator (issue #625
     });
     expect(screen.getByTestId("scanner-status-bar").props.style).toBe("auto");
     expect(screen.getByTestId("scanner-navigation-bar").props.style).toBe("auto");
+  });
+});
+
+describe("OpaqueRouterTabs — account photo (#934)", () => {
+  beforeEach(() => {
+    Object.defineProperty(Platform, "OS", { configurable: true, value: "android" });
+    mockUsePathname.mockReturnValue("/(tabs)/schedule");
+  });
+
+  it("shows the signed-in person's photo instead of the Account symbol", async () => {
+    await render(
+      <OpaqueRouterTabs
+        {...DEFAULT_PROPS}
+        account={{ name: "Ada Lovelace", image: "/api/users/7/photo?v=abc" }}
+      />,
+    );
+    const tab = screen.getByTestId("opaque-tab-account");
+    expect(tab).toBeTruthy();
+    expect(screen.queryByTestId("symbol-account_circle")).toBeNull();
+    const photo = screen.getByTestId("account-tab-avatar-photo", { includeHiddenElements: true });
+    expect(photo.props.source).toEqual({
+      uri: "https://api.example/api/users/7/photo?v=abc",
+      headers: { cookie: "session=abc" },
+    });
+  });
+
+  it("keeps the Account symbol without a photo", async () => {
+    await render(<OpaqueRouterTabs {...DEFAULT_PROPS} account={{ name: "Ada", image: null }} />);
+    expect(screen.getByTestId("symbol-account_circle")).toBeTruthy();
   });
 });
