@@ -10,10 +10,8 @@ import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
-import { apiAssetUrl } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
 import {
   type AccountRemovalEligibility,
@@ -23,18 +21,20 @@ import {
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { UserDetail } from "@/lib/types";
-import { fullName, initials, ROLE_TONE, roleDisplayName } from "./shared";
+import { fullName, ROLE_TONE, roleDisplayName } from "./shared";
+import { UserPhoto } from "./user-photo";
 
-export function ProfileHeader({ user }: { user: UserDetail }) {
+export function ProfileHeader({
+  user,
+  onPhotoChanged,
+}: {
+  user: UserDetail;
+  onPhotoChanged: () => unknown;
+}) {
   const { t } = useLocale();
   return (
     <PageHeader
-      leading={
-        <Avatar size="lg">
-          {user.image && <AvatarImage src={apiAssetUrl(user.image)} alt={fullName(user)} />}
-          <AvatarFallback>{initials(user)}</AvatarFallback>
-        </Avatar>
-      }
+      leading={<UserPhoto user={user} onChanged={onPhotoChanged} />}
       title={fullName(user)}
       meta={
         <>
