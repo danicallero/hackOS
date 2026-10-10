@@ -149,8 +149,9 @@ already-used code shows an inline error), generate a QR code shown with
 
 ## Mobile
 
-The Diary destination and its scan flow are described in
-[`mobile.md`](./mobile.md#event-diary-935).
+The Diary destination (People with search, favourites, the Directory scope and
+full profiles; Companies as a collectible stand album) and its scan flow are
+described in [`mobile.md`](./mobile.md#event-diary-935).
 
 ## Account removal (H54)
 

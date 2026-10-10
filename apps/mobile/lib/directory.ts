@@ -72,7 +72,6 @@ export function loadApiImage(path: string): Promise<string> {
   return request;
 }
 
-
 /** Lowercased and accent-free, so "José" matches "jose" (as the API search does). */
 export function foldSearchText(text: string): string {
   return text
@@ -133,7 +132,8 @@ export function socialLabel(
   const brand = SOCIAL_NAMES[link.kind];
   if (brand) return brand;
   if (link.kind === "website") return t("directoryWebsite");
-  return displayUrl(link.url);
+  // The row shows the full link below, so the label is just the site.
+  return displayUrl(link.url).split("/")[0] ?? link.url;
 }
 
 export function displayUrl(url: string): string {

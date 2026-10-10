@@ -16,6 +16,7 @@ import {
   EmptyState,
   LegacyHeaderIconButton,
   LegacyScreenHeader,
+  MenuTriggerIcon,
   Separator,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -266,7 +267,7 @@ export function PeopleDirectoryScreen() {
                 setRoleFilter(nativeEvent.event as typeof roleFilter)
               }
             >
-              <LegacyHeaderIconButton
+              <MenuTriggerIcon
                 icon={
                   roleFilter === "all"
                     ? "line.3.horizontal.decrease"
@@ -275,7 +276,6 @@ export function PeopleDirectoryScreen() {
                 accessibilityLabel={t("scannerFilterGroups")}
                 accessibilityState={{ selected: roleFilter !== "all" }}
                 tintColor={roleFilter === "all" ? colors.label : colors.accent}
-                onPress={() => undefined}
               />
             </MenuView>
           </GlassView>

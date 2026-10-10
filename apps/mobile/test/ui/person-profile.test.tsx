@@ -12,11 +12,13 @@ jest.mock("expo-router", () => ({
   useRouter: () => ({ back: jest.fn(), canGoBack: () => true }),
 }));
 jest.mock("expo-router/stack", () => ({ __esModule: true, default: { Screen: () => null } }));
-const mockDownload = jest.fn();
+const mockDownload: jest.Mock = jest.fn();
 jest.mock("expo-file-system", () => ({
   Paths: { cache: "cache" },
   File: class {
-    static downloadFileAsync = (...args: unknown[]) => mockDownload(...args);
+    static downloadFileAsync(...args: unknown[]): unknown {
+      return mockDownload(...args);
+    }
     exists = false;
     delete() {}
   },

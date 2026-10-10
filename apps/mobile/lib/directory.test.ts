@@ -63,7 +63,7 @@ describe("directory helpers (#935)", () => {
     const fetchMock = jest
       .fn()
       .mockResolvedValue({ ok: true, blob: async () => blob } as unknown as Response);
-    global.fetch = fetchMock;
+    globalThis.fetch = fetchMock;
     class Reader {
       result: string | null = null;
       onload: (() => void) | null = null;
@@ -74,7 +74,7 @@ describe("directory helpers (#935)", () => {
         this.onload?.();
       }
     }
-    global.FileReader = Reader as unknown as typeof FileReader;
+    globalThis.FileReader = Reader as unknown as typeof FileReader;
     await expect(loadApiImage("/api/users/1/photo?v=a")).resolves.toBe(
       "data:image/jpeg;base64,AAA",
     );
@@ -93,7 +93,7 @@ describe("directory helpers (#935)", () => {
     const fetchMock = jest
       .fn()
       .mockResolvedValue({ ok: false, status: 404 } as unknown as Response);
-    global.fetch = fetchMock;
+    globalThis.fetch = fetchMock;
     await expect(loadApiImage("/api/users/2/photo?v=b")).rejects.toThrow("404");
     await expect(loadApiImage("/api/users/2/photo?v=b")).rejects.toThrow("404");
     expect(fetchMock).toHaveBeenCalledTimes(2);

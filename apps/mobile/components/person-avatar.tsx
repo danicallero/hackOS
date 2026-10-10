@@ -61,10 +61,11 @@ export function PersonAvatar({
   }
   if (name) {
     return (
-      <View style={frame}>
+      // Tinted like the account avatar, so it reads on grouped and plain grounds.
+      <View style={[frame, { backgroundColor: colors.accentSurface }]}>
         <Text
           accessible={false}
-          style={{ color: colors.secondaryLabel, fontSize: size * 0.36, fontWeight: "600" }}
+          style={{ color: colors.onAccentSurface, fontSize: size * 0.36, fontWeight: "600" }}
         >
           {diaryInitials(name)}
         </Text>

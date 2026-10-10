@@ -1,29 +1,30 @@
 import { useEffect, useState } from "react";
 import { Modal, Pressable, Text, TextInput, View } from "react-native";
 import { ActionButton } from "@/components/native-ui";
-import type { DiaryEntry } from "@/lib/diary";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
 const NOTE_MAX_LENGTH = 500;
 
-/** The owner's private note on one diary entry (#935). */
+/** The owner's private note on one diary entry, person or company (#935). */
 export function DiaryNoteEditor({
-  entry,
+  visible,
+  initialNote,
   onClose,
   onSave,
 }: {
-  entry: DiaryEntry | null;
+  visible: boolean;
+  initialNote: string | null;
   onClose: () => void;
-  onSave: (entry: DiaryEntry, note: string) => void;
+  onSave: (note: string) => void;
 }) {
   const { t } = useLocale();
   const [note, setNote] = useState("");
   useEffect(() => {
-    setNote(entry?.note ?? "");
-  }, [entry]);
+    if (visible) setNote(initialNote ?? "");
+  }, [visible, initialNote]);
   return (
-    <Modal transparent visible={entry !== null} animationType="fade" onRequestClose={onClose}>
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <Pressable
         accessibilityLabel={t("close")}
         accessibilityRole="button"
@@ -71,13 +72,7 @@ export function DiaryNoteEditor({
               textAlignVertical: "top",
             }}
           />
-          <ActionButton
-            variant="filled"
-            label={t("save")}
-            onPress={() => {
-              if (entry) onSave(entry, note);
-            }}
-          />
+          <ActionButton variant="filled" label={t("save")} onPress={() => onSave(note)} />
           <ActionButton label={t("cancel")} onPress={onClose} />
         </View>
       </View>

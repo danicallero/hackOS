@@ -36,7 +36,9 @@ export function collectionProgress(collection: Pick<SponsorCollection, "total" |
 export function companyMonogram(name: string): string {
   const words = name.split(/\s+/).filter(Boolean);
   const letters =
-    words.length > 1 ? [words[0], words[1]].map((word) => Array.from(word)[0]) : Array.from(name).slice(0, 2);
+    words.length > 1
+      ? [words[0], words[1]].map((word) => Array.from(word)[0])
+      : Array.from(name).slice(0, 2);
   return letters.join("").toUpperCase();
 }
 

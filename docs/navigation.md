@@ -169,7 +169,8 @@ separate `Others` circle is needed. The full route registry remains mounted so
 hidden destinations stay routable:
 
 - **Non-operator account**: schedule, wallet, notifications, **Diary** (#935,
-  [`diary.md`](./diary.md)) and **Account** are direct; with a personal queue
+  [`diary.md`](./diary.md); People and Companies segments, opened directly with
+  `?view=companies` or `?view=directory`) and **Account** are direct; with a personal queue
   the set grows to six, so Diary and Account move to Others. **My queue** is visible to participants even before their first
   queue entry so they can see the empty state and tutorial; mentors, sponsors,
   and other accounts only see it once they have an actual queue entry. Wallet
@@ -220,6 +221,11 @@ behaviour stays sane. Direct tabs use the headless Expo Router tab state
 scroll-to-top/live-activity handlers; deeper screens inside a section still
 push normally on top of it. Pathname matching normalizes Expo Router route groups first
 (`/others/...` vs `/(tabs)/others/...`).
+
+A person's directory profile (#935) is the root-level `app/people/[id].tsx`,
+pushed above the tabs from either diary placement (direct tab or Others), the
+same way `app/schedule/[id].tsx` sits above Schedule; its back action falls
+back to `/` when there is nothing to pop.
 
 The direct surface is one continuous scrub surface: on touch-down the Liquid
 Glass selection lens follows the finger in real time, including across several

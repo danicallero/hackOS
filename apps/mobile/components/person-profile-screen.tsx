@@ -3,17 +3,10 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Alert,
-  Linking,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
+import { FavouriteStar } from "@/components/favourite-star";
 import { GlassView } from "@/components/glass-view";
 import { EmptyState, LegacyHeaderIconButton, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
@@ -181,7 +174,7 @@ export function PersonProfileScreen() {
     });
   }
 
-  const goBack = () => safeBack(router, "/(tabs)");
+  const goBack = () => safeBack(router, "/");
   const person = state.status === "ready" ? state.person : null;
 
   return (
@@ -226,9 +219,10 @@ export function PersonProfileScreen() {
         />
       )}
       <DiaryNoteEditor
-        entry={editingNote ? entry : null}
+        visible={editingNote && entry !== null}
+        initialNote={entry?.note ?? null}
         onClose={() => setEditingNote(false)}
-        onSave={(_, note) => {
+        onSave={(note) => {
           setEditingNote(false);
           patch({ note }, "note");
         }}
@@ -293,8 +287,9 @@ export function PersonProfileScreen() {
                   icon={entry.starred ? "star.fill" : "star"}
                   iconTint={entry.starred ? colors.warning : colors.accent}
                   label={t(entry.starred ? "diaryUnfavourite" : "diaryFavourite")}
-                  title={t("diaryShowFavourites")}
+                  title={t("diaryFavourite")}
                   selected={entry.starred}
+                  iconNode={<FavouriteStar on={entry.starred} size={22} />}
                   busy={busy === "star"}
                   onPress={() => patch({ starred: !entry.starred }, "star")}
                 />
@@ -395,7 +390,9 @@ export function PersonProfileScreen() {
                       key="project"
                       icon="hammer"
                       label={t(
-                        person.project.kind === "project" ? "directoryProject" : "directoryWorkGroup",
+                        person.project.kind === "project"
+                          ? "directoryProject"
+                          : "directoryWorkGroup",
                       )}
                       value={person.project.name}
                     />
@@ -434,7 +431,9 @@ export function PersonProfileScreen() {
                     paddingHorizontal: 16,
                   })}
                 >
-                  <Text style={{ color: colors.destructive, fontSize: 16 }}>{t("remove")}</Text>
+                  <Text style={{ color: colors.destructive, fontSize: 16 }}>
+                    {t("diaryRemoveFromDiary")}
+                  </Text>
                 </Pressable>
               </Section>
             ) : null}

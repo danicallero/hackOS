@@ -630,14 +630,47 @@ distributed to other Expo Router apps without importing hackOS code.
 
 `components/diary-screen.tsx`, routed as `app/(tabs)/diary.tsx` when the tab is
 direct and `app/(tabs)/others/diary.tsx` inside Others (`diary` is an
-`OVERFLOW_TAB_KEYS` entry; see `docs/navigation.md` for placement). It lists
-`GET /api/me/diary` in API order (favourites first): people with their live
-directory card, sponsors with their public card, and a quiet unavailable row
-when the person hid their profile or the sponsor is hidden. Each row has a star
-toggle and a menu with Note (modal editor, 500 characters) and Remove (with
-confirmation); a row is disabled while its update is in flight. Pull-to-refresh
-and foregrounding refetch. The diary is never written to the offline cache, so
-a profile hidden later cannot reappear from device storage.
+`OVERFLOW_TAB_KEYS` entry; see `docs/navigation.md` for placement). A
+segmented control splits it into **People** and **Companies**; the
+`?view=companies` / `?view=directory` route parameter opens a segment directly.
+Pull-to-refresh, focus and foregrounding refetch. Nothing is written to the
+offline cache, so a profile hidden later cannot reappear from device storage.
+
+**People** lists the `kind: "person"` entries of `GET /api/me/diary` (favourites
+first, then newest) and a quiet unavailable row for a hidden profile. Saving
+and favouriting are separate: the star (`components/favourite-star.tsx`, drawn
+as a filled/outline path on Android, whose Material font only has the outline
+glyph) only marks a saved person and drives the Favourites filter; the row menu
+holds Note (500 characters) and an explicit "Remove from diary" with
+confirmation. Un-starring never removes anyone. The search field filters saved
+cards locally by name, headline, project, challenges, location and the owner's
+note, ignoring accents and case; cards never carry an email, so contact details
+are not searchable. A `directory:read` holder also gets a Saved | Directory
+scope: Directory pages `GET /api/directory` (server search by name, infinite
+scroll). Its rows look like saved rows; an unsaved person shows Save
+(`POST /api/me/diary/people`), a saved one the star and the same menu.
+Rows (`components/diary-person-row.tsx`) are one full-width pressable that
+opens the profile; the trailing controls are separate siblings so they never
+also open it.
+
+`app/people/[id].tsx` (`components/person-profile-screen.tsx`) is the full
+profile from `GET /api/directory/:userId`: large photo or initials, name,
+headline, Favourite / Note / CV tiles (Save when the person is not in the
+diary), bio, the owner's note, links, location, project or work group,
+challenges and "Remove from diary". The CV route needs the session, so it is
+downloaded with the session cookie (`expo-file-system`) and opened in the share
+sheet. A hidden profile and a person the reader may not open both answer 404
+and show one "Profile not available" state. Photos are authenticated API
+routes: `lib/directory.ts` fetches them with the session and shows them from
+memory (Android's image pipeline drops a `Cookie` header), never from disk.
+
+**Companies** is a sticker album (`components/company-album.tsx`) from
+`GET /api/me/diary/sponsors`: a progress ring with collected / total, then a
+three-column grid. Collected companies are full-colour logos on a white disc
+and open a company sheet (logo, collected date, Favourite / Note / Web, the
+description, challenges, note and "Remove from collection"); companies still to
+find are dashed slots with a silhouette of the logo, a lock and their name.
+Stand favourites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.
 
 Scanning follows R008: the primary "Scan with NFC" control opens the existing
 reader immediately (`lib/nfc-reader.ts`, UID only, never writes or claims the
@@ -645,14 +678,24 @@ tag; `lib/nfc-uid.ts` normalization), one tap from the list. "Scan QR code"
 (the gated `QrCamera`) and "Enter code" sit in the compact ellipsis menu. On
 hardware without NFC the primary control becomes "Scan QR code". Cancelling any
 input sends nothing. Each scan is `POST /api/me/diary/scan` with a fresh
-`Idempotency-Key`; the saved card appears in a Saved section at the top with
-its favourite and note actions. Every error code (`diary_code_unknown`,
+`Idempotency-Key`. A saved person is pinned in a Saved section at the top of
+People; a collected stand switches to Companies, where its badge springs in
+with a fading halo and a success haptic. Every error code (`diary_code_unknown`,
 `badge_revoked`, `profile_not_shared`, `stand_unavailable`, `diary_self`, 403
-for an account without event access, 429) maps to its own localized alert (`lib/diary.ts`); none names a person.
-Badges, stand tags and the staff scanners share the NFC-A UID encoding, so a
-stand tag is never accepted as a badge (`diary.md`). Physical NFC and camera
-verification is still pending; tests mock both (`lib/diary.test.ts`,
-`test/ui/diary-screen.test.tsx`).
+for an account without event access, 429) maps to its own localized alert
+(`lib/diary.ts`); none names a person. Badges, stand tags and the staff
+scanners share the NFC-A UID encoding, so a stand tag is never accepted as a
+badge (`diary.md`).
+
+`apiFetch` returns API timestamps as `Date` objects (Better Auth's client JSON
+parser revives ISO strings), so diary ordering goes through `timestampOf`
+rather than string comparison. Menus use `MenuTriggerIcon` (`native-ui.tsx`)
+as their visible trigger: a `Pressable` inside `MenuView` takes the touch
+before the menu on Android, so the menu never opened.
+
+Physical NFC and camera verification is still pending; tests mock both
+(`lib/diary.test.ts`, `lib/directory.test.ts`, `test/ui/diary-screen.test.tsx`,
+`test/ui/person-profile.test.tsx`).
 
 ## Operator screens
 

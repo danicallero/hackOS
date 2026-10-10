@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { colors } from "@/theme/colors";
@@ -11,9 +12,12 @@ export function QuickAction({
   selected,
   busy,
   onPress,
+  iconNode,
 }: {
   icon: SymbolViewProps["name"];
   iconTint?: SymbolViewProps["tintColor"];
+  /** Replaces the symbol, e.g. the cross-platform favourite star. */
+  iconNode?: ReactNode;
   /** The visible caption. */
   title: string;
   /** The spoken action, which may differ from the caption (e.g. "Remove from favourites"). */
@@ -45,19 +49,19 @@ export function QuickAction({
       {busy ? (
         <ActivityIndicator color={colors.accent} />
       ) : (
-        <SymbolView accessible={false} name={icon} size={22} tintColor={iconTint} />
+        (iconNode ?? <SymbolView accessible={false} name={icon} size={22} tintColor={iconTint} />)
       )}
-      <Text
-        numberOfLines={1}
-        style={{ color: colors.accent, fontSize: 13, fontWeight: "600" }}
-      >
+      <Text numberOfLines={1} style={{ color: colors.accent, fontSize: 13, fontWeight: "600" }}>
         {title}
       </Text>
     </Pressable>
   );
 }
 
-/** Label over value, so long values and translations wrap instead of truncating. */
+/**
+ * Label over value, so long values and translations wrap instead of
+ * truncating. Without a label the value stands alone (a list of names).
+ */
 export function DetailRow({
   icon,
   label,
@@ -65,7 +69,7 @@ export function DetailRow({
   onPress,
 }: {
   icon: SymbolViewProps["name"];
-  label: string;
+  label?: string;
   value: string;
   onPress?: () => void;
 }) {
@@ -73,7 +77,7 @@ export function DetailRow({
     <>
       <SymbolView accessible={false} name={icon} size={20} tintColor={colors.accent} />
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>{label}</Text>
+        {label ? <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>{label}</Text> : null}
         <Text
           selectable={!onPress}
           style={{
@@ -105,7 +109,7 @@ export function DetailRow({
   };
   if (!onPress) {
     return (
-      <View accessible accessibilityLabel={`${label}, ${value}`} style={style}>
+      <View accessible accessibilityLabel={label ? `${label}, ${value}` : value} style={style}>
         {content}
       </View>
     );
@@ -113,7 +117,7 @@ export function DetailRow({
   return (
     <Pressable
       accessibilityRole="link"
-      accessibilityLabel={`${label}, ${value}`}
+      accessibilityLabel={label ? `${label}, ${value}` : value}
       onPress={onPress}
       style={({ pressed }) => [
         style,

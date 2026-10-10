@@ -40,12 +40,21 @@ export function diaryCacheKey(userId: number): string {
   return `user:${userId}:diary`;
 }
 
+/**
+ * Milliseconds of an API timestamp. `apiFetch` goes through Better Auth's
+ * client, whose JSON parser revives ISO strings into `Date` objects, so a
+ * timestamp typed as a string may be a `Date` at runtime.
+ */
+export function timestampOf(value: string | Date): number {
+  return new Date(value).getTime();
+}
+
 /** The API order: favourites first, then most recently saved. */
 export function sortDiaryEntries(entries: DiaryEntry[]): DiaryEntry[] {
   return [...entries].sort(
     (a, b) =>
       Number(b.starred) - Number(a.starred) ||
-      b.createdAt.localeCompare(a.createdAt) ||
+      timestampOf(b.createdAt) - timestampOf(a.createdAt) ||
       b.id - a.id,
   );
 }
