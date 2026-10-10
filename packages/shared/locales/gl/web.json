@@ -493,6 +493,7 @@
   "mealPlanClosed": "Pechada",
   "mealPlanSaved": "Plan de comidas gardado",
   "toastSaveMealPlan": "Gardar plan de comidas",
+  "couldNotLoadMealPlan": "Non se puido cargar o plan de comidas.",
   "couldNotSaveMealPlan": "Non se puido gardar o plan de comidas",
   "columnPlanned": "Previstas",
   "columnUnanswered": "Sen resposta",

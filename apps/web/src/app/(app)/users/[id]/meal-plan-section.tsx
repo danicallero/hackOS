@@ -6,6 +6,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { BowlFoodIcon } from "@phosphor-icons/react/dist/csr/BowlFood";
 import { useCallback, useEffect, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
@@ -33,34 +34,60 @@ export function MealPlanSection({ userId }: { userId: number }) {
   const { t, language } = useLocale();
   const canManage = useCan(CAPABILITIES.MEAL_PLANS_MANAGE);
   const [plan, setPlan] = useState<StaffMealPlan | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reload, setReload] = useState(0);
+  // Only explicit answers: an unanswered meal stays absent until staff tick
+  // it, so saving never turns "no answer" into "not attending".
   const [draft, setDraft] = useState<Record<number, boolean>>({});
   const [saving, setSaving] = useState(false);
 
   const apply = useCallback((next: StaffMealPlan) => {
     setPlan(next);
-    setDraft(Object.fromEntries(next.meals.map((m) => [m.activityId, m.attending === true])));
+    setDraft(
+      Object.fromEntries(
+        next.meals.flatMap((m) => (m.attending === null ? [] : [[m.activityId, m.attending]])),
+      ),
+    );
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reload is a retry nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     let cancelled = false;
+    setPlan(null);
+    setDraft({});
+    setLoadFailed(false);
     api
       .get<StaffMealPlan>(`/api/users/${userId}/meal-plan`)
       .then((next) => {
         if (!cancelled) apply(next);
       })
-      // Not a sponsor representative (403) or unreadable: no section.
-      .catch(() => undefined);
+      .catch((err) => {
+        // Not a sponsor representative: no section.
+        if (cancelled || (err instanceof ApiError && err.code === "not_sponsor")) return;
+        setLoadFailed(true);
+      });
     return () => {
       cancelled = true;
     };
-  }, [userId, apply]);
+  }, [userId, apply, reload]);
 
+  if (loadFailed) {
+    return (
+      <SectionCard variant="plain" title={t("meals")} icon={BowlFoodIcon}>
+        <ContextualError
+          message={t("couldNotLoadMealPlan")}
+          onRetry={() => setReload((n) => n + 1)}
+        />
+      </SectionCard>
+    );
+  }
   if (!plan || plan.meals.length === 0) return null;
 
   const editable = (meal: StaffMealPlan["meals"][number]) => canManage && !meal.locked;
-  const dirty = plan.meals.some(
-    (m) => editable(m) && (m.attending === null || draft[m.activityId] !== m.attending),
+  const edited = plan.meals.filter(
+    (m) => editable(m) && m.activityId in draft && draft[m.activityId] !== m.attending,
   );
+  const dirty = edited.length > 0;
 
   async function save() {
     if (!plan) return;
@@ -69,9 +96,7 @@ export function MealPlanSection({ userId }: { userId: number }) {
       const next = await api.put<StaffMealPlan>(
         `/api/users/${userId}/meal-plan`,
         {
-          meals: plan.meals
-            .filter((m) => !m.locked)
-            .map((m) => ({ activityId: m.activityId, attending: draft[m.activityId] === true })),
+          meals: edited.map((m) => ({ activityId: m.activityId, attending: draft[m.activityId] })),
         },
         { headers: idempotencyHeaders("meal-plan") },
       );
@@ -119,7 +144,7 @@ export function MealPlanSection({ userId }: { userId: number }) {
                   {formatScheduledDateTime(meal.startsAt, language)}
                 </span>
               </label>
-              {meal.attending === null ? (
+              {!(meal.activityId in draft) ? (
                 <StatusBadge tone="neutral">{t("columnUnanswered")}</StatusBadge>
               ) : null}
               {meal.locked ? <StatusBadge tone="neutral">{t("mealPlanClosed")}</StatusBadge> : null}

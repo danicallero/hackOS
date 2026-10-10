@@ -124,7 +124,8 @@ audiences is staff-only), and it locks `event_config.meal_plan_cutoff_hours`
 starts; responses carry it as `cutoffHours`. `PUT` ignores meals that ended or stopped being offered since the list
 was loaded, and locked meals that were never answered. Staff read a sponsor's plan through `GET
 /api/users/:id/meal-plan` (`users:read`) and correct it through `PUT
-/api/users/:id/meal-plan` (`meal-plans:manage`, same rules, audited as
+/api/users/:id/meal-plan` (`meal-plans:manage`, same rules but partial: meals left out stay
+unanswered and the sponsor's `confirmedAt` is not set; always audited as
 `meal_plan.updated`); logistics reads aggregate headcounts and the catering
 CSV under `/api/logistics/meal-plans` (see `docs/statistics-dashboard.md`).
 

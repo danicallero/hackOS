@@ -79,7 +79,13 @@ async function sponsor(
 }
 
 async function meal(
-  options: { name?: string; audiences?: string[]; startsInHours?: number; category?: string } = {},
+  options: {
+    name?: string;
+    audiences?: string[];
+    startsInHours?: number;
+    category?: string;
+    hidden?: boolean;
+  } = {},
 ): Promise<number> {
   const pool = await db();
   const startsAt = new Date(Date.now() + (options.startsInHours ?? 72) * HOUR);
@@ -91,7 +97,7 @@ async function meal(
       options.name ?? "Lunch",
       startsAt,
       new Date(startsAt.getTime() + HOUR),
-      audiences.length === 0 ? "hidden" : "shown",
+      audiences.length === 0 || options.hidden ? "hidden" : "shown",
       audiences,
     ],
   );
@@ -119,6 +125,8 @@ describe("GET /api/logistics/meal-plans (#933)", () => {
     // Not offered to sponsors: never listed.
     await meal({ name: "Participant lunch", audiences: ["participant"] });
     await meal({ name: "Talk", category: "activity" });
+    // Hidden schedule entry: not offered, so not listed either.
+    await meal({ name: "Hidden lunch", hidden: true });
 
     const a = await sponsor({ intolerances: [gluten, lactose], notes: "Severe" });
     const b = await sponsor({ intolerances: [gluten] });
@@ -170,6 +178,27 @@ describe("GET /api/logistics/meal-plans (#933)", () => {
     expect(one.json().meals.map((m: { activityId: number }) => m.activityId)).toEqual([dinner]);
   });
 
+  it("counts only test accounts for a synthetic operator", async () => {
+    const stats = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    const synthetic = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    await (await db()).query(`UPDATE users SET is_test_account = true WHERE id = $1`, [synthetic]);
+    const lunch = await meal();
+    await plan(await sponsor(), lunch, true);
+    await plan(await sponsor({ testAccount: true }), lunch, false);
+    await sponsor({ testAccount: true });
+
+    const read = async (actor: number) =>
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/logistics/meal-plans",
+          headers: asUser(actor),
+        })
+      ).json().meals[0];
+    expect(await read(stats)).toMatchObject({ attending: 1, notAttending: 0, unanswered: 0 });
+    expect(await read(synthetic)).toMatchObject({ attending: 0, notAttending: 1, unanswered: 1 });
+  });
+
   it("requires logistics statistics access", async () => {
     const other = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
     const res = await app.inject({
@@ -211,6 +240,34 @@ describe("GET /api/logistics/meal-plans/:activityId/export.csv (#933)", () => {
         "Bea,Alonso,Globex,,\r\n" +
         'Ana,Zubiri,"Acme, Inc",Lactose,No nuts\r\n',
     );
+    const { rows } = await (await db()).query(
+      `SELECT actor_id FROM audit_log
+        WHERE entity_type = 'meal_plan_export' AND entity_id = $1 AND action = 'export'`,
+      [String(lunch)],
+    );
+    expect(rows).toEqual([{ actor_id: exporter }]);
+  });
+
+  it("keeps the synthetic operator boundary", async () => {
+    const exporter = await createUserWithCapabilities([CAPABILITIES.MEAL_PLANS_EXPORT]);
+    const synthetic = await createUserWithCapabilities([CAPABILITIES.MEAL_PLANS_EXPORT]);
+    await (await db()).query(`UPDATE users SET is_test_account = true WHERE id = $1`, [synthetic]);
+    const lunch = await meal();
+    await plan(await sponsor({ name: "Real", surname: "One" }), lunch, true);
+    await plan(await sponsor({ name: "Fake", surname: "Two", testAccount: true }), lunch, true);
+
+    const csv = async (actor: number) =>
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/logistics/meal-plans/${lunch}/export.csv`,
+          headers: asUser(actor),
+        })
+      ).body;
+    expect(await csv(exporter)).toContain("Real,One");
+    expect(await csv(exporter)).not.toContain("Fake");
+    expect(await csv(synthetic)).toContain("Fake,Two");
+    expect(await csv(synthetic)).not.toContain("Real");
   });
 
   it("refuses holders of logistics:stats alone and unknown meals", async () => {
@@ -218,6 +275,7 @@ describe("GET /api/logistics/meal-plans/:activityId/export.csv (#933)", () => {
     const exporter = await createUserWithCapabilities([CAPABILITIES.MEAL_PLANS_EXPORT]);
     const lunch = await meal();
     const talk = await meal({ category: "activity" });
+    const hidden = await meal({ hidden: true });
 
     const forbidden = await app.inject({
       method: "GET",
@@ -232,6 +290,13 @@ describe("GET /api/logistics/meal-plans/:activityId/export.csv (#933)", () => {
       headers: asUser(exporter),
     });
     expect(notMeal.statusCode).toBe(404);
+
+    const notOffered = await app.inject({
+      method: "GET",
+      url: `/api/logistics/meal-plans/${hidden}/export.csv`,
+      headers: asUser(exporter),
+    });
+    expect(notOffered.statusCode).toBe(404);
   });
 });
 
@@ -295,6 +360,51 @@ describe("PUT /api/users/:id/meal-plan (#933)", () => {
     // Unchanged answers write nothing and audit nothing.
     expect((await put(manager, target, payload)).statusCode).toBe(200);
     expect(await auditRows(target)).toHaveLength(1);
+  });
+
+  it("writes only explicit answers and leaves the sponsor's confirmation unset", async () => {
+    const manager = await createUserWithCapabilities([CAPABILITIES.MEAL_PLANS_MANAGE]);
+    const target = await sponsor();
+    const lunch = await meal();
+    const dinner = await meal({ startsInHours: 80 });
+
+    const res = await put(manager, target, [{ activityId: lunch, attending: true }]);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().confirmedAt).toBeNull();
+    expect(
+      res
+        .json()
+        .meals.map((m: { activityId: number; attending: boolean | null }) => [
+          m.activityId,
+          m.attending,
+        ]),
+    ).toEqual([
+      [lunch, true],
+      [dinner, null],
+    ]);
+    const { rows } = await (await db()).query(
+      `SELECT meal_plan_confirmed_at FROM users WHERE id = $1`,
+      [target],
+    );
+    expect(rows[0].meal_plan_confirmed_at).toBeNull();
+  });
+
+  it("audits staff correcting their own plan through the staff route", async () => {
+    const self = await createUserWithCapabilities([CAPABILITIES.MEAL_PLANS_MANAGE]);
+    const pool = await db();
+    const { rows } = await pool.query(
+      `INSERT INTO enterprises (name) VALUES ('Self Inc') RETURNING id`,
+    );
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      rows[0].id,
+      self,
+    ]);
+    const lunch = await meal();
+
+    expect((await put(self, self, [{ activityId: lunch, attending: true }])).statusCode).toBe(200);
+    expect(await auditRows(self)).toEqual([
+      expect.objectContaining({ actor_id: self, after: { attending: [lunch] } }),
+    ]);
   });
 
   it("keeps business errors and capability checks", async () => {

@@ -493,6 +493,7 @@
   "mealPlanClosed": "Closed",
   "mealPlanSaved": "Meal plan saved",
   "toastSaveMealPlan": "Save meal plan",
+  "couldNotLoadMealPlan": "Could not load the meal plan.",
   "couldNotSaveMealPlan": "Could not save the meal plan",
   "columnPlanned": "Planned",
   "columnUnanswered": "No answer",

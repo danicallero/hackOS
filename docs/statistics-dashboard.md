@@ -75,8 +75,10 @@ intolerance breakdown among attendees, read from aggregate-only
 `GET /api/logistics/meal-plans` under `logistics:stats` and refreshed by
 `logistics.meal_plan.updated`. Holders of `meal-plans:export` also get the
 per-person catering CSV (`GET /api/logistics/meal-plans/:activityId/export.csv`:
-name, surname, enterprise, intolerances, notes). Counts exclude synthetic,
-inactive and anonymized accounts.
+name, surname, enterprise, intolerances, notes; each download is audited as
+`export`). Only meals on a shown schedule entry count. Counts exclude inactive
+and anonymized accounts and respect the review-fixture boundary: a synthetic
+operator sees only test accounts, everyone else only real ones.
 
 Scope keys are stable resource identifiers: `application:<id>` and
 `role:<id>`. The API validates every selected key against the caller's

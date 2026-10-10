@@ -2,31 +2,41 @@ import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
 import { toCsv } from "../../lib/csv.js";
 import { NotFoundError } from "../../lib/errors.js";
+import { fixtureReadFilter } from "./review-fixture-scope.js";
 
 /**
  * Logistics read side of sponsor meal plans (#933). Aggregates stay under
  * `logistics:stats`; the per-person CSV carries dietary data and needs
  * `meal-plans:export`. A meal counts here when its activity has meal semantics
- * and its schedule entry includes the `sponsor` audience, ended or not, so
- * planned vs served stays visible after the meal. Counted people are active,
- * non-anonymized, non-test sponsor representatives.
+ * and its shown schedule entry includes the `sponsor` audience, ended or not,
+ * so planned vs served stays visible after the meal (same offer rule as
+ * identity/meal-plan.ts, minus the end time). Counted people are active,
+ * non-anonymized sponsor representatives on the reader's side of the review
+ * fixture boundary: a synthetic operator only sees test accounts, everyone
+ * else only real ones.
  */
 
-const PLANNED_MEALS_SQL = `
-  SELECT a.id, a.name, a.name_i18n, s.starts_at
+const PLANNED_MEALS_FROM_SQL = `
     FROM activities a
     JOIN schedule s ON s.id = a.schedule_id
    WHERE a.category = ANY($1::text[])
      AND 'sponsor' = ANY(s.audiences)
-     AND ($2::int IS NULL OR a.id = $2)
+     AND s.visibility = 'shown'
+     AND ($2::int IS NULL OR a.id = $2)`;
+
+const PLANNED_MEALS_SQL = `
+  SELECT a.id, a.name, a.name_i18n, s.starts_at
+  ${PLANNED_MEALS_FROM_SQL}
    ORDER BY s.starts_at, a.id`;
 
-const SPONSOR_REPS_SQL = `
+async function sponsorRepsSql(actorId: number): Promise<string> {
+  const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
+  return `
   SELECT u.id, u.name, u.surname, u.food_intolerances, u.food_intolerance_notes
     FROM users u
-   WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
-     AND u.is_test_account = false
+   WHERE u.account_state = 'active' AND u.anonymized_at IS NULL${fixtureFilter}
      AND EXISTS (SELECT 1 FROM sponsors sp WHERE sp.user_id = u.id)`;
+}
 
 export interface MealPlanSummary {
   activityId: number;
@@ -42,7 +52,10 @@ export interface MealPlanSummary {
   withNotes: number;
 }
 
-export async function mealPlanSummaries(activityId?: number): Promise<MealPlanSummary[]> {
+export async function mealPlanSummaries(
+  actorId: number,
+  activityId?: number,
+): Promise<MealPlanSummary[]> {
   const { rows: meals } = await pool.query<{
     id: number;
     name: string;
@@ -51,6 +64,7 @@ export async function mealPlanSummaries(activityId?: number): Promise<MealPlanSu
   }>(PLANNED_MEALS_SQL, [[...MEAL_ACTIVITY_KINDS], activityId ?? null]);
   if (meals.length === 0) return [];
   const ids = meals.map((m) => m.id);
+  const repsSql = await sponsorRepsSql(actorId);
 
   const { rows: counts } = await pool.query<{
     activity_id: number;
@@ -59,7 +73,7 @@ export async function mealPlanSummaries(activityId?: number): Promise<MealPlanSu
     with_notes: number;
     reps: number;
   }>(
-    `WITH reps AS (${SPONSOR_REPS_SQL})
+    `WITH reps AS (${repsSql})
      SELECT m.activity_id,
             count(*) FILTER (WHERE p.attending)::int AS attending,
             count(*) FILTER (WHERE p.attending = false)::int AS not_attending,
@@ -77,7 +91,7 @@ export async function mealPlanSummaries(activityId?: number): Promise<MealPlanSu
     label: Record<string, string>;
     n: number;
   }>(
-    `WITH reps AS (${SPONSOR_REPS_SQL})
+    `WITH reps AS (${repsSql})
      SELECT p.activity_id, fi.id, fi.label, count(*)::int AS n
        FROM meal_attendance_plans p
        JOIN reps r ON r.id = p.user_id
@@ -118,9 +132,17 @@ function intoleranceLabel(label: Record<string, string>, language: string): stri
  * Catering CSV for one meal: one row per sponsor representative attending,
  * with their enterprise(s), intolerance labels (in `language`) and notes.
  */
-export async function exportMealPlanCsv(activityId: number, language: string): Promise<string> {
-  const [meal] = await mealPlanSummaries(activityId);
-  if (!meal) throw new NotFoundError("Meal not found", { activityId });
+export async function exportMealPlanCsv(
+  actorId: number,
+  activityId: number,
+  language: string,
+): Promise<string> {
+  const { rowCount } = await pool.query(`SELECT 1 ${PLANNED_MEALS_FROM_SQL}`, [
+    [...MEAL_ACTIVITY_KINDS],
+    activityId,
+  ]);
+  if (!rowCount) throw new NotFoundError("Meal not found", { activityId });
+  const repsSql = await sponsorRepsSql(actorId);
   const { rows } = await pool.query<{
     name: string | null;
     surname: string | null;
@@ -128,7 +150,7 @@ export async function exportMealPlanCsv(activityId: number, language: string): P
     labels: Record<string, string>[] | null;
     notes: string | null;
   }>(
-    `WITH reps AS (${SPONSOR_REPS_SQL})
+    `WITH reps AS (${repsSql})
      SELECT r.name, r.surname,
             (SELECT string_agg(DISTINCT e.name, '; ')
                FROM sponsors sp JOIN enterprises e ON e.id = sp.enterprise_id

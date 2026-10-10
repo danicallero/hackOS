@@ -121,9 +121,12 @@ export function registerMealPlanRoutes(app: FastifyInstance): void {
         summary: "Replace a user's meal plan",
         description:
           "Staff correction of a sponsor representative's meal plan. Same body, rules and errors as " +
-          "PUT /api/me/meal-plan (locked meals stay closed). Writes one `meal_plan.updated` audit " +
-          "row with the attending meal ids before and after, in the same transaction, when any " +
-          "answer changed. Accepts `Idempotency-Key`. Requires meal-plans:manage.",
+          "PUT /api/me/meal-plan (locked meals stay closed), except that it is partial: only the " +
+          "meals in the body are written, meals left out stay unanswered, and the sponsor's " +
+          "`confirmedAt` is not set. Writes one `meal_plan.updated` audit row with the attending " +
+          "meal ids before and after, in the same transaction, when any answer changed — also " +
+          "when staff correct their own plan here. Accepts `Idempotency-Key`. Requires " +
+          "meal-plans:manage.",
         body: mealPlanBodySchema,
         response: { 200: mealPlanResponseSchema },
       },
