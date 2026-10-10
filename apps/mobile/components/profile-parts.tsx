@@ -59,6 +59,40 @@ export function QuickAction({
 }
 
 /**
+ * The owner's note in a profile or company sheet: one row the height of a
+ * {@link DetailRow} (56pt minimum, 16pt side padding), its text vertically
+ * centred, so a one-line note sits like the Links and Location rows (#935).
+ */
+export function NoteRow({
+  note,
+  hint,
+  onPress,
+}: {
+  note: string;
+  hint: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityHint={hint}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        backgroundColor: pressed ? colors.elevatedSurface : undefined,
+        justifyContent: "center",
+        minHeight: 56,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+      })}
+    >
+      <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 22 }}>
+        {note}
+      </Text>
+    </Pressable>
+  );
+}
+
+/**
  * Label over value, so long values and translations wrap instead of
  * truncating. Without a label the value stands alone (a list of names).
  */

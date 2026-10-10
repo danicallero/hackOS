@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import {
   Animated,
   Easing,
@@ -14,8 +14,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { FavouriteStar } from "@/components/favourite-star";
-import { EmptyState, Section, Separator } from "@/components/native-ui";
-import { DetailRow, QuickAction } from "@/components/profile-parts";
+import { EmptyState, FloatingGlassButton, Section, Separator } from "@/components/native-ui";
+import { DetailRow, NoteRow, QuickAction } from "@/components/profile-parts";
 import { SymbolView } from "@/components/symbol";
 import {
   collectionProgress,
@@ -336,6 +336,7 @@ export function CompanySheet({
   onToggleStar,
   onEditNote,
   onRemove,
+  children,
 }: {
   item: SponsorCollectionItem | null;
   busy: boolean;
@@ -343,6 +344,12 @@ export function CompanySheet({
   onToggleStar: () => void;
   onEditNote: () => void;
   onRemove: () => void;
+  /**
+   * Sheets opened from this one (the note editor). iOS presents a modal only
+   * from the top-most controller, so a sibling page sheet would silently
+   * never appear over this one; rendered inside, it stacks.
+   */
+  children?: ReactNode;
 }) {
   const { t, language } = useLocale();
   const insets = useSafeAreaInsets();
@@ -359,37 +366,8 @@ export function CompanySheet({
     >
       {item && entry ? (
         <View style={{ backgroundColor: colors.background, flex: 1 }}>
-          <View
-            style={{
-              alignItems: "flex-end",
-              paddingHorizontal: 12,
-              paddingTop: process.env.EXPO_OS === "android" ? insets.top + 8 : 12,
-            }}
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("close")}
-              hitSlop={8}
-              onPress={onClose}
-              style={({ pressed }) => ({
-                alignItems: "center",
-                backgroundColor: colors.surface,
-                borderRadius: 16,
-                height: 32,
-                justifyContent: "center",
-                opacity: pressed ? 0.6 : 1,
-                width: 32,
-              })}
-            >
-              <SymbolView
-                accessible={false}
-                name="xmark"
-                size={13}
-                weight="bold"
-                tintColor={colors.secondaryLabel}
-              />
-            </Pressable>
-          </View>
+          {/* Room for the 44pt glass close circle the other sheets use. */}
+          <View style={{ height: 60 + (process.env.EXPO_OS === "android" ? insets.top : 0) }} />
           <ScrollView
             testID="company-sheet"
             contentContainerStyle={{
@@ -433,8 +411,8 @@ export function CompanySheet({
               />
               <QuickAction
                 icon="note.text"
-                label={t("diaryNote")}
-                title={t("diaryNote")}
+                label={t(entry.note ? "diaryEditNote" : "diaryNote")}
+                title={t(entry.note ? "diaryEditNote" : "diaryNote")}
                 busy={false}
                 onPress={onEditNote}
               />
@@ -468,20 +446,7 @@ export function CompanySheet({
 
             {entry.note ? (
               <Section title={t("diaryNote")}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityHint={t("diaryNote")}
-                  onPress={onEditNote}
-                  style={({ pressed }) => ({
-                    backgroundColor: pressed ? colors.elevatedSurface : undefined,
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                  })}
-                >
-                  <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 22 }}>
-                    {entry.note}
-                  </Text>
-                </Pressable>
+                <NoteRow note={entry.note} hint={t("diaryEditNote")} onPress={onEditNote} />
               </Section>
             ) : null}
 
@@ -516,6 +481,14 @@ export function CompanySheet({
               </Pressable>
             </Section>
           </ScrollView>
+          <FloatingGlassButton
+            top={16 + (process.env.EXPO_OS === "android" ? insets.top : 0)}
+            side="right"
+            icon="xmark"
+            accessibilityLabel={t("close")}
+            onPress={onClose}
+          />
+          {children}
         </View>
       ) : null}
     </Modal>

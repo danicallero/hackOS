@@ -6,6 +6,32 @@ import { loadApiImage } from "@/lib/directory";
 import { colors } from "@/theme/colors";
 
 /**
+ * An authenticated API image (`/api/users/:id/photo`, #934) loaded with the
+ * session and shown from memory (`loadApiImage`), or null until it arrives or
+ * when it cannot load. Android's image pipeline drops a `Cookie` header on an
+ * `Image` source, so private photos never go through `source.headers`.
+ */
+export function useApiImage(uri: string | null | undefined): string | null {
+  const [loaded, setLoaded] = useState<{ uri: string; source: string } | null>(null);
+  useEffect(() => {
+    if (!uri) return;
+    let active = true;
+    loadApiImage(uri).then(
+      (source) => {
+        if (active) setLoaded({ uri, source });
+      },
+      () => {
+        // A missing or hidden photo keeps the fallback.
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [uri]);
+  return uri && loaded && loaded.uri === uri ? loaded.source : null;
+}
+
+/**
  * A directory photo, initials or a placeholder symbol (#934). Initials show
  * until the authenticated photo arrives. Person photos are round and cropped;
  * sponsor logos keep their shape inside a rounded tile.
@@ -21,23 +47,7 @@ export function PersonAvatar({
   uri: string | null;
   kind?: "person" | "sponsor";
 }) {
-  const [loaded, setLoaded] = useState<{ uri: string; source: string } | null>(null);
-  useEffect(() => {
-    if (!uri) return;
-    let active = true;
-    loadApiImage(uri).then(
-      (source) => {
-        if (active) setLoaded({ uri, source });
-      },
-      () => {
-        // A missing or hidden photo keeps the initials.
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [uri]);
-  const source = loaded && loaded.uri === uri ? loaded.source : null;
+  const source = useApiImage(uri);
   const frame = {
     alignItems: "center" as const,
     backgroundColor: colors.elevatedSurface,

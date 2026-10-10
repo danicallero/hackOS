@@ -295,6 +295,7 @@ export function OpaqueRouterTabs({
               colorScheme={fallbackColorScheme}
               iconColor={tabIconColor}
               overflowIds={overflowIds}
+              account={account}
             />
           ) : null
         }
@@ -356,6 +357,39 @@ interface OpaqueOverflowMenuProps {
   colorScheme: "dark" | "light";
   iconColor: string;
   overflowIds: OverflowTabKey[];
+  account?: OpaqueRouterTabsProps["account"];
+}
+
+/**
+ * The Others circle shows the active overflow destination. On a compact
+ * phone a participant's Account lives here, so its account photo replaces
+ * the person symbol just as it does on a direct Account tab (#934).
+ */
+function OverflowTriggerIcon({
+  account,
+  activeIconColor,
+  activeOverflowId,
+  iconColor,
+}: {
+  account: OpaqueOverflowMenuProps["account"];
+  activeIconColor: string;
+  activeOverflowId: OverflowTabKey | null;
+  iconColor: string;
+}) {
+  if (activeOverflowId === "account" && account?.image) {
+    return (
+      <AccountTabAvatar name={account.name} image={account.image} ringColor={activeIconColor} />
+    );
+  }
+  return (
+    <SymbolView
+      name={activeOverflowId ? OVERFLOW_TAB_ICON[activeOverflowId] : "ellipsis"}
+      size={22}
+      tintColor={activeOverflowId ? activeIconColor : iconColor}
+      weight="semibold"
+      accessible={false}
+    />
+  );
 }
 
 interface OpaqueOperationsMenuItem extends MenuAction {
@@ -382,7 +416,12 @@ function OpaqueOverflowMenu(props: OpaqueOverflowMenuProps) {
   );
 }
 
-function NativeOverflowMenu({ activeIconColor, iconColor, overflowIds }: OpaqueOverflowMenuProps) {
+function NativeOverflowMenu({
+  account,
+  activeIconColor,
+  iconColor,
+  overflowIds,
+}: OpaqueOverflowMenuProps) {
   const { t } = useLocale();
   const { tabBarHeight } = useRouterTabBarInsets();
   const pathname = usePathname();
@@ -431,12 +470,11 @@ function NativeOverflowMenu({ activeIconColor, iconColor, overflowIds }: OpaqueO
           width: tabBarHeight,
         }}
       >
-        <SymbolView
-          name={activeOverflowId ? OVERFLOW_TAB_ICON[activeOverflowId] : "ellipsis"}
-          size={22}
-          tintColor={activeOverflowId ? activeIconColor : iconColor}
-          weight="semibold"
-          accessible={false}
+        <OverflowTriggerIcon
+          account={account}
+          activeIconColor={activeIconColor}
+          activeOverflowId={activeOverflowId}
+          iconColor={iconColor}
         />
       </View>
     </MenuView>
@@ -450,6 +488,7 @@ const ANDROID_OVERFLOW_MENU_Z_INDEX = 1000;
 const ANDROID_OVERFLOW_MENU_GAP = 8;
 
 function AndroidOverflowMenu({
+  account,
   activeIconColor,
   colorScheme,
   iconColor,
@@ -508,12 +547,11 @@ function AndroidOverflowMenu({
         }}
         testID="opaque-others-menu"
       >
-        <SymbolView
-          name={activeOverflowId ? OVERFLOW_TAB_ICON[activeOverflowId] : "ellipsis"}
-          size={22}
-          tintColor={activeOverflowId ? activeIconColor : iconColor}
-          weight="semibold"
-          accessible={false}
+        <OverflowTriggerIcon
+          account={account}
+          activeIconColor={activeIconColor}
+          activeOverflowId={activeOverflowId}
+          iconColor={iconColor}
         />
       </Pressable>
       {anchor ? (

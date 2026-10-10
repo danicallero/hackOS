@@ -9,6 +9,7 @@ import {
   Text,
   TextInput,
   type TextStyle,
+  useColorScheme,
   View,
   type ViewStyle,
 } from "react-native";
@@ -362,6 +363,7 @@ export function LegacyScreenHeader({
   cancelLabel,
   leading,
   actions,
+  searchEnabled = true,
 }: {
   topInset: number;
   title: string;
@@ -375,6 +377,8 @@ export function LegacyScreenHeader({
   cancelLabel: string;
   leading?: ReactNode;
   actions: ReactNode;
+  /** False hides the search button, for a segment the search does not apply to. */
+  searchEnabled?: boolean;
 }) {
   const reducedMotion = useReducedMotion();
   const headerTransition = reducedMotion ? undefined : LinearTransition.duration(180);
@@ -382,12 +386,12 @@ export function LegacyScreenHeader({
   return (
     <View style={{ gap: 8, paddingHorizontal: 16, paddingTop: topInset, zIndex: 10 }}>
       <Animated.View
-        key={searchOpen ? "search" : "actions"}
+        key={searchOpen && searchEnabled ? "search" : "actions"}
         entering={reducedMotion ? undefined : FadeIn.duration(180)}
         exiting={reducedMotion ? undefined : FadeOut.duration(120)}
         layout={headerTransition}
       >
-        {searchOpen ? (
+        {searchOpen && searchEnabled ? (
           <View
             style={{
               alignItems: "center",
@@ -456,18 +460,20 @@ export function LegacyScreenHeader({
             </View>
             <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
               {actions}
-              <GlassView
-                colorScheme="auto"
-                glassEffectStyle="regular"
-                isInteractive
-                style={{ borderRadius: 22, height: 44, width: 44 }}
-              >
-                <LegacyHeaderIconButton
-                  icon="magnifyingglass"
-                  accessibilityLabel={searchLabel}
-                  onPress={onOpenSearch}
-                />
-              </GlassView>
+              {searchEnabled ? (
+                <GlassView
+                  colorScheme="auto"
+                  glassEffectStyle="regular"
+                  isInteractive
+                  style={{ borderRadius: 22, height: 44, width: 44 }}
+                >
+                  <LegacyHeaderIconButton
+                    icon="magnifyingglass"
+                    accessibilityLabel={searchLabel}
+                    onPress={onOpenSearch}
+                  />
+                </GlassView>
+              ) : null}
             </View>
           </View>
         )}
@@ -774,6 +780,20 @@ export function FloatingGlassButton({
       </Pressable>
     </GlassView>
   );
+}
+
+/**
+ * Fill colours for a small input dialog (note, code entry) over a dimmed
+ * page. Light mode keeps the grouped page tone with white fields; in dark
+ * mode the grouped page is black, so the card steps up to the surface tone
+ * and its field to the elevated one, or the card vanishes into the dim.
+ */
+export function useDialogCardColors(): { card: ColorValue; field: ColorValue } {
+  const dark = useColorScheme() === "dark";
+  return {
+    card: dark ? colors.surface : colors.background,
+    field: dark ? colors.elevatedSurface : colors.surface,
+  };
 }
 
 /**

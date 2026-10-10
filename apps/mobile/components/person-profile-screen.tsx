@@ -8,9 +8,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
 import { GlassView } from "@/components/glass-view";
-import { EmptyState, LegacyHeaderIconButton, Section, Separator } from "@/components/native-ui";
+import {
+  AndroidStatusBarScrim,
+  EmptyState,
+  LegacyHeaderIconButton,
+  Section,
+  Separator,
+} from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
-import { DetailRow, QuickAction } from "@/components/profile-parts";
+import { DetailRow, NoteRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ApiError, apiFetch, getCurrentSessionCookie } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
@@ -36,10 +42,11 @@ type State =
 const ROW_ICON_INSET = 52;
 
 /**
- * One directory profile (#934, #935), opened from a diary row or the
- * directory list. The API answers 404 for a hidden profile and for a person
- * the reader may not open, so both show the same unavailable state. The
- * diary entry, when there is one, carries the reader's favourite and note.
+ * A saved person's profile (#934, #935), opened from a diary row. People get
+ * into the diary only by a badge scan, so there is no Save here. The API
+ * answers 404 for a hidden profile and for a person the reader may not open,
+ * so both show the same unavailable state. The diary entry carries the
+ * reader's favourite and note.
  */
 export function PersonProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,10 +57,15 @@ export function PersonProfileScreen() {
   const [state, setState] = useState<State>({ status: "loading" });
   const [entry, setEntry] = useState<DiaryEntry | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [busy, setBusy] = useState<"star" | "save" | "remove" | "note" | "cv" | null>(null);
+  const [busy, setBusy] = useState<"star" | "remove" | "note" | "cv" | null>(null);
   const [editingNote, setEditingNote] = useState(false);
   const requestId = useRef(0);
   const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
+  // iOS keeps the native back button, a circle on iOS 26, whenever there is a
+  // screen to return to. A custom headerLeft is wrapped in a wide glass pill,
+  // so a cold deep link (nothing to pop, H59) floats the same 44pt glass
+  // circle Android uses instead.
+  const [floatingBack] = useState(() => usesCustomAndroidHeader || !router.canGoBack());
 
   const load = useCallback(async () => {
     const request = ++requestId.current;
@@ -123,18 +135,6 @@ export function PersonProfileScreen() {
     });
   }
 
-  function save() {
-    void run("save", async () => {
-      const saved = await apiFetch<DiaryEntry>("/api/me/diary/people", {
-        method: "POST",
-        headers: { "content-type": "application/json", "Idempotency-Key": createIdempotencyKey() },
-        body: JSON.stringify({ userId }),
-      });
-      setEntry(saved);
-      void haptic("success");
-    });
-  }
-
   function confirmRemove() {
     if (!entry) return;
     Alert.alert(t("diaryRemoveTitle"), undefined, [
@@ -149,6 +149,9 @@ export function PersonProfileScreen() {
               headers: { "Idempotency-Key": createIdempotencyKey() },
             });
             setEntry(null);
+            // Only people in the diary have a profile here; saving again
+            // takes a new scan, so there is nothing left to show.
+            safeBack(router, "/");
           }),
       },
     ]);
@@ -179,7 +182,7 @@ export function PersonProfileScreen() {
 
   return (
     <>
-      {usesCustomAndroidHeader ? (
+      {floatingBack ? (
         <View
           style={{
             left: 16,
@@ -201,23 +204,10 @@ export function PersonProfileScreen() {
             />
           </GlassView>
         </View>
-      ) : (
-        <Stack.Screen
-          options={{
-            title: "",
-            // A root-level detail route: keep the back action explicit so it
-            // also works when the native back item has nothing to pop (H59).
-            headerBackVisible: false,
-            headerLeft: () => (
-              <LegacyHeaderIconButton
-                accessibilityLabel={t("back")}
-                icon="chevron.left"
-                onPress={goBack}
-              />
-            ),
-          }}
-        />
-      )}
+      ) : null}
+      {process.env.EXPO_OS === "ios" ? (
+        <Stack.Screen options={{ title: "", headerBackVisible: !floatingBack }} />
+      ) : null}
       <DiaryNoteEditor
         visible={editingNote && entry !== null}
         initialNote={entry?.note ?? null}
@@ -293,20 +283,13 @@ export function PersonProfileScreen() {
                   busy={busy === "star"}
                   onPress={() => patch({ starred: !entry.starred }, "star")}
                 />
-              ) : (
-                <QuickAction
-                  icon="plus.circle"
-                  label={t("directorySave")}
-                  title={t("save")}
-                  busy={busy === "save"}
-                  onPress={save}
-                />
-              )}
+              ) : null}
               {entry ? (
+                // With a note, its section below shows it; the tile edits it.
                 <QuickAction
                   icon="note.text"
-                  label={t("diaryNote")}
-                  title={t("diaryNote")}
+                  label={t(entry.note ? "diaryEditNote" : "diaryNote")}
+                  title={t(entry.note ? "diaryEditNote" : "diaryNote")}
                   busy={busy === "note"}
                   onPress={() => setEditingNote(true)}
                 />
@@ -341,20 +324,11 @@ export function PersonProfileScreen() {
 
             {entry?.note ? (
               <Section title={t("diaryNote")}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityHint={t("diaryNote")}
+                <NoteRow
+                  note={entry.note}
+                  hint={t("diaryEditNote")}
                   onPress={() => setEditingNote(true)}
-                  style={({ pressed }) => ({
-                    backgroundColor: pressed ? colors.elevatedSurface : undefined,
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                  })}
-                >
-                  <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 22 }}>
-                    {entry.note}
-                  </Text>
-                </Pressable>
+                />
               </Section>
             ) : null}
 
@@ -380,7 +354,7 @@ export function PersonProfileScreen() {
                   person.locationNote ? (
                     <DetailRow
                       key="location"
-                      icon="mappin.and.ellipse"
+                      icon="mappin"
                       label={t("directoryLocation")}
                       value={person.locationNote}
                     />
@@ -440,6 +414,9 @@ export function PersonProfileScreen() {
           </>
         )}
       </ScrollView>
+      {/* Keeps scrolled content out from behind the clock; the floating back
+          button stays above it. */}
+      <AndroidStatusBarScrim />
     </>
   );
 }

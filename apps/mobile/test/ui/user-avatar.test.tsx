@@ -1,50 +1,54 @@
-import { act, fireEvent, screen } from "@testing-library/react-native";
+import { act, screen } from "@testing-library/react-native";
 import { renderMobile } from "./render";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-let mockCookie = "better-auth.session_token=abc";
-jest.mock("@/lib/api", () => ({ getCurrentSessionCookie: () => mockCookie }));
-jest.mock("@/lib/env", () => ({ API_URL: "https://api.example/" }));
+const mockLoadApiImage = jest.fn<Promise<string>, [string]>();
+jest.mock("@/lib/api", () => ({ getCurrentSessionCookie: () => "session=abc" }));
+jest.mock("@/lib/directory", () => ({
+  loadApiImage: (path: string) => mockLoadApiImage(path),
+}));
 
-const { UserAvatar, avatarInitials, authenticatedImageSource } =
+const { UserAvatar, avatarInitials } =
   require("@/components/user-avatar") as typeof import("@/components/user-avatar");
+
+async function flush() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
 
 describe("UserAvatar (#934)", () => {
   beforeEach(() => {
-    mockCookie = "better-auth.session_token=abc";
+    mockLoadApiImage.mockReset();
   });
 
-  it("loads the private photo route with the session cookie", async () => {
+  it("fetches the private photo route with the session and shows it from memory", async () => {
+    // An `Image` source with a Cookie header answers 401 on Android, so the
+    // photo must go through the session-aware loader, never `source.headers`.
+    mockLoadApiImage.mockResolvedValue("data:image/jpeg;base64,AAAA");
     await renderMobile(
       <UserAvatar testID="avatar" name="Ada Lovelace" image="/api/users/7/photo?v=abc" />,
     );
+    await flush();
+    expect(mockLoadApiImage).toHaveBeenCalledWith("/api/users/7/photo?v=abc");
     expect(
       screen.getByTestId("avatar-photo", { includeHiddenElements: true }).props.source,
-    ).toEqual({
-      uri: "https://api.example/api/users/7/photo?v=abc",
-      headers: { cookie: "better-auth.session_token=abc" },
-    });
+    ).toEqual({ uri: "data:image/jpeg;base64,AAAA" });
     expect(screen.queryByText("AL", { includeHiddenElements: true })).toBeNull();
   });
 
   it("shows initials without a photo and when the photo fails to load", async () => {
     await renderMobile(<UserAvatar testID="avatar" name="Ada Lovelace" image={null} />);
     expect(screen.getByText("AL", { includeHiddenElements: true })).toBeTruthy();
+    expect(mockLoadApiImage).not.toHaveBeenCalled();
 
+    mockLoadApiImage.mockRejectedValue(new Error("Photo request failed (404)"));
     await renderMobile(<UserAvatar testID="broken" name="Grace" image="/api/users/8/photo" />);
-    await act(async () => {
-      fireEvent(screen.getByTestId("broken-photo", { includeHiddenElements: true }), "error");
-    });
+    await flush();
     expect(screen.getByText("GR", { includeHiddenElements: true })).toBeTruthy();
-  });
-
-  it("keeps absolute URLs and omits an empty cookie", () => {
-    mockCookie = "";
-    expect(authenticatedImageSource("https://cdn.example/a.png")).toEqual({
-      uri: "https://cdn.example/a.png",
-    });
+    expect(screen.queryByTestId("broken-photo", { includeHiddenElements: true })).toBeNull();
   });
 
   it("derives initials from the first and last words", () => {

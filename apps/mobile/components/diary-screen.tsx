@@ -1,8 +1,13 @@
-import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { useFocusEffect, useLocalSearchParams, useRouter, useScrollToTop } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
+  useFocusEffect,
+  useLocalSearchParams,
+  useNavigation,
+  useRouter,
+  useScrollToTop,
+} from "expo-router";
+import Stack from "expo-router/stack";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
   Alert,
   AppState,
   Modal,
@@ -11,22 +16,23 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  TextInput,
+  Text,
   useColorScheme,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
 import { CompanyAlbum, CompanySheet } from "@/components/company-album";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { DiaryPersonRow, PERSON_ROW_TEXT_INSET } from "@/components/diary-person-row";
 import { FavouriteStar } from "@/components/favourite-star";
-import { EmptyState, Section, Separator } from "@/components/native-ui";
+import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { EmptyState, LegacyScreenHeader, Section, Separator } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SegmentedControl } from "@/components/segmented-control";
-import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { type DiaryEntry, diaryScanErrorKey, upsertDiaryEntry } from "@/lib/diary";
 import {
@@ -34,13 +40,11 @@ import {
   type SponsorCollectionItem,
   withCompanyEntry,
 } from "@/lib/diary-sponsors";
-import { type DirectoryEntry, type DirectoryPage, filterDiaryEntries } from "@/lib/directory";
+import { filterDiaryEntries } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
-import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
-import { has } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { colors } from "@/theme/colors";
 
@@ -51,12 +55,10 @@ const SCAN_LABELS: ScanActionLabels = {
   options: "diaryScanOptions",
 };
 
-const DIRECTORY_PAGE_SIZE = 30;
-const SEARCH_DEBOUNCE_MS = 300;
-
 type ScanInput = "nfc" | "qr" | "manual";
 type DiarySection = "people" | "companies";
-type PeopleScope = "saved" | "directory";
+
+const SECTIONS: DiarySection[] = ["people", "companies"];
 type NoteTarget = { kind: "person"; entry: DiaryEntry } | { kind: "company"; enterpriseId: number };
 
 const JSON_HEADERS = () => ({
@@ -66,22 +68,31 @@ const JSON_HEADERS = () => ({
 
 /**
  * Event diary (#935), in two segments:
- * - People: those this attendee saved, searched locally (cards never carry
- *   an email). A `directory:read` holder can also browse the directory,
- *   searched by name on the server. Saving and favouriting are separate: the
- *   star only marks a saved person; only "Remove from diary" removes one.
+ * - People: those this attendee scanned, searched locally (cards never carry
+ *   an email). There is no directory to browse: a person gets in only by a
+ *   badge scan. The star only marks a saved person; only "Remove from diary"
+ *   removes one.
  * - Companies: a sticker album of the sponsor stands to collect.
- * Scanning starts NFC directly where supported (R008); QR and manual entry
- * stay in the compact menu. Cards come live from the API and are never cached
- * on the device, so a profile hidden later disappears here.
+ * The screen uses the platform header, laid out like Activities: on iOS 26
+ * the native bar with the title as a leading item, the native search and the
+ * favourites filter as a native toolbar button; elsewhere
+ * `LegacyScreenHeader`. Search and
+ * the filter apply to People only. Scanning is the shared `BadgeLinkActions`
+ * pill in the content (R008: NFC direct where supported, QR and manual code
+ * in its menu). Cards come live from the API and are never cached on the
+ * device, so a profile hidden later disappears here.
  */
 export function DiaryScreen() {
-  useColorScheme();
+  const colorScheme = useColorScheme();
   const { t } = useLocale();
   const router = useRouter();
-  const { me } = useMeContext();
-  const canBrowse = has(me?.capabilities ?? [], CAPABILITIES.DIRECTORY_READ);
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+  // iOS 26 gets the native large-title header with its own search bar;
+  // Android and earlier iOS keep the shared hand-rolled header.
+  const glassAvailable = isRealLiquidGlassAvailable();
   const androidTopInset = useAndroidTopInset();
+  const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
@@ -95,19 +106,16 @@ export function DiaryScreen() {
     scrollRef.current?.scrollTo?.({ y: restOffset.current, animated: true });
   };
 
-  // Deep links may open a segment directly: `/diary?view=companies`, or
-  // `/diary?view=directory` for a directory reader's People > Directory.
+  // Deep links may open a segment directly: `/diary?view=companies`.
   const { view } = useLocalSearchParams<{ view?: string }>();
   const [section, setSection] = useState<DiarySection>(
     view === "companies" ? "companies" : "people",
   );
-  const [scope, setScope] = useState<PeopleScope>(view === "directory" ? "directory" : "saved");
   useEffect(() => {
-    if (view === "companies") setSection("companies");
-    if (view === "directory" || view === "people") setSection("people");
-    if (view === "directory") setScope("directory");
+    if (view === "companies" || view === "people") setSection(view);
   }, [view]);
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [favouritesOnly, setFavouritesOnly] = useState(false);
   const [entries, setEntries] = useState<DiaryEntry[] | null>(null);
   const [collection, setCollection] = useState<SponsorCollection | null>(null);
@@ -125,8 +133,10 @@ export function DiaryScreen() {
   const requestId = useRef(0);
   const collectionRequestId = useRef(0);
   const scanInFlight = useRef(false);
-  const showDirectory = canBrowse && section === "people" && scope === "directory";
-  const directory = useDirectory(showDirectory, query);
+  const sectionLabels: Record<DiarySection, string> = {
+    people: t("diaryPeopleTab"),
+    companies: t("diaryCompaniesTab"),
+  };
 
   const load = useCallback(async () => {
     const request = ++requestId.current;
@@ -203,8 +213,7 @@ export function DiaryScreen() {
   async function onRefresh() {
     setRefreshing(true);
     try {
-      if (showDirectory) await directory.reload();
-      else await Promise.all([load(), loadCollection()]);
+      await Promise.all([load(), loadCollection()]);
     } finally {
       setRefreshing(false);
     }
@@ -234,7 +243,6 @@ export function DiaryScreen() {
         applyEntry(entry);
         setSavedId(entry.id);
         setSection("people");
-        setScope("saved");
       }
     } catch (error) {
       void haptic("error");
@@ -245,14 +253,14 @@ export function DiaryScreen() {
     }
   }
 
-  async function mutate(key: string, action: () => Promise<void>, errorKey = "diaryActionError") {
+  async function mutate(key: string, action: () => Promise<void>) {
     if (busyKeys.has(key)) return;
     setBusyKeys((current) => new Set(current).add(key));
     try {
       await action();
     } catch {
       void haptic("error");
-      Alert.alert(t("tabDiary"), t(errorKey as "diaryActionError"));
+      Alert.alert(t("tabDiary"), t("diaryActionError"));
     } finally {
       setBusyKeys((current) => {
         const next = new Set(current);
@@ -299,23 +307,6 @@ export function DiaryScreen() {
     );
   }
 
-  function savePerson(person: DirectoryEntry) {
-    return mutate(
-      `user:${person.userId}`,
-      async () => {
-        applyEntry(
-          await apiFetch<DiaryEntry>("/api/me/diary/people", {
-            method: "POST",
-            headers: JSON_HEADERS(),
-            body: JSON.stringify({ userId: person.userId }),
-          }),
-        );
-        void haptic("success");
-      },
-      "directorySaveError",
-    );
-  }
-
   const openCompany = collection?.items.find((item) => item.enterpriseId === openCompanyId) ?? null;
 
   function updateCompany(item: SponsorCollectionItem, patch: { starred?: boolean; note?: string }) {
@@ -349,22 +340,20 @@ export function DiaryScreen() {
   );
 
   const inputOpen = input !== null;
-  const searching = query.trim() !== "" || favouritesOnly;
+  // Search and the favourites filter apply to People only, once there is
+  // anyone to search; Companies shows the header without them.
+  const searchable = section === "people" && (entries?.length ?? 0) > 0;
+  const activeQuery = searchable ? query : "";
+  const activeFavourites = searchable && favouritesOnly;
+  const searching = activeQuery.trim() !== "" || activeFavourites;
   const visible = useMemo(
-    () => filterDiaryEntries(entries ?? [], { query, favouritesOnly }),
-    [entries, query, favouritesOnly],
+    () =>
+      filterDiaryEntries(entries ?? [], { query: activeQuery, favouritesOnly: activeFavourites }),
+    [entries, activeQuery, activeFavourites],
   );
   // The just-scanned card is pinned on top only while nothing filters the list.
   const pinned = searching ? null : (visible.find((entry) => entry.id === savedId) ?? null);
   const rest = visible.filter((entry) => entry.id !== pinned?.id);
-  const savedByUser = useMemo(
-    () =>
-      new Map(
-        (entries ?? []).flatMap((entry) => (entry.person ? [[entry.person.userId, entry]] : [])),
-      ) as Map<number, DiaryEntry>,
-    [entries],
-  );
-
   function savedRow(entry: DiaryEntry) {
     const person = entry.person;
     return (
@@ -376,50 +365,76 @@ export function DiaryScreen() {
         headline={person?.headline}
         detail={entry.note ?? person?.project?.name}
         detailIsNote={Boolean(entry.note)}
-        saved
         starred={entry.starred}
         busy={busyKeys.has(`entry:${entry.id}`)}
         onOpen={person ? () => openPerson(person.userId) : undefined}
-        onToggleStar={() => void updatePerson(entry, { starred: !entry.starred })}
+        // A hidden profile can no longer be favourited; it keeps only its
+        // note and "Remove from diary", so its name is not truncated.
+        onToggleStar={
+          person ? () => void updatePerson(entry, { starred: !entry.starred }) : undefined
+        }
         onEditNote={() => setNoteTarget({ kind: "person", entry })}
         onRemove={() => removePerson(entry)}
       />
     );
   }
 
-  function directoryRow(person: DirectoryEntry) {
-    const entry = savedByUser.get(person.userId) ?? null;
-    return (
-      <DiaryPersonRow
-        name={person.displayName}
-        photoUrl={person.photoUrl}
-        headline={person.headline}
-        detail={entry?.note ?? person.project?.name}
-        detailIsNote={Boolean(entry?.note)}
-        saved={entry !== null}
-        starred={entry?.starred ?? false}
-        busy={busyKeys.has(entry ? `entry:${entry.id}` : `user:${person.userId}`)}
-        onOpen={() => openPerson(person.userId)}
-        onSave={() => void savePerson(person)}
-        onToggleStar={
-          entry ? () => void updatePerson(entry, { starred: !entry.starred }) : undefined
-        }
-        onEditNote={entry ? () => setNoteTarget({ kind: "person", entry }) : undefined}
-        onRemove={entry ? () => removePerson(entry) : undefined}
-      />
-    );
-  }
-
   function onScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const { contentOffset } = event.nativeEvent;
     currentOffset.current = contentOffset.y;
     // The adjusted inset is not reported; the lowest offset seen is the rest.
     restOffset.current = Math.min(restOffset.current, contentOffset.y);
-    if (!showDirectory) return;
-    if (contentOffset.y + layoutMeasurement.height > contentSize.height - 400) {
-      void directory.loadMore();
+  }
+
+  function toggleFavourites() {
+    void haptic("selection");
+    setFavouritesOnly((value) => !value);
+  }
+
+  function selectSection(next: DiarySection) {
+    setSection(next);
+    // The query belongs to People; leaving it closes the field.
+    if (next !== "people") {
+      setSearchOpen(false);
+      setQuery("");
     }
   }
+
+  const headerItems = (
+    <FavouritesToggle visible={searchable} on={favouritesOnly} onToggle={toggleFavourites} />
+  );
+
+  useLayoutEffect(() => {
+    if (!glassAvailable) {
+      navigation.setOptions({ headerShown: false });
+      return;
+    }
+    navigation.setOptions({
+      // As Activities: the title is a native leading item on the bar row,
+      // beside the trailing items, so no empty row sits above a large title.
+      // An empty navigation title stops iOS 26 adding its centred one.
+      title: "",
+      headerShown: true,
+      headerLargeTitle: false,
+      // The system bar background: the list scrolls under it with iOS 26's
+      // scroll-edge effect, never an opaque page-coloured block.
+      headerTransparent: true,
+      headerShadowVisible: false,
+      // Removed on Companies: the native bar has no inert state.
+      headerSearchBarOptions: searchable
+        ? {
+            placeholder: t("diarySearchPlaceholder"),
+            autoCapitalize: "none",
+            hideWhenScrolling: true,
+            allowToolbarIntegration: false,
+            placement: "integratedButton",
+            onChangeText: (event: { nativeEvent: { text: string } }) =>
+              setQuery(event.nativeEvent.text),
+            onCancelButtonPress: () => setQuery(""),
+          }
+        : undefined,
+    });
+  }, [glassAvailable, navigation, searchable, t]);
 
   const noteInitial =
     noteTarget?.kind === "person"
@@ -429,7 +444,107 @@ export function DiaryScreen() {
             ?.note ?? null)
         : null;
 
-  return (
+  // One note editor for people and stands; a stand's opens inside the
+  // company sheet so iOS can stack it over that sheet.
+  const noteEditor = (
+    <DiaryNoteEditor
+      visible={noteTarget !== null}
+      initialNote={noteInitial}
+      onClose={() => setNoteTarget(null)}
+      onSave={(note) => {
+        const target = noteTarget;
+        setNoteTarget(null);
+        if (target?.kind === "person") void updatePerson(target.entry, { note });
+        if (target?.kind === "company") {
+          const item = collection?.items.find((i) => i.enterpriseId === target.enterpriseId);
+          if (item) void updateCompany(item, { note });
+        }
+      }}
+    />
+  );
+
+  const list = (
+    <ScrollView
+      ref={scrollRef}
+      testID="diary-scroll"
+      accessibilityElementsHidden={inputOpen}
+      importantForAccessibility={inputOpen ? "no-hide-descendants" : "auto"}
+      contentInsetAdjustmentBehavior="automatic"
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
+      onScroll={onScroll}
+      scrollEventThrottle={200}
+      style={{ backgroundColor: colors.background }}
+      contentContainerStyle={{
+        gap: 16,
+        padding: 16,
+        paddingBottom: Math.max(32, tabBarBottomInset + 16),
+        paddingTop: 8,
+      }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+    >
+      <BadgeLinkActions
+        testID="diary-scan"
+        labels={SCAN_LABELS}
+        disabled={scanning || inputOpen}
+        onNfc={() => setInput("nfc")}
+        onAlternative={setInput}
+      />
+      <SegmentedControl
+        label={t("diaryViews")}
+        values={SECTIONS.map((key) => sectionLabels[key])}
+        selectedIndex={Math.max(0, SECTIONS.indexOf(section))}
+        onChange={(index) => selectSection(SECTIONS[index] ?? "people")}
+      />
+      {section === "companies" ? (
+        collection ? (
+          <CompanyAlbum
+            collection={collection}
+            highlightId={highlightId}
+            onOpen={(item) => setOpenCompanyId(item.enterpriseId)}
+          />
+        ) : (
+          <RequestFeedback
+            loading={!collectionError}
+            error={collectionError}
+            onRetry={() => void loadCollection()}
+          />
+        )
+      ) : (
+        <>
+          {loadError ? <RequestFeedback error={loadError} onRetry={() => void load()} /> : null}
+          {entries === null ? (
+            loadError ? null : (
+              <RequestFeedback loading={loading} error={null} onRetry={() => void load()} />
+            )
+          ) : entries.length === 0 ? (
+            <EmptyState icon="person.2.crop.square.stack" title={t("diaryEmptyTitle")} />
+          ) : visible.length === 0 ? (
+            activeFavourites && !activeQuery.trim() ? (
+              <EmptyState icon="star" title={t("diaryNoFavourites")} />
+            ) : (
+              <EmptyState icon="magnifyingglass" title={t("scannerNoResults")} />
+            )
+          ) : (
+            <>
+              {pinned ? <Section title={t("diarySaved")}>{savedRow(pinned)}</Section> : null}
+              {rest.length > 0 ? (
+                <Section>
+                  {rest.map((entry, index) => (
+                    <View key={entry.id}>
+                      {index > 0 ? <Separator inset={PERSON_ROW_TEXT_INSET} /> : null}
+                      {savedRow(entry)}
+                    </View>
+                  ))}
+                </Section>
+              ) : null}
+            </>
+          )}
+        </>
+      )}
+    </ScrollView>
+  );
+  const overlays = (
     <>
       <NfcReader
         visible={input === "nfc"}
@@ -438,6 +553,9 @@ export function DiaryScreen() {
       />
       <ScannerCodeEntry
         visible={input === "manual"}
+        appearance="system"
+        title={t("personEnterBadgeCode")}
+        placeholder={null}
         submitLabel={t("save")}
         onValue={(code) => void submitScan(code)}
         onClose={() => setInput(null)}
@@ -468,333 +586,119 @@ export function DiaryScreen() {
         onRemove={() => {
           if (openCompany) removeCompany(openCompany);
         }}
-      />
-      <DiaryNoteEditor
-        visible={noteTarget !== null}
-        initialNote={noteInitial}
-        onClose={() => setNoteTarget(null)}
-        onSave={(note) => {
-          const target = noteTarget;
-          setNoteTarget(null);
-          if (target?.kind === "person") void updatePerson(target.entry, { note });
-          if (target?.kind === "company") {
-            const item = collection?.items.find((i) => i.enterpriseId === target.enterpriseId);
-            if (item) void updateCompany(item, { note });
-          }
-        }}
-      />
-      <ScrollView
-        ref={scrollRef}
-        testID="diary-scroll"
-        accessibilityElementsHidden={inputOpen}
-        importantForAccessibility={inputOpen ? "no-hide-descendants" : "auto"}
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-        onScroll={onScroll}
-        scrollEventThrottle={200}
-        style={{ backgroundColor: colors.background }}
-        contentContainerStyle={{
-          gap: 16,
-          padding: 16,
-          paddingBottom: Math.max(32, tabBarBottomInset + 16),
-          paddingTop: 16 + androidTopInset,
-        }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
-        }
       >
-        <BadgeLinkActions
-          testID="diary-scan"
-          labels={SCAN_LABELS}
-          disabled={scanning || inputOpen}
-          onNfc={() => setInput("nfc")}
-          onAlternative={setInput}
-        />
-        <SegmentedControl
-          label={t("diaryViews")}
-          values={[t("diaryPeopleTab"), t("diaryCompaniesTab")]}
-          selectedIndex={section === "people" ? 0 : 1}
-          onChange={(index) => setSection(index === 0 ? "people" : "companies")}
-        />
-        {section === "companies" ? (
-          collection ? (
-            <CompanyAlbum
-              collection={collection}
-              highlightId={highlightId}
-              onOpen={(item) => setOpenCompanyId(item.enterpriseId)}
-            />
-          ) : (
-            <RequestFeedback
-              loading={!collectionError}
-              error={collectionError}
-              onRetry={() => void loadCollection()}
-            />
-          )
-        ) : (
-          <>
-            <View style={{ gap: 10 }}>
-              {showDirectory || (entries?.length ?? 0) > 0 ? (
-                <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
-                  <SearchField
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder={t(
-                      showDirectory ? "directorySearchPlaceholder" : "diarySearchPlaceholder",
-                    )}
-                    label={t("scheduleSearch")}
-                    clearLabel={t("cancel")}
-                  />
-                  {showDirectory ? null : (
-                    <Pressable
-                      accessibilityRole="togglebutton"
-                      accessibilityLabel={t("diaryShowFavourites")}
-                      accessibilityState={{ checked: favouritesOnly }}
-                      hitSlop={4}
-                      onPress={() => {
-                        void haptic("selection");
-                        setFavouritesOnly((value) => !value);
-                      }}
-                      style={({ pressed }) => ({
-                        alignItems: "center",
-                        backgroundColor: favouritesOnly ? colors.warningSurface : colors.surface,
-                        borderColor: favouritesOnly ? colors.warning : "transparent",
-                        borderCurve: "continuous",
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        height: 44,
-                        justifyContent: "center",
-                        opacity: pressed ? 0.7 : 1,
-                        width: 44,
-                      })}
-                    >
-                      <FavouriteStar on={favouritesOnly} />
-                    </Pressable>
-                  )}
-                </View>
-              ) : null}
-              {canBrowse ? (
-                <SegmentedControl
-                  label={t("diaryPeopleTab")}
-                  values={[t("diarySavedTab"), t("diaryDirectoryTab")]}
-                  selectedIndex={scope === "saved" ? 0 : 1}
-                  onChange={(index) => setScope(index === 0 ? "saved" : "directory")}
-                />
-              ) : null}
-            </View>
-            {showDirectory ? (
-              <DirectoryResults state={directory} query={query} renderRow={directoryRow} />
-            ) : (
-              <>
-                {loadError ? (
-                  <RequestFeedback error={loadError} onRetry={() => void load()} />
-                ) : null}
-                {entries === null ? (
-                  loadError ? null : (
-                    <RequestFeedback loading={loading} error={null} onRetry={() => void load()} />
-                  )
-                ) : entries.length === 0 ? (
-                  <EmptyState icon="person.2.crop.square.stack" title={t("diaryEmptyTitle")} />
-                ) : visible.length === 0 ? (
-                  favouritesOnly && !query.trim() ? (
-                    <EmptyState icon="star" title={t("diaryNoFavourites")} />
-                  ) : (
-                    <EmptyState icon="magnifyingglass" title={t("scannerNoResults")} />
-                  )
-                ) : (
-                  <>
-                    {pinned ? <Section title={t("diarySaved")}>{savedRow(pinned)}</Section> : null}
-                    {rest.length > 0 ? (
-                      <Section>
-                        {rest.map((entry, index) => (
-                          <View key={entry.id}>
-                            {index > 0 ? <Separator inset={PERSON_ROW_TEXT_INSET} /> : null}
-                            {savedRow(entry)}
-                          </View>
-                        ))}
-                      </Section>
-                    ) : null}
-                  </>
-                )}
-              </>
-            )}
-          </>
-        )}
-      </ScrollView>
+        {noteTarget?.kind === "company" ? noteEditor : null}
+      </CompanySheet>
+      {noteTarget?.kind === "company" ? null : noteEditor}
     </>
   );
-}
 
-function SearchField({
-  value,
-  onChangeText,
-  placeholder,
-  label,
-  clearLabel,
-}: {
-  value: string;
-  onChangeText: (value: string) => void;
-  placeholder: string;
-  label: string;
-  clearLabel: string;
-}) {
+  // iOS 26: the scroll view is the screen's first child, below the native bar.
+  if (glassAvailable) {
+    return (
+      <>
+        {list}
+        <Stack.Toolbar placement="left">
+          <Stack.Toolbar.View hidesSharedBackground>
+            <Text
+              accessibilityRole="header"
+              style={{
+                // A fixed colour, not the dynamic label: iOS 26 flips a bar
+                // item's light/dark appearance with what scrolls behind it,
+                // which turned the title white over the blue scan pill.
+                color: colorScheme === "dark" ? "#ffffff" : "#000000",
+                fontSize: 28,
+                fontWeight: "800",
+              }}
+            >
+              {t("tabDiary")}
+            </Text>
+          </Stack.Toolbar.View>
+        </Stack.Toolbar>
+        {searchable ? (
+          // A native SF Symbol bar item, so the system draws the same circle
+          // as its search button.
+          <Stack.Toolbar placement="right">
+            <Stack.Toolbar.Button
+              icon={favouritesOnly ? "star.fill" : "star"}
+              accessibilityLabel={t("diaryShowFavourites")}
+              selected={favouritesOnly}
+              tintColor={favouritesOnly ? colors.warning : undefined}
+              onPress={toggleFavourites}
+            />
+          </Stack.Toolbar>
+        ) : null}
+        {overlays}
+      </>
+    );
+  }
   return (
-    <View
-      style={{
-        alignItems: "center",
-        backgroundColor: colors.surface,
-        borderCurve: "continuous",
-        borderRadius: 12,
-        flex: 1,
-        flexDirection: "row",
-        gap: 8,
-        height: 44,
-        paddingHorizontal: 12,
-      }}
-    >
-      <SymbolView
-        accessible={false}
-        name="magnifyingglass"
-        size={17}
-        tintColor={colors.secondaryLabel}
+    <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      <LegacyScreenHeader
+        actions={
+          searchable ? (
+            <GlassView
+              colorScheme="auto"
+              glassEffectStyle="regular"
+              isInteractive
+              style={{ borderRadius: 22, height: 44, width: 44 }}
+            >
+              {headerItems}
+            </GlassView>
+          ) : (
+            // Keeps the title row's height, so switching segments never jumps.
+            <View style={{ height: 44 }} />
+          )
+        }
+        cancelLabel={t("cancel")}
+        onCloseSearch={() => {
+          setSearchOpen(false);
+          setQuery("");
+        }}
+        onOpenSearch={() => setSearchOpen(true)}
+        onSearchQueryChange={setQuery}
+        searchEnabled={searchable}
+        searchLabel={t("scheduleSearch")}
+        searchOpen={searchOpen}
+        searchPlaceholder={t("diarySearchPlaceholder")}
+        searchQuery={query}
+        title={t("tabDiary")}
+        topInset={legacyTopInset}
       />
-      <TextInput
-        accessibilityLabel={label}
-        autoCapitalize="none"
-        autoCorrect={false}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.tertiaryLabel}
-        returnKeyType="search"
-        style={{ color: colors.label, flex: 1, fontSize: 17, paddingVertical: 0 }}
-        value={value}
-      />
-      {value ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={clearLabel}
-          hitSlop={8}
-          onPress={() => onChangeText("")}
-        >
-          <SymbolView
-            accessible={false}
-            name="xmark.circle.fill"
-            size={17}
-            tintColor={colors.tertiaryLabel}
-          />
-        </Pressable>
-      ) : null}
+      {list}
+      {overlays}
     </View>
   );
 }
 
-interface DirectoryState {
-  items: DirectoryEntry[] | null;
-  error: Error | null;
-  loadingMore: boolean;
-  reload: () => Promise<void>;
-  loadMore: () => Promise<void>;
-}
-
-/** Server-side directory pages for `directory:read` holders (#934). */
-function useDirectory(enabled: boolean, query: string): DirectoryState {
-  const [items, setItems] = useState<DirectoryEntry[] | null>(null);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [debounced, setDebounced] = useState(query.trim());
-  const requestId = useRef(0);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(query.trim()), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  const fetchPage = useCallback(
-    (after: string | null) => {
-      const params = new URLSearchParams({ limit: String(DIRECTORY_PAGE_SIZE) });
-      if (debounced) params.set("q", debounced);
-      if (after) params.set("cursor", after);
-      return apiFetch<DirectoryPage>(`/api/directory?${params.toString()}`);
-    },
-    [debounced],
-  );
-
-  const reload = useCallback(async () => {
-    const request = ++requestId.current;
-    try {
-      const page = await fetchPage(null);
-      if (request !== requestId.current) return;
-      setItems(page.items);
-      setCursor(page.nextCursor);
-      setError(null);
-    } catch (cause) {
-      if (request !== requestId.current) return;
-      setError(cause instanceof Error ? cause : new Error(String(cause)));
-    }
-  }, [fetchPage]);
-
-  useEffect(() => {
-    if (enabled) void reload();
-  }, [enabled, reload]);
-
-  const loadMore = useCallback(async () => {
-    if (!cursor || loadingMore) return;
-    const request = requestId.current;
-    setLoadingMore(true);
-    try {
-      const page = await fetchPage(cursor);
-      if (request !== requestId.current) return;
-      setItems((current) => [...(current ?? []), ...page.items]);
-      setCursor(page.nextCursor);
-    } catch {
-      // The next scroll retries; the loaded page stays visible.
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [cursor, fetchPage, loadingMore]);
-
-  return { items, error, loadingMore, reload, loadMore };
-}
-
-function DirectoryResults({
-  state,
-  query,
-  renderRow,
+/** The favourites filter (#935) in `LegacyScreenHeader`, on People only. */
+function FavouritesToggle({
+  visible,
+  on,
+  onToggle,
 }: {
-  state: DirectoryState;
-  query: string;
-  renderRow: (person: DirectoryEntry) => React.ReactNode;
+  visible: boolean;
+  on: boolean;
+  onToggle: () => void;
 }) {
   const { t } = useLocale();
-  if (state.items === null) {
-    return state.error ? (
-      <RequestFeedback error={state.error} onRetry={() => void state.reload()} />
-    ) : (
-      <RequestFeedback loading />
-    );
-  }
-  if (state.items.length === 0) {
-    return query.trim() ? (
-      <EmptyState icon="magnifyingglass" title={t("scannerNoResults")} />
-    ) : (
-      <EmptyState icon="person.2" title={t("directoryEmpty")} />
-    );
-  }
+  if (!visible) return null;
   return (
-    <View style={{ gap: 16 }}>
-      {state.error ? (
-        <RequestFeedback error={state.error} onRetry={() => void state.reload()} />
-      ) : null}
-      <Section>
-        {state.items.map((person, index) => (
-          <View key={person.userId}>
-            {index > 0 ? <Separator inset={PERSON_ROW_TEXT_INSET} /> : null}
-            {renderRow(person)}
-          </View>
-        ))}
-      </Section>
-      {state.loadingMore ? <ActivityIndicator color={colors.secondaryLabel} /> : null}
-    </View>
+    <Pressable
+      accessibilityRole="togglebutton"
+      accessibilityLabel={t("diaryShowFavourites")}
+      accessibilityState={{ checked: on }}
+      onPress={onToggle}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        height: 44,
+        justifyContent: "center",
+        opacity: pressed ? 0.6 : 1,
+        width: 44,
+      })}
+    >
+      {/* Material Symbols ship only an outlined star; this one also fills. */}
+      <FavouriteStar on={on} />
+    </Pressable>
   );
 }

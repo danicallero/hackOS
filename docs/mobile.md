@@ -224,10 +224,14 @@ distributed to other Expo Router apps without importing hackOS code.
   When the signed-in person has an account photo (#934), the direct Account
   tab shows it instead of the person symbol, with a ring in the tab tint when
   selected, and the Account screen header shows it in place of the initials.
-  `components/user-avatar.tsx` loads the private `/api/users/:id/photo` route
-  with the session cookie and falls back to initials if it cannot load. The
-  native `Others` dropdown keeps SF Symbols: UIMenu/Android menu items accept
-  symbol names, not an authenticated remote image.
+  On a compact phone a participant's Account sits behind Others, so the Others
+  circle shows the same ringed photo while Account is open.
+  `components/user-avatar.tsx` fetches the private `/api/users/:id/photo` route
+  with the session (`loadApiImage`, shown from memory: Android's image pipeline
+  drops a `Cookie` header on an `Image` source) and keeps the initials until it
+  arrives or if it cannot load. The items inside the native `Others` dropdown
+  keep SF Symbols: UIMenu/Android menu items accept symbol names, not an
+  authenticated remote image.
   `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
   (`lib/me-context.tsx`, `lib/use-me.ts`) and keeps the custom RouterTabs shell
   mounted while the profile revalidates. Every route stays registered in the
@@ -635,36 +639,66 @@ distributed to other Expo Router apps without importing hackOS code.
 
 ### Event diary (#935)
 
-`components/diary-screen.tsx`, routed as `app/(tabs)/diary.tsx` when the tab is
-direct and `app/(tabs)/others/diary.tsx` inside Others (`diary` is an
-`OVERFLOW_TAB_KEYS` entry; see `docs/navigation.md` for placement). A
-segmented control splits it into **People** and **Companies**; the
-`?view=companies` / `?view=directory` route parameter opens a segment directly.
+`components/diary-screen.tsx`, routed as `app/(tabs)/diary/index.tsx` (its own
+`Stack`, like Schedule, so the screen can drive a native header) when the tab
+is direct and `app/(tabs)/others/diary.tsx` inside Others (`diary` is an
+`OVERFLOW_TAB_KEYS` entry; see `docs/navigation.md` for placement). One
+segmented control splits it into **People** | **Companies**. There is no
+directory to browse: people get into the diary only by a badge scan. The
+`?view=people` / `?view=companies` route parameter opens a segment directly.
 Pull-to-refresh, focus and foregrounding refetch. Nothing is written to the
 offline cache, so a profile hidden later cannot reappear from device storage.
+
+The diary uses the system header, laid out like Activities. On iOS 26
+(`isRealLiquidGlassAvailable`) it is the transparent native bar: the list
+scrolls under it with the system scroll-edge effect. iOS has no left-aligned
+title on the bar row (`headerTitleAlign` is Android-only, and react-native-screens
+4.26 does not expose iOS 26's `inlineLarge` large-title mode), so the
+navigation title is empty and "Diario" is a leading `Stack.Toolbar.View` with
+`hidesSharedBackground` (28pt heavy, `accessibilityRole="header"`). That title
+uses a fixed black or white from the app's colour scheme, not the dynamic
+label colour: iOS 26 flips a bar item's light/dark appearance with what
+scrolls behind it, which turned a dynamic-colour title white for a moment over
+the blue scan pill (Activities has the same fix). The native search
+(`headerSearchBarOptions`, `integratedButton` placement) and the favourites
+star, a native `Stack.Toolbar.Button` (`star` / `star.fill`) drawn as the same
+circle as the search button, sit on the right. Android and earlier iOS use
+`LegacyScreenHeader`: the title, a glass star toggle and the search button that
+expands into the field. Search and the star apply to People only, and only
+once it has someone to search; on Companies the native search and the star are
+removed (`LegacyScreenHeader`'s `searchEnabled` hides its search button, and a
+44pt spacer keeps the title row's height) and leaving People clears the query.
+Below the header, the scroll content starts with the shared scan pill
+(`BadgeLinkActions`, as on the scanner screens), then the People | Companies
+control, then the list.
 
 **People** lists the `kind: "person"` entries of `GET /api/me/diary` (favourites
 first, then newest) and a quiet unavailable row for a hidden profile. Saving
 and favouriting are separate: the star (`components/favourite-star.tsx`, drawn
 as a filled/outline path on Android, whose Material font only has the outline
 glyph) only marks a saved person and drives the Favourites filter; the row menu
-holds Note (500 characters) and an explicit "Remove from diary" with
-confirmation. Un-starring never removes anyone. The search field filters saved
-cards locally by name, headline, project, challenges, location and the owner's
-note, ignoring accents and case; cards never carry an email, so contact details
-are not searchable. A `directory:read` holder also gets a Saved | Directory
-scope: Directory pages `GET /api/directory` (server search by name, infinite
-scroll). Its rows look like saved rows; an unsaved person shows Save
-(`POST /api/me/diary/people`), a saved one the star and the same menu.
-Rows (`components/diary-person-row.tsx`) are one full-width pressable that
-opens the profile; the trailing controls are separate siblings so they never
-also open it.
+holds Note (500 characters; `components/diary-note-editor.tsx` is a native
+page sheet with circular Cancel and Save and a field above the keyboard, the
+same editor for people and stands) and an explicit "Remove from diary" with
+confirmation. Un-starring never removes anyone. Search filters saved cards
+locally by name, headline, project, challenges, location and the owner's note,
+ignoring accents and case; cards never carry an email, so contact details are
+not searchable. Rows (`components/diary-person-row.tsx`) are one full-width
+pressable that opens the profile; the trailing star and menu are separate
+siblings so they never also open it. A profile hidden after it was saved keeps
+only the menu (no star). The diary's header owns the status-bar area on both
+platforms; the profile keeps an Android status-bar scrim, so scrolled content
+never slides behind the clock.
 
-`app/people/[id].tsx` (`components/person-profile-screen.tsx`) is the full
-profile from `GET /api/directory/:userId`: large photo or initials, name,
-headline, Favourite / Note / CV tiles (Save when the person is not in the
-diary), bio, the owner's note, links, location, project or work group,
-challenges and "Remove from diary". The CV route needs the session, so it is
+`app/people/[id].tsx` (`components/person-profile-screen.tsx`) is a saved
+person's full profile from `GET /api/directory/:userId` (the only directory
+route left; there is no list and no Save, since only a scan adds someone):
+large photo or initials, name, headline, Favourite / Note / CV tiles (the Note
+tile reads "Edit note" once a note exists, and the note section appears only
+then), bio, links, location (a `mappin`), project or work group, challenges and
+"Remove from diary", which then returns to the diary. iOS uses the transparent native detail
+header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
+no bar covers the centred avatar; Android floats its own glass back button. The CV route needs the session, so it is
 downloaded with the session cookie (`expo-file-system`) and opened in the share
 sheet. A hidden profile and a person the reader may not open both answer 404
 and show one "Profile not available" state. Photos are authenticated API
@@ -674,7 +708,8 @@ memory (Android's image pipeline drops a `Cookie` header), never from disk.
 **Companies** is a sticker album (`components/company-album.tsx`) from
 `GET /api/me/diary/sponsors`: a progress ring with collected / total, then a
 three-column grid. Collected companies are full-colour logos on a white disc
-and open a company sheet (logo, collected date, Favourite / Note / Web, the
+and open a company sheet (logo, collected date, Favourite / Note (or Edit
+note) / Web, the
 description, challenges, note and "Remove from collection"); companies still to
 find are dashed slots with a silhouette of the logo, a lock and their name.
 Stand favourites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.
@@ -682,8 +717,11 @@ Stand favourites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.
 Scanning follows R008: the primary "Scan with NFC" control opens the existing
 reader immediately (`lib/nfc-reader.ts`, UID only, never writes or claims the
 tag; `lib/nfc-uid.ts` normalization), one tap from the list. "Scan QR code"
-(the gated `QrCamera`) and "Enter code" sit in the compact ellipsis menu. On
-hardware without NFC the primary control becomes "Scan QR code". Cancelling any
+(the gated `QrCamera`) and "Enter code" sit in the compact ellipsis menu.
+"Enter code" opens the shared `ScannerCodeEntry` with `appearance="system"`
+(the light/dark card of the note editor, not the dark camera card) and a title
+that fits badges and stand tags alike. On hardware without NFC the primary
+control becomes "Scan QR code". Cancelling any
 input sends nothing. Each scan is `POST /api/me/diary/scan` with a fresh
 `Idempotency-Key`. A saved person is pinned in a Saved section at the top of
 People; a collected stand switches to Companies, where its badge springs in

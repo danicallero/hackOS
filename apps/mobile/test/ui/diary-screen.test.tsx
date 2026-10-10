@@ -45,18 +45,41 @@ jest.mock("@/components/QrCamera", () => ({
   },
 }));
 const mockPush = jest.fn();
+const mockSetOptions = jest.fn();
+// Stable, as the real navigation object is: the header effect depends on it.
+const mockNavigation = { setOptions: (options: unknown) => mockSetOptions(options) };
 let mockParams: { view?: string } = {};
 jest.mock("expo-router", () => ({
   useScrollToTop: () => {},
   useIsFocused: () => true,
   useLocalSearchParams: () => mockParams,
+  useNavigation: () => mockNavigation,
   useRouter: () => ({ push: mockPush }),
   useFocusEffect: (effect: () => void) => require("react").useEffect(effect, [effect]),
 }));
-let mockCapabilities: string[] = [];
-jest.mock("@/lib/me-context", () => ({
-  useMeContext: () => ({ me: { capabilities: mockCapabilities } }),
-}));
+jest.mock("expo-router/stack", () => {
+  const { Pressable } = require("react-native");
+  const Toolbar = Object.assign(({ children }: { children?: unknown }) => children ?? null, {
+    View: ({ children }: { children?: unknown }) => children ?? null,
+    Button: ({
+      accessibilityLabel,
+      selected,
+      onPress,
+    }: {
+      accessibilityLabel: string;
+      selected?: boolean;
+      onPress: () => void;
+    }) => (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityState={{ selected }}
+        onPress={onPress}
+      />
+    ),
+  });
+  return { __esModule: true, default: { Screen: () => null, Toolbar } };
+});
 jest.mock("@/components/segmented-control", () => ({
   SegmentedControl: ({
     values,
@@ -78,13 +101,13 @@ jest.mock("@/components/segmented-control", () => ({
     ));
   },
 }));
-jest.mock("@/lib/i18n", () => ({
-  useLocale: () => ({
-    language: "en",
-    t: (key: string, values?: Record<string, string>) =>
-      values ? `${key}:${Object.values(values).join("/")}` : key,
-  }),
-}));
+// One stable `t`, as the real hook returns: the header effect depends on it.
+const mockLocale = {
+  language: "en",
+  t: (key: string, values?: Record<string, string>) =>
+    values ? `${key}:${Object.values(values).join("/")}` : key,
+};
+jest.mock("@/lib/i18n", () => ({ useLocale: () => mockLocale }));
 jest.mock("@/lib/api", () => ({
   apiFetch: jest.fn(),
   getCurrentSessionCookie: () => "session=1",
@@ -98,9 +121,10 @@ jest.mock("@/lib/api", () => ({
     }
   },
 }));
+let mockGlass = false;
 jest.mock("@/components/glass-view", () => ({
   GlassView: ({ children }: { children: unknown }) => children,
-  isRealLiquidGlassAvailable: () => false,
+  isRealLiquidGlassAvailable: () => mockGlass,
 }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
 jest.mock("react-native-svg", () => {
@@ -176,9 +200,11 @@ let scanResult: DiaryEntry | Error;
 
 beforeEach(() => {
   mockNfcSupported = true;
-  mockCapabilities = [];
+  mockGlass = false;
   mockParams = {};
   mockPush.mockReset();
+  mockSetOptions.mockReset();
+  mockSetOptions.mockImplementation((options: NativeOptions) => mockOnOptions?.(options));
   mockMenus = [];
   mockNfc = null;
   mockQrMounts = 0;
@@ -221,6 +247,41 @@ function calls(path: string) {
   return jest.mocked(apiFetch).mock.calls.filter(([called]) => called === path);
 }
 
+type NativeOptions = {
+  headerRight?: () => React.ReactElement;
+  headerSearchBarOptions?: { onChangeText: (e: { nativeEvent: { text: string } }) => void };
+};
+
+/** The options the last `setOptions` call left in place. */
+function nativeOptions(): NativeOptions {
+  return (mockSetOptions.mock.calls.at(-1)?.[0] ?? {}) as NativeOptions;
+}
+
+function nativeSearch() {
+  return nativeOptions().headerSearchBarOptions;
+}
+
+let mockOnOptions: ((options: NativeOptions) => void) | null = null;
+
+/** The screen plus its native header's bar items, as the navigator renders them. */
+function WithNativeHeader() {
+  const { useLayoutEffect, useState } = require("react");
+  const [options, setOptions] = useState({} as NativeOptions);
+  useLayoutEffect(() => {
+    mockOnOptions = setOptions;
+    setOptions(nativeOptions());
+    return () => {
+      mockOnOptions = null;
+    };
+  }, []);
+  return (
+    <>
+      <DiaryScreen />
+      {options.headerRight?.()}
+    </>
+  );
+}
+
 describe("People", () => {
   it("lists saved people only; stands live in Companies", async () => {
     await renderMobile(<DiaryScreen />);
@@ -229,6 +290,11 @@ describe("People", () => {
     expect(screen.queryByText("Hidden")).toBeNull();
     expect(screen.queryByText("Acme")).toBeNull();
     expect(screen.getByRole("button", { name: "diaryUnfavourite, Ana S." })).toBeTruthy();
+    // A hidden profile keeps its menu but cannot be favourited.
+    expect(
+      screen.queryByRole("button", { name: /^diary(Un)?favourite, diaryUnavailablePerson/ }),
+    ).toBeNull();
+    expect(screen.getByLabelText("diaryEntryOptions, diaryUnavailablePerson")).toBeTruthy();
   });
 
   it("opens NFC with one tap and pins the newly saved person", async () => {
@@ -255,7 +321,8 @@ describe("People", () => {
     await screen.findByText("Ana S.");
     expect(mockQrMounts).toBe(0);
     await act(() => menuWith("manual").onPressAction({ nativeEvent: { event: "manual" } }));
-    await fireEvent.changeText(screen.getByLabelText("scannerManualEntryTitle"), "  STAND-CODE  ");
+    // The diary accepts badges and stand tags alike, so the entry is titled "Enter code".
+    await fireEvent.changeText(screen.getByLabelText("personEnterBadgeCode"), "  STAND-CODE  ");
     await fireEvent.press(screen.getByRole("button", { name: "save" }));
     await waitFor(() => expect(calls("/api/me/diary/scan")).toHaveLength(1));
     expect(JSON.parse(String(calls("/api/me/diary/scan")[0]?.[1]?.body))).toEqual({
@@ -346,6 +413,8 @@ describe("People", () => {
     diary = [person(1, "José P."), person(2, "Bea R.", { note: "Met at the robotics stand" })];
     await renderMobile(<DiaryScreen />);
     await screen.findByText("José P.");
+    // Android and earlier iOS: the header's search button opens the field.
+    await fireEvent.press(screen.getByRole("button", { name: "scheduleSearch" }));
     await fireEvent.changeText(screen.getByLabelText("scheduleSearch"), "jose");
     expect(screen.getByText("José P.")).toBeTruthy();
     expect(screen.queryByText("Bea R.")).toBeNull();
@@ -354,7 +423,32 @@ describe("People", () => {
     expect(screen.queryByText("José P.")).toBeNull();
     await fireEvent.changeText(screen.getByLabelText("scheduleSearch"), "nobody");
     expect(screen.getByText("scannerNoResults")).toBeTruthy();
-    expect(calls("/api/directory")).toHaveLength(0);
+    expect(mockSetOptions).toHaveBeenCalledWith({ headerShown: false });
+  });
+
+  it("uses the native header search and a favourites toolbar button on iOS 26", async () => {
+    mockGlass = true;
+    diary = [person(1, "José P.", { starred: true }), person(2, "Bea R.")];
+    await renderMobile(<WithNativeHeader />);
+    await screen.findByText("José P.");
+    // The title is a leading bar item on the bar row, not a large title below it.
+    expect(mockSetOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ headerLargeTitle: false, title: "" }),
+    );
+    expect(screen.getByRole("header", { name: "tabDiary" })).toBeTruthy();
+    await act(async () => nativeSearch()?.onChangeText({ nativeEvent: { text: "bea" } }));
+    expect(screen.getByText("Bea R.")).toBeTruthy();
+    expect(screen.queryByText("José P.")).toBeNull();
+    await act(async () => nativeSearch()?.onChangeText({ nativeEvent: { text: "" } }));
+    await fireEvent.press(screen.getByLabelText("diaryShowFavourites"));
+    expect(screen.getByText("José P.")).toBeTruthy();
+    expect(screen.queryByText("Bea R.")).toBeNull();
+    // Scanning stays the shared pill in the content.
+    expect(screen.getByRole("button", { name: "diaryScanNfc" })).toBeTruthy();
+    // Companies has no search: the native bar and the filter go away.
+    await fireEvent.press(screen.getByRole("tab", { name: "diaryCompaniesTab" }));
+    expect(nativeSearch()).toBeUndefined();
+    expect(screen.queryByLabelText("diaryShowFavourites")).toBeNull();
   });
 
   it("filters to favourites", async () => {
@@ -366,56 +460,29 @@ describe("People", () => {
     expect(screen.queryByText("Bea R.")).toBeNull();
   });
 
-  it("hides the directory scope without directory:read", async () => {
+  it("offers only People | Companies, with no directory to browse", async () => {
     await renderMobile(<DiaryScreen />);
     await screen.findByText("Ana S.");
-    expect(screen.queryByRole("tab", { name: "diaryDirectoryTab" })).toBeNull();
+    expect(screen.getAllByRole("tab").map((tab) => tab.props.accessibilityLabel)).toEqual([
+      "diaryPeopleTab",
+      "diaryCompaniesTab",
+    ]);
+    expect(
+      jest.mocked(apiFetch).mock.calls.some(([path]) => String(path).startsWith("/api/directory")),
+    ).toBe(false);
   });
 
-  it("lets a directory reader browse, search and save; saved people get the star", async () => {
-    mockCapabilities = ["directory:read"];
-    const carla = {
-      userId: 300,
-      displayName: "Carla M.",
-      photoUrl: null,
-      headline: "Data",
-      bio: null,
-      locationNote: null,
-      socials: [],
-      cvUrl: null,
-      project: null,
-      challenges: [],
-    };
-    jest.mocked(apiFetch).mockImplementation(async (path: string) => {
-      if (path === "/api/me/diary") return { items: diary };
-      if (path === "/api/me/diary/sponsors") return collection;
-      if (path.startsWith("/api/directory?")) return { items: [carla], nextCursor: null };
-      if (path === "/api/me/diary/people") {
-        return person(9, "Carla M.", {
-          person: { ...person(9, "Carla M.").person!, userId: 300 },
-        });
-      }
-      return undefined;
-    });
+  it("hides search and the favourites filter on Companies", async () => {
     await renderMobile(<DiaryScreen />);
     await screen.findByText("Ana S.");
-    await fireEvent.press(screen.getByRole("tab", { name: "diaryDirectoryTab" }));
-    expect(await screen.findByText("Carla M.")).toBeTruthy();
-    // Not saved yet: Save, and no favourite or remove.
-    expect(screen.queryByRole("button", { name: /diaryFavourite, Carla/ })).toBeNull();
-    await fireEvent.changeText(screen.getByLabelText("scheduleSearch"), "car");
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/directory?limit=30&q=car"));
-    await fireEvent.press(screen.getByRole("button", { name: "directorySave, Carla M." }));
-    await waitFor(() =>
-      expect(apiFetch).toHaveBeenCalledWith(
-        "/api/me/diary/people",
-        expect.objectContaining({ method: "POST", body: JSON.stringify({ userId: 300 }) }),
-      ),
-    );
-    expect(await screen.findByRole("button", { name: "diaryFavourite, Carla M." })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "directorySave, Carla M." })).toBeNull();
-    await fireEvent.press(screen.getByRole("button", { name: "Carla M., Data" }));
-    expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "300" } });
+    await fireEvent.press(screen.getByRole("button", { name: "scheduleSearch" }));
+    await fireEvent.changeText(screen.getByLabelText("scheduleSearch"), "nobody");
+    await fireEvent.press(screen.getByRole("tab", { name: "diaryCompaniesTab" }));
+    expect(screen.queryByLabelText("scheduleSearch")).toBeNull();
+    expect(screen.queryByLabelText("diaryShowFavourites")).toBeNull();
+    // Back on People the query is gone, not silently still filtering.
+    await fireEvent.press(screen.getByRole("tab", { name: "diaryPeopleTab" }));
+    expect(screen.getByText("Ana S.")).toBeTruthy();
   });
 });
 

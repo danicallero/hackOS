@@ -18,6 +18,7 @@ import { signOut } from "@/lib/auth-client";
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
 import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
+import { transparentDetailHeaderOptions } from "@/lib/navigation";
 import { setNfcShield } from "@/lib/nfc-reader";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
 import {
@@ -406,13 +407,10 @@ function RootLayoutNav({
             name="people/[id]"
             options={{
               // #935 directory profile: Android draws its own back button;
-              // iOS keeps a translucent native bar over the centered avatar,
-              // so scrolled text never runs under the status bar.
+              // iOS uses the transparent native header of the other detail
+              // screens, so no band ever covers the centred avatar.
+              ...transparentDetailHeaderOptions,
               headerShown: process.env.EXPO_OS === "ios",
-              headerTransparent: true,
-              headerBlurEffect: "systemChromeMaterial",
-              headerShadowVisible: false,
-              title: "",
             }}
           />
           <Stack.Screen
