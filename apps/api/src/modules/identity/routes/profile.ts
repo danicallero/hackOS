@@ -24,6 +24,7 @@ import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliati
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
 import { getBetterAuthSessionToken } from "../auth.js";
+import { hasPendingMealPlan } from "../meal-plan.js";
 import {
   cancelPendingAccountRemoval,
   getAccountRemovalEligibility,
@@ -180,6 +181,8 @@ const userResponseSchema = z.object({
   foodIntolerances: z.array(z.number()),
   foodIntoleranceNotes: z.string().nullable(),
   dietaryDataState: z.enum(DIETARY_DATA_STATES),
+  // #933: last explicit dietary answer, including "no restrictions".
+  dietaryConfirmedAt: z.string().nullable(),
   shirtSize: z.string().nullable(),
   universityId: z.number().nullable(),
   notes: z.string().nullable(),
@@ -188,6 +191,8 @@ const userResponseSchema = z.object({
   removal: accountRemovalProfileStateSchema.nullable(),
   createdAt: z.string(),
 });
+
+const PENDING_PROFILE_TASKS = ["dietary", "meal_plan"] as const;
 
 const userProjectSchema = z.object({
   id: z.number(),
@@ -220,6 +225,7 @@ interface UserRow {
   food_intolerances: number[];
   food_intolerance_notes: string | null;
   dietary_data_state: (typeof DIETARY_DATA_STATES)[number];
+  dietary_confirmed_at: Date | null;
   shirt_size: string | null;
   university_id: number | null;
   notes: string | null;
@@ -265,6 +271,7 @@ function serializeUser(row: UserRow, removalStatus?: PendingAccountRemovalStatus
     foodIntolerances: row.food_intolerances,
     foodIntoleranceNotes: row.food_intolerance_notes,
     dietaryDataState: row.dietary_data_state,
+    dietaryConfirmedAt: row.dietary_confirmed_at?.toISOString() ?? null,
     shirtSize: row.shirt_size,
     universityId: row.university_id,
     notes: row.notes,
@@ -363,10 +370,13 @@ async function applyUserPatch(
                     OR NULLIF(BTRIM(food_intolerance_notes), '') IS NOT NULL
                   THEN 'present'
                   ELSE 'not_provided'
-                END
+                END,
+                -- #933: the person's own dietary save is an answer, even an empty
+                -- one; a staff edit is not their confirmation.
+                dietary_confirmed_at = CASE WHEN $2 THEN now() ELSE dietary_confirmed_at END
           WHERE id = $1
           RETURNING *`,
-        [targetId],
+        [targetId, actorId === targetId],
       ));
     }
     const after = afterRows[0] as UserRow;
@@ -459,7 +469,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "accounts (H55), whether they currently hold role-derived event access, whether they have a project/queue entry of their own " +
           "(drives hiding the My project/My queue nav items, issue #424), mobile " +
           "entry eligibility, and the caller's complete assigned-role set (H8) alongside " +
-          "the single highest-visible `visibleRoleName` shown elsewhere. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
+          "the single highest-visible `visibleRoleName` shown elsewhere. `pendingProfileTasks` " +
+          "(#933) lists what to ask for on next entry: `dietary` when the caller has event access " +
+          "but never gave an explicit dietary answer and the profile is not locked (H7), `meal_plan` when a sponsor representative " +
+          "has an open offered meal without an answer. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
@@ -501,6 +514,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // form greys them out and points the participant at staff.
             profileLocked: z.boolean(),
             hasStatisticsPanels: z.boolean(),
+            // #933: profile data the client should ask for on next entry.
+            pendingProfileTasks: z.array(z.enum(PENDING_PROFILE_TASKS)),
           }),
         },
       },
@@ -555,6 +570,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           getAssignedRoles(client, userId),
           hasEventAccess(client, userId),
         ]);
+        const pendingProfileTasks: (typeof PENDING_PROFILE_TASKS)[number][] = [];
+        // H7: a locked profile cannot change its dietary data, so don't ask for it.
+        if (eventAccess && !profileLocked && row.dietary_confirmed_at === null) {
+          pendingProfileTasks.push("dietary");
+        }
+        if (membership.isSponsorRep && (await hasPendingMealPlan(client, userId))) {
+          pendingProfileTasks.push("meal_plan");
+        }
         return {
           ...serializeUser(row, removalStatus),
           visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
@@ -567,6 +590,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           canCreateProject,
           profileLocked,
           hasStatisticsPanels,
+          pendingProfileTasks,
         };
       });
       return profile;
@@ -581,6 +605,13 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       // verification; event transactions are guarded by the shared default.
       config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
+        summary: "Update my profile",
+        description:
+          "Self-service profile edit. H7: once an application has been accepted, changing name, " +
+          "surname, shirt size or dietary data is 409 `profile_locked` (resubmitting unchanged " +
+          "values is allowed). Sending `foodIntolerances` or `foodIntoleranceNotes` records an " +
+          "explicit dietary answer (#933) — an empty list counts — and clears the `dietary` " +
+          "pending profile task.",
         body: selfPatchSchema,
         response: { 200: userResponseSchema },
       },

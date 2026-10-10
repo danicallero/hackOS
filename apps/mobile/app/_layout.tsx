@@ -1,6 +1,6 @@
 import { EVENTS } from "@hackos/shared/events";
 import { useFonts } from "expo-font";
-import { type Href, useRootNavigationState, useRouter } from "expo-router";
+import { type Href, usePathname, useRootNavigationState, useRouter } from "expo-router";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
 import { Stack } from "expo-router/stack";
 import * as SplashScreen from "expo-splash-screen";
@@ -20,6 +20,11 @@ import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
 import { setNfcShield } from "@/lib/nfc-reader";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
+import {
+  PROFILE_TASKS_PATH,
+  promptableProfileTasks,
+  shouldPresentProfileTasks,
+} from "@/lib/profile-tasks";
 import { registerForPushNotifications } from "@/lib/push";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { isOperator } from "@/lib/tabs";
@@ -91,6 +96,7 @@ function RootLayoutSessionContents() {
       <NotificationListeners />
       <MobileAccessGate authenticated={authenticated} />
       <PersonalEventStream authenticated={authenticated} />
+      <ProfileTasksPrompt authenticated={authenticated} sessionPending={initialSessionPending} />
       <RootLayoutNav
         authenticated={authenticated}
         pending={initialSessionPending}
@@ -245,6 +251,48 @@ function NotificationListeners() {
   return null;
 }
 
+/**
+ * #933: opens the pending-profile-tasks sheet once per session after a fresh
+ * /api/me, deferring while a scanner is open so it never interrupts a scan.
+ * The sheet itself records the presentation when it mounts.
+ */
+function ProfileTasksPrompt({
+  authenticated,
+  sessionPending,
+}: {
+  authenticated: boolean;
+  sessionPending: boolean;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { me, offline } = useMeContext();
+  const navigationState = useRootNavigationState();
+  const present =
+    authenticated &&
+    shouldPresentProfileTasks({
+      me,
+      offline,
+      navigationReady: Boolean(navigationState?.key),
+      sessionPending,
+      pathname,
+    });
+  const tasks = me ? promptableProfileTasks(me).join(",") : "";
+  // Only guards the frames between push and the route change, not the session.
+  const requestedFrom = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!present || requestedFrom.current === pathname) return;
+    requestedFrom.current = pathname;
+    router.push({ pathname: PROFILE_TASKS_PATH, params: { tasks } });
+  }, [pathname, present, router, tasks]);
+
+  useEffect(() => {
+    if (requestedFrom.current !== pathname) requestedFrom.current = null;
+  }, [pathname]);
+
+  return null;
+}
+
 /** Signs ordinary applicants back out before they can enter event-day routes. */
 function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
   const { me, loading } = useMeContext();
@@ -353,6 +401,10 @@ function RootLayoutNav({
               headerTransparent: process.env.EXPO_OS === "ios",
               headerLargeTitle: process.env.EXPO_OS === "ios",
             }}
+          />
+          <Stack.Screen
+            name="profile-tasks"
+            options={{ headerShown: false, presentation: "modal" }}
           />
         </Stack.Protected>
       </Stack>

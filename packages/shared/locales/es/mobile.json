@@ -749,5 +749,13 @@
   "personScanBadgeCode": "Escanear código QR",
   "personLinkBadgeNfc": "Enlazar con NFC",
   "personBadgeOptions": "Opciones de acreditación",
-  "personReplaceBadgeMethod": "¿Cómo quieres reemplazar esta acreditación?"
+  "personReplaceBadgeMethod": "¿Cómo quieres reemplazar esta acreditación?",
+  "profileTasksTitle": "Completa tu perfil",
+  "profileTasksLater": "Más tarde",
+  "mealsTitle": "Comidas",
+  "mealsLockNote": "Los cambios se cierran antes de cada comida.",
+  "noRestrictions": "Sin restricciones",
+  "dietaryDataHandlingNote": "Solo se usa para pedir la comida del evento.",
+  "dietarySaveError": "No se pudieron guardar tus restricciones alimentarias.",
+  "mealPlanSaveError": "No se pudieron guardar tus comidas."
 }

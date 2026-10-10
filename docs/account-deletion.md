@@ -99,8 +99,9 @@ implementation is now the shared lifecycle in `removal.ts`.
    re-evaluates the boundary, and commits `account_state = 'removal_pending'`
    with the selected action. A live open session produces `pending_exit`, not
    a rejected privacy request.
-3. For a finalizable request, sessions, Better Auth accounts, push tokens and
-   dietary values are removed in preparation. For `pending_exit`, those
+3. For a finalizable request, sessions, Better Auth accounts, push tokens,
+   dietary values, dietary/meal-plan confirmation timestamps and sponsor meal
+   plans (`meal_attendance_plans`, #933) are removed in preparation. For `pending_exit`, those
    identity and catering rows remain only for the fixed recovery window so the
    participant can cancel or staff can record the exit; `account_state` blocks
    normal participant activity. Wallet rows are marked `voided` during removal
@@ -267,8 +268,10 @@ provider copies, backups and logs are separate controls (A07–A09, A17).
 ## 6. Operational retention and dietary data
 
 During the event, `users.food_intolerances`,
-`users.food_intolerance_notes`, and the derived `dietary_data_state` are
-available to authorized logistics paths. Native scanner snapshots include only
+`users.food_intolerance_notes`, the derived `dietary_data_state`, and sponsor
+meal plans (`meal_attendance_plans`, #933) are available to authorized
+logistics paths. Meal plans are personal (not special-category) data; they are
+deleted with the account and never copied to anonymous audit data. Native scanner snapshots include only
 what a staff scanner needs at the point of service; meal inbox rows use the
 badge only as a transient retry credential. Terminal meal results retain
 counts/status and clear `badge_id`; they do not retain dietary fields.
@@ -554,6 +557,7 @@ synthetic identity-shaped `users` row.
 | `users`: id, email, verification, image, name, surname, DNI, secondary email, language, UI prefs, timestamps | Full account data | Active profile/service identity | Delete | No | Direct identity/auth profile. |
 | `users`: badge_id, badge_id_history | Credential before use | Active badge operations | Delete; permanent unlinked keyed-digest non-reuse tombstone | No | Credential is not audit data; the digest tombstone exists only to reject arbitrarily late offline replay. |
 | `users`: food_intolerances, food_intolerance_notes, dietary_data_state, shirt_size | May be edited | Operational catering/badge data | Keep dietary values only during reversible `pending_exit`; clear them during finalization, then delete the remaining user row | No | Dietary data supports active/in-flight catering only and is never part of the permanent anonymous audit dataset. |
+| `users`: dietary_confirmed_at, meal_plan_confirmed_at; `meal_attendance_plans` (#933) | May be edited | Sponsor meal planning and the dietary re-ask | Clear the timestamps and delete plan rows with the dietary values; the user FK cascades at final deletion | No | Planned attendance supports catering headcounts only; aggregates never identify the person. |
 | `users.university_id` / `universities.name` | Profile dimension | May support services | Detach/delete the subject link; catalog survives | Only an application field explicitly configured for anonymous audit may retain a university value | Profile data is not copied merely because the shared university catalog exists. |
 | `accounts`: provider/account IDs, access/refresh/ID tokens, password | Auth credential | Auth credential | Delete | No | Credentials and provider identifiers must not survive. |
 | `sessions`: token, IP, user agent, expiry | Login session | Login/session | Delete during preparation for finalizable paths; keep existing rows while reversible `pending_exit` is active, with new/refresh sessions capped at the fixed recovery deadline, then delete at finalization | No | Pending recovery needs authenticated status/cancel/exit guidance; session metadata is never anonymous audit data. |

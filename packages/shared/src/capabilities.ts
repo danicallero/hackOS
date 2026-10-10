@@ -41,6 +41,12 @@ export const CAPABILITIES = {
   ACTIVITY_SCAN: "activity:scan", // meals + registrable activities
   LOGISTICS_STATS: "logistics:stats", // H24/H27 panels
   INTOLERANCES_MANAGE: "intolerances:manage", // maintain the food-intolerance dictionary
+  // sponsor meal plans (#933): per-person export carries dietary data, so it
+  // is separate from the aggregate counts under LOGISTICS_STATS. Reserved:
+  // seeded here with the catalogue constraint (migration 0502) but no route
+  // checks them until the #933 staff export/override routes land.
+  MEAL_PLANS_EXPORT: "meal-plans:export",
+  MEAL_PLANS_MANAGE: "meal-plans:manage", // edit someone else's meal plan
 
   // queue & judging (H29-H40)
   QUEUE_STATUS: "queue:status", // view your own queue status
@@ -115,6 +121,8 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "activity:scan": "Scan meals and registrable activities",
   "logistics:stats": "View attendance and logistics statistics panels",
   "intolerances:manage": "Maintain the food-intolerance dictionary",
+  "meal-plans:export": "Export per-person meal plans with dietary data",
+  "meal-plans:manage": "Edit anyone's meal plan",
   "queue:status": "View your own judging queue and status",
   "queue:operate": "Call, skip, mark no-show, pause, or requeue teams",
   "queue:admin": "Manage rooms, assignments, settings, and disqualifications",

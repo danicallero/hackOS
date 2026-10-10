@@ -477,6 +477,34 @@ describe("H9/H10 invite acceptance", () => {
     ]);
   });
 
+  it("counts the claim as a dietary answer only when the invite kind asked for it (#933)", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const { pool } = await import("../../src/db/pool.js");
+    const accept = async (email: string) => {
+      const invite = await createInvite(a, actor, { email, kind: "staff" });
+      const res = await a.inject({
+        method: "POST",
+        url: "/api/invites/accept",
+        payload: { ...ACCEPT_BASE, token: invite.token, foodIntolerances: [] },
+      });
+      expect(res.statusCode).toBe(201);
+      const { rows } = await pool.query(`SELECT dietary_confirmed_at FROM users WHERE id = $1`, [
+        res.json().userId,
+      ]);
+      return rows[0].dietary_confirmed_at as Date | null;
+    };
+
+    await pool.query(
+      `INSERT INTO event_config (id, require_staff_dietary) VALUES (1, false)
+       ON CONFLICT (id) DO UPDATE SET require_staff_dietary = false`,
+    );
+    expect(await accept("not-asked@example.com")).toBeNull();
+
+    await pool.query(`UPDATE event_config SET require_staff_dietary = true WHERE id = 1`);
+    expect(await accept("asked@example.com")).not.toBeNull();
+  });
+
   it("staff acceptance creates a verified Better Auth account the person can sign in with", async () => {
     const a = await getApp();
     const actor = await inviter();

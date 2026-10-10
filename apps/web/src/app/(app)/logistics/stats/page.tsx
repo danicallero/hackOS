@@ -45,6 +45,9 @@ const LOGISTICS_EVENTS = [
   EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
 ];
 
+// #933: planned headcounts only change when a meal plan does.
+const MEAL_PLAN_EVENTS = [EVENTS.LOGISTICS_MEAL_PLAN_UPDATED];
+
 const DATA_PHASES: DataPhase[] = ["before", "during", "after"];
 const EMPTY_SCOPE_FILTERS: string[] = [];
 const EMPTY_PARTICIPANT_FILTERS: Record<string, StatisticsParticipantStatus[]> = {};
@@ -97,6 +100,14 @@ export default function LogisticsStatsPage() {
     "/api/logistics/stream",
     LOGISTICS_EVENTS,
     { enabled: canGeneralStats && activePhase !== "before" },
+  );
+  const mealPlans = useLiveQuery(
+    logisticsApi.mealPlans,
+    "/api/logistics/stream",
+    MEAL_PLAN_EVENTS,
+    {
+      enabled: canGeneralStats && activePhase === "during",
+    },
   );
 
   useEffect(() => {
@@ -290,7 +301,9 @@ export default function LogisticsStatsPage() {
               )}
             </>
           )}
-          {activePhase === "during" && <DuringPanel stats={liveStats} />}
+          {activePhase === "during" && (
+            <DuringPanel stats={liveStats} mealPlans={mealPlans.data?.meals ?? []} />
+          )}
           {activePhase === "after" && (
             <AfterPanel
               stats={liveStats.data}

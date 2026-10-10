@@ -1,6 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { STATISTICS_PARTICIPANT_STATUSES } from "@hackos/shared/statistics";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -10,6 +10,7 @@ import {
   requireAuth,
   userHasCapability,
 } from "../../lib/capabilities.js";
+import { sendCsv } from "../../lib/csv.js";
 import { ForbiddenError } from "../../lib/errors.js";
 import { requireIdempotencyKey } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
@@ -84,12 +85,6 @@ const statisticsScopeAccessDeleteParams = z.object({
 const statisticsScopeAccessDeleteQuery = z.object({
   scope_key: z.string().regex(/^(application|role):[0-9]+$/),
 });
-
-function sendCsv(reply: FastifyReply, filename: string, csv: string) {
-  reply.header("content-type", "text/csv; charset=utf-8");
-  reply.header("content-disposition", `attachment; filename="${filename}"`);
-  return reply.send(csv);
-}
 
 /** Shared H27 dashboard/query boundary. All returned scopes are already
  * authorized; the query route repeats the check before aggregating. */

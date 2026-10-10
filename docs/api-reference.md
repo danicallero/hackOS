@@ -109,6 +109,35 @@ mix values from different authorization moments. Ticket QR/wallet exposure, scan
 eligibility, and physical check-in use the same live query; role transitions
 reconcile wallet passes and retain the historical ticket row.
 
+`/api/me` also returns `pendingProfileTasks` (#933): `dietary` until an
+event-access account gives an explicit dietary answer (its own `PATCH /api/me`
+with `foodIntolerances`/`foodIntoleranceNotes`, an empty list included; an
+invite claim whose kind shows the dietary fields; or an application form that
+asks for dietary data — staff edits through `PATCH /api/users/:id` do not
+count; never for a locked profile, H7, which cannot change it), and
+`meal_plan` while a sponsor representative has an open offered
+meal without an answer. Sponsors read and replace their plan through `GET`/`PUT
+/api/me/meal-plan`; a meal is offered when its activity kind has meal semantics
+and its shown schedule entry includes the `sponsor` audience (an entry without
+audiences is staff-only), and it locks `event_config.meal_plan_cutoff_hours`
+(24 by default, set through `PUT /api/event` `mealPlanCutoffHours`) before it
+starts; responses carry it as `cutoffHours`. `PUT` ignores meals that ended or stopped being offered since the list
+was loaded, and locked meals that were never answered. Staff read a sponsor's plan through `GET
+/api/users/:id/meal-plan` (`users:read`) and correct it through `PUT
+/api/users/:id/meal-plan` (`meal-plans:manage`, same rules but partial: meals left out stay
+unanswered and the sponsor's `confirmedAt` is not set; always audited as
+`meal_plan.updated`); logistics reads aggregate headcounts and the catering
+CSV under `/api/logistics/meal-plans` (see `docs/statistics-dashboard.md`).
+
+On the web, the `(app)` layout shows a dismissable dialog with one step per
+pending task ("Later" hides it for the browser session via `sessionStorage`),
+and My profile shows a sponsor-only Meals section plus an explicit "No
+restrictions" option; the profile form only sends dietary fields when they were
+edited, so saving a name never records an empty dietary answer, and both
+refuse an empty answer unless "No restrictions" is ticked. Both surfaces share
+one copy of the meal plan; a save refused because the plan changed
+(`meal_plan_incomplete`, `meal_plan_locked`, `meal_not_offered`) reloads it.
+
 Primary-email verification is deliberately not required by Better Auth at sign
 in: H1 allows an unverified account to establish a session and use read-only
 or preparation surfaces. The shared route-policy layer requires a verified

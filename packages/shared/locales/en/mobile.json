@@ -749,5 +749,13 @@
   "personScanBadgeCode": "Scan QR code",
   "personLinkBadgeNfc": "Link with NFC",
   "personBadgeOptions": "Badge options",
-  "personReplaceBadgeMethod": "How do you want to replace this badge?"
+  "personReplaceBadgeMethod": "How do you want to replace this badge?",
+  "profileTasksTitle": "Complete your profile",
+  "profileTasksLater": "Later",
+  "mealsTitle": "Meals",
+  "mealsLockNote": "Changes close before each meal.",
+  "noRestrictions": "No restrictions",
+  "dietaryDataHandlingNote": "Only used to order food for the event.",
+  "dietarySaveError": "Couldn't save your dietary restrictions.",
+  "mealPlanSaveError": "Couldn't save your meals."
 }
