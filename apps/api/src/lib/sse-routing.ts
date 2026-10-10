@@ -1,5 +1,13 @@
 import { SSE_TOPICS } from "@hackos/shared/events";
 
+declare module "fastify" {
+  interface FastifyRequest {
+    /** Set by a handler whose successful mutation changed nothing, so no
+     * domain refresh is broadcast (#934). */
+    domainUnchanged?: boolean;
+  }
+}
+
 /**
  * Map mutation routes to the narrow read-model topic they can affect.
  * Payload-free refresh signals keep unrelated browser surfaces asleep while
@@ -30,6 +38,12 @@ export function mutationDomainForPath(url: string): string | null {
     /^\/api\/challenges\/[^/]+\/repos(?:\/|$)/.test(path)
   ) {
     return SSE_TOPICS.PROJECTS;
+  }
+
+  // Public-profile writes, including staff moderation, only change the
+  // directory read model (#934).
+  if (matches("/api/me/public-profile") || /^\/api\/users\/[^/]+\/public-profile$/.test(path)) {
+    return SSE_TOPICS.DIRECTORY;
   }
 
   // Sponsor-owned enterprises and challenges have their own authenticated
@@ -100,5 +114,23 @@ export function publicContentMutationForPath(url: string): boolean {
     singleResource("/api/challenges") ||
     /^\/api\/challenges\/[^/]+\/(?:publish|unpublish)$/.test(path) ||
     /^\/api\/devpost\/prizes\/[^/]+\/map$/.test(path)
+  );
+}
+
+/**
+ * Writes owned by other domains that still change a directory card: the
+ * person's name, surname or photo, account removal, project and work-group
+ * membership, and challenge publication or titles. They also wake the
+ * payload-free `directory` topic (#934). Event-access and queue-status
+ * changes are rarer; open directory views pick those up when refocused.
+ */
+export function directoryMutationForPath(url: string): boolean {
+  const path = url.split("?", 1)[0] ?? url;
+  return (
+    path === "/api/me" ||
+    /^\/api\/users\/[^/]+$/.test(path) ||
+    mutationDomainForPath(path) === SSE_TOPICS.PROJECTS ||
+    path === "/api/challenges/visibility" ||
+    /^\/api\/challenges\/[^/]+(?:\/(?:publish|unpublish))?$/.test(path)
   );
 }

@@ -2941,6 +2941,7 @@
   "capabilityDescriptionUsersWrite": "Editar o perfil de calquera usuario",
   "capabilityDescriptionPermissionsManage": "Xestionar roles e asignacións de capacidades",
   "capabilityDescriptionInvitesManage": "Xestionar ligazóns de invitación e roles preasignados",
+  "capabilityDescriptionDirectoryRead": "Consultar o directorio de persoas",
   "capabilityDescriptionApplicationsManage": "Definir formularios de solicitude e abrir/pechar solicitudes",
   "capabilityDescriptionApplicationsReview": "Ler e puntuar as solicitudes enviadas",
   "capabilityDescriptionApplicationsDecide": "Aceptar ou rexeitar solicitudes e enviar decisións",

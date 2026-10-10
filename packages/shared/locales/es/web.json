@@ -2941,6 +2941,7 @@
   "capabilityDescriptionUsersWrite": "Editar el perfil de cualquier usuario",
   "capabilityDescriptionPermissionsManage": "Gestionar roles y asignaciones de capacidades",
   "capabilityDescriptionInvitesManage": "Gestionar enlaces de invitación y roles preasignados",
+  "capabilityDescriptionDirectoryRead": "Consultar el directorio de personas",
   "capabilityDescriptionApplicationsManage": "Definir formularios de solicitud y abrir/cerrar solicitudes",
   "capabilityDescriptionApplicationsReview": "Leer y puntuar las solicitudes enviadas",
   "capabilityDescriptionApplicationsDecide": "Aceptar o rechazar solicitudes y enviar decisiones",

@@ -19,6 +19,9 @@ export const CAPABILITIES = {
   PERMISSIONS_MANAGE: "permissions:manage",
   INVITES_MANAGE: "invites:manage",
 
+  // people directory (#934): read opted-in public profiles
+  DIRECTORY_READ: "directory:read",
+
   // applications (H11-H15)
   APPLICATIONS_MANAGE: "applications:manage", // define forms, open/close
   APPLICATIONS_REVIEW: "applications:review", // read + score submitted responses
@@ -97,6 +100,7 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "users:write": "Edit any user's profile",
   "permissions:manage": "Manage roles and capability assignments",
   "invites:manage": "Manage invite links and pre-assigned roles",
+  "directory:read": "Browse the people directory",
   "applications:manage": "Define application forms and open/close applications",
   "applications:review": "Read and score submitted applications",
   "applications:decide": "Accept or reject applications and send decisions",

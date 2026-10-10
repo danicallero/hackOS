@@ -2941,6 +2941,7 @@
   "capabilityDescriptionUsersWrite": "Edit any user's profile",
   "capabilityDescriptionPermissionsManage": "Manage roles and capability assignments",
   "capabilityDescriptionInvitesManage": "Manage invite links and pre-assigned roles",
+  "capabilityDescriptionDirectoryRead": "Browse the people directory",
   "capabilityDescriptionApplicationsManage": "Define application forms and open/close applications",
   "capabilityDescriptionApplicationsReview": "Read and score submitted applications",
   "capabilityDescriptionApplicationsDecide": "Accept or reject applications and send decisions",
