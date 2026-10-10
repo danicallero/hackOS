@@ -12,6 +12,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorReason } from "@/lib/api-error-reason";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { pickText, useLocale } from "@/lib/i18n";
 import { idempotencyHeaders } from "@/lib/logistics";
@@ -52,7 +53,7 @@ export function MealPlanSection({ userId }: { userId: number }) {
       })
       .catch((err) => {
         // Not a sponsor representative: no section.
-        if (cancelled || (err instanceof ApiError && err.code === "not_sponsor")) return;
+        if (cancelled || apiErrorReason(err) === "not_sponsor") return;
         setLoadFailed(true);
       });
     return () => {

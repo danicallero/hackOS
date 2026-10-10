@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorReason } from "@/lib/api-error-reason";
 import { type MealAnswers, type MealPlan, mealPlanBody } from "@/lib/meal-plan";
 
 /**
@@ -56,11 +57,10 @@ const STALE_PLAN_CODES = new Set(["meal_plan_incomplete", "meal_plan_locked", "m
 
 /** Localized message key for a failed meal-plan save. */
 export function mealPlanSaveErrorKey(err: unknown) {
-  if (err instanceof ApiError) {
-    if (err.code === "meal_plan_incomplete") return "mealPlanChangedReview";
-    if (err.code === "meal_plan_locked") return "mealPlanLockedReview";
-    if (err.code === "meal_not_offered") return "mealPlanChangedReview";
-  }
+  const reason = apiErrorReason(err);
+  if (reason === "meal_plan_incomplete") return "mealPlanChangedReview";
+  if (reason === "meal_plan_locked") return "mealPlanLockedReview";
+  if (reason === "meal_not_offered") return "mealPlanChangedReview";
   return "couldNotSaveMealPlan";
 }
 
@@ -92,7 +92,7 @@ export function useMealPlan(userId: number | null) {
         return next;
       } catch (err) {
         // The offered list or a lock changed under the caller: show the current plan.
-        if (userId !== null && err instanceof ApiError && STALE_PLAN_CODES.has(err.code)) {
+        if (userId !== null && STALE_PLAN_CODES.has(apiErrorReason(err) ?? "")) {
           await load(userId);
         }
         throw err;

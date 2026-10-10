@@ -15,8 +15,10 @@ vi.mock("@/lib/api", () => ({
     constructor(
       public status: number,
       public code: string,
+      message?: string,
+      public details?: unknown,
     ) {
-      super(code);
+      super(message ?? code);
     }
   },
 }));
@@ -101,9 +103,23 @@ describe("MealPlanSection (#933)", () => {
 
   it("renders nothing for a non-sponsor", async () => {
     const { ApiError } = await import("@/lib/api");
-    mocks.get.mockRejectedValue(new ApiError(403, "not_sponsor", "not_sponsor"));
+    // The API's actual shape: a generic 403 whose details name the reason.
+    mocks.get.mockRejectedValue(
+      new ApiError(403, "forbidden", "Only sponsor representatives have a meal plan", {
+        code: "not_sponsor",
+      }),
+    );
     await render();
     expect(container.textContent).toBe("");
+  });
+
+  it("still reports a 403 that is not about the sponsor role", async () => {
+    const { ApiError } = await import("@/lib/api");
+    mocks.get.mockRejectedValue(new ApiError(403, "forbidden", "Missing required capability"));
+    await render();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "couldNotLoadUserMealPlan",
+    );
   });
 
   it("shows other load failures with a retry", async () => {

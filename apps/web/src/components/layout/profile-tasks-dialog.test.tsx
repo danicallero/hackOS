@@ -23,6 +23,7 @@ vi.mock("@/lib/api", () => ({
       public status: number,
       public code: string,
       message: string,
+      public details?: unknown,
     ) {
       super(message);
     }
@@ -256,7 +257,9 @@ describe("ProfileTasksDialog (#933)", () => {
   it("refreshes the plan and explains a closed meal when saving fails", async () => {
     session.me = { ...baseMe, pendingProfileTasks: ["meal_plan"] };
     vi.mocked(api.put).mockRejectedValueOnce(
-      new ApiError(409, "meal_plan_locked", "Changes to this meal are closed"),
+      new ApiError(409, "conflict", "Changes to this meal are closed", {
+        code: "meal_plan_locked",
+      }),
     );
     const user = userEvent.setup();
     await render();
