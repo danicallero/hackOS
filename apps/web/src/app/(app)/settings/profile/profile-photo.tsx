@@ -3,12 +3,10 @@
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { useId, useRef, useState } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/common/user-avatar";
 import { Button } from "@/components/ui/button";
 import { ApiError, api, apiUpload } from "@/lib/api";
-import { apiAssetUrl } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
-import { initials } from "@/lib/initials";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 
@@ -74,10 +72,13 @@ export function ProfilePhoto() {
   return (
     <fieldset className="flex min-w-0 items-center gap-4">
       <legend className="sr-only">{t("profilePhoto")}</legend>
-      <Avatar className="size-16 text-lg">
-        {me.image && <AvatarImage src={apiAssetUrl(me.image)} alt={name} />}
-        <AvatarFallback className="text-lg">{initials(name)}</AvatarFallback>
-      </Avatar>
+      <UserAvatar
+        showInitials
+        name={name}
+        image={me.image}
+        className="size-16"
+        fallbackClassName="text-lg"
+      />
       <div className="min-w-0 space-y-2">
         <input
           ref={inputRef}

@@ -17,6 +17,7 @@ import { ListToolbar } from "@/components/common/list-toolbar";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { StatusBadge } from "@/components/common/status-badge";
+import { UserAvatar } from "@/components/common/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -42,6 +43,11 @@ import { UsersActions } from "./users-actions";
 function fullName(u: UserListItem): string {
   const name = [u.name, u.surname].filter(Boolean).join(" ").trim();
   return name || "—";
+}
+
+/** Initials come from the name, or the email when no name is on file. */
+function avatarName(u: UserListItem): string {
+  return [u.name, u.surname].filter(Boolean).join(" ").trim() || u.email;
 }
 
 const dateFmt = shortDateFmt;
@@ -144,7 +150,33 @@ function applicationTone(status: string | null): "success" | "warning" | "danger
 
 /** Presence needs the live occupancy set, so the column list is built per-render
  * (see `useCan(PRESENCE_SCAN | LOGISTICS_STATS)` in the page component). */
-function buildColumns(presentIds: Set<number> | null, t: Translate): Column<UserListItem>[] {
+/**
+ * #934: a real photo leads the name; when any listed user has one, the others
+ * keep an empty slot of the same size so names stay aligned. No initials are
+ * synthesized (DESIGN.md §Lists).
+ */
+function UserPhotoSlot({
+  user,
+  reserve,
+  className,
+}: {
+  user: UserListItem;
+  reserve: boolean;
+  className: string;
+}) {
+  if (user.image) {
+    return (
+      <UserAvatar decorative name={avatarName(user)} image={user.image} className={className} />
+    );
+  }
+  return reserve ? <span aria-hidden="true" className={`${className} shrink-0`} /> : null;
+}
+
+function buildColumns(
+  presentIds: Set<number> | null,
+  t: Translate,
+  reservePhoto: boolean,
+): Column<UserListItem>[] {
   return [
     {
       id: "name",
@@ -152,6 +184,7 @@ function buildColumns(presentIds: Set<number> | null, t: Translate): Column<User
       sortValue: (u) => `${u.surname ?? ""} ${u.name ?? ""}`.trim().toLowerCase(),
       cell: (u) => (
         <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <UserPhotoSlot user={u} reserve={reservePhoto} className="size-7" />
           <span className="font-medium">{fullName(u)}</span>
           {u.isTestAccount && (
             <StatusBadge tone="warning" dot={false}>
@@ -257,11 +290,13 @@ function UserMobileRow({
   t,
   columns,
   presentIds,
+  reservePhoto,
 }: {
   user: UserListItem;
   t: Translate;
   columns: Column<UserListItem>[];
   presentIds: Set<number> | null;
+  reservePhoto: boolean;
 }) {
   const name = fullName(user);
   const values: Record<UserColumnId, string> = {
@@ -278,8 +313,9 @@ function UserMobileRow({
   return (
     <Link
       href={`/users/${user.id}`}
-      className="focus-visible:ring-ring flex min-w-0 items-start px-4 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
+      className="focus-visible:ring-ring flex min-w-0 items-start gap-3 px-4 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
     >
+      <UserPhotoSlot user={user} reserve={reservePhoto} className="mt-0.5 size-9" />
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex min-w-0 flex-wrap items-start gap-2">
           <span className="min-w-0 flex-1 wrap-break-word font-medium">{name}</span>
@@ -489,14 +525,15 @@ export default function UsersPage() {
     [showPresence],
   );
 
+  const reservePhoto = useMemo(() => users.some((user) => user.image), [users]);
   const columns = useMemo(
     () =>
-      buildColumns(presentIds, t).filter(
+      buildColumns(presentIds, t, reservePhoto).filter(
         (column) =>
           visibleColumns.has(column.id as UserColumnId) &&
           (column.id !== "presence" || showPresence),
       ),
-    [visibleColumns, presentIds, showPresence, t],
+    [visibleColumns, presentIds, showPresence, t, reservePhoto],
   );
 
   function toggleColumn(id: UserColumnId, checked: boolean) {
@@ -615,7 +652,13 @@ export default function UsersPage() {
           getRowHref={(u) => `/users/${u.id}`}
           getRowLabel={(u) => `${u.name ?? ""} ${u.surname ?? ""}`.trim() || u.email}
           renderMobileRow={(u) => (
-            <UserMobileRow user={u} t={t} columns={columns} presentIds={presentIds} />
+            <UserMobileRow
+              user={u}
+              t={t}
+              columns={columns}
+              presentIds={presentIds}
+              reservePhoto={reservePhoto}
+            />
           )}
           pageSize={15}
           loading={loading}

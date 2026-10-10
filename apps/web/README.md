@@ -247,7 +247,12 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `FullPageError`,
 `CapabilityGate`, `AccessDenied`, `Spinner`, `SubmitButton`, `PasswordInput`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
-`EntityCombobox`, `ActionGroup`, `IconButton`.
+`EntityCombobox`, `ActionGroup`, `IconButton`, `UserAvatar`.
+
+`UserAvatar` renders a person's account photo from the authenticated
+`/api/users/:id/photo` route (`Me.image`, `UserListItem.image`). Text-first
+surfaces (sidebar account row, user tables) render it only when a photo exists;
+`showInitials` is for the photo editor, where the picture is the subject.
 
 `PageLayout` is the authenticated page canvas: `content` (1280 px), `reading`
 (896 px) for focused form/text workflows, and `workspace` only for genuinely

@@ -422,10 +422,13 @@ ordinary text, not status pills; reserve badges for meaningful changing state.
   In the collapsed icon rail the labels reduce to non-interactive separators
   and every destination remains directly reachable.
 - The footer is an account utility row: identity is text-first (name and email,
-  no fabricated initials or fallback avatar); the appearance control sits at
-  the row's trailing edge. The account menu contains Profile, the quick
-  language switcher, and Sign out. On the icon rail, text can hide but the
-  account action remains a labelled icon.
+  no fabricated initials or fallback avatar). When the person has uploaded an
+  account photo it leads the row as a small `UserAvatar`, and the account menu
+  header repeats it; without one the row stays text only. The appearance
+  control sits at the row's trailing edge. The account menu contains Profile,
+  the quick language switcher, and Sign out. On the icon rail, text can hide
+  but the account action remains a labelled control: the photo when there is
+  one, otherwise the user icon.
 
 ```tsx
 <SectionCard
@@ -857,6 +860,9 @@ Tables and lists:
   trailing edge, close to the side-panel origin.
 - User tables stay text-first when no profile image exists; do not synthesize
   initials into avatar circles, which adds height without adding identity.
+  A real account photo leads the name cell (`UserAvatar`, decorative beside
+  the visible name). Initials belong only where the photo itself is the
+  subject, such as the photo editor and the mobile Account header.
 - An inline-editable grid navigates like a spreadsheet: arrows move between
   cells, Tab/Enter commit and move, Escape reverts — and both the row-selection
   checkbox and the row actions are cells too, so nothing in a row needs a

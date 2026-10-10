@@ -69,6 +69,8 @@ export interface UserListItem {
   emailVerified: boolean;
   name: string | null;
   surname: string | null;
+  /** Authenticated account-photo route (#934), or null without a photo. */
+  image: string | null;
   badgeId: string | null;
   /** H8: this user's actual highest-visible role name (null if they hold no visible role). */
   visibleRoleName: string | null;
