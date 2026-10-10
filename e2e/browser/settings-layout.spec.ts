@@ -132,12 +132,19 @@ test("changes optional channels while queue calls stay mandatory", async ({ page
   });
 });
 
+// #932: /settings/event is a plain list of sections; each opens with ?tab=<section>.
 test("event settings fit the viewport", async ({ page }) => {
   await page.goto("/settings/event");
   const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
   await expect(cookies).toBeVisible();
   await cookies.locator("button").first().click();
   await expect(cookies).toBeHidden();
+  await expect(page.getByRole("link", { name: "Venue", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.getByRole("link", { name: "Event", exact: true }).click();
+  await expect(page).toHaveURL(/[?&]tab=event\b/);
   await expect(page.getByRole("textbox").first()).toHaveValue("HackUDC");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -155,24 +162,24 @@ for (const tab of ["venue", "wallet", "presence", "invites", "danger"] as const)
     const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
     await expect(cookies).toBeVisible();
     await cookies.locator("button").first().click();
-    const panel = page.getByRole("tabpanel").first();
+    const panel = page.getByRole("main").last();
     if (tab === "danger") await expect(panel.getByRole("heading").first()).toBeVisible();
     else
       await expect(
         panel.getByRole("button", { name: "Save changes", exact: true }).first(),
       ).toBeVisible();
-    await expect
-      .poll(async () =>
-        page
-          .getByRole("tab", { selected: true })
-          .first()
-          .evaluate((element) => {
+    // Only sections with their own views (e.g. Wallet) still show a tab bar.
+    const selectedTab = page.getByRole("tab", { selected: true });
+    if ((await selectedTab.count()) > 0)
+      await expect
+        .poll(async () =>
+          selectedTab.first().evaluate((element) => {
             const selected = element.getBoundingClientRect();
             const bar = element.closest('[role="tablist"]')?.getBoundingClientRect();
             return !!bar && selected.left >= bar.left - 1 && selected.right <= bar.right + 1;
           }),
-      )
-      .toBe(true);
+        )
+        .toBe(true);
     if (tab !== "danger") {
       await expect(panel.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(1);
     }
@@ -222,7 +229,7 @@ for (const [tab, inputLabel] of [
     const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
     await expect(cookies).toBeVisible();
     await cookies.locator("button").first().click();
-    const panel = page.getByRole("tabpanel").first();
+    const panel = page.getByRole("main").last();
     const input = panel.getByLabel(inputLabel, { exact: true }).first();
     await expect(input).toBeVisible();
     await input.fill("Edited caption");
@@ -407,7 +414,9 @@ test("queue administrator edits judging hours without reading private event sett
   );
   await page.goto("/settings/event?tab=judging");
   await page.locator('aside[aria-labelledby="cookie-notice-title"] button').first().click();
-  await expect(page.getByRole("tab", { name: "Judging window", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Judging window", exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeVisible();
   expect(eventReads).toBe(0);
   const write = page.waitForRequest(
@@ -438,11 +447,11 @@ test("Wallet keeps edits and shows a retry after a partial save failure", async 
   await website.fill("https://example.com/changed");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(website).toBeDisabled();
-  await expect(page.getByRole("tabpanel").first().getByRole("alert")).toBeVisible();
+  await expect(page.getByRole("main").last().getByRole("alert")).toBeVisible();
   await page.getByRole("tab", { name: "Fields", exact: true }).click();
   await expect(caption).toHaveValue("Unsaved attendee caption");
   fail = false;
   await page.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(page.getByRole("tabpanel").first().getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("main").last().getByRole("alert")).toHaveCount(0);
   await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
 });
