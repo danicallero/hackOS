@@ -151,26 +151,25 @@ export function StandsScreen() {
     if (session.current) return;
     setOutcome(null);
     setActive({ stand, prompt: t("standsNfcPrompt") });
-    // #935: the serial is linked before anything is written to the tag, so a
-    // refused one (409: a badge or another company's tag) leaves it untouched.
-    const current = startNfcRead(t("standsNfcPrompt"), {
-      claimBadge: true,
-      beforeClaim: async (uid) => {
-        const tag = await apiFetch<StandTag>(`/api/enterprises/${stand.enterpriseId}/stand-tags`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "Idempotency-Key": createIdempotencyKey(),
-          },
-          body: JSON.stringify({ kind: "nfc", uid }),
-        });
-        addTag(stand, tag);
-      },
-    });
+    // #935: exactly like badge accreditation, the tag is read and given the
+    // app claim inside the NFC session, and the serial is linked afterwards.
+    // Waiting on the network while holding the tag lost it on real hardware.
+    // The claim is the same record every badge carries, so writing it to a
+    // tag the API then refuses (someone's badge) changes nothing.
+    const current = startNfcRead(t("standsNfcPrompt"), { claimBadge: true });
     session.current = current;
     try {
       const uid = await current.result;
       if (!uid) return;
+      const tag = await apiFetch<StandTag>(`/api/enterprises/${stand.enterpriseId}/stand-tags`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Idempotency-Key": createIdempotencyKey(),
+        },
+        body: JSON.stringify({ kind: "nfc", uid }),
+      });
+      addTag(stand, tag);
       const prepared = !current.claimFailed();
       void haptic(prepared ? "success" : "warning");
       setOutcome({
@@ -181,7 +180,13 @@ export function StandsScreen() {
     } catch (err) {
       void haptic("error");
       const key = err instanceof Error && NFC_ERRORS.has(err.message) ? err.message : null;
-      Alert.alert(t("standsLinkNfc"), t(key ? (key as MessageKey) : standLinkErrorKey(err)));
+      const message = t(key ? (key as MessageKey) : standLinkErrorKey(err));
+      // Unmapped API errors keep the server's explicit reason visible.
+      const reason =
+        !key && err instanceof ApiError && standLinkErrorKey(err) === "standsLinkFailed"
+          ? err.message
+          : null;
+      Alert.alert(t("standsLinkNfc"), reason ? `${message}\n\n${reason}` : message);
     } finally {
       if (session.current === current) session.current = null;
       setActive(null);

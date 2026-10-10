@@ -257,47 +257,6 @@ describe("badge claim (linking only)", () => {
     expect(writes[writes.length - 1]![0][1]).toBe(4);
   });
 
-  it("links the serial before writing the claim, on both platforms (#935)", async () => {
-    for (const os of ["android", "ios"] as const) {
-      jest.clearAllMocks();
-      Platform.OS = os;
-      const steps: string[] = [];
-      jest.mocked(NfcManager.requestTechnology).mockResolvedValue(NfcTech.MifareUltralight);
-      jest.mocked(ultralight().mifareUltralightWritePage).mockImplementation(async () => {
-        steps.push("write");
-      });
-      jest.mocked(ultralight().mifareUltralightReadPages).mockResolvedValue(new Array(16).fill(0));
-      jest.mocked(NfcManager.sendMifareCommandIOS).mockImplementation(async ([cmd]) => {
-        if (cmd === 0xa2) steps.push("write");
-        return [];
-      });
-      const session = startNfcRead("Hold tag", {
-        claimBadge: true,
-        beforeClaim: async (uid) => void steps.push(`link ${uid}`),
-      });
-      await expect(session.result).resolves.toBe("04AB12CD34EF56");
-      expect(steps[0]).toBe("link 04AB12CD34EF56");
-    }
-  });
-
-  it("writes nothing when the serial is refused (#935)", async () => {
-    for (const os of ["android", "ios"] as const) {
-      jest.clearAllMocks();
-      Platform.OS = os;
-      jest.mocked(NfcManager.requestTechnology).mockResolvedValue(NfcTech.MifareUltralight);
-      const session = startNfcRead("Hold tag", {
-        claimBadge: true,
-        beforeClaim: async () => {
-          throw new Error("409");
-        },
-      });
-      await expect(session.result).rejects.toThrow("409");
-      expect(ultralight().mifareUltralightWritePage).not.toHaveBeenCalled();
-      expect(NfcManager.sendMifareCommandIOS).not.toHaveBeenCalled();
-      expect(NfcManager.cancelTechnologyRequest).toHaveBeenCalled();
-    }
-  });
-
   it("never writes when only reading", async () => {
     await startNfcRead("Hold badge").result;
     Platform.OS = "android";

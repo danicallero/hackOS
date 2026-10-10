@@ -13,27 +13,20 @@ import type { StandSummary } from "@/lib/stands";
 import { renderMobile } from "./render";
 
 /**
- * The NFC read is mocked: a "tap" runs the screen's `beforeClaim` callback
- * with the UID, as the real reader does before it writes the claim. Reads and
- * claim writes are covered by lib/nfc-reader.test.ts and need a physical device.
+ * The NFC read is mocked: a "tap" resolves with the UID after the (mocked)
+ * claim write, as the real reader does; the screen links it afterwards. Reads
+ * and claim writes are covered by lib/nfc-reader.test.ts and need a device.
  */
 let mockTap: { uid: string; claimFailed: boolean } | null = null;
-const mockReads: { claimBadge?: boolean; beforeClaim?: (uid: string) => Promise<void> }[] = [];
+const mockReads: { claimBadge?: boolean }[] = [];
 jest.mock("@/lib/nfc-reader", () => ({
-  startNfcRead: (
-    _message: string,
-    options: { claimBadge?: boolean; beforeClaim?: (uid: string) => Promise<void> },
-  ) => {
+  startNfcRead: (_message: string, options: { claimBadge?: boolean }) => {
     mockReads.push(options);
     const tap = mockTap;
     return {
       cancel: jest.fn(),
       claimFailed: () => tap?.claimFailed === true,
-      result: (async () => {
-        if (!tap) return null;
-        await options.beforeClaim?.(tap.uid);
-        return tap.uid;
-      })(),
+      result: Promise.resolve(tap ? tap.uid : null),
     };
   },
 }));
@@ -215,6 +208,18 @@ describe("StandsScreen (#935)", () => {
       expect(Alert.alert).toHaveBeenLastCalledWith("standsLinkNfc", "standsTagIsStand"),
     );
     expect(screen.queryByText(/standsLinked/)).toBeNull();
+  });
+
+  it("keeps the server's reason for an unexpected link failure", async () => {
+    linkResult = () => Promise.reject(new ApiError("Enterprise not found", 404, "not_found"));
+    await renderMobile(<StandsScreen />);
+    await tapLink("Acme");
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        "standsLinkNfc",
+        "standsLinkFailed\n\nEnterprise not found",
+      ),
+    );
   });
 
   it("explains a device without NFC and keeps the action disabled", async () => {
