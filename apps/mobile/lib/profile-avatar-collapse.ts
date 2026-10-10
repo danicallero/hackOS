@@ -13,89 +13,88 @@ type ProfileAvatarFrame = ProfileCameraCutoutFrame;
 
 const DYNAMIC_ISLAND_HEIGHT = 36.67;
 
-/** Resolve a compact camera-area target without requiring platform cutout APIs. */
+/** Largest side (dp) of a display-cutout rect still treated as a hole punch or waterdrop. */
+const MAX_HOLE_PUNCH_SIZE = 72;
+/** A hole punch sits in the top strip; side cutouts (landscape) are ignored. */
+const MAX_HOLE_PUNCH_TOP = 96;
+
+/**
+ * Pick the narrow, top-edge cutout among the rects reported by Android's
+ * DisplayCutout (window coordinates, dp). Wide notches and side cutouts are
+ * rejected so they get the plain collapse instead of a misleading morph.
+ */
+export function pickHolePunchCutout(
+  rects: ProfileCameraCutoutFrame[] | null | undefined,
+  screenWidth: number,
+): ProfileCameraCutoutFrame | null {
+  let best: ProfileCameraCutoutFrame | null = null;
+  for (const rect of rects ?? []) {
+    if (!(rect.width > 0 && rect.height > 0)) continue;
+    if (rect.width > MAX_HOLE_PUNCH_SIZE || rect.height > MAX_HOLE_PUNCH_SIZE) continue;
+    if (rect.top > MAX_HOLE_PUNCH_TOP || rect.left < 0 || rect.left + rect.width > screenWidth)
+      continue;
+    if (!best || rect.top < best.top) best = rect;
+  }
+  if (!best) return null;
+  // A hole punch is a circle: morph into the largest circle centred in the
+  // measured rect, so a padded or slightly oval report never widens the target.
+  const diameter = Math.min(best.width, best.height);
+  return {
+    left: best.left + (best.width - diameter) / 2,
+    top: best.top + (best.height - diameter) / 2,
+    width: diameter,
+    height: diameter,
+  };
+}
+
+/**
+ * Resolve the camera-area morph target.
+ * - iPhone with Dynamic Island: fixed island geometry (UIKit exposes none).
+ * - Other devices with a hole punch: a circle the size of the real cutout read
+ *   from the OS.
+ * - Everything else (notch, no cutout, landscape, unknown): `hasCutout: false`,
+ *   which callers render as a plain collapse/fade with no morph.
+ */
 export function resolveProfileCameraTarget({
   cameraCutoutFrame,
+  displayCutoutRects,
   height,
-  manufacturer,
-  modelId,
-  modelName,
   platform,
   safeAreaTop,
   screenWidth,
-  statusBarHeight,
 }: {
   cameraCutoutFrame?: ProfileCameraCutoutFrame | null;
+  displayCutoutRects?: ProfileCameraCutoutFrame[] | null;
   height: number;
-  manufacturer: string | null;
-  modelId: string | null;
-  modelName: string | null;
   platform: string;
   safeAreaTop: number;
   screenWidth: number;
-  statusBarHeight: number;
 }): ProfileAvatarFrame & { hasCutout: boolean } {
   const isLandscape = screenWidth > height;
   if (cameraCutoutFrame) return { ...cameraCutoutFrame, hasCutout: true };
 
-  let cutout: ProfileCameraCutoutFrame | null = null;
-  if (!isLandscape && platform === "ios") {
-    const id = modelId ?? "";
+  if (!isLandscape && platform === "ios" && safeAreaTop >= 55) {
     // iOS does not expose a public Dynamic Island frame. Use its measured
     // safe-area/viewport geometry in points, relative to the app window.
-    const dynamicIsland = safeAreaTop >= 55;
-    const hasNotch =
-      dynamicIsland ||
-      /^iPhone(?:10,[36]|11,[2468]|12,[1358]|13,[1245]|14,[235678])$/.test(id) ||
-      safeAreaTop >= 44;
-    if (hasNotch) {
-      const width = Math.min(
-        dynamicIsland ? (screenWidth >= 400 ? 125.33 : 125) : 176,
-        screenWidth - 32,
-      );
-      const cutoutHeight = dynamicIsland ? DYNAMIC_ISLAND_HEIGHT : 34;
-      // The iPhone 15 viewport is 393×852 with a 59 pt top inset and an
-      // 11.33 pt island top. iPhone 16/17 Pro is 402×874 with a 62 pt inset
-      // and a 14 pt island top. Newer tall cutout areas retain the same
-      // 48 pt separation from their safe-area edge (for example iPhone Air).
-      const islandTop = safeAreaTop >= 60 ? safeAreaTop - 48 : safeAreaTop - 47.67;
-      cutout = {
-        left: (screenWidth - width) / 2,
-        top: dynamicIsland ? islandTop : 0,
-        width,
-        height: cutoutHeight,
-      };
-    }
-  } else if (!isLandscape && platform === "android") {
-    const device = `${manufacturer ?? ""} ${modelName ?? ""}`;
-    const hasKnownPunchHole =
-      /pixel\s*(?:4a|5|[6-9]|1\d)/i.test(device) ||
-      /(?:galaxy\s*(?:s|z|a\s*(?:5\d|6\d|7\d|8\d))|sm-[agsz]\d{3,})/i.test(device) ||
-      /(?:xiaomi\s*1[0-9]|redmi\s*note\s*[89]|poco\s*[fxm]\d|oneplus\s*[789]|nothing\s*phone|motorola\s*edge)/i.test(
-        device,
-      );
-    const hasTallDisplayCutout = safeAreaTop > statusBarHeight + 6;
-    if (hasKnownPunchHole) {
-      const diameter = Math.min(28, safeAreaTop || 28);
-      cutout = {
-        left: (screenWidth - diameter) / 2,
-        top: Math.max(0, (safeAreaTop - diameter) / 2),
-        width: diameter,
-        height: diameter,
-      };
-    } else if (hasTallDisplayCutout) {
-      const width = Math.min(150, screenWidth - 32);
-      const cutoutHeight = Math.min(34, safeAreaTop);
-      cutout = {
-        left: (screenWidth - width) / 2,
-        top: Math.max(0, (safeAreaTop - cutoutHeight) / 2),
-        width,
-        height: cutoutHeight,
-      };
-    }
+    const width = Math.min(screenWidth >= 400 ? 125.33 : 125, screenWidth - 32);
+    // The iPhone 15 viewport is 393×852 with a 59 pt top inset and an
+    // 11.33 pt island top. iPhone 16/17 Pro is 402×874 with a 62 pt inset
+    // and a 14 pt island top. Newer tall cutout areas retain the same
+    // 48 pt separation from their safe-area edge (for example iPhone Air).
+    const islandTop = safeAreaTop >= 60 ? safeAreaTop - 48 : safeAreaTop - 47.67;
+    return {
+      left: (screenWidth - width) / 2,
+      top: islandTop,
+      width,
+      height: DYNAMIC_ISLAND_HEIGHT,
+      hasCutout: true,
+    };
   }
 
-  if (cutout) return { ...cutout, hasCutout: true };
+  if (!isLandscape && platform === "android") {
+    const punch = pickHolePunchCutout(displayCutoutRects, screenWidth);
+    if (punch) return { ...punch, hasCutout: true };
+  }
 
   const compactSize = 40;
   return {

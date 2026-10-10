@@ -1,7 +1,6 @@
 import MaskedView from "@react-native-masked-view/masked-view";
-import * as Device from "expo-device";
 import { type ReactNode, useCallback, useId, useMemo, useRef, useState } from "react";
-import { Image, Platform, StatusBar, useWindowDimensions, View } from "react-native";
+import { Image, Platform, useWindowDimensions, View } from "react-native";
 import Animated, {
   useAnimatedProps,
   useAnimatedScrollHandler,
@@ -23,6 +22,7 @@ import {
   profileAvatarMorphPath,
   resolveProfileCameraTarget,
 } from "@/lib/profile-avatar-collapse";
+import CameraCapabilities from "@/modules/camera-capabilities";
 import { colors } from "@/theme/colors";
 
 type ProfileAvatarFrame = ProfileCameraCutoutFrame;
@@ -157,20 +157,27 @@ export function ProfileAvatarCollapse({
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const reduceMotion = useReducedMotion();
+  // Android only: real cutout rects (dp, window coords). Re-read on rotation/resize.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: window size changes when the cutout moves.
+  const displayCutoutRects = useMemo(() => {
+    if (Platform.OS !== "android") return null;
+    try {
+      return CameraCapabilities?.getDisplayCutoutRects?.() ?? null;
+    } catch {
+      return null;
+    }
+  }, [screenHeight, screenWidth]);
   const target = useMemo(
     () =>
       resolveProfileCameraTarget({
         cameraCutoutFrame,
+        displayCutoutRects,
         height: screenHeight,
-        manufacturer: Device.manufacturer,
-        modelId: Device.modelId,
-        modelName: Device.modelName,
         platform: Platform.OS,
         safeAreaTop: insets.top,
         screenWidth,
-        statusBarHeight: StatusBar.currentHeight ?? 0,
       }),
-    [cameraCutoutFrame, insets.top, screenHeight, screenWidth],
+    [cameraCutoutFrame, displayCutoutRects, insets.top, screenHeight, screenWidth],
   );
   const source = useApiImage(image);
   const gradientId = `profile-avatar-cover-${useId().replaceAll(":", "-")}`;
