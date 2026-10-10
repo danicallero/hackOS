@@ -1,6 +1,8 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
 import { z } from "zod";
+import { pool } from "../db/pool.js";
+import { hasEventAccess } from "../modules/identity/role.js";
 import { type AuthorizationContext, userHasCapability } from "./capabilities.js";
 import { ForbiddenError, UnauthorizedError } from "./errors.js";
 
@@ -47,7 +49,13 @@ export async function requireScopedRefreshAccess(
     return;
   }
   if (topic === SSE_TOPICS.DIRECTORY) {
-    if (!(await userHasCapability(context, CAPABILITIES.DIRECTORY_READ))) {
+    // The signal is payload-free. Event attendees without directory:read
+    // (Sponsor, Judging Team) still own a public profile and its preview
+    // (#934), so event access is enough to subscribe.
+    if (
+      !(await userHasCapability(context, CAPABILITIES.DIRECTORY_READ)) &&
+      !(await hasEventAccess(pool, userId))
+    ) {
       throw new ForbiddenError(`Missing capability: ${CAPABILITIES.DIRECTORY_READ}`, {
         capability: CAPABILITIES.DIRECTORY_READ,
       });

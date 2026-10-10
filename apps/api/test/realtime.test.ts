@@ -293,4 +293,46 @@ describe("multiplexed authorization and wire contract (#892)", () => {
       .toBeGreaterThan(before);
     expect(other.text()).not.toContain(EVENTS.USER_SESSION_CHANGED);
   });
+
+  it("wakes directory views from card-changing writes, skipping no-op profile saves (#934)", async () => {
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    // Sponsor/Judging Team shape: event access without directory:read.
+    const owner = await createUser();
+    const role = await createRole([], { eventAccess: true });
+    await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [owner, role]);
+    const connection = await open(owner, ["domain:directory"]);
+    const signals = () => connection.text().split('"topic":"domain:directory"').length - 1;
+
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/api/users/${owner}`,
+      headers: asUser(admin),
+      payload: { name: "Renamed" },
+    });
+    expect(patch.statusCode).toBe(200);
+    await expect.poll(signals).toBe(1);
+    expect(connection.text()).not.toContain("Renamed");
+
+    const profile = {
+      directoryVisible: true,
+      showSurname: false,
+      showPhoto: false,
+      showProject: true,
+      headline: null,
+      locationNote: null,
+    };
+    const put = (key: string, payload: typeof profile) =>
+      app.inject({
+        method: "PUT",
+        url: "/api/me/public-profile",
+        headers: { ...asUser(owner), "idempotency-key": key },
+        payload,
+      });
+    expect((await put("dir-1", profile)).statusCode).toBe(200);
+    await expect.poll(signals).toBe(2);
+    expect((await put("dir-2", profile)).statusCode).toBe(200);
+    expect((await put("dir-3", { ...profile, showSurname: true })).statusCode).toBe(200);
+    // Delivery is ordered on one connection: the no-op would precede this one.
+    await expect.poll(signals).toBe(3);
+  });
 });

@@ -30,7 +30,11 @@ import { findReviewFixtureByUserId } from "./lib/review-fixture-log.js";
 import { openApiSecurityForPolicy, registerRoutePolicyInfrastructure } from "./lib/route-policy.js";
 import { registerSessionInvalidations } from "./lib/session-invalidation.js";
 import { broadcast } from "./lib/sse.js";
-import { mutationDomainForPath, publicContentMutationForPath } from "./lib/sse-routing.js";
+import {
+  directoryMutationForPath,
+  mutationDomainForPath,
+  publicContentMutationForPath,
+} from "./lib/sse-routing.js";
 import { valkey } from "./lib/valkey.js";
 import { registerModules } from "./modules/index.js";
 import { authContextPlugin } from "./plugins/auth-context.js";
@@ -440,7 +444,8 @@ export async function buildApp(): Promise<App> {
     if (
       !["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ||
       reply.statusCode >= 300 ||
-      req.idempotency?.replayed
+      req.idempotency?.replayed ||
+      req.domainUnchanged
     )
       return;
 
@@ -450,6 +455,7 @@ export async function buildApp(): Promise<App> {
     const topics = new Set<string>([SSE_TOPICS.AUDIT]);
     const domain = mutationDomainForPath(req.url);
     if (domain) topics.add(domain);
+    if (directoryMutationForPath(req.url)) topics.add(SSE_TOPICS.DIRECTORY);
     const broadcasts = [...topics].map((topic) => broadcast(topic, EVENTS.DOMAIN_CHANGED, {}));
     if (publicContentMutationForPath(req.url)) {
       broadcasts.push(broadcast(SSE_TOPICS.PUBLIC_CONTENT, EVENTS.DATA_CHANGED, {}));

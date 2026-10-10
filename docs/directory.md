@@ -78,24 +78,39 @@ and response reference.
 
 ## Writes, audit and concurrency
 
-`PUT` locks the `users` row (which also serializes the first write, when no
-profile row exists yet), refuses removal-pending accounts with 409 and
-non-attendees with 403, then upserts. Each `PUT` writes one `audit_log` row
+`PUT` locks the `users` row `FOR NO KEY UPDATE` (which also serializes the
+first write, when no profile row exists yet), refuses removal-pending accounts
+with 409 and non-attendees with 403, then upserts. A `PUT` that repeats the
+stored settings (or the hidden defaults, without a row) writes nothing, is not
+audited and broadcasts nothing. Every other `PUT` writes one `audit_log` row
 (`public_profile.updated`) in the same transaction, recording the changed field
 names and visibility before/after but never the free text. Moderation writes
-`public_profile.moderated` with the staff reason.
+`public_profile.moderated` with the staff reason and answers 409 for an account
+being removed.
+
+Listing pages first over the visible ids (search, `challengeId` as an `EXISTS`
+over the shown project, keyset cursor and `LIMIT`) and only then projects the
+project and challenges of that page. Challenges exclude cancelled and
+disqualified queue entries.
 
 ## Realtime and caching
 
-There is no server read cache (see `architecture.md`). After a successful
-`PUT`/`DELETE`, the generic mutation hook emits the payload-free
-`domain.changed` on the `directory` topic (`domain:directory` scope, requires
-`directory:read`), so open directory views refetch without receiving personal
-data over SSE.
+There is no server read cache (see `architecture.md`). The generic mutation
+hook emits the payload-free `domain.changed` on the `directory` topic
+(`domain:directory` scope: `directory:read` or event access, since Sponsor and
+Judging Team attendees own a profile and its preview without reading the
+directory), so open views refetch without receiving personal data over SSE.
+It fires after a successful profile `PUT` that changed something, moderation,
+and writes owned by other domains that change a card
+(`directoryMutationForPath`): `/api/me` and `/api/users/:id` (name, surname,
+photo, removal), project and work-group membership, and challenge
+publication, visibility or title. Event-access (role) changes and queue
+status changes are not mapped; open views pick them up when refocused.
 
 ## Account removal (H54)
 
 Deleting a user cascades to the profile. Anonymization deletes the row in the
 removal transaction (`scrubRelationships`), and the
 `h54_require_active_user_reference` trigger rejects any write for a pending or
-anonymized account.
+anonymized account. The profile row, with `consented_at`, is part of the
+personal export bundle (`publicProfile`, `null` without a row).

@@ -129,6 +129,16 @@ export async function buildExportBundle(
       [subjectUserId],
     )
   ).rows;
+  // #934: the opt-in directory profile, including its consent timestamp.
+  const publicProfile =
+    (
+      await db.query(
+        `SELECT directory_visible, show_surname, show_photo, show_project, headline,
+                location_note, consented_at, created_at, updated_at
+           FROM user_public_profiles WHERE user_id = $1`,
+        [subjectUserId],
+      )
+    ).rows[0] ?? null;
   const notificationOutbox = (
     await db.query(
       `SELECT id, category, channel, status, sent_at, read_at, created_at
@@ -187,6 +197,7 @@ export async function buildExportBundle(
     permissions: { roles, effectiveCapabilities: capabilities },
     applications,
     projects: { submissions, devpostParticipant },
+    publicProfile,
     judgingParticipation,
     presence: { activityLogs, checkInLogs, timeLogs },
     meals: { redemptions: mealRedemptions },

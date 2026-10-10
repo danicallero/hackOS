@@ -102,6 +102,26 @@ describe("public profile owner routes (#934)", () => {
       consentedAt: null,
       preview: { userId: me, displayName: "José G.", photoUrl: null, project: null },
     });
+    const { rows } = await pool.query(`SELECT 1 FROM user_public_profiles WHERE user_id = $1`, [
+      me,
+    ]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it("previews the project and challenges without a saved row", async () => {
+    const challenge = await publishChallenge("Preview");
+    const me = await person("Uxía", "Rey");
+    const repoId = await activeRepo("Unsaved", [me], [challenge]);
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/me/public-profile",
+      headers: asUser(me),
+    });
+    expect(res.json().preview).toMatchObject({
+      displayName: "Uxía R.",
+      project: { kind: "project", id: repoId, name: "Unsaved" },
+      challenges: [{ id: challenge, name: "Preview" }],
+    });
   });
 
   it("trims text, clears empty text and stamps consent only on the hidden→visible transition", async () => {
@@ -146,9 +166,9 @@ describe("public profile owner routes (#934)", () => {
       `UPDATE users SET account_state = 'removal_pending', removal_started_at = now() WHERE id = $1`,
       [me],
     );
-    // The H1 caller gate already refuses the request; the service keeps an
+    // The H1 caller gate answers 404 for a removal-pending caller; the service keeps an
     // explicit 409 for any caller that reaches it.
-    expect((await putProfile(me, VISIBLE)).statusCode).not.toBe(200);
+    expect((await putProfile(me, VISIBLE)).statusCode).toBe(404);
     const { updateMyPublicProfile } = await import("../../src/modules/directory/service.js");
     await expect(updateMyPublicProfile(me, VISIBLE)).rejects.toMatchObject({ statusCode: 409 });
     const { rows } = await pool.query(
@@ -175,6 +195,36 @@ describe("public profile owner routes (#934)", () => {
     });
     expect(rows[0].after.changedFields).toEqual(["directoryVisible", "headline"]);
     expect(JSON.stringify(rows[0])).not.toContain("Secret words");
+  });
+
+  it("writes nothing for a save that repeats the stored settings", async () => {
+    const me = await person("Ana", "Pérez");
+    const first = await putProfile(me, { ...VISIBLE, headline: "Same" });
+    const { rows: before } = await pool.query(
+      `SELECT updated_at FROM user_public_profiles WHERE user_id = $1`,
+      [me],
+    );
+    const again = await putProfile(me, { ...VISIBLE, headline: "  Same " });
+    expect(again.statusCode).toBe(200);
+    expect(again.json()).toEqual(first.json());
+    const { rows: after } = await pool.query(
+      `SELECT updated_at FROM user_public_profiles WHERE user_id = $1`,
+      [me],
+    );
+    expect(after).toEqual(before);
+    const hiddenDefaults = await person("No", "Row");
+    expect(
+      (await putProfile(hiddenDefaults, { ...VISIBLE, directoryVisible: false })).statusCode,
+    ).toBe(200);
+    const { rows: audits } = await pool.query(
+      `SELECT entity_id FROM audit_log WHERE action = 'public_profile.updated'`,
+    );
+    expect(audits).toEqual([{ entity_id: String(me) }]);
+    const { rows: noRow } = await pool.query(
+      `SELECT 1 FROM user_public_profiles WHERE user_id = $1`,
+      [hiddenDefaults],
+    );
+    expect(noRow).toHaveLength(0);
   });
 
   it("serializes concurrent first writes into one row with consent stamped once", async () => {
@@ -216,6 +266,25 @@ describe("directory reads (#934)", () => {
     const body = res.body;
     for (const forbidden of ["email", "dni", "badge", "intoleran", "Mate", "@dir.test", "DNI-"]) {
       expect(body).not.toContain(forbidden);
+    }
+  });
+
+  it("ignores cancelled and disqualified queue entries in challenges and the filter", async () => {
+    const kept = await publishChallenge("Kept");
+    const cancelled = await publishChallenge("Cancelled");
+    const disqualified = await publishChallenge("Disqualified");
+    const me = await person("Brais", "Lago");
+    const repoId = await activeRepo("Queued", [me], [kept, cancelled, disqualified]);
+    await pool.query(
+      `UPDATE queue_entries SET status = CASE challenge_id WHEN $2 THEN 'cancelled'::queue_status ELSE 'disqualified'::queue_status END
+        WHERE repo_id = $1 AND challenge_id IN ($2, $3)`,
+      [repoId, cancelled, disqualified],
+    );
+    await putProfile(me, VISIBLE);
+    expect((await directory()).json().items[0].challenges).toEqual([{ id: kept, name: "Kept" }]);
+    expect((await directory(`?challengeId=${kept}`)).json().items).toHaveLength(1);
+    for (const id of [cancelled, disqualified]) {
+      expect((await directory(`?challengeId=${id}`)).json().items).toEqual([]);
     }
   });
 
@@ -356,6 +425,39 @@ describe("moderation and removal (#934)", () => {
       payload: { reason: "x" },
     });
     expect(missing.statusCode).toBe(404);
+  });
+
+  it("refuses to moderate an account being removed with 409", async () => {
+    const me = await person("Ana", "Pérez");
+    await putProfile(me, { ...VISIBLE, headline: "Rude" });
+    await pool.query(
+      `UPDATE users SET account_state = 'removal_pending', removal_started_at = now() WHERE id = $1`,
+      [me],
+    );
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/api/users/${me}/public-profile`,
+      headers: { ...asUser(staff), "idempotency-key": "m-pending" },
+      payload: { reason: "Offensive headline" },
+    });
+    expect(res.statusCode).toBe(409);
+    const { rows } = await pool.query(
+      `SELECT 1 FROM audit_log WHERE action = 'public_profile.moderated'`,
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("includes the public profile in the personal export bundle (H54)", async () => {
+    const { buildExportBundle } = await import("../../src/modules/exports/bundle.js");
+    const me = await person("Ana", "Pérez");
+    expect((await buildExportBundle(me)).publicProfile).toBeNull();
+    await putProfile(me, { ...VISIBLE, headline: "Exported" });
+    expect((await buildExportBundle(me)).publicProfile).toMatchObject({
+      directory_visible: true,
+      headline: "Exported",
+      consented_at: expect.any(Date),
+    });
   });
 
   it("rolls back the profile write when the audit insert fails", async () => {

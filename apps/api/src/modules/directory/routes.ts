@@ -47,10 +47,14 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         body: publicProfileBody,
         summary: "Update my public profile",
         description:
-          "Replaces the caller's directory settings. Text is trimmed and empty text clears the field; headline ≤80 and locationNote ≤60 characters, no control characters. consentedAt is stamped on each hidden→visible transition. Audited without free text; 403 without event access. Accounts being removed (H54) are refused (#934).",
+          "Replaces the caller's directory settings. Text is trimmed and empty text clears the field; headline ≤80 and locationNote ≤60 characters, no control characters. consentedAt is stamped on each hidden→visible transition. Audited without free text when something changes; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934).",
       },
     },
-    async (req) => updateMyPublicProfile(req.userId as number, req.body),
+    async (req) => {
+      const { changed, profile } = await updateMyPublicProfile(req.userId as number, req.body);
+      req.domainUnchanged = !changed;
+      return profile;
+    },
   );
   r.get(
     "/api/directory",
