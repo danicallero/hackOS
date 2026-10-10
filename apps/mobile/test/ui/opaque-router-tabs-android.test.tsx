@@ -141,7 +141,9 @@ jest.mock("expo-symbols", () => ({
 }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
 jest.mock("@/lib/api", () => ({ getCurrentSessionCookie: () => "session=abc" }));
-jest.mock("@/lib/env", () => ({ API_URL: "https://api.example" }));
+jest.mock("@/lib/directory", () => ({
+  loadApiImage: (path: string) => Promise.resolve(`data:image/jpeg;base64,${path.length}`),
+}));
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({
     language: "en",
@@ -159,14 +161,15 @@ jest.mock("@/lib/i18n", () => ({
       })[key] ?? key,
   }),
 }));
+const mockFocusedSection = jest.fn(() => "external");
 jest.mock("@/lib/operations-navigation", () => ({
-  operationsSectionFromPathname: () => "external",
+  operationsSectionFromPathname: () => mockFocusedSection(),
   resolveOperationsNavigationAction: () => "replace",
 }));
 jest.mock("@/lib/overflow-tabs", () => ({
-  OVERFLOW_TAB_ICON: {},
-  OVERFLOW_TAB_LABEL_KEY: {},
-  OVERFLOW_TAB_ROUTE: {},
+  OVERFLOW_TAB_ICON: { account: "person.crop.circle", diary: "person.2.crop.square.stack" },
+  OVERFLOW_TAB_LABEL_KEY: { account: "tabAccount", diary: "tabDiary" },
+  OVERFLOW_TAB_ROUTE: { account: "/(tabs)/others/account", diary: "/(tabs)/others/diary" },
 }));
 jest.mock("@/lib/router-tabs-inset", () => ({
   RouterTabBarInsetsProvider: ({ children }: { children: unknown }) => children,
@@ -181,9 +184,11 @@ jest.mock("@/lib/router-tabs-inset", () => ({
     contentBottomInset: 98,
   }),
 }));
+const mockPrimaryTabs = jest.fn(() => ["schedule", "notifications", "wallet", "account"]);
+const mockOverflowTabs = jest.fn((): string[] => []);
 jest.mock("@/lib/tabs", () => ({
-  primaryTabs: () => ["schedule", "notifications", "wallet", "account"],
-  overflowTabs: () => [],
+  primaryTabs: () => mockPrimaryTabs(),
+  overflowTabs: () => mockOverflowTabs(),
 }));
 jest.mock("@/theme/colors", () => ({
   colors: {
@@ -303,15 +308,53 @@ describe("OpaqueRouterTabs — account photo (#934)", () => {
     const tab = screen.getByTestId("opaque-tab-account");
     expect(tab).toBeTruthy();
     expect(screen.queryByTestId("symbol-account_circle")).toBeNull();
-    const photo = screen.getByTestId("account-tab-avatar-photo", { includeHiddenElements: true });
-    expect(photo.props.source).toEqual({
-      uri: "https://api.example/api/users/7/photo?v=abc",
-      headers: { cookie: "session=abc" },
+    // Loaded with the session and shown from memory: Android drops a Cookie
+    // header on an Image source.
+    const photo = await screen.findByTestId("account-tab-avatar-photo", {
+      includeHiddenElements: true,
     });
+    expect(photo.props.source.uri).toMatch(/^data:image\/jpeg;base64,/);
   });
 
   it("keeps the Account symbol without a photo", async () => {
     await render(<OpaqueRouterTabs {...DEFAULT_PROPS} account={{ name: "Ada", image: null }} />);
     expect(screen.getByTestId("symbol-account_circle")).toBeTruthy();
+  });
+
+  describe("when Account sits behind Others", () => {
+    beforeEach(() => {
+      mockPrimaryTabs.mockReturnValue(["schedule", "queue", "wallet", "notifications"]);
+      mockOverflowTabs.mockReturnValue(["diary", "account"]);
+    });
+    afterEach(() => {
+      mockPrimaryTabs.mockReturnValue(["schedule", "notifications", "wallet", "account"]);
+      mockOverflowTabs.mockReturnValue([]);
+      mockFocusedSection.mockReturnValue("external");
+    });
+
+    it("shows the account photo in the Others circle while Account is open", async () => {
+      mockFocusedSection.mockReturnValue("account");
+      await render(
+        <OpaqueRouterTabs
+          {...DEFAULT_PROPS}
+          account={{ name: "Ada Lovelace", image: "/api/users/7/photo?v=abc" }}
+        />,
+      );
+      expect(
+        await screen.findByTestId("account-tab-avatar-photo", { includeHiddenElements: true }),
+      ).toBeTruthy();
+    });
+
+    it("keeps the Others symbol while another destination is open", async () => {
+      await render(
+        <OpaqueRouterTabs
+          {...DEFAULT_PROPS}
+          account={{ name: "Ada Lovelace", image: "/api/users/7/photo?v=abc" }}
+        />,
+      );
+      expect(
+        screen.queryByTestId("account-tab-avatar", { includeHiddenElements: true }),
+      ).toBeNull();
+    });
   });
 });

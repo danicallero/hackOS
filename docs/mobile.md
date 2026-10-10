@@ -224,10 +224,14 @@ distributed to other Expo Router apps without importing hackOS code.
   When the signed-in person has an account photo (#934), the direct Account
   tab shows it instead of the person symbol, with a ring in the tab tint when
   selected, and the Account screen header shows it in place of the initials.
-  `components/user-avatar.tsx` loads the private `/api/users/:id/photo` route
-  with the session cookie and falls back to initials if it cannot load. The
-  native `Others` dropdown keeps SF Symbols: UIMenu/Android menu items accept
-  symbol names, not an authenticated remote image.
+  On a compact phone a participant's Account sits behind Others, so the Others
+  circle shows the same ringed photo while Account is open.
+  `components/user-avatar.tsx` fetches the private `/api/users/:id/photo` route
+  with the session (`loadApiImage`, shown from memory: Android's image pipeline
+  drops a `Cookie` header on an `Image` source) and keeps the initials until it
+  arrives or if it cannot load. The items inside the native `Others` dropdown
+  keep SF Symbols: UIMenu/Android menu items accept symbol names, not an
+  authenticated remote image.
   `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
   (`lib/me-context.tsx`, `lib/use-me.ts`) and keeps the custom RouterTabs shell
   mounted while the profile revalidates. Every route stays registered in the
