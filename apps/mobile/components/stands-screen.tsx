@@ -94,8 +94,10 @@ export function StandsScreen() {
   useEffect(() => () => session.current?.cancel(), []);
 
   useEffect(() => {
+    // Only a real background ends the read: presenting the Core NFC sheet
+    // itself makes the app `inactive`, and cancelling then closed it at once.
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active") session.current?.cancel();
+      if (state === "background") session.current?.cancel();
     });
     return () => subscription.remove();
   }, []);

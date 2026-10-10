@@ -6,7 +6,7 @@ jest.mock("@/lib/use-nfc-supported", () => ({
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { Alert } from "react-native";
+import { Alert, AppState } from "react-native";
 import { StandsScreen } from "@/components/stands-screen";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { StandSummary } from "@/lib/stands";
@@ -17,16 +17,21 @@ import { renderMobile } from "./render";
  * claim write, as the real reader does; the screen links it afterwards. Reads
  * and claim writes are covered by lib/nfc-reader.test.ts and need a device.
  */
-let mockTap: { uid: string; claimFailed: boolean } | null = null;
-const mockReads: { claimBadge?: boolean }[] = [];
+let mockTap: { uid: string; claimFailed: boolean } | "pending" | null = null;
+const mockReads: { claimBadge?: boolean; cancel?: jest.Mock }[] = [];
 jest.mock("@/lib/nfc-reader", () => ({
   startNfcRead: (_message: string, options: { claimBadge?: boolean }) => {
-    mockReads.push(options);
     const tap = mockTap;
+    const cancel = jest.fn();
+    mockReads.push({ ...options, cancel });
     return {
-      cancel: jest.fn(),
-      claimFailed: () => tap?.claimFailed === true,
-      result: Promise.resolve(tap ? tap.uid : null),
+      cancel,
+      claimFailed: () => typeof tap === "object" && tap?.claimFailed === true,
+      // "pending": the Core NFC sheet is still waiting for a tag.
+      result:
+        tap === "pending"
+          ? new Promise<string | null>(() => {})
+          : Promise.resolve(tap?.uid ?? null),
     };
   },
 }));
@@ -208,6 +213,21 @@ describe("StandsScreen (#935)", () => {
       expect(Alert.alert).toHaveBeenLastCalledWith("standsLinkNfc", "standsTagIsStand"),
     );
     expect(screen.queryByText(/standsLinked/)).toBeNull();
+  });
+
+  it("keeps the iOS NFC sheet open when it makes the app inactive", async () => {
+    const listeners: ((state: string) => void)[] = [];
+    jest.spyOn(AppState, "addEventListener").mockImplementation((_type, listener) => {
+      listeners.push(listener as (state: string) => void);
+      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+    });
+    mockTap = "pending";
+    await renderMobile(<StandsScreen />);
+    await tapLink("Acme");
+    for (const listener of listeners) listener("inactive");
+    expect(mockReads[0]?.cancel).not.toHaveBeenCalled();
+    for (const listener of listeners) listener("background");
+    expect(mockReads[0]?.cancel).toHaveBeenCalled();
   });
 
   it("keeps the server's reason for an unexpected link failure", async () => {
