@@ -42,10 +42,11 @@ type State =
 const ROW_ICON_INSET = 52;
 
 /**
- * One directory profile (#934, #935), opened from a diary row or the
- * directory list. The API answers 404 for a hidden profile and for a person
- * the reader may not open, so both show the same unavailable state. The
- * diary entry, when there is one, carries the reader's favourite and note.
+ * A saved person's profile (#934, #935), opened from a diary row. People get
+ * into the diary only by a badge scan, so there is no Save here. The API
+ * answers 404 for a hidden profile and for a person the reader may not open,
+ * so both show the same unavailable state. The diary entry carries the
+ * reader's favourite and note.
  */
 export function PersonProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -56,7 +57,7 @@ export function PersonProfileScreen() {
   const [state, setState] = useState<State>({ status: "loading" });
   const [entry, setEntry] = useState<DiaryEntry | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [busy, setBusy] = useState<"star" | "save" | "remove" | "note" | "cv" | null>(null);
+  const [busy, setBusy] = useState<"star" | "remove" | "note" | "cv" | null>(null);
   const [editingNote, setEditingNote] = useState(false);
   const requestId = useRef(0);
   const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
@@ -134,18 +135,6 @@ export function PersonProfileScreen() {
     });
   }
 
-  function save() {
-    void run("save", async () => {
-      const saved = await apiFetch<DiaryEntry>("/api/me/diary/people", {
-        method: "POST",
-        headers: { "content-type": "application/json", "Idempotency-Key": createIdempotencyKey() },
-        body: JSON.stringify({ userId }),
-      });
-      setEntry(saved);
-      void haptic("success");
-    });
-  }
-
   function confirmRemove() {
     if (!entry) return;
     Alert.alert(t("diaryRemoveTitle"), undefined, [
@@ -160,6 +149,9 @@ export function PersonProfileScreen() {
               headers: { "Idempotency-Key": createIdempotencyKey() },
             });
             setEntry(null);
+            // Only people in the diary have a profile here; saving again
+            // takes a new scan, so there is nothing left to show.
+            safeBack(router, "/");
           }),
       },
     ]);
@@ -291,15 +283,7 @@ export function PersonProfileScreen() {
                   busy={busy === "star"}
                   onPress={() => patch({ starred: !entry.starred }, "star")}
                 />
-              ) : (
-                <QuickAction
-                  icon="plus.circle"
-                  label={t("directorySave")}
-                  title={t("save")}
-                  busy={busy === "save"}
-                  onPress={save}
-                />
-              )}
+              ) : null}
               {entry ? (
                 // With a note, its section below shows it; the tile edits it.
                 <QuickAction

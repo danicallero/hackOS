@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { Linking } from "react-native";
+import { Alert, Linking } from "react-native";
 import { PersonProfileScreen } from "@/components/person-profile-screen";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
@@ -7,9 +7,10 @@ import type { DirectoryEntry } from "@/lib/directory";
 import { renderMobile } from "./render";
 
 let mockId = "101";
+const mockBack = jest.fn();
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: mockId }),
-  useRouter: () => ({ back: jest.fn(), canGoBack: () => true }),
+  useRouter: () => ({ back: mockBack, canGoBack: () => true }),
 }));
 jest.mock("expo-router/stack", () => ({ __esModule: true, default: { Screen: () => null } }));
 const mockDownload: jest.Mock = jest.fn();
@@ -102,7 +103,6 @@ beforeEach(() => {
       return personResult;
     }
     if (path === "/api/me/diary") return { items: diary };
-    if (path === "/api/me/diary/people") return entry;
     if (init?.method === "PATCH") return { ...entry, ...JSON.parse(String(init.body)) };
     return undefined;
   });
@@ -154,17 +154,29 @@ it("toggles the favourite of the saved entry", async () => {
   expect(await screen.findByRole("button", { name: "diaryUnfavourite" })).toBeTruthy();
 });
 
-it("offers to save a person who is not in the diary yet", async () => {
+it("offers no Save: people get into the diary only by a scan", async () => {
   diary = [];
   await renderMobile(<PersonProfileScreen />);
-  await fireEvent.press(await screen.findByRole("button", { name: "directorySave" }));
-  await waitFor(() =>
-    expect(apiFetch).toHaveBeenCalledWith(
-      "/api/me/diary/people",
-      expect.objectContaining({ body: JSON.stringify({ userId: 101 }) }),
-    ),
+  expect(await screen.findByText("Ana Souto")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "directorySave" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "diaryFavourite" })).toBeNull();
+});
+
+it("goes back after removing the person from the diary", async () => {
+  mockBack.mockReset();
+  jest.spyOn(Alert, "alert").mockImplementation((_title, _body, buttons) => {
+    buttons?.find((button) => button.style === "destructive")?.onPress?.();
+  });
+  await renderMobile(<PersonProfileScreen />);
+  await fireEvent.press(await screen.findByRole("button", { name: "diaryRemoveFromDiary" }));
+  await waitFor(() => expect(mockBack).toHaveBeenCalled());
+  expect(apiFetch).toHaveBeenCalledWith(
+    "/api/me/diary/7",
+    expect.objectContaining({ method: "DELETE" }),
   );
-  expect(await screen.findByRole("button", { name: "diaryFavourite" })).toBeTruthy();
+  expect(jest.mocked(apiFetch).mock.calls.map(([path]) => path)).not.toContain(
+    "/api/me/diary/people",
+  );
 });
 
 it("shows one unavailable state for a hidden or unreadable profile", async () => {

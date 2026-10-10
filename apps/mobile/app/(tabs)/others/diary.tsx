@@ -1,1 +1,3 @@
-export { default } from "../diary";
+import { DiaryScreen } from "@/components/diary-screen";
+
+export default DiaryScreen;

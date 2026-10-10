@@ -19,11 +19,6 @@ export interface DirectoryEntry {
   challenges: { id: number; name: string }[];
 }
 
-export interface DirectoryPage {
-  items: DirectoryEntry[];
-  nextCursor: string | null;
-}
-
 /** Absolute URL of an authenticated, root-relative API asset route. */
 export function apiAssetUrl(path: string): string {
   return `${API_URL.replace(/\/+$/, "")}${path}`;

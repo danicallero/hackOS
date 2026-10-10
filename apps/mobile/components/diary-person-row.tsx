@@ -1,26 +1,22 @@
 import { MenuView } from "@expo/ui/community/menu";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { FavouriteStar } from "@/components/favourite-star";
 import { MenuTriggerIcon } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
-import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
 export const PERSON_ROW_TEXT_INSET = 76;
-/** Star + menu, or the Save pill; a row with only the menu needs one target. */
+/** Star + menu; a row with only the menu needs one target. */
 const TRAILING_WIDTH = 92;
 const MENU_ONLY_WIDTH = 44;
 
 /**
- * One person in Saved or Directory (#935): the same layout either way. The
- * whole row opens the profile with a full-width pressed state; trailing
- * controls are siblings layered on top, so pressing them never also opens
- * the profile (a native menu inside a Pressable would bubble its tap).
- *
- * Saving and favouriting are separate: an unsaved person offers Save; a
- * saved one offers the favourite star and a menu with the note and an
- * explicit "Remove from diary".
+ * One saved person in the diary (#935). The whole row opens the profile with
+ * a full-width pressed state; trailing controls are siblings layered on top,
+ * so pressing them never also opens the profile (a native menu inside a
+ * Pressable would bubble its tap). The star only marks a favourite; the menu
+ * holds the note and an explicit "Remove from diary".
  */
 export function DiaryPersonRow({
   name,
@@ -28,12 +24,10 @@ export function DiaryPersonRow({
   headline,
   detail,
   detailIsNote = false,
-  saved,
   starred,
   busy,
   available = true,
   onOpen,
-  onSave,
   onToggleStar,
   onEditNote,
   onRemove,
@@ -44,12 +38,10 @@ export function DiaryPersonRow({
   headline?: string | null;
   detail?: string | null;
   detailIsNote?: boolean;
-  saved: boolean;
   starred: boolean;
   busy: boolean;
   available?: boolean;
   onOpen?: () => void;
-  onSave?: () => void;
   onToggleStar?: () => void;
   onEditNote?: () => void;
   onRemove?: () => void;
@@ -57,7 +49,7 @@ export function DiaryPersonRow({
 }) {
   const { t } = useLocale();
   const lines = [headline, detail].filter(Boolean) as string[];
-  const trailingWidth = saved ? (onToggleStar ? TRAILING_WIDTH : MENU_ONLY_WIDTH) : TRAILING_WIDTH;
+  const trailingWidth = onToggleStar ? TRAILING_WIDTH : MENU_ONLY_WIDTH;
   const body = (
     <>
       <PersonAvatar size={48} name={available ? name : null} uri={photoUrl} />
@@ -135,106 +127,60 @@ export function DiaryPersonRow({
           width: trailingWidth,
         }}
       >
-        {saved ? (
-          <>
-            {onToggleStar ? (
-              <Pressable
-                key="star"
-                accessibilityRole="button"
-                accessibilityLabel={`${t(starred ? "diaryUnfavourite" : "diaryFavourite")}, ${name}`}
-                accessibilityState={{ disabled: busy, selected: starred }}
-                disabled={busy}
-                hitSlop={4}
-                onPress={onToggleStar}
-                style={({ pressed }) => ({
-                  alignItems: "center",
-                  height: 44,
-                  justifyContent: "center",
-                  opacity: busy ? 0.45 : pressed ? 0.6 : 1,
-                  width: 44,
-                })}
-              >
-                <FavouriteStar on={starred} />
-              </Pressable>
-            ) : null}
-            <MenuView
-              shouldOpenOnLongPress={false}
-              actions={[
-                ...(onEditNote
-                  ? [
-                      {
-                        id: "note",
-                        title: t("diaryNote"),
-                        image: "pencil" as const,
-                        attributes: { disabled: busy },
-                      },
-                    ]
-                  : []),
-                {
-                  id: "remove",
-                  title: t("diaryRemoveFromDiary"),
-                  image: "trash" as const,
-                  attributes: { destructive: true, disabled: busy },
-                },
-              ]}
-              onPressAction={({ nativeEvent }) => {
-                if (busy) return;
-                if (nativeEvent.event === "note") onEditNote?.();
-                if (nativeEvent.event === "remove") onRemove?.();
-              }}
-            >
-              <MenuTriggerIcon
-                icon="ellipsis"
-                accessibilityLabel={`${t("diaryEntryOptions")}, ${name}`}
-                tintColor={colors.accent}
-                disabled={busy}
-                iconSize={18}
-                weight="regular"
-              />
-            </MenuView>
-          </>
-        ) : onSave ? (
-          // Keyed apart from the star that replaces it: reusing the native view
-          // left Android announcing the star as "busy" after a save.
+        {onToggleStar ? (
           <Pressable
-            key="save"
             accessibilityRole="button"
-            accessibilityLabel={`${t("directorySave")}, ${name}`}
-            accessibilityState={{ disabled: busy, busy }}
+            accessibilityLabel={`${t(starred ? "diaryUnfavourite" : "diaryFavourite")}, ${name}`}
+            accessibilityState={{ disabled: busy, selected: starred }}
             disabled={busy}
-            onPress={onSave}
+            hitSlop={4}
+            onPress={onToggleStar}
             style={({ pressed }) => ({
               alignItems: "center",
-              backgroundColor: colors.accentSurface,
-              borderCurve: "continuous",
-              borderRadius: 16,
-              flexDirection: "row",
-              gap: 4,
-              height: 32,
+              height: 44,
               justifyContent: "center",
-              marginRight: 6,
-              opacity: pressed ? 0.7 : 1,
-              paddingHorizontal: 12,
+              opacity: busy ? 0.45 : pressed ? 0.6 : 1,
+              width: 44,
             })}
           >
-            {busy ? (
-              <ActivityIndicator color={colors.onAccentSurface} />
-            ) : (
-              <>
-                <SymbolView
-                  accessible={false}
-                  name="plus"
-                  size={13}
-                  weight="bold"
-                  tintColor={colors.onAccentSurface}
-                />
-                <Text style={{ color: colors.onAccentSurface, fontSize: 15, fontWeight: "600" }}>
-                  {t("save")}
-                </Text>
-              </>
-            )}
+            <FavouriteStar on={starred} />
           </Pressable>
         ) : null}
+        <MenuView
+          shouldOpenOnLongPress={false}
+          actions={[
+            ...(onEditNote
+              ? [
+                  {
+                    id: "note",
+                    title: t("diaryNote"),
+                    image: "pencil" as const,
+                    attributes: { disabled: busy },
+                  },
+                ]
+              : []),
+            {
+              id: "remove",
+              title: t("diaryRemoveFromDiary"),
+              image: "trash" as const,
+              attributes: { destructive: true, disabled: busy },
+            },
+          ]}
+          onPressAction={({ nativeEvent }) => {
+            if (busy) return;
+            if (nativeEvent.event === "note") onEditNote?.();
+            if (nativeEvent.event === "remove") onRemove?.();
+          }}
+        >
+          <MenuTriggerIcon
+            icon="ellipsis"
+            accessibilityLabel={`${t("diaryEntryOptions")}, ${name}`}
+            tintColor={colors.accent}
+            disabled={busy}
+            iconSize={18}
+            weight="regular"
+          />
+        </MenuView>
       </View>
     </View>
   );
