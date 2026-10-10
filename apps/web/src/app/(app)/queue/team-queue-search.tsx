@@ -24,6 +24,7 @@ import {
   collapseRepoQueueMemberships,
   entryAction,
   getRepoChallenges,
+  manualCallRoomIds,
   membershipBusyState,
   moveQueueEntryToPosition,
   type QueueEntry,
@@ -309,7 +310,7 @@ export function TeamQueueSearch({
                 const eta = etaLabel(entry, t);
                 // #931: the API reports occupancy through shared members too,
                 // so the state is visible before a move is attempted (H30).
-                const { blocksCall, blocksMove, evaluating } = membershipBusyState(entry);
+                const { blocksMove, evaluating } = membershipBusyState(entry);
                 return (
                   <div
                     key={entry.entry_id}
@@ -328,6 +329,9 @@ export function TeamQueueSearch({
                         )}
                         {eta && <span>{eta}</span>}
                         <span>{queueStatusLabel(entry.status, t)}</span>
+                        {!entry.eligible && (
+                          <span className="text-warning font-medium">{t("projectIneligible")}</span>
+                        )}
                         {entry.busy_room_name && (
                           <span className="text-warning inline-flex items-center gap-1 font-medium">
                             <WarningIcon aria-hidden="true" className="size-3.5" />
@@ -342,7 +346,6 @@ export function TeamQueueSearch({
                       entry={entry}
                       canOperate={canOperate}
                       canAdmin={canAdmin}
-                      calledInAnotherRoom={blocksCall}
                       beingEvaluatedInAnotherRoom={blocksMove}
                       busy={busyEntryId === entry.entry_id}
                       onAction={(action, roomId) => void runAction(entry, action, roomId)}
@@ -363,7 +366,6 @@ function TeamQueueActions({
   entry,
   canOperate,
   canAdmin,
-  calledInAnotherRoom,
   beingEvaluatedInAnotherRoom,
   busy,
   onAction,
@@ -372,7 +374,6 @@ function TeamQueueActions({
   entry: RepoChallenge;
   canOperate: boolean;
   canAdmin: boolean;
-  calledInAnotherRoom: boolean;
   beingEvaluatedInAnotherRoom: boolean;
   busy: boolean;
   onAction: (
@@ -384,8 +385,9 @@ function TeamQueueActions({
   const showMove =
     canOperate && entry.position != null && ["waiting", "called"].includes(entry.status);
   const canMove = showMove && !beingEvaluatedInAnotherRoom;
-  const showManualCall = canOperate && entry.status === "waiting" && entry.judging_rooms.length > 0;
-  const canManualCall = showManualCall && !calledInAnotherRoom;
+  const callableRoomIds = manualCallRoomIds(entry);
+  const showManualCall = canOperate && callableRoomIds != null;
+  const canManualCall = showManualCall && callableRoomIds.size > 0;
   const canDisqualify = canAdmin && !["completed", "disqualified"].includes(entry.status);
   const busyReason = t("queueActionBlockedBusy");
   return (
@@ -409,7 +411,12 @@ function TeamQueueActions({
             {entry.judging_rooms.map((room) => (
               <DropdownMenuItem
                 key={room.id}
-                title={t("queueManualAddToRoom", { room: room.name })}
+                disabled={!callableRoomIds?.has(room.id)}
+                title={
+                  callableRoomIds?.has(room.id)
+                    ? t("queueManualAddToRoom", { room: room.name })
+                    : busyReason
+                }
                 onSelect={() => onAction("manual-call", room.id)}
               >
                 <DoorOpenIcon aria-hidden="true" className="size-4" />

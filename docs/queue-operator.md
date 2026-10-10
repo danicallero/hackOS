@@ -47,10 +47,16 @@ through the same shared-member relation as the H30 guard, so a member shared
 with another team counts, and it clears as soon as that entry leaves
 `called`/`in_room`/`presenting`. Reordering (`move-top`, `move-to`, `skip`,
 `requeue`) never calls a team, so project eligibility does not block it; an
-ineligible project is still never called, and a manual call answers
-“Project is not eligible for judging” instead of reporting it busy. A blocked
-move names the room where the shared member is being evaluated
-(`Busy in {room}`).
+ineligible project is still never called: the row says “Not eligible for
+judging”, Manual add is not offered, and a manual call answers “Project is
+not eligible for judging” instead of reporting it busy. Eligibility is a
+separate call-time check (`isRepoIneligibleForJudging`) that call-next, the
+pump and manual calls run before the occupancy guard (`findBusyMemberEntry`),
+and the judging panel's `crossRoomSkips` labels each skip with
+`reason: "ineligible"` or `reason: "busy_member"`. A member occupied in a room
+only blocks calling into other rooms, so Manual add keeps that room enabled.
+Completed and disqualified rows carry no occupancy warning. A blocked move
+names the room where the shared member is being evaluated (`Busy in {room}`).
 
 ## Data contract
 

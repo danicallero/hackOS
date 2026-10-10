@@ -386,30 +386,45 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
   return { room, state, challenge, active, called, next, crossRoomSkips };
 }
 
+/** Why call_next passed over a waiting entry without moving it. */
+export type CrossRoomSkip =
+  | {
+      entryId: number;
+      position: number | null;
+      reason: "busy_member";
+      blockingRoomId: number;
+      blockingRoomName: string;
+      blockingTeamName: string;
+      blockingStatus: string;
+      positionPreserved: true;
+    }
+  | {
+      entryId: number;
+      position: number | null;
+      reason: "ineligible";
+      positionPreserved: true;
+    };
+
 /**
- * For each given waiting entry, reports the OTHER live queue_entries row
- * (called/in_room/presenting) that shares a team member and is therefore
- * blocking call_next from selecting it (H30). Mirrors
- * `isRepoBlockedByBusyMember` (guard.ts) exactly, minus the advisory lock —
- * this is informational only, never used to decide a transition. Exposes
- * just enough context to explain the skip (blocking room + team name)
- * without leaking which specific member is shared.
+ * For each given waiting entry, reports why call_next skips it: the project
+ * is not eligible for judging (H38, checked first, as call_next does), or
+ * the OTHER live queue_entries row (called/in_room/presenting) that shares a
+ * team member (H30). Mirrors `isRepoIneligibleForJudging` and
+ * `findBusyMemberEntry` (guard.ts), minus the advisory lock — this is
+ * informational only, never used to decide a transition. Exposes just enough
+ * context to explain the skip (blocking room + team name) without leaking
+ * which specific member is shared.
  */
 async function crossRoomSkipReasons(
   roomId: number,
   entries: { id: number; repo_id: number; position: number | null }[],
-): Promise<
-  {
-    entryId: number;
-    position: number | null;
-    blockingRoomId: number;
-    blockingRoomName: string;
-    blockingTeamName: string;
-    blockingStatus: string;
-    positionPreserved: true;
-  }[]
-> {
+): Promise<CrossRoomSkip[]> {
   if (entries.length === 0) return [];
+  const { rows: ineligibleRows } = await pool.query<{ id: number }>(
+    `SELECT id FROM project_reconciliation_state WHERE id = ANY($1) AND eligible = false`,
+    [entries.map((e) => e.repo_id)],
+  );
+  const ineligible = new Set(ineligibleRows.map((r) => r.id));
   const { rows } = await pool.query(
     `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL})
      SELECT DISTINCT ON (qe.id)
@@ -439,21 +454,28 @@ async function crossRoomSkipReasons(
       }[]
     ).map((r) => [r.entry_id, r]),
   );
-  return entries
-    .filter((e) => byEntryId.has(e.id))
-    .map((e) => {
-      const r = byEntryId.get(e.id)!;
-      return {
+  // H30 guarantee: a skip never reorders the queue, only call_next does.
+  return entries.flatMap((e): CrossRoomSkip[] => {
+    if (ineligible.has(e.repo_id)) {
+      return [
+        { entryId: e.id, position: e.position, reason: "ineligible", positionPreserved: true },
+      ];
+    }
+    const r = byEntryId.get(e.id);
+    if (!r) return [];
+    return [
+      {
         entryId: e.id,
         position: e.position,
+        reason: "busy_member",
         blockingRoomId: r.blocking_room_id,
         blockingRoomName: r.blocking_room_name,
         blockingTeamName: r.blocking_team_name,
         blockingStatus: r.blocking_status,
-        // H30 guarantee: a skip never reorders the queue, only call_next does.
         positionPreserved: true,
-      };
-    });
+      },
+    ];
+  });
 }
 
 /** H46 read surface: current room -> enterprise pool, serving queue_group, and the judges that follow. */
@@ -1172,7 +1194,17 @@ export async function roomPace(roomId: number, requestedChallengeId?: number) {
  */
 export async function repoChallenges(repoId: number) {
   const { rows } = await pool.query(
-    `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL})
+    `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL}),
+     -- Repos sharing a member with this one, resolved once for the queried
+     -- repo before joining entries (H30 shared-member relation).
+     member_repos AS (
+       SELECT DISTINCT active.repo_id
+         FROM repo_members candidate
+         JOIN repo_members active ON active.user_id = candidate.user_id
+        WHERE candidate.repo_id = $1
+       UNION
+       SELECT $1::int
+     )
      SELECT qe.id AS entry_id, qe.repo_id, qe.challenge_id AS id, c.title, qe.status,
             CASE WHEN qe.status = 'waiting' THEN (
               -- Teams ahead of entering the waiting room (ordering.ts): a
@@ -1206,33 +1238,34 @@ export async function repoChallenges(repoId: number) {
                 WHERE self.challenge_id = qe.challenge_id),
               '[]'::jsonb
             ) AS judging_rooms,
-            busy.room_name AS busy_room_name, busy.status AS busy_status
+            busy.room_id AS busy_room_id, busy.room_name AS busy_room_name,
+            busy.status AS busy_status,
+            -- H30/H38: an ineligible project is never called (#931).
+            COALESCE(prs.eligible, true) AS eligible
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
        JOIN repos repo ON repo.id = qe.repo_id AND repo.is_test_account = false
        LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
        LEFT JOIN queue_groups qg ON qg.id = qgc.queue_group_id
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
+       LEFT JOIN project_reconciliation_state prs ON prs.id = qe.repo_id
        -- H30/#931: where a member of this team is occupied elsewhere, using
-       -- the guard's shared-member relation. Evaluation (in_room/presenting)
-       -- blocks moves; a called team only blocks calls.
+       -- the guard's shared-member relation and fixture filter. Evaluation
+       -- (in_room/presenting) blocks moves; a called team only blocks calls.
+       -- Finished entries take no further action, so they carry no warning.
        LEFT JOIN LATERAL (
-         SELECT br.name AS room_name, bqe.status
+         SELECT br.id AS room_id, br.name AS room_name, bqe.status
            FROM queue_entries bqe
+           JOIN member_repos mr ON mr.repo_id = bqe.repo_id
            JOIN rooms br ON br.id = bqe.assigned_room_id
            JOIN repos brepo ON brepo.id = bqe.repo_id AND brepo.is_test_account = false
+           JOIN challenges bc ON bc.id = bqe.challenge_id AND bc.is_test_account = false
           WHERE bqe.status IN ('called', 'in_room', 'presenting')
             AND bqe.id <> qe.id
             AND bqe.assigned_room_id IS DISTINCT FROM qe.assigned_room_id
-            AND (bqe.repo_id = qe.repo_id OR EXISTS (
-              SELECT 1
-                FROM repo_members candidate
-                JOIN repo_members active ON active.user_id = candidate.user_id
-               WHERE candidate.repo_id = qe.repo_id AND active.repo_id = bqe.repo_id
-            ))
           ORDER BY (bqe.status = 'called'), bqe.id
           LIMIT 1
-       ) busy ON true
+       ) busy ON qe.status NOT IN ('completed', 'disqualified')
       WHERE qe.repo_id = $1 AND qe.status != 'cancelled'
       ORDER BY qg.display_name ASC NULLS LAST, c.title ASC`,
     [repoId],

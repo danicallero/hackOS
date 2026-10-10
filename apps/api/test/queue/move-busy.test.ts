@@ -150,7 +150,7 @@ describe("real occupancy still blocks moves (#931, H30)", () => {
     const res = await post(`/api/queue/entries/${entryId}/move-top`);
     expect(res.statusCode).toBe(409);
     expect(res.json().error.message).toBe("Busy in Sala Mars");
-    expect(res.json().error.details).toMatchObject({ roomName: "Sala Mars" });
+    expect(res.json().error.details).toMatchObject({ roomName: "Sala Mars", status: "in_room" });
     expect((await getEntry(entryId)).position).toBe(3);
 
     // The block clears with the real occupancy: no stale state survives.
@@ -161,32 +161,37 @@ describe("real occupancy still blocks moves (#931, H30)", () => {
     expect((await post(`/api/queue/entries/${entryId}/move-top`)).statusCode).toBe(200);
   });
 
-  it("serialises a move against a concurrent bring-in of a shared member", async () => {
-    const { challengeId } = await pausedQueue();
-    const other = await pausedQueue("Sala Mars");
+  it("lets exactly one of two concurrent calls of teams sharing a member win (plan/07 §2)", async () => {
+    const venus = await pausedQueue();
+    const mars = await pausedQueue("Sala Mars");
     const shared = await createUser();
     const { repoId: here } = await createRepoWithTeam([shared]);
     const { repoId: there } = await createRepoWithTeam([shared]);
-    const entryId = await enqueueRepo(challengeId, here, 3);
-    const elsewhere = await enqueueRepo(other.challengeId, there, 1);
+    const hereEntry = await enqueueRepo(venus.challengeId, here, 1);
+    const thereEntry = await enqueueRepo(mars.challengeId, there, 1);
 
-    const [move, bringIn] = await Promise.all([
-      post(`/api/queue/entries/${entryId}/move-top`),
-      post(`/api/queue/entries/${elsewhere}/manual-call`, {
+    const results = await Promise.all([
+      post(`/api/queue/entries/${hereEntry}/manual-call`, {
         targetStatus: "in_room",
-        roomId: other.roomId,
+        roomId: venus.roomId,
+      }),
+      post(`/api/queue/entries/${thereEntry}/manual-call`, {
+        targetStatus: "in_room",
+        roomId: mars.roomId,
       }),
     ]);
-    // Both may succeed in either order, but a rejected move must leave the
-    // entry untouched and an accepted one must write exactly one history row.
-    expect(bringIn.statusCode).toBe(200);
-    if (move.statusCode === 200) {
-      expect(await historyRows(entryId, "move_to_top")).toHaveLength(1);
-    } else {
-      expect(move.statusCode).toBe(409);
-      expect((await getEntry(entryId)).position).toBe(3);
-      expect(await historyRows(entryId)).toHaveLength(0);
-    }
+    expect(results.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+    const winner = results[0].statusCode === 200 ? hereEntry : thereEntry;
+    const loser = winner === hereEntry ? thereEntry : hereEntry;
+    expect((await getEntry(winner)).status).toBe("in_room");
+    expect((await getEntry(loser)).status).toBe("waiting");
+    expect(await historyRows(winner)).toHaveLength(1);
+    expect(await historyRows(loser)).toHaveLength(0);
+
+    // The loser cannot be reordered while the winner is being evaluated.
+    const move = await post(`/api/queue/entries/${loser}/move-top`);
+    expect(move.statusCode).toBe(409);
+    expect(await historyRows(loser)).toHaveLength(0);
   });
 });
 
@@ -219,5 +224,140 @@ describe("busy indicator in the team lookup (#931)", () => {
       200,
     );
     expect(await read()).toMatchObject({ busy_room_name: "Sala Mars", busy_status: "in_room" });
+  });
+
+  async function lookup(repoId: number) {
+    return (
+      await app.inject({
+        method: "GET",
+        url: `/api/queue/repos/${repoId}/challenges`,
+        headers: asUser(operatorId),
+      })
+    ).json()[0];
+  }
+
+  /** A shared member's team, put in a room of another challenge. */
+  async function occupySharedMember(status: "called" | "in_room") {
+    const { challengeId } = await pausedQueue();
+    const other = await pausedQueue("Sala Mars");
+    const shared = await createUser();
+    const { repoId: here } = await createRepoWithTeam([shared]);
+    const { repoId: there } = await createRepoWithTeam([shared]);
+    const hereEntry = await enqueueRepo(challengeId, here, 1);
+    const elsewhere = await enqueueRepo(other.challengeId, there, 1);
+    const call = await post(`/api/queue/entries/${elsewhere}/manual-call`, {
+      targetStatus: status,
+      roomId: other.roomId,
+    });
+    expect(call.statusCode).toBe(200);
+    return { here, hereEntry, elsewhere, other };
+  }
+
+  it("ignores occupancy in a test challenge, like the H30 guard", async () => {
+    const { here, other } = await occupySharedMember("in_room");
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [
+      other.challengeId,
+    ]);
+    expect(await lookup(here)).toMatchObject({ busy_room_name: null, busy_status: null });
+  });
+
+  it.each([
+    "completed",
+    "disqualified",
+  ] as const)("carries no busy warning on a %s row", async (status) => {
+    const { here, hereEntry } = await occupySharedMember("in_room");
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE queue_entries SET status = $2, position = NULL WHERE id = $1`, [
+      hereEntry,
+      status,
+    ]);
+    expect(await lookup(here)).toMatchObject({
+      status,
+      busy_room_id: null,
+      busy_room_name: null,
+      busy_status: null,
+    });
+  });
+
+  it("names the blocking room id so a call to that room stays allowed", async () => {
+    const { here, other } = await occupySharedMember("called");
+    expect(await lookup(here)).toMatchObject({ busy_room_id: other.roomId, busy_status: "called" });
+  });
+
+  it("does not report an unrelated team's occupancy", async () => {
+    const { challengeId } = await pausedQueue();
+    const other = await pausedQueue("Sala Mars");
+    const { repoId: here } = await createRepoWithTeam();
+    const { repoId: stranger } = await createRepoWithTeam();
+    await enqueueRepo(challengeId, here, 1);
+    const elsewhere = await enqueueRepo(other.challengeId, stranger, 1);
+    await post(`/api/queue/entries/${elsewhere}/manual-call`, {
+      targetStatus: "in_room",
+      roomId: other.roomId,
+    });
+    expect(await lookup(here)).toMatchObject({ busy_room_name: null });
+  });
+
+  it("exposes project eligibility (H38)", async () => {
+    const { challengeId } = await pausedQueue();
+    const { repoId } = await createRepoWithTeam();
+    await enqueueRepo(challengeId, repoId, 1);
+    expect(await lookup(repoId)).toMatchObject({ eligible: true });
+    await makeDraft(repoId);
+    expect(await lookup(repoId)).toMatchObject({ eligible: false });
+  });
+});
+
+describe("call paths check eligibility explicitly (#931, H30, H38)", () => {
+  it("call-next skips an ineligible team, keeps its position and explains why", async () => {
+    const { challengeId, roomId } = await pausedQueue();
+    const { repoId: draft } = await createRepoWithTeam();
+    const { repoId: ready } = await createRepoWithTeam();
+    const draftEntry = await enqueueRepo(challengeId, draft, 1);
+    const readyEntry = await enqueueRepo(challengeId, ready, 2);
+    await makeDraft(draft);
+
+    const view = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/view`,
+      headers: asUser(operatorId),
+    });
+    expect(view.json().crossRoomSkips).toEqual([
+      { entryId: draftEntry, position: 1, reason: "ineligible", positionPreserved: true },
+    ]);
+
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE room_queue_state SET is_paused = false WHERE room_id = $1`, [roomId]);
+    expect((await post(`/api/queue/rooms/${roomId}/call-next`)).statusCode).toBe(200);
+    expect((await getEntry(readyEntry)).status).toBe("called");
+    expect(await getEntry(draftEntry)).toMatchObject({ status: "waiting", position: 1 });
+  });
+
+  it("labels an occupancy skip as busy_member", async () => {
+    const { challengeId, roomId } = await pausedQueue();
+    const other = await pausedQueue("Sala Mars");
+    const shared = await createUser();
+    const { repoId: here } = await createRepoWithTeam([shared]);
+    const { repoId: there } = await createRepoWithTeam([shared]);
+    const entryId = await enqueueRepo(challengeId, here, 1);
+    const elsewhere = await enqueueRepo(other.challengeId, there, 1);
+    await post(`/api/queue/entries/${elsewhere}/manual-call`, {
+      targetStatus: "called",
+      roomId: other.roomId,
+    });
+    const view = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/view`,
+      headers: asUser(operatorId),
+    });
+    expect(view.json().crossRoomSkips).toEqual([
+      expect.objectContaining({
+        entryId,
+        reason: "busy_member",
+        blockingRoomName: "Sala Mars",
+        blockingStatus: "called",
+      }),
+    ]);
   });
 });

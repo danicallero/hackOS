@@ -105,15 +105,24 @@ export interface RoomView {
   crossRoomSkips: CrossRoomSkip[];
 }
 
-export interface CrossRoomSkip {
-  entryId: number;
-  position: number | null;
-  blockingRoomId: number;
-  blockingRoomName: string;
-  blockingTeamName: string;
-  blockingStatus: string;
-  positionPreserved: true;
-}
+/** Why call-next passes over a waiting team (H30 occupancy or H38 eligibility). */
+export type CrossRoomSkip =
+  | {
+      entryId: number;
+      position: number | null;
+      reason: "busy_member";
+      blockingRoomId: number;
+      blockingRoomName: string;
+      blockingTeamName: string;
+      blockingStatus: string;
+      positionPreserved: true;
+    }
+  | {
+      entryId: number;
+      position: number | null;
+      reason: "ineligible";
+      positionPreserved: true;
+    };
 
 /** GET /api/queue/challenges/:id/progress (H40). */
 export interface ChallengeProgress {
@@ -401,8 +410,11 @@ export interface RepoChallenge {
   room_name: string | null;
   judging_rooms: Array<{ id: number; name: string }>;
   /** #931: room where a team member is called or being evaluated elsewhere (H30). */
+  busy_room_id: number | null;
   busy_room_name: string | null;
   busy_status: "called" | "in_room" | "presenting" | null;
+  /** H38: false when the project is excluded from judging; it is never called. */
+  eligible: boolean;
 }
 
 const queueStatusPriority: Record<string, number> = {
@@ -416,12 +428,41 @@ const queueStatusPriority: Record<string, number> = {
 
 /**
  * #931/H30: what a member's occupancy elsewhere blocks. Any called/active
- * room blocks calling the team; only an evaluation blocks moving it, matching
+ * room blocks calling the team into a different room (the guard allows the
+ * room that already holds it); only an evaluation blocks moving it, matching
  * the API guards.
  */
-export function membershipBusyState(entry: Pick<RepoChallenge, "busy_status">) {
+export function membershipBusyState(
+  entry: Pick<RepoChallenge, "busy_status" | "busy_room_id">,
+  roomId?: number,
+) {
   const evaluating = entry.busy_status === "in_room" || entry.busy_status === "presenting";
-  return { blocksCall: entry.busy_status != null, blocksMove: evaluating, evaluating };
+  return {
+    blocksCall: entry.busy_status != null && entry.busy_room_id !== roomId,
+    blocksMove: evaluating,
+    evaluating,
+  };
+}
+
+/**
+ * Rooms a waiting team can be manually called into, or null when Manual add
+ * is not offered: an ineligible project is never called (H38), and H30
+ * occupancy blocks every room except the one already holding it (#931).
+ */
+export function manualCallRoomIds(
+  entry: Pick<
+    RepoChallenge,
+    "eligible" | "status" | "judging_rooms" | "busy_status" | "busy_room_id"
+  >,
+): Set<number> | null {
+  if (!entry.eligible || entry.status !== "waiting" || entry.judging_rooms.length === 0) {
+    return null;
+  }
+  return new Set(
+    entry.judging_rooms
+      .filter((room) => !membershipBusyState(entry, room.id).blocksCall)
+      .map((room) => room.id),
+  );
 }
 
 /** Collapse one project's challenge entries to one row per queue group. */
