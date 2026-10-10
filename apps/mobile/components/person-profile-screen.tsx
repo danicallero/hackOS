@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { Alert, Linking, Pressable, RefreshControl, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CvViewer } from "@/components/cv-viewer";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
@@ -15,6 +16,11 @@ import {
   Separator,
 } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
+import {
+  ProfileAvatarCollapse,
+  ProfileAvatarCollapseAnchor,
+  useProfileAvatarCollapse,
+} from "@/components/profile-avatar-collapse";
 import { DetailRow, NoteRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ApiError, apiFetch } from "@/lib/api";
@@ -47,6 +53,7 @@ export function PersonProfileScreen() {
   const router = useRouter();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
+  const avatarCollapse = useProfileAvatarCollapse();
   const [state, setState] = useState<State>({ status: "loading" });
   const [entry, setEntry] = useState<DiaryEntry | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -155,7 +162,7 @@ export function PersonProfileScreen() {
   const person = state.status === "ready" ? state.person : null;
 
   return (
-    <>
+    <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
       {floatingBack ? (
         <View
           style={{
@@ -199,8 +206,12 @@ export function PersonProfileScreen() {
           patch({ note }, "note");
         }}
       />
-      <ScrollView
+      <Animated.ScrollView
         testID="person-profile"
+        onScroll={avatarCollapse.onScroll}
+        onTouchStart={avatarCollapse.onScrollBeginDrag}
+        onContentSizeChange={avatarCollapse.onContentSizeChange}
+        scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="automatic"
         style={{ backgroundColor: colors.background, flex: 1 }}
         contentContainerStyle={{
@@ -223,7 +234,9 @@ export function PersonProfileScreen() {
         ) : (
           <>
             <View style={{ alignItems: "center", gap: 14 }}>
-              <PersonAvatar size={112} name={person.displayName} uri={person.photoUrl} />
+              <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={112}>
+                <PersonAvatar size={112} name={person.displayName} uri={person.photoUrl} />
+              </ProfileAvatarCollapseAnchor>
               <View style={{ alignItems: "center", gap: 4, paddingHorizontal: 8 }}>
                 <Text
                   selectable
@@ -395,10 +408,19 @@ export function PersonProfileScreen() {
             ) : null}
           </>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
       {/* Keeps scrolled content out from behind the clock; the floating back
-          button stays above it. */}
+          button and the masked avatar stay above it. */}
       <AndroidStatusBarScrim />
-    </>
+      {person ? (
+        <ProfileAvatarCollapse
+          controller={avatarCollapse}
+          image={person.photoUrl}
+          name={person.displayName}
+          size={112}
+          variant="person"
+        />
+      ) : null}
+    </View>
   );
 }

@@ -9,6 +9,9 @@ meals, and registrable activities.
 `v<version> · <commit>`: `app.config.ts` embeds the short commit the binary was built
 from (`EAS_BUILD_GIT_COMMIT_HASH`, `GITHUB_SHA`, or the local checkout).
 
+The Account connection warning appears below the profile identity header, before
+the profile fields, so it stays outside the avatar’s cutout transition.
+
 **Developer API mode.** Seven taps on the understated installed-version footer in Account
 or Sign in reveals a confirmation that switches between production
 (`api.hackudc.com`) and development (`api.dani.md`). The choice is persisted
@@ -361,6 +364,9 @@ distributed to other Expo Router apps without importing hackOS code.
   food-intolerance labels; the label dictionary is also cached on device
   (`lib/offline-cache.ts`) so a device that goes offline before its first
   successful fetch still shows dietary labels instead of bare numeric ids.
+  The account photo uses the shared scroll-driven `ProfileAvatarCollapse`
+  overlay described below, so it remains clipped while it moves into the
+  device's top camera cutout.
   Food intolerances opens `app/profile-tasks.tsx` to edit the dietary answer,
   including an explicit "No restrictions" option (#933) that `PATCH /api/me`
   records as a confirmed empty answer; the row is read-only offline or once the
@@ -704,18 +710,45 @@ tile reads "Edit note" once a note exists, and the note section appears only
 then), bio, links, location (a `mappin`), project or work group, challenges and
 "Remove from diary", which then returns to the diary. iOS uses the transparent native detail
 header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
-no bar covers the centred avatar; Android floats its own glass back button. The CV route needs the session, so
-it is downloaded with the session cookie (`expo-file-system`) into the cache and shown
+no bar covers the centred avatar; Android floats its own glass back button.
+That public photo uses the same `ProfileAvatarCollapse` overlay as the signed-in
+account: Reanimated maps 120 pt of upward scroll to the shared mask and dark
+cover progress. A native `MaskedView` clips the original cubic keyframes from
+Telegram's `UserAvatarMask` (`lib/telegram-avatar-mask.json`), evaluated on the
+UI thread rather than approximating the connection with a circle/capsule union.
+The source asset is TelegramMessenger/Telegram-iOS's UserAvatarMask animation;
+its two path tracks retain their original 512-point coordinates, timing and
+layer lifetime. The canvas converges to the cutout's lower edge as in Swift's
+`PeerInfoHeaderNode`; it does not paint a replacement system island. A black
+backing follows mask progress, with the separate `-0.25 + progress * 1.55`
+fade curve and the radial gradient stops from `DynamicIslandBlurNode`.
+The React Native cover currently uses dark paint rather than UIKit's animated
+native blur. Static photos and initials share the mask; optional live avatar
+children remain inside it.
+On iOS, the target uses window-space safe-area geometry because UIKit does not
+expose the Dynamic Island frame to apps: the iPhone 17 Pro target is centered at
+125.33 × 36.67 pt with a 14 pt top offset, and the iPhone 15 class uses 125 ×
+36.67 pt with an 11.33 pt top offset. The avatar and target are both measured in
+the same `measureInWindow` coordinate space, so the collapsed mask lines up with
+the cutout instead of drifting by the host view's safe-area inset. Android uses
+common punch-hole model names and tall display-cutout insets. The target remains
+configurable with `cameraCutoutFrame` for OEM camera placements that Expo does
+not expose. Devices without a detected cutout and landscape layouts finish as a
+compact circle below the safe area. Reduced Motion keeps the circular mask and
+uses the simpler position/scale transition.
+The CV route needs the session, so it is
+downloaded with the session cookie (`expo-file-system`) into the cache and shown
 in the in-app viewer (`components/cv-viewer.tsx`): a page-sheet modal titled
 with the person's name, a circular close button, and pages that scroll with
 pinch and double-tap zoom, rendered by the native `react-native-pdf` (with its
 peer `react-native-blob-util`). Share stays in the viewer header for anyone who
-wants the file. The native reader loads only when the viewer opens, so Expo Go
-or a development client without the native module does not block profile
-screens; opening the viewer shows the usual CV error state. A CV that is gone or
-no longer shared (404) shows "Profile not available"; any other failure offers
+wants the file. The native reader is imported only when the CV viewer opens, so
+Expo Go or a development client missing the native module does not block profile
+screens; that viewer shows the normal CV error instead. A CV that is gone or no
+longer shared (404) shows "Profile not available"; any other failure offers
 Retry. **Native dependency:** adding `react-native-pdf` means the development
-client and store builds must be rebuilt; Jest mocks it in `jest.setup.js`. The app does not show the user's own
+client and store builds must be rebuilt; Jest mocks it in `jest.setup.js`. The
+app does not show the user's own
 CV anywhere yet, so the viewer has one caller. A hidden profile and a person the reader may not open both answer 404
 and show one "Profile not available" state. Photos are authenticated API
 routes: `lib/directory.ts` fetches them with the session and shows them from

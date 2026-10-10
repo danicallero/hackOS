@@ -17,6 +17,7 @@
     "@hackos/shared": "workspace:*",
     "@premieroctet/react-native-wallet": "^1.0.2",
     "@react-native-community/datetimepicker": "^9.1.0",
+    "@react-native-masked-view/masked-view": "0.3.2",
     "better-auth": "^1.6.23",
     "expo": "~57.0.23",
     "expo-application": "~57.0.3",

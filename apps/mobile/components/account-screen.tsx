@@ -5,11 +5,12 @@ import {
   Alert,
   Pressable,
   RefreshControl,
-  ScrollView,
+  type ScrollView,
   Text,
   useColorScheme,
   View,
 } from "react-native";
+import Animated from "react-native-reanimated";
 import {
   ActionButton,
   AndroidStatusBarScrim,
@@ -19,6 +20,11 @@ import {
   StatusPill,
   ToggleRow,
 } from "@/components/native-ui";
+import {
+  ProfileAvatarCollapse,
+  ProfileAvatarCollapseAnchor,
+  useProfileAvatarCollapse,
+} from "@/components/profile-avatar-collapse";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { UserAvatar } from "@/components/user-avatar";
@@ -56,6 +62,7 @@ export default function AccountScreen() {
   const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
+  const avatarCollapse = useProfileAvatarCollapse();
   useScrollToTop(scrollRef);
   const { me, loading, error, offline, staleSince, refetch } = useMeContext();
   const { mode, setMode } = useApiMode();
@@ -239,11 +246,15 @@ export default function AccountScreen() {
     dietaryLabels || (me.dietaryConfirmedAt ? t("noRestrictions") : t("accountNoneDeclared"));
 
   return (
-    <View style={{ flex: 1 }}>
-      <ScrollView
+    <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
+      <Animated.ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
         testID="account-scroll"
+        onScroll={avatarCollapse.onScroll}
+        onTouchStart={avatarCollapse.onScrollBeginDrag}
+        onContentSizeChange={avatarCollapse.onContentSizeChange}
+        scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           gap: 20,
@@ -255,11 +266,6 @@ export default function AccountScreen() {
           <RefreshControl refreshing={refreshingAccount} onRefresh={() => void refreshAccount()} />
         }
       >
-        {offline ? (
-          <StaleDataBanner updatedAt={staleSince} />
-        ) : error ? (
-          <RequestFeedback error={error} onRetry={() => void refetch()} />
-        ) : null}
         {languageError ? (
           <RequestFeedback
             error={languageError}
@@ -270,7 +276,9 @@ export default function AccountScreen() {
         ) : null}
 
         <View style={{ alignItems: "center", gap: 12, paddingVertical: 10 }}>
-          <UserAvatar testID="account-avatar" name={fullName} image={me.image} size={96} />
+          <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={96}>
+            <UserAvatar testID="account-avatar" name={fullName} image={me.image} size={96} />
+          </ProfileAvatarCollapseAnchor>
           <View style={{ alignItems: "center", gap: 5 }}>
             <Text
               selectable
@@ -286,6 +294,12 @@ export default function AccountScreen() {
             </StatusPill>
           </View>
         </View>
+
+        {offline ? (
+          <StaleDataBanner updatedAt={staleSince} />
+        ) : error ? (
+          <RequestFeedback error={error} onRetry={() => void refetch()} />
+        ) : null}
 
         <Section title={t("accountProfile")}>
           <InfoRow label={t("accountName")} value={fullName} icon="person" />
@@ -532,8 +546,15 @@ export default function AccountScreen() {
         >
           <Text style={{ color: colors.tertiaryLabel, fontSize: 12 }}>{appVersionLabel}</Text>
         </Pressable>
-      </ScrollView>
+      </Animated.ScrollView>
       <AndroidStatusBarScrim />
+      <ProfileAvatarCollapse
+        controller={avatarCollapse}
+        image={me.image}
+        name={fullName}
+        size={96}
+        variant="account"
+      />
     </View>
   );
 }
