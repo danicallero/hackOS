@@ -1,40 +1,40 @@
 import { describe, expect, it } from "vitest";
-import { enterpriseNextAction } from "./shared";
+import { resolveUrlTab } from "@/lib/url-tab";
+import { ENTERPRISE_TAB_ALIASES, enterpriseTabs } from "./shared";
 
-describe("enterpriseNextAction", () => {
-  it("asks for a logo first", () => {
-    expect(
-      enterpriseNextAction({ logo_url: null, website: "https://acme.com", description: "Acme" }),
-    ).toBe("addLogo");
+describe("enterpriseTabs (#928, #929)", () => {
+  it("shows every tab to managers", () => {
+    expect(enterpriseTabs({ canManage: true, isSponsorRep: false })).toEqual([
+      "profile",
+      "challenges",
+      "judges",
+      "members",
+    ]);
   });
 
-  it("asks for a website next", () => {
-    expect(
-      enterpriseNextAction({
-        logo_url: "https://acme.com/logo.png",
-        website: null,
-        description: "Acme",
-      }),
-    ).toBe("addWebsite");
+  it("shows challenges but not members to the enterprise's rep", () => {
+    expect(enterpriseTabs({ canManage: false, isSponsorRep: true })).toEqual([
+      "profile",
+      "challenges",
+      "judges",
+    ]);
   });
 
-  it("asks for a description next", () => {
-    expect(
-      enterpriseNextAction({
-        logo_url: "https://acme.com/logo.png",
-        website: "https://acme.com",
-        description: "",
-      }),
-    ).toBe("addDescription");
+  it("hides the challenges tab when it could only be empty", () => {
+    expect(enterpriseTabs({ canManage: false, isSponsorRep: false })).toEqual([
+      "profile",
+      "judges",
+    ]);
   });
 
-  it("is null once the profile is complete", () => {
-    expect(
-      enterpriseNextAction({
-        logo_url: "https://acme.com/logo.png",
-        website: "https://acme.com",
-        description: "We build things.",
-      }),
-    ).toBeNull();
+  it("maps removed tab links to profile", () => {
+    const options = {
+      values: enterpriseTabs({ canManage: true, isSponsorRep: false }),
+      defaultValue: "profile" as const,
+      aliases: ENTERPRISE_TAB_ALIASES,
+    };
+    expect(resolveUrlTab("overview", options)).toBe("profile");
+    expect(resolveUrlTab("invitations", options)).toBe("profile");
+    expect(resolveUrlTab("members", options)).toBe("members");
   });
 });

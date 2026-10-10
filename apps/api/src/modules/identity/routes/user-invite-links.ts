@@ -1,12 +1,21 @@
 import { randomBytes } from "node:crypto";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool, type Queryable, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
-import { requireCapability } from "../../../lib/capabilities.js";
-import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
+import {
+  getRequestAuthorizationContext,
+  requireAnyCapability,
+  userHasCapability,
+} from "../../../lib/capabilities.js";
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from "../../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import {
   lockRoleGraph,
@@ -142,7 +151,7 @@ function toResponse(row: Record<string, unknown>): UserInviteLinkResponse {
   };
 }
 
-async function listLinks(): Promise<UserInviteLinkResponse[]> {
+async function listLinks(sponsorOnly: boolean): Promise<UserInviteLinkResponse[]> {
   const { rows } = await pool.query(
     `SELECT l.id, l.token, l.kind, l.enterprise_id, e.name AS enterprise_name,
             NULLIF(BTRIM(CONCAT_WS(' ', creator.name, creator.surname)), '') AS created_by_name,
@@ -166,36 +175,64 @@ async function listLinks(): Promise<UserInviteLinkResponse[]> {
        LEFT JOIN enterprises e ON e.id = l.enterprise_id
        LEFT JOIN users creator ON creator.id = l.created_by
        LEFT JOIN user_invite_link_redemptions r ON r.link_id = l.id
+      WHERE NOT $1::boolean OR l.kind = 'sponsor'
       GROUP BY l.id, e.name, creator.name, creator.surname
       ORDER BY l.created_at DESC`,
+    [sponsorOnly],
   );
   return rows.map((row: Record<string, unknown>) => toResponse(row));
 }
 
+/**
+ * Sponsor managers without invites:manage handle only their sponsor links:
+ * kind sponsor, no pre-assigned roles (H8, H43, #929).
+ */
+async function sponsorOnlyCaller(req: FastifyRequest): Promise<boolean> {
+  return !(await userHasCapability(
+    getRequestAuthorizationContext(req),
+    CAPABILITIES.INVITES_MANAGE,
+  ));
+}
+
+function assertSponsorScope(
+  sponsorOnly: boolean,
+  link: { kind: UserInviteLinkKind; roleIds: readonly number[] },
+): void {
+  if (sponsorOnly && (link.kind !== "sponsor" || link.roleIds.length > 0)) {
+    throw new ForbiddenError("Sponsor managers can only manage sponsor links without roles", {
+      capability: CAPABILITIES.INVITES_MANAGE,
+    });
+  }
+}
+
 export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
   const api = app.withTypeProvider<ZodTypeProvider>();
-  const manage = requireCapability(CAPABILITIES.INVITES_MANAGE);
+  const manage = requireAnyCapability(CAPABILITIES.INVITES_MANAGE, CAPABILITIES.SPONSORS_MANAGE);
+  const policy = routeAccess({
+    kind: "capability",
+    anyOf: [CAPABILITIES.INVITES_MANAGE, CAPABILITIES.SPONSORS_MANAGE],
+  });
 
   api.get(
     "/api/invites/user-links",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
+      config: policy,
       schema: {
         response: { 200: z.array(userInviteLinkResponse) },
         summary: "List reusable user invite links",
         description:
-          "Lists reusable account-creation links for staff, sponsors, or participants with their limits, status, and redemptions (H10).",
+          "Lists reusable account-creation links for staff, sponsors, or participants with their limits, status, and redemptions. Sponsor managers without invites:manage see only sponsor links (H10, H43).",
       },
     },
-    async () => listLinks(),
+    async (req) => listLinks(await sponsorOnlyCaller(req)),
   );
 
   api.post(
     "/api/invites/user-links",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
+      config: policy,
       schema: {
         body: z.object({
           kind: inviteKind,
@@ -213,12 +250,13 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
         response: { 201: userInviteLinkResponse },
         summary: "Create a reusable user invite link",
         description:
-          "Creates a reusable account-creation link. Each claimant supplies their own email; any kind of link can pre-assign roles on acceptance, a sponsor link auto-links to an enterprise, and a participant link bypasses the closed-application-window check (H8, H10).",
+          "Creates a reusable account-creation link. Each claimant supplies their own email; any kind of link can pre-assign roles on acceptance, a sponsor link auto-links to an enterprise, and a participant link bypasses the closed-application-window check. Sponsor managers without invites:manage may create only sponsor links without roles (H8, H10, H43).",
       },
     },
     async (req, reply) => {
       const { kind, enterpriseId, maxRedeems, expiresInMinutes } = req.body;
       const roleIds = [...new Set(req.body.roleIds)];
+      assertSponsorScope(await sponsorOnlyCaller(req), { kind, roleIds });
 
       if (kind === "sponsor" && enterpriseId === undefined) {
         throw new BadRequestError("Sponsor invite links require enterpriseId");
@@ -305,7 +343,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
     "/api/invites/user-links/:id",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
+      config: policy,
       schema: {
         params: z.object({ id: z.coerce.number().int().positive() }),
         body: z.object({
@@ -324,6 +362,8 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
     async (req) => {
       const { kind, enterpriseId, maxRedeems, expiresInMinutes } = req.body;
       const roleIds = [...new Set(req.body.roleIds)];
+      const sponsorOnly = await sponsorOnlyCaller(req);
+      assertSponsorScope(sponsorOnly, { kind, roleIds });
       if ((kind === "sponsor") !== (enterpriseId !== null)) {
         throw new BadRequestError(
           "Sponsor invite links require enterpriseId; other invite links cannot have one",
@@ -342,6 +382,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
         );
         const link = rows[0] as UserInviteLinkRow | undefined;
         if (!link) throw new NotFoundError("User invite link not found", { id: req.params.id });
+        assertSponsorScope(sponsorOnly, { kind: link.kind, roleIds: link.role_ids });
         if (link.redeemed_count > 0 || userInviteLinkIsExpired(link)) {
           throw new ConflictError("Only active, unused user invite links can be edited", {
             id: req.params.id,
@@ -411,7 +452,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
     "/api/invites/user-links/:id/withdraw",
     {
       preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
+      config: policy,
       schema: {
         params: z.object({ id: z.coerce.number().int().positive() }),
         response: { 200: z.object({ success: z.literal(true) }) },
@@ -421,6 +462,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
+      const sponsorOnly = await sponsorOnlyCaller(req);
       await withTransaction(async (client) => {
         const { rows } = await client.query(
           `SELECT id, kind, enterprise_id, role_ids, max_redeems, redeemed_count,
@@ -430,6 +472,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
         );
         const link = rows[0] as UserInviteLinkRow | undefined;
         if (!link) throw new NotFoundError("User invite link not found", { id: req.params.id });
+        assertSponsorScope(sponsorOnly, { kind: link.kind, roleIds: link.role_ids });
         if (link.revoked_at !== null) {
           throw new ConflictError("User invite link is already withdrawn", { id: req.params.id });
         }

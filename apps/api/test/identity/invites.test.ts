@@ -63,19 +63,24 @@ async function createInvite(
   return res.json();
 }
 
+/** Seeds a pre-#929 enterprise link; new sponsor links are user links. */
 async function createEnterpriseInviteLink(
-  a: App,
+  _a: App,
   actor: number,
-  payload: Record<string, unknown>,
+  payload: { enterpriseId: number; maxRedeems: number | null; expiresInMinutes: number | null },
 ): Promise<{ id: number; token: string }> {
-  const res = await a.inject({
-    method: "POST",
-    url: "/api/invites/enterprise-links",
-    headers: asUser(actor),
-    payload,
-  });
-  expect(res.statusCode).toBe(201);
-  return res.json();
+  const { pool } = await import("../../src/db/pool.js");
+  const { randomBytes } = await import("node:crypto");
+  const token = randomBytes(32).toString("base64url");
+  const { rows } = await pool.query(
+    `INSERT INTO enterprise_invite_links (token, enterprise_id, created_by, max_redeems, expires_at)
+     VALUES ($1, $2, $3, $4,
+             CASE WHEN $5::integer IS NULL THEN NULL
+                  ELSE now() + ($5::integer * interval '1 minute') END)
+     RETURNING id, token`,
+    [token, payload.enterpriseId, actor, payload.maxRedeems, payload.expiresInMinutes],
+  );
+  return { id: Number(rows[0].id), token: rows[0].token };
 }
 
 async function createUserInviteLink(
@@ -1780,5 +1785,78 @@ describe("#538 invite/token flow rate limits", () => {
     }
     expect(last?.statusCode).toBe(429);
     expect(Number(last?.headers["retry-after"])).toBeGreaterThan(0);
+  });
+});
+
+describe("#929 sponsor managers handle sponsor invite links", () => {
+  async function sponsorManager(): Promise<number> {
+    return createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+  }
+
+  it("creates, lists and withdraws only sponsor links without roles", async () => {
+    const a = await getApp();
+    const manager = await sponsorManager();
+    const enterpriseId = await createEnterprise("ScopedCo");
+    const staffLink = await createUserInviteLink(a, await inviter(), {
+      kind: "participant",
+      expiresInMinutes: null,
+    });
+
+    const link = await createUserInviteLink(a, manager, { kind: "sponsor", enterpriseId });
+    const list = await a.inject({
+      method: "GET",
+      url: "/api/invites/user-links",
+      headers: asUser(manager),
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().map((row: { id: number }) => row.id)).toEqual([link.id]);
+
+    const otherWithdraw = await a.inject({
+      method: "POST",
+      url: `/api/invites/user-links/${staffLink.id}/withdraw`,
+      headers: asUser(manager),
+    });
+    expect(otherWithdraw.statusCode).toBe(403);
+
+    const withdrawn = await a.inject({
+      method: "POST",
+      url: `/api/invites/user-links/${link.id}/withdraw`,
+      headers: asUser(manager),
+    });
+    expect(withdrawn.statusCode).toBe(200);
+  });
+
+  it("rejects other link kinds and pre-assigned roles", async () => {
+    const a = await getApp();
+    const manager = await sponsorManager();
+    const enterpriseId = await createEnterprise("NoRolesCo");
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(`SELECT id FROM roles ORDER BY id LIMIT 1`);
+
+    for (const payload of [
+      { kind: "participant" },
+      { kind: "sponsor", enterpriseId, roleIds: [Number(rows[0].id)] },
+    ]) {
+      const res = await a.inject({
+        method: "POST",
+        url: "/api/invites/user-links",
+        headers: asUser(manager),
+        payload,
+      });
+      expect(res.statusCode).toBe(403);
+    }
+    const { rows: links } = await pool.query(`SELECT id FROM user_invite_links`);
+    expect(links).toHaveLength(0);
+  });
+
+  it("no longer exposes a second enterprise-link creation route", async () => {
+    const a = await getApp();
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/invites/enterprise-links",
+      headers: asUser(await inviter()),
+      payload: { enterpriseId: await createEnterprise("GoneCo") },
+    });
+    expect(res.statusCode).toBe(404);
   });
 });

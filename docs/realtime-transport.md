@@ -45,6 +45,7 @@ unauthenticated calls 401, and missing capability/relationship access 403
 | `exports` | `exports:run`. |
 | `domain:applications`, `domain:projects`, `domain:identity`, `domain:sponsors` | Existing authenticated domain refresh access. |
 | `domain:audit`, `domain:tv` | Audit read / TV control respectively. |
+| `domain:directory` | `directory:read` or event access: profile owners without `directory:read` (Sponsor, Judging Team) refresh their own preview (#934). |
 | `domain:logistics` | Existing domain guard, which also accepts intolerance management; real/fixture topic. |
 | `review:<positive entry id>` | Existing entry judge/global panel guard, including fixture isolation; PostgreSQL integer bound. |
 | `public-tv`, `public-content` | Authenticated attachment of the existing empty public invalidation projections. |

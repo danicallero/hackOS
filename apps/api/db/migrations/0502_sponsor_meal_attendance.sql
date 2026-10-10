@@ -69,7 +69,7 @@ ALTER TABLE public.role_capabilities
     'applications:edit-response'::text, 'statistics:manage'::text, 'projects:read'::text,
     'projects:import'::text, 'projects:edit'::text, 'accredit:scan'::text,
     'presence:scan'::text, 'activity:scan'::text, 'logistics:stats'::text,
-    'intolerances:manage'::text, 'meal-plans:export'::text, 'meal-plans:manage'::text,
+    'intolerances:manage'::text, 'meal-plans:export'::text, 'meal-plans:manage'::text, 'directory:read'::text,
     'queue:status'::text, 'queue:operate'::text, 'queue:admin'::text, 'judge:panel'::text,
     'judging:export'::text, 'sponsors:manage'::text, 'challenges:manage'::text,
     'schedule:manage'::text, 'announcements:manage'::text, 'tv:control'::text,

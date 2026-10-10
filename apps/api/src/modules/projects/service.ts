@@ -26,6 +26,7 @@ import { assertQueueChallengeScope, assertQueueRepoScope } from "../queue/fixtur
 import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged, repoMemberIds } from "../queue/notify.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
+import { RESET_PRESENTATION_CLOCK_SQL } from "../queue/presentation-clock.js";
 import { linkDevpostImports } from "../work-groups/service.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
 import { resolveDevpostUrls } from "./devpost-url.js";
@@ -1653,7 +1654,7 @@ export async function enqueueRepoOnChallenge(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL,
               called_at = NULL, precalled_at = NULL, presentation_started_at = NULL,
-              completed_at = NULL
+              ${RESET_PRESENTATION_CLOCK_SQL}, completed_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entry.id],
@@ -1803,7 +1804,8 @@ async function terminateQueueEntry(
   const updated = await client.query(
     `UPDATE queue_entries
         SET status = $1, assigned_room_id = NULL, position = NULL, called_at = NULL,
-            precalled_at = NULL, presentation_started_at = NULL, completed_at = NULL
+            precalled_at = NULL, presentation_started_at = NULL,
+            ${RESET_PRESENTATION_CLOCK_SQL}, completed_at = NULL
       WHERE id = $2
       RETURNING *`,
     [nextStatus, entry.id],

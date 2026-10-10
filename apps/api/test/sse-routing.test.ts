@@ -1,7 +1,11 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { broadcast, publicInvalidationFor, publicInvalidationsFor } from "../src/lib/sse.js";
-import { mutationDomainForPath, publicContentMutationForPath } from "../src/lib/sse-routing.js";
+import {
+  directoryMutationForPath,
+  mutationDomainForPath,
+  publicContentMutationForPath,
+} from "../src/lib/sse-routing.js";
 import { valkey } from "../src/lib/valkey.js";
 
 afterAll(async () => {
@@ -67,6 +71,25 @@ describe("domain mutation routing", () => {
     expect(mutationDomainForPath("/api/projects/4")).toBe(SSE_TOPICS.PROJECTS);
     expect(mutationDomainForPath("/api/me/projects/4/invites")).toBe(SSE_TOPICS.PROJECTS);
     expect(mutationDomainForPath("/api/me/work-groups/4/challenges")).toBe(SSE_TOPICS.PROJECTS);
+    // #934: public-profile writes, including moderation under /api/users, wake only the directory.
+    expect(mutationDomainForPath("/api/me/public-profile")).toBe(SSE_TOPICS.DIRECTORY);
+    expect(mutationDomainForPath("/api/users/7/public-profile")).toBe(SSE_TOPICS.DIRECTORY);
+    expect(mutationDomainForPath("/api/users/7")).toBe(SSE_TOPICS.IDENTITY);
+    // ...and other domains' writes that change a card also wake the directory.
+    for (const path of [
+      "/api/me",
+      "/api/users/7",
+      "/api/repos/3/members/7",
+      "/api/me/work-groups/4/members",
+      "/api/challenges/3",
+      "/api/challenges/3/publish",
+      "/api/challenges/visibility",
+    ]) {
+      expect(directoryMutationForPath(path)).toBe(true);
+    }
+    for (const path of ["/api/me/push-tokens", "/api/users/7/roles", "/api/challenges/3/judges"]) {
+      expect(directoryMutationForPath(path)).toBe(false);
+    }
     expect(mutationDomainForPath("/api/challenges/3/repos/bulk-add")).toBe(SSE_TOPICS.PROJECTS);
   });
 

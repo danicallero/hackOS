@@ -3,6 +3,8 @@ import type { QueueStatus } from "./queue";
 export type JudgingAction =
   | "notify-enter"
   | "bring-in"
+  | "pause-timer"
+  | "resume-timer"
   | "start"
   | "complete"
   | "send-back"
@@ -28,7 +30,7 @@ export const LEGAL_ACTIONS: Record<string, readonly JudgingAction[]> = {
     "disqualify",
   ],
   in_room: ["start", "send-back", "no-show", "disqualify"],
-  presenting: ["complete", "send-back", "disqualify"],
+  presenting: ["pause-timer", "resume-timer", "complete", "send-back", "disqualify"],
   completed: ["re-enter"],
   cancelled: ["re-enter"],
   disqualified: ["re-enter"],
@@ -131,28 +133,6 @@ export interface PresentationTimerState {
 }
 
 /**
- * H39: the pace (and its cap/squeeze) is a live value that keeps recomputing as
- * the schedule and pending count change — refetching it mid-presentation must
- * not shift the total the timer counts against, or the remaining/overtime
- * figure would jump around instead of counting smoothly. The total is frozen
- * per presentation (keyed by `startedAt`) and captured once if the pace wasn't
- * ready yet when the presentation began.
- *
- * Pure so the freeze rule is assertable without rendering: the caller holds the
- * previous value in a ref and assigns the result back.
- */
-export function freezeTotalMinutes(
-  previous: { key: string | null; minutes: number | null },
-  startedAt: string | null,
-  totalMinutes: number | null,
-): { key: string | null; minutes: number | null } {
-  if (previous.key !== startedAt) return { key: startedAt, minutes: totalMinutes };
-  if (previous.minutes == null && totalMinutes != null)
-    return { key: previous.key, minutes: totalMinutes };
-  return previous;
-}
-
-/**
  * The stopwatch is not a countdown: elapsed always counts up from 0 and never
  * resets or jumps. Only the tone changes as it crosses thresholds — amber for
  * the last stretch (the greater of 60s and 10% of the total, so short slots
@@ -162,11 +142,16 @@ export function presentationTimerState(
   startedAt: string | null,
   totalMinutes: number | null,
   now = Date.now(),
+  pausedAt: string | null = null,
+  pausedSeconds = 0,
 ): PresentationTimerState {
   const totalSeconds = totalMinutes != null ? Math.round(totalMinutes * 60) : null;
   const startedMs = startedAt ? new Date(startedAt).getTime() : null;
+  const endMs = pausedAt ? new Date(pausedAt).getTime() : now;
   const elapsedSeconds =
-    startedMs && Number.isFinite(startedMs) ? Math.max(0, Math.floor((now - startedMs) / 1000)) : 0;
+    startedMs != null && Number.isFinite(startedMs) && Number.isFinite(endMs)
+      ? Math.max(0, Math.floor((endMs - startedMs) / 1000 - pausedSeconds))
+      : 0;
   const remainingSeconds = totalSeconds != null ? totalSeconds - elapsedSeconds : null;
   const progressValue =
     totalSeconds && totalSeconds > 0 ? Math.min(100, (elapsedSeconds / totalSeconds) * 100) : 0;
@@ -184,4 +169,17 @@ export function presentationTimerState(
     progressValue,
     tone: isOverTime ? "danger" : isWrappingUp ? "warning" : "default",
   };
+}
+
+/** #927: setup keeps counting in_room, then freezes at the original start. */
+export function preparationElapsedSeconds(
+  enteredAt: string | null,
+  startedAt: string | null,
+  now = Date.now(),
+): number | null {
+  if (!enteredAt) return null;
+  const enteredMs = new Date(enteredAt).getTime();
+  const endMs = startedAt ? new Date(startedAt).getTime() : now;
+  if (!Number.isFinite(enteredMs) || !Number.isFinite(endMs)) return null;
+  return Math.max(0, Math.floor((endMs - enteredMs) / 1000));
 }

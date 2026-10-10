@@ -291,7 +291,9 @@ export function QueuePanel({
                 <div className="flex w-full flex-col gap-2">
                   {blocked ? (
                     <p className="text-warning text-pretty text-xs" role="status">
-                      {t("teamBusyInOtherRoom", { room: blocked.blockingRoomName })}
+                      {blocked.reason === "ineligible"
+                        ? t("projectIneligible")
+                        : t("teamBusyInOtherRoom", { room: blocked.blockingRoomName })}
                     </p>
                   ) : null}
                   <div className="flex gap-2">

@@ -82,7 +82,12 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "repoId" },
         },
       },
-      schema: { params: repoIdParam },
+      schema: {
+        params: repoIdParam,
+        summary: "List a team's queue memberships",
+        description:
+          "Every non-cancelled queue entry of the team with its waiting rank, ETA, assigned room and the rooms serving its queue. `busy_room_id`/`busy_room_name`/`busy_status` report where a team member (shared-member relation of the H30 guard, test fixtures excluded) is `called`, `in_room` or `presenting` in another room; an evaluation blocks moves, any of them blocks calls to any other room (#931). Completed and disqualified rows never carry it. `eligible` is false when the project is excluded from judging (H38): it can be reordered but never called.",
+      },
     },
     async (req) => repoChallenges(req.params.repoId),
   );
@@ -102,7 +107,12 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "roomId" },
         },
       },
-      schema: { params: roomIdParam },
+      schema: {
+        params: roomIdParam,
+        summary: "Room queue view",
+        description:
+          'The room\'s active, called and waiting teams. `crossRoomSkips` explains, read-only, why call-next passes over a waiting team without moving it: `reason: "ineligible"` when the project is not eligible for judging (H38), or `reason: "busy_member"` with the blocking room, team and status when a team member is called or being evaluated in another room (H30, #931).',
+      },
     },
     async (req) => roomView(req.params.roomId, { includeCrossRoomSkips: true }),
   );

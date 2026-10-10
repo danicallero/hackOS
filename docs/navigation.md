@@ -57,6 +57,12 @@ hide (`NavItem.hideForPureApplicant` in `nav.ts`) — Schedule, My applications,
 and My profile stay, since applying (or checking an application's status) is
 exactly what they still need.
 
+**People** (`/people`, #934) is the one capability-gated personal entry: it
+shows with `directory:read` (seeded for every role except Sponsor and Judging
+Team; see `directory.md`) plus current event access, like Wallet and Inbox,
+and sits just above My profile, where each person
+manages whether they appear in it.
+
 There is deliberately no dashboard/home page: `/timetable` (Schedule) is the
 landing destination after sign-in and email verification
 (`apps/web/src/lib/invite-destination.ts`, `apps/web/src/lib/return-path.ts`),
@@ -89,8 +95,16 @@ The web navigation uses Phosphor concept icons: `Package` for the Logistics
 workspace, `ClipboardText` for Activities, and `Log` for the Audit log.
 
 `/users/invites` is a focused child workspace reached from Users for holders of
-`invites:manage`; it deliberately does not add a second sidebar destination.
+`invites:manage`, and from an enterprise's header for holders of
+`sponsors:manage`, who see and create only sponsor links (#929); it
+deliberately does not add a second sidebar destination.
 The invitation list and its record inspector stay together on that route (#777).
+
+The enterprise detail page (`/enterprises/[id]`) has Profile (default), Challenges
+(for `sponsors:manage` and the enterprise's own reps), Judges, and Members for
+`sponsors:manage`. Overview and Invitations were removed (#928, #929): an old
+`?tab=overview` link renders Profile, and `?tab=invitations` sends sponsor
+managers to `/users/invites` (others see Profile).
 
 The admin wildcard (`*`) passes every capability check and therefore sees
 every workspace and every item (`apps/web/src/lib/session.tsx`).
@@ -283,6 +297,18 @@ despite a working API.
   or merged into a shared one. Its scope is the caller's own —
   `GET /api/queue/groups` returns every queue for `queue:admin`/
   `sponsors:manage` and only their own enterprises' for a sponsor rep.
+
+Event settings (`/settings/event`) is a list of the sections the caller's
+capabilities allow, never a second sidebar (#932): `?tab=event|venue|wallet|presence|invites|judging|danger`
+opens one section with a back link (page header context slot) to the list. A
+lone visible section opens directly only when no `?tab=` is requested; a
+`?tab=` the caller cannot manage shows the list. The URL is the only state, so
+selecting writes nothing back. Dirtiness is tracked for the open section only;
+leaving it with unsaved edits — back link, sidebar, browser Back/swipe-back or
+unload — asks for confirmation (`useUnsavedChangesGuard`; browser Back is
+guarded only here, via the opt-in `guardBrowserBack`: a sentinel history entry
+is pushed once while dirty and consumed by the popstate confirm. Other users of
+the hook, e.g. the profile and application builder, guard links and unload only).
 
 Judging hours are in Event settings (`/settings/event?tab=judging`) and retain
 the `queue:admin` gate. `/queue/settings` preserves saved links by directing
