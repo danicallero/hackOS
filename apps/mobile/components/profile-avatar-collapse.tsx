@@ -17,6 +17,7 @@ import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
   type ProfileCameraCutoutFrame,
   profileAvatarCollapseBounds,
+  profileAvatarContentFrame,
   profileAvatarCoverOpacity,
   profileAvatarMaskFrame,
   profileAvatarMorphPath,
@@ -229,23 +230,13 @@ export function ProfileAvatarCollapse({
   );
   const contentStyle = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
-    const frame = profileAvatarMaskFrame(
+    return profileAvatarContentFrame(
       size,
       localStart,
       localTarget,
       p,
       reduceMotion || !target.hasCutout,
     );
-    const neck =
-      reduceMotion || !target.hasCutout ? 0 : Math.max(0, Math.min(1, (p - 0.15) / 0.35));
-    const top = frame.top + (localTarget.top - frame.top) * neck;
-    const width = Math.max(frame.width, localTarget.width * neck);
-    return {
-      left: frame.left + frame.width / 2 - width / 2,
-      top,
-      width,
-      height: frame.top + frame.height - top,
-    };
   }, [size, localStart, localTarget, distance, reduceMotion, target.hasCutout]);
   const initialsStyle = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));

@@ -64,7 +64,7 @@ const profile: DirectoryEntry = {
     { kind: "website", url: "https://ana.dev/" },
   ],
   cvUrl: "/api/directory/101/cv",
-  project: { kind: "project", id: 1, name: "Rover" },
+  projects: [{ kind: "project", id: 1, name: "Rover" }],
   challenges: [{ id: 2, name: "Robotics" }],
 };
 
@@ -81,7 +81,7 @@ const entry: DiaryEntry = {
     photoUrl: null,
     headline: null,
     locationNote: null,
-    project: null,
+    projects: [],
     challenges: [],
   },
   sponsor: null,
@@ -129,6 +129,22 @@ it("shows the whole profile with the saved note", async () => {
   expect(screen.queryByRole("button", { name: "diaryNote" })).toBeNull();
   await fireEvent.press(screen.getByRole("link", { name: "GitHub, github.com/ana" }));
   expect(open).toHaveBeenCalledWith("https://github.com/ana");
+});
+
+it("lists every project and work group the person is in (#935)", async () => {
+  personResult = {
+    ...profile,
+    projects: [
+      { kind: "project", id: 1, name: "Rover" },
+      { kind: "project", id: 3, name: "Lander" },
+      { kind: "workGroup", id: 4, name: "Side quest" },
+    ],
+  };
+  await renderMobile(<PersonProfileScreen />);
+  expect(await screen.findByText("Rover\nLander")).toBeTruthy();
+  expect(screen.getByText("directoryProjects")).toBeTruthy();
+  expect(screen.getByText("Side quest")).toBeTruthy();
+  expect(screen.getByText("directoryWorkGroup")).toBeTruthy();
 });
 
 it("opens the CV in the in-app viewer after downloading it with the session", async () => {

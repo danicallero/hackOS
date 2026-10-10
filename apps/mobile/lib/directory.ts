@@ -15,7 +15,7 @@ export interface DirectoryEntry {
   locationNote: string | null;
   socials: { kind: SocialKind; url: string }[];
   cvUrl: string | null;
-  project: { kind: "project" | "workGroup"; id: number; name: string } | null;
+  projects: { kind: "project" | "workGroup"; id: number; name: string }[];
   challenges: { id: number; name: string }[];
 }
 
@@ -89,7 +89,7 @@ function diarySearchText(entry: DiaryEntry): string {
       person?.displayName,
       person?.headline,
       person?.locationNote,
-      person?.project?.name,
+      ...(person?.projects ?? []).map((project) => project.name),
       ...(person?.challenges ?? []).map((challenge) => challenge.name),
       sponsor?.name,
       sponsor?.description,

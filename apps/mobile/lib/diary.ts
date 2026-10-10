@@ -8,7 +8,7 @@ export interface DiaryPerson {
   photoUrl: string | null;
   headline: string | null;
   locationNote: string | null;
-  project: { kind: "project" | "workGroup"; id: number; name: string } | null;
+  projects: { kind: "project" | "workGroup"; id: number; name: string }[];
   challenges: { id: number; name: string }[];
 }
 

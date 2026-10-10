@@ -375,7 +375,9 @@ export function DiaryScreen() {
         available={person !== null}
         photoUrl={person?.photoUrl ?? null}
         headline={person?.headline}
-        detail={entry.note ?? person?.project?.name}
+        detail={
+          entry.note ?? (person?.projects.map((project) => project.name).join(", ") || undefined)
+        }
         detailIsNote={Boolean(entry.note)}
         starred={entry.starred}
         busy={busyKeys.has(`entry:${entry.id}`)}

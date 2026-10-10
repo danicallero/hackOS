@@ -7,7 +7,8 @@ their stand. There is no browsable people directory and no way to save a
 person by id: the product owner retired it on #935 ("al final queremos que sea
 dinámico"). What a scanner sees is the person's opt-in public profile
 ([`directory.md`](./directory.md)). The diary replaces People as the personal
-destination. There is no Hxx story; code and commits reference `#935` (and
+destination. The interface calls it Agenda (gl "Axenda", en "Contacts");
+the code, routes and tables keep the `diary` name. There is no Hxx story; code and commits reference `#935` (and
 `#934` for the public profile it builds on).
 
 Module: `apps/api/src/modules/diary/`; company tags and their staff management

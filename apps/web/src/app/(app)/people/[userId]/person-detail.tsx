@@ -28,9 +28,10 @@ type State =
   | { status: "missing" }
   | { status: "error"; message: string };
 
-const PROJECT_KIND: Record<"project" | "workGroup", MessageKey> = {
-  project: "publicProfileProject",
-  workGroup: "publicProfileWorkGroup",
+/** Singular and plural row labels per project kind. */
+const PROJECT_KIND: Record<"project" | "workGroup", [MessageKey, MessageKey]> = {
+  project: ["publicProfileProject", "publicProfileProjects"],
+  workGroup: ["publicProfileWorkGroup", "publicProfileWorkGroups"],
 };
 
 /**
@@ -157,11 +158,23 @@ function PersonReader({ userId }: { userId: number }) {
       value: <p className="wrap-anywhere">{entry.locationNote}</p>,
     });
   }
-  if (entry.project) {
+  // Every project and work group the person is in, one row per kind (#935).
+  for (const kind of ["project", "workGroup"] as const) {
+    const projects = entry.projects.filter((project) => project.kind === kind);
+    if (projects.length === 0) continue;
+    const [one, many] = PROJECT_KIND[kind];
     rows.push({
-      id: "project",
-      label: t(PROJECT_KIND[entry.project.kind]),
-      value: <p className="wrap-anywhere">{entry.project.name}</p>,
+      id: kind,
+      label: t(projects.length === 1 ? one : many),
+      value: (
+        <ul className="space-y-1">
+          {projects.map((project) => (
+            <li key={project.id} className="wrap-anywhere">
+              {project.name}
+            </li>
+          ))}
+        </ul>
+      ),
     });
   }
   if (entry.challenges.length > 0) {

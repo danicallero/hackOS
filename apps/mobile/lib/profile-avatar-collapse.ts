@@ -169,6 +169,154 @@ function circlePath(x: number, y: number, radius: number) {
   return `M ${x - radius} ${y} A ${radius} ${radius} 0 1 1 ${x + radius} ${y} A ${radius} ${radius} 0 1 1 ${x - radius} ${y} Z`;
 }
 
+type MaskTrack = (typeof telegramMaskTracks)[number];
+
+/** The avatar blob track: the circle that stretches up into the island. */
+const BLOB_TRACK_END = 153;
+/** Progress at which the blob ends and only the island lip remains. */
+const BLOB_END_PROGRESS = BLOB_TRACK_END / 540;
+/** The lip (drip) track hanging from the island's lower edge. */
+const LIP_TRACK_END = 544;
+/** The lip's widest point, bezier handles included, in mask units. */
+const LIP_HALF_EXTENT = 151.3;
+/** The lip's top edge sits this many mask units above the island's lower edge. */
+const LIP_TOP_DEPTH = 5;
+
+/**
+ * Half-width the lip may take at the island's lower edge (#935). A stadium
+ * island is straight there only for `width - height`; past that its corners
+ * curve up, so a lip as wide as the island pokes out of them. A circular
+ * hole punch has no straight run, so it gets the chord at the lip's top edge.
+ */
+function lipHalfWidth(target: ProfileAvatarFrame, scale: number) {
+  "worklet";
+  const radius = target.height / 2;
+  const straight = Math.max(0, target.width - target.height) / 2;
+  const depth = Math.min(radius, LIP_TOP_DEPTH * scale);
+  const chord = Math.sqrt(Math.max(0, radius * radius - (radius - depth) * (radius - depth)));
+  return Math.max(straight, chord);
+}
+
+/** The Swift mask canvas origin and scale at `progress`. */
+function maskCanvas(
+  size: number,
+  start: ProfileAvatarFrame,
+  target: ProfileAvatarFrame,
+  p: number,
+) {
+  "worklet";
+  const scale = size / 300;
+  const startCenterX = start.left + size / 2;
+  const targetCenterX = target.left + target.width / 2;
+  const canvasX = startCenterX + (targetCenterX - startCenterX) * p - 256 * scale;
+  const initialTop = start.top + size / 2 - 234 * scale;
+  // Swift anchors the 171 pt mask canvas at the island's lower edge (47.5 pt).
+  const alignment = Math.min(1, p / 0.14);
+  const canvasY = initialTop + (target.top + target.height - initialTop) * alignment;
+  return { scale, canvasX, canvasY, time: p * 540 };
+}
+
+/** One track's keyframe pair and the linear fraction between them at `time`. */
+function trackKeyframes(track: MaskTrack, time: number) {
+  "worklet";
+  let index = 0;
+  while (index + 1 < track.frames.length && track.frames[index + 1].time <= time) index++;
+  const first = track.frames[index];
+  const next = track.frames[Math.min(index + 1, track.frames.length - 1)];
+  // The source's temporal cubic handles have equal x/y, giving linear time.
+  const fraction =
+    next.time === first.time
+      ? 0
+      : Math.max(0, Math.min(1, (time - first.time) / (next.time - first.time)));
+  return { first, next, fraction };
+}
+
+/**
+ * Bounding box of the avatar blob in the morph mask at `progress`, or null
+ * once it has ended. The blob rises and narrows faster than the linear mask
+ * frame, so content placed from that frame lags below the clip.
+ */
+export function profileAvatarBlobBounds(
+  size: number,
+  start: ProfileAvatarFrame,
+  target: ProfileAvatarFrame,
+  progress: number,
+): ProfileAvatarFrame | null {
+  "worklet";
+  const p = Math.max(0, Math.min(1, progress));
+  const { scale, canvasX, canvasY, time } = maskCanvas(size, start, target, p);
+  const track = telegramMaskTracks.find((candidate) => candidate.end === BLOB_TRACK_END);
+  if (!track || time >= track.end) return null;
+  const { first, next, fraction } = trackKeyframes(track, time);
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  // The blob's handles are tangent at its extremes, so its vertices bound it.
+  for (let i = 0; i < first.path.v.length; i++) {
+    const vx = first.path.v[i][0] + (next.path.v[i][0] - first.path.v[i][0]) * fraction;
+    const vy = first.path.v[i][1] + (next.path.v[i][1] - first.path.v[i][1]) * fraction;
+    const x = canvasX + (track.offset[0] + vx) * scale;
+    const y = canvasY + (track.offset[1] + vy) * scale;
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+  return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/**
+ * Where the avatar image sits at `progress` (#935): a square covering the
+ * mask's blob and centred on it, so the picture follows the clip instead of
+ * exposing the backing at its top, joined with the neck that stretches up to
+ * the island. After the blob ends it eases back to the neck alone.
+ */
+export function profileAvatarContentFrame(
+  size: number,
+  start: ProfileAvatarFrame,
+  target: ProfileAvatarFrame,
+  progress: number,
+  simple = false,
+): ProfileAvatarFrame {
+  "worklet";
+  const p = Math.max(0, Math.min(1, progress));
+  const frame = profileAvatarMaskFrame(size, start, target, p, simple);
+  if (simple) return { left: frame.left, top: frame.top, width: frame.width, height: frame.height };
+  const neck = Math.max(0, Math.min(1, (p - 0.15) / 0.35));
+  const neckTop = frame.top + (target.top - frame.top) * neck;
+  const neckHalf = Math.max(frame.width, target.width * neck) / 2;
+  const centerX = frame.left + frame.width / 2;
+  const neckBox = {
+    left: centerX - neckHalf,
+    top: neckTop,
+    right: centerX + neckHalf,
+    bottom: frame.top + frame.height,
+  };
+  // Past its end the blob is held at its last shape while the box eases back.
+  const blob = profileAvatarBlobBounds(size, start, target, Math.min(p, BLOB_END_PROGRESS - 1e-4));
+  let box = neckBox;
+  if (blob) {
+    const half = Math.max(blob.width, blob.height) / 2;
+    const cx = blob.left + blob.width / 2;
+    const cy = blob.top + blob.height / 2;
+    const fade = Math.max(0, Math.min(1, (p - BLOB_END_PROGRESS) / 0.1));
+    const mix = (covered: number, neckSide: number) => covered + (neckSide - covered) * fade;
+    box = {
+      left: mix(Math.min(neckBox.left, cx - half), neckBox.left),
+      top: mix(Math.min(neckBox.top, cy - half), neckBox.top),
+      right: mix(Math.max(neckBox.right, cx + half), neckBox.right),
+      bottom: mix(Math.max(neckBox.bottom, cy + half), neckBox.bottom),
+    };
+  }
+  return {
+    left: box.left,
+    top: box.top,
+    width: box.right - box.left,
+    height: box.bottom - box.top,
+  };
+}
+
 /** Original UserAvatarMask cubic paths, sampled at the same progress as Swift. */
 export function profileAvatarMorphPath(
   size: number,
@@ -183,28 +331,13 @@ export function profileAvatarMorphPath(
     const frame = profileAvatarMaskFrame(size, start, target, p, true);
     return circlePath(frame.left + frame.width / 2, frame.top + frame.height / 2, frame.height / 2);
   }
-  const scale = size / 300;
-  const startCenterX = start.left + size / 2;
-  const targetCenterX = target.left + target.width / 2;
-  const canvasX = startCenterX + (targetCenterX - startCenterX) * p - 256 * scale;
-  const initialTop = start.top + size / 2 - 234 * scale;
-  // Swift anchors the 171 pt mask canvas at the island's lower edge (47.5 pt).
-  const alignment = Math.min(1, p / 0.14);
-  const canvasY = initialTop + (target.top + target.height - initialTop) * alignment;
-  const time = p * 540;
+  const { scale, canvasX, canvasY, time } = maskCanvas(size, start, target, p);
+  const lipScale = Math.min(scale, lipHalfWidth(target, scale) / LIP_HALF_EXTENT);
   let result = "";
   for (const track of telegramMaskTracks) {
     if (time >= track.end) continue;
-    if (track.end === 544 && (time < 108 || time >= 498)) continue;
-    let index = 0;
-    while (index + 1 < track.frames.length && track.frames[index + 1].time <= time) index++;
-    const first = track.frames[index];
-    const next = track.frames[Math.min(index + 1, track.frames.length - 1)];
-    // The source's temporal cubic handles have equal x/y, giving linear time.
-    const fraction =
-      next.time === first.time
-        ? 0
-        : Math.max(0, Math.min(1, (time - first.time) / (next.time - first.time)));
+    if (track.end === LIP_TRACK_END && (time < 108 || time >= 498)) continue;
+    const { first, next, fraction } = trackKeyframes(track, time);
     const vertices = first.path.v.map((point, i) => [
       point[0] + (next.path.v[i][0] - point[0]) * fraction,
       point[1] + (next.path.v[i][1] - point[1]) * fraction,
@@ -217,8 +350,7 @@ export function profileAvatarMorphPath(
       point[0] + (next.path.o[i][0] - point[0]) * fraction,
       point[1] + (next.path.o[i][1] - point[1]) * fraction,
     ]);
-    // The thin bar is the island's lower lip: never wider than the target.
-    const xScale = track.end === 544 ? Math.min(scale, Math.max(0, target.width) / 290) : scale;
+    const xScale = track.end === LIP_TRACK_END ? lipScale : scale;
     const x = (value: number) => canvasX + track.offset[0] * scale + value * xScale;
     const y = (value: number) => canvasY + (track.offset[1] + value) * scale;
     result += `M ${x(vertices[0][0])} ${y(vertices[0][1])} `;

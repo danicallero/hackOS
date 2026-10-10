@@ -132,7 +132,7 @@ describe("public profile owner routes (#934)", () => {
     });
     expect(res.json().preview).toMatchObject({
       displayName: "Uxía R.",
-      project: { kind: "project", id: repoId, name: "Unsaved" },
+      projects: [{ kind: "project", id: repoId, name: "Unsaved" }],
       challenges: [{ id: challenge, name: "Preview" }],
     });
   });
@@ -274,6 +274,7 @@ describe("saved profile reads (#934, #935)", () => {
       locationNote: "Planta 1, mesa 12",
       socials: [],
       cvUrl: null,
+      projects: [{ kind: "project", id: expect.any(Number), name: "Neural Beans" }],
       project: { kind: "project", id: expect.any(Number), name: "Neural Beans" },
       challenges: [{ id: challenge, name: "Green AI" }],
     });
@@ -308,7 +309,42 @@ describe("saved profile reads (#934, #935)", () => {
     expect((await card(me)).json().challenges).toEqual([{ id: kept, name: "Kept" }]);
   });
 
-  it("falls back to an unlinked planned work group", async () => {
+  it("lists every project and unlinked work group with all their challenges", async () => {
+    const first = await publishChallenge("First");
+    const second = await publishChallenge("Second");
+    const planned = await publishChallenge("Planned too");
+    const me = await person("Antía", "Paz");
+    const repoA = await activeRepo("Alpha", [me], [first]);
+    const repoB = await activeRepo("Beta", [me], [second]);
+    const { rows } = await pool.query(
+      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Side quest', $1) RETURNING id`,
+      [me],
+    );
+    await pool.query(
+      `INSERT INTO planned_work_group_members (group_id, user_id, status, responded_at) VALUES ($1, $2, 'active', now())`,
+      [rows[0].id, me],
+    );
+    await pool.query(
+      `INSERT INTO planned_work_group_challenges (group_id, challenge_id) VALUES ($1, $2)`,
+      [rows[0].id, planned],
+    );
+    await putProfile(me, VISIBLE);
+    await save(me);
+    const entry = (await card(me)).json();
+    expect(entry.projects).toEqual([
+      { kind: "project", id: repoA, name: "Alpha" },
+      { kind: "project", id: repoB, name: "Beta" },
+      { kind: "workGroup", id: Number(rows[0].id), name: "Side quest" },
+    ]);
+    expect(entry.project).toEqual({ kind: "project", id: repoA, name: "Alpha" });
+    expect(entry.challenges).toEqual([
+      { id: first, name: "First" },
+      { id: planned, name: "Planned too" },
+      { id: second, name: "Second" },
+    ]);
+  });
+
+  it("shows an unlinked planned work group", async () => {
     const challenge = await publishChallenge("Planned");
     const me = await person("Lúa", "Souto");
     const { rows } = await pool.query(
@@ -326,11 +362,14 @@ describe("saved profile reads (#934, #935)", () => {
     await putProfile(me, VISIBLE);
     await save(me);
     const entry = (await card(me)).json();
-    expect(entry.project).toEqual({ kind: "workGroup", id: Number(rows[0].id), name: "Planners" });
+    expect(entry.projects).toEqual([
+      { kind: "workGroup", id: Number(rows[0].id), name: "Planners" },
+    ]);
     expect(entry.challenges).toEqual([{ id: challenge, name: "Planned" }]);
 
     await putProfile(me, { ...VISIBLE, showProject: false });
     const withoutProject = (await card(me)).json();
+    expect(withoutProject.projects).toEqual([]);
     expect(withoutProject.project).toBeNull();
     expect(withoutProject.challenges).toEqual([]);
   });

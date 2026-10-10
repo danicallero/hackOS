@@ -29,8 +29,17 @@ export interface DirectoryEntry {
   socials: SocialLink[];
   /** Authenticated CV route, only while the person shares it. */
   cvUrl: string | null;
-  project: { kind: "project" | "workGroup"; id: number; name: string } | null;
+  /** Repositories first, then unlinked work groups, each by id (#935). */
+  projects: DirectoryProject[];
+  /** Deprecated: the first of `projects`, kept for app builds that predate it. */
+  project: DirectoryProject | null;
   challenges: { id: number; name: string }[];
+}
+
+export interface DirectoryProject {
+  kind: "project" | "workGroup";
+  id: number;
+  name: string;
 }
 
 interface EntryRow {
@@ -42,57 +51,52 @@ interface EntryRow {
   location_note: string | null;
   socials: SocialLink[];
   has_cv: boolean;
-  project: DirectoryEntry["project"];
+  projects: DirectoryProject[];
   challenges: DirectoryEntry["challenges"];
 }
 
 /**
- * Fragments over `p` (user_public_profiles) and `u` (users). The project is the
- * active repository submission, falling back to an unlinked planned work
- * group; challenges are the published ones that project or group still takes
- * part in (cancelled/disqualified queue entries excluded, as in
- * projects/lifecycle.ts). Both are suppressed when show_project is off.
+ * Fragments over `p` (user_public_profiles) and `u` (users). The projects are
+ * every active repository submission plus every unlinked planned work group
+ * the person belongs to (#935: a person can work on several); challenges are
+ * the published ones any of them still takes part in (cancelled/disqualified
+ * queue entries excluded, as in projects/lifecycle.ts). Both are suppressed
+ * when show_project is off.
  */
-const SHOWN_REPO_SQL = `
+const SHOWN_REPOS_SQL = `
   SELECT r.id, r.name
     FROM submissions s
     JOIN repos r ON r.id = s.repo_id
    WHERE p.show_project
      AND s.user_id = u.id
      AND s.status = 'active'
-     AND r.is_test_account = false
-   ORDER BY r.id
-   LIMIT 1`;
+     AND r.is_test_account = false`;
 
-const SHOWN_GROUP_SQL = `
+const SHOWN_GROUPS_SQL = `
   SELECT g.id, g.name
     FROM planned_work_group_members m
     JOIN planned_work_groups g ON g.id = m.group_id
    WHERE p.show_project
-     AND NOT EXISTS (${SHOWN_REPO_SQL})
      AND m.user_id = u.id
      AND m.status = 'active'
-     AND g.linked_repo_id IS NULL
-   ORDER BY g.id
-   LIMIT 1`;
+     AND g.linked_repo_id IS NULL`;
 
-/** `c` is a published challenge the given repo/group expressions take part in. */
-function challengeOfProject(repoId: string, groupId: string): string {
-  return `c.visibility = 'visible'
+/** `c` is a published challenge one of the shown repos or groups takes part in. */
+const CHALLENGE_OF_PROJECTS = `c.visibility = 'visible'
     AND c.is_test_account = false
     AND (
       EXISTS (
         SELECT 1 FROM queue_entries qe
          WHERE qe.challenge_id = c.id
-           AND qe.repo_id = ${repoId}
+           AND qe.repo_id IN (SELECT id FROM (${SHOWN_REPOS_SQL}) sr)
            AND qe.status NOT IN ('cancelled', 'disqualified')
       )
       OR EXISTS (
         SELECT 1 FROM planned_work_group_challenges gc
-         WHERE gc.challenge_id = c.id AND gc.group_id = ${groupId}
+         WHERE gc.challenge_id = c.id
+           AND gc.group_id IN (SELECT id FROM (${SHOWN_GROUPS_SQL}) sg)
       )
     )`;
-}
 
 /**
  * Labels or keys that name a CV in the three event languages (#935): "cv",
@@ -178,20 +182,22 @@ function entrySql(profiles: string): string {
          p.location_note,
          p.socials,
          (p.share_cv AND COALESCE(fcv.key, p.cv_key) IS NOT NULL) AS has_cv,
-         CASE
-           WHEN repo.id IS NOT NULL THEN jsonb_build_object('kind', 'project', 'id', repo.id, 'name', repo.name)
-           WHEN grp.id IS NOT NULL THEN jsonb_build_object('kind', 'workGroup', 'id', grp.id, 'name', grp.name)
-         END AS project,
+         COALESCE((
+           SELECT jsonb_agg(jsonb_build_object('kind', x.kind, 'id', x.id, 'name', x.name) ORDER BY x.ord, x.id)
+             FROM (
+               SELECT 'project' AS kind, 0 AS ord, id, name FROM (${SHOWN_REPOS_SQL}) sr
+               UNION ALL
+               SELECT 'workGroup', 1, id, name FROM (${SHOWN_GROUPS_SQL}) sg
+             ) x
+         ), '[]'::jsonb) AS projects,
          COALESCE((
            SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.title) ORDER BY c.title, c.id)
              FROM challenges c
-            WHERE ${challengeOfProject("repo.id", "grp.id")}
+            WHERE ${CHALLENGE_OF_PROJECTS}
          ), '[]'::jsonb) AS challenges
     FROM ${profiles}
     JOIN users u ON u.id = p.user_id
     ${DISPLAY_NAME_JOIN}
-    LEFT JOIN LATERAL (${SHOWN_REPO_SQL}) repo ON true
-    LEFT JOIN LATERAL (${SHOWN_GROUP_SQL}) grp ON true
     LEFT JOIN LATERAL (${formCvSql("u.id")}) fcv ON true`;
 }
 
@@ -204,6 +210,7 @@ const VISIBLE_WHERE = `
 /** `cvPath` differs for the owner's preview, which reads their own CV route. */
 function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): DirectoryEntry {
   const userId = Number(row.user_id);
+  const projects = row.projects.map(({ kind, id, name }) => ({ kind, id: Number(id), name }));
   return {
     userId,
     displayName: row.display_name,
@@ -213,7 +220,8 @@ function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): Di
     locationNote: row.location_note,
     socials: row.socials.map(({ kind, url }) => ({ kind, url })),
     cvUrl: row.has_cv ? cvPath : null,
-    project: row.project ? { ...row.project, id: Number(row.project.id) } : null,
+    projects,
+    project: projects[0] ?? null,
     challenges: row.challenges.map((c) => ({ id: Number(c.id), name: c.name })),
   };
 }

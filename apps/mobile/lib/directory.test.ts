@@ -18,7 +18,7 @@ function entry(id: number, overrides: Partial<DiaryEntry> = {}): DiaryEntry {
       photoUrl: null,
       headline: null,
       locationNote: null,
-      project: null,
+      projects: [],
       challenges: [],
     },
     sponsor: null,
@@ -37,7 +37,7 @@ describe("directory helpers (#935)", () => {
       entry(2, {
         person: {
           ...entry(2).person!,
-          project: { kind: "project", id: 1, name: "Rover" },
+          projects: [{ kind: "project", id: 1, name: "Rover" }],
           challenges: [{ id: 3, name: "Robótica" }],
         },
       }),

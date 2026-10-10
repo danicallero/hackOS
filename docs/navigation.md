@@ -57,7 +57,8 @@ hide (`NavItem.hideForPureApplicant` in `nav.ts`) — Schedule, My applications,
 and My profile stay, since applying (or checking an application's status) is
 exactly what they still need.
 
-**Diary** (`/people`, #935, address-book icon) is the attendee's event diary:
+**Agenda** (es "Agenda", gl "Axenda", en "Contacts"; `/people`, #935,
+address-book icon) is the attendee's event diary:
 the people and sponsor stands they scanned, in People and Companies tabs.
 There is no people directory to browse. It needs only current event access,
 like Wallet and Inbox, and no capability. It sits just above My profile,

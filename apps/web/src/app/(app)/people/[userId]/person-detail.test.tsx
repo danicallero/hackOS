@@ -41,7 +41,7 @@ function entry(overrides: Partial<DirectoryEntry> = {}): DirectoryEntry {
     locationNote: null,
     socials: [],
     cvUrl: null,
-    project: null,
+    projects: [],
     challenges: [],
     ...overrides,
   };
@@ -91,7 +91,7 @@ describe("PersonDetail (#934, #935)", () => {
         { kind: "website", url: "https://ana.dev/" },
       ],
       cvUrl: "/api/directory/42/cv",
-      project: { kind: "project", id: 3, name: "Rías Baixas Tracker" },
+      projects: [{ kind: "project", id: 3, name: "Rías Baixas Tracker" }],
       challenges: [{ id: 7, name: "Best hack" }],
     });
     await render();
@@ -124,6 +124,27 @@ describe("PersonDetail (#934, #935)", () => {
     expect(env.autoRefresh).toHaveBeenCalledWith("/api/events/stream?topic=directory", [
       "domain.changed",
     ]);
+  });
+
+  it("lists every project and work group the person is in", async () => {
+    person = entry({
+      projects: [
+        { kind: "project", id: 3, name: "Rías Baixas Tracker" },
+        { kind: "project", id: 4, name: "Rover" },
+        { kind: "workGroup", id: 5, name: "Side quest" },
+      ],
+    });
+    await render();
+    const text = container.textContent ?? "";
+    for (const name of [
+      "Rías Baixas Tracker",
+      "Rover",
+      "Side quest",
+      "publicProfileProjects",
+      "publicProfileWorkGroup",
+    ]) {
+      expect(text).toContain(name);
+    }
   });
 
   it("omits empty sections and the CV action", async () => {
