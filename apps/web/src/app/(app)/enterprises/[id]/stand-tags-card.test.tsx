@@ -2,7 +2,7 @@ import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api } from "@/lib/api";
+import { api, apiDownload } from "@/lib/api";
 import type { StandTag } from "./stand-tags-card";
 
 const env = vi.hoisted(() => ({ toastError: vi.fn(), toastSuccess: vi.fn() }));
@@ -17,7 +17,11 @@ vi.mock("@/lib/api", () => {
       super(message);
     }
   }
-  return { api: { get: vi.fn(), post: vi.fn(), delete: vi.fn() }, ApiError };
+  return {
+    api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
+    apiDownload: vi.fn(),
+    ApiError,
+  };
 });
 vi.mock("@/hooks/use-auto-refresh", () => ({ useAutoRefresh: () => 0 }));
 vi.mock("@/lib/toast", () => ({ toast: { error: env.toastError, success: env.toastSuccess } }));
@@ -30,13 +34,15 @@ vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t, language: "en" }) }));
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
 const del = vi.mocked(api.delete);
+const put = vi.mocked(api.put);
+const download = vi.mocked(apiDownload);
 let tags: StandTag[];
 let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
   tags = [];
-  for (const mock of [get, post, del]) mock.mockReset();
+  for (const mock of [get, post, del, put, download]) mock.mockReset();
   env.toastError.mockReset();
   env.toastSuccess.mockReset();
   get.mockImplementation((() => Promise.resolve({ tags })) as typeof api.get);
@@ -50,10 +56,17 @@ afterEach(() => {
   container.remove();
 });
 
-async function render() {
+async function render(props: { scannable?: boolean; canManage?: boolean } = {}) {
   const { StandTagsCard } = await import("./stand-tags-card");
   await act(async () => {
-    root.render(<StandTagsCard enterpriseId={5} enterpriseName="Acme" />);
+    root.render(
+      <StandTagsCard
+        enterpriseId={5}
+        enterpriseName="Acme"
+        scannable={props.scannable ?? true}
+        canManage={props.canManage}
+      />,
+    );
   });
 }
 
@@ -123,7 +136,11 @@ describe("StandTagsCard (#935)", () => {
     await act(async () => user.click(button("standTagGenerateQr")));
     expect(post).toHaveBeenCalledWith("/api/enterprises/5/stand-tags", { kind: "qr" });
     expect(container.querySelector("li svg title")?.textContent).toBe("Acme QR");
-    expect(button("standTagDownloadQr")).toBeDefined();
+    await act(async () => user.click(button("standTagDownloadQr")));
+    expect(download).toHaveBeenCalledWith(
+      "/api/enterprises/5/stand-tags/2/qr.svg",
+      "STAND-ABCDEFGHJKMNPQRS.svg",
+    );
 
     await act(async () => user.click(button("remove")));
     expect(document.body.textContent).toContain("standTagRemoveQrDesc");
@@ -133,5 +150,35 @@ describe("StandTagsCard (#935)", () => {
     await act(async () => user.click(confirm));
     expect(del).toHaveBeenCalledWith("/api/enterprises/5/stand-tags/2");
     expect(container.textContent).toContain("standTagsEmpty");
+  });
+
+  it("says when attendees cannot collect the stand, and lets staff turn scanning on", async () => {
+    await render({ scannable: false });
+    expect(container.textContent).toContain("standNotScannableNotice");
+    expect(button("standTurnOnScanning")).toBeUndefined();
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    put.mockResolvedValue({ enterpriseId: 5, scannable: true, changed: true });
+    await render({ scannable: false, canManage: true });
+    const user = userEvent.setup();
+    await act(async () => user.click(button("standTurnOnScanning")));
+    expect(put).toHaveBeenCalledWith("/api/enterprises/5/stand-scannable", { scannable: true });
+  });
+
+  it("names a badge or stand conflict when linking an NFC tag", async () => {
+    const { ApiError } = await import("@/lib/api");
+    const conflict = new (ApiError as unknown as new (s: number, c: string, m: string) => Error)(
+      409,
+      "conflict",
+      "This tag is already in use",
+    );
+    Object.assign(conflict, { details: { code: "stand_tag_in_use", usedBy: "badge" } });
+    post.mockRejectedValue(conflict);
+    await render();
+    const user = userEvent.setup();
+    await act(async () => user.type(container.querySelector("input")!, "04A1B2C3D4E5F6"));
+    await act(async () => user.click(button("standTagLinkNfc")));
+    expect(container.textContent).toContain("standTagInUseBadge");
   });
 });

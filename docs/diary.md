@@ -8,9 +8,11 @@ personal destination: saved contacts first, the directory search as a
 secondary view of the same page. There is no Hxx story; code and commits
 reference `#935` (and `#934` for the directory it builds on).
 
-Module: `apps/api/src/modules/diary/`; stand tags live in
-`apps/api/src/modules/sponsors/stands.ts`. Tests:
-`apps/api/test/diary/api.test.ts`, `apps/api/test/sponsors/stand-tags.test.ts`.
+Module: `apps/api/src/modules/diary/`; stand tags and staff stand management
+live in `apps/api/src/modules/sponsors/stands.ts` (printable QR SVGs in
+`stand-qr.ts`). Tests: `apps/api/test/diary/api.test.ts`,
+`apps/api/test/sponsors/stand-tags.test.ts`,
+`apps/api/test/sponsors/stands-admin.test.ts`.
 
 ## Privacy rules
 
@@ -72,14 +74,25 @@ save converge on one row. A person cannot save themselves.
 
 A stand code can never identify a person: linking refuses a code that is a
 current or rotated-away badge or a ticket token, and badge check-in and
-rotation refuse a stand code (`assertNotStandTag`).
+rotation refuse a stand code (`assertNotStandTag`). The 409 carries
+`details.usedBy` (`badge`, `ticket` or `stand`) so staff learn why, without
+the person or the other enterprise being named.
+
+`enterprises.stand_scannable` (migration `0703_enterprise_stand_scannable.sql`)
+is the staff decision that attendees can collect a sponsor by scanning its
+stand. Only `sponsors:manage` changes it; sponsor reps keep managing their own
+tags but cannot turn scanning on. **Default:** off for new enterprises, so a
+sponsor without a physical stand never shows up in the album; the migration
+turned it on for every enterprise that already had a tag, which kept their
+behaviour unchanged.
 
 ## Scan resolution
 
 `POST /api/me/diary/scan` takes the raw `code` and tries, in order:
 
-1. a stand tag (case-insensitive) → the sponsor, if revealed (`visibility =
-   'visible'`, never a review fixture); otherwise `stand_unavailable` (409);
+1. a stand tag (case-insensitive) → the sponsor, if its stand is scannable
+   and the sponsor is revealed (`visibility = 'visible'`, never a review
+   fixture); otherwise `stand_unavailable` (409), naming no one;
 2. a current badge (`resolveByBadge`, as the scanners use) — a rotated-away
    or retired badge answers `badge_revoked` (409);
 3. a ticket token of an active account;
@@ -102,6 +115,12 @@ new entry answers 201, an existing one 200 with the stored favourite and note.
 | `GET /api/enterprises/:id/stand-tags` | enterprise access: that enterprise's sponsor reps or `sponsors:manage` |
 | `POST /api/enterprises/:id/stand-tags` | enterprise access, `Idempotency-Key`, audited |
 | `DELETE /api/enterprises/:id/stand-tags/:tagId` | enterprise access, `Idempotency-Key`, audited |
+| `GET /api/enterprises/:id/stand-tags/:tagId/qr.svg` | enterprise access |
+| `GET /api/enterprises/stands` | `sponsors:manage` |
+| `PUT /api/enterprises/:id/stand-scannable` | `sponsors:manage`, `Idempotency-Key`, audited |
+| `POST /api/enterprises/stands/qr` | `sponsors:manage`, `Idempotency-Key`, audited |
+| `GET /api/enterprises/stands/codes.csv` | `sponsors:manage`, audited |
+| `GET /api/enterprises/stands/qr.zip` | `sponsors:manage`, audited |
 
 Stand tags use the same `enterprise-access` policy as editing the enterprise
 profile (`sponsors/access.ts`): a sponsor representative generates QR tokens
@@ -109,6 +128,33 @@ and links NFC tags for their own stand only (another enterprise answers 403,
 and a tag id from another enterprise answers 404), while staff with
 `sponsors:manage` manage every enterprise. Every write is audited with its
 actor.
+
+The staff routes cover every enterprise inside the review-fixture boundary of
+the enterprise list:
+
+- `GET /api/enterprises/stands` lists each enterprise's name, logos,
+  visibility, `scannable`, NFC and QR counts and newest QR tag id. It never
+  includes codes.
+- `PUT …/stand-scannable` sets the flag under the enterprise row lock;
+  repeating the current value changes nothing, is not audited and broadcasts
+  nothing. A change writes `stand.scannable_changed` with before/after.
+- `POST /api/enterprises/stands/qr` gives every scannable enterprise without a
+  QR one new QR tag. It locks those enterprise rows first (the lock a single
+  tag write takes), so a concurrent or repeated run finds the QR already there
+  and creates nothing; each created tag is audited as `stand_tag.added` with
+  `bulk: true`.
+- Exports cover the scannable stands only. Codes are what attendees scan, so
+  each export writes `stand_codes.exported` with its format and counts (never
+  the codes) and a 409 `stand_codes_empty` answers when there is nothing to
+  export. The CSV is `enterprise_id,name,kind,code`, every NFC UID and QR
+  token. The zip holds one SVG per QR tag, named `<company>-<token>.svg`.
+- Every QR SVG (zip, single download and the reps' Stand tab) is rendered by
+  the API (`stand-qr.ts`): a vector QR at error correction Q with a 4-module
+  quiet zone, 80 mm wide, with the company name and the token printed
+  underneath. The zip is built server-side because the codes never need to
+  reach the browser for it, the export is audited where it happens, and the
+  single and bulk files are identical; its entries are small in-memory
+  strings, so nothing can fail mid-stream.
 
 No new capability exists: the diary uses the event-access gate of
 `GET /api/me/public-profile`. Writes lock the owner's `users` row and refuse
@@ -166,24 +212,50 @@ scanning on mobile but cannot browse the directory.
 ### Collection
 
 `GET /api/me/diary/sponsors` counts the stands an attendee can collect: every
-revealed sponsor (H45 visibility, never a review fixture) with at least one
-stand tag, plus revealed sponsors the caller already collected even if their
-tags were removed since. A sponsor hidden again drops out of both counts.
-Items come collected first (newest first), then by name; stand codes are never
+revealed sponsor (H45 visibility, never a review fixture) whose stand is
+scannable and has at least one stand tag, plus revealed sponsors the caller
+already collected even if their tags were removed or scanning was turned off
+since. A sponsor that is not scannable and not collected is neither listed nor
+counted. **A collected one stays in both `collected` and `total`**, as with
+removed tags: progress never goes backwards and the ring never shows more
+collected than total. A sponsor hidden again drops out of both counts. Items
+come collected first (newest first), then by name; stand codes are never
 included.
 
 The enterprise page has a Stand tab (`stand-tags-card.tsx`) for staff with
 `sponsors:manage` and for the enterprise's own sponsor reps (the page only
-loads for their own enterprise). Mobile has no enterprise screen, so reps
-manage stand tags on the web: link an NFC tag by UID (separators stripped, uppercased; a malformed or
-already-used code shows an inline error), generate a QR code shown with
-`qrcode.react` and downloadable as SVG, and remove a tag after confirmation.
+loads for their own enterprise). Reps manage stand tags on the web: link an
+NFC tag by UID (separators stripped, uppercased; a malformed code, or one that
+is already a badge or a stand, shows an inline error), generate a QR code
+previewed with `qrcode.react` and downloaded as the API's printable SVG, and
+remove a tag after confirmation. While the stand is not scannable the tab says
+attendees cannot collect it yet; staff also get "Turn on scanning" there.
+
+### Stands (staff)
+
+`/stands` (`apps/web/src/app/(app)/stands/`, Sponsors workspace,
+`sponsors:manage`) is one dense table of every enterprise, on the Users list
+pattern (`ListToolbar`, `FilterMenu`, `DataTable`): logo and name (linking to
+the enterprise's Stand tab), visibility (visible, scheduled or hidden), a
+Scannable switch (optimistic, rolled back with a toast on failure) and the NFC
+and QR counts. Filters: scannable, codes (without QR, with QR, with NFC, no
+codes) and visibility; search by name. Each row's `…` menu generates a QR,
+links an NFC tag by UID (a dialog validated like badges), downloads the newest
+QR as SVG and opens the enterprise. The header shows "n of m scannable", the
+primary "Generate missing QR codes (n)" (disabled when none is missing; an
+icon on narrow screens) and a `…` menu with "Download all QR codes" (zip) and
+"Export codes (CSV)". After a bulk run a status panel names the stands that
+got a QR, with a direct zip download. Downloads go through `apiDownload`
+(`lib/api.ts`), which keeps the API's file name (`content-disposition` is
+exposed by CORS).
 
 ## Mobile
 
 The Diary destination (People with search, favourites, the Directory scope and
 full profiles; Companies as a collectible stand album) and its scan flow are
-described in [`mobile.md`](./mobile.md#event-diary-935).
+described in [`mobile.md`](./mobile.md#event-diary-935). Staff with
+`sponsors:manage` link NFC tags to stands by tapping them from Account → Staff
+→ Sponsor stands ([`mobile.md`](./mobile.md#sponsor-stands-935)).
 
 ## Account removal (H54)
 

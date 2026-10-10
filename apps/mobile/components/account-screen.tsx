@@ -39,7 +39,7 @@ import {
 import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
-import { canViewStaffStatistics } from "@/lib/tabs";
+import { canManageStands, canViewStaffStatistics } from "@/lib/tabs";
 import type { MealPlan } from "@/lib/types";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
@@ -439,13 +439,25 @@ export default function AccountScreen() {
           </Section>
         ) : null}
 
-        {canViewStaffStatistics(me.capabilities) ? (
+        {canViewStaffStatistics(me.capabilities) || canManageStands(me.capabilities) ? (
           <Section title={t("accountStaff")}>
-            <AccountSubpageRow
-              label={t("accountStatistics")}
-              icon="chart.bar.xaxis"
-              onPress={() => router.push("/(tabs)/others/statistics")}
-            />
+            {canViewStaffStatistics(me.capabilities) ? (
+              <AccountSubpageRow
+                label={t("accountStatistics")}
+                icon="chart.bar.xaxis"
+                onPress={() => router.push("/(tabs)/others/statistics")}
+              />
+            ) : null}
+            {canViewStaffStatistics(me.capabilities) && canManageStands(me.capabilities) ? (
+              <Separator inset={48} />
+            ) : null}
+            {canManageStands(me.capabilities) ? (
+              <AccountSubpageRow
+                label={t("accountStands")}
+                icon="wave.3.right"
+                onPress={() => router.push("/(tabs)/others/stands")}
+              />
+            ) : null}
           </Section>
         ) : null}
 

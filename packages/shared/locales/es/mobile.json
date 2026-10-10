@@ -805,5 +805,18 @@
   "diaryCompaniesEmpty": "Aún no hay empresas",
   "diaryCompanyLocked": "{name}, aún sin conseguir",
   "diaryCompanyCollectedOn": "Conseguida el {date}",
-  "diaryCompanyRemove": "Quitar de la colección"
+  "diaryCompanyRemove": "Quitar de la colección",
+  "accountStands": "Stands de patrocinadores",
+  "standsTitle": "Stands",
+  "standsSearchPlaceholder": "Buscar empresas",
+  "standsEmpty": "Aún no hay empresas",
+  "standsNotScannable": "No escaneable",
+  "standsCounts": "NFC {nfc} · QR {qr}",
+  "standsLinkNfc": "Vincular NFC",
+  "standsLinkNfcFor": "Vincular una etiqueta NFC a {name}",
+  "standsLinked": "Etiqueta NFC vinculada a {name}.",
+  "standsTagIsBadge": "Esta etiqueta ya es la acreditación de alguien.",
+  "standsTagIsStand": "Esta etiqueta ya está vinculada a un stand.",
+  "standsLinkFailed": "No se pudo vincular la etiqueta.",
+  "standsNfcUnavailable": "Este dispositivo no puede leer etiquetas NFC. Vincúlalas por UID en la web."
 }

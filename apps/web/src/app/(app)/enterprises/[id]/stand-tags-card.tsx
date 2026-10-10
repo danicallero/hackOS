@@ -9,7 +9,7 @@ import { ContactlessPaymentIcon } from "@phosphor-icons/react/dist/csr/Contactle
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { QrCodeIcon } from "@phosphor-icons/react/dist/csr/QrCode";
 import { QRCodeSVG } from "qrcode.react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
@@ -18,45 +18,50 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, apiDownload } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import {
+  normalizeUid,
+  type StandTag,
+  standQrSvgPath,
+  standTagInUseKey,
+  UID_PATTERN,
+} from "@/lib/stands";
 import { toast } from "@/lib/toast";
 
-export interface StandTag {
-  id: number;
-  kind: "nfc" | "qr";
-  code: string;
-  createdAt: string;
-}
+export type { StandTag };
 
-/** Same encoding as badges (docs/mobile.md): 7-byte UID, uppercase hex. */
-export function normalizeUid(value: string): string {
-  return value.replace(/[:\s-]/g, "").toUpperCase();
-}
-
-const UID_PATTERN = /^[0-9A-F]{14}$/;
-
-function QrTag({ tag, label }: { tag: StandTag; label: string }) {
+function QrTag({
+  tag,
+  label,
+  enterpriseId,
+}: {
+  tag: StandTag;
+  label: string;
+  enterpriseId: number;
+}) {
   const { t } = useLocale();
-  const wrapper = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
 
-  function download() {
-    const svg = wrapper.current?.querySelector("svg");
-    if (!svg) return;
-    const blob = new Blob([new XMLSerializer().serializeToString(svg)], {
-      type: "image/svg+xml",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${tag.code}.svg`;
-    link.click();
-    URL.revokeObjectURL(url);
+  // The API renders the printable SVG (company name and token underneath),
+  // the same file the staff Stands page and its zip export produce.
+  async function download() {
+    setDownloading(true);
+    try {
+      await apiDownload(standQrSvgPath(enterpriseId, tag.id), `${tag.code}.svg`);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : t("standQrCouldNotDownload"),
+        t("standTagDownloadQr"),
+      );
+    } finally {
+      setDownloading(false);
+    }
   }
 
   return (
     <div className="flex items-center gap-3">
-      <div ref={wrapper} className="shrink-0 rounded-md border bg-white p-1">
+      <div className="shrink-0 rounded-md border bg-white p-1">
         <QRCodeSVG
           value={tag.code}
           title={`${label} QR`}
@@ -67,7 +72,14 @@ function QrTag({ tag, label }: { tag: StandTag; label: string }) {
           size={88}
         />
       </div>
-      <Button type="button" variant="outline" size="sm" onClick={download}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        loading={downloading}
+        disabled={downloading}
+        onClick={() => void download()}
+      >
         <DownloadSimpleIcon aria-hidden="true" className="size-4" />
         {t("standTagDownloadQr")}
       </Button>
@@ -78,17 +90,41 @@ function QrTag({ tag, label }: { tag: StandTag; label: string }) {
 export function StandTagsCard({
   enterpriseId,
   enterpriseName,
+  scannable,
+  canManage = false,
+  onScannableChange,
 }: {
   enterpriseId: number;
   enterpriseName: string;
+  /** Staff decide which stands attendees can collect (`stand_scannable`). */
+  scannable: boolean;
+  /** `sponsors:manage`: may turn scanning on from here. */
+  canManage?: boolean;
+  onScannableChange?: (scannable: boolean) => void;
 }) {
   const { t, language } = useLocale();
   const uidId = useId();
   const [tags, setTags] = useState<StandTag[] | null>(null);
   const [uid, setUid] = useState("");
   const [uidError, setUidError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"nfc" | "qr" | number | null>(null);
+  const [busy, setBusy] = useState<"nfc" | "qr" | "scannable" | number | null>(null);
   const [removing, setRemoving] = useState<StandTag | null>(null);
+
+  async function enableScanning() {
+    setBusy("scannable");
+    try {
+      await api.put(`/api/enterprises/${enterpriseId}/stand-scannable`, { scannable: true });
+      onScannableChange?.(true);
+      toast.success(t("standScanningOn"), { compactTitle: t("standScannable") });
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : t("standCouldNotUpdateScannable"),
+        t("standScannable"),
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -124,8 +160,9 @@ export function StandTagsCard({
       });
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("standTagCouldNotAdd");
-      if (body.kind === "nfc" && err instanceof ApiError && err.status === 409) {
-        setUidError(t("standTagInUse"));
+      const inUse = body.kind === "nfc" ? standTagInUseKey(err) : null;
+      if (inUse) {
+        setUidError(t(inUse));
       } else {
         toast.error(message, body.kind === "nfc" ? t("standTagLinkNfc") : t("standTagGenerateQr"));
       }
@@ -168,6 +205,26 @@ export function StandTagsCard({
   return (
     <SectionCard>
       <div className="space-y-6">
+        {!scannable && (
+          <div
+            role="status"
+            className="bg-muted/50 flex flex-wrap items-center justify-between gap-3 rounded-md border px-4 py-3"
+          >
+            <p className="text-muted-foreground text-sm">{t("standNotScannableNotice")}</p>
+            {canManage && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy !== null}
+                loading={busy === "scannable"}
+                onClick={() => void enableScanning()}
+              >
+                {t("standTurnOnScanning")}
+              </Button>
+            )}
+          </div>
+        )}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <form onSubmit={linkNfc} className="w-full max-w-md space-y-2" noValidate>
             <Label htmlFor={uidId}>{t("standTagUid")}</Label>
@@ -244,7 +301,9 @@ export function StandTagsCard({
                   </div>
                 </div>
                 <div className="ml-auto flex items-center gap-3">
-                  {tag.kind === "qr" && <QrTag tag={tag} label={enterpriseName} />}
+                  {tag.kind === "qr" && (
+                    <QrTag tag={tag} label={enterpriseName} enterpriseId={enterpriseId} />
+                  )}
                   <Button
                     type="button"
                     variant="ghost"

@@ -17,6 +17,7 @@ import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package";
 import { QuestionIcon } from "@phosphor-icons/react/dist/ssr/Question";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/ssr/SealCheck";
 import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { StorefrontIcon } from "@phosphor-icons/react/dist/ssr/Storefront";
 import { TelevisionSimpleIcon } from "@phosphor-icons/react/dist/ssr/TelevisionSimple";
 import { TrayIcon } from "@phosphor-icons/react/dist/ssr/Tray";
 import { TrophyIcon } from "@phosphor-icons/react/dist/ssr/Trophy";
@@ -327,6 +328,15 @@ export const WORKSPACES: Workspace[] = [
         icon: TrophyIcon,
         anyCapability: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
         sponsorVisible: true,
+      },
+      {
+        // #935: which sponsors attendees can collect by scanning, and their
+        // stand codes for every enterprise. Staff only; reps keep the Stand
+        // tab of their own enterprise.
+        title: "stands",
+        href: "/stands",
+        icon: StorefrontIcon,
+        capability: CAPABILITIES.SPONSORS_MANAGE,
       },
       {
         title: "sponsorFaq",

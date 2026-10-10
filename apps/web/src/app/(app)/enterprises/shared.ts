@@ -19,6 +19,8 @@ export interface Enterprise {
   visibility: Visibility;
   available_from: string | null;
   director_id: number | null;
+  /** #935: attendees can collect this stand by scanning it (staff-controlled). */
+  stand_scannable: boolean;
   created_at: string;
 }
 

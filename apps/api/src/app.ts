@@ -285,9 +285,15 @@ export async function buildApp(): Promise<App> {
     // Custom request headers the app sends (idempotency on critical mutations).
     allowedHeaders: ["content-type", "idempotency-key"],
     // Response headers the browser must be able to read cross-origin: rate
-    // limit backoff (H3), idempotent-replay signalling, and per-file export
-    // failures (H56) the web client surfaces so staff can act on them.
-    exposedHeaders: ["retry-after", "idempotency-replayed", "x-export-file-failures"],
+    // limit backoff (H3), idempotent-replay signalling, per-file export
+    // failures (H56) the web client surfaces so staff can act on them, and
+    // download file names chosen by the API (stand QR SVGs, #935).
+    exposedHeaders: [
+      "retry-after",
+      "idempotency-replayed",
+      "x-export-file-failures",
+      "content-disposition",
+    ],
   };
   await app.register(cors, {
     delegator: (req, done) => {

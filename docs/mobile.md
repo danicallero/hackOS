@@ -40,6 +40,7 @@ the hardware-free native screen suite.
 - [Auth flow](#auth-flow)
 - [Participant screens](#participant-screens)
 - [Event diary (#935)](#event-diary-935)
+- [Sponsor stands (#935)](#sponsor-stands-935)
 - [Operator screens](#operator-screens)
   - [Queue operations](#queue-operations)
   - [Scanner](#scanner)
@@ -376,7 +377,8 @@ distributed to other Expo Router apps without importing hackOS code.
   Signing out while offline with a scanning capability warns first that
   re-authentication needs a live server. The overview is grouped into Profile, Contact, Event
   details, App, Account, and Session; staff with personal logistics-statistics
-  access also see a Staff section. Its Storage row opens
+  access or `sponsors:manage` also see a Staff section (Statistics and Sponsor
+  stands respectively, [below](#sponsor-stands-935)). Its Storage row opens
   `app/(tabs)/others/storage.tsx`, which contains storage controls only. Staff
   Statistics opens `app/(tabs)/others/statistics.tsx`, with personal scan
   counts and a link to scan history; Legal opens
@@ -703,6 +705,28 @@ before the menu on Android, so the menu never opened.
 Physical NFC and camera verification is still pending; tests mock both
 (`lib/diary.test.ts`, `lib/directory.test.ts`, `test/ui/diary-screen.test.tsx`,
 `test/ui/person-profile.test.tsx`).
+
+### Sponsor stands (#935)
+
+Staff with `sponsors:manage` (`canManageStands` in `lib/tabs.ts`, the same
+gate as the web Stands page) open Account → Staff → Sponsor stands
+(`components/stands-screen.tsx`, routed as `app/(tabs)/others/stands.tsx`) to
+link NFC tags to sponsor stands by tapping them. The screen lists
+`GET /api/enterprises/stands` alphabetically with a name search (accent- and
+case-insensitive), each row showing the logo, the NFC and QR counts and "Not
+scannable" when staff have not turned scanning on. Each row's "Link NFC tag"
+starts `NfcReader` for that enterprise at once (R008); the UID read is posted
+to `POST /api/enterprises/:id/stand-tags` as `{ kind: "nfc", uid }` with a
+fresh `Idempotency-Key`. Success shows a "linked to …" banner, a success
+haptic and the updated NFC count; a 409 says whether the tag is already
+someone's badge or already a stand (`standLinkErrorKey` in `lib/stands.ts`,
+from the API's `usedBy`), and other failures say the tag could not be linked.
+On hardware without NFC the actions stay disabled and one line points to UID
+entry on the web. QR codes are generated and printed from the web.
+
+The flow is covered by `test/ui/stands-screen.test.tsx` and
+`lib/tabs.test.ts` with `NfcReader` mocked; it has not been tested on NFC
+hardware.
 
 ## Operator screens
 

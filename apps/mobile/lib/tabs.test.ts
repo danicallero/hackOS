@@ -6,6 +6,7 @@ import {
   OVERFLOW_TAB_ROUTE,
 } from "./overflow-tabs";
 import {
+  canManageStands,
   isPadIdiomForPlatform,
   overflowTabs,
   primaryTabs,
@@ -158,5 +159,14 @@ describe("isPadIdiom", () => {
 
   it("is false on Android regardless of `isPad`, since the tab bar is cross-platform", () => {
     expect(isPadIdiomForPlatform({ OS: "android", isPad: true })).toBe(false);
+  });
+});
+
+describe("canManageStands (#935)", () => {
+  it("is the global sponsor administrator capability, like the web Stands page", () => {
+    expect(canManageStands([CAPABILITIES.SPONSORS_MANAGE])).toBe(true);
+    expect(canManageStands([CAPABILITIES.ADMIN_ALL])).toBe(true);
+    expect(canManageStands([CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.QUEUE_ADMIN])).toBe(false);
+    expect(canManageStands([])).toBe(false);
   });
 });

@@ -474,6 +474,7 @@ Table enterprises {
   logo_url text
   name text [unique, not null]
   priority integer
+  stand_scannable boolean [not null, default: `false`, note: '#935: attendees can collect this sponsor by scanning its stand tags. Staff-controlled.']
   visibility text [not null, default: `'hidden'::text`]
   website text
 }
@@ -1175,14 +1176,20 @@ Table user_invite_links {
 }
 
 Table user_public_profiles {
+  bio text
   consented_at "timestamp with time zone" [note: '#934: last transition of directory_visible from false to true.']
   created_at "timestamp with time zone" [not null, default: `now()`]
+  cv_filename text
+  cv_key text
+  cv_uploaded_at "timestamp with time zone"
   directory_visible boolean [not null, default: `false`]
   headline text
   location_note text
+  share_cv boolean [not null, default: `false`, note: '#935: readers may download cv_key only while this and directory_visible are true.']
   show_photo boolean [not null, default: `false`]
   show_project boolean [not null, default: `true`]
   show_surname boolean [not null, default: `false`]
+  socials jsonb [not null, default: `'[]'::jsonb`, note: '#935: [{kind, url}] — kind in linkedin|github|x|instagram|website|other, url https.']
   updated_at "timestamp with time zone" [not null, default: `now()`]
   user_id integer [pk, not null]
 
@@ -1222,6 +1229,8 @@ Table users {
   meal_plan_confirmed_at "timestamp with time zone" [note: '#933: first time the sponsor submitted their meal plan.']
   name text
   notes text
+  photo_key text [note: '#934: private object key of the account photo (profiles/<id>/photo/…); never a public URL.']
+  photo_updated_at "timestamp with time zone"
   removal_action text [note: 'H54 action selected while the user row is locked; retries cannot change the mode.']
   removal_expires_at "timestamp with time zone" [note: 'H54 fixed pending-exit recovery deadline; later sign-ins cannot extend it.']
   removal_idempotency_key text [note: 'H54 transient self-service replay key; it is deleted with the user and is not an identity map.']

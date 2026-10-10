@@ -90,7 +90,7 @@ workspace never over-grants access.
 | Live judging | Queue operations (tabs: All rooms overview · Judging queues · Room configuration), Judging, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); The Room configuration tab is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from room administration |
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | `schedule:manage`, `tv:control`, or `announcements:manage` |
-| Sponsors | Enterprises, Challenges, Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
+| Sponsors | Enterprises, Challenges, Stands, Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Stands: `sponsors:manage` only — reps manage their own tags from their enterprise's Stand tab, #935; Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
 | Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours) (each tab within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
 | Access and audit | Users, Permissions, Audit log | `users:read`, `permissions:manage`, `audit:read` |
 
@@ -182,7 +182,9 @@ hidden destinations stay routable:
   **"Others" overflow selector** holds eligible personal Queue, Wallet,
   Diary, Account, and any queue operations destination as pseudo-tabs. Account's
   Statistics destination is the staff operations hub for the person finder,
-  scan history, and sync reconciliation.
+  scan history, and sync reconciliation. Holders of `sponsors:manage` (with or
+  without a scanner capability) also get Account → Staff → Sponsor stands, to
+  link NFC tags to stands (#935, `mobile.md`); it is not a tab.
 - **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
   scanner capability): Queue operations is a direct tab alongside Schedule and
   Alerts; an eligible personal Queue, Wallet, Diary and Account move to Others. If

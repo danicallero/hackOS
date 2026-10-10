@@ -139,3 +139,6 @@ export const standTagParams = z.object({
   id: z.coerce.number().int().positive(),
   tagId: z.coerce.number().int().positive(),
 });
+
+/** #935: staff turn an enterprise's stand scanning on or off. */
+export const standScannableBody = z.object({ scannable: z.boolean() }).strict();

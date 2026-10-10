@@ -805,5 +805,18 @@
   "diaryCompaniesEmpty": "No companies yet",
   "diaryCompanyLocked": "{name}, not collected yet",
   "diaryCompanyCollectedOn": "Collected {date}",
-  "diaryCompanyRemove": "Remove from collection"
+  "diaryCompanyRemove": "Remove from collection",
+  "accountStands": "Sponsor stands",
+  "standsTitle": "Stands",
+  "standsSearchPlaceholder": "Search enterprises",
+  "standsEmpty": "No enterprises yet",
+  "standsNotScannable": "Not scannable",
+  "standsCounts": "NFC {nfc} · QR {qr}",
+  "standsLinkNfc": "Link NFC tag",
+  "standsLinkNfcFor": "Link an NFC tag to {name}",
+  "standsLinked": "NFC tag linked to {name}.",
+  "standsTagIsBadge": "This tag is already someone's badge.",
+  "standsTagIsStand": "This tag is already linked to a stand.",
+  "standsLinkFailed": "Could not link the tag.",
+  "standsNfcUnavailable": "This device cannot read NFC tags. Link them by UID on the web."
 }

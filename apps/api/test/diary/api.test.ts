@@ -56,11 +56,15 @@ async function person(name: string, options: { visible?: boolean } = {}) {
   return { id, badge, ticket };
 }
 
-async function enterprise(name: string, visibility: "visible" | "hidden" = "visible") {
+async function enterprise(
+  name: string,
+  visibility: "visible" | "hidden" = "visible",
+  scannable = true,
+) {
   const { rows } = await pool.query(
-    `INSERT INTO enterprises (name, visibility, description, website)
-     VALUES ($1, $2, 'We make things', 'https://example.test') RETURNING id`,
-    [name, visibility],
+    `INSERT INTO enterprises (name, visibility, description, website, stand_scannable)
+     VALUES ($1, $2, 'We make things', 'https://example.test', $3) RETURNING id`,
+    [name, visibility, scannable],
   );
   return rows[0].id as number;
 }
@@ -308,6 +312,22 @@ describe("scanning sponsor stands", () => {
     expect(res.body).not.toContain("Stealth");
     expect(await rowCount()).toBe(0);
   });
+
+  it("does not save a revealed sponsor whose stand is not scannable", async () => {
+    const quiet = await enterprise("Quiet", "visible", false);
+    await standTag(quiet, "04ACAC00000004");
+    await standTag(quiet, "STAND-ABCDEFGHJKMNPQRS", "qr");
+    for (const code of ["04ACAC00000004", "STAND-ABCDEFGHJKMNPQRS"]) {
+      const res = await scan(code);
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error.code).toBe("stand_unavailable");
+      expect(res.body).not.toContain("Quiet");
+    }
+    expect(await rowCount()).toBe(0);
+
+    await pool.query(`UPDATE enterprises SET stand_scannable = true WHERE id = $1`, [quiet]);
+    expect((await scan("04ACAC00000004")).statusCode).toBe(201);
+  });
 });
 
 describe("the sponsor stand collection", () => {
@@ -360,6 +380,34 @@ describe("the sponsor stand collection", () => {
     const body = (await collection()).json();
     expect(body).toMatchObject({ total: 1, collected: 1 });
     expect(body.items[0].enterpriseId).toBe(acme);
+  });
+
+  it("leaves out stands that are not scannable unless the caller already collected them", async () => {
+    const acme = await enterprise("Acme");
+    const beta = await enterprise("Beta");
+    await enterprise("Gamma", "visible", false).then((id) => standTag(id, "04ACAC00000003"));
+    await standTag(acme, "04ACAC00000001");
+    await standTag(beta, "04ACAC00000002");
+    await scan("04ACAC00000001");
+    expect((await collection()).json()).toMatchObject({ total: 2, collected: 1 });
+
+    // Turning scanning off keeps the collected stand (in both counts) and
+    // removes the uncollected one.
+    await pool.query(`UPDATE enterprises SET stand_scannable = false WHERE id = ANY($1)`, [
+      [acme, beta],
+    ]);
+    const body = (await collection()).json();
+    expect(body).toMatchObject({ total: 1, collected: 1 });
+    expect(body.items.map((item: { name: string }) => item.name)).toEqual(["Acme"]);
+    expect(body.items[0].entry).not.toBeNull();
+
+    // The collected entry stays visible in the owner's diary with its card.
+    const diary = (await list()).json();
+    expect(diary.items[0].sponsor).toMatchObject({ enterpriseId: acme, name: "Acme" });
+
+    // Another attendee who never collected it sees nothing.
+    const other = await createUserWithCapabilities([CAPABILITIES.DIRECTORY_READ]);
+    expect((await collection(other)).json()).toMatchObject({ total: 0, collected: 0 });
   });
 
   it("is private to the caller and requires event access", async () => {
