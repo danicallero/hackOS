@@ -383,60 +383,58 @@ export function LogoCard({
   }
 
   return (
-    <SectionCard variant="plain">
-      <div className="flex items-center gap-4">
-        <Avatar size="lg" className="rounded-md">
-          {enterprise.logo_url ? (
-            <SponsorLogo
-              logoUrl={enterprise.logo_url}
-              logoNegativeUrl={enterprise.logo_negative_url}
-              alt={enterprise.name}
-              className="size-full object-contain"
-            />
-          ) : (
-            <AvatarFallback className="rounded-md">{initials(enterprise.name)}</AvatarFallback>
-          )}
-        </Avatar>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => defaultInputRef.current?.click()}
-            disabled={uploading}
-            loading={uploading}
-          >
-            {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
-            {enterprise.logo_url ? t("replaceLogo") : t("uploadLogo")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => negativeInputRef.current?.click()}
-            disabled={uploading}
-            loading={uploading}
-          >
-            {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
-            {enterprise.logo_negative_url === enterprise.logo_url
-              ? t("uploadDarkLogo")
-              : t("replaceDarkLogo")}
-          </Button>
-        </div>
-        <input
-          ref={defaultInputRef}
-          type="file"
-          accept={LOGO_ACCEPT}
-          className="hidden"
-          onChange={(e) => onFile(e, "default")}
-        />
-        <input
-          ref={negativeInputRef}
-          type="file"
-          accept={LOGO_ACCEPT}
-          className="hidden"
-          onChange={(e) => onFile(e, "negative")}
-        />
+    <div className="flex items-center gap-4">
+      <Avatar size="lg" className="rounded-md">
+        {enterprise.logo_url ? (
+          <SponsorLogo
+            logoUrl={enterprise.logo_url}
+            logoNegativeUrl={enterprise.logo_negative_url}
+            alt={enterprise.name}
+            className="size-full object-contain"
+          />
+        ) : (
+          <AvatarFallback className="rounded-md">{initials(enterprise.name)}</AvatarFallback>
+        )}
+      </Avatar>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => defaultInputRef.current?.click()}
+          disabled={uploading}
+          loading={uploading}
+        >
+          {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
+          {enterprise.logo_url ? t("replaceLogo") : t("uploadLogo")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => negativeInputRef.current?.click()}
+          disabled={uploading}
+          loading={uploading}
+        >
+          {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
+          {enterprise.logo_negative_url === enterprise.logo_url
+            ? t("uploadDarkLogo")
+            : t("replaceDarkLogo")}
+        </Button>
       </div>
-    </SectionCard>
+      <input
+        ref={defaultInputRef}
+        type="file"
+        accept={LOGO_ACCEPT}
+        className="hidden"
+        onChange={(e) => onFile(e, "default")}
+      />
+      <input
+        ref={negativeInputRef}
+        type="file"
+        accept={LOGO_ACCEPT}
+        className="hidden"
+        onChange={(e) => onFile(e, "negative")}
+      />
+    </div>
   );
 }
 
