@@ -10,6 +10,7 @@ import {
   NotFoundError,
   ServiceUnavailableError,
 } from "../../lib/errors.js";
+import { profilePrefix } from "../../lib/profile-files.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { deleteObject, deletePrefix, deleteSubjectUploadObjects } from "../../lib/storage.js";
 import type { TemplateField } from "../applications/schemas.js";
@@ -871,6 +872,10 @@ async function deleteStorageArtifacts(
 ): Promise<void> {
   try {
     await deleteSubjectUploadObjects(preparation.targetId);
+    // #934/#935: account photo and directory CV, including any object a
+    // replaced upload left behind. The users/profile rows holding their keys
+    // are deleted or scrubbed by the same removal.
+    await deletePrefix(profilePrefix(preparation.targetId));
     for (const prefix of preparation.uploadPrefixes) await deletePrefix(prefix);
     for (const prefix of preparation.exportPrefixes) await deletePrefix(prefix);
     for (const key of preparation.storageKeys) await deleteObject(key);
@@ -1810,6 +1815,8 @@ export async function resetReviewFixtureAccount(
         SET email = $2,
             email_verified = true,
             image = NULL,
+            photo_key = NULL,
+            photo_updated_at = NULL,
             name = $3,
             surname = $4,
             dni = NULL,

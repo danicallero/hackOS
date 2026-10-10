@@ -159,8 +159,8 @@ https://s3.hackudc.com/hackos/enterprises/42/logo-default.png
 ```
 
 `minio-init` permite lectura anónima sólo bajo `enterprises/`, que contiene
-logos públicos. `uploads/` permanece privado y sólo se descarga mediante el
-API autorizado. No se debe convertir todo el bucket en anónimo porque eso
+logos públicos. `uploads/` y `profiles/` (fotos de cuenta y CV del
+directorio) permanecen privados y sólo se descargan mediante el API autorizado. No se debe convertir todo el bucket en anónimo porque eso
 expondría ficheros de solicitudes.
 
 El ingress externo debe publicar únicamente la API S3 de MinIO para

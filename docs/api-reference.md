@@ -213,9 +213,12 @@ indirect, through `repo_devpost_prizes.prize` matching a challenge's
 `devpost_tags`. Full detail: [`challenges-devpost.md`](./challenges-devpost.md).
 
 ### directory (#934)
-Opt-in people directory: the caller's public profile under
-`/api/me/public-profile`, the `directory:read` listing and entry reads, and
-`users:write` moderation. Full detail: [`directory.md`](./directory.md).
+Opt-in people directory: the caller's public profile (bio, links and a
+shareable CV) under `/api/me/public-profile`, the `directory:read` listing,
+entry and shared-CV reads, and `users:write` moderation. The account photo
+(`/api/me/photo`, read through `GET /api/users/:id/photo`) lives in identity
+but follows the directory's photo switch. Full detail:
+[`directory.md`](./directory.md).
 
 ### challenges (H44)
 Sponsor-owned challenge templates bound to an enterprise: draft/published

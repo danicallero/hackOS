@@ -6,7 +6,7 @@ import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
 import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import Link from "next/link";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -48,6 +48,7 @@ import { DangerZoneCard } from "./danger-zone";
 import { EmailCard } from "./email-card";
 import { MealsSection } from "./meals-section";
 import { PasswordCard } from "./password-card";
+import { ProfilePhoto } from "./profile-photo";
 import { PublicProfileCard } from "./public-profile-card";
 
 const LANGS: Language[] = ["es", "gl", "en"];
@@ -221,6 +222,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
               }
             >
               {saveError && <ContextualError message={saveError} />}
+              <ProfilePhoto />
               <div className="grid items-start gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}

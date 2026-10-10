@@ -5,6 +5,7 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -16,6 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { apiAssetUrl } from "@/lib/directory";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
 import { useCan } from "@/lib/session";
@@ -49,7 +51,7 @@ function Person({ entry }: { entry: DirectoryEntry }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
       <Avatar size="lg">
-        {entry.photoUrl && <AvatarImage src={entry.photoUrl} alt="" />}
+        {entry.photoUrl && <AvatarImage src={apiAssetUrl(entry.photoUrl)} alt="" />}
         <AvatarFallback>{initials(entry.displayName)}</AvatarFallback>
       </Avatar>
       <div className="min-w-0">
@@ -119,7 +121,10 @@ function PersonMobileRow({
   nameOf: ChallengeName;
 }) {
   return (
-    <div className="min-w-0 space-y-2 px-4 py-3">
+    <Link
+      href={`/people/${entry.userId}`}
+      className="focus-visible:ring-ring block min-w-0 space-y-2 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset"
+    >
       <Person entry={entry} />
       {(entry.project || entry.challenges.length > 0 || entry.locationNote) && (
         <div className="space-y-1.5 pl-13 text-sm">
@@ -141,7 +146,7 @@ function PersonMobileRow({
           )}
         </div>
       )}
-    </div>
+    </Link>
   );
 }
 
@@ -336,6 +341,7 @@ function DirectoryList() {
           columns={columns}
           data={page.items}
           getRowId={(entry) => String(entry.userId)}
+          getRowHref={(entry) => `/people/${entry.userId}`}
           getRowLabel={(entry) => entry.displayName}
           renderMobileRow={(entry) => <PersonMobileRow entry={entry} t={t} nameOf={nameOf} />}
           loading={loading}
