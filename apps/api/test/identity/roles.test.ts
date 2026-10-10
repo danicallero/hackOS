@@ -1335,6 +1335,12 @@ describe("H8 default seeded role set (0805)", () => {
       Mentor: [],
       Participant: [CAPABILITIES.QUEUE_STATUS],
     };
+    // #934 D3: 0101 seeds directory:read for every seeded role except Sponsor
+    // and Judging Team (Event Director already lists the whole catalogue).
+    for (const [name, caps] of Object.entries(expected)) {
+      if (name !== "Judging Team" && name !== "Event Director")
+        caps.push(CAPABILITIES.DIRECTORY_READ);
+    }
     for (const [name, caps] of Object.entries(expected)) {
       const { rows: roleRows } = await pool.query(
         `SELECT id, is_protected, deleted_at FROM roles WHERE name = $1`,
@@ -1553,8 +1559,7 @@ describe("H8 default seeded role set (0805)", () => {
       Object.keys(eventDirector[0].capabilities).map(() => "allow"),
     );
 
-    // A capability-less seeded role (Mentor/Sponsor) still gets a snapshot
-    // row — an empty object, not a missing row.
+    // Mentor's only seeded grant is #934's directory:read; the snapshot keeps it.
     const { rows: mentor } = await pool.query(
       `SELECT rsd.capabilities
          FROM roles r
@@ -1562,7 +1567,7 @@ describe("H8 default seeded role set (0805)", () => {
         WHERE r.name = 'Mentor'`,
     );
     expect(mentor).toHaveLength(1);
-    expect(mentor[0].capabilities).toEqual({});
+    expect(mentor[0].capabilities).toEqual({ [CAPABILITIES.DIRECTORY_READ]: "allow" });
 
     const { rows: participant } = await pool.query(
       `SELECT rsd.capabilities
@@ -1573,6 +1578,7 @@ describe("H8 default seeded role set (0805)", () => {
     expect(participant).toHaveLength(1);
     expect(participant[0].capabilities).toEqual({
       [CAPABILITIES.QUEUE_STATUS]: "allow",
+      [CAPABILITIES.DIRECTORY_READ]: "allow",
     });
   });
 

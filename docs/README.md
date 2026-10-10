@@ -58,6 +58,8 @@ Architecture & modules:
   outbox/object-storage and SSE boundaries.
 - [Challenges & Devpost projects](./challenges-devpost.md) — the `challenges`
   and `projects` modules and the Devpost intake pipeline.
+- [People directory (#934)](./directory.md) — opt-in public profiles, what
+  readers can see, access, moderation and account-removal coverage.
 - [Planned work groups](./work-groups.md) — pre-event participant groups,
   explicit invitations, intended challenges, and staff/sponsor estimates.
 - [Queue groups (H46)](./queue-groups.md) — the enterprise-scoped grouping

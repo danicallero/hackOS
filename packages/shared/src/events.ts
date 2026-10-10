@@ -30,6 +30,8 @@ export const SSE_TOPICS = {
   PROJECTS: "projects",
   /** identity, invitations and permission graph changes (H7-H10) */
   IDENTITY: "identity",
+  /** opt-in people directory and public profiles (#934) */
+  DIRECTORY: "directory",
   /** authenticated sponsor, enterprise and challenge changes (H43-H46) */
   SPONSORS: "sponsors",
   /** accreditation, presence, meals and wallet updates (H22-H28) */

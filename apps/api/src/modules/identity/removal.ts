@@ -1397,6 +1397,9 @@ async function scrubRelationships(
   const scheduleOwnerAuditEntityIds = scheduleOwnerRows.map(
     (row) => `${row.schedule_id}:${row.id}`,
   );
+  // #934: the opted-in public profile is identity-bearing; anonymized rows
+  // keep the users row, so the cascade alone would not remove it.
+  await client.query(`DELETE FROM user_public_profiles WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM submissions WHERE user_id = $1`, [userId]);
   await client.query(
     `DELETE FROM devpost_participants
