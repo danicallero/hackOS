@@ -602,6 +602,7 @@ synthetic identity-shaped `users` row.
 | `enterprise_invite_links` / `user_invite_links`: creator/token | Shared invite config | Provisioning | Null subject creator; expire/revoke shared token as normal | No | Shared link survives; subject authorship does not. |
 | `devpost_participants`: repo/email/name/surname/username/user/linker | Imported project identity | Project reconciliation | Delete subject match by FK/email; capture FK-linked Devpost-only roots before deletion; shared repo may survive | No | External project snapshot is identity-bearing. |
 | `repos`: creator/name/description/URLs | Project/team | Judging/project service | Null creator; delete solo orphan; preserve shared repo for remaining members | No | Shared project is not anonymous demographic audit. |
+| `user_public_profiles`: visibility/headline/location note | Directory profile | People directory (#934) | Delete in the removal transaction; cascades on user delete; H54 trigger rejects pending writes | No | Opt-in public profile is identity-bearing. |
 | `submissions`: repo/user/inviter/external ID | Team/project relation | Judging | Delete subject membership; null subject inviter | No | No individual submission relationship needed. |
 | `repo_devpost_prizes` / `devpost_prizes`: project/prize | Shared project result | Judging/result | Survive for surviving shared repo; delete with solo orphan | No | No direct identity after member link removal. |
 | `challenges`: sponsor author anchor | Shared challenge | Judging | Survive; sponsor user link is severed | No | Organization-owned challenge needs FK anchor. |
@@ -654,6 +655,8 @@ suite alone.
 - `apps/api/src/modules/identity/removal.ts`: eligibility, pending state,
   external cleanup, demographic extraction, presence aggregation, relation
   scrubbing, anonymous UUID creation, retry worker.
+- `apps/api/src/modules/directory/`: opt-in public profile; the removal
+  transaction deletes it (#934, [`directory.md`](./directory.md)).
 - `apps/api/src/modules/identity/routes/profile.ts`: `/me` and admin
   eligibility/removal routes, schemas, auth/idempotency prehandlers.
 - `apps/api/src/lib/capabilities.ts`, `idempotency.ts`, `storage.ts`,

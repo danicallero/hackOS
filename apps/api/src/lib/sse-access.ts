@@ -12,6 +12,7 @@ export const scopedRefreshTopic = z.enum([
   SSE_TOPICS.LOGISTICS,
   SSE_TOPICS.AUDIT,
   SSE_TOPICS.TV,
+  SSE_TOPICS.DIRECTORY,
 ]);
 
 const logisticsRefreshCapabilities = [
@@ -41,6 +42,14 @@ export async function requireScopedRefreshAccess(
     if (!(await userHasCapability(context, CAPABILITIES.TV_CONTROL))) {
       throw new ForbiddenError(`Missing capability: ${CAPABILITIES.TV_CONTROL}`, {
         capability: CAPABILITIES.TV_CONTROL,
+      });
+    }
+    return;
+  }
+  if (topic === SSE_TOPICS.DIRECTORY) {
+    if (!(await userHasCapability(context, CAPABILITIES.DIRECTORY_READ))) {
+      throw new ForbiddenError(`Missing capability: ${CAPABILITIES.DIRECTORY_READ}`, {
+        capability: CAPABILITIES.DIRECTORY_READ,
       });
     }
     return;

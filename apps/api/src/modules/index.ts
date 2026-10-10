@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { registerApplicationsModule } from "./applications/index.js";
 import { registerChallengesModule } from "./challenges/index.js";
+import { registerDirectoryModule } from "./directory/index.js";
 import { registerEventModule } from "./event/index.js";
 import { registerExportsModule } from "./exports/index.js";
 import { registerIdentityModule } from "./identity/index.js";
@@ -22,6 +23,7 @@ import { registerWorkGroupsModule } from "./work-groups/index.js";
 export async function registerModules(app: FastifyInstance): Promise<void> {
   await registerApplicationsModule(app); // WS-A2 (H11-H15, H27)
   await registerChallengesModule(app); // WS-G  (H44)
+  await registerDirectoryModule(app); // #934 opt-in people directory
   await registerEventModule(app); // WS-G  (H45, H47)
   await registerExportsModule(app); // WS-F  (H54, H56)
   await registerIdentityModule(app); // WS-A1 (H1-H10)

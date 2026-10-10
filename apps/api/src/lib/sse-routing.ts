@@ -32,6 +32,12 @@ export function mutationDomainForPath(url: string): string | null {
     return SSE_TOPICS.PROJECTS;
   }
 
+  // Public-profile writes, including staff moderation, only change the
+  // directory read model (#934).
+  if (matches("/api/me/public-profile") || /^\/api\/users\/[^/]+\/public-profile$/.test(path)) {
+    return SSE_TOPICS.DIRECTORY;
+  }
+
   // Sponsor-owned enterprises and challenges have their own authenticated
   // workspace topic; public-facing writes are mirrored separately below.
   if (

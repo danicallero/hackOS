@@ -67,6 +67,10 @@ describe("domain mutation routing", () => {
     expect(mutationDomainForPath("/api/projects/4")).toBe(SSE_TOPICS.PROJECTS);
     expect(mutationDomainForPath("/api/me/projects/4/invites")).toBe(SSE_TOPICS.PROJECTS);
     expect(mutationDomainForPath("/api/me/work-groups/4/challenges")).toBe(SSE_TOPICS.PROJECTS);
+    // #934: public-profile writes, including moderation under /api/users, wake only the directory.
+    expect(mutationDomainForPath("/api/me/public-profile")).toBe(SSE_TOPICS.DIRECTORY);
+    expect(mutationDomainForPath("/api/users/7/public-profile")).toBe(SSE_TOPICS.DIRECTORY);
+    expect(mutationDomainForPath("/api/users/7")).toBe(SSE_TOPICS.IDENTITY);
     expect(mutationDomainForPath("/api/challenges/3/repos/bulk-add")).toBe(SSE_TOPICS.PROJECTS);
   });
 

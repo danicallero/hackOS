@@ -183,6 +183,11 @@ emails without ever silently merging identities. Challenge↔project linkage is
 indirect, through `repo_devpost_prizes.prize` matching a challenge's
 `devpost_tags`. Full detail: [`challenges-devpost.md`](./challenges-devpost.md).
 
+### directory (#934)
+Opt-in people directory: the caller's public profile under
+`/api/me/public-profile`, the `directory:read` listing and entry reads, and
+`users:write` moderation. Full detail: [`directory.md`](./directory.md).
+
 ### challenges (H44)
 Sponsor-owned challenge templates bound to an enterprise: draft/published
 status, hidden/visible visibility, a scheduled `available_from` reveal,

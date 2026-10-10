@@ -4,11 +4,11 @@ import { buildApp } from "../src/app.js";
 import { describeRoutePolicy } from "../src/lib/route-policy.js";
 
 const EXPECTED = {
-  total: 412,
+  total: 417,
   public: 21,
   token: 12,
-  authenticated: 76,
-  capability: 230,
+  authenticated: 78,
+  capability: 233,
   contextual: 73,
 };
 

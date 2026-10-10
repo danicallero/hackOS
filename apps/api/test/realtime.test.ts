@@ -87,6 +87,7 @@ describe("multiplexed authorization and wire contract (#892)", () => {
       "domain:logistics",
       "domain:audit",
       "domain:tv",
+      "domain:directory",
     ]) {
       expect((await app.inject({ url: url([scope]), headers: asUser(user) })).statusCode).toBe(403);
     }
