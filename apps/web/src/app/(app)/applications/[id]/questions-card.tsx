@@ -280,8 +280,17 @@ export function QuestionsCard({
   const blocks = buildBlocks(fields, sections);
   const ungroupedBlock = blocks[0];
 
+  // #935: a form has at most one profile CV field, so choosing one clears the rest.
   const update = (id: string, patch: Partial<TemplateField>) =>
-    setFields((prev) => prev.map((f) => (f._id === id ? { ...f, ...patch } : f)));
+    setFields((prev) =>
+      prev.map((f) =>
+        f._id === id
+          ? { ...f, ...patch }
+          : patch.profile_cv && f.profile_cv
+            ? { ...f, profile_cv: false }
+            : f,
+      ),
+    );
 
   const updateUnsaved = (id: string, patch: Partial<TemplateField>) => {
     setSaveState("unsaved");
@@ -884,6 +893,7 @@ export function serializeApplicationField(field: TemplateField): TemplateField {
             : {}),
           ...(field.max_file_size_mb ? { max_file_size_mb: field.max_file_size_mb } : {}),
           ...(field.shareable_with_sponsors ? { shareable_with_sponsors: true } : {}),
+          ...(field.profile_cv ? { profile_cv: true } : {}),
         }
       : {}),
     ...(field.section_key ? { section_key: field.section_key } : {}),
@@ -2092,6 +2102,17 @@ export function FileRestrictionsEditor({
         </Label>
       </div>
       <p className="text-muted-foreground text-xs">{t("shareableWithSponsorsDesc")}</p>
+      <div className="flex items-center gap-2">
+        <Switch
+          checked={field.profile_cv ?? false}
+          onCheckedChange={(v) => onChange({ profile_cv: v })}
+          id="profile-cv"
+        />
+        <Label htmlFor="profile-cv" className="text-sm">
+          {t("profileCvFieldLabel")}
+        </Label>
+      </div>
+      <p className="text-muted-foreground text-xs">{t("profileCvFieldDesc")}</p>
     </div>
   );
 }

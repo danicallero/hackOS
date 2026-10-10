@@ -36,4 +36,17 @@ describe("application question serialization", () => {
       },
     });
   });
+
+  it("keeps the profile CV flag on file questions only", () => {
+    const base = {
+      key: "cv",
+      label: { en: "CV", es: "CV", gl: "CV" },
+      required: false,
+      profile_cv: true,
+    };
+    expect(serializeApplicationField({ ...base, kind: "file" })).toMatchObject({
+      profile_cv: true,
+    });
+    expect(serializeApplicationField({ ...base, kind: "text" })).not.toHaveProperty("profile_cv");
+  });
 });

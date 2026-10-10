@@ -360,7 +360,7 @@ describe("PublicProfileCard", () => {
     vi.mocked(api.get).mockResolvedValue(profile({ directoryVisible: true }));
     const withCv = profile({
       directoryVisible: true,
-      cv: { filename: "maria.pdf", uploadedAt: "2026-10-10T10:00:00.000Z" },
+      cv: { filename: "maria.pdf", uploadedAt: "2026-10-10T10:00:00.000Z", source: "upload" },
     });
     vi.mocked(apiUpload).mockResolvedValue(withCv);
     await render(<PublicProfileCard />);
@@ -376,6 +376,27 @@ describe("PublicProfileCard", () => {
     expect(byLabel("publicProfileShareCv")).not.toBeNull();
     // The file saved itself; the form has nothing new to save.
     expect(submit()?.disabled).toBe(true);
+  });
+
+  it("shows a CV from the application without upload controls", async () => {
+    vi.mocked(api.get).mockResolvedValue(
+      profile({
+        directoryVisible: true,
+        cv: {
+          filename: "maria.pdf",
+          uploadedAt: "2026-10-10T10:00:00.000Z",
+          source: "application",
+        },
+      }),
+    );
+    await render(<PublicProfileCard />);
+    expect(container.textContent).toContain("maria.pdf");
+    expect(container.textContent).toContain("cvFromApplication");
+    expect(container.querySelector("input[type=file]")).toBeNull();
+    const labels = [...container.querySelectorAll("button")].map((b) => b.textContent);
+    expect(labels).not.toContain("replaceCv");
+    expect(labels).not.toContain("removeCv");
+    expect(byLabel("publicProfileShareCv")).not.toBeNull();
   });
 
   it("refuses a non-PDF CV before uploading", async () => {

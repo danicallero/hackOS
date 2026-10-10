@@ -125,6 +125,9 @@ export const templateFieldSchema = z
     /** File fields only (H56): lets an applicant consent to sharing this
      *  upload with sponsors; see sponsorShareKey for the response convention. */
     shareable_with_sponsors: z.boolean().optional(),
+    /** File fields only (#935): this upload is the applicant's public-profile
+     *  CV. At most one per form; see directory/service.ts formCvSql. */
+    profile_cv: z.boolean().optional(),
     /** Groups this field under a `FormSection.key` (H11 form builder sections). */
     section_key: z.string().optional(),
     /** H11: ungrouped fields can follow a named section without joining it. */
@@ -154,12 +157,18 @@ export const templateFieldSchema = z
   .refine(
     (f) => !(f.kind === "select" || f.kind === "multiselect") || (f.options?.length ?? 0) > 0,
     { message: "select/multiselect fields require a non-empty options array" },
-  );
+  )
+  .refine((f) => !f.profile_cv || f.kind === "file", {
+    message: "only a file field can be the profile CV",
+  });
 
 export const templateSchema = z
   .array(templateFieldSchema)
   .refine((fields) => new Set(fields.map((f) => f.key)).size === fields.length, {
     message: "template field keys must be unique",
+  })
+  .refine((fields) => fields.filter((f) => f.profile_cv).length <= 1, {
+    message: "only one field can be the profile CV",
   });
 
 export type TemplateField = z.infer<typeof templateFieldSchema>;

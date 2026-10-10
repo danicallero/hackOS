@@ -68,7 +68,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my public profile",
         description:
-          "Directory opt-in settings shown on My profile for an event attendee, including bio, social links, `shareCv` and the uploaded CV's file name, with `preview`: the directory entry exactly as readers would see it if visible (its `cvUrl` points at the owner's own CV route). Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown, no CV shared) (#934, #935).",
+          "Directory opt-in settings shown on My profile for an event attendee, including bio, social links, `shareCv` and the CV (`cv.source`: `application` when it comes from the file field the organizer marked as the profile CV in the person's latest submitted application, which then wins over any upload; otherwise `upload`), with `preview`: the directory entry exactly as readers would see it if visible (its `cvUrl` points at the owner's own CV route). Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown, no CV shared) (#934, #935).",
       },
     },
     async (req) => getMyPublicProfile(req.userId as number),
@@ -82,7 +82,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         body: publicProfileBody,
         summary: "Update my public profile",
         description:
-          "Replaces the caller's directory settings. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded CV (400 otherwise). `bio`, `socials` and `shareCv` may be omitted to keep their stored values. consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
+          "Replaces the caller's directory settings. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded or application CV (400 otherwise). `bio`, `socials` and `shareCv` may be omitted to keep their stored values. consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
       },
     },
     async (req) => {
@@ -148,7 +148,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Upload my CV",
         description:
-          "Multipart upload of the caller's CV for the public profile: one PDF (checked from its bytes) up to 5 MB, stored privately under the caller's profile prefix and never at a public URL. Replaces and deletes any previous CV. Readers see it only while the profile is visible and `shareCv` is on. Returns the public profile; audited as a `cv` change without the file name. 403 without event access; accounts being removed (H54) are refused (#935).",
+          "Multipart upload of the caller's CV for the public profile: one PDF (checked from its bytes) up to 5 MB, stored privately under the caller's profile prefix and never at a public URL. Replaces and deletes any previous CV. Readers see it only while the profile is visible and `shareCv` is on. Returns the public profile; audited as a `cv` change without the file name. 409 while the CV comes from the caller's application; 403 without event access; accounts being removed (H54) are refused (#935).",
       },
     },
     async (req) => {
@@ -175,7 +175,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Remove my CV",
         description:
-          "Deletes the caller's CV object and turns `shareCv` off. Returns the public profile; removing when there is no CV changes nothing (#935).",
+          "Deletes the caller's CV object and turns `shareCv` off. Returns the public profile; removing when there is no CV changes nothing; 409 while the CV comes from the caller's application (#935).",
       },
     },
     async (req) => {
@@ -193,7 +193,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Download my CV",
         description:
-          "Streams the caller's own CV, shared or not. 404 without one. Never cached by shared proxies (#935).",
+          "Streams the caller's own CV, shared or not: the application CV when there is one, otherwise the upload. 404 without either. Never cached by shared proxies (#935).",
       },
     },
     async (req, reply) => {
@@ -214,7 +214,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         params: userParams,
         summary: "Download a shared CV",
         description:
-          "Streams the CV of an opted-in person who shares it. A hidden profile, an unshared CV and a missing CV all answer 404. Open to `directory:read` holders and to attendees who saved this person; the access check runs on every request and the reader must also have event access (#935).",
+          "Streams the CV of an opted-in person who shares it: their application CV when there is one, otherwise their upload. A hidden profile, an unshared CV and a missing CV all answer 404. Open to `directory:read` holders and to attendees who saved this person; the access check runs on every request and the reader must also have event access (#935).",
       },
     },
     async (req, reply) => {
