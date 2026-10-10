@@ -89,8 +89,16 @@ The web navigation uses Phosphor concept icons: `Package` for the Logistics
 workspace, `ClipboardText` for Activities, and `Log` for the Audit log.
 
 `/users/invites` is a focused child workspace reached from Users for holders of
-`invites:manage`; it deliberately does not add a second sidebar destination.
+`invites:manage`, and from an enterprise's header for holders of
+`sponsors:manage`, who see and create only sponsor links (#929); it
+deliberately does not add a second sidebar destination.
 The invitation list and its record inspector stay together on that route (#777).
+
+The enterprise detail page (`/enterprises/[id]`) has Profile (default), Challenges
+(for `sponsors:manage` and the enterprise's own reps), Judges, and Members for
+`sponsors:manage`. Overview and Invitations were removed (#928, #929): an old
+`?tab=overview` link renders Profile, and `?tab=invitations` sends sponsor
+managers to `/users/invites` (others see Profile).
 
 The admin wildcard (`*`) passes every capability check and therefore sees
 every workspace and every item (`apps/web/src/lib/session.tsx`).
