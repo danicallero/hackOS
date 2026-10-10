@@ -8,6 +8,8 @@ import {
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
   pickHolePunchCutout,
+  profileAvatarBlobBounds,
+  profileAvatarContentFrame,
   profileAvatarCoverOpacity,
   profileAvatarMaskFrame,
   profileAvatarMorphPath,
@@ -100,7 +102,7 @@ describe("profile avatar collapse geometry", () => {
     expect(end.left + end.width / 2).toBeCloseTo(393 / 2);
   });
 
-  it("never lets the island lip path exceed the target width", () => {
+  it("keeps the island lip inside the straight run of the island's lower edge", () => {
     const wide = { left: 0, top: 200, width: 200, height: 200 };
     const target = resolveProfileCameraTarget({
       height: 852,
@@ -111,10 +113,27 @@ describe("profile avatar collapse geometry", () => {
     const path = profileAvatarMorphPath(200, wide, target, 0.6);
     const xs = [...path.matchAll(/(-?\d+\.?\d*) (-?\d+\.?\d*)/g)].map((m) => Number(m[1]));
     expect(xs.length).toBeGreaterThan(0);
-    // Every coordinate sits within the target width around the travelling centre.
+    // Past the straight run the island's corners curve up; the lip (bezier
+    // handles included) must not reach into them (#935).
     const centerX = 100 + (target.left + target.width / 2 - 100) * 0.6;
-    expect(Math.min(...xs)).toBeGreaterThanOrEqual(centerX - target.width / 2 - 0.01);
-    expect(Math.max(...xs)).toBeLessThanOrEqual(centerX + target.width / 2 + 0.01);
+    const straight = (target.width - target.height) / 2;
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(centerX - straight - 0.01);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(centerX + straight + 0.01);
+  });
+
+  it("keeps the image covering the mask blob while it rises (#935)", () => {
+    for (let step = 0; step <= 28; step += 1) {
+      const progress = step / 100;
+      const blob = profileAvatarBlobBounds(112, start, island, progress);
+      const image = profileAvatarContentFrame(112, start, island, progress);
+      if (!blob) continue;
+      expect(image.top).toBeLessThanOrEqual(blob.top + 0.01);
+      expect(image.left).toBeLessThanOrEqual(blob.left + 0.01);
+      expect(image.left + image.width).toBeGreaterThanOrEqual(blob.left + blob.width - 0.01);
+      expect(image.top + image.height).toBeGreaterThanOrEqual(blob.top + blob.height - 0.01);
+      // Square around the blob: centred on it horizontally.
+      expect(image.left + image.width / 2).toBeCloseTo(blob.left + blob.width / 2, 0);
+    }
   });
 
   it("keeps every interpolated state circular or capsule-clipped", () => {

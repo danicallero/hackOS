@@ -736,8 +736,14 @@ space, and the host is re-measured about 450 and 900 ms after layout so a screen
 that is still sliding in (stack push, modal) does not leave a stale origin. The
 mask frame centre travels linearly from the avatar centre to the target centre,
 matching the Telegram path canvas, so the image, mask and backing stay on one
-centre line and end on the island centre. The thin lower-lip track of the
-Telegram path is narrowed horizontally to never exceed the target width.
+centre line and end on the island centre. The Telegram blob rises and narrows
+faster than that linear frame, so while it exists the image is a square
+covering the blob's real bounds (`profileAvatarContentFrame`), never exposing
+the backing at its top; it eases back to the neck once the blob ends. The
+lower-lip track of the path (bezier handles included) is narrowed to the
+straight run of the island's lower edge (`width - height`; a circular hole
+punch gets the chord at the lip's depth), so it never reaches into the
+island's curved corners.
 The morph only runs where a real camera cutout exists:
 
 - **iPhone with Dynamic Island** (safe-area top >= 55 pt, portrait): the island
