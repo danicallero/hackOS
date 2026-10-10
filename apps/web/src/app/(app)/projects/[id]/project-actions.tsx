@@ -4,7 +4,12 @@ import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useEffect, useMemo, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
-import { type UserOption, UserPicker } from "@/components/common/user-picker";
+import { UserPicker } from "@/components/common/user-picker";
+import {
+  fetchMemberCandidates,
+  IdentityAccountPicker,
+} from "@/components/projects/identity-account-picker";
+import { MANUAL_SEARCH_LIMIT } from "@/components/projects/identity-matches";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,17 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ApiError, api } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { linkSecondaryEmail, removeDevpostParticipant, removeRepoMember } from "@/lib/projects";
 import { toast } from "@/lib/toast";
 import { type ChallengeOption, challengeTitleText, type ProjectRepo } from "../shared";
 
-async function searchMemberCandidates(query: string): Promise<UserOption[]> {
-  const result = await api.get<{ users: UserOption[] }>("/api/projects/member-candidates", {
-    query: { q: query, limit: 20 },
-  });
-  return result.users;
+function searchMemberCandidates(query: string) {
+  return fetchMemberCandidates(query, MANUAL_SEARCH_LIMIT);
 }
 
 export function MemberRemoveButton({
@@ -89,12 +91,16 @@ export function MemberRemoveButton({
 export function DevpostParticipantActions({
   repoId,
   email,
+  name,
+  surname,
   canDelete,
   canLink,
   onChanged,
 }: {
   repoId: number;
   email: string;
+  name: string | null;
+  surname: string | null;
   canDelete: boolean;
   canLink: boolean;
   onChanged: () => Promise<void>;
@@ -160,12 +166,11 @@ export function DevpostParticipantActions({
               <Label htmlFor={`${dialogId}-user`} className="sr-only">
                 {t("userForEmail", { email })}
               </Label>
-              <UserPicker
+              <IdentityAccountPicker
                 id={`${dialogId}-user`}
+                person={{ name, surname, email }}
                 value={selectedUserId}
                 onChange={setSelectedUserId}
-                search={searchMemberCandidates}
-                minQueryLength={2}
               />
               <Button
                 type="button"
