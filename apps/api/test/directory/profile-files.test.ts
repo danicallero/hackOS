@@ -288,6 +288,13 @@ describe("profile CV (#935)", () => {
       "filename*=UTF-8''Ana%20P%C3%A9rez%20CV.pdf",
     );
     expect(download.rawPayload.equals(PDF)).toBe(true);
+    // The web viewer reads the file name from a cross-origin blob fetch.
+    const crossOrigin = await app.inject({
+      method: "GET",
+      url: `/api/directory/${me}/cv`,
+      headers: { ...asUser(reader), origin: "http://localhost:3001" },
+    });
+    expect(crossOrigin.headers["access-control-expose-headers"]).toContain("content-disposition");
 
     // Readers without the capability who did not save the person (#935: the same
     // 404 as a hidden profile), without event access, or of a hidden profile.

@@ -10,6 +10,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { CvViewer } from "@/components/profile/cv-viewer";
 import { SocialLinks } from "@/components/profile/social-links";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -202,12 +203,16 @@ function PersonReader({ userId }: { userId: number }) {
         }
         primaryAction={
           entry.cvUrl ? (
-            <Button asChild variant="outline" size="sm">
-              <a href={apiAssetUrl(entry.cvUrl)} target="_blank" rel="noreferrer">
-                <FilePdfIcon aria-hidden="true" />
-                {t("downloadCv")}
-              </a>
-            </Button>
+            <CvViewer
+              path={entry.cvUrl}
+              name={entry.displayName}
+              trigger={
+                <Button type="button" variant="outline" size="sm">
+                  <FilePdfIcon aria-hidden="true" />
+                  {t("viewCv")}
+                </Button>
+              }
+            />
           ) : undefined
         }
       />
