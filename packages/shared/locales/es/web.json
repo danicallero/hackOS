@@ -3518,5 +3518,7 @@
   "publicProfileSaved": "Perfil público actualizado.",
   "toastSavePublicProfile": "Guardar perfil público",
   "couldNotSavePublicProfile": "No se pudo guardar el perfil público.",
-  "couldNotLoadPublicProfile": "No se pudo cargar el perfil público."
+  "couldNotLoadPublicProfile": "No se pudo cargar el perfil público.",
+  "searchPeople": "Buscar personas",
+  "colLocation": "Ubicación"
 }

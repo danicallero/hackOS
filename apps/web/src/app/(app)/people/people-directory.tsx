@@ -1,0 +1,322 @@
+"use client";
+
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { type Column, DataTable } from "@/components/common/data-table";
+import type { FilterDefinition } from "@/components/common/filter-menu";
+import { ListToolbar } from "@/components/common/list-toolbar";
+import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { ApiError, api } from "@/lib/api";
+import { type Translate, useLocale } from "@/lib/i18n";
+import type { Language } from "@/lib/types";
+import { useDirectoryParams } from "./use-directory-params";
+
+/** `DirectoryEntry` from `GET /api/directory` (#934). */
+export interface DirectoryEntry {
+  userId: number;
+  displayName: string;
+  photoUrl: string | null;
+  headline: string | null;
+  locationNote: string | null;
+  project: { kind: "project" | "workGroup"; id: number; name: string } | null;
+  challenges: { id: number; name: string }[];
+}
+
+interface DirectoryPage {
+  items: DirectoryEntry[];
+  nextCursor: string | null;
+}
+
+interface ChallengeOption {
+  id: number;
+  title: Record<string, string>;
+}
+
+const PAGE_SIZE = 25;
+const SEARCH_DEBOUNCE_MS = 250;
+
+export function initials(name: string): string {
+  const parts = name.replace(/\./g, "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+function challengeLabel(title: Record<string, string>, language: Language): string {
+  return title[language] || title.en || title.es || Object.values(title)[0] || "";
+}
+
+function Person({ entry }: { entry: DirectoryEntry }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <Avatar size="lg">
+        {entry.photoUrl && <AvatarImage src={entry.photoUrl} alt="" />}
+        <AvatarFallback>{initials(entry.displayName)}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0">
+        <p className="wrap-break-word font-medium">{entry.displayName}</p>
+        {entry.headline && (
+          <p className="text-muted-foreground wrap-break-word text-sm">{entry.headline}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Challenges({ entry }: { entry: DirectoryEntry }) {
+  if (entry.challenges.length === 0) return <span className="text-muted-foreground">—</span>;
+  return (
+    <ul className="flex flex-wrap gap-1.5">
+      {entry.challenges.map((challenge) => (
+        <li
+          key={challenge.id}
+          className="bg-muted text-muted-foreground rounded-md px-2 py-0.5 text-xs"
+        >
+          {challenge.name}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function buildColumns(t: Translate): Column<DirectoryEntry>[] {
+  return [
+    { id: "name", header: t("name"), cell: (entry) => <Person entry={entry} /> },
+    {
+      id: "project",
+      header: t("colProject"),
+      cell: (entry) =>
+        entry.project ? (
+          <span className="wrap-break-word">{entry.project.name}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    { id: "challenges", header: t("challenges"), cell: (entry) => <Challenges entry={entry} /> },
+    {
+      id: "location",
+      header: t("colLocation"),
+      cell: (entry) =>
+        entry.locationNote ? (
+          <span className="wrap-break-word">{entry.locationNote}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+  ];
+}
+
+function PersonMobileRow({ entry, t }: { entry: DirectoryEntry; t: Translate }) {
+  return (
+    <div className="min-w-0 space-y-2 px-4 py-3">
+      <Person entry={entry} />
+      {(entry.project || entry.challenges.length > 0 || entry.locationNote) && (
+        <div className="space-y-1.5 pl-13 text-sm">
+          {entry.project && <p className="wrap-break-word">{entry.project.name}</p>}
+          {entry.challenges.length > 0 && (
+            <div className="flex items-start gap-2">
+              <TrophyIcon
+                className="text-muted-foreground mt-1 size-3.5 shrink-0"
+                aria-label={t("challenges")}
+              />
+              <Challenges entry={entry} />
+            </div>
+          )}
+          {entry.locationNote && (
+            <p className="text-muted-foreground flex items-start gap-2">
+              <MapPinIcon className="mt-0.5 size-3.5 shrink-0" aria-label={t("colLocation")} />
+              <span className="min-w-0 wrap-break-word">{entry.locationNote}</span>
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Opt-in people directory over `GET /api/directory` (#934). */
+export function PeopleDirectory() {
+  const { t, language } = useLocale();
+  const { params, setParams } = useDirectoryParams();
+  const { q, challengeId, cursor } = params;
+
+  // The field echoes keystrokes immediately; the URL (and the request) follow
+  // after a short pause. An external URL change (back/forward) resets it.
+  const [search, setSearch] = useState(q);
+  const [trackedQ, setTrackedQ] = useState(q);
+  if (q !== trackedQ) {
+    setTrackedQ(q);
+    setSearch(q);
+  }
+  useEffect(() => {
+    if (search.trim() === q) return;
+    const handle = setTimeout(
+      () => setParams({ q: search.trim(), cursor: "" }),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(handle);
+  }, [search, q, setParams]);
+
+  // Earlier cursors of the current query, so Previous can step back.
+  const [history, setHistory] = useState<string[]>([]);
+  const queryKey = `${q}\u0000${challengeId}`;
+  const [trackedQueryKey, setTrackedQueryKey] = useState(queryKey);
+  if (queryKey !== trackedQueryKey) {
+    setTrackedQueryKey(queryKey);
+    setHistory([]);
+  }
+
+  const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ items: ChallengeOption[] }>("/api/public/challenges")
+      .then((r) => {
+        if (!cancelled) setChallenges(r.items);
+      })
+      .catch(() => {
+        // The filter simply offers no options; the list itself still loads.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const liveRefresh = useAutoRefresh(`/api/events/stream?topic=${SSE_TOPICS.DIRECTORY}`, [
+    EVENTS.DOMAIN_CHANGED,
+  ]);
+  const [page, setPage] = useState<DirectoryPage>({ items: [], nextCursor: null });
+  const [loading, setLoading] = useState(true);
+  const loadedKey = useRef<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
+  useEffect(() => {
+    let cancelled = false;
+    const requestKey = `${queryKey}\u0000${cursor}`;
+    // A live refresh keeps the current rows visible; a new query shows the skeleton.
+    if (loadedKey.current !== requestKey) setLoading(true);
+    setLoadError(null);
+    api
+      .get<DirectoryPage>("/api/directory", {
+        query: {
+          q: q || undefined,
+          challengeId: challengeId || undefined,
+          cursor: cursor || undefined,
+          limit: PAGE_SIZE,
+        },
+      })
+      .then((r) => {
+        if (cancelled) return;
+        loadedKey.current = requestKey;
+        setPage(r);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setPage({ items: [], nextCursor: null });
+        setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadPeople"));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [q, challengeId, cursor, queryKey, liveRefresh, retryNonce, t]);
+
+  const columns = useMemo(() => buildColumns(t), [t]);
+  const challengeOptions = useMemo(
+    () =>
+      challenges
+        .map((challenge) => ({
+          value: String(challenge.id),
+          label: challengeLabel(challenge.title, language),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [challenges, language],
+  );
+
+  const filters: FilterDefinition[] = [
+    {
+      id: "challenge",
+      label: t("challenges"),
+      icon: TrophyIcon,
+      type: "single",
+      value: challengeId,
+      resetValue: "",
+      onChange: (value) => setParams({ challengeId: value, cursor: "" }),
+      options: challengeOptions,
+    },
+  ];
+  const hasFilters = q.length > 0 || challengeId.length > 0;
+  const hasPrevious = cursor.length > 0;
+
+  function clearFilters() {
+    setSearch("");
+    setParams({ q: "", challengeId: "", cursor: "" });
+    document.getElementById("people-search")?.focus();
+  }
+
+  function goNext() {
+    if (!page.nextCursor) return;
+    setHistory((stack) => [...stack, cursor]);
+    setParams({ cursor: page.nextCursor });
+  }
+
+  function goPrevious() {
+    // A deep-linked cursor has no history; Previous then returns to the first page.
+    const previous = history.at(-1) ?? "";
+    setHistory((stack) => stack.slice(0, -1));
+    setParams({ cursor: previous });
+  }
+
+  return (
+    <PageLayout>
+      <PageHeader title={t("columnPeople")} />
+      <div className="space-y-4">
+        <ListToolbar
+          search={{
+            id: "people-search",
+            label: t("searchPeople"),
+            value: search,
+            onValueChange: setSearch,
+          }}
+          filters={challengeOptions.length > 0 || challengeId ? filters : undefined}
+        />
+        <DataTable
+          columns={columns}
+          data={page.items}
+          getRowId={(entry) => String(entry.userId)}
+          getRowLabel={(entry) => entry.displayName}
+          renderMobileRow={(entry) => <PersonMobileRow entry={entry} t={t} />}
+          loading={loading}
+          error={
+            loadError
+              ? { message: loadError, onRetry: () => setRetryNonce((value) => value + 1) }
+              : undefined
+          }
+          empty={{ icon: UsersIcon, title: t("noPeopleYet") }}
+          filteredEmpty={{ active: hasFilters, onClear: clearFilters }}
+        />
+        {(hasPrevious || page.nextCursor) && (
+          <nav className="flex justify-end gap-2" aria-label={t("tablePagination")}>
+            <Button variant="outline" size="sm" disabled={!hasPrevious} onClick={goPrevious}>
+              {t("previous")}
+            </Button>
+            <Button variant="outline" size="sm" disabled={!page.nextCursor} onClick={goNext}>
+              {t("next")}
+            </Button>
+          </nav>
+        )}
+      </div>
+    </PageLayout>
+  );
+}

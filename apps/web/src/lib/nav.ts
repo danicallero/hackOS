@@ -153,6 +153,13 @@ export const PERSONAL_NAV: NavItem[] = [
   { title: "wallet", href: "/wallet", icon: WalletIcon, hideForPureApplicant: true },
   // Hidden for pure applicants — decision emails go out regardless (H50/H51).
   { title: "inbox", href: "/inbox", icon: TrayIcon, hideForPureApplicant: true },
+  // Opt-in people directory (#934): readers need directory:read.
+  {
+    title: "columnPeople",
+    href: "/people",
+    icon: UsersIcon,
+    capability: CAPABILITIES.DIRECTORY_READ,
+  },
   { title: "myProfile", href: "/settings/profile", icon: UserIcon },
 ];
 

@@ -57,6 +57,11 @@ hide (`NavItem.hideForPureApplicant` in `nav.ts`) — Schedule, My applications,
 and My profile stay, since applying (or checking an application's status) is
 exactly what they still need.
 
+**People** (`/people`, #934) is the one capability-gated personal entry: it
+shows with `directory:read` (seeded for every role except Sponsor and Judging
+Team; see `directory.md`) and sits just above My profile, where each person
+manages whether they appear in it.
+
 There is deliberately no dashboard/home page: `/timetable` (Schedule) is the
 landing destination after sign-in and email verification
 (`apps/web/src/lib/invite-destination.ts`, `apps/web/src/lib/return-path.ts`),

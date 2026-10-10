@@ -96,6 +96,18 @@ and response reference.
 - Moderation hides the profile and clears its free text; the person may opt in
   again.
 
+## Web
+
+`/people` (`apps/web/src/app/(app)/people/`) lists `GET /api/directory` with
+the shared `ListToolbar`: a name search, a single challenge filter (options
+from `GET /api/public/challenges`) and Previous/Next over the opaque cursor.
+`q`, `challenge` and `cursor` live in the URL so a view can be shared; writes
+are skipped when the query string would not change (R003). A row shows the
+photo or initials, display name, headline, project, challenges and location
+note; the empty state is a single message. The page refetches in place on
+`domain.changed` for the `directory` topic. The nav entry (personal area) is
+gated by `directory:read` (`docs/navigation.md`).
+
 ## Writes, audit and concurrency
 
 `PUT` locks the `users` row `FOR NO KEY UPDATE` (which also serializes the
