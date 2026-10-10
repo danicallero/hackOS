@@ -118,8 +118,9 @@ const NAME_ORDER = new Intl.Collator("en", { sensitivity: "base", numeric: true 
  * whose stand staff made scannable and that has a stand tag, plus revealed
  * sponsors the caller already collected even if their tags were removed or
  * scanning was turned off since (they count in both `collected` and `total`,
- * so progress never goes backwards). Hidden sponsors never count. Collected
- * first (newest first), then the rest by name. Tag codes never leave the API.
+ * so progress never goes backwards). Hidden sponsors never count. Ordered like
+ * the public logo grid (`listPublicSponsors`): enterprise priority (1 = primary,
+ * unset last), then name, collected or not. Tag codes never leave the API.
  */
 export async function listSponsorCollection(owner: number): Promise<{
   total: number;
@@ -142,6 +143,11 @@ export async function listSponsorCollection(owner: number): Promise<{
     ...entries.map((row) => Number(row.enterprise_id)),
   ]);
   const cards = await visibleSponsorCards(pool, [...ids]);
+  const { rows: priorities } = await pool.query<{ id: number; priority: number | null }>(
+    `SELECT id, priority FROM enterprises WHERE id = ANY($1::int[])`,
+    [[...ids]],
+  );
+  const priorityOf = new Map(priorities.map((row) => [Number(row.id), row.priority ?? 9999]));
   const byEnterprise = new Map(entries.map((row) => [Number(row.enterprise_id), row]));
   const items = [...cards.values()].map((card): SponsorCollectionItem => {
     const row = byEnterprise.get(card.enterpriseId);
@@ -157,13 +163,12 @@ export async function listSponsorCollection(owner: number): Promise<{
         : null,
     };
   });
-  items.sort((a, b) => {
-    if (a.entry && b.entry) {
-      return b.entry.createdAt.localeCompare(a.entry.createdAt) || b.entry.id - a.entry.id;
-    }
-    if (a.entry || b.entry) return a.entry ? -1 : 1;
-    return NAME_ORDER.compare(a.name, b.name) || a.enterpriseId - b.enterpriseId;
-  });
+  items.sort(
+    (a, b) =>
+      (priorityOf.get(a.enterpriseId) ?? 9999) - (priorityOf.get(b.enterpriseId) ?? 9999) ||
+      NAME_ORDER.compare(a.name, b.name) ||
+      a.enterpriseId - b.enterpriseId,
+  );
   return {
     total: items.length,
     collected: items.filter((item) => item.entry !== null).length,
