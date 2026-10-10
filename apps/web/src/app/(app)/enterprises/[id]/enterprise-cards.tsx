@@ -53,6 +53,7 @@ import {
   textForDisplay,
 } from "../../challenges/shared";
 import { type Enterprise, initials, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "../shared";
+import { PublicationSummary } from "./publication-summary";
 
 const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
 const optionalPositiveInt = z
@@ -512,7 +513,7 @@ export function EditCard({
           <TabBar>
             <TabsTrigger value="details">{t("enterpriseDetailsTab")}</TabsTrigger>
             <TabsTrigger value="logos">{t("logoTitle")}</TabsTrigger>
-            {canManage && <TabsTrigger value="publication">{t("publicationTitle")}</TabsTrigger>}
+            <TabsTrigger value="publication">{t("publicationTitle")}</TabsTrigger>
           </TabBar>
           <SectionCard
             variant="plain"
@@ -618,13 +619,13 @@ export function EditCard({
                 )}
               />
             </TabsContent>
-            {canManage && (
-              <TabsContent
-                value="publication"
-                forceMount
-                hidden={view !== "publication"}
-                className="space-y-5"
-              >
+            <TabsContent
+              value="publication"
+              forceMount
+              hidden={view !== "publication"}
+              className="space-y-5"
+            >
+              {canManage ? (
                 <PublicationControls
                   id="enterprise-publication"
                   visibility={visibility}
@@ -658,8 +659,10 @@ export function EditCard({
                     form.setValue("availableFrom", value, { shouldDirty: true })
                   }
                 />
-              </TabsContent>
-            )}
+              ) : (
+                <PublicationSummary enterprise={enterprise} />
+              )}
+            </TabsContent>
           </SectionCard>
         </Tabs>
       </form>

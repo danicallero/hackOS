@@ -50,3 +50,30 @@ export function initials(name: string): string {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
+
+export type EnterpriseTab = "profile" | "challenges" | "judges" | "members";
+
+/** Removed tabs keep old deep links working (#928, #929). */
+export const ENTERPRISE_TAB_ALIASES: Partial<Record<string, EnterpriseTab>> = {
+  overview: "profile",
+  invitations: "profile",
+};
+
+/**
+ * Challenges list only what a manager or the enterprise's own rep can load;
+ * anyone else would get an empty tab (H43, H44).
+ */
+export function enterpriseTabs({
+  canManage,
+  isSponsorRep,
+}: {
+  canManage: boolean;
+  isSponsorRep: boolean;
+}): EnterpriseTab[] {
+  return [
+    "profile",
+    ...(canManage || isSponsorRep ? (["challenges"] as const) : []),
+    "judges",
+    ...(canManage ? (["members"] as const) : []),
+  ];
+}

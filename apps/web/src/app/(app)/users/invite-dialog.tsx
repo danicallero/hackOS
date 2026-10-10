@@ -48,11 +48,19 @@ function OptionLoadError({
   );
 }
 
-export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promise<void> }) {
+export function InviteUserDialog({
+  onChanged,
+  sponsorOnly = false,
+}: {
+  onChanged?: () => void | Promise<void>;
+  /** Sponsor managers without invites:manage create sponsor links only (#929). */
+  sponsorOnly?: boolean;
+}) {
   const { t } = useLocale();
   const copy = useCopyToClipboard();
   const [open, setOpen] = useState(false);
-  const [method, setMethod] = useState<Method>("email");
+  const initialMethod: Method = sponsorOnly ? "link" : "email";
+  const [method, setMethod] = useState<Method>(initialMethod);
   const [email, setEmail] = useState("");
   const [roleIds, setRoleIds] = useState<string[]>([]);
   const [enterpriseId, setEnterpriseId] = useState("");
@@ -107,12 +115,12 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
 
   useEffect(() => {
     if (!open) return;
-    void loadRoles();
+    if (!sponsorOnly) void loadRoles();
     void loadEnterprises();
-  }, [loadEnterprises, loadRoles, open]);
+  }, [loadEnterprises, loadRoles, open, sponsorOnly]);
 
   function reset() {
-    setMethod("email");
+    setMethod(initialMethod);
     setEmail("");
     setRoleIds([]);
     setEnterpriseId("");
@@ -128,6 +136,7 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
   async function submit() {
     setError(null);
     if (method === "email" && !email.trim()) return setError(t("emailRequired"));
+    if (sponsorOnly && !enterpriseId) return setError(t("selectEnterprisePlaceholder"));
     const kind: InviteKind = enterpriseId ? "sponsor" : applicationAccess ? "participant" : "staff";
     if (method === "link" && kind === "staff" && roleIds.length === 0)
       return setError(t("staffLinkGroupsRequired"));
@@ -237,22 +246,24 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
         </div>
       ) : (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t("inviteUser")}>
-            <Button
-              type="button"
-              variant={method === "email" ? "default" : "outline"}
-              onClick={() => setMethod("email")}
-            >
-              <EnvelopeSimpleIcon className="size-4" aria-hidden="true" /> {t("emailInvitation")}
-            </Button>
-            <Button
-              type="button"
-              variant={method === "link" ? "default" : "outline"}
-              onClick={() => setMethod("link")}
-            >
-              <LinkIcon className="size-4" aria-hidden="true" /> {t("inviteLink")}
-            </Button>
-          </div>
+          {!sponsorOnly && (
+            <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t("inviteUser")}>
+              <Button
+                type="button"
+                variant={method === "email" ? "default" : "outline"}
+                onClick={() => setMethod("email")}
+              >
+                <EnvelopeSimpleIcon className="size-4" aria-hidden="true" /> {t("emailInvitation")}
+              </Button>
+              <Button
+                type="button"
+                variant={method === "link" ? "default" : "outline"}
+                onClick={() => setMethod("link")}
+              >
+                <LinkIcon className="size-4" aria-hidden="true" /> {t("inviteLink")}
+              </Button>
+            </div>
+          )}
           {method === "email" && (
             <div className={fieldClass}>
               <Label htmlFor="invite-email">{t("email")}</Label>
@@ -267,28 +278,30 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
           )}
           <section className="space-y-4">
             <h2 className="type-section-title">{t("access")}</h2>
-            <div className={fieldClass}>
-              <Label htmlFor="invite-roles">{t("rolesTitle")}</Label>
-              <MultiSelect
-                inDialog
-                id="invite-roles"
-                options={roles.map((role) => ({ value: String(role.id), label: role.name }))}
-                value={roleIds}
-                onChange={setRoleIds}
-                disabled={rolesLoading || rolesError !== null}
-                aria-describedby={rolesError ? "invite-roles-error" : undefined}
-                placeholder={t("selectRolesPlaceholder")}
-                searchPlaceholder={t("searchRolesPlaceholder")}
-                emptyText={t("noRolesYet")}
-              />
-              {rolesError && (
-                <OptionLoadError
-                  id="invite-roles-error"
-                  message={rolesError}
-                  onRetry={() => void loadRoles()}
+            {!sponsorOnly && (
+              <div className={fieldClass}>
+                <Label htmlFor="invite-roles">{t("rolesTitle")}</Label>
+                <MultiSelect
+                  inDialog
+                  id="invite-roles"
+                  options={roles.map((role) => ({ value: String(role.id), label: role.name }))}
+                  value={roleIds}
+                  onChange={setRoleIds}
+                  disabled={rolesLoading || rolesError !== null}
+                  aria-describedby={rolesError ? "invite-roles-error" : undefined}
+                  placeholder={t("selectRolesPlaceholder")}
+                  searchPlaceholder={t("searchRolesPlaceholder")}
+                  emptyText={t("noRolesYet")}
                 />
-              )}
-            </div>
+                {rolesError && (
+                  <OptionLoadError
+                    id="invite-roles-error"
+                    message={rolesError}
+                    onRetry={() => void loadRoles()}
+                  />
+                )}
+              </div>
+            )}
             <div className={fieldClass}>
               <Label htmlFor="invite-enterprise">{t("enterpriseLabel")}</Label>
               <EntityCombobox
@@ -314,18 +327,20 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
                 />
               )}
             </div>
-            <div className="space-y-3">
-              <h3 className="type-label">{t("applicationAccess")}</h3>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="invite-application-access"
-                  checked={applicationAccess}
-                  disabled={Boolean(enterpriseId)}
-                  onCheckedChange={(checked) => setApplicationAccess(checked === true)}
-                />
-                <Label htmlFor="invite-application-access">{t("allowClosedFormsLabel")}</Label>
+            {!sponsorOnly && (
+              <div className="space-y-3">
+                <h3 className="type-label">{t("applicationAccess")}</h3>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="invite-application-access"
+                    checked={applicationAccess}
+                    disabled={Boolean(enterpriseId)}
+                    onCheckedChange={(checked) => setApplicationAccess(checked === true)}
+                  />
+                  <Label htmlFor="invite-application-access">{t("allowClosedFormsLabel")}</Label>
+                </div>
               </div>
-            </div>
+            )}
           </section>
           {method === "link" && (
             <section className="space-y-4">
