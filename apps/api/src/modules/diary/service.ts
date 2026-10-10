@@ -133,10 +133,10 @@ export async function listSponsorCollection(owner: number): Promise<{
       WHERE owner_id = $1 AND enterprise_id IS NOT NULL`,
     [owner],
   );
+  // Scannable companies are listed (locked) even before staff generate their
+  // tags: marking a stand scannable comes first in the staff workflow.
   const { rows: tagged } = await pool.query<{ enterprise_id: number }>(
-    `SELECT DISTINCT t.enterprise_id
-       FROM sponsor_stand_tags t JOIN enterprises e ON e.id = t.enterprise_id
-      WHERE e.stand_scannable`,
+    `SELECT id AS enterprise_id FROM enterprises WHERE stand_scannable`,
   );
   const ids = new Set([
     ...tagged.map((row) => Number(row.enterprise_id)),

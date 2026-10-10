@@ -374,7 +374,7 @@ describe("the sponsor stand collection", () => {
     const beta = await enterprise("Beta");
     const zeta = await enterprise("Zeta");
     const stealth = await enterprise("Stealth", "hidden");
-    await enterprise("Untagged");
+    const untagged = await enterprise("Untagged", "visible", false);
     await challenge(acme, "Robots", "visible");
     await standTag(acme, "04ACAC00000001");
     await standTag(beta, "04ACAC00000002");
@@ -387,6 +387,7 @@ describe("the sponsor stand collection", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body).toMatchObject({ total: 3, collected: 2 });
+    expect(untagged).toBeGreaterThan(0);
     expect(body.items.map((item: { name: string }) => item.name)).toEqual(["Acme", "Beta", "Zeta"]);
     expect(body.items[0]).toMatchObject({
       enterpriseId: acme,
@@ -398,6 +399,21 @@ describe("the sponsor stand collection", () => {
     expect(res.body).not.toContain("STAND-");
     expect(res.body).not.toContain("Stealth");
     expect(res.body).not.toContain("Untagged");
+  });
+
+  it("lists a scannable revealed company as locked before staff generate its tags (#935)", async () => {
+    const tagged = await enterprise("Acme");
+    const waiting = await enterprise("Waiting");
+    const off = await enterprise("Off", "visible", false);
+    const hiddenOne = await enterprise("Stealth", "hidden");
+    await standTag(tagged, "04ACAC00000001");
+    await standTag(off, "04ACAC00000009");
+    expect(hiddenOne).toBeGreaterThan(0);
+    const body = (await collection()).json();
+    expect(body).toMatchObject({ total: 2, collected: 0 });
+    expect(body.items.map((item: { name: string }) => item.name)).toEqual(["Acme", "Waiting"]);
+    expect(body.items.every((item: { entry: unknown }) => item.entry === null)).toBe(true);
+    expect(waiting).toBeGreaterThan(0);
   });
 
   it("orders the album by sponsor priority, then name, collected or not", async () => {

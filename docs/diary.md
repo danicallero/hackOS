@@ -106,7 +106,10 @@ is the staff decision that attendees can collect a company by scanning its
 tags. Only `sponsors:manage` changes it. **Default:** off for new
 enterprises, so a sponsor without a stand never shows up in the album; the
 migration turned it on for every enterprise that already had a tag, which
-kept their behaviour unchanged.
+kept their behaviour unchanged. `GET /api/me/diary/sponsors` lists every
+revealed scannable company, tagged or not: one without tags yet (staff mark it
+scannable first, then generate its tags) shows as a locked slot, and the app
+cannot collect it until a tag exists.
 
 ## Scan resolution
 
