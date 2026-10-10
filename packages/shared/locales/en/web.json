@@ -317,6 +317,8 @@
   "queueTeamDisqualified": "Team disqualified.",
   "queueTeamDisqualifyFailed": "Could not disqualify the team.",
   "queueActionBlockedBusy": "Unavailable while this team is active in another room.",
+  "queueBusyWaitingAt": "Waiting at {room}",
+  "queueBusyEvaluatingIn": "Being judged in {room}",
   "queueNeedsAction": "Needs action",
   "queueSearchResults": "Search results",
   "queueCalledNow": "Called now",

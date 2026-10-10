@@ -3,7 +3,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { queueFixtureMarker } from "./broadcast.js";
-import { isRepoBlockedByBusyMember } from "./guard.js";
+import { findBusyMemberEntry, isRepoIneligibleForJudging } from "./guard.js";
 import { notifyTeamPreCall } from "./notify.js";
 import { callNextForRoom } from "./service.js";
 
@@ -180,7 +180,11 @@ async function claimPreCall(queueGroupId: number, repoId: number): Promise<PreCa
     // This acquires H30's repo/member advisory locks and rechecks active
     // entries outside this group. A team that is already busy elsewhere must
     // not be warned as if it were approaching this queue.
-    if (await isRepoBlockedByBusyMember(client, repoId, { fixtureMarker: groupMarker })) {
+    // H30/H38: eligibility is checked on its own; the guard is occupancy only.
+    if (
+      (await isRepoIneligibleForJudging(client, repoId)) ||
+      (await findBusyMemberEntry(client, repoId, { fixtureMarker: groupMarker }))
+    ) {
       return null;
     }
 
