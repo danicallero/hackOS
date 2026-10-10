@@ -13,27 +13,16 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ApiError, api } from "@/lib/api";
 import { formatScheduledDateTime } from "@/lib/datetime";
-import { type I18nText, pickText, useLocale } from "@/lib/i18n";
+import { pickText, useLocale } from "@/lib/i18n";
 import { idempotencyHeaders } from "@/lib/logistics";
+import type { MealPlan, MealPlanMeal } from "@/lib/meal-plan";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
-
-export interface StaffMealPlan {
-  confirmedAt: string | null;
-  meals: Array<{
-    activityId: number;
-    name: string;
-    nameI18n: I18nText | null;
-    startsAt: string;
-    attending: boolean | null;
-    locked: boolean;
-  }>;
-}
 
 export function MealPlanSection({ userId }: { userId: number }) {
   const { t, language } = useLocale();
   const canManage = useCan(CAPABILITIES.MEAL_PLANS_MANAGE);
-  const [plan, setPlan] = useState<StaffMealPlan | null>(null);
+  const [plan, setPlan] = useState<MealPlan | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [reload, setReload] = useState(0);
   // Only explicit answers: an unanswered meal stays absent until staff tick
@@ -41,7 +30,7 @@ export function MealPlanSection({ userId }: { userId: number }) {
   const [draft, setDraft] = useState<Record<number, boolean>>({});
   const [saving, setSaving] = useState(false);
 
-  const apply = useCallback((next: StaffMealPlan) => {
+  const apply = useCallback((next: MealPlan) => {
     setPlan(next);
     setDraft(
       Object.fromEntries(
@@ -57,7 +46,7 @@ export function MealPlanSection({ userId }: { userId: number }) {
     setDraft({});
     setLoadFailed(false);
     api
-      .get<StaffMealPlan>(`/api/users/${userId}/meal-plan`)
+      .get<MealPlan>(`/api/users/${userId}/meal-plan`)
       .then((next) => {
         if (!cancelled) apply(next);
       })
@@ -83,7 +72,7 @@ export function MealPlanSection({ userId }: { userId: number }) {
   }
   if (!plan || plan.meals.length === 0) return null;
 
-  const editable = (meal: StaffMealPlan["meals"][number]) => canManage && !meal.locked;
+  const editable = (meal: MealPlanMeal) => canManage && !meal.locked;
   const edited = plan.meals.filter(
     (m) => editable(m) && m.activityId in draft && draft[m.activityId] !== m.attending,
   );
@@ -93,7 +82,7 @@ export function MealPlanSection({ userId }: { userId: number }) {
     if (!plan) return;
     setSaving(true);
     try {
-      const next = await api.put<StaffMealPlan>(
+      const next = await api.put<MealPlan>(
         `/api/users/${userId}/meal-plan`,
         {
           meals: edited.map((m) => ({ activityId: m.activityId, attending: draft[m.activityId] })),

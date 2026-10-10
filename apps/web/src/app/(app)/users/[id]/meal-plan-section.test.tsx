@@ -1,7 +1,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MealPlanSection, type StaffMealPlan } from "./meal-plan-section";
+import type { MealPlan } from "@/lib/meal-plan";
+import { MealPlanSection } from "./meal-plan-section";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -42,14 +43,17 @@ vi.mock("@/components/common/section-card", () => ({
   ),
 }));
 
-const PLAN: StaffMealPlan = {
+const PLAN: MealPlan = {
   confirmedAt: null,
+  cutoffHours: 24,
   meals: [
     {
       activityId: 1,
       name: "Lunch",
       nameI18n: null,
       startsAt: "2026-10-20T12:00:00.000Z",
+      endsAt: "2026-10-20T13:00:00.000Z",
+      location: null,
       attending: true,
       locked: false,
     },
@@ -58,6 +62,8 @@ const PLAN: StaffMealPlan = {
       name: "Breakfast",
       nameI18n: null,
       startsAt: "2026-10-11T08:00:00.000Z",
+      endsAt: "2026-10-11T09:00:00.000Z",
+      location: null,
       attending: false,
       locked: true,
     },
@@ -113,7 +119,7 @@ describe("MealPlanSection (#933)", () => {
   });
 
   it("clears the previous user's plan when the user changes", async () => {
-    let resolveNext: (plan: StaffMealPlan) => void = () => undefined;
+    let resolveNext: (plan: MealPlan) => void = () => undefined;
     mocks.get
       .mockResolvedValueOnce(PLAN)
       .mockReturnValueOnce(new Promise((resolve) => (resolveNext = resolve)));
