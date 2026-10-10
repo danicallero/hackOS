@@ -5,7 +5,14 @@ import { idempotencyGuard } from "../../lib/idempotency.js";
 import { keyByUser, rateLimitGuard } from "../../lib/rate-limit.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
 import { entryParams, savePersonBody, scanBody, updateEntryBody } from "./schemas.js";
-import { listDiary, removeEntry, savePerson, saveScanned, updateEntry } from "./service.js";
+import {
+  listDiary,
+  listSponsorCollection,
+  removeEntry,
+  savePerson,
+  saveScanned,
+  updateEntry,
+} from "./service.js";
 
 /**
  * #935: scan lookups are capped per account so badge UIDs cannot be
@@ -32,6 +39,20 @@ export function registerDiaryRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => listDiary(ownerOf(req)),
+  );
+
+  r.get(
+    "/api/me/diary/sponsors",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "Read my sponsor stand collection",
+        description:
+          "The sponsor stands the caller can collect by scanning them: every revealed sponsor with at least one stand tag, plus revealed sponsors the caller already collected even if their tags were removed since. Hidden sponsors are never listed or counted. Returns `total`, `collected` and `items`: the public sponsor card with `entry` (the caller's diary entry id, favourite, note and collection time) or null while not yet collected; collected first by newest, then the rest by name. Stand tag codes are never exposed. Private to the caller; requires event access (#935).",
+      },
+    },
+    async (req) => listSponsorCollection(ownerOf(req)),
   );
 
   r.post(

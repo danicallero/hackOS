@@ -94,6 +94,7 @@ new entry answers 201, an existing one 200 with the stored favourite and note.
 | Route | Guard |
 | --- | --- |
 | `GET /api/me/diary` | authenticated + event access |
+| `GET /api/me/diary/sponsors` | authenticated + event access |
 | `POST /api/me/diary/scan` | authenticated + event access, `diary-scan` rate limit, `Idempotency-Key` |
 | `POST /api/me/diary/people` | authenticated + event access, `Idempotency-Key` |
 | `PATCH /api/me/diary/:entryId` | owner + event access, `Idempotency-Key` |
@@ -123,22 +124,53 @@ read model. Clients update from the mutation response and refetch on focus.
 ## Web
 
 `/people` (`apps/web/src/app/(app)/people/event-diary.tsx`) is the diary,
-labelled Diary in the personal nav ([`navigation.md`](./navigation.md)). The
-default Saved tab lists `GET /api/me/diary`: people reuse the directory row
-(name links to `/people/<userId>`), sponsors show logo, name, clamped
-description, website and challenges, and unavailable entries show one quiet
-line and can still be removed. Each row has a favourite star and a menu with
-Add/Edit note (dialog, 500 characters) and Remove (confirmation). Controls
-are disabled while their request runs and every write sends an
-`Idempotency-Key`. The secondary Directory tab (`?tab=directory`,
-`directory:read` only) keeps the directory list and its URL parameters
-([`directory.md`](./directory.md)) and adds Save per row. The page refetches on
-the `directory` topic's `domain.changed` and when the window regains focus.
-Without event access it shows access denied.
+labelled Diary in the personal nav ([`navigation.md`](./navigation.md)). It
+keeps people and companies apart: people are contacts, a company is a stand
+to collect. Tabs (`?tab=`): People (default), Companies, and Directory for
+`directory:read` holders.
+
+**Save and Favourite are separate.** Saving adds a person or stand to the
+diary. Favourite only marks a saved entry and drives the Favourites filters;
+un-favouriting never removes anything. Removal is the explicit "Remove from
+diary" in the row's `…` menu (with confirmation), next to Add/Edit note
+(dialog, 500 characters). Controls are disabled while their request runs and
+every write sends an `Idempotency-Key`.
+
+- **People** lists the person entries of `GET /api/me/diary` with a local
+  search (name, headline, project, challenges, location and the private note,
+  accent- and case-insensitive) and a Favourites toggle. Rows share the
+  directory's columns, avatar and trailing actions (`personColumns`,
+  `PersonMobileRow`): Favourite and `…`. The whole row opens
+  `/people/<userId>` (desktop row click; on narrow screens a stretched link
+  with a full-width hover/pressed state); the trailing controls never trigger
+  it. Someone who no longer shares a profile shows one quiet line, has no
+  link, and can still be removed.
+- **Companies** reads `GET /api/me/diary/sponsors`: a progress ring with
+  "collected of total", then an album of round logo badges. Collected stands
+  are in colour (a star marks favourites); the rest are muted and dashed with
+  a lock. A badge opens a dialog with the public card (description, website,
+  challenges) and, once collected, the collection date, the note, Favourite,
+  Edit note and Remove. Uncollected badges explain how to collect them. A
+  Favourites toggle narrows the album to starred stands.
+- **Directory** keeps the directory list and its URL parameters
+  ([`directory.md`](./directory.md)) with the same row as People: Save for
+  someone not yet saved; once saved, "Saved", Favourite and the `…` menu.
+
+The page refetches on the `directory` topic's `domain.changed` and when the
+window regains focus. Without event access it shows access denied.
 
 Person cards render for every attendee; only the Directory tab needs
 `directory:read`, so an attendee without it sees the people they saved by
 scanning on mobile but cannot browse the directory.
+
+### Collection
+
+`GET /api/me/diary/sponsors` counts the stands an attendee can collect: every
+revealed sponsor (H45 visibility, never a review fixture) with at least one
+stand tag, plus revealed sponsors the caller already collected even if their
+tags were removed since. A sponsor hidden again drops out of both counts.
+Items come collected first (newest first), then by name; stand codes are never
+included.
 
 The enterprise page has a Stand tab (`stand-tags-card.tsx`) for staff with
 `sponsors:manage` and for the enterprise's own sponsor reps (the page only

@@ -2,8 +2,6 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/csr/BookmarkSimple";
-import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
@@ -22,7 +20,9 @@ import { type Translate, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 import { type ChallengeOption, challengeTitleText } from "../projects/shared";
+import { type DiaryHandlers, type DiaryMark, PersonActions } from "./diary-actions";
 import { useDirectoryParams } from "./use-directory-params";
 
 /** `DirectoryEntry` from `GET /api/directory` (#934). */
@@ -47,7 +47,8 @@ const SEARCH_DEBOUNCE_MS = 250;
 /** Localized challenge title by id; the API's `name` is the fallback. */
 export type ChallengeName = (challenge: { id: number; name: string }) => string;
 
-export function Person({ entry, href }: { entry: DirectoryEntry; href?: string }) {
+/** Avatar, name and headline; the whole row is the link, not this name. */
+export function Person({ entry }: { entry: DirectoryEntry }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
       <Avatar size="lg">
@@ -55,15 +56,7 @@ export function Person({ entry, href }: { entry: DirectoryEntry; href?: string }
         <AvatarFallback>{initials(entry.displayName)}</AvatarFallback>
       </Avatar>
       <div className="min-w-0">
-        <p className="wrap-break-word font-medium">
-          {href ? (
-            <Link href={href} className="hover:underline underline-offset-4">
-              {entry.displayName}
-            </Link>
-          ) : (
-            entry.displayName
-          )}
-        </p>
+        <p className="wrap-break-word font-medium">{entry.displayName}</p>
         {entry.headline && (
           <p className="text-muted-foreground wrap-break-word text-sm">{entry.headline}</p>
         )}
@@ -94,135 +87,161 @@ export function Challenges({
   );
 }
 
-/** Optional "save to my diary" action on directory rows (#935). */
-export interface DirectorySaveAction {
-  savedUserIds: ReadonlySet<number>;
-  pendingUserId: number | null;
-  onSave: (entry: DirectoryEntry) => void;
-}
-
-function SaveButton({
-  entry,
-  save,
-  t,
-}: {
-  entry: DirectoryEntry;
-  save: DirectorySaveAction;
-  t: Translate;
-}) {
-  const saved = save.savedUserIds.has(entry.userId);
+/** The private note under a saved person's name. */
+export function NoteLine({ note }: { note: string }) {
   return (
-    <Button
-      type="button"
-      variant={saved ? "ghost" : "outline"}
-      size="sm"
-      disabled={saved || save.pendingUserId !== null}
-      loading={save.pendingUserId === entry.userId}
-      aria-label={`${saved ? t("diarySaved") : t("diarySave")}: ${entry.displayName}`}
-      onClick={(event) => {
-        event.stopPropagation();
-        save.onSave(entry);
-      }}
-    >
-      {saved ? (
-        <CheckIcon aria-hidden="true" className="size-4" />
-      ) : (
-        <BookmarkSimpleIcon aria-hidden="true" className="size-4" />
-      )}
-      {saved ? t("diarySaved") : t("diarySave")}
-    </Button>
+    <p className="text-muted-foreground line-clamp-2 text-sm whitespace-pre-line wrap-break-word italic">
+      {note}
+    </p>
   );
 }
 
-function buildColumns(
+/**
+ * Diary state for directory rows (#935): Save while not in the diary; once
+ * saved, Favourite and the note/remove menu, exactly as on People.
+ */
+export interface DirectoryDiary {
+  markFor: (userId: number) => DiaryMark | null;
+  savingUserId: number | null;
+  onSave: (entry: DirectoryEntry) => void;
+  handlers: DiaryHandlers;
+}
+
+/** A person row in People or Directory: identity first, then the diary actions. */
+export interface PersonRowModel {
+  key: string;
+  /** null for a saved person who no longer shares a profile. */
+  person: DirectoryEntry | null;
+  note: string | null;
+  actions: React.ReactNode;
+}
+
+function Unavailable({ t }: { t: Translate }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <Avatar size="lg">
+        <AvatarFallback>?</AvatarFallback>
+      </Avatar>
+      <p className="text-muted-foreground">{t("diaryPersonUnavailable")}</p>
+    </div>
+  );
+}
+
+/** Shared desktop columns of People and Directory (#934, #935). */
+export function personColumns<R extends PersonRowModel>(
   t: Translate,
   nameOf: ChallengeName,
-  save?: DirectorySaveAction,
-): Column<DirectoryEntry>[] {
-  const columns: Column<DirectoryEntry>[] = [
-    { id: "name", header: t("name"), cell: (entry) => <Person entry={entry} /> },
+): Column<R>[] {
+  const dash = <span className="text-muted-foreground">—</span>;
+  return [
+    {
+      id: "name",
+      header: t("name"),
+      className: "whitespace-normal",
+      cell: (row) => (
+        <div className="min-w-0 space-y-1">
+          {row.person ? <Person entry={row.person} /> : <Unavailable t={t} />}
+          {row.note && (
+            <div className="pl-13">
+              <NoteLine note={row.note} />
+            </div>
+          )}
+        </div>
+      ),
+    },
     {
       id: "project",
       header: t("colProject"),
-      cell: (entry) =>
-        entry.project ? (
-          <span className="wrap-break-word">{entry.project.name}</span>
+      cell: (row) =>
+        row.person?.project ? (
+          <span className="wrap-break-word">{row.person.project.name}</span>
         ) : (
-          <span className="text-muted-foreground">—</span>
+          dash
         ),
     },
     {
       id: "challenges",
       header: t("challenges"),
-      cell: (entry) => <Challenges entry={entry} nameOf={nameOf} />,
+      cell: (row) => (row.person ? <Challenges entry={row.person} nameOf={nameOf} /> : dash),
     },
     {
       id: "location",
       header: t("colLocation"),
-      cell: (entry) =>
-        entry.locationNote ? (
-          <span className="wrap-break-word">{entry.locationNote}</span>
+      cell: (row) =>
+        row.person?.locationNote ? (
+          <span className="wrap-break-word">{row.person.locationNote}</span>
         ) : (
-          <span className="text-muted-foreground">—</span>
+          dash
         ),
     },
-  ];
-  if (save) {
-    columns.push({
-      id: "save",
-      header: <span className="sr-only">{t("diarySave")}</span>,
+    {
+      id: "actions",
+      header: <span className="sr-only">{t("diary")}</span>,
       align: "right",
-      width: "w-32",
-      cell: (entry) => <SaveButton entry={entry} save={save} t={t} />,
-    });
-  }
-  return columns;
+      cell: (row) => row.actions,
+    },
+  ];
 }
 
-function PersonMobileRow({
-  entry,
+export function personHref(row: PersonRowModel): string | null {
+  return row.person ? `/people/${row.person.userId}` : null;
+}
+
+/**
+ * Narrow-screen person row: the whole row is the link (stretched over it, with
+ * a full-width hover and pressed state); the trailing actions sit above it.
+ */
+export function PersonMobileRow({
+  row,
   t,
   nameOf,
-  save,
 }: {
-  entry: DirectoryEntry;
+  row: PersonRowModel;
   t: Translate;
   nameOf: ChallengeName;
-  save?: DirectorySaveAction;
 }) {
+  const { person } = row;
+  const href = personHref(row);
+  const details = person && (person.project || person.challenges.length > 0 || person.locationNote);
   return (
-    <div className="relative min-w-0 space-y-2 px-4 py-3">
+    <div
+      className={cn(
+        "relative min-w-0 space-y-2 px-4 py-3 transition-colors",
+        href && "hover:bg-muted/50 has-[a:active]:bg-muted",
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
-        <Link
-          href={`/people/${entry.userId}`}
-          className="focus-visible:ring-ring min-w-0 outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-inset"
-        >
-          <Person entry={entry} />
-        </Link>
-        {save && (
-          <span className="relative z-10 shrink-0">
-            <SaveButton entry={entry} save={save} t={t} />
-          </span>
+        {person && href ? (
+          <Link
+            href={href}
+            className="min-w-0 outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset"
+          >
+            <Person entry={person} />
+          </Link>
+        ) : (
+          <Unavailable t={t} />
         )}
+        <div className="relative z-10 shrink-0">{row.actions}</div>
       </div>
-      {(entry.project || entry.challenges.length > 0 || entry.locationNote) && (
+      {(details || row.note) && (
         <div className="space-y-1.5 pl-13 text-sm">
-          {entry.project && <p className="wrap-break-word">{entry.project.name}</p>}
-          {entry.challenges.length > 0 && (
+          {person?.project && <p className="wrap-break-word">{person.project.name}</p>}
+          {person && person.challenges.length > 0 && (
             <div className="flex items-start gap-2">
               <TrophyIcon
                 className="text-muted-foreground mt-1 size-3.5 shrink-0"
                 aria-label={t("challenges")}
               />
-              <Challenges entry={entry} nameOf={nameOf} />
+              <Challenges entry={person} nameOf={nameOf} />
             </div>
           )}
-          {entry.locationNote && (
+          {person?.locationNote && (
             <p className="text-muted-foreground flex items-start gap-2">
               <MapPinIcon className="mt-0.5 size-3.5 shrink-0" aria-label={t("colLocation")} />
-              <span className="min-w-0 wrap-break-word">{entry.locationNote}</span>
+              <span className="min-w-0 wrap-break-word">{person.locationNote}</span>
             </p>
           )}
+          {row.note && <NoteLine note={row.note} />}
         </div>
       )}
     </div>
@@ -262,15 +281,17 @@ export function useChallengeNames() {
 }
 
 /** Opt-in people directory over `GET /api/directory` (#934). */
-export function PeopleDirectory({ save }: { save?: DirectorySaveAction } = {}) {
+export function PeopleDirectory({ diary }: { diary?: DirectoryDiary } = {}) {
   const { t } = useLocale();
   const canRead = useCan(CAPABILITIES.DIRECTORY_READ);
   // Gate before mounting the list, so a reader without access opens no fetch or stream.
   if (!canRead) return <AccessDenied ask={t("peopleAccessDeniedDesc")} />;
-  return <DirectoryList save={save} />;
+  return <DirectoryList diary={diary} />;
 }
 
-function DirectoryList({ save }: { save?: DirectorySaveAction }) {
+type DirectoryRow = PersonRowModel & { person: DirectoryEntry };
+
+function DirectoryList({ diary }: { diary?: DirectoryDiary }) {
   const { t, language } = useLocale();
   const { params, setParams } = useDirectoryParams();
   const { q, challengeId, cursor } = params;
@@ -364,7 +385,32 @@ function DirectoryList({ save }: { save?: DirectorySaveAction }) {
     };
   }, [q, challengeId, cursor, queryKey, liveRefresh, retryNonce, t]);
 
-  const columns = useMemo(() => buildColumns(t, nameOf, save), [t, nameOf, save]);
+  const columns = useMemo(() => personColumns<DirectoryRow>(t, nameOf), [t, nameOf]);
+  const rows = useMemo<DirectoryRow[]>(
+    () =>
+      page.items.map((person) => {
+        const mark = diary?.markFor(person.userId) ?? null;
+        return {
+          key: String(person.userId),
+          person,
+          note: mark?.note ?? null,
+          actions: diary ? (
+            <PersonActions
+              name={person.displayName}
+              mark={mark}
+              handlers={diary.handlers}
+              showSaved
+              save={{
+                pending: diary.savingUserId === person.userId,
+                disabled: diary.savingUserId !== null,
+                onSave: () => diary.onSave(person),
+              }}
+            />
+          ) : null,
+        };
+      }),
+    [page.items, diary],
+  );
   const challengeOptions = useMemo(
     () =>
       challenges
@@ -426,13 +472,11 @@ function DirectoryList({ save }: { save?: DirectorySaveAction }) {
       />
       <DataTable
         columns={columns}
-        data={page.items}
-        getRowId={(entry) => String(entry.userId)}
-        getRowHref={(entry) => `/people/${entry.userId}`}
-        getRowLabel={(entry) => entry.displayName}
-        renderMobileRow={(entry) => (
-          <PersonMobileRow entry={entry} t={t} nameOf={nameOf} save={save} />
-        )}
+        data={rows}
+        getRowId={(row) => row.key}
+        getRowHref={personHref}
+        getRowLabel={(row) => row.person.displayName}
+        renderMobileRow={(row) => <PersonMobileRow row={row} t={t} nameOf={nameOf} />}
         loading={loading}
         error={
           loadError
