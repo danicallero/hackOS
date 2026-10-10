@@ -6,8 +6,17 @@
  * live binding rather than capturing it in a module-local constant.
  */
 export const PRODUCTION_API_URL = "https://api.hackudc.com";
-/** Explicit Expo env override for local/preview development servers. */
-export const LOCAL_API_URL_OVERRIDE = process.env.EXPO_PUBLIC_API_URL || null;
+/**
+ * Explicit Expo env override for local/preview development servers. Release
+ * builds bake the production URL into `EXPO_PUBLIC_API_URL` (EAS production
+ * environment); that is not an override, or it would force development mode
+ * onto production and leave the switch unable to reach staging (#935).
+ */
+export function localApiUrlOverride(value: string | undefined): string | null {
+  const url = value?.trim().replace(/\/+$/, "");
+  return url && url !== PRODUCTION_API_URL ? url : null;
+}
+export const LOCAL_API_URL_OVERRIDE = localApiUrlOverride(process.env.EXPO_PUBLIC_API_URL);
 export const DEVELOPMENT_API_URL = LOCAL_API_URL_OVERRIDE ?? "https://api.dani.md";
 
 /** The active base URL. Changed only by the persisted developer endpoint mode. */

@@ -13,7 +13,7 @@ jest.mock("./auth-client", () => ({
 }));
 
 import { apiModeForStartup, apiUrlFor, isApiMode } from "./api-mode";
-import { DEVELOPMENT_API_URL, PRODUCTION_API_URL } from "./env";
+import { DEVELOPMENT_API_URL, localApiUrlOverride, PRODUCTION_API_URL } from "./env";
 
 describe("API endpoint modes", () => {
   beforeEach(() => {
@@ -36,5 +36,13 @@ describe("API endpoint modes", () => {
     expect(apiModeForStartup("production", "http://127.0.0.1:3000")).toBe("development");
     expect(apiModeForStartup(null, null)).toBe("production");
     expect(apiModeForStartup("development", null)).toBe("development");
+  });
+
+  it("does not treat the production URL baked into release builds as an override", () => {
+    expect(localApiUrlOverride("https://api.hackudc.com")).toBeNull();
+    expect(localApiUrlOverride("https://api.hackudc.com/")).toBeNull();
+    expect(localApiUrlOverride("")).toBeNull();
+    expect(localApiUrlOverride(undefined)).toBeNull();
+    expect(localApiUrlOverride("http://127.0.0.1:3000/")).toBe("http://127.0.0.1:3000");
   });
 });

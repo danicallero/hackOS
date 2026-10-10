@@ -116,8 +116,11 @@ EXPO_PUBLIC_API_URL=http://127.0.0.1:3000
 EXPO_PUBLIC_EVENT_WEBSITE_URL=https://os.hackudc.com
 ```
 
-Setting `EXPO_PUBLIC_API_URL` selects the development API at app startup, even
-if SecureStore previously retained production mode. This lets the root
+Setting `EXPO_PUBLIC_API_URL` to anything other than the production API selects
+the development API at app startup, even if SecureStore previously retained
+production mode. The production URL (what the EAS production environment bakes
+into release builds) is not an override: those builds start in production and
+the hidden switch still reaches `https://api.dani.md`. This lets the root
 `EXPO_PUBLIC_API_URL=http://localhost:3000 pnpm start` command reliably target
 the local API.
 
