@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
@@ -167,6 +166,8 @@ async function listLinks(enterpriseId?: number): Promise<EnterpriseInviteLinkRes
   return rows.map((row: Record<string, unknown>) => toResponse(row));
 }
 
+// Existing enterprise links stay listable and withdrawable; new sponsor links
+// are created only as `user_invite_links` of kind sponsor (H43, #929).
 export function registerEnterpriseInviteLinkRoutes(app: FastifyInstance): void {
   const api = app.withTypeProvider<ZodTypeProvider>();
   const manage = requireAnyCapability(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.INVITES_MANAGE);
@@ -216,70 +217,6 @@ export function registerEnterpriseInviteLinkRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => listLinks(req.query.enterpriseId),
-  );
-
-  api.post(
-    "/api/invites/enterprise-links",
-    {
-      ...routeAccess(policy),
-      preHandler: manage,
-      schema: {
-        body: z.object({
-          enterpriseId: z.number().int().positive(),
-          maxRedeems: z.number().int().positive().nullable().default(null),
-          // `null` means the link never expires. A one-minute link is valid.
-          expiresInMinutes: z
-            .number()
-            .int()
-            .positive()
-            .nullable()
-            .default(7 * 24 * 60),
-        }),
-        response: { 201: enterpriseInviteLinkResponse },
-        summary: "Create an enterprise invite link",
-        description:
-          "Creates a reusable account-creation link for an enterprise with an optional redemption limit and expiry (H43).",
-      },
-    },
-    async (req, reply) => {
-      const { enterpriseId, maxRedeems, expiresInMinutes } = req.body;
-      const token = randomBytes(32).toString("base64url");
-      const result = await withTransaction(async (client) => {
-        const { rows: enterprises } = await client.query(
-          `SELECT id, name FROM enterprises WHERE id = $1 FOR SHARE`,
-          [enterpriseId],
-        );
-        const enterprise = enterprises[0] as { id: number; name: string } | undefined;
-        if (!enterprise) throw new NotFoundError("Enterprise not found", { enterpriseId });
-
-        const { rows } = await client.query(
-          `INSERT INTO enterprise_invite_links
-             (token, enterprise_id, created_by, max_redeems, expires_at)
-           VALUES ($1, $2, $3, $4,
-                   CASE WHEN $5::integer IS NULL THEN NULL
-                        ELSE now() + ($5::integer * interval '1 minute') END)
-           RETURNING id, token, enterprise_id, max_redeems, redeemed_count,
-                     expires_at, revoked_at, created_at`,
-          [token, enterpriseId, req.userId, maxRedeems, expiresInMinutes],
-        );
-        const created = rows[0] as EnterpriseInviteLinkRow;
-        await audit(client, {
-          actorId: req.userId,
-          entityType: "enterprise_invite_link",
-          entityId: created.id,
-          action: "create",
-          source: "admin",
-          after: {
-            enterpriseId,
-            maxRedeems,
-            expiresInMinutes,
-          },
-        });
-        return { ...created, enterprise_name: enterprise.name, redemptions: [] };
-      });
-
-      return reply.code(201).send(toResponse(result));
-    },
   );
 
   api.post(
