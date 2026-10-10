@@ -3504,5 +3504,16 @@
   "attendedStat": "Attended",
   "attendanceRate": "Attendance rate",
   "averageHoursOnSite": "Average hours on site",
-  "totalHours": "Total hours"
+  "totalHours": "Total hours",
+  "completeYourProfile": "Complete your profile",
+  "later": "Later",
+  "stepOfTotal": "{current} of {total}",
+  "mealPlanLockNotice": "Changes close {hours} h before each meal.",
+  "mealPlanSaved": "Meal plan saved",
+  "toastSaveMealPlan": "Save meals",
+  "couldNotSaveMealPlan": "Could not save your meals",
+  "couldNotLoadMealPlan": "Could not load your meals",
+  "mealPlanChangedReview": "Your meals changed. Review them and save again.",
+  "mealPlanLockedReview": "Changes to one of these meals just closed. Review them and save again.",
+  "dietaryAnswerRequired": "Choose your restrictions or tick No restrictions."
 }

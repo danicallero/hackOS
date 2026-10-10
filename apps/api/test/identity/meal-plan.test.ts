@@ -167,6 +167,7 @@ describe("GET /api/me/meal-plan (#933)", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.confirmedAt).toBeNull();
+    expect(body.cutoffHours).toBe(24);
     expect(
       body.meals.map((m: { activityId: number; locked: boolean; attending: null }) => [
         m.activityId,
@@ -448,6 +449,25 @@ describe("dietary confirmation and pendingProfileTasks (#933)", () => {
     expect(unchanged.statusCode).toBe(200);
   });
 
+  it("does not ask a locked profile (H7) for dietary data", async () => {
+    const userId = await attendee();
+    const pool = await db();
+    const { rows: apps } = await pool.query(
+      `INSERT INTO applications (name, template) VALUES ('Hack', '[]'::jsonb) RETURNING id`,
+    );
+    const { ensureApplicationFormVersion } = await import("../helpers.js");
+    const versionId = await ensureApplicationFormVersion(apps[0].id);
+    await pool.query(
+      `INSERT INTO application_responses
+         (application_id, user_id, status, application_form_version_id)
+       VALUES ($1, $2, 'accepted', $3)`,
+      [apps[0].id, userId, versionId],
+    );
+    const profile = await me(userId);
+    expect(profile.profileLocked).toBe(true);
+    expect(profile.pendingProfileTasks).toEqual([]);
+  });
+
   it("asks sponsors for a meal plan until every open meal is answered, and again for a new meal", async () => {
     const sponsor = await attendee({ sponsor: true });
     await (await db()).query(`UPDATE users SET dietary_confirmed_at = now() WHERE id = $1`, [
@@ -555,6 +575,7 @@ describe("meal plan cutoff setting (#933)", () => {
       headers: asUser(sponsor),
     });
     expect(plan.json().meals[0].locked).toBe(true);
+    expect(plan.json().cutoffHours).toBe(48);
 
     for (const bad of [-1, 169, 1.5]) {
       const res = await a.inject({

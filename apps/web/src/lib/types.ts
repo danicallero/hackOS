@@ -55,6 +55,10 @@ export interface Me {
   /** H7: once an application is accepted, name/shirt-size/dietary fields are no longer self-editable. */
   profileLocked: boolean;
   hasStatisticsPanels: boolean;
+  /** #933: when the person last saved an explicit dietary answer (an empty one counts). */
+  dietaryConfirmedAt: string | null;
+  /** #933: next-entry prompt steps, in display order. */
+  pendingProfileTasks: ("dietary" | "meal_plan")[];
 }
 
 export type Language = "en" | "es" | "gl";
