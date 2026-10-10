@@ -67,6 +67,17 @@ estimated. The second chart separates first visits from repeat scans or
 servings. Exact counts are visible beside the charts. Logistics SSE events
 refresh the operational totals and charts during the event.
 
+Sponsor meal plans (#933) add planned-versus-served figures to the During
+meals table: **Planned** (sponsor representatives who said they attend) next
+to **Served**, and **No answer**. Meals not offered to sponsors show `—`. The
+meal detail adds the plan ring (attending, not attending, no answer) and the
+intolerance breakdown among attendees, read from aggregate-only
+`GET /api/logistics/meal-plans` under `logistics:stats` and refreshed by
+`logistics.meal_plan.updated`. Holders of `meal-plans:export` also get the
+per-person catering CSV (`GET /api/logistics/meal-plans/:activityId/export.csv`:
+name, surname, enterprise, intolerances, notes). Counts exclude synthetic,
+inactive and anonymized accounts.
+
 Scope keys are stable resource identifiers: `application:<id>` and
 `role:<id>`. The API validates every selected key against the caller's
 effective permissions. The browser may select several compatible scopes, but it

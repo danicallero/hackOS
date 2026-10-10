@@ -1,6 +1,7 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { type Queryable, withTransaction } from "../../db/pool.js";
+import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { computeMembershipFlags } from "./role.js";
@@ -141,7 +142,11 @@ async function mealActivityIds(db: Queryable, ids: number[]): Promise<Set<number
 export async function replaceMealPlan(
   userId: number,
   answers: ReadonlyArray<{ activityId: number; attending: boolean }>,
+  options: { actorId?: number } = {},
 ): Promise<MealPlan> {
+  // A staff correction (PUT /api/users/:id/meal-plan) is audited; the
+  // sponsor's own submission is a benign self-edit and is not (H53).
+  const staffActor = options.actorId !== undefined && options.actorId !== userId;
   const { plan, written } = await withTransaction(async (client) => {
     const { rows: userRows } = await client.query(
       `SELECT id FROM users
@@ -201,6 +206,22 @@ export async function replaceMealPlan(
         [userId, openIds, openIds.map((id) => byActivity.get(id))],
       );
       changed = rows.map((row) => row.activity_id);
+    }
+    if (staffActor && changed.length > 0) {
+      const attendingIds = (plan: Map<number, boolean | null>) =>
+        [...plan].filter(([, attending]) => attending === true).map(([id]) => id);
+      const before = new Map([...offered.values()].map((m) => [m.activityId, m.attending]));
+      const after = new Map(before);
+      for (const id of openIds) after.set(id, byActivity.get(id) ?? null);
+      await audit(client, {
+        actorId: options.actorId as number,
+        entityType: "user",
+        entityId: userId,
+        action: "meal_plan.updated",
+        source: "admin",
+        before: { attending: attendingIds(before) },
+        after: { attending: attendingIds(after) },
+      });
     }
     await client.query(
       `UPDATE users SET meal_plan_confirmed_at = COALESCE(meal_plan_confirmed_at, now())

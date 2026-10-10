@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { I18nText } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
 
 export interface PersonCard {
@@ -219,6 +220,19 @@ export interface HourlyBucket {
   n: number;
 }
 
+/** #933: planned sponsor headcount for one meal (GET /api/logistics/meal-plans). */
+export interface MealPlanSummary {
+  activityId: number;
+  name: string;
+  nameI18n: Record<string, string>;
+  startsAt: string;
+  attending: number;
+  notAttending: number;
+  unanswered: number;
+  intolerances: Array<{ id: number; label: I18nText; n: number }>;
+  withNotes: number;
+}
+
 export interface LogisticsStats {
   accreditedCount: number;
   currentlyPresent: number;
@@ -430,6 +444,7 @@ export const logisticsApi = {
   deletePresenceActivity: (id: number) =>
     api.delete<{ deleted: true }>(`/api/presence/activity-logs/${id}`),
   stats: () => api.get<LogisticsStats>("/api/logistics/stats"),
+  mealPlans: () => api.get<{ meals: MealPlanSummary[] }>("/api/logistics/meal-plans"),
   staffScanRanking: () =>
     api.get<{ items: StaffScanRankingRow[] }>("/api/logistics/stats/by-staff"),
   scannableActivities: (category?: "meal" | "activity") =>

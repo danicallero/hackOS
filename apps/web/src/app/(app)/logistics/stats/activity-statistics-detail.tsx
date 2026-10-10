@@ -1,25 +1,35 @@
 "use client";
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import type { ReactNode } from "react";
 import { Modal } from "@/components/common/modal";
 import { StatusBadge } from "@/components/common/status-badge";
-import { useLocale } from "@/lib/i18n";
-import type { LogisticsStats } from "@/lib/logistics";
+import { Button } from "@/components/ui/button";
+import { API_URL } from "@/lib/env";
+import { pickText, useLocale } from "@/lib/i18n";
+import type { LogisticsStats, MealPlanSummary } from "@/lib/logistics";
+import { useCan } from "@/lib/session";
 import { StatsChart } from "./stats-chart";
 
 export function ActivityStatisticsDetail({
   selected,
   stats,
+  mealPlan,
   connected,
   error,
   onClose,
 }: {
   selected: { id: number; meal: boolean } | null;
   stats: LogisticsStats | null;
+  /** #933: present only for meals offered to sponsors. */
+  mealPlan?: MealPlanSummary;
   connected: boolean;
   error: unknown;
   onClose: () => void;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
+  const canExportPlan = useCan(CAPABILITIES.MEAL_PLANS_EXPORT);
   const meal = selected?.meal
     ? stats?.meals.find((row) => row.activityId === selected.id)
     : undefined;
@@ -41,6 +51,14 @@ export function ActivityStatisticsDetail({
     { label: t("firstVisits"), n: people },
     { label: t("columnRepeats"), n: row?.repeats ?? 0 },
   ];
+
+  const planned = mealPlan
+    ? [
+        { label: t("mealPlanAttending"), n: mealPlan.attending },
+        { label: t("mealPlanNotAttending"), n: mealPlan.notAttending },
+        { label: t("columnUnanswered"), n: mealPlan.unanswered },
+      ]
+    : [];
 
   return (
     <Modal
@@ -71,6 +89,50 @@ export function ActivityStatisticsDetail({
             data={servings}
             rows={[{ label: t(meal ? "columnServed" : "columnScans"), n: served }, ...servings]}
           />
+          {mealPlan ? (
+            <StatsSection
+              title={t("mealPlanBreakdown")}
+              data={planned}
+              rows={planned}
+              action={
+                canExportPlan ? (
+                  <Button asChild variant="outline" size="sm">
+                    <a
+                      href={`${API_URL}/api/logistics/meal-plans/${mealPlan.activityId}/export.csv?language=${language}`}
+                    >
+                      <DownloadSimpleIcon className="size-4" aria-hidden="true" />
+                      {t("exportCsv")}
+                    </a>
+                  </Button>
+                ) : null
+              }
+            />
+          ) : null}
+          {mealPlan ? (
+            <section className="min-w-0 space-y-3">
+              <h2 className="type-section-title">{t("mealPlanDietary")}</h2>
+              <dl className="divide-y divide-border/60 border-y border-border/60">
+                {mealPlan.intolerances.length === 0 ? (
+                  <div className="py-2 text-sm text-muted-foreground">
+                    {t("mealPlanNoRestrictions")}
+                  </div>
+                ) : (
+                  mealPlan.intolerances.map((item) => (
+                    <div key={item.id} className="flex items-baseline justify-between gap-4 py-2">
+                      <dt className="text-sm text-muted-foreground">
+                        {pickText(item.label, language)}
+                      </dt>
+                      <dd className="text-lg tabular-nums">{item.n}</dd>
+                    </div>
+                  ))
+                )}
+                <div className="flex items-baseline justify-between gap-4 py-2">
+                  <dt className="text-sm text-muted-foreground">{t("mealPlanWithNotes")}</dt>
+                  <dd className="text-lg tabular-nums">{mealPlan.withNotes}</dd>
+                </div>
+              </dl>
+            </section>
+          ) : null}
         </div>
       </div>
     </Modal>
@@ -82,14 +144,19 @@ function StatsSection({
   title,
   data,
   rows,
+  action,
 }: {
   title: string;
   data: { label: string; n: number }[];
   rows: { label: string; n: number }[];
+  action?: ReactNode;
 }) {
   return (
     <section className="min-w-0 space-y-3">
-      <h2 className="type-section-title">{title}</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="type-section-title">{title}</h2>
+        {action}
+      </div>
       <StatsChart
         height="clamp(280px, min(calc(100dvh - 27rem), 60vw), 640px)"
         type="pie"

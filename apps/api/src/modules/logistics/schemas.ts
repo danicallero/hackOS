@@ -403,3 +403,32 @@ export const scheduleOwnerCandidatesQuery = z.object({
   q: z.string().trim().min(2),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
+
+// #933 sponsor meal plans (logistics read side)
+export const mealPlanSummariesQuery = z.object({
+  activityId: z.coerce.number().int().positive().optional(),
+});
+
+export const mealPlanActivityParam = z.object({
+  activityId: z.coerce.number().int().positive(),
+});
+
+export const mealPlanExportQuery = z.object({ language: languageSchema.default("es") });
+
+export const mealPlanSummariesResponse = z.object({
+  meals: z.array(
+    z.object({
+      activityId: z.number(),
+      name: z.string(),
+      nameI18n: z.record(z.string(), z.string()),
+      startsAt: z.string(),
+      attending: z.number(),
+      notAttending: z.number(),
+      unanswered: z.number(),
+      intolerances: z.array(
+        z.object({ id: z.number(), label: z.record(z.string(), z.string()), n: z.number() }),
+      ),
+      withNotes: z.number(),
+    }),
+  ),
+});

@@ -122,7 +122,11 @@ and its shown schedule entry includes the `sponsor` audience (an entry without
 audiences is staff-only), and it locks `event_config.meal_plan_cutoff_hours`
 (24 by default, set through `PUT /api/event` `mealPlanCutoffHours`) before it
 starts; responses carry it as `cutoffHours`. `PUT` ignores meals that ended or stopped being offered since the list
-was loaded, and locked meals that were never answered.
+was loaded, and locked meals that were never answered. Staff read a sponsor's plan through `GET
+/api/users/:id/meal-plan` (`users:read`) and correct it through `PUT
+/api/users/:id/meal-plan` (`meal-plans:manage`, same rules, audited as
+`meal_plan.updated`); logistics reads aggregate headcounts and the catering
+CSV under `/api/logistics/meal-plans` (see `docs/statistics-dashboard.md`).
 
 On the web, the `(app)` layout shows a dismissable dialog with one step per
 pending task ("Later" hides it for the browser session via `sessionStorage`),

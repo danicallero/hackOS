@@ -14,7 +14,12 @@ import { StatCard } from "@/components/common/stat-card";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
-import { type LogisticsStats, logisticsApi, type StaffScanRankingRow } from "@/lib/logistics";
+import {
+  type LogisticsStats,
+  logisticsApi,
+  type MealPlanSummary,
+  type StaffScanRankingRow,
+} from "@/lib/logistics";
 import { ActivityStatisticsDetail } from "./activity-statistics-detail";
 import { ChartCard } from "./chart-card";
 import { useEventChartRows } from "./event-charts";
@@ -29,9 +34,17 @@ export interface LiveStatsState {
   connected: boolean;
 }
 
-export function DuringPanel({ stats }: { stats: LiveStatsState }) {
+export function DuringPanel({
+  stats,
+  mealPlans = [],
+}: {
+  stats: LiveStatsState;
+  /** #933: planned sponsor headcounts, keyed into the meal rows by activity. */
+  mealPlans?: MealPlanSummary[];
+}) {
   const { t } = useLocale();
   const data = stats.data;
+  const planByMeal = new Map(mealPlans.map((plan) => [plan.activityId, plan]));
   const charts = useEventChartRows(data);
   const [hourlyChart, setHourlyChart] = useState<StatsChartType>("line");
   const [roleChart, setRoleChart] = useState<StatsChartType>("bar");
@@ -46,6 +59,13 @@ export function DuringPanel({ stats }: { stats: LiveStatsState }) {
       : "provisional";
   const mealColumns: Column<LogisticsStats["meals"][number]>[] = [
     { id: "name", header: t("columnMeal"), cell: (row) => row.name, sortValue: (row) => row.name },
+    {
+      id: "planned",
+      header: t("columnPlanned"),
+      align: "right",
+      cell: (row) => planByMeal.get(row.activityId)?.attending ?? "—",
+      sortValue: (row) => planByMeal.get(row.activityId)?.attending ?? -1,
+    },
     {
       id: "served",
       header: t("columnServed"),
@@ -66,6 +86,13 @@ export function DuringPanel({ stats }: { stats: LiveStatsState }) {
       align: "right",
       cell: (row) => row.repeats,
       sortValue: (row) => row.repeats,
+    },
+    {
+      id: "unanswered",
+      header: t("columnUnanswered"),
+      align: "right",
+      cell: (row) => planByMeal.get(row.activityId)?.unanswered ?? "—",
+      sortValue: (row) => planByMeal.get(row.activityId)?.unanswered ?? -1,
     },
   ];
   const activityColumns: Column<LogisticsStats["activities"][number]>[] = [
@@ -180,6 +207,7 @@ export function DuringPanel({ stats }: { stats: LiveStatsState }) {
       <ActivityStatisticsDetail
         selected={selectedActivity}
         stats={data}
+        mealPlan={selectedActivity?.meal ? planByMeal.get(selectedActivity.id) : undefined}
         connected={stats.connected}
         error={stats.error}
         onClose={() => setSelectedActivity(null)}

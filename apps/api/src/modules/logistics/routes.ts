@@ -31,6 +31,7 @@ import {
 import { logisticsTopicForFixture } from "./active-broadcast.js";
 import { activityScan } from "./activities.js";
 import { buildGoogleSaveUrl } from "./google-wallet.js";
+import { exportMealPlanCsv, mealPlanSummaries } from "./meal-plans.js";
 import { enqueueMealScanBatch } from "./offline-meals.js";
 import { listPeople, searchPeople } from "./people.js";
 import {
@@ -82,6 +83,10 @@ import {
   languageSchema,
   lookupBody,
   lookupUserBody,
+  mealPlanActivityParam,
+  mealPlanExportQuery,
+  mealPlanSummariesQuery,
+  mealPlanSummariesResponse,
   mealScanBatchBody,
   personSearchBody,
   presenceActivityPatchBody,
@@ -729,6 +734,48 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       },
     },
     async () => logisticsStats(),
+  );
+
+  // ── #933 sponsor meal plans: planned headcounts and catering export ─────
+
+  typed.get(
+    "/api/logistics/meal-plans",
+    {
+      ...routeAccess(access.stats),
+      preHandler: stats,
+      schema: {
+        querystring: mealPlanSummariesQuery,
+        summary: "Planned sponsor meal headcounts",
+        description:
+          "Per meal offered to sponsors (meal-kind activity whose schedule entry includes the `sponsor` audience, ended meals included): how many sponsor representatives plan to attend, declined, or have not answered, plus the intolerance breakdown and the number with dietary notes among those attending. Aggregates only; excludes synthetic, inactive and anonymized accounts. `activityId` narrows to one meal. Requires logistics statistics access.",
+        response: { 200: mealPlanSummariesResponse },
+      },
+    },
+    async (req) => ({ meals: await mealPlanSummaries(req.query.activityId) }),
+  );
+
+  typed.get(
+    "/api/logistics/meal-plans/:activityId/export.csv",
+    {
+      ...routeAccess({ kind: "capability", capability: CAPABILITIES.MEAL_PLANS_EXPORT }),
+      preHandler: requireCapability(CAPABILITIES.MEAL_PLANS_EXPORT),
+      schema: {
+        params: mealPlanActivityParam,
+        querystring: mealPlanExportQuery,
+        summary: "Export a meal's attendees for catering",
+        description:
+          "One row per sponsor representative planning to attend the meal: name, surname, enterprise, intolerances (labels in `language`, default es) and dietary notes. Carries per-person dietary data, so it requires the meal-plans:export capability. 404 when the activity is not a meal offered to sponsors.",
+      },
+    },
+    async (req, reply) => {
+      const csv = await exportMealPlanCsv(req.params.activityId, req.query.language);
+      reply.header("content-type", "text/csv; charset=utf-8");
+      reply.header(
+        "content-disposition",
+        `attachment; filename="meal-plan-${req.params.activityId}.csv"`,
+      );
+      return reply.send(csv);
+    },
   );
 
   typed.get(
