@@ -46,17 +46,29 @@ export function isScheduled(availableFrom: string | null): boolean {
 
 export { initials } from "@/lib/initials";
 
-/**
- * The next missing action for a company profile, in priority order (H44).
- * One direct next step, not an enumeration of every filled field — audit §4.3.
- */
-export type EnterpriseNextAction = "addLogo" | "addWebsite" | "addDescription" | null;
+export type EnterpriseTab = "profile" | "challenges" | "judges" | "members";
 
-export function enterpriseNextAction(
-  enterprise: Pick<Enterprise, "logo_url" | "website" | "description">,
-): EnterpriseNextAction {
-  if (!enterprise.logo_url) return "addLogo";
-  if (!enterprise.website) return "addWebsite";
-  if (!enterprise.description?.trim()) return "addDescription";
-  return null;
+/** Removed tabs keep old deep links working (#928, #929). */
+export const ENTERPRISE_TAB_ALIASES: Partial<Record<string, EnterpriseTab>> = {
+  overview: "profile",
+  invitations: "profile",
+};
+
+/**
+ * Challenges list only what a manager or the enterprise's own rep can load;
+ * anyone else would get an empty tab (H43, H44).
+ */
+export function enterpriseTabs({
+  canManage,
+  isSponsorRep,
+}: {
+  canManage: boolean;
+  isSponsorRep: boolean;
+}): EnterpriseTab[] {
+  return [
+    "profile",
+    ...(canManage || isSponsorRep ? (["challenges"] as const) : []),
+    "judges",
+    ...(canManage ? (["members"] as const) : []),
+  ];
 }

@@ -614,10 +614,13 @@ without context are not an adequate mobile adaptation.
   do not repeat it as an immediate `h2`; give distinct subsections their own
   headings. Statistics phase uses `width="content"` in its control row. Use a route for a different subject/workflow.
 - Tabs stay on one scrollable line; never wrap or clip their last item. Event
-  settings uses a vertical category rail on desktop and horizontal tabs on
-  narrow screens, with keyboard orientation matching the visible layout. Use
-  meaningful labels and keyboard arrow navigation. Existing deep-linkable
-  settings retain their URL and dirty-category guard.
+  settings does not add a second vertical rail beside the app sidebar:
+  `/settings/event` is a plain list of the sections the caller may manage, and
+  `?tab=<section>` opens one section with a back link in the header context slot; a section's own views
+  stay horizontal tabs. The same layout serves desktop and mobile. Use
+  meaningful labels and keyboard arrow navigation. Deep links, per-category save
+  scope and the dirty-section guard (links, browser Back and unload) are
+  retained (#932).
 
 ### Creation, reading and editing
 

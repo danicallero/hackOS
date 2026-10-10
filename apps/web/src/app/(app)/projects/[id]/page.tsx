@@ -226,7 +226,7 @@ export default function ProjectDetailPage() {
                               : memberMatchLabel(member, t)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                         <StatusBadge tone={mergeStatusTone(member.mergeStatus)}>
                           {memberMatchLabel(member, t)}
                         </StatusBadge>
@@ -246,6 +246,8 @@ export default function ProjectDetailPage() {
                             <DevpostParticipantActions
                               repoId={repo.id}
                               email={member.email}
+                              name={member.name}
+                              surname={member.surname}
                               canDelete={canEdit}
                               canLink={canImport}
                               onChanged={load}
