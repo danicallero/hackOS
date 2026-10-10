@@ -372,9 +372,13 @@ describe("People", () => {
     expect(screen.queryByText("Bea R.")).toBeNull();
   });
 
-  it("hides the directory scope without directory:read", async () => {
+  it("shows People | Companies, without Directory, to an account without directory:read", async () => {
     await renderMobile(<DiaryScreen />);
     await screen.findByText("Ana S.");
+    expect(screen.getAllByRole("tab").map((tab) => tab.props.accessibilityLabel)).toEqual([
+      "diaryPeopleTab",
+      "diaryCompaniesTab",
+    ]);
     expect(screen.queryByRole("tab", { name: "diaryDirectoryTab" })).toBeNull();
   });
 
@@ -405,8 +409,15 @@ describe("People", () => {
     });
     await renderMobile(<DiaryScreen />);
     await screen.findByText("Ana S.");
+    // One control: the three sibling views of the web diary, no second bar.
+    expect(screen.getAllByRole("tab").map((tab) => tab.props.accessibilityLabel)).toEqual([
+      "diaryPeopleTab",
+      "diaryCompaniesTab",
+      "diaryDirectoryTab",
+    ]);
     await fireEvent.press(screen.getByRole("tab", { name: "diaryDirectoryTab" }));
     expect(await screen.findByText("Carla M.")).toBeTruthy();
+    expect(screen.queryByLabelText("diaryShowFavourites")).toBeNull();
     // Not saved yet: Save, and no favourite or remove.
     expect(screen.queryByRole("button", { name: /diaryFavourite, Carla/ })).toBeNull();
     await fireEvent.changeText(screen.getByLabelText("scheduleSearch"), "car");
@@ -422,6 +433,10 @@ describe("People", () => {
     expect(screen.queryByRole("button", { name: "directorySave, Carla M." })).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "Carla M., Data" }));
     expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "300" } });
+    // People keeps its own local search and the favourites filter.
+    await fireEvent.press(screen.getByRole("tab", { name: "diaryPeopleTab" }));
+    expect(screen.getByLabelText("scheduleSearch").props.value).toBe("");
+    expect(screen.getByLabelText("diaryShowFavourites")).toBeTruthy();
   });
 });
 

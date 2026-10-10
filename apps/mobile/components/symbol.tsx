@@ -93,7 +93,7 @@ const ANDROID_SYMBOL_NAMES = {
   "lock.fill": "lock",
   magnifyingglass: "search",
   "lock.rotation": "sync_lock",
-  "mappin.and.ellipse": "location_on",
+  mappin: "location_on",
   "megaphone.fill": "campaign",
   mic: "mic",
   "note.text": "description",

@@ -60,6 +60,11 @@ export function PersonProfileScreen() {
   const [editingNote, setEditingNote] = useState(false);
   const requestId = useRef(0);
   const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
+  // iOS keeps the native back button, a circle on iOS 26, whenever there is a
+  // screen to return to. A custom headerLeft is wrapped in a wide glass pill,
+  // so a cold deep link (nothing to pop, H59) floats the same 44pt glass
+  // circle Android uses instead.
+  const [floatingBack] = useState(() => usesCustomAndroidHeader || !router.canGoBack());
 
   const load = useCallback(async () => {
     const request = ++requestId.current;
@@ -185,7 +190,7 @@ export function PersonProfileScreen() {
 
   return (
     <>
-      {usesCustomAndroidHeader ? (
+      {floatingBack ? (
         <View
           style={{
             left: 16,
@@ -207,23 +212,10 @@ export function PersonProfileScreen() {
             />
           </GlassView>
         </View>
-      ) : (
-        <Stack.Screen
-          options={{
-            title: "",
-            // A root-level detail route: keep the back action explicit so it
-            // also works when the native back item has nothing to pop (H59).
-            headerBackVisible: false,
-            headerLeft: () => (
-              <LegacyHeaderIconButton
-                accessibilityLabel={t("back")}
-                icon="chevron.left"
-                onPress={goBack}
-              />
-            ),
-          }}
-        />
-      )}
+      ) : null}
+      {process.env.EXPO_OS === "ios" ? (
+        <Stack.Screen options={{ title: "", headerBackVisible: !floatingBack }} />
+      ) : null}
       <DiaryNoteEditor
         visible={editingNote && entry !== null}
         initialNote={entry?.note ?? null}
@@ -309,10 +301,11 @@ export function PersonProfileScreen() {
                 />
               )}
               {entry ? (
+                // With a note, its section below shows it; the tile edits it.
                 <QuickAction
                   icon="note.text"
-                  label={t("diaryNote")}
-                  title={t("diaryNote")}
+                  label={t(entry.note ? "diaryEditNote" : "diaryNote")}
+                  title={t(entry.note ? "diaryEditNote" : "diaryNote")}
                   busy={busy === "note"}
                   onPress={() => setEditingNote(true)}
                 />
@@ -386,7 +379,7 @@ export function PersonProfileScreen() {
                   person.locationNote ? (
                     <DetailRow
                       key="location"
-                      icon="mappin.and.ellipse"
+                      icon="mappin"
                       label={t("directoryLocation")}
                       value={person.locationNote}
                     />

@@ -2,7 +2,7 @@ import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Modal, Platform, Pressable, Text, TextInput, View } from "react-native";
 import { GlassView } from "@/components/glass-view";
-import { ActionButton } from "@/components/native-ui";
+import { ActionButton, useDialogCardColors } from "@/components/native-ui";
 import { useLocale } from "@/lib/i18n";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { colors } from "@/theme/colors";
@@ -33,6 +33,7 @@ export function ScannerCodeEntry({
 }) {
   const { t } = useLocale();
   const system = appearance === "system";
+  const fill = useDialogCardColors();
   const heading = title ?? t("scannerManualEntryTitle");
   const hint = placeholder === undefined ? t("scannerManualEntryPlaceholder") : placeholder;
   const bottomInset = useRouterTabBarBottomInset();
@@ -92,7 +93,7 @@ export function ScannerCodeEntry({
         placeholderTextColor={system ? colors.tertiaryLabel : "rgba(255,255,255,0.5)"}
         returnKeyType="done"
         style={{
-          backgroundColor: system ? colors.surface : "rgba(255,255,255,0.12)",
+          backgroundColor: system ? fill.field : "rgba(255,255,255,0.12)",
           borderCurve: "continuous",
           borderRadius: 12,
           color: system ? colors.label : "white",
@@ -131,7 +132,7 @@ export function ScannerCodeEntry({
       >
         {system ? (
           // Same opaque card as the diary's note editor.
-          <View style={[cardStyle, { backgroundColor: colors.background }]}>{body}</View>
+          <View style={[cardStyle, { backgroundColor: fill.card }]}>{body}</View>
         ) : (
           <GlassView colorScheme="dark" glassEffectStyle="regular" style={cardStyle}>
             {body}

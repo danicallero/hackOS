@@ -433,8 +433,8 @@ export function CompanySheet({
               />
               <QuickAction
                 icon="note.text"
-                label={t("diaryNote")}
-                title={t("diaryNote")}
+                label={t(entry.note ? "diaryEditNote" : "diaryNote")}
+                title={t(entry.note ? "diaryEditNote" : "diaryNote")}
                 busy={false}
                 onPress={onEditNote}
               />

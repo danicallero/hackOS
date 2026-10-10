@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Modal, Pressable, Text, TextInput, View } from "react-native";
-import { ActionButton } from "@/components/native-ui";
+import { KeyboardAvoidingView, Modal, Pressable, Text, TextInput, View } from "react-native";
+import { ActionButton, useDialogCardColors } from "@/components/native-ui";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
@@ -19,6 +19,7 @@ export function DiaryNoteEditor({
   onSave: (note: string) => void;
 }) {
   const { t } = useLocale();
+  const fill = useDialogCardColors();
   const [note, setNote] = useState("");
   useEffect(() => {
     if (visible) setNote(initialNote ?? "");
@@ -31,7 +32,10 @@ export function DiaryNoteEditor({
         onPress={onClose}
         style={{ backgroundColor: "rgba(0,0,0,0.4)", position: "absolute", inset: 0 }}
       />
-      <View
+      {/* The card rises above the keyboard; centred under it, iOS hid
+          Save and Cancel behind the keys (#935). */}
+      <KeyboardAvoidingView
+        behavior={process.env.EXPO_OS === "ios" ? "padding" : undefined}
         pointerEvents="box-none"
         style={{ flex: 1, justifyContent: "center", paddingHorizontal: 20 }}
       >
@@ -39,7 +43,7 @@ export function DiaryNoteEditor({
           accessibilityViewIsModal
           style={{
             alignSelf: "center",
-            backgroundColor: colors.background,
+            backgroundColor: fill.card,
             borderCurve: "continuous",
             borderRadius: 24,
             gap: 14,
@@ -62,7 +66,7 @@ export function DiaryNoteEditor({
             value={note}
             onChangeText={setNote}
             style={{
-              backgroundColor: colors.surface,
+              backgroundColor: fill.field,
               borderCurve: "continuous",
               borderRadius: 12,
               color: colors.label,
@@ -75,7 +79,7 @@ export function DiaryNoteEditor({
           <ActionButton variant="filled" label={t("save")} onPress={() => onSave(note)} />
           <ActionButton label={t("cancel")} onPress={onClose} />
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

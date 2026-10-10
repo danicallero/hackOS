@@ -55,8 +55,7 @@ const DIRECTORY_PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 300;
 
 type ScanInput = "nfc" | "qr" | "manual";
-type DiarySection = "people" | "companies";
-type PeopleScope = "saved" | "directory";
+type DiarySection = "people" | "companies" | "directory";
 type NoteTarget = { kind: "person"; entry: DiaryEntry } | { kind: "company"; enterpriseId: number };
 
 const JSON_HEADERS = () => ({
@@ -99,15 +98,15 @@ export function DiaryScreen() {
   // `/diary?view=directory` for a directory reader's People > Directory.
   const { view } = useLocalSearchParams<{ view?: string }>();
   const [section, setSection] = useState<DiarySection>(
-    view === "companies" ? "companies" : "people",
+    view === "companies" || view === "directory" ? view : "people",
   );
-  const [scope, setScope] = useState<PeopleScope>(view === "directory" ? "directory" : "saved");
   useEffect(() => {
-    if (view === "companies") setSection("companies");
-    if (view === "directory" || view === "people") setSection("people");
-    if (view === "directory") setScope("directory");
+    if (view === "companies" || view === "directory" || view === "people") setSection(view);
   }, [view]);
+  // People filters its saved cards locally; Directory searches the server.
+  // Each keeps its own text, so switching segments never carries a query over.
   const [query, setQuery] = useState("");
+  const [directoryQuery, setDirectoryQuery] = useState("");
   const [favouritesOnly, setFavouritesOnly] = useState(false);
   const [entries, setEntries] = useState<DiaryEntry[] | null>(null);
   const [collection, setCollection] = useState<SponsorCollection | null>(null);
@@ -125,8 +124,18 @@ export function DiaryScreen() {
   const requestId = useRef(0);
   const collectionRequestId = useRef(0);
   const scanInFlight = useRef(false);
-  const showDirectory = canBrowse && section === "people" && scope === "directory";
-  const directory = useDirectory(showDirectory, query);
+  const showDirectory = canBrowse && section === "directory";
+  const directory = useDirectory(showDirectory, directoryQuery);
+  // People | Companies, plus Directory for a `directory:read` holder: the
+  // same three sibling views as the web diary, in one control (#935).
+  const sections: DiarySection[] = canBrowse
+    ? ["people", "companies", "directory"]
+    : ["people", "companies"];
+  const sectionLabels: Record<DiarySection, string> = {
+    people: t("diaryPeopleTab"),
+    companies: t("diaryCompaniesTab"),
+    directory: t("diaryDirectoryTab"),
+  };
 
   const load = useCallback(async () => {
     const request = ++requestId.current;
@@ -234,7 +243,6 @@ export function DiaryScreen() {
         applyEntry(entry);
         setSavedId(entry.id);
         setSection("people");
-        setScope("saved");
       }
     } catch (error) {
       void haptic("error");
@@ -520,9 +528,9 @@ export function DiaryScreen() {
         />
         <SegmentedControl
           label={t("diaryViews")}
-          values={[t("diaryPeopleTab"), t("diaryCompaniesTab")]}
-          selectedIndex={section === "people" ? 0 : 1}
-          onChange={(index) => setSection(index === 0 ? "people" : "companies")}
+          values={sections.map((key) => sectionLabels[key])}
+          selectedIndex={Math.max(0, sections.indexOf(section))}
+          onChange={(index) => setSection(sections[index] ?? "people")}
         />
         {section === "companies" ? (
           collection ? (
@@ -540,57 +548,47 @@ export function DiaryScreen() {
           )
         ) : (
           <>
-            <View style={{ gap: 10 }}>
-              {canBrowse ? (
-                <SegmentedControl
-                  label={t("diaryPeopleTab")}
-                  values={[t("diarySavedTab"), t("diaryDirectoryTab")]}
-                  selectedIndex={scope === "saved" ? 0 : 1}
-                  onChange={(index) => setScope(index === 0 ? "saved" : "directory")}
-                />
-              ) : null}
-              {showDirectory || (entries?.length ?? 0) > 0 ? (
-                <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
-                  <SearchField
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder={t(
-                      showDirectory ? "directorySearchPlaceholder" : "diarySearchPlaceholder",
-                    )}
-                    label={t("scheduleSearch")}
-                    clearLabel={t("cancel")}
-                  />
-                  {showDirectory ? null : (
-                    <Pressable
-                      accessibilityRole="togglebutton"
-                      accessibilityLabel={t("diaryShowFavourites")}
-                      accessibilityState={{ checked: favouritesOnly }}
-                      hitSlop={4}
-                      onPress={() => {
-                        void haptic("selection");
-                        setFavouritesOnly((value) => !value);
-                      }}
-                      style={({ pressed }) => ({
-                        alignItems: "center",
-                        backgroundColor: favouritesOnly ? colors.warningSurface : colors.surface,
-                        borderColor: favouritesOnly ? colors.warning : "transparent",
-                        borderCurve: "continuous",
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        height: 44,
-                        justifyContent: "center",
-                        opacity: pressed ? 0.7 : 1,
-                        width: 44,
-                      })}
-                    >
-                      <FavouriteStar on={favouritesOnly} />
-                    </Pressable>
+            {showDirectory || (entries?.length ?? 0) > 0 ? (
+              <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
+                <SearchField
+                  value={showDirectory ? directoryQuery : query}
+                  onChangeText={showDirectory ? setDirectoryQuery : setQuery}
+                  placeholder={t(
+                    showDirectory ? "directorySearchPlaceholder" : "diarySearchPlaceholder",
                   )}
-                </View>
-              ) : null}
-            </View>
+                  label={t("scheduleSearch")}
+                  clearLabel={t("cancel")}
+                />
+                {showDirectory ? null : (
+                  <Pressable
+                    accessibilityRole="togglebutton"
+                    accessibilityLabel={t("diaryShowFavourites")}
+                    accessibilityState={{ checked: favouritesOnly }}
+                    hitSlop={4}
+                    onPress={() => {
+                      void haptic("selection");
+                      setFavouritesOnly((value) => !value);
+                    }}
+                    style={({ pressed }) => ({
+                      alignItems: "center",
+                      backgroundColor: favouritesOnly ? colors.warningSurface : colors.surface,
+                      borderColor: favouritesOnly ? colors.warning : "transparent",
+                      borderCurve: "continuous",
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      height: 44,
+                      justifyContent: "center",
+                      opacity: pressed ? 0.7 : 1,
+                      width: 44,
+                    })}
+                  >
+                    <FavouriteStar on={favouritesOnly} />
+                  </Pressable>
+                )}
+              </View>
+            ) : null}
             {showDirectory ? (
-              <DirectoryResults state={directory} query={query} renderRow={directoryRow} />
+              <DirectoryResults state={directory} query={directoryQuery} renderRow={directoryRow} />
             ) : (
               <>
                 {loadError ? (

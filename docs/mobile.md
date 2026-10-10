@@ -641,9 +641,12 @@ distributed to other Expo Router apps without importing hackOS code.
 
 `components/diary-screen.tsx`, routed as `app/(tabs)/diary.tsx` when the tab is
 direct and `app/(tabs)/others/diary.tsx` inside Others (`diary` is an
-`OVERFLOW_TAB_KEYS` entry; see `docs/navigation.md` for placement). A
-segmented control splits it into **People** and **Companies**; the
-`?view=companies` / `?view=directory` route parameter opens a segment directly.
+`OVERFLOW_TAB_KEYS` entry; see `docs/navigation.md` for placement). One
+segmented control splits it into **People** | **Companies**, plus
+**Directory** for a `directory:read` holder: the same three sibling views as
+the web diary, never a second control stacked under the first. The
+`?view=people` / `?view=companies` / `?view=directory` route parameter opens a
+segment directly.
 Pull-to-refresh, focus and foregrounding refetch. Nothing is written to the
 offline cache, so a profile hidden later cannot reappear from device storage.
 
@@ -656,9 +659,9 @@ holds Note (500 characters) and an explicit "Remove from diary" with
 confirmation. Un-starring never removes anyone. The search field filters saved
 cards locally by name, headline, project, challenges, location and the owner's
 note, ignoring accents and case; cards never carry an email, so contact details
-are not searchable. A `directory:read` holder also gets a Saved | Directory
-scope above the search field: Directory pages `GET /api/directory` (server search by name, infinite
-scroll). Its rows look like saved rows; an unsaved person shows Save
+are not searchable. The search field and the Favourites star belong to
+People only. **Directory** keeps its own query and pages `GET /api/directory`
+(server search by name, infinite scroll). Its rows look like saved rows; an unsaved person shows Save
 (`POST /api/me/diary/people`), a saved one the star and the same menu.
 Rows (`components/diary-person-row.tsx`) are one full-width pressable that
 opens the profile; the trailing controls are separate siblings so they never
@@ -669,8 +672,11 @@ scrolled content never slides behind the clock.
 `app/people/[id].tsx` (`components/person-profile-screen.tsx`) is the full
 profile from `GET /api/directory/:userId`: large photo or initials, name,
 headline, Favourite / Note / CV tiles (Save when the person is not in the
-diary), bio, the owner's note, links, location, project or work group,
-challenges and "Remove from diary". The CV route needs the session, so it is
+diary; the Note tile reads "Edit note" once a note exists, and the note section
+appears only then), bio, links, location (a `mappin`), project or work group,
+challenges and "Remove from diary". iOS uses the transparent native detail
+header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
+no bar covers the centred avatar; Android floats its own glass back button. The CV route needs the session, so it is
 downloaded with the session cookie (`expo-file-system`) and opened in the share
 sheet. A hidden profile and a person the reader may not open both answer 404
 and show one "Profile not available" state. Photos are authenticated API
@@ -680,7 +686,8 @@ memory (Android's image pipeline drops a `Cookie` header), never from disk.
 **Companies** is a sticker album (`components/company-album.tsx`) from
 `GET /api/me/diary/sponsors`: a progress ring with collected / total, then a
 three-column grid. Collected companies are full-colour logos on a white disc
-and open a company sheet (logo, collected date, Favourite / Note / Web, the
+and open a company sheet (logo, collected date, Favourite / Note (or Edit
+note) / Web, the
 description, challenges, note and "Remove from collection"); companies still to
 find are dashed slots with a silhouette of the logo, a lock and their name.
 Stand favourites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.

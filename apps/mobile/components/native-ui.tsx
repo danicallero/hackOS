@@ -9,6 +9,7 @@ import {
   Text,
   TextInput,
   type TextStyle,
+  useColorScheme,
   View,
   type ViewStyle,
 } from "react-native";
@@ -774,6 +775,20 @@ export function FloatingGlassButton({
       </Pressable>
     </GlassView>
   );
+}
+
+/**
+ * Fill colours for a small input dialog (note, code entry) over a dimmed
+ * page. Light mode keeps the grouped page tone with white fields; in dark
+ * mode the grouped page is black, so the card steps up to the surface tone
+ * and its field to the elevated one, or the card vanishes into the dim.
+ */
+export function useDialogCardColors(): { card: ColorValue; field: ColorValue } {
+  const dark = useColorScheme() === "dark";
+  return {
+    card: dark ? colors.surface : colors.background,
+    field: dark ? colors.elevatedSurface : colors.surface,
+  };
 }
 
 /**

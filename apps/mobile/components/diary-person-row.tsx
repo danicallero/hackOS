@@ -79,7 +79,8 @@ export function DiaryPersonRow({
         ) : null}
         {detail ? (
           <Text
-            numberOfLines={1}
+            // The owner's own note gets a second line; a project name stays on one.
+            numberOfLines={detailIsNote ? 2 : 1}
             style={{
               color: detailIsNote ? colors.label : colors.secondaryLabel,
               fontSize: 14,
@@ -98,7 +99,7 @@ export function DiaryPersonRow({
     gap: 12,
     minHeight: 72,
     paddingLeft: 16,
-    paddingRight: trailingWidth + 10,
+    paddingRight: trailingWidth + 4,
     paddingVertical: 10,
   };
 
@@ -138,6 +139,7 @@ export function DiaryPersonRow({
           <>
             {onToggleStar ? (
               <Pressable
+                key="star"
                 accessibilityRole="button"
                 accessibilityLabel={`${t(starred ? "diaryUnfavourite" : "diaryFavourite")}, ${name}`}
                 accessibilityState={{ disabled: busy, selected: starred }}
@@ -192,7 +194,10 @@ export function DiaryPersonRow({
             </MenuView>
           </>
         ) : onSave ? (
+          // Keyed apart from the star that replaces it: reusing the native view
+          // left Android announcing the star as "busy" after a save.
           <Pressable
+            key="save"
             accessibilityRole="button"
             accessibilityLabel={`${t("directorySave")}, ${name}`}
             accessibilityState={{ disabled: busy, busy }}

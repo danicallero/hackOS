@@ -124,6 +124,9 @@ it("shows the whole profile with the saved note", async () => {
     expect(screen.getByText(text)).toBeTruthy();
   }
   const open = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+  // A note exists, so its section shows it and the tile edits it.
+  expect(screen.getByRole("button", { name: "diaryEditNote" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "diaryNote" })).toBeNull();
   await fireEvent.press(screen.getByRole("link", { name: "GitHub, github.com/ana" }));
   expect(open).toHaveBeenCalledWith("https://github.com/ana");
 });
