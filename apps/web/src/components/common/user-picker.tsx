@@ -43,6 +43,7 @@ export function UserPicker({
   className,
   placeholder,
   minQueryLength = 0,
+  onResults,
   id,
   "aria-labelledby": ariaLabelledBy,
   "aria-describedby": ariaDescribedBy,
@@ -58,6 +59,8 @@ export function UserPicker({
   placeholder?: string;
   /** Query length below which `search` isn't called at all. */
   minQueryLength?: number;
+  /** Called with each current (non-stale) result set; callers own any preselection. */
+  onResults?: (query: string, users: UserOption[]) => void;
   id?: string;
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
@@ -80,16 +83,23 @@ export function UserPicker({
   useEffect(() => {
     searchRef.current = search;
   });
+  const onResultsRef = useRef(onResults);
+  useEffect(() => {
+    onResultsRef.current = onResults;
+  });
 
   useEffect(() => {
     if (!open || query.trim().length < minQueryLength) return;
     let active = true;
+    const requestedQuery = query.trim();
     const handle = setTimeout(async () => {
       setLoading(true);
       setSearchError(false);
       try {
-        const users = await searchRef.current(query.trim());
-        if (active) setOptions(users);
+        const users = await searchRef.current(requestedQuery);
+        if (!active) return;
+        setOptions(users);
+        onResultsRef.current?.(requestedQuery, users);
       } catch {
         if (active) {
           setOptions([]);
@@ -108,7 +118,8 @@ export function UserPicker({
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
     setPrevValue(value);
-    if (!value) setSelected(null);
+    // A caller may set the value from the current options (e.g. a suggestion).
+    setSelected(value ? (options.find((user) => String(user.id) === value) ?? selected) : null);
   }
 
   function select(user: UserOption) {
