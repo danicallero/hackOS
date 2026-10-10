@@ -125,6 +125,7 @@ const ANDROID_SYMBOL_NAMES = {
   "rectangle.3.group.fill": "dashboard",
   "rectangle.portrait.and.arrow.right": "logout",
   sparkles: "auto_awesome",
+  "square.and.arrow.up": "ios_share",
   star: "star_border",
   "star.fill": "star",
   "ticket.fill": "confirmation_number",

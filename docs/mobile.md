@@ -699,8 +699,16 @@ then), bio, links, location (a `mappin`), project or work group, challenges and
 "Remove from diary", which then returns to the diary. iOS uses the transparent native detail
 header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
 no bar covers the centred avatar; Android floats its own glass back button. The CV route needs the session, so it is
-downloaded with the session cookie (`expo-file-system`) and opened in the share
-sheet. A hidden profile and a person the reader may not open both answer 404
+downloaded with the session cookie (`expo-file-system`) into the cache and shown
+in the in-app viewer (`components/cv-viewer.tsx`): a page-sheet modal titled
+with the person's name, a circular close button, and pages that scroll with
+pinch and double-tap zoom, rendered by the native `react-native-pdf` (with its
+peer `react-native-blob-util`). Share stays in the viewer header for anyone who
+wants the file. A CV that is gone or no longer shared (404) shows "Profile not
+available"; any other failure offers Retry. **Native dependency:** adding
+`react-native-pdf` means the development client and store builds must be
+rebuilt; Jest mocks it in `jest.setup.js`. The app does not show the user's own
+CV anywhere yet, so the viewer has one caller. A hidden profile and a person the reader may not open both answer 404
 and show one "Profile not available" state. Photos are authenticated API
 routes: `lib/directory.ts` fetches them with the session and shows them from
 memory (Android's image pipeline drops a `Cookie` header), never from disk.
