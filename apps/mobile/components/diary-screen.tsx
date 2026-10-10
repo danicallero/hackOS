@@ -441,6 +441,25 @@ export function DiaryScreen() {
             ?.note ?? null)
         : null;
 
+  // One note editor for people and stands; a stand's opens inside the
+  // company sheet so iOS can stack it over that sheet.
+  const noteEditor = (
+    <DiaryNoteEditor
+      visible={noteTarget !== null}
+      initialNote={noteInitial}
+      onClose={() => setNoteTarget(null)}
+      onSave={(note) => {
+        const target = noteTarget;
+        setNoteTarget(null);
+        if (target?.kind === "person") void updatePerson(target.entry, { note });
+        if (target?.kind === "company") {
+          const item = collection?.items.find((i) => i.enterpriseId === target.enterpriseId);
+          if (item) void updateCompany(item, { note });
+        }
+      }}
+    />
+  );
+
   return (
     <>
       <NfcReader
@@ -483,21 +502,10 @@ export function DiaryScreen() {
         onRemove={() => {
           if (openCompany) removeCompany(openCompany);
         }}
-      />
-      <DiaryNoteEditor
-        visible={noteTarget !== null}
-        initialNote={noteInitial}
-        onClose={() => setNoteTarget(null)}
-        onSave={(note) => {
-          const target = noteTarget;
-          setNoteTarget(null);
-          if (target?.kind === "person") void updatePerson(target.entry, { note });
-          if (target?.kind === "company") {
-            const item = collection?.items.find((i) => i.enterpriseId === target.enterpriseId);
-            if (item) void updateCompany(item, { note });
-          }
-        }}
-      />
+      >
+        {noteTarget?.kind === "company" ? noteEditor : null}
+      </CompanySheet>
+      {noteTarget?.kind === "company" ? null : noteEditor}
       <ScrollView
         ref={scrollRef}
         testID="diary-scroll"
