@@ -60,6 +60,9 @@ Architecture & modules:
   and `projects` modules and the Devpost intake pipeline.
 - [People directory (#934)](./directory.md) — opt-in public profiles, what
   readers can see, access, moderation and account-removal coverage.
+- [Event diary (#935)](./diary.md) — saving people and sponsor stands by
+  NFC/QR scan or from the directory, privacy rules, stand tags and
+  account-removal coverage.
 - [Planned work groups](./work-groups.md) — pre-event participant groups,
   explicit invitations, intended challenges, and staff/sponsor estimates.
 - [Queue groups (H46)](./queue-groups.md) — the enterprise-scoped grouping

@@ -1,5 +1,6 @@
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { AddressBookIcon } from "@phosphor-icons/react/dist/ssr/AddressBook";
 import { BooksIcon } from "@phosphor-icons/react/dist/ssr/Books";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/ssr/CalendarDots";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
@@ -153,15 +154,10 @@ export const PERSONAL_NAV: NavItem[] = [
   { title: "wallet", href: "/wallet", icon: WalletIcon, hideForPureApplicant: true },
   // Hidden for pure applicants — decision emails go out regardless (H50/H51).
   { title: "inbox", href: "/inbox", icon: TrayIcon, hideForPureApplicant: true },
-  // Opt-in people directory (#934): readers need directory:read and, like the
-  // API, current event access.
-  {
-    title: "columnPeople",
-    href: "/people",
-    icon: UsersIcon,
-    capability: CAPABILITIES.DIRECTORY_READ,
-    hideForPureApplicant: true,
-  },
+  // Event diary (#935): saved people and sponsor stands, with the opt-in
+  // directory (#934, directory:read) as a secondary view. Like the API, it
+  // needs current event access only.
+  { title: "diary", href: "/people", icon: AddressBookIcon, hideForPureApplicant: true },
   { title: "myProfile", href: "/settings/profile", icon: UserIcon },
 ];
 

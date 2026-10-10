@@ -62,6 +62,10 @@ export default function OthersLayout() {
         options={{ headerShown, headerLargeTitle: true, title: t("tabWallet") }}
       />
       <Stack.Screen
+        name="diary"
+        options={{ headerShown, headerLargeTitle: true, title: t("tabDiary") }}
+      />
+      <Stack.Screen
         name="operations"
         options={{
           headerShown,

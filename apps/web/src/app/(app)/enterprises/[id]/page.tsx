@@ -29,6 +29,7 @@ import { ENTERPRISE_TAB_ALIASES, type Enterprise, enterpriseTabs, initials } fro
 
 import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterprise-cards";
 import { JudgesCard } from "./judges-card";
+import { StandTagsCard } from "./stand-tags-card";
 
 export default function EnterpriseDetailPage() {
   const { t } = useLocale();
@@ -134,6 +135,7 @@ export default function EnterpriseDetailPage() {
           )}
           <TabsTrigger value="judges">{t("judges")}</TabsTrigger>
           {canManage && <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>}
+          {canManage && <TabsTrigger value="stand">{t("standTags")}</TabsTrigger>}
         </TabBar>
         <TabsContent value="profile" className="space-y-6 pt-2">
           <EditCard
@@ -154,6 +156,11 @@ export default function EnterpriseDetailPage() {
         {canManage && (
           <TabsContent value="members" className="pt-2">
             <MembersCard enterpriseId={enterprise.id} />
+          </TabsContent>
+        )}
+        {canManage && (
+          <TabsContent value="stand" className="pt-2">
+            <StandTagsCard enterpriseId={enterprise.id} enterpriseName={enterprise.name} />
           </TabsContent>
         )}
       </Tabs>

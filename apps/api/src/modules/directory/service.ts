@@ -231,6 +231,23 @@ export async function getDirectoryEntry(readerId: number, userId: number): Promi
   return toEntry(rows[0]);
 }
 
+/**
+ * Live cards of the given people that are visible right now, keyed by user id
+ * (#935 event diary). Anyone hidden, missing or no longer admitted is simply
+ * absent, exactly as in the directory itself; no reader gate is applied here.
+ */
+export async function visibleDirectoryEntries(
+  db: Queryable,
+  userIds: number[],
+): Promise<Map<number, DirectoryEntry>> {
+  if (userIds.length === 0) return new Map();
+  const { rows } = await db.query<EntryRow>(
+    `${entrySql("user_public_profiles p")} WHERE ${VISIBLE_WHERE} AND u.id = ANY($1::int[])`,
+    [userIds],
+  );
+  return new Map(rows.map((row) => [Number(row.user_id), toEntry(row)]));
+}
+
 interface ProfileRow {
   directory_visible: boolean;
   show_surname: boolean;

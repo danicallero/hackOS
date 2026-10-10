@@ -35,7 +35,7 @@ const COLUMN_FOR: Record<string, string> = {
 // their sponsor users or authored challenges; mixed graphs fail closed in
 // assertFixtureEnterpriseScope. Keep the list/public queries on the same
 // boundary so a global operator cannot discover a fixture by id or visibility.
-const ENTERPRISE_HAS_SYNTHETIC = `(
+export const ENTERPRISE_HAS_SYNTHETIC = `(
   EXISTS (
     SELECT 1 FROM sponsors marker_sponsor
     JOIN users marker_user ON marker_user.id = marker_sponsor.user_id

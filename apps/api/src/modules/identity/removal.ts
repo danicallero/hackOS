@@ -1406,6 +1406,11 @@ async function scrubRelationships(
   // #934: the opted-in public profile is identity-bearing; anonymized rows
   // keep the users row, so the cascade alone would not remove it.
   await client.query(`DELETE FROM user_public_profiles WHERE user_id = $1`, [userId]);
+  // #935: the subject's own event diary, and every entry in other attendees'
+  // diaries that points at them.
+  await client.query(`DELETE FROM diary_entries WHERE owner_id = $1 OR target_user_id = $1`, [
+    userId,
+  ]);
   await client.query(`DELETE FROM submissions WHERE user_id = $1`, [userId]);
   await client.query(
     `DELETE FROM devpost_participants

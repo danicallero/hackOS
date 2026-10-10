@@ -46,7 +46,7 @@ export function isScheduled(availableFrom: string | null): boolean {
 
 export { initials } from "@/lib/initials";
 
-export type EnterpriseTab = "profile" | "challenges" | "judges" | "members";
+export type EnterpriseTab = "profile" | "challenges" | "judges" | "members" | "stand";
 
 /** Removed tabs keep old deep links working (#928, #929). */
 export const ENTERPRISE_TAB_ALIASES: Partial<Record<string, EnterpriseTab>> = {
@@ -69,6 +69,6 @@ export function enterpriseTabs({
     "profile",
     ...(canManage || isSponsorRep ? (["challenges"] as const) : []),
     "judges",
-    ...(canManage ? (["members"] as const) : []),
+    ...(canManage ? (["members", "stand"] as const) : []),
   ];
 }

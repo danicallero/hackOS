@@ -390,7 +390,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: checkInBody,
         description:
-          "Assign a badge to the ticket's owner and log the check-in (H22). Idempotency-key replays are safe; 409 if the badge belongs to someone else, the badge id is actually a ticket token, or the person is already accredited (use /api/accreditation/rotate to replace a badge); 403 if the ticket's owner no longer holds event access (H43) — the tickets row is permanent, so a stale/captured QR does not itself expire, but check-in still checks live event access. Rate limited per staff user (#538, docs/rate-limiting.md).",
+          "Assign a badge to the ticket's owner and log the check-in (H22). Idempotency-key replays are safe; 409 if the badge belongs to someone else, the badge id is actually a ticket token or a sponsor stand tag (#935), or the person is already accredited (use /api/accreditation/rotate to replace a badge); 403 if the ticket's owner no longer holds event access (H43) — the tickets row is permanent, so a stale/captured QR does not itself expire, but check-in still checks live event access. Rate limited per staff user (#538, docs/rate-limiting.md).",
       },
     },
     async (req) =>
@@ -431,7 +431,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: rotateBody,
         description:
-          "Replace someone's badge (H23): identify the person by userId (preferred) or by their current badge id. The old badge is revoked everywhere, wallet badge passes are voided, and the change is audited with the given reason. 409 if the new badge is already assigned or is actually a ticket token. Rate limited per staff user (#538, docs/rate-limiting.md).",
+          "Replace someone's badge (H23): identify the person by userId (preferred) or by their current badge id. The old badge is revoked everywhere, wallet badge passes are voided, and the change is audited with the given reason. 409 if the new badge is already assigned or is actually a ticket token or a sponsor stand tag (#935). Rate limited per staff user (#538, docs/rate-limiting.md).",
       },
     },
     async (req) =>

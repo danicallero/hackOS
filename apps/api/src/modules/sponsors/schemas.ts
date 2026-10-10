@@ -113,3 +113,29 @@ export const sponsorFaqBody = z
 export type FaqItem = z.infer<typeof faqItem>;
 
 export type SponsorFaqBody = z.infer<typeof sponsorFaqBody>;
+
+/**
+ * #935 sponsor stand tags. NFC UIDs use the badge encoding (docs/mobile.md):
+ * separators are dropped and hex is uppercased before the 7-byte check. A QR
+ * tag carries no input; the server generates its printable token.
+ */
+export const standTagBody = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("nfc"),
+      uid: z
+        .string()
+        .max(40)
+        .transform((value) => value.replace(/[:\s-]/g, "").toUpperCase())
+        .refine((value) => /^[0-9A-F]{14}$/.test(value), {
+          message: "Must be a 7-byte NFC UID in hexadecimal",
+        }),
+    })
+    .strict(),
+  z.object({ kind: z.literal("qr") }).strict(),
+]);
+
+export const standTagParams = z.object({
+  id: z.coerce.number().int().positive(),
+  tagId: z.coerce.number().int().positive(),
+});

@@ -9,6 +9,7 @@ describe("enterpriseTabs (#928, #929)", () => {
       "challenges",
       "judges",
       "members",
+      "stand",
     ]);
   });
 

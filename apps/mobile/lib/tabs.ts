@@ -99,10 +99,13 @@ export function overflowTabs(
   capabilities: string[],
   context: PersonalTabContext = NO_PERSONAL_QUEUE,
 ): OverflowTabKey[] {
-  if (!isOperator(capabilities) && !canOperateQueues(capabilities)) return ["account"];
+  // #935: every signed-in attendee keeps an event diary (the tab shell
+  // already requires event access).
+  if (!isOperator(capabilities) && !canOperateQueues(capabilities)) return ["diary", "account"];
   return [
     ...(canSeeMyQueue(capabilities, context) ? (["queue"] as const) : []),
     "wallet",
+    "diary",
     "account",
     ...(isOperator(capabilities) && canOperateQueues(capabilities)
       ? (["operations"] as const)

@@ -48,6 +48,7 @@ import { colors } from "@/theme/colors";
 type TabLabelKey =
   | "tabAccount"
   | "tabActivities"
+  | "tabDiary"
   | "tabNotifications"
   | "tabQueue"
   | "tabQueueOperations"
@@ -84,6 +85,13 @@ const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
     labelKey: "tabWallet",
     selectedIcon: "wallet.pass.fill",
     triggerName: "wallet",
+  },
+  diary: {
+    href: "/(tabs)/diary",
+    icon: "person.2.crop.square.stack",
+    labelKey: "tabDiary",
+    selectedIcon: "person.2.crop.square.stack.fill",
+    triggerName: "diary",
   },
   operations: {
     href: "/(tabs)/operations",
@@ -125,6 +133,7 @@ const REGISTERED_TAB_ROUTES: RouterTabRoute[] = [
   { href: "/(tabs)/schedule", name: "schedule" },
   { href: "/(tabs)/queue", name: "queue" },
   { href: "/(tabs)/wallet", name: "wallet" },
+  { href: "/(tabs)/diary", name: "diary" },
   { href: "/(tabs)/operations", name: "operations" },
   { href: "/(tabs)/scan", name: "scan" },
   { href: "/(tabs)/activities", name: "activities" },
