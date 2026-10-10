@@ -196,6 +196,10 @@ link navigation, and working loading demonstrations in es/gl/en and both themes.
 Hover/focus/pressed specimens use `data-preview-state` only to display CSS;
 this attribute must not be used on product controls or to fake keyboard focus.
 
+Pills need more horizontal room than rectangles: text buttons pad 12/16/20/28 px
+(tiny/compact/default/prominent) per side, and a leading icon trims only the
+start side by 2-4 px so the icon does not crowd the curve.
+
 | Variant | Purpose | Default appearance |
 | --- | --- | --- |
 | `default` | One primary action per scope | Ink/cream in light mode; blue/dark text in dark mode; slight shadow |

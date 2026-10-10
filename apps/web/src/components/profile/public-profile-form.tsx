@@ -198,7 +198,7 @@ export function LinksEditor({
   const replace = (id: string, patch: Partial<SocialLink>) =>
     onChange(links.map((link) => (link.id === id ? { ...link, ...patch } : link)));
   return (
-    <fieldset className="min-w-0 space-y-2" aria-labelledby={headingId}>
+    <fieldset className="min-w-0 space-y-3" aria-labelledby={headingId}>
       <span id={headingId} className="block text-sm font-medium">
         {t("publicProfileLinks")}
       </span>

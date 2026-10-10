@@ -358,8 +358,8 @@ function CvField({
   }
 
   return (
-    <fieldset className="min-w-0 space-y-2" aria-labelledby={headingId}>
-      <span id={headingId} className="text-sm font-medium">
+    <fieldset className="min-w-0 space-y-3" aria-labelledby={headingId}>
+      <span id={headingId} className="block text-sm font-medium">
         {t("publicProfileCv")}
       </span>
       {locked ? null : (
