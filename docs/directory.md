@@ -5,6 +5,10 @@ headline, an optional location note and, if they choose, their project and its
 challenges. It is also the profile base that the NFC contact card (#935)
 extends. There is no Hxx story yet; code and commits reference `#934`.
 
+People manage their public profile (opt-in, surname/photo/project, headline,
+location note and preview) from My profile (`/settings/profile`); there is no
+separate settings page.
+
 Module: `apps/api/src/modules/directory/`. Tests:
 `apps/api/test/directory/api.test.ts`.
 

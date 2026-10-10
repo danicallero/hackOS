@@ -33,7 +33,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my public profile",
         description:
-          "Directory opt-in settings for an event attendee, with `preview`: the directory entry exactly as readers would see it if visible. Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown) (#934).",
+          "Directory opt-in settings shown on My profile for an event attendee, with `preview`: the directory entry exactly as readers would see it if visible. Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown) (#934).",
       },
     },
     async (req) => getMyPublicProfile(req.userId as number),
