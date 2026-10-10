@@ -449,8 +449,8 @@ Primary provider references:
 
 ## Web category ownership
 
-Event settings uses a desktop category rail and narrow horizontal tabs, with
-one bounded capability-gated category visible at a time. Judging hours live at `?tab=judging`, require `queue:admin`,
+Event settings is a list of capability-gated categories (`/settings/event`) and
+opens one bounded category at a time (`?tab=`) with a back control. Judging hours live at `?tab=judging`, require `queue:admin`,
 and save the separate queue settings resource. Wallet has one Save changes
 action shared by its Fields and Appearance views. Images and delivery are
 separate views; `?tab=wallet&wallet=appearance|artwork|delivery` preserves

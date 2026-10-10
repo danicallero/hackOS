@@ -289,6 +289,13 @@ despite a working API.
   `GET /api/queue/groups` returns every queue for `queue:admin`/
   `sponsors:manage` and only their own enterprises' for a sponsor rep.
 
+Event settings (`/settings/event`) is a list of the sections the caller's
+capabilities allow, never a second sidebar (#932): `?tab=event|venue|wallet|presence|invites|judging|danger`
+opens one section with a back control to the list, and a lone visible section
+opens directly. A `?tab=` the caller cannot manage shows the list. The URL is
+the only state, so selecting writes nothing back, and leaving a section with
+unsaved edits goes through the unsaved-changes link guard.
+
 Judging hours are in Event settings (`/settings/event?tab=judging`) and retain
 the `queue:admin` gate. `/queue/settings` preserves saved links by directing
 them there. `/queue/rooms` remains available as the room configuration page;

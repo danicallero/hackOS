@@ -1,32 +1,32 @@
 "use client";
 
-// Local settings navigation for event configuration (H19, H24, H28, H42,
-// H45, H47-H50): one category at a time, each with a stable deep link
-// (?tab=) and its own save scope, instead of one long scrolling form.
+// Event configuration navigation (H19, H24, H28, H42, H45, H47-H50, #932):
+// `/settings/event` is a plain list of the sections the caller may manage;
+// `?tab=<section>` opens one section with a back control. The app sidebar is
+// the only vertical navigation, and a section's own views stay horizontal.
 //
 // Each category retains its own capability and save scope (H8, H39).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
 import { UserCheckIcon } from "@phosphor-icons/react/dist/csr/UserCheck";
 import { WalletIcon } from "@phosphor-icons/react/dist/csr/Wallet";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
+import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { TabBar } from "@/components/common/tab-bar";
-import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
-import { useUrlTab } from "@/lib/url-tab";
-import {
-  confirmDiscardUnsavedChanges,
-  useUnsavedChangesGuard,
-} from "@/lib/use-unsaved-changes-guard";
+import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import { JudgingWindowTab } from "../../queue/rooms/judging-window-tab";
 import { EventConfigProvider } from "./event-config-context";
 import { EventTab } from "./event-tab";
@@ -47,9 +47,21 @@ const CATEGORIES = [
 ] as const;
 type Category = (typeof CATEGORIES)[number];
 
+const CATEGORY_ICONS = {
+  event: TagIcon,
+  venue: MapPinIcon,
+  wallet: WalletIcon,
+  presence: UserCheckIcon,
+  invites: EnvelopeSimpleIcon,
+  judging: ClockIcon,
+  danger: WarningIcon,
+} as const;
+
+const SECTION_CLASS = "min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6";
+
 export default function EventSettingsPage() {
   const { t } = useLocale();
-  const isMobile = useIsMobile();
+  const searchParams = useSearchParams();
   const canEvent = useCan(CAPABILITIES.EVENT_MANAGE);
   const canVenue = useCan(CAPABILITIES.VENUE_MANAGE);
   const canWallet = useCan(CAPABILITIES.WALLET_MANAGE);
@@ -67,30 +79,27 @@ export default function EventSettingsPage() {
     danger: canDanger,
   };
   const visibleCategories = CATEGORIES.filter((c) => canByCategory[c]);
+  const labels: Record<Category, string> = {
+    event: t("eventTitle"),
+    venue: t("venueSectionTitle"),
+    wallet: t("walletPassSectionTitle"),
+    presence: t("presencePolicyTitle"),
+    invites: t("invitesSectionTitle"),
+    judging: t("judgingWindowTitle"),
+    danger: t("dangerZone"),
+  };
 
-  function isCategory(value: string | null): value is Category {
-    return !!value && (visibleCategories as readonly string[]).includes(value);
-  }
+  // The URL is the only source of truth: no local mirror, so there is nothing
+  // to write back and nothing to loop on (R003). A single visible section has
+  // no list to return to and opens directly.
+  const requested = searchParams.get("tab");
+  const active: Category | null =
+    visibleCategories.length === 1
+      ? visibleCategories[0]
+      : (visibleCategories.find((c) => c === requested) ?? null);
 
-  const { tab, setTab } = useUrlTab({
-    values: visibleCategories.length > 0 ? visibleCategories : CATEGORIES,
-    defaultValue: visibleCategories[0] ?? "event",
-  });
-  const tabBarRef = useRef<HTMLDivElement>(null);
-  const categoryCount = visibleCategories.length;
-  useEffect(() => {
-    if (!categoryCount || !tab) return;
-    const bar = tabBarRef.current;
-    const active = bar?.querySelector<HTMLElement>(`[data-state="active"]`);
-    if (!bar || !active) return;
-    const bounds = bar.getBoundingClientRect();
-    const selected = active.getBoundingClientRect();
-    if (selected.left < bounds.left) bar.scrollLeft -= bounds.left - selected.left;
-    else if (selected.right > bounds.right) bar.scrollLeft += selected.right - bounds.right;
-  }, [tab, categoryCount]);
-
-  // Tracked per category so the beforeunload guard and the tab-switch confirm
-  // both know exactly which category (if any) owns the unsaved edit.
+  // Tracked per category so the beforeunload/link guard knows whether the
+  // open category owns an unsaved edit (R011).
   const dirtyRef = useRef<Record<Category, boolean>>({
     event: false,
     venue: false,
@@ -107,105 +116,100 @@ export default function EventSettingsPage() {
     setAnyDirty(Object.values(dirtyRef.current).some(Boolean));
   }, []);
 
-  useUnsavedChangesGuard(anyDirty);
+  // Leaving a category unmounts its form, which discards its edits.
+  useEffect(() => {
+    for (const category of CATEGORIES) {
+      if (category !== active) dirtyRef.current[category] = false;
+    }
+    setAnyDirty(Object.values(dirtyRef.current).some(Boolean));
+  }, [active]);
 
-  function changeTab(next: string) {
-    if (!isCategory(next) || next === tab) return;
-    if (dirtyRef.current[tab as Category] && !confirmDiscardUnsavedChanges(true, t)) return;
-    setTab(next);
-  }
+  // Links out of a dirty category (back, sidebar) are confirmed by this guard.
+  useUnsavedChangesGuard(anyDirty);
 
   if (visibleCategories.length === 0) {
     return <AccessDenied ask={t("noEventSettingsAccessDesc")} />;
   }
 
+  const showBack = active !== null && visibleCategories.length > 1;
+
   return (
     <EventConfigProvider enabled={canEvent || canVenue || canWallet || canPresence || canInvites}>
       <PageLayout width="content">
-        <PageHeader title={t("eventSettings")} />
+        <PageHeader
+          title={active ? labels[active] : t("eventSettings")}
+          secondaryActions={
+            showBack ? (
+              <IconButton label={t("eventSettings")} variant="outline" asChild>
+                <Link href="/settings/event">
+                  <ArrowLeftIcon aria-hidden="true" />
+                </Link>
+              </IconButton>
+            ) : undefined
+          }
+        />
 
-        <Tabs
-          value={tab}
-          onValueChange={changeTab}
-          orientation={isMobile ? "horizontal" : "vertical"}
-          className="gap-6 md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:items-start"
-        >
-          <TabBar
-            ref={tabBarRef}
-            className="[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] md:[mask-image:none] md:sticky md:top-6 md:h-auto md:items-stretch md:[&_[data-slot=tabs-trigger]]:flex-none md:[&_[data-slot=tabs-trigger]]:justify-start"
-          >
-            {canEvent && <TabsTrigger value="event">{t("eventTitle")}</TabsTrigger>}
-            {canVenue && <TabsTrigger value="venue">{t("venueSectionTitle")}</TabsTrigger>}
-            {canWallet && <TabsTrigger value="wallet">{t("walletPassSectionTitle")}</TabsTrigger>}
-            {canPresence && <TabsTrigger value="presence">{t("presencePolicyTitle")}</TabsTrigger>}
-            {canInvites && <TabsTrigger value="invites">{t("invitesSectionTitle")}</TabsTrigger>}
-            {canJudging && <TabsTrigger value="judging">{t("judgingWindowTitle")}</TabsTrigger>}
-            {canDanger && <TabsTrigger value="danger">{t("dangerZone")}</TabsTrigger>}
-          </TabBar>
+        {active === null && (
+          <ul className="divide-y rounded-lg border bg-card">
+            {visibleCategories.map((category) => {
+              const Icon = CATEGORY_ICONS[category];
+              return (
+                <li key={category}>
+                  <Link
+                    href={`/settings/event?tab=${category}`}
+                    className="flex min-h-(--control-height-lg,3rem) items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                  >
+                    <Icon aria-hidden="true" className="size-5 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate">{labels[category]}</span>
+                    <CaretRightIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
-          {canEvent && (
-            <TabsContent
-              value="event"
-              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
-            >
-              <EventTab icon={TagIcon} onDirtyChange={(dirty) => setDirty("event", dirty)} />
-            </TabsContent>
-          )}
-          {canVenue && (
-            <TabsContent
-              value="venue"
-              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
-            >
-              <VenueTab icon={MapPinIcon} onDirtyChange={(dirty) => setDirty("venue", dirty)} />
-            </TabsContent>
-          )}
-          {canWallet && (
-            <TabsContent
-              value="wallet"
-              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
-            >
-              <WalletTab icon={WalletIcon} onDirtyChange={(dirty) => setDirty("wallet", dirty)} />
-            </TabsContent>
-          )}
-          {canPresence && (
-            <TabsContent
-              value="presence"
-              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
-            >
-              <PresenceTab
-                icon={UserCheckIcon}
-                onDirtyChange={(dirty) => setDirty("presence", dirty)}
-              />
-            </TabsContent>
-          )}
-          {canInvites && (
-            <TabsContent
-              value="invites"
-              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
-            >
-              <InvitesTab
-                icon={EnvelopeSimpleIcon}
-                onDirtyChange={(dirty) => setDirty("invites", dirty)}
-              />
-            </TabsContent>
-          )}
-          {canJudging && (
-            <TabsContent
-              value="judging"
-              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
-            >
-              <JudgingWindowTab onDirtyChange={(dirty) => setDirty("judging", dirty)} />
-            </TabsContent>
-          )}
-          {canDanger && (
-            <TabsContent
-              value="danger"
-              className="min-w-0 rounded-lg border bg-card p-4 [--form-footer-bg:var(--card)] sm:p-6 md:mt-0"
-            >
-              <ResetJudgingDataTab icon={WarningIcon} />
-            </TabsContent>
-          )}
-        </Tabs>
+        {active === "event" && (
+          <section className={SECTION_CLASS}>
+            <EventTab icon={TagIcon} onDirtyChange={(dirty) => setDirty("event", dirty)} />
+          </section>
+        )}
+        {active === "venue" && (
+          <section className={SECTION_CLASS}>
+            <VenueTab icon={MapPinIcon} onDirtyChange={(dirty) => setDirty("venue", dirty)} />
+          </section>
+        )}
+        {active === "wallet" && (
+          <section className={SECTION_CLASS}>
+            <WalletTab icon={WalletIcon} onDirtyChange={(dirty) => setDirty("wallet", dirty)} />
+          </section>
+        )}
+        {active === "presence" && (
+          <section className={SECTION_CLASS}>
+            <PresenceTab
+              icon={UserCheckIcon}
+              onDirtyChange={(dirty) => setDirty("presence", dirty)}
+            />
+          </section>
+        )}
+        {active === "invites" && (
+          <section className={SECTION_CLASS}>
+            <InvitesTab
+              icon={EnvelopeSimpleIcon}
+              onDirtyChange={(dirty) => setDirty("invites", dirty)}
+            />
+          </section>
+        )}
+        {active === "judging" && (
+          <section className={SECTION_CLASS}>
+            <JudgingWindowTab onDirtyChange={(dirty) => setDirty("judging", dirty)} />
+          </section>
+        )}
+        {active === "danger" && (
+          <section className={SECTION_CLASS}>
+            <ResetJudgingDataTab icon={WarningIcon} />
+          </section>
+        )}
       </PageLayout>
     </EventConfigProvider>
   );
