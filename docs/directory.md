@@ -9,6 +9,26 @@ People manage their public profile (opt-in, surname/photo/project, headline,
 location note and preview) from My profile (`/settings/profile`); there is no
 separate settings page.
 
+The "Public profile" section (`settings/profile/public-profile-card.tsx`)
+shows only the opt-in switch, with one line naming who will see it, until the
+person opts in; then it reveals the surname, photo and project switches, the
+headline and location note, and a preview card. The preview is the server's
+`preview` until something changes; then name (surname initial by code point,
+as the API), photo and text follow the unsaved edits, while the project and
+challenges stay the saved ones until saving. While the opt-in is off the
+hidden fields neither enable Save nor get published: switching it off saves
+the stored text and toggles unchanged. Fields are locked while a save is in
+flight, and each change set saves with one `Idempotency-Key`.
+
+The section does not subscribe to the `directory` topic, which fires for any
+attendee's write and would make every open My profile refetch. It refetches
+after its own `PUT` (the response replaces the state, and a `GET` that started
+before the save is discarded), when the session's name, surname or photo
+changes (edited in the same page), on `user.session.changed` over the personal
+stream the shell already holds (event access changes), and when the tab
+regains focus after a while. A 403 (no event access) hides the
+section; any other load failure shows an inline error with Retry, not a toast.
+
 Module: `apps/api/src/modules/directory/`. Tests:
 `apps/api/test/directory/api.test.ts`.
 

@@ -3503,5 +3503,20 @@
   "attendedStat": "Attended",
   "attendanceRate": "Attendance rate",
   "averageHoursOnSite": "Average hours on site",
-  "totalHours": "Total hours"
+  "totalHours": "Total hours",
+  "publicProfileTitle": "Public profile",
+  "publicProfileVisible": "Appear in the directory",
+  "publicProfileAudience": "Event participants, mentors and staff will see it.",
+  "publicProfileShowSurname": "Full surname",
+  "publicProfileShowPhoto": "Photo",
+  "publicProfileShowProject": "Project and challenges",
+  "publicProfileHeadline": "Headline",
+  "publicProfileLocation": "Where to find you",
+  "publicProfilePreview": "Preview",
+  "publicProfileProject": "Project",
+  "publicProfileWorkGroup": "Work group",
+  "publicProfileSaved": "Public profile updated.",
+  "toastSavePublicProfile": "Save public profile",
+  "couldNotSavePublicProfile": "Could not save the public profile.",
+  "couldNotLoadPublicProfile": "Could not load the public profile."
 }

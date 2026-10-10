@@ -44,12 +44,7 @@ export function isScheduled(availableFrom: string | null): boolean {
   return !Number.isNaN(at.getTime()) && at.getTime() > Date.now();
 }
 
-export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-}
+export { initials } from "@/lib/initials";
 
 /**
  * The next missing action for a company profile, in priority order (H44).

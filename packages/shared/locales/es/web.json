@@ -3503,5 +3503,20 @@
   "attendedStat": "Asistieron",
   "attendanceRate": "Tasa de asistencia",
   "averageHoursOnSite": "Media de horas en el evento",
-  "totalHours": "Horas totales"
+  "totalHours": "Horas totales",
+  "publicProfileTitle": "Perfil público",
+  "publicProfileVisible": "Aparecer en el directorio",
+  "publicProfileAudience": "Lo verán participantes, mentores y staff del evento.",
+  "publicProfileShowSurname": "Apellido completo",
+  "publicProfileShowPhoto": "Foto",
+  "publicProfileShowProject": "Proyecto y retos",
+  "publicProfileHeadline": "Titular",
+  "publicProfileLocation": "Dónde encontrarte",
+  "publicProfilePreview": "Vista previa",
+  "publicProfileProject": "Proyecto",
+  "publicProfileWorkGroup": "Grupo de trabajo",
+  "publicProfileSaved": "Perfil público actualizado.",
+  "toastSavePublicProfile": "Guardar perfil público",
+  "couldNotSavePublicProfile": "No se pudo guardar el perfil público.",
+  "couldNotLoadPublicProfile": "No se pudo cargar el perfil público."
 }
