@@ -92,6 +92,11 @@ workspace, `ClipboardText` for Activities, and `Log` for the Audit log.
 `invites:manage`; it deliberately does not add a second sidebar destination.
 The invitation list and its record inspector stay together on that route (#777).
 
+The enterprise detail page (`/enterprises/[id]`) has Profile (default), Challenges and
+Judges tabs, plus Members for `sponsors:manage`. Overview and Invitations were
+removed (#928, #929); an old `?tab=overview` or `?tab=invitations` link renders
+Profile without rewriting the URL. Enterprise invitation links are managed from Users.
+
 The admin wildcard (`*`) passes every capability check and therefore sees
 every workspace and every item (`apps/web/src/lib/session.tsx`).
 

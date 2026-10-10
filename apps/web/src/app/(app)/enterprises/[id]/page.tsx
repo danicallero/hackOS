@@ -26,9 +26,7 @@ import { useUrlTab } from "@/lib/url-tab";
 import { type Enterprise, initials } from "../shared";
 
 import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterprise-cards";
-import { InviteLinksCard } from "./invite-links-card";
 import { JudgesCard } from "./judges-card";
-import { EnterpriseOverviewCard } from "./overview-card";
 
 export default function EnterpriseDetailPage() {
   const { t } = useLocale();
@@ -36,9 +34,9 @@ export default function EnterpriseDetailPage() {
   const id = Number(params.id);
   const canManage = useCan(CAPABILITIES.SPONSORS_MANAGE);
   const enterpriseTabs = canManage
-    ? (["overview", "profile", "challenges", "judges", "members", "invitations"] as const)
-    : (["overview", "profile", "challenges", "judges"] as const);
-  const { tab, setTab } = useUrlTab({ values: enterpriseTabs, defaultValue: "overview" });
+    ? (["profile", "challenges", "judges", "members"] as const)
+    : (["profile", "challenges", "judges"] as const);
+  const { tab, setTab } = useUrlTab({ values: enterpriseTabs, defaultValue: "profile" });
 
   const [enterprise, setEnterprise] = useState<Enterprise | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -112,20 +110,11 @@ export default function EnterpriseDetailPage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar aria-label={t("enterpriseSections")}>
-          <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
           <TabsTrigger value="profile">{t("enterpriseProfileTab")}</TabsTrigger>
           <TabsTrigger value="challenges">{t("challenges")}</TabsTrigger>
           <TabsTrigger value="judges">{t("judges")}</TabsTrigger>
           {canManage && <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>}
-          {canManage && <TabsTrigger value="invitations">{t("invitationManagement")}</TabsTrigger>}
         </TabBar>
-        <TabsContent value="overview" className="space-y-6 pt-2">
-          <EnterpriseOverviewCard
-            enterprise={enterprise}
-            canManage={canManage}
-            onOpenProfile={() => setTab("profile")}
-          />
-        </TabsContent>
         <TabsContent value="profile" className="space-y-6 pt-2">
           <EditCard
             enterprise={enterprise}
@@ -143,11 +132,6 @@ export default function EnterpriseDetailPage() {
         {canManage && (
           <TabsContent value="members" className="pt-2">
             <MembersCard enterpriseId={enterprise.id} />
-          </TabsContent>
-        )}
-        {canManage && (
-          <TabsContent value="invitations" className="pt-2">
-            <InviteLinksCard enterpriseId={enterprise.id} />
           </TabsContent>
         )}
       </Tabs>

@@ -90,9 +90,6 @@ to `RESERVED_FIELD_KEYS` — see the doc comment on that constant.
 - `(auth)/login/page.tsx` — honours a **same-origin** `?next=` param
   (open-redirect guarded via `safeNext`), so the invited participant lands on
   the application form right after signing in.
-- `(app)/enterprises/[id]/invite-links-card.tsx` — creates copyable reusable
-  links and shows their status, limit, expiry, and account redemption history;
-  withdrawal uses an accessible destructive confirmation.
 - `(app)/users/active-invitations-modal.tsx` and
   `(app)/users/user-invite-links-section.tsx` — unified invitation management
   for email-bound invites, enterprise links, and reusable account links,
