@@ -229,6 +229,11 @@ describe("People", () => {
     expect(screen.queryByText("Hidden")).toBeNull();
     expect(screen.queryByText("Acme")).toBeNull();
     expect(screen.getByRole("button", { name: "diaryUnfavourite, Ana S." })).toBeTruthy();
+    // A hidden profile keeps its menu but cannot be favourited.
+    expect(
+      screen.queryByRole("button", { name: /^diary(Un)?favourite, diaryUnavailablePerson/ }),
+    ).toBeNull();
+    expect(screen.getByLabelText("diaryEntryOptions, diaryUnavailablePerson")).toBeTruthy();
   });
 
   it("opens NFC with one tap and pins the newly saved person", async () => {
@@ -255,7 +260,8 @@ describe("People", () => {
     await screen.findByText("Ana S.");
     expect(mockQrMounts).toBe(0);
     await act(() => menuWith("manual").onPressAction({ nativeEvent: { event: "manual" } }));
-    await fireEvent.changeText(screen.getByLabelText("scannerManualEntryTitle"), "  STAND-CODE  ");
+    // The diary accepts badges and stand tags alike, so the entry is titled "Enter code".
+    await fireEvent.changeText(screen.getByLabelText("personEnterBadgeCode"), "  STAND-CODE  ");
     await fireEvent.press(screen.getByRole("button", { name: "save" }));
     await waitFor(() => expect(calls("/api/me/diary/scan")).toHaveLength(1));
     expect(JSON.parse(String(calls("/api/me/diary/scan")[0]?.[1]?.body))).toEqual({

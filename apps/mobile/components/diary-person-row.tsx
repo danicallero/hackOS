@@ -8,7 +8,9 @@ import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
 export const PERSON_ROW_TEXT_INSET = 76;
+/** Star + menu, or the Save pill; a row with only the menu needs one target. */
 const TRAILING_WIDTH = 92;
+const MENU_ONLY_WIDTH = 44;
 
 /**
  * One person in Saved or Directory (#935): the same layout either way. The
@@ -55,6 +57,7 @@ export function DiaryPersonRow({
 }) {
   const { t } = useLocale();
   const lines = [headline, detail].filter(Boolean) as string[];
+  const trailingWidth = saved ? (onToggleStar ? TRAILING_WIDTH : MENU_ONLY_WIDTH) : TRAILING_WIDTH;
   const body = (
     <>
       <PersonAvatar size={48} name={available ? name : null} uri={photoUrl} />
@@ -95,7 +98,7 @@ export function DiaryPersonRow({
     gap: 12,
     minHeight: 72,
     paddingLeft: 16,
-    paddingRight: TRAILING_WIDTH + 4,
+    paddingRight: trailingWidth + 10,
     paddingVertical: 10,
   };
 
@@ -128,7 +131,7 @@ export function DiaryPersonRow({
           position: "absolute",
           right: 6,
           top: 0,
-          width: TRAILING_WIDTH,
+          width: trailingWidth,
         }}
       >
         {saved ? (

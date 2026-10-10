@@ -8,7 +8,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
 import { GlassView } from "@/components/glass-view";
-import { EmptyState, LegacyHeaderIconButton, Section, Separator } from "@/components/native-ui";
+import {
+  AndroidStatusBarScrim,
+  EmptyState,
+  LegacyHeaderIconButton,
+  Section,
+  Separator,
+} from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { DetailRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -440,6 +446,9 @@ export function PersonProfileScreen() {
           </>
         )}
       </ScrollView>
+      {/* Keeps scrolled content out from behind the clock; the floating back
+          button stays above it. */}
+      <AndroidStatusBarScrim />
     </>
   );
 }

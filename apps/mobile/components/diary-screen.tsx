@@ -20,7 +20,7 @@ import { CompanyAlbum, CompanySheet } from "@/components/company-album";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { DiaryPersonRow, PERSON_ROW_TEXT_INSET } from "@/components/diary-person-row";
 import { FavouriteStar } from "@/components/favourite-star";
-import { EmptyState, Section, Separator } from "@/components/native-ui";
+import { AndroidStatusBarScrim, EmptyState, Section, Separator } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -380,7 +380,11 @@ export function DiaryScreen() {
         starred={entry.starred}
         busy={busyKeys.has(`entry:${entry.id}`)}
         onOpen={person ? () => openPerson(person.userId) : undefined}
-        onToggleStar={() => void updatePerson(entry, { starred: !entry.starred })}
+        // A hidden profile can no longer be favourited; it keeps only its
+        // note and "Remove from diary", so its name is not truncated.
+        onToggleStar={
+          person ? () => void updatePerson(entry, { starred: !entry.starred }) : undefined
+        }
         onEditNote={() => setNoteTarget({ kind: "person", entry })}
         onRemove={() => removePerson(entry)}
       />
@@ -438,6 +442,9 @@ export function DiaryScreen() {
       />
       <ScannerCodeEntry
         visible={input === "manual"}
+        appearance="system"
+        title={t("personEnterBadgeCode")}
+        placeholder={null}
         submitLabel={t("save")}
         onValue={(code) => void submitScan(code)}
         onClose={() => setInput(null)}
@@ -534,6 +541,14 @@ export function DiaryScreen() {
         ) : (
           <>
             <View style={{ gap: 10 }}>
+              {canBrowse ? (
+                <SegmentedControl
+                  label={t("diaryPeopleTab")}
+                  values={[t("diarySavedTab"), t("diaryDirectoryTab")]}
+                  selectedIndex={scope === "saved" ? 0 : 1}
+                  onChange={(index) => setScope(index === 0 ? "saved" : "directory")}
+                />
+              ) : null}
               {showDirectory || (entries?.length ?? 0) > 0 ? (
                 <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
                   <SearchField
@@ -572,14 +587,6 @@ export function DiaryScreen() {
                     </Pressable>
                   )}
                 </View>
-              ) : null}
-              {canBrowse ? (
-                <SegmentedControl
-                  label={t("diaryPeopleTab")}
-                  values={[t("diarySavedTab"), t("diaryDirectoryTab")]}
-                  selectedIndex={scope === "saved" ? 0 : 1}
-                  onChange={(index) => setScope(index === 0 ? "saved" : "directory")}
-                />
               ) : null}
             </View>
             {showDirectory ? (
@@ -621,6 +628,7 @@ export function DiaryScreen() {
           </>
         )}
       </ScrollView>
+      <AndroidStatusBarScrim />
     </>
   );
 }

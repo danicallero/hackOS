@@ -657,12 +657,14 @@ confirmation. Un-starring never removes anyone. The search field filters saved
 cards locally by name, headline, project, challenges, location and the owner's
 note, ignoring accents and case; cards never carry an email, so contact details
 are not searchable. A `directory:read` holder also gets a Saved | Directory
-scope: Directory pages `GET /api/directory` (server search by name, infinite
+scope above the search field: Directory pages `GET /api/directory` (server search by name, infinite
 scroll). Its rows look like saved rows; an unsaved person shows Save
 (`POST /api/me/diary/people`), a saved one the star and the same menu.
 Rows (`components/diary-person-row.tsx`) are one full-width pressable that
 opens the profile; the trailing controls are separate siblings so they never
-also open it.
+also open it. A profile hidden after it was saved keeps only the menu (no
+star). The diary and the profile keep an Android status-bar scrim, so
+scrolled content never slides behind the clock.
 
 `app/people/[id].tsx` (`components/person-profile-screen.tsx`) is the full
 profile from `GET /api/directory/:userId`: large photo or initials, name,
@@ -686,8 +688,11 @@ Stand favourites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.
 Scanning follows R008: the primary "Scan with NFC" control opens the existing
 reader immediately (`lib/nfc-reader.ts`, UID only, never writes or claims the
 tag; `lib/nfc-uid.ts` normalization), one tap from the list. "Scan QR code"
-(the gated `QrCamera`) and "Enter code" sit in the compact ellipsis menu. On
-hardware without NFC the primary control becomes "Scan QR code". Cancelling any
+(the gated `QrCamera`) and "Enter code" sit in the compact ellipsis menu.
+"Enter code" opens the shared `ScannerCodeEntry` with `appearance="system"`
+(the light/dark card of the note editor, not the dark camera card) and a title
+that fits badges and stand tags alike. On hardware without NFC the primary
+control becomes "Scan QR code". Cancelling any
 input sends nothing. Each scan is `POST /api/me/diary/scan` with a fresh
 `Idempotency-Key`. A saved person is pinned in a Saved section at the top of
 People; a collected stand switches to Companies, where its badge springs in
