@@ -156,7 +156,7 @@ function person(id: number, name: string, overrides: Partial<DiaryEntry> = {}): 
       photoUrl: null,
       headline: "Builds robots",
       locationNote: null,
-      project: { kind: "project", id: 1, name: "Rover" },
+      projects: [{ kind: "project", id: 1, name: "Rover" }],
       challenges: [{ id: 2, name: "Robotics" }],
     },
     sponsor: null,

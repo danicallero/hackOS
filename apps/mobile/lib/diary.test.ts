@@ -34,7 +34,7 @@ function entry(id: number, overrides: Partial<DiaryEntry> = {}): DiaryEntry {
       photoUrl: null,
       headline: null,
       locationNote: null,
-      project: null,
+      projects: [],
       challenges: [],
     },
     sponsor: null,

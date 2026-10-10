@@ -20,7 +20,7 @@ export interface DirectoryEntry {
   photoUrl: string | null;
   headline: string | null;
   locationNote: string | null;
-  project: { kind: "project" | "workGroup"; id: number; name: string } | null;
+  projects: { kind: "project" | "workGroup"; id: number; name: string }[];
   challenges: { id: number; name: string }[];
 }
 
@@ -122,8 +122,10 @@ export function personColumns<R extends PersonRowModel>(
       id: "project",
       header: t("colProject"),
       cell: (row) =>
-        row.person?.project ? (
-          <span className="wrap-break-word">{row.person.project.name}</span>
+        row.person?.projects.length ? (
+          <span className="wrap-break-word">
+            {row.person.projects.map((project) => project.name).join(", ")}
+          </span>
         ) : (
           dash
         ),
@@ -171,7 +173,8 @@ export function PersonMobileRow({
 }) {
   const { person } = row;
   const href = personHref(row);
-  const details = person && (person.project || person.challenges.length > 0 || person.locationNote);
+  const details =
+    person && (person.projects.length > 0 || person.challenges.length > 0 || person.locationNote);
   return (
     <div
       className={cn(
@@ -194,7 +197,11 @@ export function PersonMobileRow({
       </div>
       {(details || row.note) && (
         <div className="space-y-1.5 pl-13 text-sm">
-          {person?.project && <p className="wrap-break-word">{person.project.name}</p>}
+          {person?.projects.map((project) => (
+            <p key={`${project.kind}-${project.id}`} className="wrap-break-word">
+              {project.name}
+            </p>
+          ))}
           {person && person.challenges.length > 0 && (
             <div className="flex items-start gap-2">
               <TrophyIcon

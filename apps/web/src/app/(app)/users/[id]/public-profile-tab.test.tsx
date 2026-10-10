@@ -56,7 +56,7 @@ function profile(): PublicProfile {
       locationNote: null,
       socials: [],
       cvUrl: null,
-      project: null,
+      projects: [],
       challenges: [],
     },
   };

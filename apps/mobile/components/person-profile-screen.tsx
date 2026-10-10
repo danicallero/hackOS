@@ -27,7 +27,7 @@ import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
 import { type DirectoryEntry, displayUrl, socialLabel } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
-import { useLocale } from "@/lib/i18n";
+import { type MessageKey, useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { safeBack } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
@@ -39,6 +39,12 @@ type State =
   | { status: "error"; error: Error };
 
 const ROW_ICON_INSET = 52;
+
+/** Singular and plural row labels per project kind. */
+const PROJECT_KINDS: { kind: "project" | "workGroup"; one: MessageKey; many: MessageKey }[] = [
+  { kind: "project", one: "directoryProject", many: "directoryProjects" },
+  { kind: "workGroup", one: "directoryWorkGroup", many: "directoryWorkGroups" },
+];
 
 /**
  * A saved person's profile (#934, #935), opened from a diary row. People get
@@ -343,7 +349,7 @@ export function PersonProfileScreen() {
               </Section>
             ) : null}
 
-            {person.locationNote || person.project || person.challenges.length > 0 ? (
+            {person.locationNote || person.projects.length > 0 || person.challenges.length > 0 ? (
               <Section>
                 {[
                   person.locationNote ? (
@@ -354,18 +360,20 @@ export function PersonProfileScreen() {
                       value={person.locationNote}
                     />
                   ) : null,
-                  person.project ? (
-                    <DetailRow
-                      key="project"
-                      icon="hammer"
-                      label={t(
-                        person.project.kind === "project"
-                          ? "directoryProject"
-                          : "directoryWorkGroup",
-                      )}
-                      value={person.project.name}
-                    />
-                  ) : null,
+                  // Every project and work group, one row per kind (#935).
+                  ...PROJECT_KINDS.map(({ kind, one, many }) => {
+                    const names = person.projects
+                      .filter((project) => project.kind === kind)
+                      .map((project) => project.name);
+                    return names.length > 0 ? (
+                      <DetailRow
+                        key={kind}
+                        icon="hammer"
+                        label={t(names.length === 1 ? one : many)}
+                        value={names.join("\n")}
+                      />
+                    ) : null;
+                  }),
                   person.challenges.length > 0 ? (
                     <DetailRow
                       key="challenges"

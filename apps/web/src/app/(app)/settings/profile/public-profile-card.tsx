@@ -92,7 +92,7 @@ export function previewEntry(
     locationNote: settings.locationNote.trim() || null,
     socials: savedLinks(settings.socials),
     cvUrl: settings.shareCv && hasCv ? OWN_CV_PATH : null,
-    project: settings.showProject ? saved.project : null,
+    projects: settings.showProject ? saved.projects : [],
     challenges: settings.showProject ? saved.challenges : [],
   };
 }

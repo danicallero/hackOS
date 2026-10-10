@@ -2,7 +2,7 @@
 
 An opt-in public profile that an attendee shares with the people who scan
 their badge: name, photo, an optional headline, bio, location note, links and
-CV and, if they choose, their project and its challenges. There is no
+CV and, if they choose, their projects and their challenges. There is no
 browsable people directory: the product owner retired it on #935 ("al final
 queremos que sea dinámico"), so a person enters someone's event diary only by
 a scan ([`diary.md`](./diary.md)), and only then can that attendee read their
@@ -22,7 +22,7 @@ headline and location note (placeholder "Room 2.1", so people know which classro
 (type + address rows; empty rows are not saved), the CV and a preview card.
 The preview is the server's `preview` until something changes; then name
 (surname initial by code point, as the API), photo, text, links and the
-shared CV follow the unsaved edits, while the project and challenges stay the
+shared CV follow the unsaved edits, while the projects and challenges stay the
 saved ones until saving. While the opt-in is off the hidden fields neither
 enable Save nor get published: switching it off saves the stored text and
 toggles unchanged. Fields are locked while a save is in flight, and each
@@ -142,13 +142,14 @@ badge or ticket.
 | `headline`, `bio`, `locationNote` | profile | when set |
 | `socials[]` `{kind, url}` | profile | always (may be empty) |
 | `cvUrl` | `/api/directory/:userId/cv` (the owner's preview: `/api/me/public-profile/cv`) | `share_cv` and a CV exists |
-| `project` `{kind, id, name}` | active `submissions` → `repos` (`kind: "project"`), else an active, unlinked `planned_work_groups` membership (`kind: "workGroup"`) | `show_project` |
-| `challenges[]` `{id, name}` | published, non-test challenges of that project (`queue_entries`) or group (`planned_work_group_challenges`) | `show_project` |
+| `projects[]` `{kind, id, name}` | every active `submissions` → `repos` (`kind: "project"`), then every active, unlinked `planned_work_groups` membership (`kind: "workGroup"`), each by id | `show_project` |
+| `project` | deprecated: the first of `projects` (or `null`), kept for app builds that predate the list | `show_project` |
+| `challenges[]` `{id, name}` | published, non-test challenges of any of those projects (`queue_entries`) or groups (`planned_work_group_challenges`) | `show_project` |
 
 Nothing else leaves the module: no email, DNI, badge, intolerances,
 university, size, application state, roles or capabilities, presence, test
 flag, teammates or storage keys (the CV download names the file as uploaded).
-A project name may appear while its other members stay hidden; members are
+Project names may appear while its other members stay hidden; members are
 never listed.
 
 A profile is shared only while it is visible, the person is in

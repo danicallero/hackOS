@@ -77,7 +77,7 @@ function searchText(entry: DiaryEntry): string {
     [
       person?.displayName,
       person?.headline,
-      person?.project?.name,
+      ...(person?.projects.map((project) => project.name) ?? []),
       person?.locationNote,
       ...(person?.challenges.map((challenge) => challenge.name) ?? []),
       entry.note,

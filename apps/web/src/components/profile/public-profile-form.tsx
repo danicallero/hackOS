@@ -289,12 +289,15 @@ export function DirectoryCard({ entry }: { entry: DirectoryEntry }) {
       <div className="min-w-0 flex-1 space-y-1">
         <p className="font-medium wrap-anywhere">{entry.displayName}</p>
         {entry.headline && <p className="text-sm wrap-anywhere">{entry.headline}</p>}
-        {entry.project && (
-          <p className="text-muted-foreground text-sm wrap-anywhere">
-            <span className="sr-only">{t(PROJECT_KIND[entry.project.kind])}: </span>
-            {entry.project.name}
+        {entry.projects.map((project) => (
+          <p
+            key={`${project.kind}-${project.id}`}
+            className="text-muted-foreground text-sm wrap-anywhere"
+          >
+            <span className="sr-only">{t(PROJECT_KIND[project.kind])}: </span>
+            {project.name}
           </p>
-        )}
+        ))}
         {entry.challenges.length > 0 && (
           <ul aria-label={t("challenges")} className="flex flex-wrap gap-1.5 pt-1">
             {entry.challenges.map((challenge) => (

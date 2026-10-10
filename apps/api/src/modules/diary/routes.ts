@@ -48,7 +48,7 @@ export function registerDiaryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my sponsor stand collection",
         description:
-          "The sponsor stands the caller can collect by scanning them: every revealed sponsor with at least one stand tag, plus revealed sponsors the caller already collected even if their tags were removed since. Hidden sponsors are never listed or counted. Returns `total`, `collected` and `items`: the public sponsor card with `entry` (the caller's diary entry id, favourite, note and collection time) or null while not yet collected; ordered like the public logo grid: sponsor priority (1 first, unset last), then name, whether collected or not. Stand tag codes are never exposed. Private to the caller; requires event access (#935).",
+          "The sponsor stands the caller can collect by scanning them: every revealed sponsor staff marked scannable (listed even before its tags exist), plus revealed sponsors the caller already collected even if their tags were removed since. Hidden sponsors are never listed or counted. Returns `total`, `collected` and `items`: the public sponsor card with `entry` (the caller's diary entry id, favourite, note and collection time) or null while not yet collected; ordered like the public logo grid: sponsor priority (1 first, unset last), then name, whether collected or not. Stand tag codes are never exposed. Private to the caller; requires event access (#935).",
       },
     },
     async (req) => listSponsorCollection(ownerOf(req)),

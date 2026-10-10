@@ -96,7 +96,7 @@ function profile(overrides: Record<string, unknown> = {}, preview: Partial<Direc
       locationNote: null,
       socials: [],
       cvUrl: null,
-      project: null,
+      projects: [],
       challenges: [],
       ...preview,
     },
@@ -468,7 +468,7 @@ describe("DirectoryCard", () => {
     locationNote: null,
     socials: [],
     cvUrl: null,
-    project: null,
+    projects: [],
     challenges: [],
   };
 
@@ -484,7 +484,7 @@ describe("DirectoryCard", () => {
         <DirectoryCard
           entry={{
             ...entry,
-            project: { kind: "project", id: 1, name: "Very long project name" },
+            projects: [{ kind: "project", id: 1, name: "Very long project name" }],
             challenges: [{ id: 1, name: "Best use of open data" }],
           }}
         />,
@@ -499,7 +499,7 @@ describe("DirectoryCard", () => {
         <DirectoryCard
           entry={{
             ...entry,
-            project: { kind: "workGroup", id: 2, name: "Group" },
+            projects: [{ kind: "workGroup", id: 2, name: "Group" }],
             challenges: many,
           }}
         />,

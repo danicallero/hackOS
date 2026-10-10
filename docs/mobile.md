@@ -666,7 +666,7 @@ The diary uses the system header, laid out like Activities. On iOS 26
 scrolls under it with the system scroll-edge effect. iOS has no left-aligned
 title on the bar row (`headerTitleAlign` is Android-only, and react-native-screens
 4.26 does not expose iOS 26's `inlineLarge` large-title mode), so the
-navigation title is empty and "Diario" is a leading `Stack.Toolbar.View` with
+navigation title is empty and "Agenda" is a leading `Stack.Toolbar.View` with
 `hidesSharedBackground` (28pt heavy, `accessibilityRole="header"`). That title
 uses a fixed black or white from the app's colour scheme, not the dynamic
 label colour: iOS 26 flips a bar item's light/dark appearance with what
