@@ -54,8 +54,10 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
         {
           nfcPermission:
             "hackOS uses NFC to read participant badge serial numbers, link badges to participant accounts, record check-in, meal collection, and activity attendance, and link company tags so attendees can collect companies.",
-          // #935: staff write the company-tag link (NDEF) when linking a tag.
-          includeNdefEntitlement: true,
+          // #935: TAG only. Company-tag links are written through the iOS
+          // tag-reader session (MifareIOS), which already exposes NDEF; App
+          // Store Connect rejects the NDEF reader-session format (SDK 27).
+          includeNdefEntitlement: false,
         },
       ],
       ["expo-navigation-bar", { enforceContrast: false }],
