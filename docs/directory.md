@@ -9,6 +9,16 @@ People manage their public profile (opt-in, surname/photo/project, headline,
 location note and preview) from My profile (`/settings/profile`); there is no
 separate settings page.
 
+The "Public profile" section (`settings/profile/public-profile-card.tsx`)
+shows only the opt-in switch, with one line naming who will see it, until the
+person opts in; then it reveals the surname, photo and project switches, the
+headline and location note, and a preview card. Name, photo and text in the
+preview follow unsaved edits; the project and challenges come from the saved
+`preview`, so they appear after saving. It saves with one `Idempotency-Key`
+per change set, refetches on `domain.changed` (`directory` topic) without
+discarding unsaved edits, and stays hidden when the API answers 403 (no
+event access).
+
 Module: `apps/api/src/modules/directory/`. Tests:
 `apps/api/test/directory/api.test.ts`.
 
