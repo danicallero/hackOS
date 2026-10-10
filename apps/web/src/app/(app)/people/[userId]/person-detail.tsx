@@ -10,6 +10,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { CvViewer } from "@/components/profile/cv-viewer";
 import { SocialLinks } from "@/components/profile/social-links";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -33,9 +34,9 @@ const PROJECT_KIND: Record<"project" | "workGroup", MessageKey> = {
 };
 
 /**
- * One opted-in person from `GET /api/directory/:userId` (#934, #935). Not gated
- * on `directory:read` here: attendees may read the people they saved in their
- * diary, and the API answers the same 404 for anyone else.
+ * One opted-in person from `GET /api/directory/:userId` (#934, #935): only
+ * someone the reader saved in their diary by scanning; the API answers the
+ * same 404 for anyone else.
  */
 export function PersonDetail({ userId }: { userId: number }) {
   return <PersonReader userId={userId} />;
@@ -58,7 +59,7 @@ function PersonReader({ userId }: { userId: number }) {
         if (!cancelled) setChallenges(r.items);
       })
       .catch(() => {
-        // Challenge chips fall back to the names the directory returns.
+        // Challenge chips fall back to the names the profile returns.
       });
     return () => {
       cancelled = true;
@@ -202,12 +203,16 @@ function PersonReader({ userId }: { userId: number }) {
         }
         primaryAction={
           entry.cvUrl ? (
-            <Button asChild variant="outline" size="sm">
-              <a href={apiAssetUrl(entry.cvUrl)} target="_blank" rel="noreferrer">
-                <FilePdfIcon aria-hidden="true" />
-                {t("downloadCv")}
-              </a>
-            </Button>
+            <CvViewer
+              path={entry.cvUrl}
+              name={entry.displayName}
+              trigger={
+                <Button type="button" variant="outline" size="sm">
+                  <FilePdfIcon aria-hidden="true" />
+                  {t("viewCv")}
+                </Button>
+              }
+            />
           ) : undefined
         }
       />

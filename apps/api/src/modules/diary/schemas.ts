@@ -21,8 +21,6 @@ export const scanBody = z
   })
   .strict();
 
-export const savePersonBody = z.object({ userId: z.number().int().positive() }).strict();
-
 export const entryParams = z.object({ entryId: z.coerce.number().int().positive() });
 
 export const updateEntryBody = z

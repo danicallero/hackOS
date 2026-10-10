@@ -1,5 +1,4 @@
 import "./env.js";
-import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
@@ -26,7 +25,7 @@ beforeEach(async () => {
   await truncateAll();
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
-  owner = await createUserWithCapabilities([CAPABILITIES.DIRECTORY_READ]);
+  owner = await createUserWithCapabilities([]);
 });
 afterAll(async () => {
   await app.close();
@@ -56,11 +55,15 @@ async function person(name: string, options: { visible?: boolean } = {}) {
   return { id, badge, ticket };
 }
 
-async function enterprise(name: string, visibility: "visible" | "hidden" = "visible") {
+async function enterprise(
+  name: string,
+  visibility: "visible" | "hidden" = "visible",
+  scannable = true,
+) {
   const { rows } = await pool.query(
-    `INSERT INTO enterprises (name, visibility, description, website)
-     VALUES ($1, $2, 'We make things', 'https://example.test') RETURNING id`,
-    [name, visibility],
+    `INSERT INTO enterprises (name, visibility, description, website, stand_scannable)
+     VALUES ($1, $2, 'We make things', 'https://example.test', $3) RETURNING id`,
+    [name, visibility, scannable],
   );
   return rows[0].id as number;
 }
@@ -94,15 +97,6 @@ function scan(code: string, as = owner, key = `scan-${++keySeq}`) {
     url: "/api/me/diary/scan",
     headers: { ...asUser(as), "idempotency-key": key },
     payload: { code },
-  });
-}
-
-function saveFromDirectory(userId: number, as = owner) {
-  return app.inject({
-    method: "POST",
-    url: "/api/me/diary/people",
-    headers: { ...asUser(as), "idempotency-key": `save-${++keySeq}` },
-    payload: { userId },
   });
 }
 
@@ -178,8 +172,8 @@ describe("scanning people", () => {
     expect(res.json().error.code).toBe("diary_self");
   });
 
-  it("lets any attendee save people, including a sponsor without directory:read", async () => {
-    // A seeded-style Sponsor role: event access, no directory:read (#934 D3).
+  it("lets any attendee save people, including a sponsor", async () => {
+    // A seeded-style Sponsor role: event access and no capabilities.
     const sponsorRole = await createRole([], { name: "Sponsor" });
     const rep = await createUser();
     await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [
@@ -202,7 +196,7 @@ describe("scanning people", () => {
     expect((await scan("04ACAC00000001", rep)).statusCode).toBe(201);
   });
 
-  it("lets a sponsor without directory:read open only the people they saved", async () => {
+  it("lets an attendee open only the people they saved", async () => {
     const sponsorRole = await createRole([], { name: "Sponsor" });
     const rep = await createUser();
     await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [
@@ -268,7 +262,7 @@ describe("scanning people", () => {
     }
     const limited = await scan("04FFFFFFFFFFAA");
     expect(limited.statusCode).toBe(429);
-    const other = await createUserWithCapabilities([CAPABILITIES.DIRECTORY_READ]);
+    const other = await createUserWithCapabilities([]);
     expect((await scan("04FFFFFFFFFFAA", other)).statusCode).toBe(404);
   });
 });
@@ -308,30 +302,173 @@ describe("scanning sponsor stands", () => {
     expect(res.body).not.toContain("Stealth");
     expect(await rowCount()).toBe(0);
   });
-});
 
-describe("saving from the directory", () => {
-  it("saves a visible person and answers 404 for hidden, missing or self", async () => {
-    const ana = await person("Ana");
-    const hidden = await person("Hidden", { visible: false });
-    const saved = await saveFromDirectory(ana.id);
-    expect(saved.statusCode).toBe(201);
-    expect(saved.json().person.userId).toBe(ana.id);
-    expect((await saveFromDirectory(ana.id)).statusCode).toBe(200);
-    expect((await saveFromDirectory(hidden.id)).statusCode).toBe(404);
-    expect((await saveFromDirectory(999_999)).statusCode).toBe(404);
-    expect((await saveFromDirectory(owner)).statusCode).toBe(404);
+  it("collects a company from its tag link, with the same rules as the bare code", async () => {
+    const { config } = await import("../../src/config.js");
+    const web = config.WEB_URL.replace(/\/+$/, "");
+    const acme = await enterprise("Acme");
+    const quiet = await enterprise("Quiet", "visible", false);
+    await standTag(acme, "04ACAC00000001");
+    await standTag(acme, "STAND-ABCDEFGHJKMNPQRS", "qr");
+    await standTag(quiet, "04ACAC00000005");
+
+    const viaNfcLink = await scan(`${web}/s/04acac00000001`);
+    expect(viaNfcLink.statusCode).toBe(201);
+    expect(viaNfcLink.json().sponsor).toMatchObject({ enterpriseId: acme });
+    const viaQrLink = await scan(`${web}/s/STAND-ABCDEFGHJKMNPQRS/`);
+    expect(viaQrLink.statusCode).toBe(200);
+    expect(viaQrLink.json().id).toBe(viaNfcLink.json().id);
+
+    const notScannable = await scan(`${web}/s/04ACAC00000005`);
+    expect(notScannable.json().error.code).toBe("stand_unavailable");
+    // Another host's link is not a company tag.
+    const foreign = await scan("https://evil.example/s/04ACAC00000001");
+    expect(foreign.statusCode).toBe(404);
+    expect(foreign.json().error.code).toBe("diary_code_unknown");
     expect(await rowCount()).toBe(1);
   });
 
-  it("is open to any attendee but not to accounts without event access", async () => {
-    const ana = await person("Ana");
-    const role = await createRole([]);
-    const attendee = await createUser();
-    await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [attendee, role]);
-    expect((await saveFromDirectory(ana.id, attendee)).statusCode).toBe(201);
+  it("never grants a company for scanning its representative's badge", async () => {
+    const acme = await enterprise("Acme");
+    await standTag(acme, "04ACAC00000001");
+    const rep = await person("Rita");
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
+      acme,
+      rep.id,
+    ]);
+    const res = await scan(rep.badge);
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({ kind: "person", sponsor: null });
+    const collected = await app.inject({
+      method: "GET",
+      url: "/api/me/diary/sponsors",
+      headers: asUser(owner),
+    });
+    expect(collected.json()).toMatchObject({ collected: 0 });
+  });
+
+  it("does not save a revealed sponsor whose stand is not scannable", async () => {
+    const quiet = await enterprise("Quiet", "visible", false);
+    await standTag(quiet, "04ACAC00000004");
+    await standTag(quiet, "STAND-ABCDEFGHJKMNPQRS", "qr");
+    for (const code of ["04ACAC00000004", "STAND-ABCDEFGHJKMNPQRS"]) {
+      const res = await scan(code);
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error.code).toBe("stand_unavailable");
+      expect(res.body).not.toContain("Quiet");
+    }
+    expect(await rowCount()).toBe(0);
+
+    await pool.query(`UPDATE enterprises SET stand_scannable = true WHERE id = $1`, [quiet]);
+    expect((await scan("04ACAC00000004")).statusCode).toBe(201);
+  });
+});
+
+describe("the sponsor stand collection", () => {
+  function collection(as = owner) {
+    return app.inject({ method: "GET", url: "/api/me/diary/sponsors", headers: asUser(as) });
+  }
+
+  it("counts revealed tagged stands, collected ones first, without exposing codes", async () => {
+    const acme = await enterprise("Acme");
+    const beta = await enterprise("Beta");
+    const zeta = await enterprise("Zeta");
+    const stealth = await enterprise("Stealth", "hidden");
+    await enterprise("Untagged");
+    await challenge(acme, "Robots", "visible");
+    await standTag(acme, "04ACAC00000001");
+    await standTag(beta, "04ACAC00000002");
+    await standTag(zeta, "STAND-ABCDEFGHJKMNPQRS", "qr");
+    await standTag(stealth, "04ACAC00000003");
+    await scan("04ACAC00000002");
+    await scan("04ACAC00000001");
+
+    const res = await collection();
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toMatchObject({ total: 3, collected: 2 });
+    expect(body.items.map((item: { name: string }) => item.name)).toEqual(["Acme", "Beta", "Zeta"]);
+    expect(body.items[0]).toMatchObject({
+      enterpriseId: acme,
+      challenges: [{ name: "Robots" }],
+      entry: { starred: false, note: null },
+    });
+    expect(body.items[2].entry).toBeNull();
+    expect(res.body).not.toContain("04ACAC");
+    expect(res.body).not.toContain("STAND-");
+    expect(res.body).not.toContain("Stealth");
+    expect(res.body).not.toContain("Untagged");
+  });
+
+  it("keeps a collected stand after its tags are removed, but not once it is hidden", async () => {
+    const acme = await enterprise("Acme");
+    const beta = await enterprise("Beta");
+    await standTag(acme, "04ACAC00000001");
+    await standTag(beta, "04ACAC00000002");
+    await scan("04ACAC00000001");
+    await scan("04ACAC00000002");
+    await pool.query(`DELETE FROM sponsor_stand_tags`);
+    expect((await collection()).json()).toMatchObject({ total: 2, collected: 2 });
+
+    await pool.query(`UPDATE enterprises SET visibility = 'hidden' WHERE id = $1`, [beta]);
+    const body = (await collection()).json();
+    expect(body).toMatchObject({ total: 1, collected: 1 });
+    expect(body.items[0].enterpriseId).toBe(acme);
+  });
+
+  it("leaves out stands that are not scannable unless the caller already collected them", async () => {
+    const acme = await enterprise("Acme");
+    const beta = await enterprise("Beta");
+    await enterprise("Gamma", "visible", false).then((id) => standTag(id, "04ACAC00000003"));
+    await standTag(acme, "04ACAC00000001");
+    await standTag(beta, "04ACAC00000002");
+    await scan("04ACAC00000001");
+    expect((await collection()).json()).toMatchObject({ total: 2, collected: 1 });
+
+    // Turning scanning off keeps the collected stand (in both counts) and
+    // removes the uncollected one.
+    await pool.query(`UPDATE enterprises SET stand_scannable = false WHERE id = ANY($1)`, [
+      [acme, beta],
+    ]);
+    const body = (await collection()).json();
+    expect(body).toMatchObject({ total: 1, collected: 1 });
+    expect(body.items.map((item: { name: string }) => item.name)).toEqual(["Acme"]);
+    expect(body.items[0].entry).not.toBeNull();
+
+    // The collected entry stays visible in the owner's diary with its card.
+    const diary = (await list()).json();
+    expect(diary.items[0].sponsor).toMatchObject({ enterpriseId: acme, name: "Acme" });
+
+    // Another attendee who never collected it sees nothing.
+    const other = await createUserWithCapabilities([]);
+    await admitParticipant(other);
+    expect((await collection(other)).json()).toMatchObject({ total: 0, collected: 0 });
+  });
+
+  it("is private to the caller and requires event access", async () => {
+    const acme = await enterprise("Acme");
+    await standTag(acme, "04ACAC00000001");
+    await scan("04ACAC00000001");
+    const other = await createUserWithCapabilities([]);
+    const theirs = (await collection(other)).json();
+    expect(theirs).toMatchObject({ total: 1, collected: 0 });
+    expect(theirs.items[0].entry).toBeNull();
     const outsider = await createUser();
-    expect((await saveFromDirectory(ana.id, outsider)).statusCode).toBe(403);
+    expect((await collection(outsider)).statusCode).toBe(403);
+  });
+});
+
+describe("no save by id", () => {
+  it("adds people only by scanning, never from a browsed id", async () => {
+    const ana = await person("Ana");
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/me/diary/people",
+      headers: { ...asUser(owner), "idempotency-key": `save-${++keySeq}` },
+      payload: { userId: ana.id },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(await rowCount()).toBe(0);
   });
 });
 
@@ -374,7 +511,7 @@ describe("reading and editing the diary", () => {
   it("keeps entries private to their owner", async () => {
     const ana = await person("Ana");
     const entry = (await scan(ana.badge)).json();
-    const other = await createUserWithCapabilities([CAPABILITIES.DIRECTORY_READ]);
+    const other = await createUserWithCapabilities([]);
     expect((await list(other)).json().items).toEqual([]);
     const patch = await app.inject({
       method: "PATCH",

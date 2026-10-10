@@ -2,26 +2,20 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 
 // app.config.ts runs in Node, but the mobile tsconfig intentionally does not
 // include @types/node for the client bundle.
-declare function require(moduleName: string): {
-  existsSync(path: string): boolean;
-  execSync(command: string, options: { stdio: string[] }): { toString(): string };
+declare function require(moduleName: "node:fs"): { existsSync(path: string): boolean };
+declare function require(moduleName: "node:child_process"): {
+  execFileSync(command: string, args: string[], options: { encoding: "utf8" }): string;
 };
 
-/**
- * Short commit of the source this binary was built from, shown beside the
- * version so a tester can tell which build they are running. EAS and GitHub
- * Actions provide it; local builds read the checkout.
- */
-function buildCommit(): string | null {
-  const fromCi = process.env.EAS_BUILD_GIT_COMMIT_HASH ?? process.env.GITHUB_SHA;
-  if (fromCi) return fromCi.slice(0, 7);
+function buildCommit(): string | undefined {
+  const provided = process.env.EAS_BUILD_GIT_COMMIT_HASH ?? process.env.GITHUB_SHA;
+  if (provided && /^[a-f0-9]{7,40}$/i.test(provided)) return provided.slice(0, 7);
   try {
     return require("node:child_process")
-      .execSync("git rev-parse --short=7 HEAD", { stdio: ["ignore", "pipe", "ignore"] })
-      .toString()
+      .execFileSync("git", ["rev-parse", "--short=7", "HEAD"], { encoding: "utf8" })
       .trim();
   } catch {
-    return null;
+    return undefined;
   }
 }
 
@@ -59,8 +53,9 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
         "react-native-nfc-manager",
         {
           nfcPermission:
-            "hackOS uses NFC to read participant badge serial numbers, link badges to participant accounts, and record check-in, meal collection, and activity attendance.",
-          includeNdefEntitlement: false,
+            "hackOS uses NFC to read participant badge serial numbers, link badges to participant accounts, record check-in, meal collection, and activity attendance, and link company tags so attendees can collect companies.",
+          // #935: staff write the company-tag link (NDEF) when linking a tag.
+          includeNdefEntitlement: true,
         },
       ],
       ["expo-navigation-bar", { enforceContrast: false }],
@@ -69,6 +64,8 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
       "expo-web-browser",
       "./plugins/withAndroidResConfigs.js",
       "./plugins/withAndroidNfcTagClaim.js",
+      // #935: company-tag links https://<event host>/s/<code> open the app.
+      ["./plugins/withAndroidCompanyTagLinks.js", { host: eventWebsiteHost }],
     ],
     extra: { ...config.extra, buildCommit: buildCommit() },
     name: isDevelopmentBuild ? `${config.name} (Debug)` : config.name,
@@ -78,7 +75,8 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
         ? `${config.ios?.bundleIdentifier}.debug`
         : config.ios?.bundleIdentifier,
       icon: isDevelopmentBuild ? "./assets/icon-ios-debug.icon" : config.ios?.icon,
-      associatedDomains: [`webcredentials:${eventWebsiteHost}`],
+      // applinks (#935): company-tag links /s/<code>, see the web AASA.
+      associatedDomains: [`webcredentials:${eventWebsiteHost}`, `applinks:${eventWebsiteHost}`],
       ...(devClientDefaultLauncherUrl
         ? {
             infoPlist: {

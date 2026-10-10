@@ -1,64 +1,154 @@
 "use client";
 
-// Sponsor stand tags (#935): NFC tag UIDs and printable QR tokens that
-// attendees scan to save this sponsor in their event diary. Managed by the
-// enterprise's own sponsor reps or staff with sponsors:manage.
+// Company tags (#935): NFC tags or wristbands (by serial number) and printable
+// QR codes that attendees scan to collect this company in their event diary.
+// Staff with sponsors:manage define them; the company's own reps only see
+// them. Tags belong to the company, never to a rep's profile.
 
 import { EVENTS } from "@hackos/shared/events";
 import { ContactlessPaymentIcon } from "@phosphor-icons/react/dist/csr/ContactlessPayment";
+import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { QrCodeIcon } from "@phosphor-icons/react/dist/csr/QrCode";
 import { QRCodeSVG } from "qrcode.react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
+import { IconButton } from "@/components/common/icon-button";
+import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
+import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { ApiError, api, apiDownload } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import {
+  LABEL_MAX,
+  normalizeUid,
+  type StandTag,
+  standQrSvgPath,
+  standTagInUseKey,
+  UID_PATTERN,
+} from "@/lib/stands";
 import { toast } from "@/lib/toast";
 
-export interface StandTag {
-  id: number;
-  kind: "nfc" | "qr";
-  code: string;
-  createdAt: string;
+export type { StandTag };
+
+/** The tag link the printed QR holds (the API's `companyTagUrl` on this web host). */
+function companyTagLink(code: string): string {
+  return `${window.location.origin}/s/${encodeURIComponent(code)}`;
 }
 
-/** Same encoding as badges (docs/mobile.md): 7-byte UID, uppercase hex. */
-export function normalizeUid(value: string): string {
-  return value.replace(/[:\s-]/g, "").toUpperCase();
-}
-
-const UID_PATTERN = /^[0-9A-F]{14}$/;
-
-function QrTag({ tag, label }: { tag: StandTag; label: string }) {
+function TagLabelDialog({
+  enterpriseId,
+  tag,
+  onOpenChange,
+  onSaved,
+}: {
+  enterpriseId: number;
+  tag: StandTag | null;
+  onOpenChange: (open: boolean) => void;
+  onSaved: (tag: StandTag) => void;
+}) {
   const { t } = useLocale();
-  const wrapper = useRef<HTMLDivElement>(null);
+  const inputId = useId();
+  const [value, setValue] = useState("");
+  const [pending, setPending] = useState(false);
 
-  function download() {
-    const svg = wrapper.current?.querySelector("svg");
-    if (!svg) return;
-    const blob = new Blob([new XMLSerializer().serializeToString(svg)], {
-      type: "image/svg+xml",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${tag.code}.svg`;
-    link.click();
-    URL.revokeObjectURL(url);
+  useEffect(() => {
+    if (tag) setValue(tag.label ?? "");
+  }, [tag]);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!tag) return;
+    setPending(true);
+    try {
+      const saved = await api.patch<StandTag>(
+        `/api/enterprises/${enterpriseId}/stand-tags/${tag.id}`,
+        { label: value.trim() || null },
+      );
+      toast.success(t("standTagLabelSaved"), { compactTitle: t("standTagEditLabel") });
+      onSaved(saved);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : t("standTagCouldNotSaveLabel"),
+        t("standTagEditLabel"),
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={tag !== null}
+      onOpenChange={(open) => {
+        if (!pending) onOpenChange(open);
+      }}
+      title={t("standTagEditLabel")}
+      size="sm"
+      footer={
+        <SubmitButton form="tag-label-form" pending={pending}>
+          {t("save")}
+        </SubmitButton>
+      }
+    >
+      <form id="tag-label-form" onSubmit={submit} noValidate className="space-y-2 pb-1">
+        <Label htmlFor={inputId}>{t("standTagLabel")}</Label>
+        <Input
+          id={inputId}
+          value={value}
+          maxLength={LABEL_MAX}
+          autoComplete="off"
+          autoFocus
+          placeholder="Lanyard Ana"
+          disabled={pending}
+          onChange={(event) => setValue(event.target.value)}
+        />
+        {tag && <p className="text-muted-foreground font-mono text-xs">{tag.code}</p>}
+      </form>
+    </Modal>
+  );
+}
+
+function QrTag({
+  tag,
+  label,
+  enterpriseId,
+}: {
+  tag: StandTag;
+  label: string;
+  enterpriseId: number;
+}) {
+  const { t } = useLocale();
+  const [downloading, setDownloading] = useState(false);
+
+  // The API renders the printable SVG (company name and token underneath),
+  // the same file the staff Stands page and its zip export produce.
+  async function download() {
+    setDownloading(true);
+    try {
+      await apiDownload(standQrSvgPath(enterpriseId, tag.id), `${tag.code}.svg`);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : t("standQrCouldNotDownload"),
+        t("standTagDownloadQr"),
+      );
+    } finally {
+      setDownloading(false);
+    }
   }
 
   return (
     <div className="flex items-center gap-3">
-      <div ref={wrapper} className="shrink-0 rounded-md border bg-white p-1">
+      <div className="shrink-0 rounded-md border bg-white p-1">
         <QRCodeSVG
-          value={tag.code}
+          value={companyTagLink(tag.code)}
           title={`${label} QR`}
           level="Q"
           marginSize={2}
@@ -67,7 +157,14 @@ function QrTag({ tag, label }: { tag: StandTag; label: string }) {
           size={88}
         />
       </div>
-      <Button type="button" variant="outline" size="sm" onClick={download}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        loading={downloading}
+        disabled={downloading}
+        onClick={() => void download()}
+      >
         <DownloadSimpleIcon aria-hidden="true" className="size-4" />
         {t("standTagDownloadQr")}
       </Button>
@@ -78,17 +175,43 @@ function QrTag({ tag, label }: { tag: StandTag; label: string }) {
 export function StandTagsCard({
   enterpriseId,
   enterpriseName,
+  scannable,
+  canManage = false,
+  onScannableChange,
 }: {
   enterpriseId: number;
   enterpriseName: string;
+  /** Staff decide which stands attendees can collect (`stand_scannable`). */
+  scannable: boolean;
+  /** `sponsors:manage`: defines the tags and may turn scanning on from here. */
+  canManage?: boolean;
+  onScannableChange?: (scannable: boolean) => void;
 }) {
   const { t, language } = useLocale();
   const uidId = useId();
   const [tags, setTags] = useState<StandTag[] | null>(null);
   const [uid, setUid] = useState("");
   const [uidError, setUidError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"nfc" | "qr" | number | null>(null);
+  const [busy, setBusy] = useState<"nfc" | "qr" | "scannable" | number | null>(null);
   const [removing, setRemoving] = useState<StandTag | null>(null);
+  const [labelling, setLabelling] = useState<StandTag | null>(null);
+  const copy = useCopyToClipboard({ title: "standTagCopyCode", failure: "standTagCouldNotCopy" });
+
+  async function enableScanning() {
+    setBusy("scannable");
+    try {
+      await api.put(`/api/enterprises/${enterpriseId}/stand-scannable`, { scannable: true });
+      onScannableChange?.(true);
+      toast.success(t("standScanningOn"), { compactTitle: t("standScannable") });
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : t("standCouldNotUpdateScannable"),
+        t("standScannable"),
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -124,8 +247,9 @@ export function StandTagsCard({
       });
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("standTagCouldNotAdd");
-      if (body.kind === "nfc" && err instanceof ApiError && err.status === 409) {
-        setUidError(t("standTagInUse"));
+      const inUse = body.kind === "nfc" ? standTagInUseKey(err) : null;
+      if (inUse) {
+        setUidError(t(inUse));
       } else {
         toast.error(message, body.kind === "nfc" ? t("standTagLinkNfc") : t("standTagGenerateQr"));
       }
@@ -168,51 +292,73 @@ export function StandTagsCard({
   return (
     <SectionCard>
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <form onSubmit={linkNfc} className="w-full max-w-md space-y-2" noValidate>
-            <Label htmlFor={uidId}>{t("standTagUid")}</Label>
-            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-              <Input
-                id={uidId}
-                value={uid}
-                autoComplete="off"
-                spellCheck={false}
-                className="font-mono"
-                aria-invalid={uidError ? true : undefined}
-                aria-describedby={uidError ? `${uidId}-error` : undefined}
-                disabled={busy !== null}
-                onChange={(event) => {
-                  setUid(event.target.value);
-                  setUidError(null);
-                }}
-              />
-              <Button
-                type="submit"
-                size="lg"
-                disabled={busy !== null || uid.trim() === ""}
-                loading={busy === "nfc"}
-              >
-                {t("standTagLinkNfc")}
-              </Button>
-            </div>
-            {uidError && (
-              <p id={`${uidId}-error`} className="text-destructive text-sm">
-                {uidError}
-              </p>
-            )}
-          </form>
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            disabled={busy !== null}
-            loading={busy === "qr"}
-            onClick={() => void add({ kind: "qr" })}
+        {!scannable && (
+          <div
+            role="status"
+            className="bg-muted/50 flex flex-wrap items-center justify-between gap-3 rounded-md border px-4 py-3"
           >
-            <QrCodeIcon aria-hidden="true" className="size-4" />
-            {t("standTagGenerateQr")}
-          </Button>
-        </div>
+            <p className="text-muted-foreground text-sm">{t("standNotScannableNotice")}</p>
+            {canManage && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy !== null}
+                loading={busy === "scannable"}
+                onClick={() => void enableScanning()}
+              >
+                {t("standTurnOnScanning")}
+              </Button>
+            )}
+          </div>
+        )}
+        {canManage && (
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <form onSubmit={linkNfc} className="w-full max-w-md space-y-2" noValidate>
+              <Label htmlFor={uidId}>{t("standTagUid")}</Label>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <Input
+                  id={uidId}
+                  value={uid}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="font-mono"
+                  aria-invalid={uidError ? true : undefined}
+                  aria-describedby={uidError ? `${uidId}-error` : undefined}
+                  disabled={busy !== null}
+                  onChange={(event) => {
+                    setUid(event.target.value);
+                    setUidError(null);
+                  }}
+                />
+                <Button
+                  type="submit"
+                  size="lg"
+                  disabled={busy !== null || uid.trim() === ""}
+                  loading={busy === "nfc"}
+                >
+                  {t("standTagLinkNfc")}
+                </Button>
+              </div>
+              {uidError && (
+                <p id={`${uidId}-error`} className="text-destructive text-sm">
+                  {uidError}
+                </p>
+              )}
+            </form>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              disabled={busy !== null}
+              loading={busy === "qr"}
+              onClick={() => void add({ kind: "qr" })}
+            >
+              <QrCodeIcon aria-hidden="true" className="size-4" />
+              {t("standTagGenerateQr")}
+            </Button>
+          </div>
+        )}
 
         {tags === null ? (
           <div className="flex justify-center py-6">
@@ -224,7 +370,7 @@ export function StandTagsCard({
           <ul className="divide-border divide-y border-t">
             {tags.map((tag) => (
               <li key={tag.id} className="flex flex-wrap items-center gap-3 py-3">
-                <div className="flex min-w-0 flex-1 basis-48 items-center gap-3">
+                <div className="flex min-w-0 flex-1 basis-56 items-center gap-3">
                   {tag.kind === "nfc" ? (
                     <ContactlessPaymentIcon
                       className="text-muted-foreground size-5 shrink-0"
@@ -237,29 +383,69 @@ export function StandTagsCard({
                     />
                   )}
                   <div className="min-w-0">
-                    <p className="truncate font-mono text-sm">{tag.code}</p>
+                    {tag.label && <p className="truncate text-sm font-medium">{tag.label}</p>}
+                    <div className="flex min-w-0 items-center gap-1">
+                      <p className="truncate font-mono text-sm">{tag.code}</p>
+                      <IconButton
+                        variant="ghost"
+                        size="icon-sm"
+                        className="size-7"
+                        label={t("standTagCopyCodeOf", { code: tag.label ?? tag.code })}
+                        onClick={() => void copy(tag.code)}
+                      >
+                        <CopyIcon aria-hidden="true" className="size-3.5" />
+                      </IconButton>
+                    </div>
                     <p className="text-muted-foreground text-xs">
                       {dateFormat.format(new Date(tag.createdAt))}
                     </p>
                   </div>
                 </div>
-                <div className="ml-auto flex items-center gap-3">
-                  {tag.kind === "qr" && <QrTag tag={tag} label={enterpriseName} />}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy !== null}
-                    onClick={() => setRemoving(tag)}
-                  >
-                    {t("remove")}
-                  </Button>
+                <div className="ml-auto flex items-center gap-2">
+                  {tag.kind === "qr" && (
+                    <QrTag tag={tag} label={enterpriseName} enterpriseId={enterpriseId} />
+                  )}
+                  {canManage && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy !== null}
+                        onClick={() => setLabelling(tag)}
+                      >
+                        {t("standTagEditLabel")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy !== null}
+                        onClick={() => setRemoving(tag)}
+                      >
+                        {t("remove")}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </li>
             ))}
           </ul>
         )}
       </div>
+      <TagLabelDialog
+        enterpriseId={enterpriseId}
+        tag={labelling}
+        onOpenChange={(open) => {
+          if (!open) setLabelling(null);
+        }}
+        onSaved={(saved) => {
+          setTags((current) =>
+            (current ?? []).map((item) => (item.id === saved.id ? saved : item)),
+          );
+          setLabelling(null);
+        }}
+      />
       <AlertModal
         open={removing !== null}
         onOpenChange={(open) => {

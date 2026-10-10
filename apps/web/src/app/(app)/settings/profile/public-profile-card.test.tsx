@@ -360,7 +360,7 @@ describe("PublicProfileCard", () => {
     vi.mocked(api.get).mockResolvedValue(profile({ directoryVisible: true }));
     const withCv = profile({
       directoryVisible: true,
-      cv: { filename: "maria.pdf", uploadedAt: "2026-10-10T10:00:00.000Z" },
+      cv: { filename: "maria.pdf", uploadedAt: "2026-10-10T10:00:00.000Z", source: "upload" },
     });
     vi.mocked(apiUpload).mockResolvedValue(withCv);
     await render(<PublicProfileCard />);
@@ -376,6 +376,39 @@ describe("PublicProfileCard", () => {
     expect(byLabel("publicProfileShareCv")).not.toBeNull();
     // The file saved itself; the form has nothing new to save.
     expect(submit()?.disabled).toBe(true);
+  });
+
+  it("shows a CV from the application without upload controls", async () => {
+    vi.mocked(api.get).mockResolvedValue(
+      profile({
+        directoryVisible: true,
+        cv: {
+          filename: "maria.pdf",
+          uploadedAt: "2026-10-10T10:00:00.000Z",
+          source: "application",
+        },
+      }),
+    );
+    await render(<PublicProfileCard />);
+    expect(container.textContent).toContain("maria.pdf");
+    expect(container.textContent).toContain("cvFromApplication");
+    // The file name opens the owner's CV in the viewer instead of a new tab.
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    const fileButton = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "maria.pdf",
+    );
+    await act(async () => fileButton?.click());
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${API_URL}/api/me/public-profile/cv`,
+      expect.objectContaining({ credentials: "include" }),
+    );
+    vi.unstubAllGlobals();
+    expect(container.querySelector("input[type=file]")).toBeNull();
+    const labels = [...container.querySelectorAll("button")].map((b) => b.textContent);
+    expect(labels).not.toContain("replaceCv");
+    expect(labels).not.toContain("removeCv");
+    expect(byLabel("publicProfileShareCv")).not.toBeNull();
   });
 
   it("refuses a non-PDF CV before uploading", async () => {
@@ -475,7 +508,7 @@ describe("DirectoryCard", () => {
     expect(container.querySelectorAll("li")).toHaveLength(6);
   });
 
-  it("shows the bio, links and CV through the authenticated API", () => {
+  it("shows the bio, links and CV through the authenticated API", async () => {
     act(() =>
       root.render(
         <DirectoryCard
@@ -493,9 +526,19 @@ describe("DirectoryCard", () => {
     const link = container.querySelector<HTMLAnchorElement>("a[href='https://github.com/maria/']");
     expect(link?.textContent).toBe("socialGithub: github.com/maria");
     expect(link?.rel).toContain("noopener");
-    expect(
-      container.querySelector<HTMLAnchorElement>(`a[href='${API_URL}/api/directory/7/cv']`)
-        ?.textContent,
-    ).toBe("downloadCv");
+    // The CV opens in the in-app viewer, read with the session cookie.
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    const viewCv = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "viewCv",
+    );
+    expect(container.querySelector("a[href$='/cv']")).toBeNull();
+    await act(async () => viewCv?.click());
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${API_URL}/api/directory/7/cv`,
+      expect.objectContaining({ credentials: "include" }),
+    );
+    expect(document.querySelector("[role=dialog]")).not.toBeNull();
+    vi.unstubAllGlobals();
   });
 });

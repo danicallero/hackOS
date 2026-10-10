@@ -75,6 +75,23 @@ privadas y pasan por el API.
 Los valores de `API_DOMAIN`, `WEB_DOMAIN` y `CORS_ORIGINS` deben corresponder
 con esos hosts. `API_DOMAIN` y `WEB_DOMAIN` son nombres sin `https://`.
 
+### App links de etiquetas de empresa (#935)
+
+Las etiquetas NFC y los QR de empresa llevan `https://${WEB_DOMAIN}/s/<código>`.
+`web` sirve los dos ficheros que permiten abrir ese enlace en la app:
+
+- `/.well-known/apple-app-site-association` es estático
+  (`apps/web/public/.well-known/`, equipo `P88YRBYY9T`, `applinks` para `/s/*`
+  y `webcredentials`). Un cambio de dominio, equipo o bundle ID exige editarlo
+  y una nueva build nativa (`EXPO_PUBLIC_EVENT_WEBSITE_URL`).
+- `/.well-known/assetlinks.json` se genera con `ANDROID_APP_CERT_SHA256`:
+  las huellas SHA-256 de la clave de subida y de la clave de firma de Play
+  (Play Console → Integridad de la app). Sin ellas el fichero no lista apps y
+  Android abre la página web `/s/<código>`, que también recoge la empresa.
+
+El dominio de la web (`WEB_DOMAIN`, que el API usa como `WEB_URL`) debe ser el
+mismo que `EXPO_PUBLIC_EVENT_WEBSITE_URL` de la app.
+
 ### Optional shared ingress network
 
 The normal profile uses a Compose-owned `edge` network and the external proxy
@@ -223,7 +240,7 @@ contenedor.
 | `migrate` | `NODE_ENV`, `DATABASE_URL`, `BETTER_AUTH_SECRET` |
 | `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, traducción, SSE, rate limits y fixtures API-only |
 | `worker` | base de datos, Valkey, `SSE_NAMESPACE`, auth/URLs necesarias para enlaces, almacenamiento, correo, Wallet y tuning del worker |
-| `web` | sólo `API_DOMAIN` y `WEB_DOMAIN` |
+| `web` | sólo `API_DOMAIN`, `WEB_DOMAIN` y la configuración pública `ANDROID_APP_CERT_SHA256` |
 
 En particular, `web` nunca recibe secretos; `api` no recibe credenciales de
 correo; y `migrate` no recibe Valkey, S3, correo ni Wallet.

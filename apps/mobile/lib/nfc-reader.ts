@@ -43,6 +43,36 @@ async function syncShield() {
   }
 }
 
+/**
+ * Runs `task` as the only NFC session (#935 company-tag writes): after the
+ * previous scan has torn down, with the Android idle shield released while it
+ * runs and restored afterwards.
+ */
+export function runExclusiveNfcSession<T>(task: () => Promise<T>): Promise<T> {
+  const run = previousSession
+    .catch(() => undefined)
+    .then(async () => {
+      if (Platform.OS === "android" && shieldActive) {
+        shieldActive = false;
+        try {
+          await NfcManager.unregisterTagEvent();
+        } catch {
+          // Already unregistered; the session below registers its own reader.
+        }
+      }
+      try {
+        return await task();
+      } finally {
+        await syncShield();
+      }
+    });
+  previousSession = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 export function setNfcShield(wanted: boolean) {
   if (Platform.OS !== "android") return;
   shieldWanted = wanted;

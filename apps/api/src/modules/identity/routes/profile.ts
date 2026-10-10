@@ -846,7 +846,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List and search users",
         description:
-          '`q` matches name, surname, "name surname"/"surname name", email, badge id, or DNI as a case-insensitive, accent-insensitive substring.',
+          '`q` matches name, surname, "name surname"/"surname name", email, badge id, or DNI as a case-insensitive, accent-insensitive substring. `image` is the authenticated account-photo route (#934), or null without a photo.',
         querystring: z.object({
           q: z.string().optional(),
           limit: z.coerce.number().int().min(1).max(200).default(50),
@@ -861,6 +861,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 emailVerified: z.boolean(),
                 name: z.string().nullable(),
                 surname: z.string().nullable(),
+                image: z.string().nullable(),
                 badgeId: z.string().nullable(),
                 visibleRoleName: z.string().nullable(),
                 language: z.string(),
@@ -903,7 +904,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       // getHighestVisibleRoleName() calls), the same view logistics/stats.ts
       // and scanner-sync.ts use.
       const { rows } = await pool.query<UserRow & { role: string | null }>(
-        `SELECT u.id, u.email, u.email_verified, u.name, u.surname, u.badge_id, u.language,
+        `SELECT u.id, u.email, u.email_verified, u.name, u.surname, u.photo_key, u.badge_id, u.language,
                 u.shirt_size, u.food_intolerances, u.food_intolerance_notes,
                 u.is_test_account, u.created_at,
                 uern.role_name AS role
@@ -950,6 +951,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         emailVerified: r.email_verified,
         name: r.name,
         surname: r.surname,
+        image: photoUrl(r.id, r.photo_key),
         badgeId: r.badge_id,
         visibleRoleName: r.role,
         language: r.language,

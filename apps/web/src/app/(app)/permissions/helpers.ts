@@ -72,7 +72,6 @@ const CAPABILITY_DESCRIPTION_KEYS: Partial<Record<string, MessageKey>> = {
   "users:write": "capabilityDescriptionUsersWrite",
   "permissions:manage": "capabilityDescriptionPermissionsManage",
   "invites:manage": "capabilityDescriptionInvitesManage",
-  "directory:read": "capabilityDescriptionDirectoryRead",
   "applications:manage": "capabilityDescriptionApplicationsManage",
   "applications:review": "capabilityDescriptionApplicationsReview",
   "applications:decide": "capabilityDescriptionApplicationsDecide",

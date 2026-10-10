@@ -6,13 +6,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
   true;
 
 vi.mock("@/lib/api", () => ({
-  ApiError: class ApiError extends Error {},
+  ApiError: class ApiError extends Error {
+    constructor(
+      public status: number,
+      public code: string,
+      message: string,
+      public details?: unknown,
+    ) {
+      super(message);
+    }
+  },
   api: { get: vi.fn(), put: vi.fn() },
 }));
 
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import type { MealPlan } from "@/lib/meal-plan";
-import { resetMealPlanStore, useMealPlan } from "./use-meal-plan";
+import { mealPlanSaveErrorKey, resetMealPlanStore, useMealPlan } from "./use-meal-plan";
 
 const meal = {
   activityId: 11,
@@ -68,5 +77,45 @@ describe("useMealPlan (#933)", () => {
       await seen.dialog.save(plan, { 11: true });
     });
     expect(seen.profile.plan).toEqual(saved);
+  });
+
+  it("reloads the plan when a save fails because the offered meals changed", async () => {
+    await act(async () => root.render(<Probe name="profile" />));
+    expect(api.get).toHaveBeenCalledTimes(1);
+    // The API's actual shape: a generic 409 whose details name the reason.
+    const locked = new ApiError(409, "conflict", "Changes to this meal are closed", {
+      code: "meal_plan_locked",
+    });
+    vi.mocked(api.put).mockRejectedValueOnce(locked);
+    await act(async () => {
+      await expect(seen.profile.save(plan, { 11: true })).rejects.toBe(locked);
+    });
+    expect(api.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reload after an unrelated failure", async () => {
+    await act(async () => root.render(<Probe name="profile" />));
+    vi.mocked(api.put).mockRejectedValueOnce(new ApiError(400, "bad_request", "Invalid body"));
+    await act(async () => {
+      await expect(seen.profile.save(plan, { 11: true })).rejects.toBeInstanceOf(ApiError);
+    });
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("mealPlanSaveErrorKey (#933)", () => {
+  const failure = (code: string) => new ApiError(400, "bad_request", code, { code });
+
+  it("explains each domain reason the API sends in details", () => {
+    expect(mealPlanSaveErrorKey(failure("meal_plan_incomplete"))).toBe("mealPlanChangedReview");
+    expect(mealPlanSaveErrorKey(failure("meal_plan_locked"))).toBe("mealPlanLockedReview");
+    expect(mealPlanSaveErrorKey(failure("meal_not_offered"))).toBe("mealPlanChangedReview");
+  });
+
+  it("falls back to the generic message", () => {
+    expect(mealPlanSaveErrorKey(new ApiError(400, "bad_request", "Invalid body"))).toBe(
+      "couldNotSaveMealPlan",
+    );
+    expect(mealPlanSaveErrorKey(new Error("network"))).toBe("couldNotSaveMealPlan");
   });
 });

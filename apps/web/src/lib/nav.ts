@@ -17,6 +17,7 @@ import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package";
 import { QuestionIcon } from "@phosphor-icons/react/dist/ssr/Question";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/ssr/SealCheck";
 import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { StorefrontIcon } from "@phosphor-icons/react/dist/ssr/Storefront";
 import { TelevisionSimpleIcon } from "@phosphor-icons/react/dist/ssr/TelevisionSimple";
 import { TrayIcon } from "@phosphor-icons/react/dist/ssr/Tray";
 import { TrophyIcon } from "@phosphor-icons/react/dist/ssr/Trophy";
@@ -154,9 +155,8 @@ export const PERSONAL_NAV: NavItem[] = [
   { title: "wallet", href: "/wallet", icon: WalletIcon, hideForPureApplicant: true },
   // Hidden for pure applicants — decision emails go out regardless (H50/H51).
   { title: "inbox", href: "/inbox", icon: TrayIcon, hideForPureApplicant: true },
-  // Event diary (#935): saved people and sponsor stands, with the opt-in
-  // directory (#934, directory:read) as a secondary view. Like the API, it
-  // needs current event access only.
+  // Event diary (#935): people saved by scanning their badge and sponsor
+  // stands. Like the API, it needs current event access only.
   { title: "diary", href: "/people", icon: AddressBookIcon, hideForPureApplicant: true },
   { title: "myProfile", href: "/settings/profile", icon: UserIcon },
 ];
@@ -327,6 +327,15 @@ export const WORKSPACES: Workspace[] = [
         icon: TrophyIcon,
         anyCapability: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
         sponsorVisible: true,
+      },
+      {
+        // #935: which companies attendees can collect by scanning, and the
+        // company tags (NFC tags or wristbands, QR codes) staff define for
+        // them. Staff only; reps see their company's tags on its Tags tab.
+        title: "companyTags",
+        href: "/company-tags",
+        icon: StorefrontIcon,
+        capability: CAPABILITIES.SPONSORS_MANAGE,
       },
       {
         title: "sponsorFaq",

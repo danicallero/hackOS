@@ -16,6 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorReason } from "@/lib/api-error-reason";
 import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import {
@@ -202,25 +203,24 @@ export function DangerZoneCard() {
       // recording their venue exit first).
       const ambiguousOutcome =
         !(error instanceof ApiError) ||
-        error.code === "removal_storage_pending" ||
+        apiErrorReason(error) === "removal_storage_pending" ||
         error.status >= 500;
       if (ambiguousOutcome) {
         await finishLocalAccountClosure(action, true, undefined, { action, status: "processing" });
         return;
       }
-      if (error instanceof ApiError && error.code === "removal_pin_expired") {
+      if (apiErrorReason(error) === "removal_pin_expired") {
         setPinSent(false);
         setPinMode(null);
         setSecurityPin("");
         setPinError(t("accountRemovalPinExpired"));
       } else if (
-        error instanceof ApiError &&
-        ["removal_pin_invalid", "removal_pin_required"].includes(error.code)
+        ["removal_pin_invalid", "removal_pin_required"].includes(apiErrorReason(error) ?? "")
       ) {
         setPinError(t("accountRemovalPinInvalid"));
-      } else if (error instanceof ApiError && error.code === "removal_reauthentication_required") {
+      } else if (apiErrorReason(error) === "removal_reauthentication_required") {
         setReauthenticationError(t("accountRemovalPasswordRequired"));
-      } else if (error instanceof ApiError && error.code === "removal_reauthentication_invalid") {
+      } else if (apiErrorReason(error) === "removal_reauthentication_invalid") {
         setReauthenticationError(t("accountRemovalPasswordInvalid"));
       } else {
         toast.error(

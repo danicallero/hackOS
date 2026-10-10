@@ -45,7 +45,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await truncateAll();
-  reader = await createUserWithCapabilities([CAPABILITIES.DIRECTORY_READ]);
+  reader = await person("Reader", "Zed");
 });
 afterAll(async () => {
   await app.close();
@@ -60,6 +60,14 @@ async function person(name = "Ana", surname = "Pérez") {
   const id = rows[0].id as number;
   await admitParticipant(id);
   return id;
+}
+
+/** The reader saved `target` in their diary, as a badge scan would (#935). */
+async function savedByReader(target: number) {
+  await pool.query(`INSERT INTO diary_entries (owner_id, target_user_id) VALUES ($1, $2)`, [
+    reader,
+    target,
+  ]);
 }
 
 function multipart(bytes: Buffer, filename: string, contentType: string) {
@@ -154,6 +162,7 @@ describe("bio and social links (#935)", () => {
       cv: null,
       preview: { bio: "Line one\nLine two", socials, cvUrl: null },
     });
+    await savedByReader(me);
     const entry = await get(`/api/directory/${me}`, reader);
     expect(entry.json()).toMatchObject({ bio: "Line one\nLine two", socials, cvUrl: null });
 
@@ -269,6 +278,7 @@ describe("profile CV (#935)", () => {
 
     // Not shared yet: hidden from readers, still downloadable by the owner.
     await putProfile(me, VISIBLE);
+    await savedByReader(me);
     expect((await get(`/api/directory/${me}`, reader)).json().cvUrl).toBeNull();
     expect((await get(`/api/directory/${me}/cv`, reader)).statusCode).toBe(404);
     const own = await get("/api/me/public-profile/cv", me);
@@ -288,9 +298,16 @@ describe("profile CV (#935)", () => {
       "filename*=UTF-8''Ana%20P%C3%A9rez%20CV.pdf",
     );
     expect(download.rawPayload.equals(PDF)).toBe(true);
+    // The web viewer reads the file name from a cross-origin blob fetch.
+    const crossOrigin = await app.inject({
+      method: "GET",
+      url: `/api/directory/${me}/cv`,
+      headers: { ...asUser(reader), origin: "http://localhost:3001" },
+    });
+    expect(crossOrigin.headers["access-control-expose-headers"]).toContain("content-disposition");
 
-    // Readers without the capability who did not save the person (#935: the same
-    // 404 as a hidden profile), without event access, or of a hidden profile.
+    // Readers who did not save the person (#935: the same 404 as a hidden
+    // profile), anonymous readers, or readers of a hidden profile.
     const participant = await person("Other", "Participant");
     expect((await get(`/api/directory/${me}/cv`, participant)).statusCode).toBe(404);
     expect((await get(`/api/directory/${me}/cv`)).statusCode).toBe(401);
@@ -340,6 +357,123 @@ describe("profile CV (#935)", () => {
   });
 });
 
+describe("application CV (#935, H11)", () => {
+  const CV_FIELD = {
+    key: "cv",
+    label: { en: "CV", es: "CV", gl: "CV" },
+    kind: "file",
+    profile_cv: true,
+  };
+
+  /** A form whose `cv` field is the profile CV, with one response per call. */
+  async function applicationCv(
+    userId: number,
+    options: {
+      status?: string;
+      filename?: string;
+      template?: Record<string, unknown>[];
+      submittedAt?: string;
+    } = {},
+  ) {
+    const { ensureApplicationFormVersion } = await import("../helpers.js");
+    const { putObject } = await import("../../src/lib/storage.js");
+    const { rows } = await pool.query(
+      `INSERT INTO applications (name, template) VALUES ($1, $2::jsonb) RETURNING id`,
+      [`Form ${++keySeq}`, JSON.stringify(options.template ?? [CV_FIELD])],
+    );
+    const applicationId = rows[0].id as number;
+    const key = `uploads/${applicationId}/${userId}/cv/${crypto.randomUUID()}/${options.filename ?? "Ana CV.pdf"}`;
+    await putObject(key, PDF, "application/pdf");
+    const status = options.status ?? "confirmed";
+    await pool.query(
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses, submitted_at)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+      [
+        userId,
+        applicationId,
+        await ensureApplicationFormVersion(applicationId),
+        status,
+        JSON.stringify({ cv: key }),
+        status === "draft" ? null : (options.submittedAt ?? new Date().toISOString()),
+      ],
+    );
+    return key;
+  }
+
+  it("uses the application PDF, shares it on consent and locks the profile CV", async () => {
+    const me = await person();
+    // An earlier upload is superseded by the application's CV.
+    expect(
+      (await upload("/api/me/public-profile/cv", me, PDF, "old.pdf", "application/pdf")).statusCode,
+    ).toBe(200);
+    await applicationCv(me);
+
+    const profile = (await get("/api/me/public-profile", me)).json();
+    expect(profile.cv).toMatchObject({ filename: "Ana CV.pdf", source: "application" });
+    expect(profile.shareCv).toBe(false);
+
+    const own = await get("/api/me/public-profile/cv", me);
+    expect(own.statusCode).toBe(200);
+    expect(own.rawPayload.equals(PDF)).toBe(true);
+
+    // Sharing needs no upload; it remains the person's own choice.
+    const shared = await putProfile(me, { ...VISIBLE, shareCv: true });
+    expect(shared.statusCode).toBe(200);
+    expect(shared.json().preview.cvUrl).toBe("/api/me/public-profile/cv");
+    await savedByReader(me);
+    expect((await get(`/api/directory/${me}`, reader)).json().cvUrl).toBe(
+      `/api/directory/${me}/cv`,
+    );
+    const download = await get(`/api/directory/${me}/cv`, reader);
+    expect(download.statusCode).toBe(200);
+    expect(download.headers["content-disposition"]).toContain("Ana%20CV.pdf");
+    expect(download.rawPayload.equals(PDF)).toBe(true);
+
+    const replace = await upload(
+      "/api/me/public-profile/cv",
+      me,
+      PDF,
+      "new.pdf",
+      "application/pdf",
+    );
+    expect(replace.statusCode).toBe(409);
+    expect((await remove("/api/me/public-profile/cv", me)).statusCode).toBe(409);
+    expect((await get("/api/me/public-profile", me)).json().cv.source).toBe("application");
+
+    await putProfile(me, { ...VISIBLE, shareCv: false });
+    expect((await get(`/api/directory/${me}/cv`, reader)).statusCode).toBe(404);
+  });
+
+  it("ignores drafts, non-PDF files and fields not marked as the profile CV", async () => {
+    const me = await person();
+    await applicationCv(me, { status: "draft" });
+    await applicationCv(me, { filename: "cv.docx" });
+    await applicationCv(me, { template: [{ ...CV_FIELD, profile_cv: undefined }] });
+    expect((await get("/api/me/public-profile", me)).json().cv).toBeNull();
+    expect((await putProfile(me, { ...VISIBLE, shareCv: true })).statusCode).toBe(400);
+    const up = await upload("/api/me/public-profile/cv", me, PDF, "mine.pdf", "application/pdf");
+    expect(up.statusCode).toBe(200);
+    expect(up.json().cv).toMatchObject({ filename: "mine.pdf", source: "upload" });
+  });
+
+  it("takes the most recently submitted application", async () => {
+    const me = await person();
+    await applicationCv(me, { filename: "older.pdf", submittedAt: "2026-01-01T00:00:00Z" });
+    await applicationCv(me, { filename: "newer.pdf", submittedAt: "2026-02-01T00:00:00Z" });
+    expect((await get("/api/me/public-profile", me)).json().cv.filename).toBe("newer.pdf");
+  });
+
+  it("allows the flag on one file field per form only", async () => {
+    const { templateSchema } = await import("../../src/modules/applications/schemas.js");
+    expect(templateSchema.safeParse([CV_FIELD]).success).toBe(true);
+    expect(
+      templateSchema.safeParse([{ ...CV_FIELD, kind: "text", profile_cv: true }]).success,
+    ).toBe(false);
+    expect(templateSchema.safeParse([CV_FIELD, { ...CV_FIELD, key: "cv2" }]).success).toBe(false);
+  });
+});
+
 describe("account photo (#934)", () => {
   it("is stored privately and served only to permitted readers", async () => {
     const me = await person();
@@ -358,8 +492,10 @@ describe("account photo (#934)", () => {
     expect(own.headers["cache-control"]).toBe("private, max-age=300");
     expect(own.rawPayload.equals(PNG)).toBe(true);
 
-    // The directory sees it only while the profile is visible with the photo on.
+    // A reader who saved the person sees it only while the profile is visible
+    // with the photo on (#935).
     expect((await get(image)).statusCode).toBe(401);
+    await savedByReader(me);
     expect((await get(image, reader)).statusCode).toBe(404);
     await putProfile(me, VISIBLE);
     expect((await get(image, reader)).statusCode).toBe(404);
@@ -370,7 +506,7 @@ describe("account photo (#934)", () => {
     const participant = await person("Other", "Participant");
     expect((await get(image, participant)).statusCode).toBe(404);
 
-    // Staff who read users see it regardless of the directory.
+    // Staff who read users see it regardless of the public profile.
     await putProfile(me, VISIBLE);
     const staff = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
     expect((await get(image, staff)).statusCode).toBe(200);
@@ -426,6 +562,73 @@ describe("account photo (#934)", () => {
   });
 });
 
+describe("staff photo management (#934, H8)", () => {
+  it("lets user staff replace and remove someone's photo, audited as an admin change", async () => {
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const subject = await person();
+    await upload("/api/me/photo", subject, PNG, "own.png", "image/png");
+    const own = await photoKey(subject);
+
+    const url = `/api/users/${subject}/photo`;
+    const first = await upload(url, staff, WEBP, "b.webp", "image/webp", "staff-photo");
+    expect(first.statusCode).toBe(200);
+    const replay = await upload(url, staff, WEBP, "b.webp", "image/webp", "staff-photo");
+    expect(replay.json()).toEqual(first.json());
+    const current = await photoKey(subject);
+    expect(current).toMatch(new RegExp(`^profiles/${subject}/photo/.+\\.webp$`));
+    expect(first.json().image).toMatch(new RegExp(`^/api/users/${subject}/photo\\?v=`));
+    expect(await stored(own)).toBe(false);
+    expect(await stored(current)).toBe(true);
+
+    const removed = await remove(url, staff);
+    expect(removed.statusCode).toBe(200);
+    expect(removed.json()).toEqual({ image: null });
+    expect(await photoKey(subject)).toBeNull();
+    expect(await stored(current)).toBe(false);
+    expect((await remove(url, staff)).json()).toEqual({ image: null });
+
+    const { rows } = await pool.query(
+      `SELECT action, actor_id, source FROM audit_log
+        WHERE entity_type = 'user' AND entity_id = $1 ORDER BY id`,
+      [String(subject)],
+    );
+    expect(rows).toEqual([
+      { action: "user.photo_updated", actor_id: subject, source: "participant" },
+      { action: "user.photo_updated", actor_id: staff, source: "admin" },
+      { action: "user.photo_removed", actor_id: staff, source: "admin" },
+    ]);
+  });
+
+  it("refuses readers without users:write, unknown and out-of-scope accounts, and removals", async () => {
+    const subject = await person();
+    const url = `/api/users/${subject}/photo`;
+    const readOnly = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    expect((await upload(url, readOnly, PNG, "a.png", "image/png")).statusCode).toBe(403);
+    expect((await remove(url, subject)).statusCode).toBe(403);
+
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    expect((await upload(url, staff, Buffer.from("nope"), "a.gif", "image/gif")).statusCode).toBe(
+      400,
+    );
+    expect(
+      (await upload("/api/users/999999/photo", staff, PNG, "a.png", "image/png")).statusCode,
+    ).toBe(404);
+
+    // An ordinary operator cannot see synthetic review accounts (H8 fixture scope).
+    const fixture = await person("Test", "Account");
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [fixture]);
+    expect(
+      (await upload(`/api/users/${fixture}/photo`, staff, PNG, "a.png", "image/png")).statusCode,
+    ).toBe(404);
+    expect(await photoKey(fixture)).toBeNull();
+
+    await pool.query(`UPDATE users SET account_state = 'removal_pending' WHERE id = $1`, [subject]);
+    expect((await upload(url, staff, PNG, "a.png", "image/png")).statusCode).toBe(409);
+    expect((await remove(url, staff)).statusCode).toBe(409);
+    expect(await photoKey(subject)).toBeNull();
+  });
+});
+
 describe("account removal and export (H54)", () => {
   it("exports photo and profile metadata, then removal deletes every profile object", async () => {
     const admin = await createUserWithCapabilities(["*"]);
@@ -473,5 +676,162 @@ describe("account removal and export (H54)", () => {
     expect(await stored(cv)).toBe(false);
     const { rows } = await pool.query(`SELECT photo_key FROM users WHERE id = $1`, [me]);
     expect(rows[0]?.photo_key ?? null).toBeNull();
+  });
+});
+
+describe("user-management moderation (#935)", () => {
+  function staffPut(
+    staff: number,
+    userId: number,
+    payload: Record<string, unknown>,
+    key = `sp-${++keySeq}`,
+  ) {
+    return app.inject({
+      method: "PUT",
+      url: `/api/users/${userId}/public-profile`,
+      headers: { ...asUser(staff), "idempotency-key": key },
+      payload,
+    });
+  }
+
+  it("reads anyone's profile with users:read, shared or not", async () => {
+    const me = await person();
+    await putProfile(me, { ...VISIBLE, directoryVisible: false, headline: "Hidden headline" });
+    const staffReader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const res = await get(`/api/users/${me}/public-profile`, staffReader);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      directoryVisible: false,
+      headline: "Hidden headline",
+      preview: { displayName: "Ana P.", headline: "Hidden headline" },
+    });
+
+    const participant = await person("Other", "Participant");
+    expect((await get(`/api/users/${me}/public-profile`, participant)).statusCode).toBe(403);
+    expect((await get("/api/users/999999/public-profile", staffReader)).statusCode).toBe(404);
+  });
+
+  it("edits with the owner's validation, stops sharing, and audits as admin", async () => {
+    const me = await person();
+    await putProfile(me, { ...VISIBLE, headline: "Rude", bio: "Rude bio" });
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const staffReader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+
+    expect((await staffPut(staffReader, me, { ...VISIBLE, headline: null })).statusCode).toBe(403);
+    expect((await staffPut(staff, 999_999, VISIBLE)).statusCode).toBe(404);
+    const invalid = await staffPut(staff, me, {
+      ...VISIBLE,
+      socials: [{ kind: "x", url: "http://x.com/a" }],
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const body = { ...VISIBLE, directoryVisible: false, headline: null, bio: null };
+    const edited = await staffPut(staff, me, body, "moderate-1");
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json()).toMatchObject({ directoryVisible: false, headline: null, bio: null });
+    // A retry with the same key replays the response and writes nothing new.
+    const replay = await staffPut(staff, me, body, "moderate-1");
+    expect(replay.json()).toEqual(edited.json());
+    const { rows } = await pool.query(
+      `SELECT actor_id, source, before, after FROM audit_log
+        WHERE action = 'public_profile.updated' AND actor_id = $1`,
+      [staff],
+    );
+    expect(rows).toEqual([
+      {
+        actor_id: staff,
+        source: "admin",
+        before: { directoryVisible: true },
+        after: { directoryVisible: false, changedFields: ["directoryVisible", "headline", "bio"] },
+      },
+    ]);
+    expect(JSON.stringify(rows)).not.toContain("Rude");
+
+    // Sharing is the person's own consent: staff can never turn it on.
+    const optIn = await staffPut(staff, me, VISIBLE);
+    expect(optIn.statusCode).toBe(409);
+    expect(optIn.json().error.code).toBe("profile_consent_required");
+  });
+
+  it("reads an unshared CV and removes it, audited", async () => {
+    const me = await person();
+    await upload("/api/me/public-profile/cv", me, PDF, "cv.pdf", "application/pdf");
+    const key = await cvKey(me);
+    await putProfile(me, { ...VISIBLE, shareCv: true });
+    const staff = await createUserWithCapabilities([
+      CAPABILITIES.USERS_READ,
+      CAPABILITIES.USERS_WRITE,
+    ]);
+    const profile = (await get(`/api/users/${me}/public-profile`, staff)).json();
+    expect(profile.preview.cvUrl).toBe(`/api/users/${me}/public-profile/cv`);
+    const download = await get(`/api/users/${me}/public-profile/cv`, staff);
+    expect(download.statusCode).toBe(200);
+    expect(download.rawPayload.equals(PDF)).toBe(true);
+
+    const staffReader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    expect((await remove(`/api/users/${me}/public-profile/cv`, staffReader)).statusCode).toBe(403);
+    expect((await remove("/api/users/999999/public-profile/cv", staff)).statusCode).toBe(404);
+    const removed = await remove(`/api/users/${me}/public-profile/cv`, staff);
+    expect(removed.statusCode).toBe(200);
+    expect(removed.json()).toMatchObject({ cv: null, shareCv: false });
+    expect(await stored(key)).toBe(false);
+    expect((await get(`/api/users/${me}/public-profile/cv`, staff)).statusCode).toBe(404);
+    const { rows } = await pool.query(
+      `SELECT source, after FROM audit_log WHERE action = 'public_profile.updated' AND actor_id = $1`,
+      [staff],
+    );
+    expect(rows).toEqual([
+      { source: "admin", after: { directoryVisible: true, changedFields: ["cv", "shareCv"] } },
+    ]);
+  });
+
+  it("allows staff to edit hidden fields after event access ends, but refuses account removal", async () => {
+    const me = await person();
+    await putProfile(me, { ...VISIBLE, directoryVisible: false });
+    await pool.query("DELETE FROM user_roles WHERE user_id = $1", [me]);
+    const staff = await createUserWithCapabilities([
+      CAPABILITIES.USERS_READ,
+      CAPABILITIES.USERS_WRITE,
+    ]);
+    expect(
+      (await staffPut(staff, me, { ...VISIBLE, directoryVisible: false, bio: "Corrected" }))
+        .statusCode,
+    ).toBe(200);
+    await pool.query("UPDATE users SET account_state = 'removal_pending' WHERE id = $1", [me]);
+    expect((await staffPut(staff, me, { ...VISIBLE, directoryVisible: false })).statusCode).toBe(
+      409,
+    );
+    expect((await remove(`/api/users/${me}/public-profile/cv`, staff)).statusCode).toBe(409);
+  });
+
+  it("enforces synthetic subject boundaries for profile and CV reads and writes", async () => {
+    const real = await person();
+    const fixture = await person("Synthetic", "Participant");
+    await pool.query("UPDATE users SET is_test_account = true WHERE id = $1", [fixture]);
+    const staff = await createUserWithCapabilities([
+      CAPABILITIES.USERS_READ,
+      CAPABILITIES.USERS_WRITE,
+    ]);
+    const syntheticStaff = await createUserWithCapabilities([
+      CAPABILITIES.USERS_READ,
+      CAPABILITIES.USERS_WRITE,
+    ]);
+    await pool.query("UPDATE users SET is_test_account = true WHERE id = $1", [syntheticStaff]);
+    for (const path of [
+      `/api/users/${fixture}/public-profile`,
+      `/api/users/${fixture}/public-profile/cv`,
+    ]) {
+      expect((await get(path, staff)).statusCode).toBe(404);
+    }
+    expect((await staffPut(staff, fixture, VISIBLE)).statusCode).toBe(404);
+    expect((await get(`/api/users/${real}/public-profile`, syntheticStaff)).statusCode).toBe(403);
+    expect((await staffPut(syntheticStaff, real, VISIBLE)).statusCode).toBe(403);
+    const legacy = await app.inject({
+      method: "DELETE",
+      url: `/api/users/${fixture}/public-profile`,
+      headers: { ...asUser(staff), "idempotency-key": "legacy-fixture" },
+      payload: { reason: "Moderation" },
+    });
+    expect(legacy.statusCode).toBe(404);
   });
 });

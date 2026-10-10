@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { ZipArchive } from "archiver";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
+import { sendCsv, toCsv } from "../../lib/csv.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { requireIdempotencyKey } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
@@ -25,7 +27,9 @@ import {
   memberParams,
   OWNER_EDITABLE_KEYS,
   sponsorFaqBody,
+  standScannableBody,
   standTagBody,
+  standTagLabelBody,
   standTagParams,
   updateEnterpriseBody,
 } from "./schemas.js";
@@ -49,7 +53,18 @@ import {
   updateEnterprise,
   updateSponsorFaq,
 } from "./service.js";
-import { addStandTag, listStandTags, removeStandTag } from "./stands.js";
+import { companyTagUrl, standQrFilename, standQrSvg } from "./stand-qr.js";
+import {
+  addStandTag,
+  exportStandCodes,
+  generateMissingQrTags,
+  listStands,
+  listStandTags,
+  removeStandTag,
+  setStandScannable,
+  setStandTagLabel,
+  standQrTag,
+} from "./stands.js";
 
 function actor(userId: number | null): number {
   if (userId == null) throw new UnauthorizedError();
@@ -322,7 +337,10 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     },
   );
 
-  // ── #935: stand tags that attendees scan into their event diary ─────────────
+  // ── #935: company tags that attendees scan into their event diary ───────────
+  // Staff (sponsors:manage) define a company's tags; they belong to the
+  // company, never to a representative's or participant's profile. The
+  // company's own reps may only read them.
   r.get(
     "/api/enterprises/:id/stand-tags",
     {
@@ -330,9 +348,9 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       preHandler: requireEnterpriseAccess(enterpriseParam),
       schema: {
         params: enterpriseIdParam,
-        summary: "List stand tags",
+        summary: "List company tags",
         description:
-          "NFC tag UIDs and printable QR tokens that identify this enterprise's stand. Attendees scan one to save the sponsor's public card in their event diary. Readable by the enterprise's own sponsor representatives or a global sponsor administrator (#935).",
+          "The company's tags: NFC tags or wristbands (by serial number, the 7-byte UID) and printable QR tokens, each with its kind, code, optional staff label and creation time. Attendees scan one to collect the company's badge in their event diary. Readable by the company's own sponsor representatives or a global sponsor administrator (#935).",
       },
     },
     async (req) => ({ tags: await listStandTags(actor(req.userId), req.params.id) }),
@@ -341,14 +359,14 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
   r.post(
     "/api/enterprises/:id/stand-tags",
     {
-      ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
-      preHandler: [requireEnterpriseAccess(enterpriseParam), requireIdempotencyKey],
+      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
+      preHandler: [manage, requireIdempotencyKey],
       schema: {
         params: enterpriseIdParam,
         body: standTagBody,
-        summary: "Add a stand tag",
+        summary: "Add a company tag",
         description:
-          "`kind: nfc` links a tag by its 7-byte UID (hex; separators ignored, stored uppercase like badges). `kind: qr` generates a printable `STAND-…` token. A code already used by a stand, a badge (current or rotated away) or a ticket answers 409. The enterprise's own sponsor representatives or a global sponsor administrator; audited (#935).",
+          "`kind: nfc` links an NFC tag or wristband by its serial number, the 7-byte UID (hex; separators ignored, stored uppercase like badges). `kind: qr` generates a printable `STAND-…` token. `label` is an optional staff label (≤40 characters). A code that is or was someone's badge, a ticket, or already a company tag answers 409 with `details.usedBy` (`badge`, `ticket` or `stand`). Global sponsor administrators only; audited (#935).",
       },
     },
     async (req, reply) => {
@@ -358,21 +376,180 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     },
   );
 
+  r.patch(
+    "/api/enterprises/:id/stand-tags/:tagId",
+    {
+      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
+      preHandler: [manage, requireIdempotencyKey],
+      schema: {
+        params: standTagParams,
+        body: standTagLabelBody,
+        summary: "Label a company tag",
+        description:
+          'Sets or clears (`null` or "") a tag\'s staff label, such as "Lanyard Ana" or "Table 3". Repeating the current label changes nothing and is not audited; a change is audited. Global sponsor administrators only (#935).',
+      },
+    },
+    async (req) => {
+      const { tag, changed } = await setStandTagLabel(
+        actor(req.userId),
+        req.params.id,
+        req.params.tagId,
+        req.body.label,
+      );
+      req.domainUnchanged = !changed;
+      return tag;
+    },
+  );
+
   r.delete(
     "/api/enterprises/:id/stand-tags/:tagId",
     {
-      ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
-      preHandler: [requireEnterpriseAccess(enterpriseParam), requireIdempotencyKey],
+      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
+      preHandler: [manage, requireIdempotencyKey],
       schema: {
         params: standTagParams,
-        summary: "Remove a stand tag",
+        summary: "Remove a company tag",
         description:
-          "Unlinks a stand tag; scanning it afterwards is an unknown code. Diary entries already saved for the sponsor stay. The enterprise's own sponsor representatives or a global sponsor administrator; audited (#935).",
+          "Unlinks a company tag; scanning it afterwards is an unknown code, and the wristband can be reused. Diary entries already saved for the company stay. Global sponsor administrators only; audited (#935).",
       },
     },
     async (req, reply) => {
       await removeStandTag(actor(req.userId), req.params.id, req.params.tagId);
       return reply.code(204).send();
+    },
+  );
+
+  r.get(
+    "/api/enterprises/:id/stand-tags/:tagId/qr.svg",
+    {
+      ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
+      preHandler: requireEnterpriseAccess(enterpriseParam),
+      schema: {
+        params: standTagParams,
+        summary: "Download a company QR as SVG",
+        description:
+          "A print-quality vector SVG (80 mm wide) of one QR company tag. The QR holds the tag link `https://<web host>/s/<token>`; the company name and the token are printed underneath. NFC tags and other companies' tags answer 404. The company's own sponsor representatives or a global sponsor administrator (#935).",
+      },
+    },
+    async (req, reply) => {
+      const { name, code } = await standQrTag(actor(req.userId), req.params.id, req.params.tagId);
+      reply.header("content-type", "image/svg+xml; charset=utf-8");
+      reply.header("content-disposition", `attachment; filename="${standQrFilename(name, code)}"`);
+      reply.header("cache-control", "private, no-store");
+      return reply.send(standQrSvg(code, name));
+    },
+  );
+
+  // Staff company-tag management: which companies are scannable, codes for all.
+  r.get(
+    "/api/enterprises/stands",
+    {
+      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
+      preHandler: manage,
+      schema: {
+        summary: "List company tags of every enterprise",
+        description:
+          "Every enterprise for the staff Company tags page: name, logos, visibility, whether attendees can collect it by scanning (`scannable`), its NFC and QR counts, the newest QR tag id and every tag (kind, serial number or token, label, creation time). Global sponsor administrators only (#935).",
+      },
+    },
+    async (req) => ({ stands: await listStands(actor(req.userId)) }),
+  );
+
+  r.put(
+    "/api/enterprises/:id/stand-scannable",
+    {
+      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
+      preHandler: [manage, requireIdempotencyKey],
+      schema: {
+        params: enterpriseIdParam,
+        body: standScannableBody,
+        summary: "Set whether a company is scannable",
+        description:
+          "Turns collecting a company by scanning its tags on or off. While off, scanning its tags answers `stand_unavailable` and the company leaves attendees' collection, except for attendees who already collected it. Sponsor representatives cannot change it. Repeating the current value changes nothing and is not audited; a change is audited (#935).",
+      },
+    },
+    async (req) => {
+      const result = await setStandScannable(actor(req.userId), req.params.id, req.body.scannable);
+      req.domainUnchanged = !result.changed;
+      return result;
+    },
+  );
+
+  r.post(
+    "/api/enterprises/stands/qr",
+    {
+      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
+      preHandler: [manage, requireIdempotencyKey],
+      schema: {
+        summary: "Generate missing company QR codes",
+        description:
+          "Generates one QR tag for every scannable company that has none and returns the created tags (`created`, empty when every scannable company already has a QR). Concurrent or repeated runs never create a second QR for the same company. Each created tag is audited. Global sponsor administrators only (#935).",
+      },
+    },
+    async (req) => {
+      const result = await generateMissingQrTags(actor(req.userId));
+      req.domainUnchanged = result.created.length === 0;
+      return result;
+    },
+  );
+
+  r.get(
+    "/api/enterprises/stands/codes.csv",
+    {
+      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
+      preHandler: manage,
+      schema: {
+        summary: "Export company tag codes as CSV",
+        description:
+          "Every NFC serial number and QR token of the scannable companies as CSV (`enterprise_id,name,kind,code,label,url`, where `url` is the tag link), for printing with another tool. Codes are what attendees scan, so each export is audited with its size. 409 `stand_codes_empty` when no scannable company has a code. Global sponsor administrators only (#935).",
+      },
+    },
+    async (req, reply) => {
+      const codes = await exportStandCodes(actor(req.userId), "csv");
+      return sendCsv(
+        reply,
+        "company-tags.csv",
+        toCsv(
+          ["enterprise_id", "name", "kind", "code", "label", "url"],
+          codes.map((code) => [
+            code.enterpriseId,
+            code.name,
+            code.kind,
+            code.code,
+            code.label,
+            companyTagUrl(code.code),
+          ]),
+        ),
+      );
+    },
+  );
+
+  r.get(
+    "/api/enterprises/stands/qr.zip",
+    {
+      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
+      preHandler: manage,
+      schema: {
+        summary: "Download all company QR codes",
+        description:
+          "A zip with one print-quality SVG per QR tag of the scannable companies, each labelled with the company name and named `<company>-<token>.svg`. Audited like the CSV export. 409 `stand_codes_empty` when no scannable company has a QR. Global sponsor administrators only (#935).",
+      },
+    },
+    async (req, reply) => {
+      const codes = await exportStandCodes(actor(req.userId), "svg");
+      // Every entry is a small in-memory string (no storage reads, unlike the
+      // file exports), so nothing can fail once the zip starts streaming.
+      const archive = new ZipArchive({ zlib: { level: 9 } });
+      for (const code of codes) {
+        archive.append(standQrSvg(code.code, code.name), {
+          name: standQrFilename(code.name, code.code),
+        });
+      }
+      void archive.finalize();
+      reply.header("content-type", "application/zip");
+      reply.header("content-disposition", `attachment; filename="company-qr-codes.zip"`);
+      reply.header("cache-control", "private, no-store");
+      return reply.send(archive);
     },
   );
 

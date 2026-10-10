@@ -24,6 +24,7 @@ import {
   type RouterTabsTheme,
 } from "@/components/router-tabs";
 import { SymbolView } from "@/components/symbol";
+import { UserAvatar } from "@/components/user-avatar";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import {
@@ -145,6 +146,39 @@ export interface OpaqueRouterTabsProps {
   capabilities: string[];
   hasQueueItems: boolean;
   hasUnreadNotifications: boolean;
+  /** The signed-in person; their account photo replaces the Account symbol (#934). */
+  account?: { name: string; image: string | null };
+}
+
+/** Matches the 22pt tab symbols; the ring adds a 1pt gap and a 2pt stroke. */
+const TAB_AVATAR_SIZE = 22;
+const TAB_AVATAR_FRAME = TAB_AVATAR_SIZE + 6;
+
+/** The account photo as a tab icon; the selected tab adds a ring in the tab tint. */
+function AccountTabAvatar({
+  name,
+  image,
+  ringColor,
+}: {
+  name: string;
+  image: string;
+  ringColor: string | null;
+}) {
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        borderColor: ringColor ?? "transparent",
+        borderRadius: TAB_AVATAR_FRAME / 2,
+        borderWidth: 2,
+        height: TAB_AVATAR_FRAME,
+        justifyContent: "center",
+        width: TAB_AVATAR_FRAME,
+      }}
+    >
+      <UserAvatar testID="account-tab-avatar" name={name} image={image} size={TAB_AVATAR_SIZE} />
+    </View>
+  );
 }
 
 /**
@@ -156,6 +190,7 @@ export function OpaqueRouterTabs({
   capabilities,
   hasQueueItems,
   hasUnreadNotifications,
+  account,
 }: OpaqueRouterTabsProps) {
   const { t } = useLocale();
   const pathname = usePathname();
@@ -186,6 +221,20 @@ export function OpaqueRouterTabs({
     const unread = key === "notifications" && hasUnreadNotifications;
     const icon = unread ? "bell.badge" : definition.icon;
     const selectedIcon = unread ? "bell.badge.fill" : definition.selectedIcon;
+    const accountImage = key === "account" ? account?.image : null;
+
+    if (account && accountImage) {
+      return {
+        href: definition.href,
+        icon: <AccountTabAvatar name={account.name} image={accountImage} ringColor={null} />,
+        label: t(definition.labelKey),
+        name: definition.triggerName,
+        selectedIcon: (
+          <AccountTabAvatar name={account.name} image={accountImage} ringColor={tabSelectedColor} />
+        ),
+        testID: `opaque-tab-${key}`,
+      };
+    }
 
     return {
       href: definition.href,
@@ -246,6 +295,7 @@ export function OpaqueRouterTabs({
               colorScheme={fallbackColorScheme}
               iconColor={tabIconColor}
               overflowIds={overflowIds}
+              account={account}
             />
           ) : null
         }
@@ -307,6 +357,39 @@ interface OpaqueOverflowMenuProps {
   colorScheme: "dark" | "light";
   iconColor: string;
   overflowIds: OverflowTabKey[];
+  account?: OpaqueRouterTabsProps["account"];
+}
+
+/**
+ * The Others circle shows the active overflow destination. On a compact
+ * phone a participant's Account lives here, so its account photo replaces
+ * the person symbol just as it does on a direct Account tab (#934).
+ */
+function OverflowTriggerIcon({
+  account,
+  activeIconColor,
+  activeOverflowId,
+  iconColor,
+}: {
+  account: OpaqueOverflowMenuProps["account"];
+  activeIconColor: string;
+  activeOverflowId: OverflowTabKey | null;
+  iconColor: string;
+}) {
+  if (activeOverflowId === "account" && account?.image) {
+    return (
+      <AccountTabAvatar name={account.name} image={account.image} ringColor={activeIconColor} />
+    );
+  }
+  return (
+    <SymbolView
+      name={activeOverflowId ? OVERFLOW_TAB_ICON[activeOverflowId] : "ellipsis"}
+      size={22}
+      tintColor={activeOverflowId ? activeIconColor : iconColor}
+      weight="semibold"
+      accessible={false}
+    />
+  );
 }
 
 interface OpaqueOperationsMenuItem extends MenuAction {
@@ -333,7 +416,12 @@ function OpaqueOverflowMenu(props: OpaqueOverflowMenuProps) {
   );
 }
 
-function NativeOverflowMenu({ activeIconColor, iconColor, overflowIds }: OpaqueOverflowMenuProps) {
+function NativeOverflowMenu({
+  account,
+  activeIconColor,
+  iconColor,
+  overflowIds,
+}: OpaqueOverflowMenuProps) {
   const { t } = useLocale();
   const { tabBarHeight } = useRouterTabBarInsets();
   const pathname = usePathname();
@@ -382,12 +470,11 @@ function NativeOverflowMenu({ activeIconColor, iconColor, overflowIds }: OpaqueO
           width: tabBarHeight,
         }}
       >
-        <SymbolView
-          name={activeOverflowId ? OVERFLOW_TAB_ICON[activeOverflowId] : "ellipsis"}
-          size={22}
-          tintColor={activeOverflowId ? activeIconColor : iconColor}
-          weight="semibold"
-          accessible={false}
+        <OverflowTriggerIcon
+          account={account}
+          activeIconColor={activeIconColor}
+          activeOverflowId={activeOverflowId}
+          iconColor={iconColor}
         />
       </View>
     </MenuView>
@@ -401,6 +488,7 @@ const ANDROID_OVERFLOW_MENU_Z_INDEX = 1000;
 const ANDROID_OVERFLOW_MENU_GAP = 8;
 
 function AndroidOverflowMenu({
+  account,
   activeIconColor,
   colorScheme,
   iconColor,
@@ -459,12 +547,11 @@ function AndroidOverflowMenu({
         }}
         testID="opaque-others-menu"
       >
-        <SymbolView
-          name={activeOverflowId ? OVERFLOW_TAB_ICON[activeOverflowId] : "ellipsis"}
-          size={22}
-          tintColor={activeOverflowId ? activeIconColor : iconColor}
-          weight="semibold"
-          accessible={false}
+        <OverflowTriggerIcon
+          account={account}
+          activeIconColor={activeIconColor}
+          activeOverflowId={activeOverflowId}
+          iconColor={iconColor}
         />
       </Pressable>
       {anchor ? (

@@ -49,16 +49,11 @@ export async function requireScopedRefreshAccess(
     return;
   }
   if (topic === SSE_TOPICS.DIRECTORY) {
-    // The signal is payload-free. Event attendees without directory:read
-    // (Sponsor, Judging Team) still own a public profile and its preview
-    // (#934), so event access is enough to subscribe.
-    if (
-      !(await userHasCapability(context, CAPABILITIES.DIRECTORY_READ)) &&
-      !(await hasEventAccess(pool, userId))
-    ) {
-      throw new ForbiddenError(`Missing capability: ${CAPABILITIES.DIRECTORY_READ}`, {
-        capability: CAPABILITIES.DIRECTORY_READ,
-      });
+    // The signal is payload-free. Every event attendee owns a public profile
+    // preview and a diary of saved profiles (#934, #935), so event access is
+    // what subscribing requires.
+    if (!(await hasEventAccess(pool, userId))) {
+      throw new ForbiddenError("Public profiles are only available to event attendees");
     }
     return;
   }

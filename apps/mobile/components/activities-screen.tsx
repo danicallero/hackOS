@@ -9,8 +9,8 @@ import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   AndroidFilterMenu,
   EmptyState,
-  LegacyHeaderIconButton,
   LegacyScreenHeader,
+  MenuTriggerIcon,
   StatusPill,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -35,7 +35,7 @@ import { colors } from "@/theme/colors";
 const MARKER_TICK_MS = 60_000;
 
 export function ActivitiesScreen() {
-  useColorScheme();
+  const colorScheme = useColorScheme();
   const router = useRouter();
   const navigation = useNavigation();
   const { language, t } = useLocale();
@@ -250,7 +250,17 @@ export function ActivitiesScreen() {
         <>
           <Stack.Toolbar placement="left">
             <Stack.Toolbar.View hidesSharedBackground>
-              <Text style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}>
+              <Text
+                accessibilityRole="header"
+                style={{
+                  // A fixed colour, not the dynamic label: iOS 26 flips a bar
+                  // item's light/dark appearance with what scrolls behind it,
+                  // which turned the title white for a moment.
+                  color: colorScheme === "dark" ? "#ffffff" : "#000000",
+                  fontSize: 28,
+                  fontWeight: "800",
+                }}
+              >
                 {t("tabActivities")}
               </Text>
             </Stack.Toolbar.View>
@@ -328,7 +338,7 @@ export function ActivitiesScreen() {
                     setKind(nativeEvent.event === "all" ? null : nativeEvent.event)
                   }
                 >
-                  <LegacyHeaderIconButton
+                  <MenuTriggerIcon
                     icon={
                       kind === null
                         ? "line.3.horizontal.decrease"
@@ -337,7 +347,6 @@ export function ActivitiesScreen() {
                     accessibilityLabel={t("scheduleFilter")}
                     accessibilityState={{ selected: kind !== null }}
                     tintColor={kind === null ? colors.label : colors.accent}
-                    onPress={() => undefined}
                   />
                 </MenuView>
               </GlassView>

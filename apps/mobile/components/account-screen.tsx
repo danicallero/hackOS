@@ -5,11 +5,12 @@ import {
   Alert,
   Pressable,
   RefreshControl,
-  ScrollView,
+  type ScrollView,
   Text,
   useColorScheme,
   View,
 } from "react-native";
+import Animated from "react-native-reanimated";
 import {
   ActionButton,
   AndroidStatusBarScrim,
@@ -19,8 +20,14 @@ import {
   StatusPill,
   ToggleRow,
 } from "@/components/native-ui";
+import {
+  ProfileAvatarCollapse,
+  ProfileAvatarCollapseAnchor,
+  useProfileAvatarCollapse,
+} from "@/components/profile-avatar-collapse";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
+import { UserAvatar } from "@/components/user-avatar";
 import { apiFetch } from "@/lib/api";
 import { useApiMode } from "@/lib/api-mode";
 import { appVersionLabel } from "@/lib/app-version";
@@ -38,7 +45,7 @@ import {
 import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
-import { canViewStaffStatistics } from "@/lib/tabs";
+import { canManageStands, canViewStaffStatistics } from "@/lib/tabs";
 import type { MealPlan } from "@/lib/types";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
@@ -55,6 +62,7 @@ export default function AccountScreen() {
   const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
+  const avatarCollapse = useProfileAvatarCollapse();
   useScrollToTop(scrollRef);
   const { me, loading, error, offline, staleSince, refetch } = useMeContext();
   const { mode, setMode } = useApiMode();
@@ -221,13 +229,6 @@ export default function AccountScreen() {
   if (!me) return <RequestFeedback error={error} onRetry={() => void refetch()} />;
 
   const fullName = [me.name, me.surname].filter(Boolean).join(" ") || me.email;
-  const initials =
-    [me.name, me.surname]
-      .filter(Boolean)
-      .map((part) => part?.[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || me.email[0].toUpperCase();
   const canEditDietary = !offline && !me.profileLocked;
   const dietaryLabels = me.foodIntolerances
     .map((id) => intolerances.find((item) => item.id === id)?.label[language] ?? String(id))
@@ -245,11 +246,15 @@ export default function AccountScreen() {
     dietaryLabels || (me.dietaryConfirmedAt ? t("noRestrictions") : t("accountNoneDeclared"));
 
   return (
-    <View style={{ flex: 1 }}>
-      <ScrollView
+    <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
+      <Animated.ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
         testID="account-scroll"
+        onScroll={avatarCollapse.onScroll}
+        onTouchStart={avatarCollapse.onScrollBeginDrag}
+        onContentSizeChange={avatarCollapse.onContentSizeChange}
+        scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           gap: 20,
@@ -261,11 +266,6 @@ export default function AccountScreen() {
           <RefreshControl refreshing={refreshingAccount} onRefresh={() => void refreshAccount()} />
         }
       >
-        {offline ? (
-          <StaleDataBanner updatedAt={staleSince} />
-        ) : error ? (
-          <RequestFeedback error={error} onRetry={() => void refetch()} />
-        ) : null}
         {languageError ? (
           <RequestFeedback
             error={languageError}
@@ -275,21 +275,10 @@ export default function AccountScreen() {
           />
         ) : null}
 
-        <View style={{ alignItems: "center", gap: 10, paddingVertical: 10 }}>
-          <View
-            style={{
-              alignItems: "center",
-              backgroundColor: colors.accent,
-              borderRadius: 42,
-              height: 84,
-              justifyContent: "center",
-              width: 84,
-            }}
-          >
-            <Text selectable style={{ color: colors.accentText, fontSize: 30, fontWeight: "700" }}>
-              {initials}
-            </Text>
-          </View>
+        <View style={{ alignItems: "center", gap: 12, paddingVertical: 10 }}>
+          <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={96}>
+            <UserAvatar testID="account-avatar" name={fullName} image={me.image} size={96} />
+          </ProfileAvatarCollapseAnchor>
           <View style={{ alignItems: "center", gap: 5 }}>
             <Text
               selectable
@@ -305,6 +294,12 @@ export default function AccountScreen() {
             </StatusPill>
           </View>
         </View>
+
+        {offline ? (
+          <StaleDataBanner updatedAt={staleSince} />
+        ) : error ? (
+          <RequestFeedback error={error} onRetry={() => void refetch()} />
+        ) : null}
 
         <Section title={t("accountProfile")}>
           <InfoRow label={t("accountName")} value={fullName} icon="person" />
@@ -458,13 +453,25 @@ export default function AccountScreen() {
           </Section>
         ) : null}
 
-        {canViewStaffStatistics(me.capabilities) ? (
+        {canViewStaffStatistics(me.capabilities) || canManageStands(me.capabilities) ? (
           <Section title={t("accountStaff")}>
-            <AccountSubpageRow
-              label={t("accountStatistics")}
-              icon="chart.bar.xaxis"
-              onPress={() => router.push("/(tabs)/others/statistics")}
-            />
+            {canViewStaffStatistics(me.capabilities) ? (
+              <AccountSubpageRow
+                label={t("accountStatistics")}
+                icon="chart.bar.xaxis"
+                onPress={() => router.push("/(tabs)/others/statistics")}
+              />
+            ) : null}
+            {canViewStaffStatistics(me.capabilities) && canManageStands(me.capabilities) ? (
+              <Separator inset={48} />
+            ) : null}
+            {canManageStands(me.capabilities) ? (
+              <AccountSubpageRow
+                label={t("accountStands")}
+                icon="wave.3.right"
+                onPress={() => router.push("/(tabs)/others/stands")}
+              />
+            ) : null}
           </Section>
         ) : null}
 
@@ -539,8 +546,15 @@ export default function AccountScreen() {
         >
           <Text style={{ color: colors.tertiaryLabel, fontSize: 12 }}>{appVersionLabel}</Text>
         </Pressable>
-      </ScrollView>
+      </Animated.ScrollView>
       <AndroidStatusBarScrim />
+      <ProfileAvatarCollapse
+        controller={avatarCollapse}
+        image={me.image}
+        name={fullName}
+        size={96}
+        variant="account"
+      />
     </View>
   );
 }

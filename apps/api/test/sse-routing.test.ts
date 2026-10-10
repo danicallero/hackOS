@@ -75,6 +75,7 @@ describe("domain mutation routing", () => {
     expect(mutationDomainForPath("/api/me/public-profile")).toBe(SSE_TOPICS.DIRECTORY);
     expect(mutationDomainForPath("/api/users/7/public-profile")).toBe(SSE_TOPICS.DIRECTORY);
     expect(mutationDomainForPath("/api/me/public-profile/cv")).toBe(SSE_TOPICS.DIRECTORY);
+    expect(mutationDomainForPath("/api/users/7/public-profile/cv")).toBe(SSE_TOPICS.DIRECTORY);
     expect(mutationDomainForPath("/api/users/7")).toBe(SSE_TOPICS.IDENTITY);
     // ...and other domains' writes that change a card also wake the directory.
     for (const path of [

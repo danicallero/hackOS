@@ -105,45 +105,44 @@ describe("stand tags", () => {
     expect((await del(tag.id)).statusCode).toBe(404);
   });
 
-  it("lets a sponsor rep manage only their own enterprise's tags, audited", async () => {
+  it("lets a sponsor rep read only their own company's tags, never write them", async () => {
     const rep = await createUser();
     await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
       enterpriseId,
       rep,
     ]);
-    const own = await addTag({ kind: "qr" }, rep);
-    expect(own.statusCode).toBe(201);
-    const nfc = await addTag({ kind: "nfc", uid: "04A1B2C3D4E5F6" }, rep);
-    expect(nfc.statusCode).toBe(201);
+    const tag = (await addTag({ kind: "qr", label: "Table 3" })).json();
+    expect(tag.label).toBe("Table 3");
+    expect((await addTag({ kind: "qr" }, rep)).statusCode).toBe(403);
+    expect((await addTag({ kind: "nfc", uid: "04A1B2C3D4E5F6" }, rep)).statusCode).toBe(403);
     const listed = await app.inject({
       method: "GET",
       url: `/api/enterprises/${enterpriseId}/stand-tags`,
       headers: asUser(rep),
     });
-    expect(listed.json().tags).toHaveLength(2);
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().tags).toEqual([
+      expect.objectContaining({ id: tag.id, kind: "qr", label: "Table 3" }),
+    ]);
     const removed = await app.inject({
       method: "DELETE",
-      url: `/api/enterprises/${enterpriseId}/stand-tags/${own.json().id}`,
+      url: `/api/enterprises/${enterpriseId}/stand-tags/${tag.id}`,
       headers: { ...asUser(rep), "idempotency-key": `del-${++keySeq}` },
     });
-    expect(removed.statusCode).toBe(204);
-    const audits = await pool.query(
-      `SELECT actor_id, action FROM audit_log WHERE entity_type = 'enterprise' AND entity_id = $1 ORDER BY id`,
-      [String(enterpriseId)],
-    );
-    expect(audits.rows).toEqual([
-      { actor_id: rep, action: "stand_tag.added" },
-      { actor_id: rep, action: "stand_tag.added" },
-      { actor_id: rep, action: "stand_tag.removed" },
-    ]);
+    expect(removed.statusCode).toBe(403);
+    const relabel = await app.inject({
+      method: "PATCH",
+      url: `/api/enterprises/${enterpriseId}/stand-tags/${tag.id}`,
+      headers: { ...asUser(rep), "idempotency-key": `lab-${++keySeq}` },
+      payload: { label: "Mine" },
+    });
+    expect(relabel.statusCode).toBe(403);
 
-    // Another enterprise's tags are out of reach: list, add and remove.
+    // Another company's tags are out of reach.
     const { rows } = await pool.query(
       `INSERT INTO enterprises (name) VALUES ('Other') RETURNING id`,
     );
     const otherId = rows[0].id as number;
-    const foreign = (await addTag({ kind: "qr" }, admin, otherId)).json();
-    expect((await addTag({ kind: "qr" }, rep, otherId)).statusCode).toBe(403);
     expect(
       (
         await app.inject({
@@ -153,23 +152,35 @@ describe("stand tags", () => {
         })
       ).statusCode,
     ).toBe(403);
-    const crossDelete = await app.inject({
-      method: "DELETE",
-      url: `/api/enterprises/${otherId}/stand-tags/${foreign.id}`,
-      headers: { ...asUser(rep), "idempotency-key": `del-${++keySeq}` },
-    });
-    expect(crossDelete.statusCode).toBe(403);
-    // A tag id from another enterprise under the rep's own enterprise is not found.
-    const smuggled = await app.inject({
-      method: "DELETE",
-      url: `/api/enterprises/${enterpriseId}/stand-tags/${foreign.id}`,
-      headers: { ...asUser(rep), "idempotency-key": `del-${++keySeq}` },
-    });
-    expect(smuggled.statusCode).toBe(404);
-    const { rows: left } = await pool.query(`SELECT 1 FROM sponsor_stand_tags WHERE id = $1`, [
-      foreign.id,
+  });
+
+  it("labels a tag, audited once per change, and clears it", async () => {
+    const tag = (
+      await addTag({ kind: "nfc", uid: "04A1B2C3D4E5F6", label: "  Lanyard Ana " })
+    ).json();
+    expect(tag.label).toBe("Lanyard Ana");
+    const label = (value: unknown) =>
+      app.inject({
+        method: "PATCH",
+        url: `/api/enterprises/${enterpriseId}/stand-tags/${tag.id}`,
+        headers: { ...asUser(admin), "idempotency-key": `lab-${++keySeq}` },
+        payload: { label: value },
+      });
+    expect((await label("Table 3")).json()).toMatchObject({ id: tag.id, label: "Table 3" });
+    expect((await label("Table 3")).statusCode).toBe(200);
+    expect((await label("")).json().label).toBeNull();
+    expect((await label("x".repeat(41))).statusCode).toBe(400);
+    expect((await label("a\u0007b")).statusCode).toBe(400);
+    const audits = await pool.query(
+      `SELECT before, after FROM audit_log WHERE action = 'stand_tag.labelled' ORDER BY id`,
+    );
+    expect(audits.rows).toEqual([
+      {
+        before: { tagId: tag.id, label: "Lanyard Ana" },
+        after: { tagId: tag.id, label: "Table 3" },
+      },
+      { before: { tagId: tag.id, label: "Table 3" }, after: { tagId: tag.id, label: null } },
     ]);
-    expect(left).toHaveLength(1);
   });
 
   it("refuses a stand tag as someone's badge at accreditation", async () => {
@@ -184,7 +195,44 @@ describe("stand tags", () => {
       payload: { ticketToken: token, badgeId: "04A1B2C3D4E5F6", method: "nfc" },
     });
     expect(res.statusCode).toBe(409);
+    expect(res.json().error).toMatchObject({
+      message: "This wristband is a company tag; use an unassigned one",
+      details: { code: "company_tag" },
+    });
     const { rows } = await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [uid]);
     expect(rows[0].badge_id).toBeNull();
+  });
+
+  it("refuses a company-tag wristband when replacing someone's badge", async () => {
+    await addTag({ kind: "nfc", uid: "04A1B2C3D4E5F6" });
+    const staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
+    const uid = await createUser({ name: "Ada" });
+    await pool.query(`UPDATE users SET badge_id = '04000000000009' WHERE id = $1`, [uid]);
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/rotate",
+      headers: asUser(staff),
+      payload: { userId: uid, newBadgeId: "04A1B2C3D4E5F6", reason: "lost" },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.details).toEqual({ code: "company_tag" });
+    const { rows } = await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [uid]);
+    expect(rows[0].badge_id).toBe("04000000000009");
+  });
+
+  it("says a wristband that is or was a badge is already a badge", async () => {
+    const person = await createUser();
+    await pool.query(
+      `UPDATE users SET badge_id = '04000000000001', badge_id_history = ARRAY['04000000000002'] WHERE id = $1`,
+      [person],
+    );
+    for (const uid of ["04000000000001", "04000000000002"]) {
+      const res = await addTag({ kind: "nfc", uid });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error).toMatchObject({
+        message: "This wristband is already a badge; use an unassigned one",
+        details: { code: "stand_tag_in_use", usedBy: "badge" },
+      });
+    }
   });
 });

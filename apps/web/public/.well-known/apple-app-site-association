@@ -1,4 +1,12 @@
 {
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["P88YRBYY9T.com.hackudc.os", "P88YRBYY9T.com.hackudc.os.debug"],
+        "components": [{ "/": "/s/*", "comment": "Company tags (#935)" }]
+      }
+    ]
+  },
   "webcredentials": {
     "apps": ["P88YRBYY9T.com.hackudc.os"]
   }

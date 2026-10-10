@@ -1,4 +1,5 @@
 import type pg from "pg";
+import { config } from "../../config.js";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { type DirectoryEntry, visibleDirectoryEntries } from "../directory/service.js";
@@ -13,8 +14,10 @@ import type { UpdateEntryInput } from "./schemas.js";
 
 /**
  * Event diary (#935): an attendee's private list of the people and sponsor
- * stands they met. Only the owner's own choices (favourite, note) are stored;
- * cards are projected live from the #934 directory and the public sponsor
+ * stands they met. Entries are added only by scanning a badge, ticket or stand
+ * tag; there is no browsable directory. Only the owner's own choices
+ * (favourite, note) are stored;
+ * cards are projected live from the #934 public profile and the public sponsor
  * profile, so a person who hides their profile — or a sponsor that is hidden
  * again — shows as unavailable instead of as a stale copy.
  */
@@ -25,7 +28,7 @@ export interface DiaryEntry {
   note: string | null;
   createdAt: string;
   updatedAt: string;
-  /** The person's current directory card; null while their profile is not visible. */
+  /** The person's current public profile card; null while their profile is not visible. */
   person: DirectoryEntry | null;
   /** The sponsor's current public card; null while the sponsor is not revealed. */
   sponsor: SponsorCard | null;
@@ -45,7 +48,7 @@ const ENTRY_COLUMNS = `id, target_user_id, enterprise_id, starred, note, created
 
 async function present(db: Queryable, rows: EntryRow[]) {
   // Every attendee may keep the people they met (#935), but only cards that
-  // are directory-visible right now are ever shown.
+  // are publicly shared right now are ever shown.
   const people = await visibleDirectoryEntries(
     db,
     rows.flatMap((row) => (row.target_user_id ? [Number(row.target_user_id)] : [])),
@@ -102,6 +105,72 @@ export async function listDiary(owner: number): Promise<{ items: DiaryEntry[] }>
   return { items: await present(pool, rows) };
 }
 
+/** One company in the attendee's stand collection (#935). */
+export interface SponsorCollectionItem extends SponsorCard {
+  /** The caller's diary entry once they scanned the stand; null while still to collect. */
+  entry: { id: number; starred: boolean; note: string | null; createdAt: string } | null;
+}
+
+const NAME_ORDER = new Intl.Collator("en", { sensitivity: "base", numeric: true });
+
+/**
+ * The sponsor stands an attendee can collect (#935): every revealed sponsor
+ * whose stand staff made scannable and that has a stand tag, plus revealed
+ * sponsors the caller already collected even if their tags were removed or
+ * scanning was turned off since (they count in both `collected` and `total`,
+ * so progress never goes backwards). Hidden sponsors never count. Collected
+ * first (newest first), then the rest by name. Tag codes never leave the API.
+ */
+export async function listSponsorCollection(owner: number): Promise<{
+  total: number;
+  collected: number;
+  items: SponsorCollectionItem[];
+}> {
+  await assertAttendee(pool, owner);
+  const { rows: entries } = await pool.query<EntryRow>(
+    `SELECT ${ENTRY_COLUMNS} FROM diary_entries
+      WHERE owner_id = $1 AND enterprise_id IS NOT NULL`,
+    [owner],
+  );
+  const { rows: tagged } = await pool.query<{ enterprise_id: number }>(
+    `SELECT DISTINCT t.enterprise_id
+       FROM sponsor_stand_tags t JOIN enterprises e ON e.id = t.enterprise_id
+      WHERE e.stand_scannable`,
+  );
+  const ids = new Set([
+    ...tagged.map((row) => Number(row.enterprise_id)),
+    ...entries.map((row) => Number(row.enterprise_id)),
+  ]);
+  const cards = await visibleSponsorCards(pool, [...ids]);
+  const byEnterprise = new Map(entries.map((row) => [Number(row.enterprise_id), row]));
+  const items = [...cards.values()].map((card): SponsorCollectionItem => {
+    const row = byEnterprise.get(card.enterpriseId);
+    return {
+      ...card,
+      entry: row
+        ? {
+            id: Number(row.id),
+            starred: row.starred,
+            note: row.note,
+            createdAt: row.created_at.toISOString(),
+          }
+        : null,
+    };
+  });
+  items.sort((a, b) => {
+    if (a.entry && b.entry) {
+      return b.entry.createdAt.localeCompare(a.entry.createdAt) || b.entry.id - a.entry.id;
+    }
+    if (a.entry || b.entry) return a.entry ? -1 : 1;
+    return NAME_ORDER.compare(a.name, b.name) || a.enterpriseId - b.enterpriseId;
+  });
+  return {
+    total: items.length,
+    collected: items.filter((item) => item.entry !== null).length,
+    items,
+  };
+}
+
 /**
  * Insert-or-return: the partial unique indexes make a concurrent double save
  * converge on one row, and a re-scan returns the existing entry untouched.
@@ -149,17 +218,47 @@ async function personForCode(db: Queryable, code: string): Promise<number> {
 }
 
 /**
- * Save whatever was scanned: a sponsor stand tag/QR, or a person's badge or
- * ticket. Nothing about a person is revealed unless their profile is visible
- * right now; otherwise the answer is `profile_not_shared` and nothing is
- * stored. The scanned person is never notified.
+ * A company tag link `https://<web host>/s/<code>` (QR content, NDEF URI
+ * record, #935) carries the tag's own code. Links on another host are left
+ * as they are and answer `diary_code_unknown`.
  */
-export async function saveScanned(owner: number, code: string) {
+export function codeFromScan(raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return raw;
+  }
+  const webHost = new URL(config.WEB_URL).host;
+  const match = /^\/s\/([^/]+)\/?$/.exec(url.pathname);
+  if (url.host !== webHost || !match?.[1]) return raw;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Save whatever was scanned: a company tag (NFC UID, QR token or its link),
+ * or a person's badge or ticket. A person's badge only ever saves that person
+ * (a sponsor rep's badge never grants their company). Nothing about a person
+ * is revealed unless their profile is visible right now; otherwise the answer
+ * is `profile_not_shared` and nothing is stored. The scanned person is never
+ * notified.
+ */
+export async function saveScanned(owner: number, scanned: string) {
+  const code = codeFromScan(scanned);
   return withTransaction(async (db) => {
     await lockOwner(db, owner);
-    const enterpriseId = await standEnterpriseForCode(db, code);
-    if (enterpriseId !== null) {
-      const cards = await visibleSponsorCards(db, [enterpriseId]);
+    const stand = await standEnterpriseForCode(db, code);
+    if (stand !== null) {
+      const { enterpriseId } = stand;
+      // Staff decide which stands can be collected (0703); a stand that is
+      // not scannable answers like an unrevealed sponsor and names no one.
+      const cards = stand.scannable
+        ? await visibleSponsorCards(db, [enterpriseId])
+        : new Map<number, SponsorCard>();
       if (!cards.has(enterpriseId)) {
         throw new AppError(409, "stand_unavailable", "This sponsor is not available yet");
       }
@@ -172,18 +271,6 @@ export async function saveScanned(owner: number, code: string) {
     const people = await visibleDirectoryEntries(db, [userId]);
     if (!people.has(userId)) {
       throw new AppError(409, "profile_not_shared", "This person does not share a profile");
-    }
-    return save(db, owner, { userId });
-  });
-}
-
-/** Save someone found in the directory; hidden and missing are the same 404 (#934). */
-export async function savePerson(owner: number, userId: number) {
-  return withTransaction(async (db) => {
-    await lockOwner(db, owner);
-    const people = await visibleDirectoryEntries(db, [userId]);
-    if (userId === owner || !people.has(userId)) {
-      throw new NotFoundError("Person not found");
     }
     return save(db, owner, { userId });
   });

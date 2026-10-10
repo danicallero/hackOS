@@ -1,9 +1,8 @@
 import { MenuView } from "@expo/ui/community/menu";
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 import { GlassView } from "@/components/glass-view";
-import { ActionButton } from "@/components/native-ui";
-import { SymbolView } from "@/components/symbol";
+import { ActionButton, MenuTriggerIcon } from "@/components/native-ui";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useNfcSupported } from "@/lib/use-nfc-supported";
 import { colors } from "@/theme/colors";
@@ -86,22 +85,15 @@ export function BadgeLinkActions({
           glassEffectStyle="regular"
           style={{ width: 50, height: 50, borderRadius: 25, overflow: "hidden" }}
         >
-          <Pressable
-            accessibilityRole="button"
+          <MenuTriggerIcon
+            icon="ellipsis"
             accessibilityLabel={t(labels.options)}
-            accessibilityState={{ disabled }}
+            tintColor={colors.accent}
             disabled={disabled}
-            style={({ pressed }) => ({
-              width: 50,
-              minHeight: 50,
-              borderRadius: 25,
-              alignItems: "center",
-              justifyContent: "center",
-              opacity: disabled ? 0.45 : pressed ? 0.6 : 1,
-            })}
-          >
-            <SymbolView accessible={false} name="ellipsis" tintColor={colors.accent} size={20} />
-          </Pressable>
+            size={50}
+            iconSize={20}
+            weight="regular"
+          />
         </GlassView>
       </MenuView>
     </View>

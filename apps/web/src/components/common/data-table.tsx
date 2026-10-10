@@ -55,8 +55,8 @@ interface DataTableProps<T> {
   rowActions?: (row: T) => React.ReactNode;
   /** Native button action rendered in its own table cell. */
   onRowClick?: (row: T) => void;
-  /** Native link destination rendered in its own table cell. */
-  getRowHref?: (row: T) => string;
+  /** Native link destination rendered in its own table cell; null leaves that row inert. */
+  getRowHref?: (row: T) => string | null;
   /** Accessible name for the row link or button. */
   getRowLabel?: (row: T) => string;
   /** Render a drill-down row for narrow screens instead of the table. */
@@ -379,13 +379,14 @@ export function DataTable<T>({
                   rows.map((row) => {
                     const rowId = getRowId(row);
                     const checked = selectable && selectedIds?.has(rowId);
-                    const rowHref = getRowHref?.(row);
+                    const rowHref = getRowHref?.(row) ?? null;
+                    const interactive = rowInteractionCol > 0 && (rowHref !== null || !getRowHref);
                     return (
                       <TableRow
                         key={rowId}
-                        className={rowInteractionCol > 0 ? "cursor-pointer" : undefined}
+                        className={interactive ? "cursor-pointer" : undefined}
                         onClick={
-                          rowInteractionCol > 0
+                          interactive
                             ? () => (rowHref ? router.push(rowHref) : onRowClick?.(row))
                             : undefined
                         }
@@ -409,7 +410,7 @@ export function DataTable<T>({
                         ))}
                         {rowInteractionCol > 0 && (
                           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                            {getRowHref ? (
+                            {!interactive ? null : rowHref ? (
                               <IconButton
                                 variant="ghost"
                                 size="icon-lg"
@@ -417,10 +418,7 @@ export function DataTable<T>({
                                 asChild
                                 label={getRowLabel?.(row) ?? rowId}
                               >
-                                <Link
-                                  href={getRowHref(row)}
-                                  aria-label={getRowLabel?.(row) ?? rowId}
-                                >
+                                <Link href={rowHref} aria-label={getRowLabel?.(row) ?? rowId}>
                                   <CaretRightIcon className="size-4" aria-hidden="true" />
                                 </Link>
                               </IconButton>

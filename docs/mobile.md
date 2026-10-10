@@ -9,6 +9,9 @@ meals, and registrable activities.
 `v<version> · <commit>`: `app.config.ts` embeds the short commit the binary was built
 from (`EAS_BUILD_GIT_COMMIT_HASH`, `GITHUB_SHA`, or the local checkout).
 
+The Account connection warning appears below the profile identity header, before
+the profile fields, so it stays outside the avatar’s cutout transition.
+
 **Developer API mode.** Seven taps on the understated installed-version footer in Account
 or Sign in reveals a confirmation that switches between production
 (`api.hackudc.com`) and development (`api.dani.md`). The choice is persisted
@@ -44,6 +47,7 @@ the hardware-free native screen suite.
 - [Auth flow](#auth-flow)
 - [Participant screens](#participant-screens)
 - [Event diary (#935)](#event-diary-935)
+- [Company tags (#935)](#company-tags-935)
 - [Operator screens](#operator-screens)
   - [Queue operations](#queue-operations)
   - [Scanner](#scanner)
@@ -225,6 +229,17 @@ distributed to other Expo Router apps without importing hackOS code.
   operators instead get Queue operations in the primary bar; scanner
   operators with queue access find it in Others, preserving Scanner's direct
   placement.
+  When the signed-in person has an account photo (#934), the direct Account
+  tab shows it instead of the person symbol, with a ring in the tab tint when
+  selected, and the Account screen header shows it in place of the initials.
+  On a compact phone a participant's Account sits behind Others, so the Others
+  circle shows the same ringed photo while Account is open.
+  `components/user-avatar.tsx` fetches the private `/api/users/:id/photo` route
+  with the session (`loadApiImage`, shown from memory: Android's image pipeline
+  drops a `Cookie` header on an `Image` source) and keeps the initials until it
+  arrives or if it cannot load. The items inside the native `Others` dropdown
+  keep SF Symbols: UIMenu/Android menu items accept symbol names, not an
+  authenticated remote image.
   `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
   (`lib/me-context.tsx`, `lib/use-me.ts`) and keeps the custom RouterTabs shell
   mounted while the profile revalidates. Every route stays registered in the
@@ -349,6 +364,9 @@ distributed to other Expo Router apps without importing hackOS code.
   food-intolerance labels; the label dictionary is also cached on device
   (`lib/offline-cache.ts`) so a device that goes offline before its first
   successful fetch still shows dietary labels instead of bare numeric ids.
+  The account photo uses the shared scroll-driven `ProfileAvatarCollapse`
+  overlay described below, so it remains clipped while it moves into the
+  device's top camera cutout.
   Food intolerances opens `app/profile-tasks.tsx` to edit the dietary answer,
   including an explicit "No restrictions" option (#933) that `PATCH /api/me`
   records as a confirmed empty answer; the row is read-only offline or once the
@@ -373,7 +391,8 @@ distributed to other Expo Router apps without importing hackOS code.
   Signing out while offline with a scanning capability warns first that
   re-authentication needs a live server. The overview is grouped into Profile, Contact, Event
   details, App, Account, and Session; staff with personal logistics-statistics
-  access also see a Staff section. Its Storage row opens
+  access or `sponsors:manage` also see a Staff section (Statistics and Company
+  tags respectively, [below](#company-tags-935)). Its Storage row opens
   `app/(tabs)/others/storage.tsx`, which contains storage controls only. Staff
   Statistics opens `app/(tabs)/others/statistics.tsx`, with personal scan
   counts and a link to scan history; Legal opens
@@ -632,31 +651,216 @@ distributed to other Expo Router apps without importing hackOS code.
 
 ### Event diary (#935)
 
-`components/diary-screen.tsx`, routed as `app/(tabs)/diary.tsx` when the tab is
-direct and `app/(tabs)/others/diary.tsx` inside Others (`diary` is an
-`OVERFLOW_TAB_KEYS` entry; see `docs/navigation.md` for placement). It lists
-`GET /api/me/diary` in API order (favourites first): people with their live
-directory card, sponsors with their public card, and a quiet unavailable row
-when the person hid their profile or the sponsor is hidden. Each row has a star
-toggle and a menu with Note (modal editor, 500 characters) and Remove (with
-confirmation); a row is disabled while its update is in flight. Pull-to-refresh
-and foregrounding refetch. The diary is never written to the offline cache, so
-a profile hidden later cannot reappear from device storage.
+`components/diary-screen.tsx`, routed as `app/(tabs)/diary/index.tsx` (its own
+`Stack`, like Schedule, so the screen can drive a native header) when the tab
+is direct and `app/(tabs)/others/diary.tsx` inside Others (`diary` is an
+`OVERFLOW_TAB_KEYS` entry; see `docs/navigation.md` for placement). One
+segmented control splits it into **People** | **Companies**. There is no
+directory to browse: people get into the diary only by a badge scan. The
+`?view=people` / `?view=companies` route parameter opens a segment directly.
+Pull-to-refresh, focus and foregrounding refetch. Nothing is written to the
+offline cache, so a profile hidden later cannot reappear from device storage.
+
+The diary uses the system header, laid out like Activities. On iOS 26
+(`isRealLiquidGlassAvailable`) it is the transparent native bar: the list
+scrolls under it with the system scroll-edge effect. iOS has no left-aligned
+title on the bar row (`headerTitleAlign` is Android-only, and react-native-screens
+4.26 does not expose iOS 26's `inlineLarge` large-title mode), so the
+navigation title is empty and "Diario" is a leading `Stack.Toolbar.View` with
+`hidesSharedBackground` (28pt heavy, `accessibilityRole="header"`). That title
+uses a fixed black or white from the app's colour scheme, not the dynamic
+label colour: iOS 26 flips a bar item's light/dark appearance with what
+scrolls behind it, which turned a dynamic-colour title white for a moment over
+the blue scan pill (Activities has the same fix). The native search
+(`headerSearchBarOptions`, `integratedButton` placement) and the favourites
+star, a native `Stack.Toolbar.Button` (`star` / `star.fill`) drawn as the same
+circle as the search button, sit on the right. Android and earlier iOS use
+`LegacyScreenHeader`: the title, a glass star toggle and the search button that
+expands into the field. Search and the star apply to People only, and only
+once it has someone to search; on Companies the native search and the star are
+removed (`LegacyScreenHeader`'s `searchEnabled` hides its search button, and a
+44pt spacer keeps the title row's height) and leaving People clears the query.
+Below the header, the scroll content starts with the shared scan pill
+(`BadgeLinkActions`, as on the scanner screens), then the People | Companies
+control, then the list.
+
+**People** lists the `kind: "person"` entries of `GET /api/me/diary` (favourites
+first, then newest) and a quiet unavailable row for a hidden profile. Saving
+and favouriting are separate: the star (`components/favourite-star.tsx`, drawn
+as a filled/outline path on Android, whose Material font only has the outline
+glyph) only marks a saved person and drives the Favourites filter; the row menu
+holds Note (500 characters; `components/diary-note-editor.tsx` is a native
+page sheet with circular Cancel and Save and a field above the keyboard, the
+same editor for people and stands) and an explicit "Remove from diary" with
+confirmation. Un-starring never removes anyone. Search filters saved cards
+locally by name, headline, project, challenges, location and the owner's note,
+ignoring accents and case; cards never carry an email, so contact details are
+not searchable. Rows (`components/diary-person-row.tsx`) are one full-width
+pressable that opens the profile; the trailing star and menu are separate
+siblings so they never also open it. A profile hidden after it was saved keeps
+only the menu (no star). The diary's header owns the status-bar area on both
+platforms; the profile keeps an Android status-bar scrim, so scrolled content
+never slides behind the clock.
+
+`app/people/[id].tsx` (`components/person-profile-screen.tsx`) is a saved
+person's full profile from `GET /api/directory/:userId` (the only directory
+route left; there is no list and no Save, since only a scan adds someone):
+large photo or initials, name, headline, Favourite / Note / CV tiles (the Note
+tile reads "Edit note" once a note exists, and the note section appears only
+then), bio, links, location (a `mappin`), project or work group, challenges and
+"Remove from diary", which then returns to the diary. iOS uses the transparent native detail
+header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
+no bar covers the centred avatar; Android floats its own glass back button.
+That public photo uses the same `ProfileAvatarCollapse` overlay as the signed-in
+account: Reanimated maps 120 pt of upward scroll to the shared mask and dark
+cover progress. A native `MaskedView` clips the original cubic keyframes from
+Telegram's `UserAvatarMask` (`lib/telegram-avatar-mask.json`), evaluated on the
+UI thread rather than approximating the connection with a circle/capsule union.
+The source asset is TelegramMessenger/Telegram-iOS's UserAvatarMask animation;
+its two path tracks retain their original 512-point coordinates, timing and
+layer lifetime. The canvas converges to the cutout's lower edge as in Swift's
+`PeerInfoHeaderNode`; it does not paint a replacement system island. A black
+backing follows mask progress, with the separate `-0.25 + progress * 1.55`
+fade curve and the radial gradient stops from `DynamicIslandBlurNode`.
+The React Native cover currently uses dark paint rather than UIKit's animated
+native blur. Static photos and initials share the mask; optional live avatar
+children remain inside it.
+On iOS, the target uses window-space safe-area geometry because UIKit does not
+expose the Dynamic Island frame to apps: the iPhone 17 Pro target is centered at
+125.33 × 36.67 pt with a 14 pt top offset, and the iPhone 15 class uses 125 ×
+36.67 pt with an 11.33 pt top offset. The avatar and target are both measured in
+the same `measureInWindow` coordinate space, so the collapsed mask lines up with
+the cutout instead of drifting by the host view's safe-area inset. Android uses
+common punch-hole model names and tall display-cutout insets. The target remains
+configurable with `cameraCutoutFrame` for OEM camera placements that Expo does
+not expose. Devices without a detected cutout and landscape layouts finish as a
+compact circle below the safe area. Reduced Motion keeps the circular mask and
+uses the simpler position/scale transition.
+The CV route needs the session, so it is
+downloaded with the session cookie (`expo-file-system`) into the cache and shown
+in the in-app viewer (`components/cv-viewer.tsx`): a page-sheet modal titled
+with the person's name, a circular close button, and pages that scroll with
+pinch and double-tap zoom, rendered by the native `react-native-pdf` (with its
+peer `react-native-blob-util`). Share stays in the viewer header for anyone who
+wants the file. The native reader is imported only when the CV viewer opens, so
+Expo Go or a development client missing the native module does not block profile
+screens; that viewer shows the normal CV error instead. A CV that is gone or no
+longer shared (404) shows "Profile not available"; any other failure offers
+Retry. **Native dependency:** adding `react-native-pdf` means the development
+client and store builds must be rebuilt; Jest mocks it in `jest.setup.js`. The
+app does not show the user's own
+CV anywhere yet, so the viewer has one caller. A hidden profile and a person the reader may not open both answer 404
+and show one "Profile not available" state. Photos are authenticated API
+routes: `lib/directory.ts` fetches them with the session and shows them from
+memory (Android's image pipeline drops a `Cookie` header), never from disk.
+
+**Companies** is a sticker album (`components/company-album.tsx`) from
+`GET /api/me/diary/sponsors`: a progress ring with collected / total, then a
+three-column grid. Collected companies are full-colour logos on a white disc
+and open a company sheet (logo, collected date, Favourite / Note (or Edit
+note) / Web, the
+description, challenges, note and "Remove from collection"); companies still to
+find are dashed slots with a silhouette of the logo, a lock and their name.
+Stand favourites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.
 
 Scanning follows R008: the primary "Scan with NFC" control opens the existing
 reader immediately (`lib/nfc-reader.ts`, UID only, never writes or claims the
 tag; `lib/nfc-uid.ts` normalization), one tap from the list. "Scan QR code"
-(the gated `QrCamera`) and "Enter code" sit in the compact ellipsis menu. On
-hardware without NFC the primary control becomes "Scan QR code". Cancelling any
+(the gated `QrCamera`) and "Enter code" sit in the compact ellipsis menu.
+"Enter code" opens the shared `ScannerCodeEntry` with `appearance="system"`
+(the light/dark card of the note editor, not the dark camera card) and a title
+that fits badges and stand tags alike. On hardware without NFC the primary
+control becomes "Scan QR code". Cancelling any
 input sends nothing. Each scan is `POST /api/me/diary/scan` with a fresh
-`Idempotency-Key`; the saved card appears in a Saved section at the top with
-its favourite and note actions. Every error code (`diary_code_unknown`,
+`Idempotency-Key`. A saved person is pinned in a Saved section at the top of
+People; a collected stand switches to Companies, where its badge springs in
+with a fading halo and a success haptic. Every error code (`diary_code_unknown`,
 `badge_revoked`, `profile_not_shared`, `stand_unavailable`, `diary_self`, 403
-for an account without event access, 429) maps to its own localized alert (`lib/diary.ts`); none names a person.
-Badges, stand tags and the staff scanners share the NFC-A UID encoding, so a
-stand tag is never accepted as a badge (`diary.md`). Physical NFC and camera
-verification is still pending; tests mock both (`lib/diary.test.ts`,
-`test/ui/diary-screen.test.tsx`).
+for an account without event access, 429) maps to its own localized alert
+(`lib/diary.ts`); none names a person. Badges, stand tags and the staff
+scanners share the NFC-A UID encoding, so a stand tag is never accepted as a
+badge (`diary.md`).
+
+`apiFetch` returns API timestamps as `Date` objects (Better Auth's client JSON
+parser revives ISO strings), so diary ordering goes through `timestampOf`
+rather than string comparison. Menus use `MenuTriggerIcon` (`native-ui.tsx`)
+as their visible trigger: a `Pressable` inside `MenuView` takes the touch
+before the menu on Android, so the menu never opened.
+
+Physical NFC and camera verification is still pending; tests mock both
+(`lib/diary.test.ts`, `lib/directory.test.ts`, `test/ui/diary-screen.test.tsx`,
+`test/ui/person-profile.test.tsx`).
+
+### Company tags (#935)
+
+Company tags are what attendees scan to collect a company in their Diary
+([`diary.md`](./diary.md#company-tags)): NFC tags or wristbands linked by
+serial number, and printed QR codes. Staff with `sponsors:manage`
+(`canManageStands` in `lib/tabs.ts`, the same gate as the web Company tags
+page) open Account → Staff → Company tags (`components/stands-screen.tsx`,
+routed as `app/(tabs)/others/stands.tsx`). The screen lists
+`GET /api/enterprises/stands` alphabetically with a name search (accent- and
+case-insensitive), each row showing the logo, the NFC and QR counts and "Not
+scannable" when staff have not turned scanning on.
+
+**Provisioning a tag.** Each row's "Link tag" starts reading at once (R008).
+One tap (`startCompanyTagSession` in `lib/company-tag-nfc.ts`, serialized with
+the other scanners by `runExclusiveNfcSession`):
+
+1. reads the UID (iOS tag-reader session; Android NDEF or NFC-A);
+2. links it: `POST /api/enterprises/:id/stand-tags` `{ kind: "nfc", uid }`
+   with a fresh `Idempotency-Key`. A 409 stops here with nothing written and
+   says whether the wristband is already someone's badge ("use an unassigned
+   one") or already a company tag (`standLinkErrorKey`, from `usedBy`);
+3. writes an NDEF message with a URI record
+   `https://<EXPO_PUBLIC_EVENT_WEBSITE_URL host>/s/<UID>` and an Android
+   Application Record for the release package, then reads it back and
+   compares the bytes.
+
+Writing is safe by construction: a tag that is empty or only holds the badge
+claim record (`nfc-badge-claim.ts`) is written directly; one that already
+holds this link is left alone; one holding other data is linked and then
+asks "Replace the data on this tag?" — Replace needs a second tap of the same
+tag (a different UID writes nothing), Keep leaves the data and says the tag
+won't open hackOS by itself. A read-only or locked tag, or one without NDEF
+support, stays linked by serial and says scanning it from the Diary still
+works; so does a write that fails its read-back. A failed read of existing
+records skips writing rather than treating unreadable content as empty.
+Cancellation while the server links the serial also skips the subsequent write.
+On iOS the next scanner waits for Core NFC's session-closed event after a
+company-tag session, just as it does after a badge read.
+The result line offers "Link another" for the same company, so several tags or wristbands are linked in a
+row without leaving the screen. On hardware without NFC the actions stay
+disabled and one line points to serial-number entry on the web. QR codes are
+generated and printed from the web.
+
+**Opening the app from a tag.** The link opens `app/s/[code].tsx`, which is
+outside the session guard: signed in, it sends the code to the Diary
+(`?view=companies&collect=<code>`, `collectCompanyTagHref`), which collects it
+through `POST /api/me/diary/scan` once and celebrates on the Companies album;
+signed out, it keeps the code (`lib/company-tag-link.ts`, in memory) and
+`RootLayout` resumes it after sign-in. Native wiring in `app.config.ts`:
+
+- iOS: the `react-native-nfc-manager` plugin with `includeNdefEntitlement:
+  true` (NDEF and TAG reader formats) and `applinks:<host>` next to
+  `webcredentials` in `associatedDomains`; the web serves the matching
+  `apple-app-site-association` (`applinks` for `/s/*`);
+- Android: `plugins/withAndroidCompanyTagLinks.js` adds a VIEW + BROWSABLE
+  `autoVerify` filter and an `NDEF_DISCOVERED` filter for
+  `https://<host>/s/…` to the main activity, so a tapped tag hands its link to
+  the app; the badge `TECH_DISCOVERED` filter (`withAndroidNfcTagClaim.js`) is
+  unchanged. App Link verification needs `ANDROID_APP_CERT_SHA256` on the web
+  ([`deploy/README.md`](../deploy/README.md)). The AAR makes Android open the
+  app even before verification.
+
+These native changes need a new build. The flow is covered by
+`lib/company-tag-nfc.test.ts` (NDEF message, write, read-back, overwrite and
+locked-tag paths with `react-native-nfc-manager` mocked),
+`test/ui/stands-screen.test.tsx`, `test/ui/company-tag-link.test.tsx`,
+`lib/company-tag-link.test.ts`, `test/company-tag-links-plugin.test.tsx`, the
+Diary `collect` test and `lib/tabs.test.ts`. It has not been tested on NFC
+hardware, and the universal/app links have not been opened on a device or
+simulator build yet.
 
 ## Operator screens
 
@@ -1090,6 +1294,11 @@ physical iOS/Android and EAS verification remains a release-gate task in
   that matches iOS SF Symbol badge behavior without altering geometry. (issue #625)
 
 ## Other infrastructure
+
+- `lib/app-version.ts` shows the installed binary's version and a seven-character
+  commit in Sign in and Account. `app.config.ts` captures EAS/CI commit metadata,
+  falling back to the checkout's HEAD when building locally; builds without Git
+  metadata retain the version alone.
 
 - `lib/i18n.tsx` — react-i18next wrapper (`useLocale()` keeps the original
   `{ language, setLanguage, t }` shape) reading `packages/shared/locales/

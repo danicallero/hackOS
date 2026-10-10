@@ -422,10 +422,13 @@ ordinary text, not status pills; reserve badges for meaningful changing state.
   In the collapsed icon rail the labels reduce to non-interactive separators
   and every destination remains directly reachable.
 - The footer is an account utility row: identity is text-first (name and email,
-  no fabricated initials or fallback avatar); the appearance control sits at
-  the row's trailing edge. The account menu contains Profile, the quick
-  language switcher, and Sign out. On the icon rail, text can hide but the
-  account action remains a labelled icon.
+  no fabricated initials or fallback avatar). When the person has uploaded an
+  account photo it leads the row as a small `UserAvatar`, and the account menu
+  header repeats it; without one the row stays text only. The appearance
+  control sits at the row's trailing edge. The account menu contains Profile,
+  the quick language switcher, and Sign out. On the icon rail, text can hide
+  but the account action remains a labelled control: the photo when there is
+  one, otherwise the user icon.
 
 ```tsx
 <SectionCard
@@ -595,6 +598,9 @@ without context are not an adequate mobile adaptation.
 - No decorative page symbol by default. `leading` is a real record identity
   (logo/photo); section icons are optional scanning aids when several distinct
   domains appear together, not mandatory decoration. Never fabricate avatars.
+  When the reader may edit that image (user staff on a person's record), the
+  avatar itself opens a small change/remove menu, marked with a camera badge;
+  it never carries other page actions.
 - Status belongs next to the subject it describes. A count is neutral text
   with tabular numerals; email/date/ownership are metadata. A description only
   earns space when it explains policy, risk, consequence or an unfamiliar state.
@@ -643,6 +649,9 @@ Keep actual multi-record objects independently bounded when ownership matters.
 - The live statistics activity chart can expand to the viewport minus 32 px,
   using the shared modal focus and close controls. This is a focused read-only
   chart view, not a record editor.
+- The CV viewer is the other read-only document view: up to 1152 px wide and
+  the viewport height minus 32 px on desktop, the whole screen below `sm`,
+  with the PDF as its only content.
 - Modal `sm`: 384 px, short confirmations/decisions; `md` (default): 512 px,
   compact forms. `lg`: 672 px, exceptional paired fields/review content; `xl`:
   896 px, existing specialized review tools only. Larger sizes are not a
@@ -857,6 +866,9 @@ Tables and lists:
   trailing edge, close to the side-panel origin.
 - User tables stay text-first when no profile image exists; do not synthesize
   initials into avatar circles, which adds height without adding identity.
+  A real account photo leads the name cell (`UserAvatar`, decorative beside
+  the visible name). Initials belong only where the photo itself is the
+  subject, such as the photo editor and the mobile Account header.
 - An inline-editable grid navigates like a spreadsheet: arrows move between
   cells, Tab/Enter commit and move, Escape reverts — and both the row-selection
   checkbox and the row actions are cells too, so nothing in a row needs a

@@ -3,7 +3,7 @@
     "name": "hackOS",
     "slug": "hackos",
     "description": "The HackUDC participant and event operations app.",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hackos",
@@ -12,7 +12,7 @@
       "icon": "./assets/icon-ios.icon",
       "supportsTablet": true,
       "bundleIdentifier": "com.hackudc.os",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "appleTeamId": "P88YRBYY9T",
       "associatedDomains": ["webcredentials:os.hackudc.com"],
       "config": {
@@ -33,7 +33,7 @@
       "predictiveBackGestureEnabled": false,
       "permissions": ["android.permission.CAMERA"],
       "package": "com.hackudc.os",
-      "versionCode": 1,
+      "versionCode": 2,
       "googleServicesFile": "./google-services.json"
     },
     "web": {

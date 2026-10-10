@@ -58,13 +58,11 @@ and My profile stay, since applying (or checking an application's status) is
 exactly what they still need.
 
 **Diary** (`/people`, #935, address-book icon) is the attendee's event diary:
-saved people and sponsor stands first, with the opt-in directory (#934) as a
-secondary `Directory` tab (`?tab=directory`). It needs only current event
-access, like Wallet and Inbox, and every attendee can save people and stands
-in it. Only the Directory tab needs `directory:read` (seeded for every role
-except Sponsor and Judging Team; see `directory.md`). It sits just above
-My profile, where each person manages whether they appear in the directory.
-See [`diary.md`](./diary.md).
+the people and sponsor stands they scanned, in People and Companies tabs.
+There is no people directory to browse. It needs only current event access,
+like Wallet and Inbox, and no capability. It sits just above My profile,
+where each person decides whether to share a public profile with the people
+who scan their badge. See [`diary.md`](./diary.md).
 
 There is deliberately no dashboard/home page: `/timetable` (Schedule) is the
 landing destination after sign-in and email verification
@@ -90,7 +88,7 @@ workspace never over-grants access.
 | Live judging | Queue operations (tabs: All rooms overview · Judging queues · Room configuration), Judging, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); The Room configuration tab is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from room administration |
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | `schedule:manage`, `tv:control`, or `announcements:manage` |
-| Sponsors | Enterprises, Challenges, Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
+| Sponsors | Enterprises, Challenges, Company tags (`/company-tags`), Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Company tags: `sponsors:manage` only — reps see their company's tags on its Tags tab, #935; Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
 | Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours) (each tab within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
 | Access and audit | Users, Permissions, Audit log | `users:read`, `permissions:manage`, `audit:read` |
 
@@ -169,7 +167,10 @@ separate `Others` circle is needed. The full route registry remains mounted so
 hidden destinations stay routable:
 
 - **Non-operator account**: schedule, wallet, notifications, **Diary** (#935,
-  [`diary.md`](./diary.md)) and **Account** are direct; with a personal queue
+  [`diary.md`](./diary.md); People and Companies segments only, with no
+  directory to browse, opened directly with `?view=companies`; the direct tab is
+  `app/(tabs)/diary/`, its own Stack for the native header and search) and
+  **Account** are direct; with a personal queue
   the set grows to six, so Diary and Account move to Others. **My queue** is visible to participants even before their first
   queue entry so they can see the empty state and tutorial; mentors, sponsors,
   and other accounts only see it once they have an actual queue entry. Wallet
@@ -181,7 +182,11 @@ hidden destinations stay routable:
   **"Others" overflow selector** holds eligible personal Queue, Wallet,
   Diary, Account, and any queue operations destination as pseudo-tabs. Account's
   Statistics destination is the staff operations hub for the person finder,
-  scan history, and sync reconciliation.
+  scan history, and sync reconciliation. Holders of `sponsors:manage` (with or
+  without a scanner capability) also get Account → Staff → Company tags, to
+  link NFC tags and wristbands to companies (#935, `mobile.md`); it is not a
+  tab. Company-tag links `/s/<code>` (`app/s/[code].tsx`) open outside the
+  session guard and resume after sign-in.
 - **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
   scanner capability): Queue operations is a direct tab alongside Schedule and
   Alerts; an eligible personal Queue, Wallet, Diary and Account move to Others. If
@@ -220,6 +225,11 @@ behaviour stays sane. Direct tabs use the headless Expo Router tab state
 scroll-to-top/live-activity handlers; deeper screens inside a section still
 push normally on top of it. Pathname matching normalizes Expo Router route groups first
 (`/others/...` vs `/(tabs)/others/...`).
+
+A saved person's profile (#935) is the root-level `app/people/[id].tsx`,
+pushed above the tabs from either diary placement (direct tab or Others), the
+same way `app/schedule/[id].tsx` sits above Schedule; its back action falls
+back to `/` when there is nothing to pop.
 
 The direct surface is one continuous scrub surface: on touch-down the Liquid
 Glass selection lens follows the finger in real time, including across several

@@ -74,6 +74,10 @@ export default function TabLayout() {
         capabilities={capabilities}
         hasQueueItems={me.hasQueueItems}
         hasUnreadNotifications={hasUnreadNotifications}
+        account={{
+          name: [me.name, me.surname].filter(Boolean).join(" ") || me.email,
+          image: me.image,
+        }}
       />
     </View>
   );
