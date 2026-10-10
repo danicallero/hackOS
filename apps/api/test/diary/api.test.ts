@@ -178,8 +178,9 @@ describe("scanning people", () => {
     expect(res.json().error.code).toBe("diary_self");
   });
 
-  it("requires directory:read to save people but not stands", async () => {
-    const sponsorRole = await createRole([]);
+  it("lets any attendee save people, including a sponsor without directory:read", async () => {
+    // A seeded-style Sponsor role: event access, no directory:read (#934 D3).
+    const sponsorRole = await createRole([], { name: "Sponsor" });
     const rep = await createUser();
     await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [
       rep,
@@ -187,8 +188,14 @@ describe("scanning people", () => {
     ]);
     const ana = await person("Ana");
     const res = await scan(ana.badge, rep);
-    expect(res.statusCode).toBe(403);
-    expect(res.body).not.toContain("Ana");
+    expect(res.statusCode).toBe(201);
+    expect(res.json().person).toMatchObject({ userId: ana.id, displayName: "Ana S." });
+    expect((await list(rep)).json().items[0].person.userId).toBe(ana.id);
+
+    const hidden = await person("Hidden", { visible: false });
+    const refused = await scan(hidden.badge, rep);
+    expect(refused.json().error.code).toBe("profile_not_shared");
+    expect(refused.body).not.toContain("Hidden");
 
     const acme = await enterprise("Acme");
     await standTag(acme, "04ACAC00000001");
@@ -284,12 +291,14 @@ describe("saving from the directory", () => {
     expect(await rowCount()).toBe(1);
   });
 
-  it("requires directory:read", async () => {
+  it("is open to any attendee but not to accounts without event access", async () => {
     const ana = await person("Ana");
     const role = await createRole([]);
-    const reader = await createUser();
-    await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [reader, role]);
-    expect((await saveFromDirectory(ana.id, reader)).statusCode).toBe(403);
+    const attendee = await createUser();
+    await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [attendee, role]);
+    expect((await saveFromDirectory(ana.id, attendee)).statusCode).toBe(201);
+    const outsider = await createUser();
+    expect((await saveFromDirectory(ana.id, outsider)).statusCode).toBe(403);
   });
 });
 

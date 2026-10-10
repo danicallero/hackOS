@@ -775,7 +775,7 @@
   "diaryScanNotShared": "This person doesn't share a profile.",
   "diaryScanStandUnavailable": "This sponsor isn't available yet.",
   "diaryScanSelf": "That's your own badge.",
-  "diaryScanPeopleForbidden": "Your account can't save people.",
+  "diaryForbidden": "Your account has no event diary.",
   "diaryScanRateLimited": "Too many scans. Try again in a minute.",
   "diaryScanError": "Couldn't save. Try again.",
   "diaryActionError": "Couldn't update the diary."

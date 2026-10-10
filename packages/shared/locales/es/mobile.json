@@ -775,7 +775,7 @@
   "diaryScanNotShared": "Esta persona no comparte su perfil.",
   "diaryScanStandUnavailable": "Este patrocinador aún no está disponible.",
   "diaryScanSelf": "Es tu propia acreditación.",
-  "diaryScanPeopleForbidden": "Tu cuenta no puede guardar personas.",
+  "diaryForbidden": "Tu cuenta no tiene diario del evento.",
   "diaryScanRateLimited": "Demasiados escaneos. Inténtalo en un minuto.",
   "diaryScanError": "No se pudo guardar. Inténtalo de nuevo.",
   "diaryActionError": "No se pudo actualizar el diario."

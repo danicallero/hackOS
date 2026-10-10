@@ -647,8 +647,8 @@ hardware without NFC the primary control becomes "Scan QR code". Cancelling any
 input sends nothing. Each scan is `POST /api/me/diary/scan` with a fresh
 `Idempotency-Key`; the saved card appears in a Saved section at the top with
 its favourite and note actions. Every error code (`diary_code_unknown`,
-`badge_revoked`, `profile_not_shared`, `stand_unavailable`, `diary_self`, 403,
-429) maps to its own localized alert (`lib/diary.ts`); none names a person.
+`badge_revoked`, `profile_not_shared`, `stand_unavailable`, `diary_self`, 403
+for an account without event access, 429) maps to its own localized alert (`lib/diary.ts`); none names a person.
 Badges, stand tags and the staff scanners share the NFC-A UID encoding, so a
 stand tag is never accepted as a badge (`diary.md`). Physical NFC and camera
 verification is still pending; tests mock both (`lib/diary.test.ts`,

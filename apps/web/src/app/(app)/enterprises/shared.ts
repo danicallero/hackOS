@@ -56,7 +56,8 @@ export const ENTERPRISE_TAB_ALIASES: Partial<Record<string, EnterpriseTab>> = {
 
 /**
  * Challenges list only what a manager or the enterprise's own rep can load;
- * anyone else would get an empty tab (H43, H44).
+ * anyone else would get an empty tab (H43, H44). Reps also generate their own
+ * stand tags (#935); the page itself only loads for their own enterprise.
  */
 export function enterpriseTabs({
   canManage,
@@ -69,6 +70,7 @@ export function enterpriseTabs({
     "profile",
     ...(canManage || isSponsorRep ? (["challenges"] as const) : []),
     "judges",
-    ...(canManage ? (["members", "stand"] as const) : []),
+    ...(canManage ? (["members"] as const) : []),
+    ...(canManage || isSponsorRep ? (["stand"] as const) : []),
   ];
 }

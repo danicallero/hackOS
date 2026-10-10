@@ -135,7 +135,7 @@ export default function EnterpriseDetailPage() {
           )}
           <TabsTrigger value="judges">{t("judges")}</TabsTrigger>
           {canManage && <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>}
-          {canManage && <TabsTrigger value="stand">{t("standTags")}</TabsTrigger>}
+          {tabs.includes("stand") && <TabsTrigger value="stand">{t("standTags")}</TabsTrigger>}
         </TabBar>
         <TabsContent value="profile" className="space-y-6 pt-2">
           <EditCard
@@ -158,7 +158,7 @@ export default function EnterpriseDetailPage() {
             <MembersCard enterpriseId={enterprise.id} />
           </TabsContent>
         )}
-        {canManage && (
+        {tabs.includes("stand") && (
           <TabsContent value="stand" className="pt-2">
             <StandTagsCard enterpriseId={enterprise.id} enterpriseName={enterprise.name} />
           </TabsContent>

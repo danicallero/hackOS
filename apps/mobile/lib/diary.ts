@@ -85,7 +85,7 @@ export function diaryScanErrorKey(error: unknown): MessageKey {
   if (!(error instanceof ApiError)) return "diaryScanError";
   const known = error.code ? SCAN_ERROR_KEYS[error.code] : undefined;
   if (known) return known;
-  if (error.status === 403) return "diaryScanPeopleForbidden";
+  if (error.status === 403) return "diaryForbidden";
   if (error.status === 429) return "diaryScanRateLimited";
   return "diaryScanError";
 }

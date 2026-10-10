@@ -32,10 +32,12 @@ Module: `apps/api/src/modules/diary/`; stand tags live in
   owner; other users get 404. Staff have no route to read diaries.
 - **No notification.** The scanned person is not told, and no realtime event
   carries diary data.
-- **Directory access still applies to people.** Saving or seeing people needs
-  `directory:read` (#934 D3: Sponsor and Judging Team roles do not have it by
-  default). An attendee without it keeps a stands-only diary, and person
-  cards they saved earlier read as unavailable.
+- **Every attendee may save people.** Saving and seeing people only needs
+  event access, so Sponsor and Judging Team attendees, who lack
+  `directory:read` (#934 D3), save people too (owner decision on #935). The
+  visibility rules above still decide what any of them can see. Browsing the
+  directory itself keeps its `directory:read` gate: scanning someone's badge
+  is a deliberate in-person exchange, while browsing everyone is not.
 - **Not shared with sponsors.** Scanning a stand gives the attendee the
   sponsor's public card; nothing about the attendee reaches the sponsor.
 - **Enumeration.** Scan lookups are rate-limited to 20 per minute per account
@@ -83,8 +85,8 @@ rotation refuse a stand code (`assertNotStandTag`).
 3. a ticket token of an active account;
 4. otherwise `diary_code_unknown` (404).
 
-People then need `directory:read` (403) and a currently visible profile
-(`profile_not_shared`); the caller's own badge answers `diary_self` (409). A
+People then need a currently visible profile (`profile_not_shared`); the
+caller's own badge answers `diary_self` (409). A
 new entry answers 201, an existing one 200 with the stored favourite and note.
 
 ## Access
@@ -93,12 +95,19 @@ new entry answers 201, an existing one 200 with the stored favourite and note.
 | --- | --- |
 | `GET /api/me/diary` | authenticated + event access |
 | `POST /api/me/diary/scan` | authenticated + event access, `diary-scan` rate limit, `Idempotency-Key` |
-| `POST /api/me/diary/people` | `directory:read` + event access, `Idempotency-Key` |
+| `POST /api/me/diary/people` | authenticated + event access, `Idempotency-Key` |
 | `PATCH /api/me/diary/:entryId` | owner + event access, `Idempotency-Key` |
 | `DELETE /api/me/diary/:entryId` | owner + event access, `Idempotency-Key` |
-| `GET /api/enterprises/:id/stand-tags` | `sponsors:manage` |
-| `POST /api/enterprises/:id/stand-tags` | `sponsors:manage`, `Idempotency-Key`, audited |
-| `DELETE /api/enterprises/:id/stand-tags/:tagId` | `sponsors:manage`, `Idempotency-Key`, audited |
+| `GET /api/enterprises/:id/stand-tags` | enterprise access: that enterprise's sponsor reps or `sponsors:manage` |
+| `POST /api/enterprises/:id/stand-tags` | enterprise access, `Idempotency-Key`, audited |
+| `DELETE /api/enterprises/:id/stand-tags/:tagId` | enterprise access, `Idempotency-Key`, audited |
+
+Stand tags use the same `enterprise-access` policy as editing the enterprise
+profile (`sponsors/access.ts`): a sponsor representative generates QR tokens
+and links NFC tags for their own stand only (another enterprise answers 403,
+and a tag id from another enterprise answers 404), while staff with
+`sponsors:manage` manage every enterprise. Every write is audited with its
+actor.
 
 No new capability exists: the diary uses the event-access gate of
 `GET /api/me/public-profile`. Writes lock the owner's `users` row and refuse
@@ -127,8 +136,14 @@ are disabled while their request runs and every write sends an
 the `directory` topic's `domain.changed` and when the window regains focus.
 Without event access it shows access denied.
 
-The enterprise page has a Stand tab (`stand-tags-card.tsx`, `sponsors:manage`
-only): link an NFC tag by UID (separators stripped, uppercased; a malformed or
+Person cards render for every attendee; only the Directory tab needs
+`directory:read`, so an attendee without it sees the people they saved by
+scanning on mobile but cannot browse the directory.
+
+The enterprise page has a Stand tab (`stand-tags-card.tsx`) for staff with
+`sponsors:manage` and for the enterprise's own sponsor reps (the page only
+loads for their own enterprise). Mobile has no enterprise screen, so reps
+manage stand tags on the web: link an NFC tag by UID (separators stripped, uppercased; a malformed or
 already-used code shows an inline error), generate a QR code shown with
 `qrcode.react` and downloadable as SVG, and remove a tag after confirmation.
 

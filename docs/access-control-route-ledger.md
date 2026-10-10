@@ -8,9 +8,9 @@ The runtime has **432 non-HEAD application route rows** plus the single Better A
 | --- | ---: |
 | public | 21 |
 | token | 12 |
-| authenticated | 84 |
-| capability | 240 |
-| contextual | 75 |
+| authenticated | 85 |
+| capability | 236 |
+| contextual | 78 |
 | **total** | **432** |
 
 Public/token snapshot: public rows are health, telemetry, public content/announcement/TV/invalidation only; token rows are invite and reusable account-link lookup/acceptance, confirmation, verification resend, scoped wallet access, and Apple PassKit protocol flows. The sole exemption is Better Auth's generated `/api/auth/*` catch-all.
@@ -108,9 +108,9 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | POST | `/api/enterprises/:id/queue-groups/:queueGroupId/split` | contextual:enterprise-judge-manage (params.id) + email-verification:caller |
 | POST | `/api/enterprises/:id/queue-groups/merge` | contextual:enterprise-judge-manage (params.id) + email-verification:caller |
 | POST | `/api/enterprises/:id/queue-groups/preview-merge` | contextual:enterprise-judge-manage (params.id) + email-verification:none |
-| GET | `/api/enterprises/:id/stand-tags` | capability:sponsors:manage |
-| POST | `/api/enterprises/:id/stand-tags` | capability:sponsors:manage + email-verification:caller |
-| DELETE | `/api/enterprises/:id/stand-tags/:tagId` | capability:sponsors:manage + email-verification:caller |
+| GET | `/api/enterprises/:id/stand-tags` | contextual:enterprise-access (params.id) |
+| POST | `/api/enterprises/:id/stand-tags` | contextual:enterprise-access (params.id) + email-verification:caller |
+| DELETE | `/api/enterprises/:id/stand-tags/:tagId` | contextual:enterprise-access (params.id) + email-verification:caller |
 | GET | `/api/enterprises/mine` | authenticated |
 | POST | `/api/enterprises/visibility` | capability:sponsors:manage + email-verification:caller |
 | GET | `/api/event` | capability:anyOf(event:manage,venue:manage,wallet:manage,presence:manage,invites:manage,intolerances:manage) |
@@ -174,7 +174,7 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | GET | `/api/me/diary` | authenticated |
 | DELETE | `/api/me/diary/:entryId` | authenticated + email-verification:caller |
 | PATCH | `/api/me/diary/:entryId` | authenticated + email-verification:caller |
-| POST | `/api/me/diary/people` | capability:directory:read + email-verification:caller |
+| POST | `/api/me/diary/people` | authenticated + email-verification:caller |
 | POST | `/api/me/diary/scan` | authenticated + email-verification:caller |
 | GET | `/api/me/logistics/stats` | capability:anyOf(accredit:scan,presence:scan,activity:scan,logistics:stats,schedule:manage) |
 | GET | `/api/me/meal-plan` | authenticated |

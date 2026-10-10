@@ -326,13 +326,13 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
   r.get(
     "/api/enterprises/:id/stand-tags",
     {
-      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: manage,
+      ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
+      preHandler: requireEnterpriseAccess(enterpriseParam),
       schema: {
         params: enterpriseIdParam,
         summary: "List stand tags",
         description:
-          "NFC tag UIDs and printable QR tokens that identify this enterprise's stand. Attendees scan one to save the sponsor's public card in their event diary (#935).",
+          "NFC tag UIDs and printable QR tokens that identify this enterprise's stand. Attendees scan one to save the sponsor's public card in their event diary. Readable by the enterprise's own sponsor representatives or a global sponsor administrator (#935).",
       },
     },
     async (req) => ({ tags: await listStandTags(actor(req.userId), req.params.id) }),
@@ -341,14 +341,14 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
   r.post(
     "/api/enterprises/:id/stand-tags",
     {
-      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: [manage, requireIdempotencyKey],
+      ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
+      preHandler: [requireEnterpriseAccess(enterpriseParam), requireIdempotencyKey],
       schema: {
         params: enterpriseIdParam,
         body: standTagBody,
         summary: "Add a stand tag",
         description:
-          "`kind: nfc` links a tag by its 7-byte UID (hex; separators ignored, stored uppercase like badges). `kind: qr` generates a printable `STAND-…` token. A code already used by a stand, a badge (current or rotated away) or a ticket answers 409. Audited (#935).",
+          "`kind: nfc` links a tag by its 7-byte UID (hex; separators ignored, stored uppercase like badges). `kind: qr` generates a printable `STAND-…` token. A code already used by a stand, a badge (current or rotated away) or a ticket answers 409. The enterprise's own sponsor representatives or a global sponsor administrator; audited (#935).",
       },
     },
     async (req, reply) => {
@@ -361,13 +361,13 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/enterprises/:id/stand-tags/:tagId",
     {
-      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: [manage, requireIdempotencyKey],
+      ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
+      preHandler: [requireEnterpriseAccess(enterpriseParam), requireIdempotencyKey],
       schema: {
         params: standTagParams,
         summary: "Remove a stand tag",
         description:
-          "Unlinks a stand tag; scanning it afterwards is an unknown code. Diary entries already saved for the sponsor stay. Audited (#935).",
+          "Unlinks a stand tag; scanning it afterwards is an unknown code. Diary entries already saved for the sponsor stay. The enterprise's own sponsor representatives or a global sponsor administrator; audited (#935).",
       },
     },
     async (req, reply) => {

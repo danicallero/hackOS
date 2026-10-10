@@ -1,8 +1,8 @@
 "use client";
 
 // Sponsor stand tags (#935): NFC tag UIDs and printable QR tokens that
-// attendees scan to save this sponsor in their event diary. Managed by staff
-// with sponsors:manage only.
+// attendees scan to save this sponsor in their event diary. Managed by the
+// enterprise's own sponsor reps or staff with sponsors:manage.
 
 import { EVENTS } from "@hackos/shared/events";
 import { ContactlessPaymentIcon } from "@phosphor-icons/react/dist/csr/ContactlessPayment";

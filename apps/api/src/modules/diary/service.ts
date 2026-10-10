@@ -25,7 +25,7 @@ export interface DiaryEntry {
   note: string | null;
   createdAt: string;
   updatedAt: string;
-  /** The person's current directory card; null while it is not visible to this reader. */
+  /** The person's current directory card; null while their profile is not visible. */
   person: DirectoryEntry | null;
   /** The sponsor's current public card; null while the sponsor is not revealed. */
   sponsor: SponsorCard | null;
@@ -43,19 +43,13 @@ interface EntryRow {
 
 const ENTRY_COLUMNS = `id, target_user_id, enterprise_id, starred, note, created_at, updated_at`;
 
-/** Whether the reader may see person cards (directory:read, #934 D3). */
-export interface DiaryReader {
-  userId: number;
-  canReadPeople: boolean;
-}
-
-async function present(db: Queryable, reader: DiaryReader, rows: EntryRow[]) {
-  const people = reader.canReadPeople
-    ? await visibleDirectoryEntries(
-        db,
-        rows.flatMap((row) => (row.target_user_id ? [Number(row.target_user_id)] : [])),
-      )
-    : new Map<number, DirectoryEntry>();
+async function present(db: Queryable, rows: EntryRow[]) {
+  // Every attendee may keep the people they met (#935), but only cards that
+  // are directory-visible right now are ever shown.
+  const people = await visibleDirectoryEntries(
+    db,
+    rows.flatMap((row) => (row.target_user_id ? [Number(row.target_user_id)] : [])),
+  );
   const sponsors = await visibleSponsorCards(
     db,
     rows.flatMap((row) => (row.enterprise_id ? [Number(row.enterprise_id)] : [])),
@@ -97,15 +91,15 @@ async function lockOwner(db: pg.PoolClient, userId: number): Promise<void> {
 }
 
 /** Starred first, then most recently saved. */
-export async function listDiary(reader: DiaryReader): Promise<{ items: DiaryEntry[] }> {
-  await assertAttendee(pool, reader.userId);
+export async function listDiary(owner: number): Promise<{ items: DiaryEntry[] }> {
+  await assertAttendee(pool, owner);
   const { rows } = await pool.query<EntryRow>(
     `SELECT ${ENTRY_COLUMNS} FROM diary_entries
       WHERE owner_id = $1
       ORDER BY starred DESC, created_at DESC, id DESC`,
-    [reader.userId],
+    [owner],
   );
-  return { items: await present(pool, reader, rows) };
+  return { items: await present(pool, rows) };
 }
 
 /**
@@ -114,7 +108,7 @@ export async function listDiary(reader: DiaryReader): Promise<{ items: DiaryEntr
  */
 async function save(
   db: pg.PoolClient,
-  reader: DiaryReader,
+  owner: number,
   target: { userId: number } | { enterpriseId: number },
 ): Promise<{ created: boolean; entry: DiaryEntry }> {
   const [column, value] =
@@ -123,18 +117,18 @@ async function save(
     `INSERT INTO diary_entries (owner_id, ${column}) VALUES ($1, $2)
      ON CONFLICT DO NOTHING
      RETURNING ${ENTRY_COLUMNS}`,
-    [reader.userId, value],
+    [owner, value],
   );
   const row =
     inserted.rows[0] ??
     (
       await db.query<EntryRow>(
         `SELECT ${ENTRY_COLUMNS} FROM diary_entries WHERE owner_id = $1 AND ${column} = $2`,
-        [reader.userId, value],
+        [owner, value],
       )
     ).rows[0];
   if (!row) throw new ConflictError("The diary entry could not be saved");
-  const [entry] = await present(db, reader, [row]);
+  const [entry] = await present(db, [row]);
   return { created: inserted.rows[0] !== undefined, entry: entry as DiaryEntry };
 }
 
@@ -160,67 +154,64 @@ async function personForCode(db: Queryable, code: string): Promise<number> {
  * right now; otherwise the answer is `profile_not_shared` and nothing is
  * stored. The scanned person is never notified.
  */
-export async function saveScanned(reader: DiaryReader, code: string) {
+export async function saveScanned(owner: number, code: string) {
   return withTransaction(async (db) => {
-    await lockOwner(db, reader.userId);
+    await lockOwner(db, owner);
     const enterpriseId = await standEnterpriseForCode(db, code);
     if (enterpriseId !== null) {
       const cards = await visibleSponsorCards(db, [enterpriseId]);
       if (!cards.has(enterpriseId)) {
         throw new AppError(409, "stand_unavailable", "This sponsor is not available yet");
       }
-      return save(db, reader, { enterpriseId });
-    }
-    if (!reader.canReadPeople) {
-      throw new ForbiddenError("Saving people requires access to the people directory");
+      return save(db, owner, { enterpriseId });
     }
     const userId = await personForCode(db, code);
-    if (userId === reader.userId) {
+    if (userId === owner) {
       throw new AppError(409, "diary_self", "This is your own badge");
     }
     const people = await visibleDirectoryEntries(db, [userId]);
     if (!people.has(userId)) {
       throw new AppError(409, "profile_not_shared", "This person does not share a profile");
     }
-    return save(db, reader, { userId });
+    return save(db, owner, { userId });
   });
 }
 
 /** Save someone found in the directory; hidden and missing are the same 404 (#934). */
-export async function savePerson(reader: DiaryReader, userId: number) {
+export async function savePerson(owner: number, userId: number) {
   return withTransaction(async (db) => {
-    await lockOwner(db, reader.userId);
+    await lockOwner(db, owner);
     const people = await visibleDirectoryEntries(db, [userId]);
-    if (userId === reader.userId || !people.has(userId)) {
+    if (userId === owner || !people.has(userId)) {
       throw new NotFoundError("Person not found");
     }
-    return save(db, reader, { userId });
+    return save(db, owner, { userId });
   });
 }
 
-export async function updateEntry(reader: DiaryReader, entryId: number, input: UpdateEntryInput) {
+export async function updateEntry(owner: number, entryId: number, input: UpdateEntryInput) {
   return withTransaction(async (db) => {
-    await lockOwner(db, reader.userId);
+    await lockOwner(db, owner);
     const { rows } = await db.query<EntryRow>(
       `UPDATE diary_entries
           SET starred = COALESCE($3, starred),
               note = CASE WHEN $4 THEN $5 ELSE note END
         WHERE id = $1 AND owner_id = $2
         RETURNING ${ENTRY_COLUMNS}`,
-      [entryId, reader.userId, input.starred ?? null, input.note !== undefined, input.note ?? null],
+      [entryId, owner, input.starred ?? null, input.note !== undefined, input.note ?? null],
     );
     if (!rows[0]) throw new NotFoundError("Diary entry not found");
-    const [entry] = await present(db, reader, rows);
+    const [entry] = await present(db, rows);
     return entry as DiaryEntry;
   });
 }
 
-export async function removeEntry(reader: DiaryReader, entryId: number): Promise<void> {
+export async function removeEntry(owner: number, entryId: number): Promise<void> {
   await withTransaction(async (db) => {
-    await lockOwner(db, reader.userId);
+    await lockOwner(db, owner);
     const { rowCount } = await db.query(
       `DELETE FROM diary_entries WHERE id = $1 AND owner_id = $2`,
-      [entryId, reader.userId],
+      [entryId, owner],
     );
     if (!rowCount) throw new NotFoundError("Diary entry not found");
   });

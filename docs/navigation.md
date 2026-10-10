@@ -60,9 +60,9 @@ exactly what they still need.
 **Diary** (`/people`, #935, address-book icon) is the attendee's event diary:
 saved people and sponsor stands first, with the opt-in directory (#934) as a
 secondary `Directory` tab (`?tab=directory`). It needs only current event
-access, like Wallet and Inbox; the Directory tab and saving people also need
-`directory:read` (seeded for every role except Sponsor and Judging Team; see
-`directory.md`), so those accounts keep a stands-only diary. It sits just above
+access, like Wallet and Inbox, and every attendee can save people and stands
+in it. Only the Directory tab needs `directory:read` (seeded for every role
+except Sponsor and Judging Team; see `directory.md`). It sits just above
 My profile, where each person manages whether they appear in the directory.
 See [`diary.md`](./diary.md).
 

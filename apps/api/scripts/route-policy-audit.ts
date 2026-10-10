@@ -7,9 +7,9 @@ const EXPECTED = {
   total: 432,
   public: 21,
   token: 12,
-  authenticated: 84,
-  capability: 240,
-  contextual: 75,
+  authenticated: 85,
+  capability: 236,
+  contextual: 78,
 };
 
 function table(rows: Awaited<ReturnType<typeof buildApp>>["routePolicyLedger"]): string {

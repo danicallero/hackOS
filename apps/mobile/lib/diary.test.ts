@@ -84,7 +84,7 @@ describe("diaryScanErrorKey", () => {
     ["profile_not_shared", 409, "diaryScanNotShared"],
     ["stand_unavailable", 409, "diaryScanStandUnavailable"],
     ["diary_self", 409, "diaryScanSelf"],
-    ["forbidden", 403, "diaryScanPeopleForbidden"],
+    ["forbidden", 403, "diaryForbidden"],
     ["too_many_requests", 429, "diaryScanRateLimited"],
     ["conflict", 409, "diaryScanError"],
   ])("maps %s (%i) to %s", (code, status, key) => {

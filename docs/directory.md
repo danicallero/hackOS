@@ -102,6 +102,9 @@ and response reference.
 [`diary.md`](./diary.md)); the directory is its secondary `Directory` tab
 (`?tab=directory`, shown with `directory:read`), where each row also has a
 Save action (`POST /api/me/diary/people`) that shows Saved once in the diary.
+Saving people into a diary, by scan or by id, only needs event access, so
+attendees without `directory:read` can keep the people they meet; they still
+only ever see directory-visible cards.
 That tab lists `GET /api/directory` with
 the shared `ListToolbar`: a name search, a single challenge filter (options
 from `GET /api/public/challenges`) and Previous/Next over the opaque cursor.
