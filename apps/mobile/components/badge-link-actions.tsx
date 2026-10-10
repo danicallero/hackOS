@@ -4,18 +4,41 @@ import { Pressable, View } from "react-native";
 import { GlassView } from "@/components/glass-view";
 import { ActionButton } from "@/components/native-ui";
 import { SymbolView } from "@/components/symbol";
-import { useLocale } from "@/lib/i18n";
+import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useNfcSupported } from "@/lib/use-nfc-supported";
 import { colors } from "@/theme/colors";
 
+export interface ScanActionLabels {
+  nfc: MessageKey;
+  qr: MessageKey;
+  manual: MessageKey;
+  options: MessageKey;
+}
+
+const BADGE_LABELS: ScanActionLabels = {
+  nfc: "personLinkBadgeNfc",
+  qr: "personScanBadgeCode",
+  manual: "personEnterBadgeCode",
+  options: "personBadgeOptions",
+};
+
+/**
+ * R008: NFC is the direct primary action where the hardware supports it; QR
+ * and manual entry stay in a compact native menu. Without NFC, QR becomes the
+ * primary action. Shared by badge linking (H22/H23) and the event diary (#935).
+ */
 export function BadgeLinkActions({
   onNfc,
   onAlternative,
   disabled,
+  labels = BADGE_LABELS,
+  testID = UI_TEST_IDS.scanner.linkBadge,
 }: {
   onNfc: () => void;
   onAlternative: (method: "manual" | "qr") => void;
   disabled: boolean;
+  labels?: ScanActionLabels;
+  testID?: string;
 }) {
   const { t } = useLocale();
   const nfcSupported = useNfcSupported();
@@ -28,9 +51,9 @@ export function BadgeLinkActions({
         style={{ flex: 1, borderRadius: 25, overflow: "hidden" }}
       >
         <ActionButton
-          testID={UI_TEST_IDS.scanner.linkBadge}
+          testID={testID}
           icon={nfcSupported ? "wave.3.right" : "qrcode.viewfinder"}
-          label={t(nfcSupported ? "personLinkBadgeNfc" : "personScanBadgeCode")}
+          label={t(nfcSupported ? labels.nfc : labels.qr)}
           variant="filled"
           style={{ borderRadius: 25, backgroundColor: "transparent" }}
           disabled={disabled}
@@ -42,13 +65,13 @@ export function BadgeLinkActions({
         actions={[
           {
             id: "qr",
-            title: t("personScanBadgeCode"),
+            title: t(labels.qr),
             image: "qrcode.viewfinder",
             attributes: { disabled },
           },
           {
             id: "manual",
-            title: t("personEnterBadgeCode"),
+            title: t(labels.manual),
             image: "keyboard",
             attributes: { disabled },
           },
@@ -65,7 +88,7 @@ export function BadgeLinkActions({
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={t("personBadgeOptions")}
+            accessibilityLabel={t(labels.options)}
             accessibilityState={{ disabled }}
             disabled={disabled}
             style={({ pressed }) => ({

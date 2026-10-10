@@ -212,6 +212,12 @@ emails without ever silently merging identities. Challenge↔project linkage is
 indirect, through `repo_devpost_prizes.prize` matching a challenge's
 `devpost_tags`. Full detail: [`challenges-devpost.md`](./challenges-devpost.md).
 
+### diary (#935)
+The caller's private event diary under `/api/me/diary`: people saved by
+scanning a badge/ticket or from the directory, and sponsor stands saved by
+scanning a stand tag. Cards are projected live from `directory` and the
+public sponsor profile. Full detail: [`diary.md`](./diary.md).
+
 ### directory (#934)
 Opt-in people directory: the caller's public profile (bio, links and a
 shareable CV) under `/api/me/public-profile`, the `directory:read` listing,

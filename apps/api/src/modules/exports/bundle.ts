@@ -141,6 +141,18 @@ export async function buildExportBundle(
         [subjectUserId],
       )
     ).rows[0] ?? null;
+  // #935: the subject's own event diary. Saved people appear by user id only;
+  // their cards belong to them. Entries other attendees hold about the
+  // subject are those attendees' private data and are not listed.
+  const diary = (
+    await db.query(
+      `SELECT d.id, d.target_user_id, d.enterprise_id, e.name AS enterprise_name, d.starred,
+              d.note, d.created_at, d.updated_at
+         FROM diary_entries d LEFT JOIN enterprises e ON e.id = d.enterprise_id
+        WHERE d.owner_id = $1 ORDER BY d.created_at, d.id`,
+      [subjectUserId],
+    )
+  ).rows;
   const notificationOutbox = (
     await db.query(
       `SELECT id, category, channel, status, sent_at, read_at, created_at
@@ -205,6 +217,7 @@ export async function buildExportBundle(
     applications,
     projects: { submissions, devpostParticipant },
     publicProfile,
+    diary,
     judgingParticipation,
     presence: { activityLogs, checkInLogs, timeLogs },
     meals: { redemptions: mealRedemptions },

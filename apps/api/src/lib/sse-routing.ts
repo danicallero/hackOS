@@ -66,6 +66,10 @@ export function mutationDomainForPath(url: string): string | null {
     return SSE_TOPICS.LOGISTICS;
   }
 
+  // The event diary is private to its owner and wakes no shared read model;
+  // without this, `/api/me` below would refresh every identity view (#935).
+  if (matches("/api/me/diary")) return null;
+
   // Device-token registration changes delivery plumbing only. It does not
   // change any identity read model, so invalidating `identity` here makes a
   // mobile profile refresh register the same token again and forms a request

@@ -397,6 +397,19 @@ Table devpost_prizes {
   updated_at "timestamp with time zone" [not null, default: `now()`]
 }
 
+Table diary_entries {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  enterprise_id integer
+  id integer [pk, increment, not null]
+  note text [note: '#935: private note visible only to owner_id.']
+  owner_id integer [not null]
+  starred boolean [not null, default: `false`]
+  target_user_id integer
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  Note: '#935 private event diary: people and sponsor stands an attendee saved. Cards are projected live; only the owner\'s favourite flag and note are stored.'
+}
+
 Table email_verification_tokens {
   created_at "timestamp with time zone" [not null, default: `now()`]
   email text [not null]
@@ -757,7 +770,10 @@ Table queue_entries {
   id integer [pk, increment, not null]
   position integer
   precalled_at "timestamp with time zone"
+  presentation_paused_at "timestamp with time zone"
+  presentation_paused_seconds "double precision" [not null, default: `0`]
   presentation_started_at "timestamp with time zone"
+  presentation_total_seconds integer
   priority integer [not null, default: `0`]
   repo_id integer [not null]
   room_entered_at "timestamp with time zone"
@@ -1019,6 +1035,16 @@ Table sponsor_faq {
   updated_at "timestamp with time zone" [not null, default: `now()`]
 }
 
+Table sponsor_stand_tags {
+  code text [unique, not null]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  enterprise_id integer [not null]
+  id integer [pk, increment, not null]
+  kind text [not null]
+
+  Note: '#935: NFC tag UIDs and printable QR tokens that identify an enterprise\'s stand for the event diary.'
+}
+
 Table sponsors {
   enterprise_id integer [not null]
   id integer [pk, increment, not null]
@@ -1146,6 +1172,21 @@ Table user_invite_links {
   token text [unique, not null]
   updated_at "timestamp with time zone" [not null, default: `now()`]
   wildcard_authorized boolean [not null, default: `false`, note: 'Durable proof that a wildcard holder authorized this deferred group grant.']
+}
+
+Table user_public_profiles {
+  consented_at "timestamp with time zone" [note: '#934: last transition of directory_visible from false to true.']
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  directory_visible boolean [not null, default: `false`]
+  headline text
+  location_note text
+  show_photo boolean [not null, default: `false`]
+  show_project boolean [not null, default: `true`]
+  show_surname boolean [not null, default: `false`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  user_id integer [pk, not null]
+
+  Note: '#934 directory opt-in and public fields; #935 extends it. Absence of a row = not visible.'
 }
 
 Table user_roles {
@@ -1337,6 +1378,9 @@ Ref: data_subject_requests.subject_user_id > users.id
 Ref: devpost_participants.linked_by > users.id
 Ref: devpost_participants.repo_id > repos.id
 Ref: devpost_participants.user_id > users.id
+Ref: diary_entries.enterprise_id > enterprises.id
+Ref: diary_entries.owner_id > users.id
+Ref: diary_entries.target_user_id > users.id
 Ref: email_verification_tokens.enterprise_id > enterprises.id
 Ref: email_verification_tokens.user_id > users.id
 Ref: enterprise_invite_link_redemptions.link_id > enterprise_invite_links.id
@@ -1412,6 +1456,7 @@ Ref: schedule_owners.assigned_by > users.id
 Ref: schedule_owners.schedule_id > schedule.id
 Ref: schedule_owners.user_id > users.id
 Ref: sessions.user_id > users.id
+Ref: sponsor_stand_tags.enterprise_id > enterprises.id
 Ref: sponsors.enterprise_id > enterprises.id
 Ref: sponsors.user_id > users.id
 Ref: statistics_scope_panel_role_access.role_id > roles.id
@@ -1430,6 +1475,7 @@ Ref: user_invite_link_redemptions.link_id > user_invite_links.id
 Ref: user_invite_link_redemptions.user_id > users.id
 Ref: user_invite_links.created_by > users.id
 Ref: user_invite_links.enterprise_id > enterprises.id
+Ref: user_public_profiles.user_id > users.id
 Ref: user_roles.assigned_by > users.id
 Ref: user_roles.role_id > roles.id
 Ref: user_roles.user_id > users.id

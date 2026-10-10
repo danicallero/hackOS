@@ -784,7 +784,7 @@ export function EmptyState({
 }: {
   icon: SymbolViewProps["name"];
   title: string;
-  description: string;
+  description?: string;
   action?: ReactNode;
 }) {
   return (
@@ -809,12 +809,19 @@ export function EmptyState({
       >
         {title}
       </Text>
-      <Text
-        selectable
-        style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21, textAlign: "center" }}
-      >
-        {description}
-      </Text>
+      {description ? (
+        <Text
+          selectable
+          style={{
+            color: colors.secondaryLabel,
+            fontSize: 15,
+            lineHeight: 21,
+            textAlign: "center",
+          }}
+        >
+          {description}
+        </Text>
+      ) : null}
       {action}
     </View>
   );

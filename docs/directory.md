@@ -158,7 +158,14 @@ and response reference.
 
 ## Web
 
-`/people` (`apps/web/src/app/(app)/people/`) lists `GET /api/directory` with
+`/people` (`apps/web/src/app/(app)/people/`) is the event diary (#935,
+[`diary.md`](./diary.md)); the directory is its secondary `Directory` tab
+(`?tab=directory`, shown with `directory:read`), where each row also has a
+Save action (`POST /api/me/diary/people`) that shows Saved once in the diary.
+Saving people into a diary, by scan or by id, only needs event access, so
+attendees without `directory:read` can keep the people they meet; they still
+only ever see directory-visible cards.
+That tab lists `GET /api/directory` with
 the shared `ListToolbar`: a name search, a single challenge filter (options
 from `GET /api/public/challenges`) and Previous/Next over the opaque cursor.
 `q`, `challenge` and `cursor` live in the URL so a view can be shared; writes
@@ -168,9 +175,9 @@ note; challenge chips use the localized title from those options. The search
 field resyncs from the URL only on navigation it did not write, and `q` is
 trimmed on both sides. The page refetches in place on `domain.changed` for the
 `directory` topic; a failed refresh keeps the rows and shows a toast. Paging
-is disabled while a new query loads. Without `directory:read` the page shows
-access denied and opens no request or stream; the nav entry (personal area)
-also needs event access (`docs/navigation.md`). Each row links to the
+is disabled while a new query loads. Without `directory:read` the tab is
+hidden and opens no directory request; the nav entry (personal area) needs
+event access (`docs/navigation.md`). Each directory row links to the
 person's page (the desktop row link and the whole narrow-screen row).
 
 `/people/<userId>` (`people/[userId]/person-detail.tsx`) reads

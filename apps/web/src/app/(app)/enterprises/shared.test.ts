@@ -9,14 +9,16 @@ describe("enterpriseTabs (#928, #929)", () => {
       "challenges",
       "judges",
       "members",
+      "stand",
     ]);
   });
 
-  it("shows challenges but not members to the enterprise's rep", () => {
+  it("shows challenges and stand tags but not members to the enterprise's rep", () => {
     expect(enterpriseTabs({ canManage: false, isSponsorRep: true })).toEqual([
       "profile",
       "challenges",
       "judges",
+      "stand",
     ]);
   });
 
