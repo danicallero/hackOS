@@ -1,10 +1,12 @@
 "use client";
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import type { FilterDefinition } from "@/components/common/filter-menu";
 import { ListToolbar } from "@/components/common/list-toolbar";
@@ -15,7 +17,9 @@ import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
-import type { Language } from "@/lib/types";
+import { useCan } from "@/lib/session";
+import { toast } from "@/lib/toast";
+import { type ChallengeOption, challengeTitleText } from "../projects/shared";
 import { useDirectoryParams } from "./use-directory-params";
 
 /** `DirectoryEntry` from `GET /api/directory` (#934). */
@@ -34,11 +38,6 @@ interface DirectoryPage {
   nextCursor: string | null;
 }
 
-interface ChallengeOption {
-  id: number;
-  title: Record<string, string>;
-}
-
 const PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -49,9 +48,8 @@ export function initials(name: string): string {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
-function challengeLabel(title: Record<string, string>, language: Language): string {
-  return title[language] || title.en || title.es || Object.values(title)[0] || "";
-}
+/** Localized challenge title by id; the API's `name` is the fallback. */
+type ChallengeName = (challenge: { id: number; name: string }) => string;
 
 function Person({ entry }: { entry: DirectoryEntry }) {
   return (
@@ -70,7 +68,7 @@ function Person({ entry }: { entry: DirectoryEntry }) {
   );
 }
 
-function Challenges({ entry }: { entry: DirectoryEntry }) {
+function Challenges({ entry, nameOf }: { entry: DirectoryEntry; nameOf: ChallengeName }) {
   if (entry.challenges.length === 0) return <span className="text-muted-foreground">—</span>;
   return (
     <ul className="flex flex-wrap gap-1.5">
@@ -79,14 +77,14 @@ function Challenges({ entry }: { entry: DirectoryEntry }) {
           key={challenge.id}
           className="bg-muted text-muted-foreground rounded-md px-2 py-0.5 text-xs"
         >
-          {challenge.name}
+          {nameOf(challenge)}
         </li>
       ))}
     </ul>
   );
 }
 
-function buildColumns(t: Translate): Column<DirectoryEntry>[] {
+function buildColumns(t: Translate, nameOf: ChallengeName): Column<DirectoryEntry>[] {
   return [
     { id: "name", header: t("name"), cell: (entry) => <Person entry={entry} /> },
     {
@@ -99,7 +97,11 @@ function buildColumns(t: Translate): Column<DirectoryEntry>[] {
           <span className="text-muted-foreground">—</span>
         ),
     },
-    { id: "challenges", header: t("challenges"), cell: (entry) => <Challenges entry={entry} /> },
+    {
+      id: "challenges",
+      header: t("challenges"),
+      cell: (entry) => <Challenges entry={entry} nameOf={nameOf} />,
+    },
     {
       id: "location",
       header: t("colLocation"),
@@ -113,7 +115,15 @@ function buildColumns(t: Translate): Column<DirectoryEntry>[] {
   ];
 }
 
-function PersonMobileRow({ entry, t }: { entry: DirectoryEntry; t: Translate }) {
+function PersonMobileRow({
+  entry,
+  t,
+  nameOf,
+}: {
+  entry: DirectoryEntry;
+  t: Translate;
+  nameOf: ChallengeName;
+}) {
   return (
     <div className="min-w-0 space-y-2 px-4 py-3">
       <Person entry={entry} />
@@ -126,7 +136,7 @@ function PersonMobileRow({ entry, t }: { entry: DirectoryEntry; t: Translate }) 
                 className="text-muted-foreground mt-1 size-3.5 shrink-0"
                 aria-label={t("challenges")}
               />
-              <Challenges entry={entry} />
+              <Challenges entry={entry} nameOf={nameOf} />
             </div>
           )}
           {entry.locationNote && (
@@ -143,24 +153,37 @@ function PersonMobileRow({ entry, t }: { entry: DirectoryEntry; t: Translate }) 
 
 /** Opt-in people directory over `GET /api/directory` (#934). */
 export function PeopleDirectory() {
+  const { t } = useLocale();
+  const canRead = useCan(CAPABILITIES.DIRECTORY_READ);
+  // Gate before mounting the list, so a reader without access opens no fetch or stream.
+  if (!canRead) return <AccessDenied ask={t("peopleAccessDeniedDesc")} />;
+  return <DirectoryList />;
+}
+
+function DirectoryList() {
   const { t, language } = useLocale();
   const { params, setParams } = useDirectoryParams();
   const { q, challengeId, cursor } = params;
 
   // The field echoes keystrokes immediately; the URL (and the request) follow
-  // after a short pause. An external URL change (back/forward) resets it.
+  // after a short pause. Only a URL change this field did not write
+  // (back/forward, a link) resets it — the echo of our own write must not
+  // overwrite what was typed meanwhile (R003).
   const [search, setSearch] = useState(q);
   const [trackedQ, setTrackedQ] = useState(q);
+  const [writtenQ, setWrittenQ] = useState<string | null>(null);
   if (q !== trackedQ) {
     setTrackedQ(q);
-    setSearch(q);
+    setWrittenQ(null);
+    if (q !== writtenQ) setSearch(q);
   }
   useEffect(() => {
-    if (search.trim() === q) return;
-    const handle = setTimeout(
-      () => setParams({ q: search.trim(), cursor: "" }),
-      SEARCH_DEBOUNCE_MS,
-    );
+    const next = search.trim();
+    if (next === q) return;
+    const handle = setTimeout(() => {
+      setWrittenQ(next);
+      setParams({ q: next, cursor: "" });
+    }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [search, q, setParams]);
 
@@ -192,7 +215,12 @@ export function PeopleDirectory() {
   const liveRefresh = useAutoRefresh(`/api/events/stream?topic=${SSE_TOPICS.DIRECTORY}`, [
     EVENTS.DOMAIN_CHANGED,
   ]);
-  const [page, setPage] = useState<DirectoryPage>({ items: [], nextCursor: null });
+  // `queryKey` records which query the page (and its nextCursor) belongs to.
+  const [page, setPage] = useState<DirectoryPage & { queryKey: string | null }>({
+    items: [],
+    nextCursor: null,
+    queryKey: null,
+  });
   const [loading, setLoading] = useState(true);
   const loadedKey = useRef<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -203,7 +231,8 @@ export function PeopleDirectory() {
     let cancelled = false;
     const requestKey = `${queryKey}\u0000${cursor}`;
     // A live refresh keeps the current rows visible; a new query shows the skeleton.
-    if (loadedKey.current !== requestKey) setLoading(true);
+    const isRefresh = loadedKey.current === requestKey;
+    if (!isRefresh) setLoading(true);
     setLoadError(null);
     api
       .get<DirectoryPage>("/api/directory", {
@@ -217,12 +246,19 @@ export function PeopleDirectory() {
       .then((r) => {
         if (cancelled) return;
         loadedKey.current = requestKey;
-        setPage(r);
+        setPage({ ...r, queryKey });
       })
       .catch((err) => {
         if (cancelled) return;
-        setPage({ items: [], nextCursor: null });
-        setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadPeople"));
+        const message = err instanceof ApiError ? err.message : t("couldNotLoadPeople");
+        // A failed background refresh keeps the rows already shown.
+        if (isRefresh) {
+          toast.error(message, t("columnPeople"));
+          return;
+        }
+        loadedKey.current = null;
+        setPage({ items: [], nextCursor: null, queryKey: null });
+        setLoadError(message);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -232,13 +268,21 @@ export function PeopleDirectory() {
     };
   }, [q, challengeId, cursor, queryKey, liveRefresh, retryNonce, t]);
 
-  const columns = useMemo(() => buildColumns(t), [t]);
+  const titles = useMemo(
+    () => new Map(challenges.map((c) => [c.id, challengeTitleText(c.title, language)])),
+    [challenges, language],
+  );
+  const nameOf = useCallback<ChallengeName>(
+    (challenge) => titles.get(challenge.id) || challenge.name,
+    [titles],
+  );
+  const columns = useMemo(() => buildColumns(t, nameOf), [t, nameOf]);
   const challengeOptions = useMemo(
     () =>
       challenges
         .map((challenge) => ({
           value: String(challenge.id),
-          label: challengeLabel(challenge.title, language),
+          label: challengeTitleText(challenge.title, language),
         }))
         .sort((a, b) => a.label.localeCompare(b.label)),
     [challenges, language],
@@ -258,17 +302,20 @@ export function PeopleDirectory() {
   ];
   const hasFilters = q.length > 0 || challengeId.length > 0;
   const hasPrevious = cursor.length > 0;
+  // A cursor from another query's page is never followed.
+  const nextCursor = page.queryKey === queryKey ? page.nextCursor : null;
 
   function clearFilters() {
     setSearch("");
+    setWrittenQ("");
     setParams({ q: "", challengeId: "", cursor: "" });
     document.getElementById("people-search")?.focus();
   }
 
   function goNext() {
-    if (!page.nextCursor) return;
+    if (!nextCursor) return;
     setHistory((stack) => [...stack, cursor]);
-    setParams({ cursor: page.nextCursor });
+    setParams({ cursor: nextCursor });
   }
 
   function goPrevious() {
@@ -296,7 +343,7 @@ export function PeopleDirectory() {
           data={page.items}
           getRowId={(entry) => String(entry.userId)}
           getRowLabel={(entry) => entry.displayName}
-          renderMobileRow={(entry) => <PersonMobileRow entry={entry} t={t} />}
+          renderMobileRow={(entry) => <PersonMobileRow entry={entry} t={t} nameOf={nameOf} />}
           loading={loading}
           error={
             loadError
@@ -306,12 +353,17 @@ export function PeopleDirectory() {
           empty={{ icon: UsersIcon, title: t("noPeopleYet") }}
           filteredEmpty={{ active: hasFilters, onClear: clearFilters }}
         />
-        {(hasPrevious || page.nextCursor) && (
+        {(hasPrevious || nextCursor) && (
           <nav className="flex justify-end gap-2" aria-label={t("tablePagination")}>
-            <Button variant="outline" size="sm" disabled={!hasPrevious} onClick={goPrevious}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loading || !hasPrevious}
+              onClick={goPrevious}
+            >
               {t("previous")}
             </Button>
-            <Button variant="outline" size="sm" disabled={!page.nextCursor} onClick={goNext}>
+            <Button variant="outline" size="sm" disabled={loading || !nextCursor} onClick={goNext}>
               {t("next")}
             </Button>
           </nav>

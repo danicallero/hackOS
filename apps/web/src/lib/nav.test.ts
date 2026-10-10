@@ -125,6 +125,13 @@ describe("people directory (#934)", () => {
     expect(hrefs(contextFor([CAPABILITIES.ADMIN_ALL]))).toContain("/people");
     expect(hrefs(contextFor([]))).not.toContain("/people");
   });
+
+  it("hides People without current event access, even with directory:read", () => {
+    const ctx = contextFor([CAPABILITIES.DIRECTORY_READ], { isPureApplicant: true });
+    expect(
+      PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map((i) => i.href),
+    ).not.toContain("/people");
+  });
 });
 
 describe("personal projects (issue #424, #852)", () => {

@@ -59,7 +59,8 @@ exactly what they still need.
 
 **People** (`/people`, #934) is the one capability-gated personal entry: it
 shows with `directory:read` (seeded for every role except Sponsor and Judging
-Team; see `directory.md`) and sits just above My profile, where each person
+Team; see `directory.md`) plus current event access, like Wallet and Inbox,
+and sits just above My profile, where each person
 manages whether they appear in it.
 
 There is deliberately no dashboard/home page: `/timetable` (Schedule) is the

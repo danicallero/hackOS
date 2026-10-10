@@ -14,7 +14,8 @@ export const DIRECTORY_PARAM_KEYS = { q: "q", challengeId: "challenge", cursor: 
 export function readDirectoryParams(search: URLSearchParams): DirectoryParams {
   const challenge = search.get(DIRECTORY_PARAM_KEYS.challengeId) ?? "";
   return {
-    q: search.get(DIRECTORY_PARAM_KEYS.q) ?? "",
+    // Trimmed like the field, so a shared link with spaces is already canonical.
+    q: (search.get(DIRECTORY_PARAM_KEYS.q) ?? "").trim(),
     challengeId: /^[1-9]\d*$/.test(challenge) ? challenge : "",
     cursor: search.get(DIRECTORY_PARAM_KEYS.cursor) ?? "",
   };

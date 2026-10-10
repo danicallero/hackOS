@@ -104,9 +104,13 @@ from `GET /api/public/challenges`) and Previous/Next over the opaque cursor.
 `q`, `challenge` and `cursor` live in the URL so a view can be shared; writes
 are skipped when the query string would not change (R003). A row shows the
 photo or initials, display name, headline, project, challenges and location
-note; the empty state is a single message. The page refetches in place on
-`domain.changed` for the `directory` topic. The nav entry (personal area) is
-gated by `directory:read` (`docs/navigation.md`).
+note; challenge chips use the localized title from those options. The search
+field resyncs from the URL only on navigation it did not write, and `q` is
+trimmed on both sides. The page refetches in place on `domain.changed` for the
+`directory` topic; a failed refresh keeps the rows and shows a toast. Paging
+is disabled while a new query loads. Without `directory:read` the page shows
+access denied and opens no request or stream; the nav entry (personal area)
+also needs event access (`docs/navigation.md`).
 
 ## Writes, audit and concurrency
 

@@ -435,6 +435,7 @@
   "accreditationAndPresence": "Acreditaciones",
   "peopleTab": "Directorio",
   "peopleSearchPlaceholder": "Nombre, apellidos, correo, DNI o acreditación",
+  "peopleAccessDeniedDesc": "Pide a un administrador acceso al directorio.",
   "couldNotLoadPeople": "No se ha podido cargar el directorio.",
   "noPeopleYet": "Aún no hay nadie",
   "minHoursLabel": "Horas mínimas",

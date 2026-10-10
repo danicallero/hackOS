@@ -245,9 +245,13 @@ export function memberMatchLabel(member: RepoMember, t: Translate): string {
   return labels[member.matchType];
 }
 
-/** i18n challenge title from `GET /api/public/challenges` (title is a record). */
-export function challengeTitleText(title: Record<string, string> | string | undefined): string {
+/** i18n challenge title from `GET /api/public/challenges` (title is a record);
+ * `language` picks that translation first. */
+export function challengeTitleText(
+  title: Record<string, string> | string | undefined,
+  language?: string,
+): string {
   if (!title) return "";
   if (typeof title === "string") return title;
-  return title.en || title.es || Object.values(title)[0] || "";
+  return (language && title[language]) || title.en || title.es || Object.values(title)[0] || "";
 }
