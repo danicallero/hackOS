@@ -120,8 +120,14 @@ meal without an answer. Sponsors read and replace their plan through `GET`/`PUT
 and its shown schedule entry includes the `sponsor` audience (an entry without
 audiences is staff-only), and it locks `event_config.meal_plan_cutoff_hours`
 (24 by default, set through `PUT /api/event` `mealPlanCutoffHours`) before it
-starts. `PUT` ignores meals that ended or stopped being offered since the list
+starts; responses carry it as `cutoffHours`. `PUT` ignores meals that ended or stopped being offered since the list
 was loaded, and locked meals that were never answered.
+
+On the web, the `(app)` layout shows a dismissable dialog with one step per
+pending task ("Later" hides it for the browser session via `sessionStorage`),
+and My profile shows a sponsor-only Meals section plus an explicit "No
+restrictions" option; the profile form only sends dietary fields when they were
+edited, so saving a name never records an empty dietary answer.
 
 Primary-email verification is deliberately not required by Better Auth at sign
 in: H1 allows an unverified account to establish a session and use read-only

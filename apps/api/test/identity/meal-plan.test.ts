@@ -167,6 +167,7 @@ describe("GET /api/me/meal-plan (#933)", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.confirmedAt).toBeNull();
+    expect(body.cutoffHours).toBe(24);
     expect(
       body.meals.map((m: { activityId: number; locked: boolean; attending: null }) => [
         m.activityId,
@@ -555,6 +556,7 @@ describe("meal plan cutoff setting (#933)", () => {
       headers: asUser(sponsor),
     });
     expect(plan.json().meals[0].locked).toBe(true);
+    expect(plan.json().cutoffHours).toBe(48);
 
     for (const bad of [-1, 169, 1.5]) {
       const res = await a.inject({

@@ -11,6 +11,7 @@ import { getMealPlan, replaceMealPlan } from "../meal-plan.js";
 
 export const mealPlanResponseSchema = z.object({
   confirmedAt: z.string().nullable(),
+  cutoffHours: z.number().int(),
   meals: z.array(
     z.object({
       activityId: z.number(),
@@ -51,7 +52,7 @@ export function registerMealPlanRoutes(app: FastifyInstance): void {
           "offered to sponsors — meal-kind activities whose shown schedule entry includes the " +
           "`sponsor` audience (an entry with no audiences is staff-only and never offered) — with the caller's answer (`attending` is null until " +
           "answered) and whether the meal is `locked` because it starts within the event's change " +
-          "cutoff (24 h by default). `confirmedAt` is when the plan was first submitted.",
+          "cutoff (`cutoffHours`, 24 by default). `confirmedAt` is when the plan was first submitted.",
         response: { 200: mealPlanResponseSchema },
       },
     },

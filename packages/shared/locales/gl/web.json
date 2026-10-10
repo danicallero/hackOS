@@ -3504,5 +3504,14 @@
   "attendedStat": "Asistiron",
   "attendanceRate": "Taxa de asistencia",
   "averageHoursOnSite": "Media de horas no evento",
-  "totalHours": "Horas totais"
+  "totalHours": "Horas totais",
+  "completeYourProfile": "Completa o teu perfil",
+  "later": "Máis tarde",
+  "stepOfTotal": "{current} de {total}",
+  "mealPlanLockNotice": "Os cambios péchanse {hours} h antes de cada comida.",
+  "mealPlanSaved": "Plan de comidas gardado",
+  "toastSaveMealPlan": "Gardar comidas",
+  "couldNotSaveMealPlan": "Non se puideron gardar as túas comidas",
+  "couldNotLoadMealPlan": "Non se puideron cargar as túas comidas",
+  "dietaryAnswerRequired": "Escolle as túas restricións ou marca Sen restricións."
 }

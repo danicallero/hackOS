@@ -6,7 +6,7 @@ import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
 import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import Link from "next/link";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -44,6 +45,7 @@ import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import { capabilitiesByDomain, prettifyCapability } from "../../permissions/helpers";
 import { DangerZoneCard } from "./danger-zone";
 import { EmailCard } from "./email-card";
+import { MealsSection } from "./meals-section";
 import { PasswordCard } from "./password-card";
 
 const LANGS: Language[] = ["es", "gl", "en"];
@@ -56,6 +58,8 @@ function profileSchema(t: Translate) {
     shirtSize: z.string(),
     foodIntolerances: z.array(z.string()),
     foodIntoleranceNotes: z.string().max(2000),
+    // #933: an explicit empty answer, distinct from never having answered.
+    noRestrictions: z.boolean(),
   });
 }
 
@@ -105,6 +109,10 @@ function valuesFromMe(me: Me): Values {
     shirtSize: me.shirtSize ?? NONE,
     foodIntolerances: (me.foodIntolerances ?? []).map(String),
     foodIntoleranceNotes: me.foodIntoleranceNotes ?? "",
+    noRestrictions:
+      me.dietaryConfirmedAt !== null &&
+      (me.foodIntolerances ?? []).length === 0 &&
+      !me.foodIntoleranceNotes?.trim(),
   };
 }
 
@@ -145,18 +153,28 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
   // an application is accepted — staff can still fix them via the user detail page.
   const locked = me.profileLocked;
   const [saveError, setSaveError] = useState<string | null>(null);
-  useUnsavedChangesGuard(form.formState.isDirty);
+  const [mealsDirty, setMealsDirty] = useState(false);
+  const onMealsDirtyChange = useCallback((dirty: boolean) => setMealsDirty(dirty), []);
+  useUnsavedChangesGuard(form.formState.isDirty || mealsDirty);
+  const noRestrictions = form.watch("noRestrictions");
 
   async function onSubmit(values: Values) {
     setSaveError(null);
+    const dirty = form.formState.dirtyFields;
+    // Sending dietary fields records an answer (#933), so only send them when edited.
+    const dietaryEdited = Boolean(
+      dirty.foodIntolerances || dirty.foodIntoleranceNotes || dirty.noRestrictions,
+    );
     try {
       await api.patch<Me>("/api/me", {
         name: values.name,
         surname: values.surname,
         language: values.language,
         shirtSize: values.shirtSize === NONE ? null : values.shirtSize,
-        foodIntolerances: values.foodIntolerances.map(Number),
-        foodIntoleranceNotes: values.foodIntoleranceNotes || null,
+        ...(dietaryEdited && {
+          foodIntolerances: values.foodIntolerances.map(Number),
+          foodIntoleranceNotes: values.foodIntoleranceNotes || null,
+        }),
       });
       form.reset(values);
       await refresh();
@@ -287,7 +305,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                         placeholder={t("selectIntolerances")}
                         searchPlaceholder={t("searchIntolerances")}
                         emptyText={t("noIntolerances")}
-                        disabled={locked}
+                        disabled={locked || noRestrictions}
                       />
                     </FormControl>
                     <FormMessage />
@@ -304,7 +322,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                       <Textarea
                         rows={3}
                         placeholder={t("cateringNotes")}
-                        disabled={locked}
+                        disabled={locked || noRestrictions}
                         {...field}
                       />
                     </FormControl>
@@ -312,10 +330,35 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="noRestrictions"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        disabled={locked}
+                        onCheckedChange={(checked) => {
+                          const none = checked === true;
+                          field.onChange(none);
+                          if (none) {
+                            const opts = { shouldDirty: true };
+                            form.setValue("foodIntolerances", [], opts);
+                            form.setValue("foodIntoleranceNotes", "", opts);
+                          }
+                        }}
+                      />
+                    </FormControl>
+                    <FormLabel className="font-normal">{t("noRestrictions")}</FormLabel>
+                  </FormItem>
+                )}
+              />
             </SectionCard>
           </form>
         </Form>
         <div className="min-w-0 space-y-(--space-between-sections)">
+          {me.isSponsorRep && <MealsSection onDirtyChange={onMealsDirtyChange} />}
           <EmailCard />
           <PasswordCard />
         </div>
