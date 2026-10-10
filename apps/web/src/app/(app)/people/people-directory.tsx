@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
+import { initials } from "@/lib/initials";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { type ChallengeOption, challengeTitleText } from "../projects/shared";
@@ -40,13 +41,6 @@ interface DirectoryPage {
 
 const PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 250;
-
-export function initials(name: string): string {
-  const parts = name.replace(/\./g, "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-}
 
 /** Localized challenge title by id; the API's `name` is the fallback. */
 type ChallengeName = (challenge: { id: number; name: string }) => string;
