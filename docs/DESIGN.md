@@ -649,6 +649,9 @@ Keep actual multi-record objects independently bounded when ownership matters.
 - The live statistics activity chart can expand to the viewport minus 32 px,
   using the shared modal focus and close controls. This is a focused read-only
   chart view, not a record editor.
+- The CV viewer is the other read-only document view: up to 1152 px wide and
+  the viewport height minus 32 px on desktop, the whole screen below `sm`,
+  with the PDF as its only content.
 - Modal `sm`: 384 px, short confirmations/decisions; `md` (default): 512 px,
   compact forms. `lg`: 672 px, exceptional paired fields/review content; `xl`:
   896 px, existing specialized review tools only. Larger sizes are not a

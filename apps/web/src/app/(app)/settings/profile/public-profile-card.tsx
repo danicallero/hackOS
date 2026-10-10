@@ -12,6 +12,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { IconButton } from "@/components/common/icon-button";
 import { SectionCard } from "@/components/common/section-card";
+import { CvViewer } from "@/components/profile/cv-viewer";
 import { SOCIAL_ICON, SocialLinks } from "@/components/profile/social-links";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -334,6 +335,7 @@ export function PublicProfileCard() {
               <LinksEditor links={settings.socials} onChange={(socials) => update({ socials })} />
               <CvField
                 cv={profile.cv}
+                ownerName={displayName(me, true)}
                 shareCv={settings.shareCv}
                 onShareChange={(shareCv) => update({ shareCv })}
                 onSaved={(next) => {
@@ -525,11 +527,13 @@ function nextKind(links: EditableLink[]): SocialKind {
 
 function CvField({
   cv,
+  ownerName,
   shareCv,
   onShareChange,
   onSaved,
 }: {
   cv: PublicProfile["cv"];
+  ownerName: string;
   shareCv: boolean;
   onShareChange: (shareCv: boolean) => void;
   onSaved: (profile: PublicProfile) => void;
@@ -602,15 +606,23 @@ function CvField({
       <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
         {cv ? (
           <>
-            <a
-              href={apiAssetUrl(OWN_CV_PATH)}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex min-w-0 max-w-full items-center gap-2 text-sm underline-offset-4 hover:underline"
-            >
-              <FilePdfIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
-              <span className="min-w-0 truncate">{cv.filename}</span>
-            </a>
+            <CvViewer
+              path={OWN_CV_PATH}
+              name={ownerName}
+              notFoundTitle={t("noFileUploadedPeriod")}
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex min-w-0 max-w-full items-center gap-2 text-sm underline-offset-4 hover:underline"
+                >
+                  <FilePdfIcon
+                    aria-hidden="true"
+                    className="text-muted-foreground size-4 shrink-0"
+                  />
+                  <span className="min-w-0 truncate">{cv.filename}</span>
+                </button>
+              }
+            />
             {locked ? null : (
               <div className="flex gap-2">
                 <Button
@@ -709,15 +721,20 @@ export function DirectoryCard({ entry }: { entry: DirectoryEntry }) {
         {entry.bio && <p className="pt-1 text-sm whitespace-pre-line wrap-anywhere">{entry.bio}</p>}
         {(entry.socials ?? []).length > 0 && <SocialLinks links={entry.socials} className="pt-1" />}
         {entry.cvUrl && (
-          <a
-            href={apiAssetUrl(entry.cvUrl)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 pt-1 text-sm underline-offset-4 hover:underline"
-          >
-            <FilePdfIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
-            {t("downloadCv")}
-          </a>
+          <CvViewer
+            path={entry.cvUrl}
+            name={entry.displayName}
+            notFoundTitle={entry.cvUrl === OWN_CV_PATH ? t("noFileUploadedPeriod") : undefined}
+            trigger={
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 pt-1 text-sm underline-offset-4 hover:underline"
+              >
+                <FilePdfIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
+                {t("viewCv")}
+              </button>
+            }
+          />
         )}
       </div>
     </article>

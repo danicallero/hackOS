@@ -106,10 +106,20 @@ describe("PersonDetail (#934, #935)", () => {
     expect(text).toContain("Mejor hack");
     expect(text).toContain("linkedin.com/in/ana");
     expect(text).toContain("ana.dev");
-    const cv = container.querySelector<HTMLAnchorElement>(
-      `a[href='${API_URL}/api/directory/42/cv']`,
+    // The CV opens in the in-app viewer, not as a link to a new tab.
+    expect(container.querySelector("a[href$='/cv']")).toBeNull();
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    const viewCv = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "viewCv",
     );
-    expect(cv?.textContent).toBe("downloadCv");
+    await act(async () => viewCv?.click());
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${API_URL}/api/directory/42/cv`,
+      expect.objectContaining({ credentials: "include" }),
+    );
+    expect(document.querySelector("[role=dialog]")?.textContent).toContain("cvViewerTitle");
+    vi.unstubAllGlobals();
     expect(container.querySelector("a[href='/people']")?.textContent).toBe("backToPeople");
     expect(env.autoRefresh).toHaveBeenCalledWith("/api/events/stream?topic=directory", [
       "domain.changed",
@@ -119,7 +129,7 @@ describe("PersonDetail (#934, #935)", () => {
   it("omits empty sections and the CV action", async () => {
     await render();
     expect(container.querySelector("dl")).toBeNull();
-    expect(container.textContent).not.toContain("downloadCv");
+    expect(container.textContent).not.toContain("viewCv");
   });
 
   it("treats a hidden or missing person as not found", async () => {

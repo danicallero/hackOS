@@ -213,7 +213,7 @@ person's page (the desktop row link and the whole narrow-screen row).
 
 `/people/<userId>` (`people/[userId]/person-detail.tsx`) reads
 `GET /api/directory/:userId`: a header with the photo, name, headline and a
-"Download CV" action when shared, the bio, then hairline rows for links (the
+"View CV" action when shared, the bio, then hairline rows for links (the
 address stays visible next to the icon; links open with
 `rel="noopener noreferrer nofollow ugc"`), where to find the person, project
 and challenges. Empty rows are omitted. A 404 (hidden or missing) shows
@@ -221,6 +221,20 @@ and challenges. Empty rows are omitted. A 404 (hidden or missing) shows
 refetches on `domain.changed` for the `directory` topic. It is not gated on
 `directory:read`: attendees who saved the person in their diary may open it,
 and the API answers the same 404 to anyone else.
+
+Every CV link on the web (the person page, the owner's file name and the
+"View CV" link of the My profile preview) opens the shared viewer
+(`components/profile/cv-viewer.tsx`) instead of a new tab. It fetches the CV
+route as a blob with the session cookie, shows it from an object URL in an
+`<iframe>` (the browser's own PDF viewer) and revokes the URL when it closes.
+The dialog is wide and nearly full height on desktop and full screen on
+phones; its header offers Download, named after the original file through
+`content-disposition` (which the API exposes to the web origin for this), and
+Open in new tab on the API route. Loading shows a page-shaped skeleton; a 404
+shows "Person not found" (the owner's routes: "No file uploaded."), and other
+failures an inline error with Retry. Browsers without an inline PDF viewer
+(`navigator.pdfViewerEnabled === false`, such as Chrome on Android) get the
+file name and a Download button instead.
 
 ## Writes, audit and concurrency
 
