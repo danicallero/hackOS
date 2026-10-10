@@ -9,7 +9,6 @@
 // profiles — this tab only owns the two invite-claim requirement toggles.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -42,13 +41,7 @@ function fromConfig(cfg: EventConfig): Values {
   };
 }
 
-export function InvitesTab({
-  icon,
-  onDirtyChange,
-}: {
-  icon: PhosphorIcon;
-  onDirtyChange: (dirty: boolean) => void;
-}) {
+export function InvitesTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
   const { t } = useLocale();
   const { config, status, applyConfig } = useEventConfig();
   const form = useForm<Values>({
@@ -85,7 +78,7 @@ export function InvitesTab({
   }
 
   if (status !== "ready" || !config) {
-    return <EventConfigLoadState icon={icon} title={t("invitesSectionTitle")} />;
+    return <EventConfigLoadState />;
   }
 
   return (

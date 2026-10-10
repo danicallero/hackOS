@@ -12,7 +12,6 @@
 // by reusing the same phase logic the public site and TV run.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { useEffect, useId, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
@@ -140,13 +139,7 @@ function CountdownPreview({
   );
 }
 
-export function EventTab({
-  icon,
-  onDirtyChange,
-}: {
-  icon: PhosphorIcon;
-  onDirtyChange: (dirty: boolean) => void;
-}) {
+export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
   const { t } = useLocale();
   const reminderLabelId = useId();
   const [view, setView] = useState("general");
@@ -217,7 +210,7 @@ export function EventTab({
   }
 
   if (status !== "ready" || !config) {
-    return <EventConfigLoadState icon={icon} title={t("eventTitle")} />;
+    return <EventConfigLoadState />;
   }
   const timezone = values.timezone ?? config.timezone;
 

@@ -228,7 +228,7 @@ returns only that device’s registered Apple serials.
 
 Six capability-gated tabs: Event, Venue, Apple Wallet pass, Presence, Invited
 accounts, and Danger zone. Editable categories use open sections and save only
-their own fields through `PUT /api/event`; changing tabs with unsaved edits
+their own fields through `PUT /api/event`; leaving a section with unsaved edits
 requires confirmation. The active tab names its panel without a repeated section
 header. A shared save footer pairs the submit button with the persistent save
 state; successful saves also use the app's Sileo toast. Forms retain native Enter
@@ -449,8 +449,8 @@ Primary provider references:
 
 ## Web category ownership
 
-Event settings uses a desktop category rail and narrow horizontal tabs, with
-one bounded capability-gated category visible at a time. Judging hours live at `?tab=judging`, require `queue:admin`,
+Event settings is a list of capability-gated categories (`/settings/event`) and
+opens one bounded category at a time (`?tab=`) with a back link; leaving a category with unsaved edits (back link, browser Back, sidebar) asks for confirmation. Judging hours live at `?tab=judging`, require `queue:admin`,
 and save the separate queue settings resource. Wallet has one Save changes
 action shared by its Fields and Appearance views. Images and delivery are
 separate views; `?tab=wallet&wallet=appearance|artwork|delivery` preserves

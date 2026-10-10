@@ -292,6 +292,18 @@ despite a working API.
   `GET /api/queue/groups` returns every queue for `queue:admin`/
   `sponsors:manage` and only their own enterprises' for a sponsor rep.
 
+Event settings (`/settings/event`) is a list of the sections the caller's
+capabilities allow, never a second sidebar (#932): `?tab=event|venue|wallet|presence|invites|judging|danger`
+opens one section with a back link (page header context slot) to the list. A
+lone visible section opens directly only when no `?tab=` is requested; a
+`?tab=` the caller cannot manage shows the list. The URL is the only state, so
+selecting writes nothing back. Dirtiness is tracked for the open section only;
+leaving it with unsaved edits — back link, sidebar, browser Back/swipe-back or
+unload — asks for confirmation (`useUnsavedChangesGuard`; browser Back is
+guarded only here, via the opt-in `guardBrowserBack`: a sentinel history entry
+is pushed once while dirty and consumed by the popstate confirm. Other users of
+the hook, e.g. the profile and application builder, guard links and unload only).
+
 Judging hours are in Event settings (`/settings/event?tab=judging`) and retain
 the `queue:admin` gate. `/queue/settings` preserves saved links by directing
 them there. `/queue/rooms` remains available as the room configuration page;

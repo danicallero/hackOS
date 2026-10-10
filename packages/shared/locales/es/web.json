@@ -1918,6 +1918,7 @@
   "groupNotFoundTitle": "Grupo no encontrado",
   "groupNotFoundDesc": "Este grupo de permisos ya no existe.",
   "backToPermissions": "Volver a permisos",
+  "backToEventSettings": "Volver a configuración del evento",
   "groupDetailsTitle": "Datos del grupo",
   "saveCapabilities": "Guardar permisos",
   "membersTitle": "Miembros",
