@@ -16,7 +16,7 @@ import {
   Separator,
 } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
-import { DetailRow, QuickAction } from "@/components/profile-parts";
+import { DetailRow, NoteRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ApiError, apiFetch, getCurrentSessionCookie } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
@@ -340,20 +340,11 @@ export function PersonProfileScreen() {
 
             {entry?.note ? (
               <Section title={t("diaryNote")}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityHint={t("diaryNote")}
+                <NoteRow
+                  note={entry.note}
+                  hint={t("diaryEditNote")}
                   onPress={() => setEditingNote(true)}
-                  style={({ pressed }) => ({
-                    backgroundColor: pressed ? colors.elevatedSurface : undefined,
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                  })}
-                >
-                  <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 22 }}>
-                    {entry.note}
-                  </Text>
-                </Pressable>
+                />
               </Section>
             ) : null}
 

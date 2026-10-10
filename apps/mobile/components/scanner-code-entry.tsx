@@ -48,11 +48,16 @@ export function ScannerCodeEntry({
     }
   }, [visible]);
   useEffect(() => {
-    if (!visible || Platform.OS !== "ios") return;
-    const show = Keyboard.addListener("keyboardWillShow", (event) =>
+    if (!visible) return;
+    // Android draws edge-to-edge, so the modal is never resized for a docked
+    // keyboard; it only reports the "did" events (#935).
+    const ios = Platform.OS === "ios";
+    const show = Keyboard.addListener(ios ? "keyboardWillShow" : "keyboardDidShow", (event) =>
       setKeyboardHeight(event.endCoordinates.height),
     );
-    const hide = Keyboard.addListener("keyboardWillHide", () => setKeyboardHeight(0));
+    const hide = Keyboard.addListener(ios ? "keyboardWillHide" : "keyboardDidHide", () =>
+      setKeyboardHeight(0),
+    );
     return () => {
       show.remove();
       hide.remove();

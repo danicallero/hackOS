@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { FavouriteStar } from "@/components/favourite-star";
 import { EmptyState, Section, Separator } from "@/components/native-ui";
-import { DetailRow, QuickAction } from "@/components/profile-parts";
+import { DetailRow, NoteRow, QuickAction } from "@/components/profile-parts";
 import { SymbolView } from "@/components/symbol";
 import {
   collectionProgress,
@@ -468,20 +468,7 @@ export function CompanySheet({
 
             {entry.note ? (
               <Section title={t("diaryNote")}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityHint={t("diaryNote")}
-                  onPress={onEditNote}
-                  style={({ pressed }) => ({
-                    backgroundColor: pressed ? colors.elevatedSurface : undefined,
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                  })}
-                >
-                  <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 22 }}>
-                    {entry.note}
-                  </Text>
-                </Pressable>
+                <NoteRow note={entry.note} hint={t("diaryEditNote")} onPress={onEditNote} />
               </Section>
             ) : null}
 

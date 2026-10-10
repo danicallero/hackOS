@@ -1,12 +1,22 @@
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Modal, Pressable, Text, TextInput, View } from "react-native";
-import { ActionButton, useDialogCardColors } from "@/components/native-ui";
+import { KeyboardAvoidingView, Modal, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FloatingGlassButton } from "@/components/native-ui";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
 const NOTE_MAX_LENGTH = 500;
+const HEADER_HEIGHT = 76;
 
-/** The owner's private note on one diary entry, person or company (#935). */
+/**
+ * The owner's private note on one diary entry, person or company (#935).
+ *
+ * A native page sheet rather than a hand-made centred card: the card had to
+ * be re-centred above every keyboard (iOS hid Save behind the keys; Android,
+ * edge-to-edge, never resized the modal). The sheet keeps a fixed header,
+ * circular Cancel and Save in the corners as in the CV viewer and team
+ * sheets, and a field that fills the space the keyboard leaves.
+ */
 export function DiaryNoteEditor({
   visible,
   initialNote,
@@ -19,45 +29,44 @@ export function DiaryNoteEditor({
   onSave: (note: string) => void;
 }) {
   const { t } = useLocale();
-  const fill = useDialogCardColors();
+  const insets = useSafeAreaInsets();
+  // A pageSheet on iOS starts below the status bar; on Android the same
+  // Modal is full screen, so its chrome clears the status bar itself.
+  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [note, setNote] = useState("");
   useEffect(() => {
     if (visible) setNote(initialNote ?? "");
   }, [visible, initialNote]);
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <Pressable
-        accessibilityLabel={t("close")}
-        accessibilityRole="button"
-        onPress={onClose}
-        style={{ backgroundColor: "rgba(0,0,0,0.4)", position: "absolute", inset: 0 }}
-      />
-      {/* The card rises above the keyboard; centred under it, iOS hid
-          Save and Cancel behind the keys (#935). */}
-      <KeyboardAvoidingView
-        behavior={process.env.EXPO_OS === "ios" ? "padding" : undefined}
-        pointerEvents="box-none"
-        style={{ flex: 1, justifyContent: "center", paddingHorizontal: 20 }}
-      >
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <View style={{ backgroundColor: colors.background, flex: 1 }}>
         <View
-          accessibilityViewIsModal
           style={{
-            alignSelf: "center",
-            backgroundColor: fill.card,
-            borderCurve: "continuous",
-            borderRadius: 24,
-            gap: 14,
-            maxWidth: 420,
-            padding: 20,
-            width: "100%",
+            alignItems: "center",
+            height: HEADER_HEIGHT + sheetTopInset,
+            justifyContent: "center",
+            paddingHorizontal: 72,
+            paddingTop: sheetTopInset,
           }}
         >
           <Text
             accessibilityRole="header"
-            style={{ color: colors.label, fontSize: 18, fontWeight: "700" }}
+            numberOfLines={1}
+            style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}
           >
             {t("diaryNote")}
           </Text>
+        </View>
+        <KeyboardAvoidingView
+          behavior="padding"
+          keyboardVerticalOffset={process.env.EXPO_OS === "ios" ? HEADER_HEIGHT : 0}
+          style={{ flex: 1, paddingBottom: 16, paddingHorizontal: 16 }}
+        >
           <TextInput
             accessibilityLabel={t("diaryNote")}
             autoFocus
@@ -66,20 +75,37 @@ export function DiaryNoteEditor({
             value={note}
             onChangeText={setNote}
             style={{
-              backgroundColor: fill.field,
+              backgroundColor: colors.surface,
               borderCurve: "continuous",
               borderRadius: 12,
               color: colors.label,
+              flex: 1,
               fontSize: 17,
-              minHeight: 110,
-              padding: 14,
+              lineHeight: 23,
+              maxHeight: 320,
+              paddingHorizontal: 16,
+              paddingBottom: 14,
+              paddingTop: 14,
               textAlignVertical: "top",
             }}
           />
-          <ActionButton variant="filled" label={t("save")} onPress={() => onSave(note)} />
-          <ActionButton label={t("cancel")} onPress={onClose} />
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+        <FloatingGlassButton
+          top={16 + sheetTopInset}
+          side="left"
+          icon="xmark"
+          accessibilityLabel={t("cancel")}
+          onPress={onClose}
+        />
+        <FloatingGlassButton
+          top={16 + sheetTopInset}
+          side="right"
+          icon="checkmark"
+          tintColor={colors.accent}
+          accessibilityLabel={t("save")}
+          onPress={() => onSave(note)}
+        />
+      </View>
     </Modal>
   );
 }

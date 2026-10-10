@@ -655,7 +655,9 @@ first, then newest) and a quiet unavailable row for a hidden profile. Saving
 and favouriting are separate: the star (`components/favourite-star.tsx`, drawn
 as a filled/outline path on Android, whose Material font only has the outline
 glyph) only marks a saved person and drives the Favourites filter; the row menu
-holds Note (500 characters) and an explicit "Remove from diary" with
+holds Note (500 characters; `components/diary-note-editor.tsx` is a native
+page sheet with circular Cancel and Save and a field above the keyboard, the
+same editor for people and stands) and an explicit "Remove from diary" with
 confirmation. Un-starring never removes anyone. The search field filters saved
 cards locally by name, headline, project, challenges, location and the owner's
 note, ignoring accents and case; cards never carry an email, so contact details
