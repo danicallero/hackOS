@@ -282,4 +282,13 @@ describe("PeopleDirectory (#934)", () => {
     expect(container.querySelector("tbody")?.textContent).toContain("Ana P.");
     expect(env.toastError).toHaveBeenCalledWith("couldNotLoadPeople", "columnPeople");
   });
+
+  it("links each row to the person's page", async () => {
+    directory.items = [entry({ userId: 42, displayName: "Ana P." })];
+    await render();
+    const links = [...container.querySelectorAll<HTMLAnchorElement>("a[href='/people/42']")];
+    // The desktop row link and the narrow-screen row both open the detail page.
+    expect(links.length).toBeGreaterThanOrEqual(1);
+    expect(links.some((link) => link.getAttribute("aria-label") === "Ana P.")).toBe(true);
+  });
 });

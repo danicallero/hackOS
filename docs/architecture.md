@@ -146,7 +146,9 @@ explicit `migrate` process succeeds.
 - **Stack:** MinIO (S3-compatible) + a one-shot `mc` sidecar that creates the
   bucket idempotently and sets prefix policy: **`enterprises/` is anonymously
   readable** (sponsor logos, H44), **`uploads/` is private** (application files,
-  H12, served only through the API's owner-or-staff proxied-download route).
+  H12, served only through the API's owner-or-staff proxied-download route), and
+  so is **`profiles/`** (account photos and directory CVs, #934/#935, streamed
+  only through the API's access-checked photo and CV routes).
 - **Network:** private Compose network plus the published host S3 API port
   (`S3_PUBLISH_PORT` → `minio:9000`). When the optional shared ingress network
   is enabled for a host-level tunnel, MinIO joins that network as well; the
@@ -191,8 +193,8 @@ without a published port.
 
 The `enterprises/` logo prefix is initialized for public reads, and production
 uses `https://s3.hackudc.com/hackos/` as `S3_PUBLIC_URL`. The external ingress
-must provide the route to MinIO's S3 API; the private `uploads/` prefix is
-served through the API.
+must provide the route to MinIO's S3 API; the private `uploads/` and
+`profiles/` prefixes are served through the API.
 
 > **DNS gotcha (learned the hard way, H51).** Docker's embedded resolver
 > (`127.0.0.11`) snapshots the *host's* upstream DNS servers at

@@ -39,11 +39,16 @@ afterAll(async () => {
 
 async function person(name: string, surname: string, email = `${crypto.randomUUID()}@dir.test`) {
   const { rows } = await pool.query(
-    `INSERT INTO users (email, name, surname, image, email_verified, dni, badge_id)
-     VALUES ($1, $2, $3, 'https://img.test/a.png', true, $4, $5) RETURNING id`,
+    `INSERT INTO users (email, name, surname, email_verified, dni, badge_id)
+     VALUES ($1, $2, $3, true, $4, $5) RETURNING id`,
     [email, name, surname, `DNI-${crypto.randomUUID()}`, `B-${crypto.randomUUID()}`],
   );
   const id = rows[0].id as number;
+  // #934: a stored photo key; the object itself is exercised in profile-files.test.ts.
+  await pool.query(`UPDATE users SET photo_key = $2, photo_updated_at = now() WHERE id = $1`, [
+    id,
+    `profiles/${id}/photo/${"a".repeat(32)}.png`,
+  ]);
   await admitParticipant(id);
   return id;
 }
@@ -256,15 +261,27 @@ describe("directory reads (#934)", () => {
       {
         userId: jose,
         displayName: "José Á.",
-        photoUrl: "https://img.test/a.png",
+        photoUrl: `/api/users/${jose}/photo?v=aaaaaaaaaaaa`,
         headline: null,
+        bio: null,
         locationNote: "Planta 1, mesa 12",
+        socials: [],
+        cvUrl: null,
         project: { kind: "project", id: expect.any(Number), name: "Neural Beans" },
         challenges: [{ id: challenge, name: "Green AI" }],
       },
     ]);
     const body = res.body;
-    for (const forbidden of ["email", "dni", "badge", "intoleran", "Mate", "@dir.test", "DNI-"]) {
+    for (const forbidden of [
+      "email",
+      "dni",
+      "badge",
+      "intoleran",
+      "Mate",
+      "@dir.test",
+      "DNI-",
+      "profiles/",
+    ]) {
       expect(body).not.toContain(forbidden);
     }
   });

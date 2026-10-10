@@ -128,6 +128,7 @@ export function directoryMutationForPath(url: string): boolean {
   const path = url.split("?", 1)[0] ?? url;
   return (
     path === "/api/me" ||
+    path === "/api/me/photo" ||
     /^\/api\/users\/[^/]+$/.test(path) ||
     mutationDomainForPath(path) === SSE_TOPICS.PROJECTS ||
     path === "/api/challenges/visibility" ||

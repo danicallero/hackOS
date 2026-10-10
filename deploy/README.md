@@ -69,7 +69,8 @@ La tercera ruta sólo puede apuntar a la API S3 de MinIO, nunca a la consola
 (9001), y debe permitir únicamente `/hackos/enterprises/`. `S3_PUBLIC_URL` no
 crea el registro DNS ni la ruta en Caddy.
 El acceso anónimo se limita al prefijo `enterprises/`; las subidas bajo
-`uploads/` siguen siendo privadas y pasan por el API.
+`uploads/` y `profiles/` (fotos de cuenta y CV del directorio) siguen siendo
+privadas y pasan por el API.
 
 Los valores de `API_DOMAIN`, `WEB_DOMAIN` y `CORS_ORIGINS` deben corresponder
 con esos hosts. `API_DOMAIN` y `WEB_DOMAIN` son nombres sin `https://`.

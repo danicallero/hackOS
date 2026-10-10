@@ -2,20 +2,26 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { photoUrl } from "../../lib/profile-files.js";
 import { hasEventAccess } from "../identity/role.js";
-import type { DirectoryQuery, PublicProfileInput } from "./schemas.js";
+import type { DirectoryQuery, PublicProfileInput, SocialLink } from "./schemas.js";
 
 /**
- * People directory (#934). Every field a reader can see is listed in
+ * People directory (#934, #935). Every field a reader can see is listed in
  * `entrySql`; anything else about a person (email, badge, intolerances,
- * roles, presence, teammates) never leaves this module.
+ * roles, presence, teammates, storage keys) never leaves this module.
  */
 export interface DirectoryEntry {
   userId: number;
   displayName: string;
+  /** Authenticated photo route; the object itself is private. */
   photoUrl: string | null;
   headline: string | null;
+  bio: string | null;
   locationNote: string | null;
+  socials: SocialLink[];
+  /** Authenticated CV route, only while the person shares it. */
+  cvUrl: string | null;
   project: { kind: "project" | "workGroup"; id: number; name: string } | null;
   challenges: { id: number; name: string }[];
 }
@@ -24,9 +30,12 @@ interface EntryRow {
   user_id: number;
   display_name: string;
   sort_key: string;
-  photo_url: string | null;
+  photo_key: string | null;
   headline: string | null;
+  bio: string | null;
   location_note: string | null;
+  socials: SocialLink[];
+  has_cv: boolean;
   project: DirectoryEntry["project"];
   challenges: DirectoryEntry["challenges"];
 }
@@ -99,9 +108,12 @@ function entrySql(profiles: string): string {
   SELECT u.id AS user_id,
          e.display_name,
          lower(unaccent(e.display_name)) AS sort_key,
-         CASE WHEN p.show_photo THEN u.image END AS photo_url,
+         CASE WHEN p.show_photo THEN u.photo_key END AS photo_key,
          p.headline,
+         p.bio,
          p.location_note,
+         p.socials,
+         (p.share_cv AND p.cv_key IS NOT NULL) AS has_cv,
          CASE
            WHEN repo.id IS NOT NULL THEN jsonb_build_object('kind', 'project', 'id', repo.id, 'name', repo.name)
            WHEN grp.id IS NOT NULL THEN jsonb_build_object('kind', 'workGroup', 'id', grp.id, 'name', grp.name)
@@ -124,16 +136,34 @@ const VISIBLE_WHERE = `
   AND u.is_test_account = false
   AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id = u.id)`;
 
-function toEntry(row: EntryRow): DirectoryEntry {
+/** `cvPath` differs for the owner's preview, who may not read the directory. */
+function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): DirectoryEntry {
+  const userId = Number(row.user_id);
   return {
-    userId: Number(row.user_id),
+    userId,
     displayName: row.display_name,
-    photoUrl: row.photo_url,
+    photoUrl: photoUrl(userId, row.photo_key),
     headline: row.headline,
+    bio: row.bio,
     locationNote: row.location_note,
+    socials: row.socials.map(({ kind, url }) => ({ kind, url })),
+    cvUrl: row.has_cv ? cvPath : null,
     project: row.project ? { ...row.project, id: Number(row.project.id) } : null,
     challenges: row.challenges.map((c) => ({ id: Number(c.id), name: c.name })),
   };
+}
+
+/**
+ * Whether `userId`'s photo is published to directory readers: the same
+ * universe as the listing, with the photo switch on (#934).
+ */
+export async function photoPublishedInDirectory(db: Queryable, userId: number): Promise<boolean> {
+  const { rows } = await db.query(
+    `SELECT 1 FROM user_public_profiles p JOIN users u ON u.id = p.user_id
+      WHERE ${VISIBLE_WHERE} AND p.show_photo AND u.id = $1`,
+    [userId],
+  );
+  return rows.length > 0;
 }
 
 async function assertReaderAdmitted(userId: number): Promise<void> {
@@ -215,7 +245,7 @@ export async function listDirectory(
   const page = rows.slice(0, query.limit);
   const last = page.at(-1);
   return {
-    items: page.map(toEntry),
+    items: page.map((row) => toEntry(row)),
     nextCursor: rows.length > query.limit && last ? encodeCursor(last) : null,
   };
 }
@@ -231,13 +261,38 @@ export async function getDirectoryEntry(readerId: number, userId: number): Promi
   return toEntry(rows[0]);
 }
 
+/**
+ * The shared CV of an opted-in person (#935). Hidden profiles, a CV that is
+ * not shared and a missing CV all answer the same 404.
+ */
+export async function getDirectoryCv(
+  readerId: number,
+  userId: number,
+): Promise<{ key: string; filename: string }> {
+  await assertReaderAdmitted(readerId);
+  const { rows } = await pool.query<{ cv_key: string; cv_filename: string }>(
+    `SELECT p.cv_key, p.cv_filename
+       FROM user_public_profiles p JOIN users u ON u.id = p.user_id
+      WHERE ${VISIBLE_WHERE} AND p.share_cv AND p.cv_key IS NOT NULL AND u.id = $1`,
+    [userId],
+  );
+  if (!rows[0]) throw new NotFoundError("Person not found");
+  return { key: rows[0].cv_key, filename: rows[0].cv_filename };
+}
+
 interface ProfileRow {
   directory_visible: boolean;
   show_surname: boolean;
   show_photo: boolean;
   show_project: boolean;
   headline: string | null;
+  bio: string | null;
   location_note: string | null;
+  socials: SocialLink[];
+  share_cv: boolean;
+  cv_key: string | null;
+  cv_filename: string | null;
+  cv_uploaded_at: Date | null;
   consented_at: Date | null;
 }
 
@@ -247,7 +302,13 @@ const DEFAULT_PROFILE: ProfileRow = {
   show_photo: false,
   show_project: true,
   headline: null,
+  bio: null,
   location_note: null,
+  socials: [],
+  share_cv: false,
+  cv_key: null,
+  cv_filename: null,
+  cv_uploaded_at: null,
   consented_at: null,
 };
 
@@ -256,7 +317,8 @@ async function preview(db: Queryable, userId: number, profile: ProfileRow) {
   const { rows } = await db.query<EntryRow>(
     `WITH p AS (
        SELECT $1::int AS user_id, $2::boolean AS show_surname, $3::boolean AS show_photo,
-              $4::boolean AS show_project, $5::text AS headline, $6::text AS location_note
+              $4::boolean AS show_project, $5::text AS headline, $6::text AS location_note,
+              $7::text AS bio, $8::jsonb AS socials, $9::boolean AS share_cv, $10::text AS cv_key
      )
      ${entrySql("p")} WHERE u.id = $1`,
     [
@@ -266,10 +328,14 @@ async function preview(db: Queryable, userId: number, profile: ProfileRow) {
       profile.show_project,
       profile.headline,
       profile.location_note,
+      profile.bio,
+      JSON.stringify(profile.socials),
+      profile.share_cv,
+      profile.cv_key,
     ],
   );
   if (!rows[0]) throw new NotFoundError("User not found");
-  return toEntry(rows[0]);
+  return toEntry(rows[0], "/api/me/public-profile/cv");
 }
 
 async function presentProfile(db: Queryable, userId: number, profile: ProfileRow) {
@@ -279,22 +345,36 @@ async function presentProfile(db: Queryable, userId: number, profile: ProfileRow
     showPhoto: profile.show_photo,
     showProject: profile.show_project,
     headline: profile.headline,
+    bio: profile.bio,
     locationNote: profile.location_note,
+    socials: profile.socials.map(({ kind, url }) => ({ kind, url })),
+    shareCv: profile.share_cv,
+    cv:
+      profile.cv_filename && profile.cv_uploaded_at
+        ? { filename: profile.cv_filename, uploadedAt: profile.cv_uploaded_at.toISOString() }
+        : null,
     consentedAt: profile.consented_at ? profile.consented_at.toISOString() : null,
     preview: await preview(db, userId, profile),
   };
 }
 
-const PROFILE_COLUMNS = `directory_visible, show_surname, show_photo, show_project, headline, location_note, consented_at`;
+const PROFILE_COLUMNS = `directory_visible, show_surname, show_photo, show_project, headline, bio,
+  location_note, socials, share_cv, cv_key, cv_filename, cv_uploaded_at, consented_at`;
+
+async function readProfile(db: Queryable, userId: number, lock = false): Promise<ProfileRow> {
+  const { rows } = await db.query<ProfileRow>(
+    `SELECT ${PROFILE_COLUMNS} FROM user_public_profiles WHERE user_id = $1${lock ? " FOR UPDATE" : ""}`,
+    [userId],
+  );
+  return rows[0] ?? DEFAULT_PROFILE;
+}
 
 export async function getMyPublicProfile(userId: number) {
   await assertReaderAdmitted(userId);
-  const { rows } = await pool.query<ProfileRow>(
-    `SELECT ${PROFILE_COLUMNS} FROM user_public_profiles WHERE user_id = $1`,
-    [userId],
-  );
-  return presentProfile(pool, userId, rows[0] ?? DEFAULT_PROFILE);
+  return presentProfile(pool, userId, await readProfile(pool, userId));
 }
+
+type ProfileSettings = Required<PublicProfileInput>;
 
 const FIELD_COLUMNS = {
   directoryVisible: "directory_visible",
@@ -302,38 +382,60 @@ const FIELD_COLUMNS = {
   showPhoto: "show_photo",
   showProject: "show_project",
   headline: "headline",
+  bio: "bio",
   locationNote: "location_note",
-} as const satisfies Record<keyof PublicProfileInput, keyof ProfileRow>;
+  socials: "socials",
+  shareCv: "share_cv",
+} as const satisfies Record<keyof ProfileSettings, keyof ProfileRow>;
+
+const SETTINGS_FIELDS = Object.keys(FIELD_COLUMNS) as (keyof ProfileSettings)[];
+
+function sameValue(a: unknown, b: unknown): boolean {
+  return typeof a === "object" && a !== null ? JSON.stringify(a) === JSON.stringify(b) : a === b;
+}
+
+/**
+ * Locks the owner for a profile write: the user-row lock serializes writes to
+ * this profile, including concurrent first writes that have no profile row to
+ * lock yet. NO KEY UPDATE still lets unrelated FK checks through. H54
+ * removal-pending accounts are refused explicitly; non-attendees get 403.
+ */
+async function lockProfileOwner(db: Queryable, userId: number): Promise<void> {
+  const { rows: users } = await db.query<{ account_state: string }>(
+    `SELECT account_state FROM users WHERE id = $1 AND anonymized_at IS NULL FOR NO KEY UPDATE`,
+    [userId],
+  );
+  if (users[0]?.account_state === "removal_pending") {
+    throw new ConflictError("This account is being removed");
+  }
+  if (!users[0] || !(await hasEventAccess(db, userId))) {
+    throw new ForbiddenError("Only event attendees can publish a directory profile");
+  }
+}
 
 /** `changed` is false when the request repeats the stored state (#934). */
 export async function updateMyPublicProfile(userId: number, input: PublicProfileInput) {
   return withTransaction(async (db) => {
-    // The user-row lock serializes writes to this profile, including concurrent
-    // first writes that have no profile row to lock yet, so consent is stamped
-    // exactly once. NO KEY UPDATE still lets unrelated FK checks through.
-    const { rows: users } = await db.query<{ account_state: string }>(
-      `SELECT account_state FROM users WHERE id = $1 AND anonymized_at IS NULL FOR NO KEY UPDATE`,
-      [userId],
-    );
-    if (users[0]?.account_state === "removal_pending") {
-      throw new ConflictError("This account is being removed");
-    }
-    if (!users[0] || !(await hasEventAccess(db, userId))) {
-      throw new ForbiddenError("Only event attendees can publish a directory profile");
-    }
-    const { rows: existing } = await db.query<ProfileRow>(
-      `SELECT ${PROFILE_COLUMNS} FROM user_public_profiles WHERE user_id = $1`,
-      [userId],
-    );
-    const before = existing[0] ?? DEFAULT_PROFILE;
-    const fields = Object.keys(FIELD_COLUMNS) as (keyof PublicProfileInput)[];
-    if (fields.every((field) => before[FIELD_COLUMNS[field]] === input[field])) {
+    await lockProfileOwner(db, userId);
+    const before = await readProfile(db, userId);
+    // Omitted #935 fields keep their stored values.
+    const next = Object.fromEntries(
+      SETTINGS_FIELDS.map((field) => [
+        field,
+        input[field] === undefined ? before[FIELD_COLUMNS[field]] : input[field],
+      ]),
+    ) as ProfileSettings;
+    if (SETTINGS_FIELDS.every((field) => sameValue(before[FIELD_COLUMNS[field]], next[field]))) {
       return { changed: false, profile: await presentProfile(db, userId, before) };
+    }
+    if (next.shareCv && !before.cv_key) {
+      throw new BadRequestError("Upload a CV before sharing it");
     }
     const { rows } = await db.query<ProfileRow>(
       `INSERT INTO user_public_profiles
-         (user_id, directory_visible, show_surname, show_photo, show_project, headline, location_note, consented_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $2 THEN now() END)
+         (user_id, directory_visible, show_surname, show_photo, show_project, headline,
+          location_note, bio, socials, share_cv, consented_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, CASE WHEN $2 THEN now() END)
        ON CONFLICT (user_id) DO UPDATE SET
          directory_visible = EXCLUDED.directory_visible,
          show_surname = EXCLUDED.show_surname,
@@ -341,6 +443,9 @@ export async function updateMyPublicProfile(userId: number, input: PublicProfile
          show_project = EXCLUDED.show_project,
          headline = EXCLUDED.headline,
          location_note = EXCLUDED.location_note,
+         bio = EXCLUDED.bio,
+         socials = EXCLUDED.socials,
+         share_cv = EXCLUDED.share_cv,
          consented_at = CASE
            WHEN EXCLUDED.directory_visible AND NOT user_public_profiles.directory_visible THEN now()
            ELSE user_public_profiles.consented_at
@@ -348,19 +453,22 @@ export async function updateMyPublicProfile(userId: number, input: PublicProfile
        RETURNING ${PROFILE_COLUMNS}`,
       [
         userId,
-        input.directoryVisible,
-        input.showSurname,
-        input.showPhoto,
-        input.showProject,
-        input.headline,
-        input.locationNote,
+        next.directoryVisible,
+        next.showSurname,
+        next.showPhoto,
+        next.showProject,
+        next.headline,
+        next.locationNote,
+        next.bio,
+        JSON.stringify(next.socials),
+        next.shareCv,
       ],
     );
     const after = rows[0] as ProfileRow;
-    const changedFields = (Object.keys(FIELD_COLUMNS) as (keyof PublicProfileInput)[]).filter(
-      (field) => before[FIELD_COLUMNS[field]] !== after[FIELD_COLUMNS[field]],
+    const changedFields = SETTINGS_FIELDS.filter(
+      (field) => !sameValue(before[FIELD_COLUMNS[field]], after[FIELD_COLUMNS[field]]),
     );
-    // Free text stays out of the audit log; only which fields changed.
+    // Free text and links stay out of the audit log; only which fields changed.
     await audit(db, {
       actorId: userId,
       entityType: "user_public_profile",
@@ -374,7 +482,93 @@ export async function updateMyPublicProfile(userId: number, input: PublicProfile
   });
 }
 
-/** Staff moderation: hide the profile and clear its free text (#934). */
+/**
+ * Stores the owner's CV (#935). `store` writes the object while the owner
+ * row is locked, so H54 removal cannot run between the check and the write.
+ * Returns the replaced object's key for deletion after commit.
+ */
+export async function setMyCv(
+  userId: number,
+  cv: { key: string; filename: string },
+  store: () => Promise<void>,
+) {
+  return withTransaction(async (db) => {
+    await lockProfileOwner(db, userId);
+    const before = await readProfile(db, userId);
+    await store();
+    const { rows } = await db.query<ProfileRow>(
+      `INSERT INTO user_public_profiles (user_id, cv_key, cv_filename, cv_uploaded_at)
+       VALUES ($1, $2, $3, now())
+       ON CONFLICT (user_id) DO UPDATE SET
+         cv_key = EXCLUDED.cv_key,
+         cv_filename = EXCLUDED.cv_filename,
+         cv_uploaded_at = EXCLUDED.cv_uploaded_at
+       RETURNING ${PROFILE_COLUMNS}`,
+      [userId, cv.key, cv.filename],
+    );
+    await audit(db, {
+      actorId: userId,
+      entityType: "user_public_profile",
+      entityId: userId,
+      action: "public_profile.updated",
+      before: { directoryVisible: before.directory_visible },
+      after: { directoryVisible: before.directory_visible, changedFields: ["cv"] },
+      source: "participant",
+    });
+    return {
+      replacedKey: before.cv_key && before.cv_key !== cv.key ? before.cv_key : null,
+      profile: await presentProfile(db, userId, rows[0] as ProfileRow),
+    };
+  });
+}
+
+/** Removes the owner's CV and stops sharing it (#935). */
+export async function removeMyCv(userId: number) {
+  return withTransaction(async (db) => {
+    await lockProfileOwner(db, userId);
+    const before = await readProfile(db, userId, true);
+    if (!before.cv_key) {
+      return {
+        changed: false,
+        removedKey: null,
+        profile: await presentProfile(db, userId, before),
+      };
+    }
+    const { rows } = await db.query<ProfileRow>(
+      `UPDATE user_public_profiles
+          SET cv_key = NULL, cv_filename = NULL, cv_uploaded_at = NULL, share_cv = false
+        WHERE user_id = $1
+        RETURNING ${PROFILE_COLUMNS}`,
+      [userId],
+    );
+    await audit(db, {
+      actorId: userId,
+      entityType: "user_public_profile",
+      entityId: userId,
+      action: "public_profile.updated",
+      before: { directoryVisible: before.directory_visible },
+      after: {
+        directoryVisible: before.directory_visible,
+        changedFields: before.share_cv ? ["cv", "shareCv"] : ["cv"],
+      },
+      source: "participant",
+    });
+    return {
+      changed: true,
+      removedKey: before.cv_key,
+      profile: await presentProfile(db, userId, rows[0] as ProfileRow),
+    };
+  });
+}
+
+/** The owner's own CV, whether or not it is shared (#935). */
+export async function getMyCv(userId: number): Promise<{ key: string; filename: string }> {
+  const profile = await readProfile(pool, userId);
+  if (!profile.cv_key || !profile.cv_filename) throw new NotFoundError("No CV uploaded");
+  return { key: profile.cv_key, filename: profile.cv_filename };
+}
+
+/** Staff moderation: hide the profile and clear its free text and links (#934, #935). */
 export async function moderatePublicProfile(actorId: number, userId: number, reason: string) {
   await withTransaction(async (db) => {
     // The H54 trigger would refuse the write with a 500; answer explicitly.
@@ -392,7 +586,8 @@ export async function moderatePublicProfile(actorId: number, userId: number, rea
     if (!rows[0]) throw new NotFoundError("Public profile not found");
     await db.query(
       `UPDATE user_public_profiles
-          SET directory_visible = false, headline = NULL, location_note = NULL
+          SET directory_visible = false, headline = NULL, location_note = NULL, bio = NULL,
+              socials = '[]'::jsonb, share_cv = false
         WHERE user_id = $1`,
       [userId],
     );
@@ -405,6 +600,9 @@ export async function moderatePublicProfile(actorId: number, userId: number, rea
         directoryVisible: rows[0].directory_visible,
         hadHeadline: rows[0].headline !== null,
         hadLocationNote: rows[0].location_note !== null,
+        hadBio: rows[0].bio !== null,
+        socialCount: rows[0].socials.length,
+        sharedCv: rows[0].share_cv,
       },
       after: { directoryVisible: false },
       reason,

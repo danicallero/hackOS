@@ -16,6 +16,7 @@ import {
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { idempotencyGuard, replayCompletedIdempotency } from "../../../lib/idempotency.js";
+import { photoUrl } from "../../../lib/profile-files.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { assertFixtureSubjectScope } from "../../logistics/review-fixture-scope.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
@@ -71,7 +72,6 @@ const selfPatchSchema = z
     name: z.string().min(1).max(200).optional(),
     surname: z.string().min(1).max(200).optional(),
     language: z.enum(LANGUAGES).optional(),
-    image: z.string().max(2000).nullable().optional(),
     universityId: z.number().int().nullable().optional(),
     // Logistics data a participant owns and manages on their own settings page.
     foodIntolerances: z.array(z.number().int()).optional(),
@@ -94,7 +94,6 @@ const COLUMN_BY_FIELD: Record<string, string> = {
   name: "name",
   surname: "surname",
   language: "language",
-  image: "image",
   foodIntolerances: "food_intolerances",
   foodIntoleranceNotes: "food_intolerance_notes",
   shirtSize: "shirt_size",
@@ -172,6 +171,7 @@ const userResponseSchema = z.object({
   emailVerified: z.boolean(),
   name: z.string().nullable(),
   surname: z.string().nullable(),
+  // #934: the authenticated photo route, never a storage or public bucket URL.
   image: z.string().nullable(),
   dni: z.string().nullable(),
   badgeId: z.string().nullable(),
@@ -216,7 +216,7 @@ interface UserRow {
   email_verified: boolean;
   name: string | null;
   surname: string | null;
-  image: string | null;
+  photo_key: string | null;
   dni: string | null;
   badge_id: string | null;
   language: string;
@@ -262,7 +262,7 @@ function serializeUser(row: UserRow, removalStatus?: PendingAccountRemovalStatus
     emailVerified: row.email_verified,
     name: row.name,
     surname: row.surname,
-    image: row.image,
+    image: photoUrl(row.id, row.photo_key),
     dni: row.dni,
     badgeId: row.badge_id,
     language: row.language,

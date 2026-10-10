@@ -1,6 +1,7 @@
 import { pool, type Queryable } from "../../db/pool.js";
 import { createAuthorizationContext, getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
+import { photoContentType } from "../../lib/profile-files.js";
 
 /**
  * H54 personal-data export bundle. Every query is explicitly scoped to
@@ -134,7 +135,8 @@ export async function buildExportBundle(
     (
       await db.query(
         `SELECT directory_visible, show_surname, show_photo, show_project, headline,
-                location_note, consented_at, created_at, updated_at
+                location_note, bio, socials, share_cv, cv_filename, cv_uploaded_at,
+                consented_at, created_at, updated_at
            FROM user_public_profiles WHERE user_id = $1`,
         [subjectUserId],
       )
@@ -181,6 +183,11 @@ export async function buildExportBundle(
       surname: user.surname,
       dni: user.dni,
       image: user.image,
+      // #934: the private account photo; its bytes stay downloadable from
+      // GET /api/users/:id/photo, so the bundle records that one exists.
+      photo: user.photo_key
+        ? { contentType: photoContentType(user.photo_key), uploadedAt: user.photo_updated_at }
+        : null,
       badgeId: user.badge_id,
       badgeIdHistory: user.badge_id_history,
       foodIntolerances: user.food_intolerances,
