@@ -10,17 +10,22 @@ import { type Translate, useLocale } from "@/lib/i18n";
  * trigger `beforeunload` and must call `confirmDiscard()` themselves before
  * switching away from a dirty category.
  *
- * Browser Back / swipe-back is covered with a sentinel history entry pushed
- * while dirty: Back first pops the sentinel (same URL, nothing unmounts), and
- * the popstate handler either confirms and steps back once more or re-arms the
- * sentinel. It is pushed once per dirty period, never on rerender (R003); after
- * a save the spent entry stays, so one extra Back lands on the same URL.
+ * Browser Back / swipe-back is covered only when `guardBrowserBack` is set
+ * (off by default; event settings opts in): a sentinel history entry is pushed
+ * while dirty, Back first pops it (same URL, nothing unmounts), and the popstate
+ * handler either confirms and steps back once more or re-arms the sentinel. It
+ * is pushed once per dirty period, never on rerender (R003); after a save the
+ * spent entry stays, so one extra Back lands on the same URL. Without the
+ * option no history entry is pushed and no popstate listener is registered.
  *
  * Internal links intercepted at the document's capture phase: stopping
  * propagation there keeps the event from ever reaching the link's own click
  * handler (Next.js `Link`), so a cancelled confirm leaves navigation as a no-op.
  */
-export function useUnsavedChangesGuard(dirty: boolean) {
+export function useUnsavedChangesGuard(
+  dirty: boolean,
+  { guardBrowserBack = false }: { guardBrowserBack?: boolean } = {},
+) {
   const { t } = useLocale();
   // Read through a ref so a locale change never re-runs the effect and re-arms history.
   const tRef = useRef(t);
@@ -63,8 +68,10 @@ export function useUnsavedChangesGuard(dirty: boolean) {
       }
     }
 
-    arm();
-    window.addEventListener("popstate", onPopState);
+    if (guardBrowserBack) {
+      arm();
+      window.addEventListener("popstate", onPopState);
+    }
     window.addEventListener("beforeunload", onBeforeUnload);
     document.addEventListener("click", onClickCapture, true);
     return () => {
@@ -72,7 +79,7 @@ export function useUnsavedChangesGuard(dirty: boolean) {
       window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("click", onClickCapture, true);
     };
-  }, [dirty]);
+  }, [dirty, guardBrowserBack]);
 }
 
 /** Category-switch guard: returns false (and blocks the switch) when the user cancels. */

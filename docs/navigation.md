@@ -296,8 +296,10 @@ lone visible section opens directly only when no `?tab=` is requested; a
 `?tab=` the caller cannot manage shows the list. The URL is the only state, so
 selecting writes nothing back. Dirtiness is tracked for the open section only;
 leaving it with unsaved edits — back link, sidebar, browser Back/swipe-back or
-unload — asks for confirmation (`useUnsavedChangesGuard`: a sentinel history
-entry is pushed once while dirty and consumed by the popstate confirm).
+unload — asks for confirmation (`useUnsavedChangesGuard`; browser Back is
+guarded only here, via the opt-in `guardBrowserBack`: a sentinel history entry
+is pushed once while dirty and consumed by the popstate confirm. Other users of
+the hook, e.g. the profile and application builder, guard links and unload only).
 
 Judging hours are in Event settings (`/settings/event?tab=judging`) and retain
 the `queue:admin` gate. `/queue/settings` preserves saved links by directing

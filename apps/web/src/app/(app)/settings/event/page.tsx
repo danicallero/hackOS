@@ -134,7 +134,7 @@ export default function EventSettingsPage() {
   const activeDirty = active !== null && dirtyState.category === active && dirtyState.dirty;
 
   // Links, browser Back and unload out of a dirty section are confirmed here.
-  useUnsavedChangesGuard(activeDirty);
+  useUnsavedChangesGuard(activeDirty, { guardBrowserBack: true });
 
   if (visibleCategories.length === 0) {
     return <AccessDenied ask={t("noEventSettingsAccessDesc")} />;
