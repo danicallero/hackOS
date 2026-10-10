@@ -289,9 +289,10 @@ describe("profile CV (#935)", () => {
     );
     expect(download.rawPayload.equals(PDF)).toBe(true);
 
-    // Readers without the capability, without event access or of a hidden profile.
+    // Readers without the capability who did not save the person (#935: the same
+    // 404 as a hidden profile), without event access, or of a hidden profile.
     const participant = await person("Other", "Participant");
-    expect((await get(`/api/directory/${me}/cv`, participant)).statusCode).toBe(403);
+    expect((await get(`/api/directory/${me}/cv`, participant)).statusCode).toBe(404);
     expect((await get(`/api/directory/${me}/cv`)).statusCode).toBe(401);
     await putProfile(me, { ...VISIBLE, directoryVisible: false, shareCv: true });
     expect((await get(`/api/directory/${me}/cv`, reader)).statusCode).toBe(404);

@@ -251,8 +251,37 @@ export async function listDirectory(
 }
 
 /** Hidden and missing profiles are deliberately indistinguishable (#934). */
-export async function getDirectoryEntry(readerId: number, userId: number): Promise<DirectoryEntry> {
+/**
+ * Whether the reader saved this person in their event diary (#935). Saving is
+ * open to every attendee, so a saved person stays readable without
+ * `directory:read`; visibility is still enforced by the caller's query.
+ */
+export async function savedByReader(
+  db: Queryable,
+  readerId: number,
+  userId: number,
+): Promise<boolean> {
+  const { rowCount } = await db.query(
+    "SELECT 1 FROM diary_entries WHERE owner_id = $1 AND target_user_id = $2",
+    [readerId, userId],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+/** Directory readers see any listed person; others only the people they saved. */
+async function assertMayReadPerson(readerId: number, userId: number, canBrowse: boolean) {
   await assertReaderAdmitted(readerId);
+  if (!canBrowse && !(await savedByReader(pool, readerId, userId))) {
+    throw new NotFoundError("Person not found");
+  }
+}
+
+export async function getDirectoryEntry(
+  readerId: number,
+  userId: number,
+  canBrowse: boolean,
+): Promise<DirectoryEntry> {
+  await assertMayReadPerson(readerId, userId, canBrowse);
   const { rows } = await pool.query<EntryRow>(
     `${entrySql("user_public_profiles p")} WHERE ${VISIBLE_WHERE} AND u.id = $1`,
     [userId],
@@ -268,8 +297,9 @@ export async function getDirectoryEntry(readerId: number, userId: number): Promi
 export async function getDirectoryCv(
   readerId: number,
   userId: number,
+  canBrowse: boolean,
 ): Promise<{ key: string; filename: string }> {
-  await assertReaderAdmitted(readerId);
+  await assertMayReadPerson(readerId, userId, canBrowse);
   const { rows } = await pool.query<{ cv_key: string; cv_filename: string }>(
     `SELECT p.cv_key, p.cv_filename
        FROM user_public_profiles p JOIN users u ON u.id = p.user_id

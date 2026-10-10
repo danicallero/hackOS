@@ -1,13 +1,11 @@
 "use client";
 
-import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -21,7 +19,6 @@ import { ApiError, api } from "@/lib/api";
 import { apiAssetUrl, type DirectoryEntry } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
-import { useCan } from "@/lib/session";
 import { type ChallengeOption, challengeTitleText } from "../../projects/shared";
 
 type State =
@@ -35,12 +32,12 @@ const PROJECT_KIND: Record<"project" | "workGroup", MessageKey> = {
   workGroup: "publicProfileWorkGroup",
 };
 
-/** One opted-in person from `GET /api/directory/:userId` (#934, #935). */
+/**
+ * One opted-in person from `GET /api/directory/:userId` (#934, #935). Not gated
+ * on `directory:read` here: attendees may read the people they saved in their
+ * diary, and the API answers the same 404 for anyone else.
+ */
 export function PersonDetail({ userId }: { userId: number }) {
-  const { t } = useLocale();
-  const canRead = useCan(CAPABILITIES.DIRECTORY_READ);
-  // Gate before mounting the reader, so no request or stream opens without access.
-  if (!canRead) return <AccessDenied ask={t("peopleAccessDeniedDesc")} />;
   return <PersonReader userId={userId} />;
 }
 

@@ -5,7 +5,7 @@ import { ApiError, api } from "@/lib/api";
 import type { DirectoryEntry } from "@/lib/directory";
 import { API_URL } from "@/lib/env";
 
-const env = vi.hoisted(() => ({ canRead: true, refreshNonce: 0, autoRefresh: vi.fn() }));
+const env = vi.hoisted(() => ({ refreshNonce: 0, autoRefresh: vi.fn() }));
 
 vi.mock("@/lib/api", () => ({
   api: { get: vi.fn() },
@@ -24,10 +24,6 @@ vi.mock("@/hooks/use-auto-refresh", () => ({
     env.autoRefresh(...args);
     return env.refreshNonce;
   },
-}));
-vi.mock("@/lib/session", () => ({ useCan: () => env.canRead }));
-vi.mock("@/components/common/access-denied", () => ({
-  AccessDenied: ({ ask }: { ask: string }) => <p>{ask}</p>,
 }));
 const t = (key: string) => key;
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t, language: "es" }) }));
@@ -64,7 +60,6 @@ async function render(userId = 42) {
 }
 
 beforeEach(() => {
-  env.canRead = true;
   env.refreshNonce = 0;
   env.autoRefresh.mockReset();
   person = entry();
@@ -142,12 +137,5 @@ describe("PersonDetail (#934, #935)", () => {
     const retry = [...container.querySelectorAll("button")].find((b) => b.textContent === "retry");
     await act(async () => retry?.click());
     expect(container.querySelector("h1")?.textContent).toBe("Back again");
-  });
-
-  it("opens nothing without directory access", async () => {
-    env.canRead = false;
-    await render();
-    expect(container.textContent).toBe("peopleAccessDeniedDesc");
-    expect(get).not.toHaveBeenCalled();
   });
 });

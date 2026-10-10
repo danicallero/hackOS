@@ -202,6 +202,39 @@ describe("scanning people", () => {
     expect((await scan("04ACAC00000001", rep)).statusCode).toBe(201);
   });
 
+  it("lets a sponsor without directory:read open only the people they saved", async () => {
+    const sponsorRole = await createRole([], { name: "Sponsor" });
+    const rep = await createUser();
+    await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [
+      rep,
+      sponsorRole,
+    ]);
+    const ana = await person("Ana");
+    const bea = await person("Bea");
+    const read = (id: number) =>
+      app.inject({ method: "GET", url: `/api/directory/${id}`, headers: asUser(rep) });
+    const photo = (id: number) =>
+      app.inject({ method: "GET", url: `/api/users/${id}/photo`, headers: asUser(rep) });
+    const cv = (id: number) =>
+      app.inject({ method: "GET", url: `/api/directory/${id}/cv`, headers: asUser(rep) });
+    // Not saved yet: indistinguishable from a hidden or missing person.
+    expect((await read(ana.id)).statusCode).toBe(404);
+    expect((await scan(ana.badge, rep)).statusCode).toBe(201);
+    const opened = await read(ana.id);
+    expect(opened.statusCode).toBe(200);
+    expect(opened.json()).toMatchObject({ userId: ana.id, displayName: "Ana S." });
+    expect((await read(bea.id)).statusCode).toBe(404);
+    // No photo or CV stored: the same 404 as for someone not saved.
+    expect((await photo(ana.id)).statusCode).toBe(404);
+    expect((await cv(bea.id)).statusCode).toBe(404);
+    // Hiding the profile closes it again, even for those who saved it.
+    await pool.query(
+      `UPDATE user_public_profiles SET directory_visible = false WHERE user_id = $1`,
+      [ana.id],
+    );
+    expect((await read(ana.id)).statusCode).toBe(404);
+  });
+
   it("requires event access", async () => {
     const outsider = await createUser();
     expect((await list(outsider)).statusCode).toBe(403);

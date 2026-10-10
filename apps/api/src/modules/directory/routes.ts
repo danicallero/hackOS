@@ -1,7 +1,12 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { requireAuth, requireCapability } from "../../lib/capabilities.js";
+import {
+  getRequestAuthorizationContext,
+  requireAuth,
+  requireCapability,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { BadRequestError } from "../../lib/errors.js";
 import { idempotencyGuard, requireIdempotencyKey } from "../../lib/idempotency.js";
 import {
@@ -40,6 +45,18 @@ const authenticated = { routeAccessPolicy: { kind: "authenticated" as const } };
 const directoryReader = {
   routeAccessPolicy: { kind: "capability" as const, capability: CAPABILITIES.DIRECTORY_READ },
 };
+/** A directory reader, or an attendee who saved this person in their diary (#935). */
+const personReader = {
+  routeAccessPolicy: {
+    kind: "contextual" as const,
+    policy: "directory-person-access",
+    resource: { source: "params" as const, field: "userId" },
+  },
+};
+
+function canBrowse(req: FastifyRequest): Promise<boolean> {
+  return userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.DIRECTORY_READ);
+}
 
 export function registerDirectoryRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -91,16 +108,16 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
   r.get(
     "/api/directory/:userId",
     {
-      config: directoryReader,
-      preHandler: requireCapability(CAPABILITIES.DIRECTORY_READ),
+      config: personReader,
+      preHandler: requireAuth,
       schema: {
         params: userParams,
         summary: "Read one directory entry",
         description:
-          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared), project and challenges. A missing and a hidden profile both answer 404, so visibility cannot be probed (#934, #935).",
+          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared), project and challenges. Open to `directory:read` holders and to attendees who saved this person in their diary. A missing or hidden profile, and a person the caller may not read, all answer 404, so visibility cannot be probed (#934, #935).",
       },
     },
-    async (req) => getDirectoryEntry(req.userId as number, req.params.userId),
+    async (req) => getDirectoryEntry(req.userId as number, req.params.userId, await canBrowse(req)),
   );
   r.delete(
     "/api/users/:id/public-profile",
@@ -191,17 +208,21 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
   r.get(
     "/api/directory/:userId/cv",
     {
-      config: directoryReader,
-      preHandler: requireCapability(CAPABILITIES.DIRECTORY_READ),
+      config: personReader,
+      preHandler: requireAuth,
       schema: {
         params: userParams,
         summary: "Download a shared CV",
         description:
-          "Streams the CV of an opted-in person who shares it. A hidden profile, an unshared CV and a missing CV all answer 404. The access check runs on every request; the reader must also have event access (#935).",
+          "Streams the CV of an opted-in person who shares it. A hidden profile, an unshared CV and a missing CV all answer 404. Open to `directory:read` holders and to attendees who saved this person; the access check runs on every request and the reader must also have event access (#935).",
       },
     },
     async (req, reply) => {
-      const cv = await getDirectoryCv(req.userId as number, req.params.userId);
+      const cv = await getDirectoryCv(
+        req.userId as number,
+        req.params.userId,
+        await canBrowse(req),
+      );
       return sendProfileObject(reply, cv.key, {
         contentType: "application/pdf",
         cacheControl: PDF_CACHE,

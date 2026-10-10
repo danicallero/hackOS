@@ -125,14 +125,14 @@ is not a test account.
 | `GET /api/me/public-profile` | authenticated + event access |
 | `PUT /api/me/public-profile` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/directory` | `directory:read` + event access |
-| `GET /api/directory/:userId` | `directory:read` + event access |
-| `GET /api/directory/:userId/cv` | `directory:read` + event access; visible profile with `share_cv` |
+| `GET /api/directory/:userId` | event access + (`directory:read` or the person is in the caller's diary, #935) |
+| `GET /api/directory/:userId/cv` | as above; visible profile with `share_cv` |
 | `POST /api/me/public-profile/cv` | authenticated + event access, multipart, `Idempotency-Key` |
 | `DELETE /api/me/public-profile/cv` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/me/public-profile/cv` | authenticated (own CV, shared or not) |
 | `POST /api/me/photo` | authenticated, multipart, `Idempotency-Key` |
 | `DELETE /api/me/photo` | authenticated, `Idempotency-Key` |
-| `GET /api/users/:id/photo` | the person; or `users:read`; or `directory:read` + event access while the person is listed with `show_photo` |
+| `GET /api/users/:id/photo` | the person; or `users:read`; or event access + (`directory:read` or the person is in the caller's diary) while the person is listed with `show_photo` |
 | `DELETE /api/users/:id/public-profile` | `users:write` (moderation), `Idempotency-Key` |
 
 `directory:read` is seeded for every seeded role except Sponsor and Judging
@@ -187,8 +187,9 @@ address stays visible next to the icon; links open with
 `rel="noopener noreferrer nofollow ugc"`), where to find the person, project
 and challenges. Empty rows are omitted. A 404 (hidden or missing) shows
 "Person not found"; other failures keep an inline error with Retry. It
-refetches on `domain.changed` for the `directory` topic and, like the list,
-opens nothing without `directory:read`.
+refetches on `domain.changed` for the `directory` topic. It is not gated on
+`directory:read`: attendees who saved the person in their diary may open it,
+and the API answers the same 404 to anyone else.
 
 ## Writes, audit and concurrency
 
