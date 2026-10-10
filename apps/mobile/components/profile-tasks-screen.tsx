@@ -8,7 +8,6 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import {
-  confirmLockedDietary,
   type DietaryDraft,
   dietaryDraftFromMe,
   fetchMealPlan,
@@ -41,7 +40,8 @@ export default function ProfileTasksScreen() {
   // Opened from Account to edit one answer rather than as the next-entry prompt.
   const editing = params.edit === "1";
   const { me, refetch } = useMeContext();
-  const showDietary = tasks.includes("dietary");
+  // H7: a locked profile's dietary data is not self-editable; skip the step.
+  const showDietary = tasks.includes("dietary") && !me?.profileLocked;
   const wantsMeals = tasks.includes("meal_plan");
   const { intolerances } = useFoodIntolerances(showDietary);
   const mealPlan = useCachedApi<MealPlan>(
@@ -71,10 +71,8 @@ export default function ProfileTasksScreen() {
 
   if (!me || !dietary) return null;
 
-  // H7: after an accepted application the answer can be confirmed, not edited.
-  const dietaryLocked = Boolean(me.profileLocked);
   const plan = mealPlan.data;
-  const dietaryReady = !showDietary || dietaryLocked || isDietaryAnswered(dietary);
+  const dietaryReady = !showDietary || isDietaryAnswered(dietary);
   // A failed plan load must not block saving the dietary answer on its own.
   const mealsReady = !wantsMeals || plan !== null || mealPlan.error !== null;
   const nothingToSave = !showDietary && plan === null;
@@ -86,7 +84,7 @@ export default function ProfileTasksScreen() {
     try {
       if (showDietary && !dietarySaved) {
         try {
-          await (dietaryLocked ? confirmLockedDietary(me) : saveDietary(dietary));
+          await saveDietary(dietary);
           setDietarySaved(true);
         } catch {
           setSaveError(t("dietarySaveError"));
@@ -138,7 +136,6 @@ export default function ProfileTasksScreen() {
             <ToggleRow
               label={t("noRestrictions")}
               value={dietary.noRestrictions}
-              disabled={dietaryLocked}
               onChange={(on) => setDietary((current) => current && setNoRestrictions(current, on))}
             />
             {intolerances.map((item) => (
@@ -147,23 +144,13 @@ export default function ProfileTasksScreen() {
                 <ToggleRow
                   label={item.label[language]}
                   value={dietary.intolerances.includes(item.id)}
-                  disabled={dietaryLocked}
                   onChange={(on) =>
                     setDietary((current) => current && toggleIntolerance(current, item.id, on))
                   }
                 />
               </View>
             ))}
-            {dietaryLocked ? (
-              dietary.notes ? (
-                <>
-                  <Separator />
-                  <Text selectable style={{ color: colors.label, fontSize: 16, padding: 16 }}>
-                    {dietary.notes}
-                  </Text>
-                </>
-              ) : null
-            ) : dietary.noRestrictions ? null : (
+            {dietary.noRestrictions ? null : (
               <>
                 <Separator />
                 <TextInput
@@ -216,7 +203,7 @@ export default function ProfileTasksScreen() {
 
         <View style={{ gap: 8 }}>
           <ActionButton
-            label={showDietary && dietaryLocked ? t("confirm") : t("save")}
+            label={t("save")}
             variant="filled"
             busy={saving}
             disabled={!dietaryReady || !mealsReady || nothingToSave}

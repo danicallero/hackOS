@@ -20,7 +20,11 @@ import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
 import { setNfcShield } from "@/lib/nfc-reader";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
-import { PROFILE_TASKS_PATH, shouldPresentProfileTasks } from "@/lib/profile-tasks";
+import {
+  PROFILE_TASKS_PATH,
+  promptableProfileTasks,
+  shouldPresentProfileTasks,
+} from "@/lib/profile-tasks";
 import { registerForPushNotifications } from "@/lib/push";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { isOperator } from "@/lib/tabs";
@@ -272,7 +276,7 @@ function ProfileTasksPrompt({
       sessionPending,
       pathname,
     });
-  const tasks = me?.pendingProfileTasks?.join(",") ?? "";
+  const tasks = me ? promptableProfileTasks(me).join(",") : "";
   // Only guards the frames between push and the route change, not the session.
   const requestedFrom = useRef<string | null>(null);
 

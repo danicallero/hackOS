@@ -36,6 +36,11 @@ export function isScannerPath(pathname: string): boolean {
 
 export const PROFILE_TASKS_PATH = "/profile-tasks";
 
+/** H7: a locked profile cannot change dietary data, so it is never asked for it. */
+export function promptableProfileTasks(me: Me): ProfileTask[] {
+  return (me.pendingProfileTasks ?? []).filter((task) => task !== "dietary" || !me.profileLocked);
+}
+
 export function shouldPresentProfileTasks({
   me,
   offline,
@@ -52,7 +57,7 @@ export function shouldPresentProfileTasks({
 }): boolean {
   if (!me || offline || !navigationReady || sessionPending) return false;
   if (!me.hasEventAccess || me.accountState !== "active") return false;
-  if (!me.pendingProfileTasks?.length) return false;
+  if (promptableProfileTasks(me).length === 0) return false;
   if (handledUserIds.has(me.id)) return false;
   // "/" only redirects into the tabs; pushing over it would race that redirect.
   if (pathname === "/" || pathname === PROFILE_TASKS_PATH) return false;
@@ -108,21 +113,6 @@ export async function saveDietary(draft: DietaryDraft): Promise<void> {
     body: JSON.stringify({
       foodIntolerances: draft.noRestrictions ? [] : draft.intolerances,
       foodIntoleranceNotes: draft.noRestrictions || notes === "" ? null : notes,
-    }),
-  });
-}
-
-/**
- * H7: a locked profile can only confirm what staff already recorded. The
- * stored values are resubmitted verbatim so the API sees no change.
- */
-export async function confirmLockedDietary(me: Me): Promise<void> {
-  await apiFetch("/api/me", {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      foodIntolerances: me.foodIntolerances,
-      foodIntoleranceNotes: me.foodIntoleranceNotes,
     }),
   });
 }

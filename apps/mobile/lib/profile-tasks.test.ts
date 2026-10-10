@@ -5,6 +5,7 @@ import {
   markProfileTasksHandled,
   mealPlanAnswers,
   parseProfileTasks,
+  promptableProfileTasks,
   resetProfileTasksHandled,
   setNoRestrictions,
   shouldPresentProfileTasks,
@@ -57,6 +58,14 @@ describe("shouldPresentProfileTasks", () => {
     }
     expect(isScannerPath("/activities/people")).toBe(false);
     expect(isScannerPath("/others/statistics")).toBe(false);
+  });
+
+  it("never prompts a locked profile for dietary data", () => {
+    const locked = { ...me, profileLocked: true } as Me;
+    expect(shouldPresentProfileTasks({ ...ready, me: locked })).toBe(false);
+    const sponsor = { ...locked, pendingProfileTasks: ["dietary", "meal_plan"] } as Me;
+    expect(shouldPresentProfileTasks({ ...ready, me: sponsor })).toBe(true);
+    expect(promptableProfileTasks(sponsor)).toEqual(["meal_plan"]);
   });
 
   it("waits for the initial session and the root redirect", () => {

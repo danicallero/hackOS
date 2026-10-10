@@ -347,8 +347,8 @@ distributed to other Expo Router apps without importing hackOS code.
   Food intolerances opens `app/profile-tasks.tsx` to edit the dietary answer,
   including an explicit "No restrictions" option (#933) that `PATCH /api/me`
   records as a confirmed empty answer; the row is read-only offline or once the
-  H7 profile lock applies (the next-entry prompt then only confirms the stored
-  answer, resubmitted verbatim). Sponsor representatives (`isSponsorRep`) also
+  H7 profile lock applies (the next-entry prompt then skips the dietary step).
+  Sponsor representatives (`isSponsorRep`) also
   see a Meals section listing `GET /api/me/meal-plan`, reloaded on every focus
   and cached under `user:<id>:meal-plan` so sign-out and 401 invalidation clear
   it. Toggles only change a local draft; Save (shown while an open meal is

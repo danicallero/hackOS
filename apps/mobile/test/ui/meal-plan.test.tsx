@@ -396,8 +396,8 @@ describe("Profile tasks sheet", () => {
     expect(bodyOf("PATCH", "/api/me")).toBeUndefined();
   });
 
-  it("only confirms a locked profile's stored answer", async () => {
-    mockParams = { tasks: "dietary" };
+  it("skips the dietary step for a locked profile and never sends it", async () => {
+    mockParams = { tasks: "dietary,meal_plan" };
     mockMeContext.me = {
       ...baseMe,
       profileLocked: true,
@@ -405,15 +405,12 @@ describe("Profile tasks sheet", () => {
       foodIntoleranceNotes: " nuts ",
     };
     await renderMobile(<ProfileTasksScreen />);
-    expect((await screen.findByLabelText("Gluten")).props.disabled).toBe(true);
-    expect(screen.getByLabelText("noRestrictions").props.disabled).toBe(true);
-    expect(screen.queryByLabelText("accountDietaryNotes")).toBeNull();
-    await act(async () => fireEvent.press(screen.getByRole("button", { name: "confirm" })));
+    await screen.findByLabelText(label(lunch));
+    expect(screen.queryByLabelText("noRestrictions")).toBeNull();
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
 
-    expect(bodyOf("PATCH", "/api/me")).toEqual({
-      foodIntolerances: [3],
-      foodIntoleranceNotes: " nuts ",
-    });
+    expect(bodyOf("PATCH", "/api/me")).toBeUndefined();
+    expect(bodyOf("PUT", "/api/me/meal-plan")).toBeDefined();
     expect(mockBack).toHaveBeenCalled();
   });
 
