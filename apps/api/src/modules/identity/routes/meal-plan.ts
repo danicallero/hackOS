@@ -1,13 +1,18 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../../db/pool.js";
-import { requireAuth } from "../../../lib/capabilities.js";
+import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
 import { idempotencyGuard } from "../../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
+import { assertFixtureSubjectScope } from "../../logistics/review-fixture-scope.js";
 import { getMealPlan, replaceMealPlan } from "../meal-plan.js";
 
-/** Self-service sponsor meal plan (#933). Benign self-edit: no audit row. */
+/**
+ * Sponsor meal plan (#933). Self-service is a benign self-edit (no audit
+ * row); the staff correction under meal-plans:manage is audited.
+ */
 
 export const mealPlanResponseSchema = z.object({
   confirmedAt: z.string().nullable(),
@@ -82,5 +87,53 @@ export function registerMealPlanRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => replaceMealPlan(req.userId as number, req.body.meals),
+  );
+
+  const userParams = z.object({ id: z.coerce.number().int().positive() });
+
+  api.get(
+    "/api/users/:id/meal-plan",
+    {
+      preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
+      schema: {
+        params: userParams,
+        summary: "Get a user's meal plan",
+        description:
+          "Staff view of a sponsor representative's meal plan, same shape as GET /api/me/meal-plan. " +
+          "403 `not_sponsor` when the user is not a sponsor representative.",
+        response: { 200: mealPlanResponseSchema },
+      },
+    },
+    async (req) => {
+      await assertFixtureSubjectScope(pool, req.userId as number, req.params.id);
+      return getMealPlan(pool, req.params.id);
+    },
+  );
+
+  api.put(
+    "/api/users/:id/meal-plan",
+    {
+      preHandler: [requireCapability(CAPABILITIES.MEAL_PLANS_MANAGE), idempotencyGuard],
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.MEAL_PLANS_MANAGE }),
+      schema: {
+        params: userParams,
+        summary: "Replace a user's meal plan",
+        description:
+          "Staff correction of a sponsor representative's meal plan. Same body, rules and errors as " +
+          "PUT /api/me/meal-plan (locked meals stay closed), except that it is partial: only the " +
+          "meals in the body are written, meals left out stay unanswered, and the sponsor's " +
+          "`confirmedAt` is not set. Writes one `meal_plan.updated` audit row with the attending " +
+          "meal ids before and after, in the same transaction, when any answer changed — also " +
+          "when staff correct their own plan here. Accepts `Idempotency-Key`. Requires " +
+          "meal-plans:manage.",
+        body: mealPlanBodySchema,
+        response: { 200: mealPlanResponseSchema },
+      },
+    },
+    async (req) => {
+      await assertFixtureSubjectScope(pool, req.userId as number, req.params.id);
+      return replaceMealPlan(req.params.id, req.body.meals, { actorId: req.userId as number });
+    },
   );
 }

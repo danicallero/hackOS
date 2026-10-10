@@ -1,6 +1,7 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { type Queryable, withTransaction } from "../../db/pool.js";
+import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { computeMembershipFlags } from "./role.js";
@@ -131,16 +132,30 @@ async function mealActivityIds(db: Queryable, ids: number[]): Promise<Set<number
 }
 
 /**
+ * A staff correction (PUT /api/users/:id/meal-plan): the route decides it, not
+ * a comparison of actor and subject, so staff editing their own plan through
+ * that route is still audited (H53).
+ */
+export interface MealPlanCorrection {
+  actorId: number;
+}
+
+/**
  * Replace semantics: the body must answer every offered, unlocked meal.
  * Locked meals may be echoed back unchanged (clients submit the full list)
  * but never changed; a locked meal the caller never answered is ignored.
  * Meals that ended or stopped being offered since the client loaded the
  * list are ignored too; only ids that are not meal activities are refused. The user row lock serializes concurrent submissions
  * from several tabs/devices so the stored plan is always one whole payload.
+ *
+ * A staff correction is partial instead: only the meals in the body are
+ * written, unanswered meals stay unanswered, and the sponsor's own
+ * confirmation (`meal_plan_confirmed_at`) is left untouched.
  */
 export async function replaceMealPlan(
   userId: number,
   answers: ReadonlyArray<{ activityId: number; attending: boolean }>,
+  correction?: MealPlanCorrection,
 ): Promise<MealPlan> {
   const { plan, written } = await withTransaction(async (client) => {
     const { rows: userRows } = await client.query(
@@ -180,14 +195,14 @@ export async function replaceMealPlan(
     }
     const open = [...offered.values()].filter((meal) => !meal.locked);
     const missing = open.filter((meal) => !byActivity.has(meal.activityId));
-    if (missing.length > 0) {
+    if (!correction && missing.length > 0) {
       throw new BadRequestError("Answer every open meal", {
         code: "meal_plan_incomplete",
         activityIds: missing.map((meal) => meal.activityId),
       });
     }
 
-    const openIds = open.map((meal) => meal.activityId);
+    const openIds = open.map((meal) => meal.activityId).filter((id) => byActivity.has(id));
     let changed: number[] = [];
     if (openIds.length > 0) {
       const { rows } = await client.query<{ activity_id: number }>(
@@ -202,11 +217,30 @@ export async function replaceMealPlan(
       );
       changed = rows.map((row) => row.activity_id);
     }
-    await client.query(
-      `UPDATE users SET meal_plan_confirmed_at = COALESCE(meal_plan_confirmed_at, now())
-        WHERE id = $1`,
-      [userId],
-    );
+    // The sponsor's own submission is a benign self-edit and is not audited.
+    if (correction && changed.length > 0) {
+      const attendingIds = (plan: Map<number, boolean | null>) =>
+        [...plan].filter(([, attending]) => attending === true).map(([id]) => id);
+      const before = new Map([...offered.values()].map((m) => [m.activityId, m.attending]));
+      const after = new Map(before);
+      for (const id of openIds) after.set(id, byActivity.get(id) ?? null);
+      await audit(client, {
+        actorId: correction.actorId,
+        entityType: "user",
+        entityId: userId,
+        action: "meal_plan.updated",
+        source: "admin",
+        before: { attending: attendingIds(before) },
+        after: { attending: attendingIds(after) },
+      });
+    }
+    if (!correction) {
+      await client.query(
+        `UPDATE users SET meal_plan_confirmed_at = COALESCE(meal_plan_confirmed_at, now())
+          WHERE id = $1`,
+        [userId],
+      );
+    }
     return {
       // Sequential: one transaction client cannot run queries concurrently.
       plan: { ...(await planHeader(client, userId)), meals: await offeredMeals(client, userId) },
