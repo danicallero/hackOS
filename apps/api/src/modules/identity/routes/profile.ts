@@ -24,6 +24,7 @@ import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliati
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
 import { getBetterAuthSessionToken } from "../auth.js";
+import { hasPendingMealPlan } from "../meal-plan.js";
 import {
   cancelPendingAccountRemoval,
   getAccountRemovalEligibility,
@@ -180,6 +181,8 @@ const userResponseSchema = z.object({
   foodIntolerances: z.array(z.number()),
   foodIntoleranceNotes: z.string().nullable(),
   dietaryDataState: z.enum(DIETARY_DATA_STATES),
+  // #933: last explicit dietary answer, including "no restrictions".
+  dietaryConfirmedAt: z.string().nullable(),
   shirtSize: z.string().nullable(),
   universityId: z.number().nullable(),
   notes: z.string().nullable(),
@@ -188,6 +191,8 @@ const userResponseSchema = z.object({
   removal: accountRemovalProfileStateSchema.nullable(),
   createdAt: z.string(),
 });
+
+const PENDING_PROFILE_TASKS = ["dietary", "meal_plan"] as const;
 
 const userProjectSchema = z.object({
   id: z.number(),
@@ -220,6 +225,7 @@ interface UserRow {
   food_intolerances: number[];
   food_intolerance_notes: string | null;
   dietary_data_state: (typeof DIETARY_DATA_STATES)[number];
+  dietary_confirmed_at: Date | null;
   shirt_size: string | null;
   university_id: number | null;
   notes: string | null;
@@ -265,6 +271,7 @@ function serializeUser(row: UserRow, removalStatus?: PendingAccountRemovalStatus
     foodIntolerances: row.food_intolerances,
     foodIntoleranceNotes: row.food_intolerance_notes,
     dietaryDataState: row.dietary_data_state,
+    dietaryConfirmedAt: row.dietary_confirmed_at?.toISOString() ?? null,
     shirtSize: row.shirt_size,
     universityId: row.university_id,
     notes: row.notes,
@@ -363,7 +370,9 @@ async function applyUserPatch(
                     OR NULLIF(BTRIM(food_intolerance_notes), '') IS NOT NULL
                   THEN 'present'
                   ELSE 'not_provided'
-                END
+                END,
+                -- #933: any explicit dietary save is an answer, even an empty one.
+                dietary_confirmed_at = now()
           WHERE id = $1
           RETURNING *`,
         [targetId],
@@ -394,6 +403,67 @@ async function applyUserPatch(
     }
     return after;
   });
+}
+
+/**
+ * M1.5/H7 self-edit lock, shared by PATCH /api/me and the #933 dietary
+ * confirmation: changing identity or logistics fields is refused once an
+ * application has been accepted.
+ */
+async function assertSelfLogisticsEditable(
+  userId: number,
+  patch: {
+    name?: string;
+    surname?: string;
+    shirtSize?: string | null;
+    foodIntolerances?: number[];
+    foodIntoleranceNotes?: string | null;
+  },
+): Promise<void> {
+  // M1.5/H7: once any application has been accepted, the participant can
+  // no longer CHANGE their own legal name (it's on their badge/certificate)
+  // or their logistics data (shirt size, dietary info — already committed
+  // to shirt orders/catering headcounts). We compare against the stored
+  // values so an unchanged field (the settings form always submits them
+  // all) doesn't block edits to fields that remain open, like language.
+  // Staff can still fix these via PATCH /api/users/:id.
+  const wantsIdentityChange = patch.name !== undefined || patch.surname !== undefined;
+  const wantsLogisticsChange =
+    patch.shirtSize !== undefined ||
+    patch.foodIntolerances !== undefined ||
+    patch.foodIntoleranceNotes !== undefined;
+  if (wantsIdentityChange || wantsLogisticsChange) {
+    const { rows: cur } = await pool.query(
+      `SELECT name, surname, shirt_size, food_intolerances, food_intolerance_notes
+         FROM users WHERE id = $1`,
+      [userId],
+    );
+    const changingName = patch.name !== undefined && patch.name !== cur[0]?.name;
+    const changingSurname = patch.surname !== undefined && patch.surname !== cur[0]?.surname;
+    const changingShirtSize =
+      patch.shirtSize !== undefined && patch.shirtSize !== cur[0]?.shirt_size;
+    const changingIntolerances =
+      patch.foodIntolerances !== undefined &&
+      JSON.stringify([...patch.foodIntolerances].sort()) !==
+        JSON.stringify([...(cur[0]?.food_intolerances ?? [])].sort());
+    const changingNotes =
+      patch.foodIntoleranceNotes !== undefined &&
+      patch.foodIntoleranceNotes !== cur[0]?.food_intolerance_notes;
+    if (
+      changingName ||
+      changingSurname ||
+      changingShirtSize ||
+      changingIntolerances ||
+      changingNotes
+    ) {
+      if (await hasAcceptedApplication(pool, userId)) {
+        throw new ConflictError(
+          "Your profile is locked because an application has been accepted — ask staff to change your name, shirt size, or dietary info.",
+          { code: "profile_locked" },
+        );
+      }
+    }
+  }
 }
 
 export function registerProfileRoutes(app: FastifyInstance): void {
@@ -459,7 +529,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "accounts (H55), whether they currently hold role-derived event access, whether they have a project/queue entry of their own " +
           "(drives hiding the My project/My queue nav items, issue #424), mobile " +
           "entry eligibility, and the caller's complete assigned-role set (H8) alongside " +
-          "the single highest-visible `visibleRoleName` shown elsewhere. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
+          "the single highest-visible `visibleRoleName` shown elsewhere. `pendingProfileTasks` " +
+          "(#933) lists what to ask for on next entry: `dietary` when the caller has event access " +
+          "but never gave an explicit dietary answer, `meal_plan` when a sponsor representative " +
+          "has an open offered meal without an answer. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
@@ -501,6 +574,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // form greys them out and points the participant at staff.
             profileLocked: z.boolean(),
             hasStatisticsPanels: z.boolean(),
+            // #933: profile data the client should ask for on next entry.
+            pendingProfileTasks: z.array(z.enum(PENDING_PROFILE_TASKS)),
           }),
         },
       },
@@ -555,6 +630,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           getAssignedRoles(client, userId),
           hasEventAccess(client, userId),
         ]);
+        const pendingProfileTasks: (typeof PENDING_PROFILE_TASKS)[number][] = [];
+        if (eventAccess && row.dietary_confirmed_at === null) pendingProfileTasks.push("dietary");
+        if (membership.isSponsorRep && (await hasPendingMealPlan(client, userId))) {
+          pendingProfileTasks.push("meal_plan");
+        }
         return {
           ...serializeUser(row, removalStatus),
           visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
@@ -567,6 +647,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           canCreateProject,
           profileLocked,
           hasStatisticsPanels,
+          pendingProfileTasks,
         };
       });
       return profile;
@@ -587,51 +668,37 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const userId = req.userId as number;
-      // M1.5/H7: once any application has been accepted, the participant can
-      // no longer CHANGE their own legal name (it's on their badge/certificate)
-      // or their logistics data (shirt size, dietary info — already committed
-      // to shirt orders/catering headcounts). We compare against the stored
-      // values so an unchanged field (the settings form always submits them
-      // all) doesn't block edits to fields that remain open, like language.
-      // Staff can still fix these via PATCH /api/users/:id.
-      const wantsIdentityChange = req.body.name !== undefined || req.body.surname !== undefined;
-      const wantsLogisticsChange =
-        req.body.shirtSize !== undefined ||
-        req.body.foodIntolerances !== undefined ||
-        req.body.foodIntoleranceNotes !== undefined;
-      if (wantsIdentityChange || wantsLogisticsChange) {
-        const { rows: cur } = await pool.query(
-          `SELECT name, surname, shirt_size, food_intolerances, food_intolerance_notes
-             FROM users WHERE id = $1`,
-          [userId],
-        );
-        const changingName = req.body.name !== undefined && req.body.name !== cur[0]?.name;
-        const changingSurname =
-          req.body.surname !== undefined && req.body.surname !== cur[0]?.surname;
-        const changingShirtSize =
-          req.body.shirtSize !== undefined && req.body.shirtSize !== cur[0]?.shirt_size;
-        const changingIntolerances =
-          req.body.foodIntolerances !== undefined &&
-          JSON.stringify([...req.body.foodIntolerances].sort()) !==
-            JSON.stringify([...(cur[0]?.food_intolerances ?? [])].sort());
-        const changingNotes =
-          req.body.foodIntoleranceNotes !== undefined &&
-          req.body.foodIntoleranceNotes !== cur[0]?.food_intolerance_notes;
-        if (
-          changingName ||
-          changingSurname ||
-          changingShirtSize ||
-          changingIntolerances ||
-          changingNotes
-        ) {
-          if (await hasAcceptedApplication(pool, userId)) {
-            throw new ConflictError(
-              "Your profile is locked because an application has been accepted — ask staff to change your name, shirt size, or dietary info.",
-              { code: "profile_locked" },
-            );
-          }
-        }
-      }
+      await assertSelfLogisticsEditable(userId, req.body);
+      const after = await applyUserPatch(userId, userId, req.body, "web");
+      return serializeUser(after);
+    },
+  );
+
+  api.post(
+    "/api/me/dietary/confirm",
+    {
+      preHandler: [requireAuth, idempotencyGuard],
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      schema: {
+        summary: "Confirm my dietary restrictions",
+        description:
+          "Records an explicit dietary answer (#933). An empty `foodIntolerances` with null " +
+          'notes means "no restrictions" and still counts as an answer, clearing the `dietary` ' +
+          "pending profile task. Same H7 lock as PATCH /api/me: changing values after an " +
+          "accepted application is 409 `profile_locked`; confirming unchanged values is allowed. " +
+          "Accepts `Idempotency-Key`. Returns the updated profile.",
+        body: z
+          .object({
+            foodIntolerances: z.array(z.number().int()).max(100),
+            foodIntoleranceNotes: z.string().max(2000).nullable(),
+          })
+          .strict(),
+        response: { 200: userResponseSchema },
+      },
+    },
+    async (req) => {
+      const userId = req.userId as number;
+      await assertSelfLogisticsEditable(userId, req.body);
       const after = await applyUserPatch(userId, userId, req.body, "web");
       return serializeUser(after);
     },

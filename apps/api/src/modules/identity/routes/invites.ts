@@ -824,6 +824,8 @@ export function registerInviteRoutes(app: FastifyInstance): void {
                  THEN 'present'
                  ELSE 'not_provided'
                END,
+               -- #933: the claim form asks for dietary data (H10); its answer counts.
+               dietary_confirmed_at = now(),
                shirt_size = COALESCE($5, shirt_size)
            WHERE id = $1`,
           [

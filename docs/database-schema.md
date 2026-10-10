@@ -18,7 +18,7 @@ and role seeds. It does not contain staging or application data.
 | Applications | An `application` owns immutable `application_form_versions`; each `application_response` belongs to a user and version. Reviews and role grants derive from responses. |
 | Sponsors and challenges | An `enterprise` has sponsors, challenges, judge rosters and queue groups. A queue group cannot cross enterprise boundaries. |
 | Projects and judging | `repos` collect submissions and Devpost records. Queue entries are unique per repo/challenge and connect to rooms, history, judging sessions and reviews. Rooms use their numeric primary key as the stable internal identifier; their editable human-facing fields are name and location. |
-| Event operations | Tickets, badges, wallet passes, check-ins, time logs, meals and activities connect to the participant or the anonymous-retention boundary. |
+| Event operations | Tickets, badges, wallet passes, check-ins, time logs, meals and activities connect to the participant or the anonymous-retention boundary. Sponsor `meal_attendance_plans` hold one explicit yes/no per (user, meal activity) and lock `event_config.meal_plan_cutoff_hours` before each meal (#933). |
 | Content and communication | Schedule, announcements, recipients, notification preferences, push tokens and durable outbox rows are isolated from operational writes. |
 | Privacy, audit and reporting | Account-removal state, anonymous participants, revoked scanner credentials, `audit_log`, idempotency keys and statistics ACLs provide the durable control plane. |
 
