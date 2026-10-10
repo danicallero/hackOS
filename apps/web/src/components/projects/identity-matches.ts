@@ -1,6 +1,6 @@
 import type { UserOption } from "@/components/common/user-picker";
 
-type ImportedIdentity = { name: string | null; surname: string | null; email: string };
+export type ImportedIdentity = { name: string | null; surname: string | null; email: string };
 
 export function searchableIdentity(value: string): string {
   return value
@@ -11,15 +11,55 @@ export function searchableIdentity(value: string): string {
     .replace(/\s+/g, " ");
 }
 
+function completeName(person: ImportedIdentity): string {
+  const parts = [person.name, person.surname].map((value) => value?.trim() ?? "").filter(Boolean);
+  return parts.length === 2 ? parts.join(" ") : "";
+}
+
+/** The most specific safe query to run when an operator opens an identity picker. */
+export function matchingQuery(person: ImportedIdentity): string {
+  const name = completeName(person);
+  if (name.length >= 2) return name;
+
+  const partialName = [person.name, person.surname]
+    .map((value) => value?.trim() ?? "")
+    .find((value) => value.length >= 2);
+  if (partialName) return partialName;
+
+  const local = person.email.split("@")[0]?.trim() ?? "";
+  return local.length >= 2 ? local : "";
+}
+
 /** H17: suggestions are evidence for a human decision, never automatic links. */
 export function matchingQueries(person: ImportedIdentity): string[] {
+  const fullName = completeName(person);
   return [
     ...new Set(
-      [person.surname, person.name, person.email.split("@")[0]]
+      [fullName, person.surname, person.name, person.email.split("@")[0]]
         .map((value) => value?.trim() ?? "")
         .filter((value) => value.length >= 2),
     ),
-  ].slice(0, 3);
+  ];
+}
+
+/**
+ * An identity picker may preselect a single exact full-name match to reduce
+ * operator work, but never treats a partial/fuzzy result or duplicate name as
+ * a decision. The caller still owns the explicit link mutation.
+ */
+export function unambiguousFullNameMatch(
+  person: ImportedIdentity,
+  users: UserOption[],
+): UserOption | null {
+  const name = completeName(person);
+  if (!name) return null;
+
+  const matches = users.filter(
+    (user) =>
+      searchableIdentity([user.name, user.surname].filter(Boolean).join(" ")) ===
+      searchableIdentity(name),
+  );
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export function rankMatchingUsers(

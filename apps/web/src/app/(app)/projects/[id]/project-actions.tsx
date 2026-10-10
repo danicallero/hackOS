@@ -5,6 +5,7 @@ import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useEffect, useMemo, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
+import { matchingQuery, unambiguousFullNameMatch } from "@/components/projects/identity-matches";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,7 +23,7 @@ import { type ChallengeOption, challengeTitleText, type ProjectRepo } from "../s
 
 async function searchMemberCandidates(query: string): Promise<UserOption[]> {
   const result = await api.get<{ users: UserOption[] }>("/api/projects/member-candidates", {
-    query: { q: query, limit: 20 },
+    query: { q: query, limit: 50 },
   });
   return result.users;
 }
@@ -89,12 +90,16 @@ export function MemberRemoveButton({
 export function DevpostParticipantActions({
   repoId,
   email,
+  name,
+  surname,
   canDelete,
   canLink,
   onChanged,
 }: {
   repoId: number;
   email: string;
+  name: string | null;
+  surname: string | null;
   canDelete: boolean;
   canLink: boolean;
   onChanged: () => Promise<void>;
@@ -104,6 +109,8 @@ export function DevpostParticipantActions({
   const [selectedUserId, setSelectedUserId] = useState("");
   const [busy, setBusy] = useState<"delete" | "link" | null>(null);
   const dialogId = `devpost-link-${repoId}-${email}`;
+  const identity = useMemo(() => ({ name, surname, email }), [email, name, surname]);
+  const suggestedQuery = useMemo(() => matchingQuery(identity), [identity]);
 
   async function deleteParticipant() {
     setBusy("delete");
@@ -166,6 +173,8 @@ export function DevpostParticipantActions({
                 onChange={setSelectedUserId}
                 search={searchMemberCandidates}
                 minQueryLength={2}
+                initialQuery={suggestedQuery}
+                autoSelect={(users) => unambiguousFullNameMatch(identity, users)}
               />
               <Button
                 type="button"

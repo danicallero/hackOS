@@ -26,6 +26,7 @@ import {
   matchingQueries,
   rankMatchingUsers,
   searchableIdentity,
+  unambiguousFullNameMatch,
 } from "@/components/projects/identity-matches";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -264,6 +265,8 @@ export default function UnmatchedProjectsPage() {
                           placeholder={t("projectSuggestedMatches")}
                           search={(query) => searchUsers(query, row)}
                           disabled={busy !== null}
+                          initialQuery=""
+                          autoSelect={(users) => unambiguousFullNameMatch(row, users)}
                         />
                       </div>
                       <div className="flex flex-wrap gap-2">

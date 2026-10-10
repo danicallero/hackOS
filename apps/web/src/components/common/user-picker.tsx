@@ -8,7 +8,7 @@
 import { CaretUpDownIcon } from "@phosphor-icons/react/dist/csr/CaretUpDown";
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { Popover as PopoverPrimitive } from "radix-ui";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -43,6 +43,8 @@ export function UserPicker({
   className,
   placeholder,
   minQueryLength = 0,
+  initialQuery,
+  autoSelect,
   id,
   "aria-labelledby": ariaLabelledBy,
   "aria-describedby": ariaDescribedBy,
@@ -58,6 +60,10 @@ export function UserPicker({
   placeholder?: string;
   /** Query length below which `search` isn't called at all. */
   minQueryLength?: number;
+  /** Query populated when the picker opens, for contextual suggestions. */
+  initialQuery?: string;
+  /** Returns a safe initial selection from the contextual suggestions, if any. */
+  autoSelect?: (users: UserOption[]) => UserOption | null;
   id?: string;
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
@@ -71,6 +77,17 @@ export function UserPicker({
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [selected, setSelected] = useState<UserOption | null>(null);
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  const suggestionQueryRef = useRef<string | null>(null);
+  const autoSelectionAttemptedRef = useRef(false);
+
+  const select = useCallback((user: UserOption, close = true) => {
+    valueRef.current = String(user.id);
+    setSelected(user);
+    onChangeRef.current(String(user.id), user);
+    if (close) setOpen(false);
+  }, []);
 
   // `search` is a fresh closure most renders (callers rarely memoize it); reading
   // it via a ref instead of depending on it directly stops a mid-type re-render
@@ -82,14 +99,44 @@ export function UserPicker({
   });
 
   useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+
+  // `autoSelect` is commonly an inline identity matcher. Keep its latest
+  // implementation without turning an in-flight query into a new request.
+  const autoSelectRef = useRef(autoSelect);
+  useEffect(() => {
+    autoSelectRef.current = autoSelect;
+  });
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  useEffect(() => {
     if (!open || query.trim().length < minQueryLength) return;
     let active = true;
+    const requestedQuery = query.trim();
     const handle = setTimeout(async () => {
       setLoading(true);
       setSearchError(false);
       try {
-        const users = await searchRef.current(query.trim());
-        if (active) setOptions(users);
+        const users = await searchRef.current(requestedQuery);
+        if (!active) return;
+        setOptions(users);
+
+        // Only the response for the query supplied at open time can offer an
+        // automatic selection. A manual choice wins immediately, even if this
+        // request resolves afterwards.
+        if (
+          !autoSelectionAttemptedRef.current &&
+          !valueRef.current &&
+          requestedQuery === suggestionQueryRef.current
+        ) {
+          autoSelectionAttemptedRef.current = true;
+          const suggested = autoSelectRef.current?.(users);
+          if (suggested && users.some((user) => user.id === suggested.id)) select(suggested, false);
+        }
       } catch {
         if (active) {
           setOptions([]);
@@ -103,7 +150,7 @@ export function UserPicker({
       active = false;
       clearTimeout(handle);
     };
-  }, [open, query, minQueryLength]);
+  }, [open, query, minQueryLength, select]);
 
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
@@ -111,10 +158,16 @@ export function UserPicker({
     if (!value) setSelected(null);
   }
 
-  function select(user: UserOption) {
-    setSelected(user);
-    onChange(String(user.id), user);
-    setOpen(false);
+  function handleOpenChange(nextOpen: boolean) {
+    if (nextOpen && initialQuery !== undefined) {
+      const suggestedQuery = initialQuery.trim();
+      suggestionQueryRef.current = suggestedQuery;
+      autoSelectionAttemptedRef.current = Boolean(valueRef.current);
+      setQuery(suggestedQuery);
+    } else if (!nextOpen) {
+      suggestionQueryRef.current = null;
+    }
+    setOpen(nextOpen);
   }
 
   const label = selected ? userOptionLabel(selected) : null;
@@ -166,7 +219,7 @@ export function UserPicker({
   );
 
   return (
-    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+    <PopoverPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <PopoverPrimitive.Trigger asChild>
         <Button
           ref={anchorRef}

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { matchingQueries, rankMatchingUsers, searchableIdentity } from "./identity-matches";
+import {
+  matchingQueries,
+  rankMatchingUsers,
+  searchableIdentity,
+  unambiguousFullNameMatch,
+} from "./identity-matches";
 
 describe("unmatched identity suggestions (H17)", () => {
   const person = { name: "María", surname: "López", email: "maria@devpost.test" };
@@ -28,5 +33,23 @@ describe("unmatched identity suggestions (H17)", () => {
   });
   it("normalizes accents, case and spaces for the bounded list search", () => {
     expect(searchableIdentity("  MARÍA  López ")).toBe("maria lopez");
+  });
+  it("loads the complete profile name before broader fallback queries", () => {
+    expect(matchingQueries(person)).toEqual(["María López", "López", "María", "maria"]);
+  });
+  it("preselects one accent-insensitive complete-name match but not an ambiguous one", () => {
+    expect(unambiguousFullNameMatch(person, [sameHandle, sameName])).toEqual(sameName);
+    expect(
+      unambiguousFullNameMatch(person, [
+        sameName,
+        { id: 4, name: "María", surname: "López", email: "other@platform.test" },
+      ]),
+    ).toBeNull();
+  });
+  it("does not preselect a partial profile or an unrelated result", () => {
+    expect(
+      unambiguousFullNameMatch({ name: "María", surname: null, email: person.email }, [sameName]),
+    ).toBeNull();
+    expect(unambiguousFullNameMatch(person, [unrelated])).toBeNull();
   });
 });
