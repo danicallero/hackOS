@@ -340,6 +340,122 @@ describe("profile CV (#935)", () => {
   });
 });
 
+describe("application CV (#935, H11)", () => {
+  const CV_FIELD = {
+    key: "cv",
+    label: { en: "CV", es: "CV", gl: "CV" },
+    kind: "file",
+    profile_cv: true,
+  };
+
+  /** A form whose `cv` field is the profile CV, with one response per call. */
+  async function applicationCv(
+    userId: number,
+    options: {
+      status?: string;
+      filename?: string;
+      template?: Record<string, unknown>[];
+      submittedAt?: string;
+    } = {},
+  ) {
+    const { ensureApplicationFormVersion } = await import("../helpers.js");
+    const { putObject } = await import("../../src/lib/storage.js");
+    const { rows } = await pool.query(
+      `INSERT INTO applications (name, template) VALUES ($1, $2::jsonb) RETURNING id`,
+      [`Form ${++keySeq}`, JSON.stringify(options.template ?? [CV_FIELD])],
+    );
+    const applicationId = rows[0].id as number;
+    const key = `uploads/${applicationId}/${userId}/cv/${crypto.randomUUID()}/${options.filename ?? "Ana CV.pdf"}`;
+    await putObject(key, PDF, "application/pdf");
+    const status = options.status ?? "confirmed";
+    await pool.query(
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses, submitted_at)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+      [
+        userId,
+        applicationId,
+        await ensureApplicationFormVersion(applicationId),
+        status,
+        JSON.stringify({ cv: key }),
+        status === "draft" ? null : (options.submittedAt ?? new Date().toISOString()),
+      ],
+    );
+    return key;
+  }
+
+  it("uses the application PDF, shares it on consent and locks the profile CV", async () => {
+    const me = await person();
+    // An earlier upload is superseded by the application's CV.
+    expect(
+      (await upload("/api/me/public-profile/cv", me, PDF, "old.pdf", "application/pdf")).statusCode,
+    ).toBe(200);
+    await applicationCv(me);
+
+    const profile = (await get("/api/me/public-profile", me)).json();
+    expect(profile.cv).toMatchObject({ filename: "Ana CV.pdf", source: "application" });
+    expect(profile.shareCv).toBe(false);
+
+    const own = await get("/api/me/public-profile/cv", me);
+    expect(own.statusCode).toBe(200);
+    expect(own.rawPayload.equals(PDF)).toBe(true);
+
+    // Sharing needs no upload; it remains the person's own choice.
+    const shared = await putProfile(me, { ...VISIBLE, shareCv: true });
+    expect(shared.statusCode).toBe(200);
+    expect(shared.json().preview.cvUrl).toBe("/api/me/public-profile/cv");
+    expect((await get(`/api/directory/${me}`, reader)).json().cvUrl).toBe(
+      `/api/directory/${me}/cv`,
+    );
+    const download = await get(`/api/directory/${me}/cv`, reader);
+    expect(download.statusCode).toBe(200);
+    expect(download.headers["content-disposition"]).toContain("Ana%20CV.pdf");
+    expect(download.rawPayload.equals(PDF)).toBe(true);
+
+    const replace = await upload(
+      "/api/me/public-profile/cv",
+      me,
+      PDF,
+      "new.pdf",
+      "application/pdf",
+    );
+    expect(replace.statusCode).toBe(409);
+    expect((await remove("/api/me/public-profile/cv", me)).statusCode).toBe(409);
+    expect((await get("/api/me/public-profile", me)).json().cv.source).toBe("application");
+
+    await putProfile(me, { ...VISIBLE, shareCv: false });
+    expect((await get(`/api/directory/${me}/cv`, reader)).statusCode).toBe(404);
+  });
+
+  it("ignores drafts, non-PDF files and fields not marked as the profile CV", async () => {
+    const me = await person();
+    await applicationCv(me, { status: "draft" });
+    await applicationCv(me, { filename: "cv.docx" });
+    await applicationCv(me, { template: [{ ...CV_FIELD, profile_cv: undefined }] });
+    expect((await get("/api/me/public-profile", me)).json().cv).toBeNull();
+    expect((await putProfile(me, { ...VISIBLE, shareCv: true })).statusCode).toBe(400);
+    const up = await upload("/api/me/public-profile/cv", me, PDF, "mine.pdf", "application/pdf");
+    expect(up.statusCode).toBe(200);
+    expect(up.json().cv).toMatchObject({ filename: "mine.pdf", source: "upload" });
+  });
+
+  it("takes the most recently submitted application", async () => {
+    const me = await person();
+    await applicationCv(me, { filename: "older.pdf", submittedAt: "2026-01-01T00:00:00Z" });
+    await applicationCv(me, { filename: "newer.pdf", submittedAt: "2026-02-01T00:00:00Z" });
+    expect((await get("/api/me/public-profile", me)).json().cv.filename).toBe("newer.pdf");
+  });
+
+  it("allows the flag on one file field per form only", async () => {
+    const { templateSchema } = await import("../../src/modules/applications/schemas.js");
+    expect(templateSchema.safeParse([CV_FIELD]).success).toBe(true);
+    expect(
+      templateSchema.safeParse([{ ...CV_FIELD, kind: "text", profile_cv: true }]).success,
+    ).toBe(false);
+    expect(templateSchema.safeParse([CV_FIELD, { ...CV_FIELD, key: "cv2" }]).success).toBe(false);
+  });
+});
+
 describe("account photo (#934)", () => {
   it("is stored privately and served only to permitted readers", async () => {
     const me = await person();

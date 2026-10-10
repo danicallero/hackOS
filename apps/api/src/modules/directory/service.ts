@@ -2,7 +2,7 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
-import { photoUrl } from "../../lib/profile-files.js";
+import { photoUrl, safePdfFilename } from "../../lib/profile-files.js";
 import { hasEventAccess } from "../identity/role.js";
 import type { DirectoryQuery, PublicProfileInput, SocialLink } from "./schemas.js";
 
@@ -88,6 +88,48 @@ function challengeOfProject(repoId: string, groupId: string): string {
     )`;
 }
 
+/**
+ * The person's application CV (#935, H11): the PDF uploaded to the file field
+ * the organizer marked `profile_cv` in the live form, from their most recent
+ * submitted response. It replaces any CV the person uploaded on their profile
+ * and cannot be changed there; sharing it stays the person's own choice. The
+ * key must sit under that response's own upload prefix.
+ */
+function formCvSql(userId: string): string {
+  return `
+  SELECT r.responses ->> f.key AS key, r.submitted_at
+    FROM application_responses r
+    JOIN applications a ON a.id = r.application_id
+    CROSS JOIN LATERAL jsonb_to_recordset(
+      CASE WHEN jsonb_typeof(a.template) = 'array' THEN a.template ELSE '[]'::jsonb END
+    ) AS f(key text, kind text, profile_cv boolean)
+   WHERE r.user_id = ${userId}
+     AND r.status <> 'draft'
+     AND r.submitted_at IS NOT NULL
+     AND f.kind = 'file'
+     AND f.profile_cv
+     AND r.responses ->> f.key LIKE 'uploads/' || r.application_id || '/' || r.user_id || '/%'
+     AND lower(r.responses ->> f.key) LIKE '%.pdf'
+   ORDER BY r.submitted_at DESC, r.id DESC
+   LIMIT 1`;
+}
+
+interface FormCv {
+  key: string;
+  filename: string;
+  submittedAt: Date;
+}
+
+async function readFormCv(db: Queryable, userId: number): Promise<FormCv | null> {
+  const { rows } = await db.query<{ key: string; submitted_at: Date }>(formCvSql("$1"), [userId]);
+  if (!rows[0]) return null;
+  return {
+    key: rows[0].key,
+    filename: safePdfFilename(rows[0].key.split("/").pop()),
+    submittedAt: rows[0].submitted_at,
+  };
+}
+
 const DISPLAY_NAME_JOIN = `
   CROSS JOIN LATERAL (
     SELECT btrim(
@@ -113,7 +155,7 @@ function entrySql(profiles: string): string {
          p.bio,
          p.location_note,
          p.socials,
-         (p.share_cv AND p.cv_key IS NOT NULL) AS has_cv,
+         (p.share_cv AND COALESCE(fcv.key, p.cv_key) IS NOT NULL) AS has_cv,
          CASE
            WHEN repo.id IS NOT NULL THEN jsonb_build_object('kind', 'project', 'id', repo.id, 'name', repo.name)
            WHEN grp.id IS NOT NULL THEN jsonb_build_object('kind', 'workGroup', 'id', grp.id, 'name', grp.name)
@@ -127,7 +169,8 @@ function entrySql(profiles: string): string {
     JOIN users u ON u.id = p.user_id
     ${DISPLAY_NAME_JOIN}
     LEFT JOIN LATERAL (${SHOWN_REPO_SQL}) repo ON true
-    LEFT JOIN LATERAL (${SHOWN_GROUP_SQL}) grp ON true`;
+    LEFT JOIN LATERAL (${SHOWN_GROUP_SQL}) grp ON true
+    LEFT JOIN LATERAL (${formCvSql("u.id")}) fcv ON true`;
 }
 
 /** Directory universe: opted in, admitted to the event, never a test account. */
@@ -300,13 +343,16 @@ export async function getDirectoryCv(
   canBrowse: boolean,
 ): Promise<{ key: string; filename: string }> {
   await assertMayReadPerson(readerId, userId, canBrowse);
-  const { rows } = await pool.query<{ cv_key: string; cv_filename: string }>(
+  const { rows } = await pool.query<{ cv_key: string | null; cv_filename: string | null }>(
     `SELECT p.cv_key, p.cv_filename
        FROM user_public_profiles p JOIN users u ON u.id = p.user_id
-      WHERE ${VISIBLE_WHERE} AND p.share_cv AND p.cv_key IS NOT NULL AND u.id = $1`,
+      WHERE ${VISIBLE_WHERE} AND p.share_cv AND u.id = $1`,
     [userId],
   );
   if (!rows[0]) throw new NotFoundError("Person not found");
+  const cv = await readFormCv(pool, userId);
+  if (cv) return { key: cv.key, filename: cv.filename };
+  if (!rows[0].cv_key || !rows[0].cv_filename) throw new NotFoundError("Person not found");
   return { key: rows[0].cv_key, filename: rows[0].cv_filename };
 }
 
@@ -386,6 +432,7 @@ async function preview(db: Queryable, userId: number, profile: ProfileRow) {
 }
 
 async function presentProfile(db: Queryable, userId: number, profile: ProfileRow) {
+  const formCv = await readFormCv(db, userId);
   return {
     directoryVisible: profile.directory_visible,
     showSurname: profile.show_surname,
@@ -396,9 +443,18 @@ async function presentProfile(db: Queryable, userId: number, profile: ProfileRow
     locationNote: profile.location_note,
     socials: profile.socials.map(({ kind, url }) => ({ kind, url })),
     shareCv: profile.share_cv,
-    cv:
-      profile.cv_filename && profile.cv_uploaded_at
-        ? { filename: profile.cv_filename, uploadedAt: profile.cv_uploaded_at.toISOString() }
+    cv: formCv
+      ? {
+          filename: formCv.filename,
+          uploadedAt: formCv.submittedAt.toISOString(),
+          source: "application" as const,
+        }
+      : profile.cv_filename && profile.cv_uploaded_at
+        ? {
+            filename: profile.cv_filename,
+            uploadedAt: profile.cv_uploaded_at.toISOString(),
+            source: "upload" as const,
+          }
         : null,
     consentedAt: profile.consented_at ? profile.consented_at.toISOString() : null,
     preview: await preview(db, userId, profile),
@@ -475,7 +531,7 @@ export async function updateMyPublicProfile(userId: number, input: PublicProfile
     if (SETTINGS_FIELDS.every((field) => sameValue(before[FIELD_COLUMNS[field]], next[field]))) {
       return { changed: false, profile: await presentProfile(db, userId, before) };
     }
-    if (next.shareCv && !before.cv_key) {
+    if (next.shareCv && !before.cv_key && !(await readFormCv(db, userId))) {
       throw new BadRequestError("Upload a CV before sharing it");
     }
     const { rows } = await db.query<ProfileRow>(
@@ -541,6 +597,7 @@ export async function setMyCv(
 ) {
   return withTransaction(async (db) => {
     await lockProfileOwner(db, userId);
+    await assertNoFormCv(db, userId);
     const before = await readProfile(db, userId);
     await store();
     const { rows } = await db.query<ProfileRow>(
@@ -569,10 +626,18 @@ export async function setMyCv(
   });
 }
 
+/** While the application provides the CV, the profile cannot replace or remove it (#935). */
+async function assertNoFormCv(db: Queryable, userId: number): Promise<void> {
+  if (await readFormCv(db, userId)) {
+    throw new ConflictError("Your CV comes from your application and cannot be changed here");
+  }
+}
+
 /** Removes the owner's CV and stops sharing it (#935). */
 export async function removeMyCv(userId: number) {
   return withTransaction(async (db) => {
     await lockProfileOwner(db, userId);
+    await assertNoFormCv(db, userId);
     const before = await readProfile(db, userId, true);
     if (!before.cv_key) {
       return {
@@ -608,8 +673,10 @@ export async function removeMyCv(userId: number) {
   });
 }
 
-/** The owner's own CV, whether or not it is shared (#935). */
+/** The owner's own CV (the application's when there is one), shared or not (#935). */
 export async function getMyCv(userId: number): Promise<{ key: string; filename: string }> {
+  const formCv = await readFormCv(pool, userId);
+  if (formCv) return { key: formCv.key, filename: formCv.filename };
   const profile = await readProfile(pool, userId);
   if (!profile.cv_key || !profile.cv_filename) throw new NotFoundError("No CV uploaded");
   return { key: profile.cv_key, filename: profile.cv_filename };

@@ -27,7 +27,9 @@ change set saves with one `Idempotency-Key`.
 
 The CV file saves on its own (upload, replace, remove), like the photo; the
 "Share CV" switch appears once a CV exists and is part of the form. Removing
-the CV also stops sharing it. Link addresses are typed as text, not a native
+the CV also stops sharing it. A CV taken from the person's application (see
+below) shows its file name and "From your application" with no upload,
+replace or remove controls; the share switch still works. Link addresses are typed as text, not a native
 URL input, so a bare host like `github.com/ana` is accepted and the API adds
 `https://`.
 
@@ -61,7 +63,7 @@ including the account photo, stays in `users` and is projected, never copied.
 | `location_note` | `NULL` | Free text written by the person (for example "Floor 1, table 12"), ≤60 characters. There is no staff-assigned seating and presence (`time_logs`) is never exposed. |
 | `bio` | `NULL` | Free text, ≤500 characters; line breaks kept, other control characters rejected. |
 | `socials` | `[]` | Up to 6 distinct `{kind, url}`; `kind` is `linkedin`, `github`, `x`, `instagram`, `website` or `other`. `url` must be https (a bare host gets `https://`; credentials and hosts without a dot are rejected) and is stored in the parsed URL's canonical form. |
-| `share_cv` | `false` | Readers may download the CV. Requires an uploaded CV (400 otherwise); removing the CV clears it. |
+| `share_cv` | `false` | Readers may download the CV. Requires an uploaded or application CV (400 otherwise); removing the CV clears it. |
 | `cv_key`, `cv_filename`, `cv_uploaded_at` | `NULL` | The private CV object, its sanitized original name and upload time; all set or all null. |
 | `consented_at` | `NULL` | Stamped on every hidden→visible transition; required while visible. |
 
@@ -88,10 +90,30 @@ authenticated route `/api/users/<id>/photo?v=<op prefix>`; the web prefixes it
 with the API origin (`apiAssetUrl` in `apps/web/src/lib/directory.ts`) so the
 session cookie travels with the image request.
 
-Why a profile CV instead of the application's CV: application file fields are
-defined per form (there is no canonical "CV" field), their H56 consent covers
-sharing with sponsors, not directory readers, and the file belongs to an
-application lifecycle. The directory therefore keeps its own opt-in PDF.
+### CV from the application
+
+Application file fields are defined per form, so there is no implicit "CV"
+field. An organizer marks one file question per form as the profile CV
+(`profile_cv: true` in the template, H11; the form builder's "Use as profile
+CV" switch, file questions only, at most one per form). When the person has a
+submitted (non-draft) response to a form whose live template marks that field,
+and the stored upload is a PDF under that response's own
+`uploads/<application>/<user>/` prefix, the most recently submitted one is
+their profile CV:
+
+- it wins over any CV they uploaded on the profile, which stays stored but
+  unused; `GET /api/me/public-profile` reports `cv.source: "application"`
+  (`"upload"` otherwise) with the submission time as `uploadedAt`;
+- `POST` and `DELETE /api/me/public-profile/cv` answer 409 while it exists;
+- `shareCv` can be turned on without an upload. Sharing with directory
+  readers stays the person's own consent: the H56 sponsor consent does not
+  imply it;
+- both CV download routes stream the application object, named after the
+  uploaded file. Unmarking the field in the form, or a non-PDF upload, falls
+  back to the profile upload.
+
+Application objects are removed with the application responses on H54
+removal, like any other upload.
 
 ## What a reader sees
 

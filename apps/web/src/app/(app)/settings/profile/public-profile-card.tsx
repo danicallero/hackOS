@@ -73,7 +73,8 @@ interface PublicProfile {
   locationNote: string | null;
   socials: SocialLink[];
   shareCv: boolean;
-  cv: { filename: string; uploadedAt: string } | null;
+  /** `application`: taken from the person's application form and locked here (#935). */
+  cv: { filename: string; uploadedAt: string; source: "upload" | "application" } | null;
   consentedAt: string | null;
   preview: DirectoryEntry;
 }
@@ -539,6 +540,7 @@ function CvField({
   const hintId = useId();
   const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const locked = cv?.source === "application";
 
   function fail(message: string, title: string) {
     setError(message);
@@ -583,18 +585,20 @@ function CvField({
       <span id={headingId} className="text-sm font-medium">
         {t("publicProfileCv")}
       </span>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="application/pdf"
-        className="sr-only"
-        tabIndex={-1}
-        aria-hidden="true"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) void upload(file);
-        }}
-      />
+      {locked ? null : (
+        <input
+          ref={inputRef}
+          type="file"
+          accept="application/pdf"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void upload(file);
+          }}
+        />
+      )}
       <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
         {cv ? (
           <>
@@ -607,31 +611,33 @@ function CvField({
               <FilePdfIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
               <span className="min-w-0 truncate">{cv.filename}</span>
             </a>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                loading={busy === "upload"}
-                disabled={busy !== null}
-                aria-describedby={hintId}
-                onClick={() => inputRef.current?.click()}
-              >
-                <UploadSimpleIcon aria-hidden="true" />
-                {t("replaceCv")}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                loading={busy === "remove"}
-                disabled={busy !== null}
-                onClick={remove}
-              >
-                <TrashIcon aria-hidden="true" />
-                {t("removeCv")}
-              </Button>
-            </div>
+            {locked ? null : (
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  loading={busy === "upload"}
+                  disabled={busy !== null}
+                  aria-describedby={hintId}
+                  onClick={() => inputRef.current?.click()}
+                >
+                  <UploadSimpleIcon aria-hidden="true" />
+                  {t("replaceCv")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  loading={busy === "remove"}
+                  disabled={busy !== null}
+                  onClick={remove}
+                >
+                  <TrashIcon aria-hidden="true" />
+                  {t("removeCv")}
+                </Button>
+              </div>
+            )}
           </>
         ) : (
           <Button
@@ -653,7 +659,7 @@ function CvField({
         role={error ? "alert" : undefined}
         className={error ? "text-destructive text-sm" : "text-muted-foreground text-xs"}
       >
-        {error ?? t("cvFileHint")}
+        {error ?? t(locked ? "cvFromApplication" : "cvFileHint")}
       </p>
       {cv && (
         <SwitchRow checked={shareCv} onChange={onShareChange} label={t("publicProfileShareCv")} />
