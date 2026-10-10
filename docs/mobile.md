@@ -344,6 +344,19 @@ distributed to other Expo Router apps without importing hackOS code.
   food-intolerance labels; the label dictionary is also cached on device
   (`lib/offline-cache.ts`) so a device that goes offline before its first
   successful fetch still shows dietary labels instead of bare numeric ids.
+  Food intolerances opens `app/profile-tasks.tsx` to edit the dietary answer,
+  including an explicit "No restrictions" option (#933) that `PATCH /api/me`
+  records as a confirmed empty answer; the row is read-only offline or once the
+  H7 profile lock applies. Sponsor representatives (`isSponsorRep`) also see a
+  Meals section listing `GET /api/me/meal-plan`: each toggle submits the whole
+  plan with `PUT` (unanswered unlocked meals as not attending), locked meals are
+  disabled, and offline the last cached plan is shown read-only.
+  The same `app/profile-tasks.tsx` modal is the next-entry prompt: the root
+  `_layout.tsx` (`ProfileTasksPrompt`, `lib/profile-tasks.ts`) pushes it once per
+  signed-in session when a fresh `/api/me` lists `pendingProfileTasks`, never
+  while offline or on a scanner route (`/scan…`, `/activities/:id`), waiting
+  until the operator leaves it. "Later" or dismissing the sheet defers it with an
+  in-memory flag that a sign-out or app restart clears.
   Signing out while offline with a scanning capability warns first that
   re-authentication needs a live server. The overview is grouped into Profile, Contact, Event
   details, App, Account, and Session; staff with personal logistics-statistics

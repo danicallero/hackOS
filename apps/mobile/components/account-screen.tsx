@@ -1,6 +1,6 @@
 import { type MenuAction, MenuView } from "@expo/ui/community/menu";
 import { useRouter, useScrollToTop } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -17,6 +17,7 @@ import {
   Section,
   Separator,
   StatusPill,
+  ToggleRow,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -27,21 +28,24 @@ import { forceLocalSignOut, signOut } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
-import { readCachedValue, writeCachedValue } from "@/lib/offline-cache";
+import {
+  fetchMealPlan,
+  mealLabel,
+  mealPlanCacheKey,
+  PROFILE_TASKS_PATH,
+  saveMealPlan,
+} from "@/lib/profile-tasks";
 import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
 import { canViewStaffStatistics } from "@/lib/tabs";
+import type { MealPlan } from "@/lib/types";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
+import { useCachedApi } from "@/lib/use-cached-api";
+import { useFoodIntolerances } from "@/lib/use-food-intolerances";
 import { colors } from "@/theme/colors";
 
-interface Intolerance {
-  id: number;
-  label: { en: string; es: string; gl: string };
-}
-
 const LANGUAGES: Lang[] = ["en", "es", "gl"];
-const INTOLERANCES_CACHE_KEY = "food-intolerances";
 
 /** Account overview with the same participant-owned profile fields exposed on web. */
 export default function AccountScreen() {
@@ -54,7 +58,20 @@ export default function AccountScreen() {
   useScrollToTop(scrollRef);
   const { me, loading, error, offline, staleSince, refetch } = useMeContext();
   const { mode, setMode } = useApiMode();
-  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
+  const { intolerances, reload: loadSupportingData } = useFoodIntolerances(Boolean(me));
+  const isSponsorRep = Boolean(me?.isSponsorRep);
+  const mealPlanKey = me ? mealPlanCacheKey(me.id) : "meal-plan:none";
+  const mealPlan = useCachedApi<MealPlan>(mealPlanKey, fetchMealPlan, { enabled: isSponsorRep });
+  const [savingMealId, setSavingMealId] = useState<number | null>(null);
+  const [mealPlanError, setMealPlanError] = useState<Error | null>(null);
+  const loadMealPlan = mealPlan.load;
+  const pendingTasks = me?.pendingProfileTasks?.join(",");
+
+  // Reload after the next-entry sheet saves, which changes the pending tasks.
+  useEffect(() => {
+    void pendingTasks;
+    if (isSponsorRep) void loadMealPlan();
+  }, [isSponsorRep, loadMealPlan, pendingTasks]);
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState<Error | null>(null);
   const [languageRetry, setLanguageRetry] = useState<Lang | null>(null);
@@ -69,32 +86,15 @@ export default function AccountScreen() {
     router.replace("/(auth)/sign-in");
   }
 
-  const loadSupportingData = useCallback(async () => {
-    if (!me) return;
-    try {
-      const { intolerances: list } = await apiFetch<{ intolerances: Intolerance[] }>(
-        "/api/public/food-intolerances",
-      );
-      setIntolerances(list);
-      void writeCachedValue(INTOLERANCES_CACHE_KEY, list);
-    } catch {
-      // The rest of the profile remains usable without intolerance labels —
-      // fall back to whatever was cached from the last successful fetch so
-      // an offline first launch shows labels instead of raw numeric ids.
-      const cached = await readCachedValue<Intolerance[]>(INTOLERANCES_CACHE_KEY);
-      if (cached) setIntolerances(cached.data);
-    }
-  }, [me]);
-
-  useEffect(() => {
-    void loadSupportingData();
-  }, [loadSupportingData]);
-
   async function refreshAccount() {
     if (refreshingAccount) return;
     setRefreshingAccount(true);
     try {
-      await Promise.all([refetch(), loadSupportingData()]);
+      await Promise.all([
+        refetch(),
+        loadSupportingData(),
+        isSponsorRep ? mealPlan.load() : Promise.resolve(),
+      ]);
     } finally {
       setRefreshingAccount(false);
     }
@@ -118,6 +118,24 @@ export default function AccountScreen() {
       setLanguageError(cause instanceof Error ? cause : new Error(t("accountLanguageError")));
     } finally {
       setSavingLanguage(false);
+    }
+  }
+
+  // #933: each toggle submits the whole plan as shown (PUT replace semantics).
+  async function toggleMeal(activityId: number, attending: boolean) {
+    const plan = mealPlan.data;
+    if (!plan || offline || savingMealId !== null) return;
+    setSavingMealId(activityId);
+    setMealPlanError(null);
+    try {
+      mealPlan.setData(await saveMealPlan(plan, { [activityId]: attending }));
+      void refetch();
+    } catch (cause) {
+      setMealPlanError(cause instanceof Error ? cause : new Error(t("mealPlanSaveError")));
+      // A meal may have locked since the list loaded; show the server's state.
+      void mealPlan.load();
+    } finally {
+      setSavingMealId(null);
     }
   }
 
@@ -206,9 +224,12 @@ export default function AccountScreen() {
       .join("")
       .slice(0, 2)
       .toUpperCase() || me.email[0].toUpperCase();
+  const canEditDietary = !offline && !me.profileLocked;
   const dietaryLabels = me.foodIntolerances
     .map((id) => intolerances.find((item) => item.id === id)?.label[language] ?? String(id))
     .join(", ");
+  const dietaryValue =
+    dietaryLabels || (me.dietaryConfirmedAt ? t("noRestrictions") : t("accountNoneDeclared"));
 
   return (
     <View style={{ flex: 1 }}>
@@ -355,11 +376,28 @@ export default function AccountScreen() {
             icon="tshirt"
           />
           <Separator inset={48} />
-          <InfoRow
-            label={t("accountFoodIntolerances")}
-            value={dietaryLabels || t("accountNoneDeclared")}
-            icon="fork.knife"
-          />
+          {canEditDietary ? (
+            <Pressable
+              accessibilityLabel={t("accountFoodIntolerances")}
+              accessibilityRole="button"
+              onPress={() =>
+                router.push({
+                  pathname: PROFILE_TASKS_PATH,
+                  params: { tasks: "dietary", edit: "1" },
+                })
+              }
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <InfoRow
+                label={t("accountFoodIntolerances")}
+                value={dietaryValue}
+                icon="fork.knife"
+                accessoryIcon="chevron.right"
+              />
+            </Pressable>
+          ) : (
+            <InfoRow label={t("accountFoodIntolerances")} value={dietaryValue} icon="fork.knife" />
+          )}
           {me.foodIntoleranceNotes ? (
             <>
               <Separator inset={48} />
@@ -374,6 +412,26 @@ export default function AccountScreen() {
             </>
           ) : null}
         </Section>
+
+        {isSponsorRep && mealPlan.data && mealPlan.data.meals.length > 0 ? (
+          <Section title={t("mealsTitle")} footer={t("mealsLockNote")}>
+            {mealPlanError ? (
+              <RequestFeedback error={mealPlanError} message={t("mealPlanSaveError")} />
+            ) : null}
+            {mealPlan.data.meals.map((meal, index) => (
+              <View key={meal.activityId}>
+                {index > 0 ? <Separator /> : null}
+                <ToggleRow
+                  label={mealLabel(meal, language)}
+                  value={meal.attending ?? false}
+                  // Offline the cached plan stays visible but read-only.
+                  disabled={offline || meal.locked || savingMealId !== null}
+                  onChange={(on) => void toggleMeal(meal.activityId, on)}
+                />
+              </View>
+            ))}
+          </Section>
+        ) : null}
 
         {canViewStaffStatistics(me.capabilities) ? (
           <Section title={t("accountStaff")}>
