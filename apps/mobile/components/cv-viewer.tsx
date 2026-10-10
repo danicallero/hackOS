@@ -2,7 +2,6 @@ import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Text, View } from "react-native";
-import Pdf from "react-native-pdf";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EmptyState, FloatingGlassButton } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -18,6 +17,7 @@ type ViewerState =
   | { status: "error" };
 
 const HEADER_HEIGHT = 76;
+type PdfComponent = typeof import("react-native-pdf")["default"];
 
 /**
  * In-app CV viewer (#935): the private CV route needs the session, so the PDF
@@ -45,6 +45,8 @@ export function CvViewer({
   // Modal is full screen, so its chrome clears the status bar itself.
   const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [state, setState] = useState<ViewerState>({ status: "loading" });
+  const [Pdf, setPdf] = useState<PdfComponent | null>(null);
+  const [pdfReaderUnavailable, setPdfReaderUnavailable] = useState(false);
   const request = useRef(0);
 
   const load = useCallback(async () => {
@@ -77,6 +79,20 @@ export function CvViewer({
     if (visible) void load();
     else request.current += 1;
   }, [visible, load]);
+
+  useEffect(() => {
+    if (!visible) return;
+    try {
+      const module = require("react-native-pdf") as { default: PdfComponent };
+      setPdf(() => module.default);
+      setPdfReaderUnavailable(false);
+    } catch {
+      // Expo Go and stale development clients may not contain the native PDF
+      // module. Keep profile routes usable and show the normal CV error only
+      // when someone actually opens the viewer.
+      setPdfReaderUnavailable(true);
+    }
+  }, [visible]);
 
   async function share() {
     if (state.status !== "ready" || !(await Sharing.isAvailableAsync())) return;
@@ -113,7 +129,14 @@ export function CvViewer({
           </Text>
         </View>
         <View style={{ flex: 1 }}>
-          {state.status === "ready" ? (
+          {pdfReaderUnavailable ? (
+            <View style={{ padding: 16 }}>
+              <RequestFeedback
+                error={new Error("PDF reader unavailable")}
+                message={t("directoryCvError")}
+              />
+            </View>
+          ) : state.status === "ready" && Pdf ? (
             <Pdf
               source={{ uri: state.uri }}
               trustAllCerts={false}

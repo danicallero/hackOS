@@ -6,7 +6,9 @@
  * live binding rather than capturing it in a module-local constant.
  */
 export const PRODUCTION_API_URL = "https://api.hackudc.com";
-export const DEVELOPMENT_API_URL = "https://api.dani.md";
+/** Explicit Expo env override for local/preview development servers. */
+export const LOCAL_API_URL_OVERRIDE = process.env.EXPO_PUBLIC_API_URL || null;
+export const DEVELOPMENT_API_URL = LOCAL_API_URL_OVERRIDE ?? "https://api.dani.md";
 
 /** The active base URL. Changed only by the persisted developer endpoint mode. */
 export let API_URL = PRODUCTION_API_URL;

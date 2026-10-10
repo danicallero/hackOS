@@ -1,16 +1,18 @@
 let mockCommit: unknown;
+let mockConfiguredVersion: string | undefined;
 jest.mock("expo-application", () => ({ nativeApplicationVersion: "1.2.3" }));
 jest.mock("expo-constants", () => ({
   __esModule: true,
   default: {
     get expoConfig() {
-      return { extra: { buildCommit: mockCommit } };
+      return { version: mockConfiguredVersion, extra: { buildCommit: mockCommit } };
     },
   },
 }));
 
-function versionLabel(commit: unknown) {
+function versionLabel(commit: unknown, configuredVersion?: string) {
   mockCommit = commit;
+  mockConfiguredVersion = configuredVersion;
   let label = "";
   jest.isolateModules(() => {
     label = require("./app-version").appVersionLabel;
@@ -18,11 +20,11 @@ function versionLabel(commit: unknown) {
   return label;
 }
 
-it("shows the short build commit next to the native version", () => {
-  expect(versionLabel("abcdef1234567890")).toBe("v1.2.3 · abcdef1");
+it("shows the short build commit next to the configured app version", () => {
+  expect(versionLabel("abcdef1234567890", "1.0.4")).toBe("v1.0.4 · abcdef1");
 });
 
-it("keeps the version alone when build metadata is unavailable or invalid", () => {
+it("falls back to the native version when config or build metadata is unavailable", () => {
   expect(versionLabel(undefined)).toBe("v1.2.3");
-  expect(versionLabel("unknown")).toBe("v1.2.3");
+  expect(versionLabel("unknown", "1.0.4")).toBe("v1.0.4");
 });

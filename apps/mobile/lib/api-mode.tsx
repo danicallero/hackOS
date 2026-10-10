@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import { configureAuthClient, signOutForEnvironmentChange } from "./auth-client";
-import { DEVELOPMENT_API_URL, PRODUCTION_API_URL, setApiUrl } from "./env";
+import { DEVELOPMENT_API_URL, LOCAL_API_URL_OVERRIDE, PRODUCTION_API_URL, setApiUrl } from "./env";
 import { clearApiEnvironmentData } from "./storage-usage";
 
 export type ApiMode = "development" | "production";
@@ -16,12 +16,19 @@ export function isApiMode(value: string | null): value is ApiMode {
   return value === "development" || value === "production";
 }
 
+export function apiModeForStartup(
+  storedMode: string | null,
+  localApiUrlOverride: string | null = LOCAL_API_URL_OVERRIDE,
+): ApiMode {
+  if (localApiUrlOverride) return "development";
+  return isApiMode(storedMode) ? storedMode : "production";
+}
+
 async function readApiMode(): Promise<ApiMode> {
   try {
-    const stored = await SecureStore.getItemAsync(STORAGE_KEY);
-    return isApiMode(stored) ? stored : "production";
+    return apiModeForStartup(await SecureStore.getItemAsync(STORAGE_KEY));
   } catch {
-    return "production";
+    return apiModeForStartup(null);
   }
 }
 
