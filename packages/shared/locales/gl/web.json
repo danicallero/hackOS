@@ -3479,5 +3479,9 @@
   "attendedStat": "Asistiron",
   "attendanceRate": "Taxa de asistencia",
   "averageHoursOnSite": "Media de horas no evento",
-  "totalHours": "Horas totais"
+  "totalHours": "Horas totais",
+  "pausePresentationTimer": "Pausar cronómetro",
+  "resumePresentationTimer": "Retomar cronómetro",
+  "presentationTimerPaused": "Cronómetro pausado",
+  "presentationPreparationTime": "Tempo de preparación"
 }

@@ -3,9 +3,9 @@ import {
   calledTooLongThresholdMinutes,
   canTransition,
   collaborationState,
-  freezeTotalMinutes,
   hasWaitedTooLong,
   LEGAL_ACTIONS,
+  preparationElapsedSeconds,
   presentationTimerState,
   workspaceAccess,
 } from "./judging-workspace";
@@ -177,26 +177,33 @@ describe("judging workspace H29-H40", () => {
     expect(zero).toMatchObject({ totalSeconds: 0, progressValue: 0, tone: "danger" });
   });
 
-  it("H39 freezes the presentation total against mid-presentation pace refetches", () => {
-    const startedAt = "2026-07-22T12:00:00Z";
+  it("#926 preserves remaining time across pauses, resumes and a new reader", () => {
+    const start = "2026-10-10T12:00:00Z";
+    const paused = "2026-10-10T12:02:00Z";
+    const at = (seconds: number) => Date.parse(start) + seconds * 1000;
+    expect(presentationTimerState(start, 10, at(300), paused)).toMatchObject({
+      elapsedSeconds: 120,
+      remainingSeconds: 480,
+    });
+    expect(presentationTimerState(start, 10, at(360), null, 180)).toMatchObject({
+      elapsedSeconds: 180,
+      remainingSeconds: 420,
+    });
+    expect(presentationTimerState(start, 10, at(900), "2026-10-10T12:06:00Z", 180)).toMatchObject({
+      elapsedSeconds: 180,
+      remainingSeconds: 420,
+    });
+    expect(presentationTimerState(start, 10, at(1300), null, 720).elapsedSeconds).toBe(580);
+  });
 
-    // Captured at the start, then held: the pace recomputing to 4 minutes
-    // mid-presentation must not shrink the total being counted against.
-    const first = freezeTotalMinutes({ key: null, minutes: null }, startedAt, 10);
-    expect(first).toEqual({ key: startedAt, minutes: 10 });
-    expect(freezeTotalMinutes(first, startedAt, 4).minutes).toBe(10);
-
-    // The pace often isn't ready when the presentation begins: capture it once,
-    // late, then hold that too.
-    const pending = freezeTotalMinutes({ key: null, minutes: null }, startedAt, null);
-    expect(pending).toEqual({ key: startedAt, minutes: null });
-    const captured = freezeTotalMinutes(pending, startedAt, 7);
-    expect(captured).toEqual({ key: startedAt, minutes: 7 });
-    expect(freezeTotalMinutes(captured, startedAt, 3).minutes).toBe(7);
-
-    // The next presentation re-freezes, and ending one clears the hold.
-    const next = "2026-07-22T12:30:00Z";
-    expect(freezeTotalMinutes(captured, next, 4)).toEqual({ key: next, minutes: 4 });
-    expect(freezeTotalMinutes(captured, null, null)).toEqual({ key: null, minutes: null });
+  it("#927 counts preparation only until start and handles absent/invalid timestamps", () => {
+    const entered = "2026-10-10T12:00:00Z";
+    expect(preparationElapsedSeconds(entered, null, Date.parse(entered) + 31000)).toBe(31);
+    expect(
+      preparationElapsedSeconds(entered, "2026-10-10T12:02:00Z", Date.parse(entered) + 900000),
+    ).toBe(120);
+    expect(preparationElapsedSeconds(null, null)).toBeNull();
+    expect(preparationElapsedSeconds("bad", null)).toBeNull();
+    expect(preparationElapsedSeconds(entered, null, 0)).toBe(0);
   });
 });

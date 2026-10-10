@@ -30,6 +30,8 @@ import {
   placeEntryAtWaitingRank,
   type RequeuePosition,
 } from "./ordering.js";
+import { CLOSE_PRESENTATION_PAUSE_SQL } from "./presentation-clock.js";
+import { roomPace } from "./reads.js";
 import type { QueueEntryRow } from "./types.js";
 
 /**
@@ -508,16 +510,53 @@ export async function bringIn(entryId: number, actorId: number): Promise<QueueEn
 }
 
 export async function startPresentation(entryId: number, actorId: number): Promise<QueueEntryRow> {
+  // #926: the frozen goal is computed before taking any lock, from an
+  // unlocked snapshot, and never blocks the start: a reassigned room or a
+  // pace failure falls back to the group's capped target inside the lock.
+  const snapshot = (
+    await pool.query<{ assigned_room_id: number | null; challenge_id: number; marker: boolean }>(
+      `SELECT qe.assigned_room_id, qe.challenge_id, r.is_test_account AS marker
+         FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
+        WHERE qe.id = $1`,
+      [entryId],
+    )
+  ).rows[0];
+  const pacedSeconds = snapshot?.assigned_room_id
+    ? await roomPace(
+        snapshot.assigned_room_id,
+        snapshot.challenge_id,
+        pool,
+        snapshot.marker,
+        entryId,
+      )
+        .then((pace) => Math.round(pace.effectiveMinutesPerTeam * 60))
+        .catch(() => null)
+    : null;
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["in_room"], "start");
+    const totalSeconds =
+      pacedSeconds !== null && entry.assigned_room_id === snapshot?.assigned_room_id
+        ? pacedSeconds
+        : ((
+            await client.query<{ seconds: number | null }>(
+              `SELECT LEAST(min(c.target_seconds_per_team), min(c.max_presentation_seconds))::int AS seconds
+                 FROM queue_group_challenges own
+                 JOIN queue_group_challenges sibling ON sibling.queue_group_id = own.queue_group_id
+                 JOIN challenges c ON c.id = sibling.challenge_id
+                WHERE own.challenge_id = $1`,
+              [entry.challenge_id],
+            )
+          ).rows[0]?.seconds ?? null);
     const res = await client.query(
       `UPDATE queue_entries
-          SET status = 'presenting', presentation_started_at = now(), precalled_at = NULL
+          SET status = 'presenting', presentation_started_at = now(), precalled_at = NULL,
+              presentation_paused_at = NULL, presentation_paused_seconds = 0,
+              presentation_total_seconds = $2
         WHERE id = $1
         RETURNING *`,
-      [entryId],
+      [entryId, totalSeconds],
     );
     await writeQueueHistory(client, {
       entryId,
@@ -526,7 +565,63 @@ export async function startPresentation(entryId: number, actorId: number): Promi
       newStatus: "presenting",
       action: "start",
     });
+    await audit(client, {
+      actorId,
+      action: "start",
+      entityType: "queue_entry",
+      entityId: entryId,
+      before: { status: entry.status },
+      after: {
+        status: "presenting",
+        presentationTotalSeconds: res.rows[0].presentation_total_seconds,
+      },
+    });
     return res.rows[0];
+  }).then(broadcastEntry);
+}
+
+// #926: timer pause is independent of the H35 room pause and keeps occupancy.
+export async function setPresentationPaused(
+  entryId: number,
+  actorId: number,
+  paused: boolean,
+): Promise<QueueEntryRow> {
+  return withTransaction(async (client) => {
+    const entry = await lockEntry(client, entryId);
+    await assertEntryFixtureScope(client, actorId, entryId);
+    assertFrom(entry, ["presenting"], paused ? "pause_timer" : "resume_timer");
+    if (Boolean(entry.presentation_paused_at) === paused) {
+      throw new ConflictError(
+        paused ? "Presentation timer is already paused" : "Presentation timer is already running",
+      );
+    }
+    const { rows } = await client.query(
+      paused
+        ? `UPDATE queue_entries SET presentation_paused_at = now() WHERE id = $1 RETURNING *`
+        : `UPDATE queue_entries
+              SET presentation_paused_seconds = presentation_paused_seconds +
+                    GREATEST(0, EXTRACT(EPOCH FROM (now() - presentation_paused_at))),
+                  presentation_paused_at = NULL
+            WHERE id = $1 RETURNING *`,
+      [entryId],
+    );
+    const action = paused ? "pause_timer" : "resume_timer";
+    await writeQueueHistory(client, {
+      entryId,
+      actorId,
+      previousStatus: "presenting",
+      newStatus: "presenting",
+      action,
+    });
+    await audit(client, {
+      actorId,
+      action,
+      entityType: "queue_entry",
+      entityId: entryId,
+      before: { paused: !paused },
+      after: { paused },
+    });
+    return rows[0];
   }).then(broadcastEntry);
 }
 
@@ -543,7 +638,8 @@ export async function completePresentation(
     assertFrom(entry, ["presenting"], "complete");
     const res = await client.query(
       `UPDATE queue_entries
-          SET status = 'completed', completed_at = now(), precalled_at = NULL
+          SET status = 'completed', completed_at = now(), precalled_at = NULL,
+              ${CLOSE_PRESENTATION_PAUSE_SQL}
         WHERE id = $1
         RETURNING *`,
       [entryId],
@@ -575,7 +671,7 @@ export async function sendBackToWaiting(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'called', position = $1, called_at = now(), precalled_at = NULL,
-              presentation_started_at = NULL, room_entered_at = NULL
+              presentation_started_at = NULL, presentation_paused_at = NULL, presentation_paused_seconds = 0, presentation_total_seconds = NULL, room_entered_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -644,7 +740,7 @@ export async function reEnter(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL, room_entered_at = NULL, completed_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL, presentation_paused_at = NULL, presentation_paused_seconds = 0, presentation_total_seconds = NULL, room_entered_at = NULL, completed_at = NULL
         WHERE id = $2
         RETURNING *`,
       [pos, entryId],
@@ -690,7 +786,7 @@ export async function markNoShow(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL, room_entered_at = NULL, call_count = call_count + 1
+              precalled_at = NULL, presentation_started_at = NULL, presentation_paused_at = NULL, presentation_paused_seconds = 0, presentation_total_seconds = NULL, room_entered_at = NULL, call_count = call_count + 1
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -733,7 +829,7 @@ export async function moveToPosition(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL, room_entered_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL, presentation_paused_at = NULL, presentation_paused_seconds = 0, presentation_total_seconds = NULL, room_entered_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -768,7 +864,7 @@ export async function skipToEnd(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL, room_entered_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL, presentation_paused_at = NULL, presentation_paused_seconds = 0, presentation_total_seconds = NULL, room_entered_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -867,7 +963,7 @@ export async function moveToTop(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL, room_entered_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL, presentation_paused_at = NULL, presentation_paused_seconds = 0, presentation_total_seconds = NULL, room_entered_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -977,7 +1073,7 @@ export async function removeRepoFromChallenge(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = $1, assigned_room_id = NULL, position = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL, room_entered_at = NULL, completed_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL, presentation_paused_at = NULL, presentation_paused_seconds = 0, presentation_total_seconds = NULL, room_entered_at = NULL, completed_at = NULL
         WHERE id = $2
         RETURNING *`,
       [nextStatus, entryId],
@@ -1250,7 +1346,7 @@ async function enqueueQueueRepo(
     const revived = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', assigned_room_id = NULL,
-              called_at = NULL, presentation_started_at = NULL, room_entered_at = NULL, completed_at = NULL,
+              called_at = NULL, presentation_started_at = NULL, presentation_paused_at = NULL, presentation_paused_seconds = 0, presentation_total_seconds = NULL, room_entered_at = NULL, completed_at = NULL,
               precalled_at = NULL
         WHERE id = $1
         RETURNING *`,

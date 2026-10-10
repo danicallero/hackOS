@@ -990,27 +990,33 @@ export async function myQueueStatus(userId: number) {
  * this challenge's queue (they work the queue in parallel, so N rooms means
  * N× the throughput for the same remaining time).
  */
-export async function roomPace(roomId: number, requestedChallengeId?: number) {
-  const state = (await pool.query(`SELECT * FROM room_queue_state WHERE room_id = $1`, [roomId]))
+export async function roomPace(
+  roomId: number,
+  requestedChallengeId?: number,
+  db: Queryable = pool,
+  fixtureMarker = false,
+  startingEntryId?: number,
+) {
+  const state = (await db.query(`SELECT * FROM room_queue_state WHERE room_id = $1`, [roomId]))
     .rows[0];
   if (!state) throw new NotFoundError("Room not found", { roomId });
-  const settings = (await pool.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0];
+  const settings = (await db.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0];
 
   // H29/H46: the presentation-length ceiling comes from the room's queue_group.
   // Every group is 1:1 today, so this is that one challenge's own ceiling; for
   // a merged group the strictest member ceiling is the one that must hold for
   // every team the group calls.
   const primaryChallenge = (
-    await pool.query(
+    await db.query(
       `SELECT qgc.challenge_id::int AS id,
               (SELECT min(sc.max_presentation_seconds) FROM queue_group_challenges sg JOIN challenges sc ON sc.id=sg.challenge_id WHERE sg.queue_group_id=rqg.queue_group_id)::int AS max_presentation_seconds
          FROM room_queue_groups rqg
          JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
-         JOIN challenges c ON c.id = qgc.challenge_id AND c.is_test_account = false
+         JOIN challenges c ON c.id = qgc.challenge_id AND c.is_test_account = $3
          WHERE rqg.room_id = $1 AND ($2::int IS NULL OR qgc.challenge_id=$2)
          ORDER BY EXISTS(SELECT 1 FROM queue_entries active JOIN queue_group_challenges ag ON ag.challenge_id=active.challenge_id WHERE ag.queue_group_id=rqg.queue_group_id AND active.assigned_room_id=$1 AND active.status IN ('in_room','presenting')) DESC,qgc.challenge_id ASC
          LIMIT 1`,
-      [roomId, requestedChallengeId ?? null],
+      [roomId, requestedChallengeId ?? null, fixtureMarker],
     )
   ).rows[0] as { id: number; max_presentation_seconds: number | null } | undefined;
 
@@ -1018,7 +1024,7 @@ export async function roomPace(roomId: number, requestedChallengeId?: number) {
     throw new NotFoundError("This room does not judge the requested track");
   const challengeIds = primaryChallenge
     ? (
-        await pool.query(
+        await db.query(
           `SELECT sibling.challenge_id FROM queue_group_challenges anchor JOIN queue_group_challenges sibling ON sibling.queue_group_id=anchor.queue_group_id WHERE anchor.challenge_id=$1`,
           [primaryChallenge.id],
         )
@@ -1029,11 +1035,11 @@ export async function roomPace(roomId: number, requestedChallengeId?: number) {
   // challenges is one team still to be judged (the "call once" view).
   const pendingCount = challengeIds.length
     ? (
-        await pool.query(
+        await db.query(
           `SELECT COUNT(DISTINCT repo_id)::int AS n FROM queue_entries
             WHERE challenge_id = ANY($1) AND status IN ('waiting', 'called')
-              AND repo_id IN (SELECT id FROM project_reconciliation_state WHERE is_test_account = false AND eligible)`,
-          [challengeIds],
+              AND repo_id IN (SELECT id FROM project_reconciliation_state WHERE is_test_account = $2 AND eligible)`,
+          [challengeIds, fixtureMarker],
         )
       ).rows[0].n
     : 0;
@@ -1045,13 +1051,13 @@ export async function roomPace(roomId: number, requestedChallengeId?: number) {
     ? Math.max(
         1,
         (
-          await pool.query(
+          await db.query(
             `SELECT COUNT(DISTINCT serving.room_id)::int AS n
-               FROM (${CHALLENGE_ROOM_IDS_SQL}) serving
+               FROM (${CHALLENGE_ROOM_IDS_FOR_MARKER_SQL}) serving
                JOIN room_queue_state rqs
                  ON rqs.room_id = serving.room_id
                 AND rqs.is_paused = false`,
-            [primaryChallenge.id],
+            [primaryChallenge.id, fixtureMarker],
           )
         ).rows[0].n,
       )
@@ -1059,7 +1065,7 @@ export async function roomPace(roomId: number, requestedChallengeId?: number) {
 
   const timing = primaryChallenge
     ? (
-        await pool.query(
+        await db.query(
           `SELECT t.* FROM queue_group_challenges qgc CROSS JOIN LATERAL queue_group_timing(qgc.queue_group_id) t WHERE qgc.challenge_id=$1`,
           [primaryChallenge.id],
         )
@@ -1074,17 +1080,28 @@ export async function roomPace(roomId: number, requestedChallengeId?: number) {
   const preparationMinutes = estimatedCycleMinutes - estimatedPresentationMinutes;
   const activeEntries = challengeIds.length
     ? (
-        await pool.query(
-          `SELECT DISTINCT ON(repo_id) status,presentation_started_at,room_entered_at,called_at FROM queue_entries WHERE challenge_id=ANY($1::int[]) AND status IN ('in_room','presenting') ORDER BY repo_id,presentation_started_at DESC NULLS LAST`,
+        await db.query(
+          `SELECT DISTINCT ON(repo_id) id,status,presentation_started_at,presentation_paused_at,presentation_paused_seconds,room_entered_at,called_at FROM queue_entries WHERE challenge_id=ANY($1::int[]) AND status IN ('in_room','presenting') ORDER BY repo_id,presentation_started_at DESC NULLS LAST`,
           [challengeIds],
         )
       ).rows
     : [];
   const now = Date.now();
   const activeMinutes = activeEntries.map((entry) => {
+    // #926: the entry being started has finished preparing; only its own
+    // presentation still occupies the room.
+    if (entry.id === startingEntryId) return estimatedPresentationMinutes;
     if (entry.status === "presenting") {
       const elapsed = entry.presentation_started_at
-        ? Math.max(0, (now - new Date(entry.presentation_started_at).getTime()) / 60000)
+        ? Math.max(
+            0,
+            ((entry.presentation_paused_at
+              ? new Date(entry.presentation_paused_at).getTime()
+              : now) -
+              new Date(entry.presentation_started_at).getTime() -
+              Number(entry.presentation_paused_seconds) * 1000) /
+              60000,
+          )
         : 0;
       return Math.max(0, estimatedPresentationMinutes - elapsed);
     }

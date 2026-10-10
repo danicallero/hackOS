@@ -27,7 +27,11 @@ export interface QueueEntry {
   priority: number;
   call_count: number;
   called_at: string | null;
+  room_entered_at?: string | null;
   presentation_started_at: string | null;
+  presentation_paused_at?: string | null;
+  presentation_paused_seconds?: number;
+  presentation_total_seconds?: number | null;
   completed_at: string | null;
   precalled_at: string | null;
   /** Approximate wait in minutes, present on room queue projections. */
@@ -532,6 +536,8 @@ type EntryAction =
   | "notify-enter"
   | "remind-waiting"
   | "bring-in"
+  | "pause-timer"
+  | "resume-timer"
   | "start"
   | "complete"
   | "send-back"

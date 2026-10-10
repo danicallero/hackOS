@@ -3479,5 +3479,9 @@
   "attendedStat": "Attended",
   "attendanceRate": "Attendance rate",
   "averageHoursOnSite": "Average hours on site",
-  "totalHours": "Total hours"
+  "totalHours": "Total hours",
+  "pausePresentationTimer": "Pause timer",
+  "resumePresentationTimer": "Resume timer",
+  "presentationTimerPaused": "Timer paused",
+  "presentationPreparationTime": "Preparation time"
 }
