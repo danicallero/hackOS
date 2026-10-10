@@ -21,6 +21,7 @@ import {
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
+import { UserAvatar } from "@/components/user-avatar";
 import { apiFetch } from "@/lib/api";
 import { useApiMode } from "@/lib/api-mode";
 import { appVersionLabel } from "@/lib/app-version";
@@ -221,13 +222,6 @@ export default function AccountScreen() {
   if (!me) return <RequestFeedback error={error} onRetry={() => void refetch()} />;
 
   const fullName = [me.name, me.surname].filter(Boolean).join(" ") || me.email;
-  const initials =
-    [me.name, me.surname]
-      .filter(Boolean)
-      .map((part) => part?.[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || me.email[0].toUpperCase();
   const canEditDietary = !offline && !me.profileLocked;
   const dietaryLabels = me.foodIntolerances
     .map((id) => intolerances.find((item) => item.id === id)?.label[language] ?? String(id))
@@ -275,21 +269,8 @@ export default function AccountScreen() {
           />
         ) : null}
 
-        <View style={{ alignItems: "center", gap: 10, paddingVertical: 10 }}>
-          <View
-            style={{
-              alignItems: "center",
-              backgroundColor: colors.accent,
-              borderRadius: 42,
-              height: 84,
-              justifyContent: "center",
-              width: 84,
-            }}
-          >
-            <Text selectable style={{ color: colors.accentText, fontSize: 30, fontWeight: "700" }}>
-              {initials}
-            </Text>
-          </View>
+        <View style={{ alignItems: "center", gap: 12, paddingVertical: 10 }}>
+          <UserAvatar testID="account-avatar" name={fullName} image={me.image} size={96} />
           <View style={{ alignItems: "center", gap: 5 }}>
             <Text
               selectable
