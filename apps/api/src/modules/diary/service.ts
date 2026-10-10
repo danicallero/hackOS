@@ -102,6 +102,68 @@ export async function listDiary(owner: number): Promise<{ items: DiaryEntry[] }>
   return { items: await present(pool, rows) };
 }
 
+/** One company in the attendee's stand collection (#935). */
+export interface SponsorCollectionItem extends SponsorCard {
+  /** The caller's diary entry once they scanned the stand; null while still to collect. */
+  entry: { id: number; starred: boolean; note: string | null; createdAt: string } | null;
+}
+
+const NAME_ORDER = new Intl.Collator("en", { sensitivity: "base", numeric: true });
+
+/**
+ * The sponsor stands an attendee can collect (#935): every revealed sponsor
+ * with a stand tag, plus revealed sponsors the caller already collected even
+ * if their tags were removed since. Hidden sponsors never count. Collected
+ * first (newest first), then the rest by name. Tag codes never leave the API.
+ */
+export async function listSponsorCollection(owner: number): Promise<{
+  total: number;
+  collected: number;
+  items: SponsorCollectionItem[];
+}> {
+  await assertAttendee(pool, owner);
+  const { rows: entries } = await pool.query<EntryRow>(
+    `SELECT ${ENTRY_COLUMNS} FROM diary_entries
+      WHERE owner_id = $1 AND enterprise_id IS NOT NULL`,
+    [owner],
+  );
+  const { rows: tagged } = await pool.query<{ enterprise_id: number }>(
+    `SELECT DISTINCT enterprise_id FROM sponsor_stand_tags`,
+  );
+  const ids = new Set([
+    ...tagged.map((row) => Number(row.enterprise_id)),
+    ...entries.map((row) => Number(row.enterprise_id)),
+  ]);
+  const cards = await visibleSponsorCards(pool, [...ids]);
+  const byEnterprise = new Map(entries.map((row) => [Number(row.enterprise_id), row]));
+  const items = [...cards.values()].map((card): SponsorCollectionItem => {
+    const row = byEnterprise.get(card.enterpriseId);
+    return {
+      ...card,
+      entry: row
+        ? {
+            id: Number(row.id),
+            starred: row.starred,
+            note: row.note,
+            createdAt: row.created_at.toISOString(),
+          }
+        : null,
+    };
+  });
+  items.sort((a, b) => {
+    if (a.entry && b.entry) {
+      return b.entry.createdAt.localeCompare(a.entry.createdAt) || b.entry.id - a.entry.id;
+    }
+    if (a.entry || b.entry) return a.entry ? -1 : 1;
+    return NAME_ORDER.compare(a.name, b.name) || a.enterpriseId - b.enterpriseId;
+  });
+  return {
+    total: items.length,
+    collected: items.filter((item) => item.entry !== null).length,
+    items,
+  };
+}
+
 /**
  * Insert-or-return: the partial unique indexes make a concurrent double save
  * converge on one row, and a re-scan returns the existing entry untouched.

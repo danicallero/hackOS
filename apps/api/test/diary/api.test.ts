@@ -310,6 +310,71 @@ describe("scanning sponsor stands", () => {
   });
 });
 
+describe("the sponsor stand collection", () => {
+  function collection(as = owner) {
+    return app.inject({ method: "GET", url: "/api/me/diary/sponsors", headers: asUser(as) });
+  }
+
+  it("counts revealed tagged stands, collected ones first, without exposing codes", async () => {
+    const acme = await enterprise("Acme");
+    const beta = await enterprise("Beta");
+    const zeta = await enterprise("Zeta");
+    const stealth = await enterprise("Stealth", "hidden");
+    await enterprise("Untagged");
+    await challenge(acme, "Robots", "visible");
+    await standTag(acme, "04ACAC00000001");
+    await standTag(beta, "04ACAC00000002");
+    await standTag(zeta, "STAND-ABCDEFGHJKMNPQRS", "qr");
+    await standTag(stealth, "04ACAC00000003");
+    await scan("04ACAC00000002");
+    await scan("04ACAC00000001");
+
+    const res = await collection();
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toMatchObject({ total: 3, collected: 2 });
+    expect(body.items.map((item: { name: string }) => item.name)).toEqual(["Acme", "Beta", "Zeta"]);
+    expect(body.items[0]).toMatchObject({
+      enterpriseId: acme,
+      challenges: [{ name: "Robots" }],
+      entry: { starred: false, note: null },
+    });
+    expect(body.items[2].entry).toBeNull();
+    expect(res.body).not.toContain("04ACAC");
+    expect(res.body).not.toContain("STAND-");
+    expect(res.body).not.toContain("Stealth");
+    expect(res.body).not.toContain("Untagged");
+  });
+
+  it("keeps a collected stand after its tags are removed, but not once it is hidden", async () => {
+    const acme = await enterprise("Acme");
+    const beta = await enterprise("Beta");
+    await standTag(acme, "04ACAC00000001");
+    await standTag(beta, "04ACAC00000002");
+    await scan("04ACAC00000001");
+    await scan("04ACAC00000002");
+    await pool.query(`DELETE FROM sponsor_stand_tags`);
+    expect((await collection()).json()).toMatchObject({ total: 2, collected: 2 });
+
+    await pool.query(`UPDATE enterprises SET visibility = 'hidden' WHERE id = $1`, [beta]);
+    const body = (await collection()).json();
+    expect(body).toMatchObject({ total: 1, collected: 1 });
+    expect(body.items[0].enterpriseId).toBe(acme);
+  });
+
+  it("is private to the caller and requires event access", async () => {
+    const acme = await enterprise("Acme");
+    await standTag(acme, "04ACAC00000001");
+    await scan("04ACAC00000001");
+    const other = await createUserWithCapabilities([CAPABILITIES.DIRECTORY_READ]);
+    const theirs = (await collection(other)).json();
+    expect(theirs).toMatchObject({ total: 1, collected: 0 });
+    expect(theirs.items[0].entry).toBeNull();
+    const outsider = await createUser();
+    expect((await collection(outsider)).statusCode).toBe(403);
+  });
+});
+
 describe("saving from the directory", () => {
   it("saves a visible person and answers 404 for hidden, missing or self", async () => {
     const ana = await person("Ana");
