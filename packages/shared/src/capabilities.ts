@@ -39,7 +39,9 @@ export const CAPABILITIES = {
   LOGISTICS_STATS: "logistics:stats", // H24/H27 panels
   INTOLERANCES_MANAGE: "intolerances:manage", // maintain the food-intolerance dictionary
   // sponsor meal plans (#933): per-person export carries dietary data, so it
-  // is separate from the aggregate counts under LOGISTICS_STATS.
+  // is separate from the aggregate counts under LOGISTICS_STATS. Reserved:
+  // seeded here with the catalogue constraint (migration 0502) but no route
+  // checks them until the #933 staff export/override routes land.
   MEAL_PLANS_EXPORT: "meal-plans:export",
   MEAL_PLANS_MANAGE: "meal-plans:manage", // edit someone else's meal plan
 

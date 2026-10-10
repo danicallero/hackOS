@@ -16,8 +16,18 @@ COMMENT ON COLUMN public.users.dietary_confirmed_at IS
 COMMENT ON COLUMN public.users.meal_plan_confirmed_at IS
   '#933: first time the sponsor submitted their meal plan.';
 
--- Anyone with dietary data already answered the question.
-UPDATE public.users SET dietary_confirmed_at = now() WHERE dietary_data_state = 'present';
+-- Anyone with dietary data already answered the question, and so did anyone
+-- who submitted an application whose form asked for it (an empty answer there
+-- means "no restrictions"), mirroring submitResponse.
+UPDATE public.users u SET dietary_confirmed_at = now()
+ WHERE u.dietary_data_state = 'present'
+    OR EXISTS (
+      SELECT 1
+        FROM public.application_responses r
+        JOIN public.applications a ON a.id = r.application_id
+       WHERE r.user_id = u.id
+         AND r.submitted_at IS NOT NULL
+         AND a.ask_food_intolerances);
 
 ALTER TABLE public.event_config
   ADD COLUMN meal_plan_cutoff_hours integer DEFAULT 24 NOT NULL,
@@ -28,8 +38,8 @@ COMMENT ON COLUMN public.event_config.meal_plan_cutoff_hours IS
   '#933: meal plans lock this many hours before each meal starts.';
 
 -- One row per (user, offered meal) with an explicit answer, so "not going"
--- differs from "has not answered". Meal eligibility (meal kind + sponsor or
--- untagged audience) is validated by the service, not the database.
+-- differs from "has not answered". Meal eligibility (meal kind + sponsor
+-- audience) is validated by the service, not the database.
 CREATE TABLE public.meal_attendance_plans (
     user_id integer NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     activity_id integer NOT NULL REFERENCES public.activities(id) ON DELETE CASCADE,

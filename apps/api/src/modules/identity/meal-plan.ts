@@ -7,11 +7,10 @@ import { computeMembershipFlags } from "./role.js";
 
 /**
  * Sponsor meal plans (#933). A meal is offered to sponsors when its activity
- * kind has meal semantics, it is linked to a schedule entry that has not
- * ended, and that entry is either tagged for sponsors and shown, or carries
- * no audience tags at all (an event-wide meal, which the schedule keeps
- * hidden from public listings by `schedule_visibility_requires_audience`).
- * Each meal locks `event_config.meal_plan_cutoff_hours` before it starts.
+ * kind has meal semantics and it is linked to a shown schedule entry that has
+ * not ended and whose audiences include `sponsor`. An entry with no audience
+ * tags is staff-only (see `normalizeVisibilityForAudiences` in the schedule
+ * module), so it is never offered. Each meal locks `event_config.meal_plan_cutoff_hours` before it starts.
  */
 
 export interface MealPlanEntry {
@@ -30,19 +29,22 @@ export interface MealPlan {
   meals: MealPlanEntry[];
 }
 
-const OFFERED_MEALS_SQL = `
-  SELECT a.id AS activity_id, a.name, a.name_i18n, s.starts_at, s.ends_at, s.location,
-         p.attending,
-         now() >= s.starts_at - make_interval(hours => COALESCE(
-           (SELECT meal_plan_cutoff_hours FROM event_config WHERE id = 1), 24
-         )) AS locked
+const CUTOFF_HOURS_SQL = `COALESCE((SELECT meal_plan_cutoff_hours FROM event_config WHERE id = 1), 24)`;
+
+const OFFERED_MEALS_FROM_SQL = `
     FROM activities a
     JOIN schedule s ON s.id = a.schedule_id
     LEFT JOIN meal_attendance_plans p ON p.activity_id = a.id AND p.user_id = $1
    WHERE a.category = ANY($2::text[])
      AND s.ends_at > now()
-     AND (cardinality(s.audiences) = 0
-          OR ('sponsor' = ANY(s.audiences) AND s.visibility = 'shown'))
+     AND 'sponsor' = ANY(s.audiences)
+     AND s.visibility = 'shown'`;
+
+const OFFERED_MEALS_SQL = `
+  SELECT a.id AS activity_id, a.name, a.name_i18n, s.starts_at, s.ends_at, s.location,
+         p.attending,
+         now() >= s.starts_at - make_interval(hours => ${CUTOFF_HOURS_SQL}) AS locked
+  ${OFFERED_MEALS_FROM_SQL}
    ORDER BY s.starts_at, a.id`;
 
 interface OfferedMealRow {
@@ -97,14 +99,33 @@ export async function getMealPlan(db: Queryable, userId: number): Promise<MealPl
 
 /** True when a sponsor still has an open (unlocked) offered meal with no answer. */
 export async function hasPendingMealPlan(db: Queryable, userId: number): Promise<boolean> {
-  const meals = await offeredMeals(db, userId);
-  return meals.some((meal) => !meal.locked && meal.attending === null);
+  const { rows } = await db.query<{ pending: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 ${OFFERED_MEALS_FROM_SQL}
+          AND p.user_id IS NULL
+          AND now() < s.starts_at - make_interval(hours => ${CUTOFF_HOURS_SQL})
+     ) AS pending`,
+    [userId, [...MEAL_ACTIVITY_KINDS]],
+  );
+  return rows[0]?.pending ?? false;
+}
+
+/** Ids among `ids` that are meal-kind activities, offered now or not. */
+async function mealActivityIds(db: Queryable, ids: number[]): Promise<Set<number>> {
+  if (ids.length === 0) return new Set();
+  const { rows } = await db.query<{ id: number }>(
+    `SELECT id FROM activities WHERE id = ANY($1::int[]) AND category = ANY($2::text[])`,
+    [ids, [...MEAL_ACTIVITY_KINDS]],
+  );
+  return new Set(rows.map((row) => row.id));
 }
 
 /**
  * Replace semantics: the body must answer every offered, unlocked meal.
  * Locked meals may be echoed back unchanged (clients submit the full list)
- * but never changed. The user row lock serializes concurrent submissions
+ * but never changed; a locked meal the caller never answered is ignored.
+ * Meals that ended or stopped being offered since the client loaded the
+ * list are ignored too; only ids that are not meal activities are refused. The user row lock serializes concurrent submissions
  * from several tabs/devices so the stored plan is always one whole payload.
  */
 export async function replaceMealPlan(
@@ -122,16 +143,24 @@ export async function replaceMealPlan(
     await assertSponsor(client, userId);
 
     const offered = new Map((await offeredMeals(client, userId)).map((m) => [m.activityId, m]));
+    const unknown = answers.filter((answer) => !offered.has(answer.activityId));
+    const meals = await mealActivityIds(
+      client,
+      unknown.map((answer) => answer.activityId),
+    );
+    const notMeal = unknown.find((answer) => !meals.has(answer.activityId));
+    if (notMeal) {
+      throw new BadRequestError("This meal is not offered to sponsors", {
+        code: "meal_not_offered",
+        activityId: notMeal.activityId,
+      });
+    }
     const byActivity = new Map<number, boolean>();
     for (const answer of answers) {
       const meal = offered.get(answer.activityId);
-      if (!meal) {
-        throw new BadRequestError("This meal is not offered to sponsors", {
-          code: "meal_not_offered",
-          activityId: answer.activityId,
-        });
-      }
-      if (meal.locked && meal.attending !== answer.attending) {
+      // Ended or no longer offered since the list was loaded: nothing to store.
+      if (!meal) continue;
+      if (meal.locked && meal.attending !== null && meal.attending !== answer.attending) {
         throw new ConflictError("Changes to this meal are closed", {
           code: "meal_plan_locked",
           activityId: answer.activityId,
@@ -149,16 +178,19 @@ export async function replaceMealPlan(
     }
 
     const openIds = open.map((meal) => meal.activityId);
+    let changed: number[] = [];
     if (openIds.length > 0) {
-      await client.query(
+      const { rows } = await client.query<{ activity_id: number }>(
         `INSERT INTO meal_attendance_plans (user_id, activity_id, attending)
          SELECT $1, t.activity_id, t.attending
            FROM unnest($2::int[], $3::boolean[]) AS t(activity_id, attending)
          ON CONFLICT (user_id, activity_id)
            DO UPDATE SET attending = EXCLUDED.attending
-           WHERE meal_attendance_plans.attending IS DISTINCT FROM EXCLUDED.attending`,
+           WHERE meal_attendance_plans.attending IS DISTINCT FROM EXCLUDED.attending
+         RETURNING activity_id`,
         [userId, openIds, openIds.map((id) => byActivity.get(id))],
       );
+      changed = rows.map((row) => row.activity_id);
     }
     await client.query(
       `UPDATE users SET meal_plan_confirmed_at = COALESCE(meal_plan_confirmed_at, now())
@@ -170,10 +202,11 @@ export async function replaceMealPlan(
         confirmedAt: await confirmedAt(client, userId),
         meals: await offeredMeals(client, userId),
       },
-      written: openIds,
+      written: changed,
     };
   });
-  // Ids only: open logistics panels refetch their aggregate counts.
+  // Ids only, and only those whose answer changed: open logistics panels
+  // refetch their aggregate counts.
   if (written.length > 0) {
     await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_MEAL_PLAN_UPDATED, {
       activityIds: written,

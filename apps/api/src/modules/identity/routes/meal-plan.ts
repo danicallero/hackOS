@@ -48,8 +48,8 @@ export function registerMealPlanRoutes(app: FastifyInstance): void {
         summary: "Get my meal plan",
         description:
           "Sponsor representatives only (403 `not_sponsor` otherwise). Lists the upcoming meals " +
-          "offered to sponsors — meal-kind activities whose schedule entry is shown to the sponsor " +
-          "audience or has no audience tags — with the caller's answer (`attending` is null until " +
+          "offered to sponsors — meal-kind activities whose shown schedule entry includes the " +
+          "`sponsor` audience (an entry with no audiences is staff-only and never offered) — with the caller's answer (`attending` is null until " +
           "answered) and whether the meal is `locked` because it starts within the event's change " +
           "cutoff (24 h by default). `confirmedAt` is when the plan was first submitted.",
         response: { 200: mealPlanResponseSchema },
@@ -68,12 +68,14 @@ export function registerMealPlanRoutes(app: FastifyInstance): void {
         summary: "Replace my meal plan",
         description:
           "Sponsor representatives only (403 `not_sponsor`). The body must answer every offered, " +
-          "unlocked meal (400 `meal_plan_incomplete`); an id that is not an offered meal is 400 " +
-          "`meal_not_offered`; changing a locked meal is 409 `meal_plan_locked` (echoing its stored " +
-          "answer is accepted). Concurrent submissions are serialized per user, so the stored plan " +
-          "always matches one whole request. Accepts `Idempotency-Key`. Broadcasts " +
-          "`logistics.meal_plan.updated` with the affected activity ids only. Returns the same " +
-          "shape as GET.",
+          "unlocked meal (400 `meal_plan_incomplete`). Meals that ended or stopped being offered " +
+          "since the list was loaded are ignored; an id that is not a meal activity at all is 400 " +
+          "`meal_not_offered`. Changing a locked meal's stored answer is 409 `meal_plan_locked`; " +
+          "echoing it unchanged, or sending any answer for a locked meal that was never answered, " +
+          "is ignored. Concurrent submissions are serialized per user, so the stored plan always " +
+          "matches one whole request. Accepts `Idempotency-Key`. Broadcasts " +
+          "`logistics.meal_plan.updated` with the ids of meals whose answer actually changed, and " +
+          "nothing when none did. Returns the same shape as GET.",
         body: mealPlanBodySchema,
         response: { 200: mealPlanResponseSchema },
       },
