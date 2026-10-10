@@ -161,7 +161,8 @@ and response reference.
 `/people` (`apps/web/src/app/(app)/people/`) is the event diary (#935,
 [`diary.md`](./diary.md)); the directory is its secondary `Directory` tab
 (`?tab=directory`, shown with `directory:read`), where each row also has a
-Save action (`POST /api/me/diary/people`) that shows Saved once in the diary.
+Save action (`POST /api/me/diary/people`); once saved, the row shows Saved,
+Favourite and the diary's `…` menu, exactly like the People tab.
 Saving people into a diary, by scan or by id, only needs event access, so
 attendees without `directory:read` can keep the people they meet; they still
 only ever see directory-visible cards.
