@@ -22,7 +22,13 @@ const me = {
   pendingProfileTasks: ["dietary"],
 } as Me;
 
-const ready = { me, offline: false, navigationReady: true, pathname: "/schedule" };
+const ready = {
+  me,
+  offline: false,
+  navigationReady: true,
+  sessionPending: false,
+  pathname: "/schedule",
+};
 
 beforeEach(() => resetProfileTasksHandled());
 
@@ -39,7 +45,24 @@ describe("shouldPresentProfileTasks", () => {
     expect(shouldPresentProfileTasks({ ...ready, pathname: "/scan" })).toBe(false);
     expect(shouldPresentProfileTasks({ ...ready, pathname: "/scan/person/4" })).toBe(false);
     expect(shouldPresentProfileTasks({ ...ready, pathname: "/activities/12" })).toBe(false);
+    // Person operations mount QrCamera/NfcReader under every tab.
+    for (const path of [
+      "/activities/person/4",
+      "/activities/person/presence/4",
+      "/others/person/4",
+      "/others/person/presence/4",
+      "/scan/person/presence/4",
+    ]) {
+      expect(isScannerPath(path)).toBe(true);
+    }
     expect(isScannerPath("/activities/people")).toBe(false);
+    expect(isScannerPath("/others/statistics")).toBe(false);
+  });
+
+  it("waits for the initial session and the root redirect", () => {
+    expect(shouldPresentProfileTasks({ ...ready, sessionPending: true })).toBe(false);
+    expect(shouldPresentProfileTasks({ ...ready, pathname: "/" })).toBe(false);
+    expect(shouldPresentProfileTasks({ ...ready, pathname: "/profile-tasks" })).toBe(false);
   });
 
   it("waits for a fresh profile and skips cached profiles from older builds", () => {

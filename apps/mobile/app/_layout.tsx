@@ -20,11 +20,7 @@ import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
 import { setNfcShield } from "@/lib/nfc-reader";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
-import {
-  markProfileTasksHandled,
-  PROFILE_TASKS_PATH,
-  shouldPresentProfileTasks,
-} from "@/lib/profile-tasks";
+import { PROFILE_TASKS_PATH, shouldPresentProfileTasks } from "@/lib/profile-tasks";
 import { registerForPushNotifications } from "@/lib/push";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { isOperator } from "@/lib/tabs";
@@ -96,7 +92,7 @@ function RootLayoutSessionContents() {
       <NotificationListeners />
       <MobileAccessGate authenticated={authenticated} />
       <PersonalEventStream authenticated={authenticated} />
-      <ProfileTasksPrompt authenticated={authenticated} />
+      <ProfileTasksPrompt authenticated={authenticated} sessionPending={initialSessionPending} />
       <RootLayoutNav
         authenticated={authenticated}
         pending={initialSessionPending}
@@ -254,8 +250,15 @@ function NotificationListeners() {
 /**
  * #933: opens the pending-profile-tasks sheet once per session after a fresh
  * /api/me, deferring while a scanner is open so it never interrupts a scan.
+ * The sheet itself records the presentation when it mounts.
  */
-function ProfileTasksPrompt({ authenticated }: { authenticated: boolean }) {
+function ProfileTasksPrompt({
+  authenticated,
+  sessionPending,
+}: {
+  authenticated: boolean;
+  sessionPending: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const { me, offline } = useMeContext();
@@ -266,16 +269,22 @@ function ProfileTasksPrompt({ authenticated }: { authenticated: boolean }) {
       me,
       offline,
       navigationReady: Boolean(navigationState?.key),
+      sessionPending,
       pathname,
     });
   const tasks = me?.pendingProfileTasks?.join(",") ?? "";
+  // Only guards the frames between push and the route change, not the session.
+  const requestedFrom = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!present || !me) return;
-    // One presentation per session; dismissing the sheet defers it until the next sign-in.
-    markProfileTasksHandled(me.id);
+    if (!present || requestedFrom.current === pathname) return;
+    requestedFrom.current = pathname;
     router.push({ pathname: PROFILE_TASKS_PATH, params: { tasks } });
-  }, [me, present, router, tasks]);
+  }, [pathname, present, router, tasks]);
+
+  useEffect(() => {
+    if (requestedFrom.current !== pathname) requestedFrom.current = null;
+  }, [pathname]);
 
   return null;
 }

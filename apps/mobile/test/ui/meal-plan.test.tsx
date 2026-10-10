@@ -51,6 +51,7 @@ jest.mock("@expo/ui/community/menu", () => ({
 }));
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => mockParams,
+  useFocusEffect: (effect: () => void) => require("react").useEffect(effect, [effect]),
   useRouter: () => ({ push: mockPush, back: mockBack, replace: jest.fn() }),
   useScrollToTop: jest.fn(),
 }));
@@ -132,8 +133,29 @@ jest.mock("@/components/RequestFeedback", () => {
   const ReactLib = require("react");
   const Native = require("react-native");
   return {
-    RequestFeedback: ({ error, message }: { error?: Error | null; message?: string }) =>
-      error ? ReactLib.createElement(Native.Text, null, message ?? error.message) : null,
+    RequestFeedback: ({
+      error,
+      message,
+      onRetry,
+    }: {
+      error?: Error | null;
+      message?: string;
+      onRetry?: () => void;
+    }) =>
+      error
+        ? ReactLib.createElement(
+            Native.View,
+            null,
+            ReactLib.createElement(Native.Text, null, message ?? error.message),
+            onRetry
+              ? ReactLib.createElement(
+                  Native.Pressable,
+                  { accessibilityLabel: "retry", accessibilityRole: "button", onPress: onRetry },
+                  ReactLib.createElement(Native.Text, null, "retry"),
+                )
+              : null,
+          )
+        : null,
   };
 });
 jest.mock("@/components/stale-data-banner", () => ({ StaleDataBanner: () => null }));
@@ -214,12 +236,14 @@ beforeEach(() => {
 });
 
 describe("Account meals section", () => {
-  it("submits every unlocked meal when a sponsor toggles one", async () => {
+  it("submits every unlocked meal only on an explicit Save", async () => {
     await renderMobile(<AccountScreen />);
     const toggle = await screen.findByLabelText(label(lunch));
     expect(screen.getByLabelText(label(dinner)).props.disabled).toBe(true);
 
     await act(async () => fireEvent(toggle, "valueChange", true));
+    expect(bodyOf("PUT", "/api/me/meal-plan")).toBeUndefined();
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
 
     await waitFor(() =>
       expect(bodyOf("PUT", "/api/me/meal-plan")).toEqual({
@@ -238,6 +262,7 @@ describe("Account meals section", () => {
     await act(async () =>
       fireEvent(await screen.findByLabelText(label(lunch)), "valueChange", true),
     );
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
     expect(await screen.findByText("mealPlanSaveError")).toBeTruthy();
     // A rejected plan (e.g. a meal locked meanwhile) reloads the server state.
     expect(
@@ -248,7 +273,7 @@ describe("Account meals section", () => {
   });
 
   it("keeps the cached plan read-only offline", async () => {
-    mockCache.set("meal-plan:user:7", { data: plan, updatedAt: "2026-10-09T08:00:00.000Z" });
+    mockCache.set("user:7:meal-plan", { data: plan, updatedAt: "2026-10-09T08:00:00.000Z" });
     mockMeContext.offline = true;
     routeApi({
       "GET /api/me/meal-plan": () => {
@@ -258,6 +283,34 @@ describe("Account meals section", () => {
     await renderMobile(<AccountScreen />);
     expect((await screen.findByLabelText(label(lunch))).props.disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "accountFoodIntolerances" })).toBeNull();
+  });
+
+  it("never answers the other open meals when one is toggled", async () => {
+    const breakfast = { ...lunch, activityId: 10, name: "Breakfast" };
+    const open = { confirmedAt: null, meals: [breakfast, lunch] };
+    routeApi({ "GET /api/me/meal-plan": () => open, "PUT /api/me/meal-plan": () => open });
+    await renderMobile(<AccountScreen />);
+    await act(async () =>
+      fireEvent(await screen.findByLabelText(label(lunch)), "valueChange", true),
+    );
+    expect(mockApiFetch).not.toHaveBeenCalledWith(
+      "/api/me/meal-plan",
+      expect.objectContaining({ method: "PUT" }),
+    );
+    expect(screen.getByLabelText(label(breakfast)).props.value).toBe(false);
+  });
+
+  it("hides Save once every open meal is answered and unchanged", async () => {
+    const answered = {
+      confirmedAt: "2026-10-09T08:00:00.000Z",
+      meals: [{ ...lunch, attending: false }, dinner],
+    };
+    routeApi({ "GET /api/me/meal-plan": () => answered });
+    await renderMobile(<AccountScreen />);
+    const toggle = await screen.findByLabelText(label(lunch));
+    expect(screen.queryByRole("button", { name: "save" })).toBeNull();
+    await act(async () => fireEvent(toggle, "valueChange", true));
+    expect(screen.getByRole("button", { name: "save" })).toBeTruthy();
   });
 
   it("renders without a section on a fresh offline install", async () => {
@@ -341,5 +394,108 @@ describe("Profile tasks sheet", () => {
     );
     expect(mockBack).toHaveBeenCalled();
     expect(bodyOf("PATCH", "/api/me")).toBeUndefined();
+  });
+
+  it("only confirms a locked profile's stored answer", async () => {
+    mockParams = { tasks: "dietary" };
+    mockMeContext.me = {
+      ...baseMe,
+      profileLocked: true,
+      foodIntolerances: [3],
+      foodIntoleranceNotes: " nuts ",
+    };
+    await renderMobile(<ProfileTasksScreen />);
+    expect((await screen.findByLabelText("Gluten")).props.disabled).toBe(true);
+    expect(screen.getByLabelText("noRestrictions").props.disabled).toBe(true);
+    expect(screen.queryByLabelText("accountDietaryNotes")).toBeNull();
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "confirm" })));
+
+    expect(bodyOf("PATCH", "/api/me")).toEqual({
+      foodIntolerances: [3],
+      foodIntoleranceNotes: " nuts ",
+    });
+    expect(mockBack).toHaveBeenCalled();
+  });
+
+  it("saves the dietary answer alone when the meal plan cannot load", async () => {
+    mockParams = { tasks: "dietary,meal_plan" };
+    routeApi({
+      "GET /api/me/meal-plan": () => {
+        throw new Error("network");
+      },
+    });
+    await renderMobile(<ProfileTasksScreen />);
+    expect(await screen.findByText("network")).toBeTruthy();
+    await act(async () => fireEvent(screen.getByLabelText("noRestrictions"), "valueChange", true));
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
+
+    expect(bodyOf("PATCH", "/api/me")).toEqual({
+      foodIntolerances: [],
+      foodIntoleranceNotes: null,
+    });
+    expect(bodyOf("PUT", "/api/me/meal-plan")).toBeUndefined();
+    expect(mockBack).toHaveBeenCalled();
+  });
+
+  it("retries a failed meal plan load", async () => {
+    mockParams = { tasks: "meal_plan" };
+    let fail = true;
+    routeApi({
+      "GET /api/me/meal-plan": () => {
+        if (fail) throw new Error("network");
+        return plan;
+      },
+    });
+    await renderMobile(<ProfileTasksScreen />);
+    await screen.findByText("network");
+    fail = false;
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "retry" })));
+    expect(await screen.findByLabelText(label(lunch))).toBeTruthy();
+  });
+
+  it("keeps a stored dietary answer when only the meal plan save fails", async () => {
+    mockParams = { tasks: "dietary,meal_plan" };
+    let failPut = true;
+    routeApi({
+      "PUT /api/me/meal-plan": () => {
+        if (failPut) throw new Error("meal_plan_locked");
+        return plan;
+      },
+    });
+    await renderMobile(<ProfileTasksScreen />);
+    await act(async () =>
+      fireEvent(await screen.findByLabelText("noRestrictions"), "valueChange", true),
+    );
+    await screen.findByLabelText(label(lunch));
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
+    expect(await screen.findByText("mealPlanSaveError")).toBeTruthy();
+    expect(mockMeContext.refetch).toHaveBeenCalled();
+
+    failPut = false;
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "retry" })));
+    const calls = (method: string, path: string) =>
+      mockApiFetch.mock.calls.filter(([p, init]) => p === path && init?.method === method);
+    expect(calls("PATCH", "/api/me")).toHaveLength(1);
+    expect(calls("PUT", "/api/me/meal-plan")).toHaveLength(2);
+    expect(mockBack).toHaveBeenCalled();
+  });
+
+  it("records the prompt as shown only when the sheet opens, not from Account", async () => {
+    const { resetProfileTasksHandled, shouldPresentProfileTasks } = require("@/lib/profile-tasks");
+    const ready = {
+      me: mockMeContext.me,
+      offline: false,
+      navigationReady: true,
+      sessionPending: false,
+      pathname: "/schedule",
+    };
+    resetProfileTasksHandled();
+    mockParams = { tasks: "dietary", edit: "1" };
+    const edit = await renderMobile(<ProfileTasksScreen />);
+    expect(shouldPresentProfileTasks(ready)).toBe(true);
+    edit.unmount();
+    mockParams = { tasks: "dietary" };
+    await renderMobile(<ProfileTasksScreen />);
+    expect(shouldPresentProfileTasks(ready)).toBe(false);
   });
 });

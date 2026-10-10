@@ -8,12 +8,14 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import {
+  confirmLockedDietary,
   type DietaryDraft,
   dietaryDraftFromMe,
   fetchMealPlan,
   isDietaryAnswered,
   markProfileTasksHandled,
   mealLabel,
+  mealPlanCacheKey,
   parseProfileTasks,
   saveDietary,
   saveMealPlan,
@@ -21,6 +23,7 @@ import {
   toggleIntolerance,
 } from "@/lib/profile-tasks";
 import type { MealPlan } from "@/lib/types";
+import { useCachedApi } from "@/lib/use-cached-api";
 import { useFoodIntolerances } from "@/lib/use-food-intolerances";
 import { colors } from "@/theme/colors";
 
@@ -38,51 +41,53 @@ export default function ProfileTasksScreen() {
   // Opened from Account to edit one answer rather than as the next-entry prompt.
   const editing = params.edit === "1";
   const { me, refetch } = useMeContext();
-  const { intolerances } = useFoodIntolerances(tasks.includes("dietary"));
+  const showDietary = tasks.includes("dietary");
+  const wantsMeals = tasks.includes("meal_plan");
+  const { intolerances } = useFoodIntolerances(showDietary);
+  const mealPlan = useCachedApi<MealPlan>(
+    me ? mealPlanCacheKey(me.id) : "meal-plan:none",
+    fetchMealPlan,
+    { enabled: wantsMeals && Boolean(me) },
+  );
   const [dietary, setDietary] = useState<DietaryDraft | null>(() =>
     me ? dietaryDraftFromMe(me) : null,
   );
-  const [plan, setPlan] = useState<MealPlan | null>(null);
-  const [planError, setPlanError] = useState<Error | null>(null);
+  // Set once the PATCH succeeds, so a retry after a failed PUT resends only the meals.
+  const [dietarySaved, setDietarySaved] = useState(false);
   const [attending, setAttending] = useState<Record<number, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const wantsMeals = tasks.includes("meal_plan");
+  const meId = me?.id;
+  const loadMealPlan = mealPlan.load;
 
-  // Opening the sheet is the prompt's one presentation for this session.
+  // The sheet mounting is the prompt's one presentation for this session.
   useEffect(() => {
-    if (me) markProfileTasksHandled(me.id);
-  }, [me]);
+    if (meId !== undefined && !editing) markProfileTasksHandled(meId);
+  }, [editing, meId]);
 
   useEffect(() => {
-    if (!wantsMeals) return;
-    let cancelled = false;
-    fetchMealPlan()
-      .then((next) => {
-        if (!cancelled) setPlan(next);
-      })
-      .catch((cause) => {
-        if (!cancelled) setPlanError(cause instanceof Error ? cause : new Error(String(cause)));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [wantsMeals]);
+    if (wantsMeals && meId !== undefined) void loadMealPlan();
+  }, [loadMealPlan, meId, wantsMeals]);
 
   if (!me || !dietary) return null;
 
-  const showDietary = tasks.includes("dietary");
-  const dietaryReady = !showDietary || isDietaryAnswered(dietary);
-  const mealsReady = !wantsMeals || plan !== null;
+  // H7: after an accepted application the answer can be confirmed, not edited.
+  const dietaryLocked = Boolean(me.profileLocked);
+  const plan = mealPlan.data;
+  const dietaryReady = !showDietary || dietaryLocked || isDietaryAnswered(dietary);
+  // A failed plan load must not block saving the dietary answer on its own.
+  const mealsReady = !wantsMeals || plan !== null || mealPlan.error !== null;
+  const nothingToSave = !showDietary && plan === null;
 
   async function save() {
-    if (saving || !dietary) return;
+    if (saving || !me || !dietary) return;
     setSaving(true);
     setSaveError(null);
     try {
-      if (showDietary) {
+      if (showDietary && !dietarySaved) {
         try {
-          await saveDietary(dietary);
+          await (dietaryLocked ? confirmLockedDietary(me) : saveDietary(dietary));
+          setDietarySaved(true);
         } catch {
           setSaveError(t("dietarySaveError"));
           return;
@@ -90,9 +95,11 @@ export default function ProfileTasksScreen() {
       }
       if (wantsMeals && plan) {
         try {
-          await saveMealPlan(plan, attending);
+          mealPlan.setData(await saveMealPlan(plan, attending));
         } catch {
           setSaveError(t("mealPlanSaveError"));
+          // The dietary answer may already be stored; reflect it in /api/me.
+          if (showDietary) await refetch();
           return;
         }
       }
@@ -131,6 +138,7 @@ export default function ProfileTasksScreen() {
             <ToggleRow
               label={t("noRestrictions")}
               value={dietary.noRestrictions}
+              disabled={dietaryLocked}
               onChange={(on) => setDietary((current) => current && setNoRestrictions(current, on))}
             />
             {intolerances.map((item) => (
@@ -139,13 +147,23 @@ export default function ProfileTasksScreen() {
                 <ToggleRow
                   label={item.label[language]}
                   value={dietary.intolerances.includes(item.id)}
+                  disabled={dietaryLocked}
                   onChange={(on) =>
                     setDietary((current) => current && toggleIntolerance(current, item.id, on))
                   }
                 />
               </View>
             ))}
-            {dietary.noRestrictions ? null : (
+            {dietaryLocked ? (
+              dietary.notes ? (
+                <>
+                  <Separator />
+                  <Text selectable style={{ color: colors.label, fontSize: 16, padding: 16 }}>
+                    {dietary.notes}
+                  </Text>
+                </>
+              ) : null
+            ) : dietary.noRestrictions ? null : (
               <>
                 <Separator />
                 <TextInput
@@ -165,9 +183,7 @@ export default function ProfileTasksScreen() {
         ) : null}
 
         {wantsMeals ? (
-          planError ? (
-            <RequestFeedback error={planError} />
-          ) : plan ? (
+          plan ? (
             <Section title={t("mealsTitle")} footer={t("mealsLockNote")}>
               {plan.meals.map((meal, index) => (
                 <View key={meal.activityId}>
@@ -183,6 +199,12 @@ export default function ProfileTasksScreen() {
                 </View>
               ))}
             </Section>
+          ) : mealPlan.error ? (
+            <RequestFeedback
+              error={mealPlan.error}
+              onRetry={() => void mealPlan.load()}
+              retrying={mealPlan.loading}
+            />
           ) : (
             <RequestFeedback loading />
           )
@@ -194,10 +216,10 @@ export default function ProfileTasksScreen() {
 
         <View style={{ gap: 8 }}>
           <ActionButton
-            label={t("save")}
+            label={showDietary && dietaryLocked ? t("confirm") : t("save")}
             variant="filled"
             busy={saving}
-            disabled={!dietaryReady || !mealsReady}
+            disabled={!dietaryReady || !mealsReady || nothingToSave}
             onPress={() => void save()}
           />
           <ActionButton

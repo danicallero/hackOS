@@ -21,9 +21,17 @@ export function resetProfileTasksHandled(): void {
   handledUserIds.clear();
 }
 
-/** Scanner surfaces: the prompt waits until the operator leaves them. */
+/**
+ * Surfaces that mount QrCamera/NfcReader (general scanner, activity scanner,
+ * person operations under every tab): the prompt waits until the operator
+ * leaves them.
+ */
 export function isScannerPath(pathname: string): boolean {
-  return /^\/scan(\/|$)/.test(pathname) || /^\/activities\/\d+(\/|$)/.test(pathname);
+  return (
+    /^\/scan(\/|$)/.test(pathname) ||
+    /^\/activities\/\d+(\/|$)/.test(pathname) ||
+    /^\/(activities|others)\/person(\/|$)/.test(pathname)
+  );
 }
 
 export const PROFILE_TASKS_PATH = "/profile-tasks";
@@ -32,18 +40,23 @@ export function shouldPresentProfileTasks({
   me,
   offline,
   navigationReady,
+  sessionPending,
   pathname,
 }: {
   me: Me | null;
   offline: boolean;
   navigationReady: boolean;
+  /** The root layout is still resolving the initial session. */
+  sessionPending: boolean;
   pathname: string;
 }): boolean {
-  if (!me || offline || !navigationReady) return false;
+  if (!me || offline || !navigationReady || sessionPending) return false;
   if (!me.hasEventAccess || me.accountState !== "active") return false;
   if (!me.pendingProfileTasks?.length) return false;
   if (handledUserIds.has(me.id)) return false;
-  return pathname !== PROFILE_TASKS_PATH && !isScannerPath(pathname);
+  // "/" only redirects into the tabs; pushing over it would race that redirect.
+  if (pathname === "/" || pathname === PROFILE_TASKS_PATH) return false;
+  return !isScannerPath(pathname);
 }
 
 export function parseProfileTasks(value: string | string[] | undefined): ProfileTask[] {
@@ -99,8 +112,24 @@ export async function saveDietary(draft: DietaryDraft): Promise<void> {
   });
 }
 
+/**
+ * H7: a locked profile can only confirm what staff already recorded. The
+ * stored values are resubmitted verbatim so the API sees no change.
+ */
+export async function confirmLockedDietary(me: Me): Promise<void> {
+  await apiFetch("/api/me", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      foodIntolerances: me.foodIntolerances,
+      foodIntoleranceNotes: me.foodIntoleranceNotes,
+    }),
+  });
+}
+
 export function mealPlanCacheKey(userId: number): string {
-  return `meal-plan:user:${userId}`;
+  // `user:<id>:` prefix: sign-out and 401 invalidation clear it with the profile.
+  return `user:${userId}:meal-plan`;
 }
 
 export function fetchMealPlan(signal?: AbortSignal): Promise<MealPlan> {
@@ -108,8 +137,9 @@ export function fetchMealPlan(signal?: AbortSignal): Promise<MealPlan> {
 }
 
 /**
- * PUT replaces the whole plan and must answer every unlocked meal; an
- * unanswered meal is submitted as shown, i.e. not attending.
+ * PUT replaces the whole plan and must answer every unlocked meal. It is only
+ * sent from an explicit Save, so an unticked meal is a "not attending" answer
+ * (same model as the web checklist).
  */
 export function mealPlanAnswers(
   plan: MealPlan,

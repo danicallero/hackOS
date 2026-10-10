@@ -1,6 +1,6 @@
 import { type MenuAction, MenuView } from "@expo/ui/community/menu";
-import { useRouter, useScrollToTop } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect, useRouter, useScrollToTop } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -62,16 +62,18 @@ export default function AccountScreen() {
   const isSponsorRep = Boolean(me?.isSponsorRep);
   const mealPlanKey = me ? mealPlanCacheKey(me.id) : "meal-plan:none";
   const mealPlan = useCachedApi<MealPlan>(mealPlanKey, fetchMealPlan, { enabled: isSponsorRep });
-  const [savingMealId, setSavingMealId] = useState<number | null>(null);
+  // Local answers until Save; a toggle alone never submits the plan.
+  const [mealAnswers, setMealAnswers] = useState<Record<number, boolean>>({});
+  const [savingMeals, setSavingMeals] = useState(false);
   const [mealPlanError, setMealPlanError] = useState<Error | null>(null);
   const loadMealPlan = mealPlan.load;
-  const pendingTasks = me?.pendingProfileTasks?.join(",");
 
-  // Reload after the next-entry sheet saves, which changes the pending tasks.
-  useEffect(() => {
-    void pendingTasks;
-    if (isSponsorRep) void loadMealPlan();
-  }, [isSponsorRep, loadMealPlan, pendingTasks]);
+  // Load on every focus, so a plan answered from the next-entry sheet shows here.
+  useFocusEffect(
+    useCallback(() => {
+      if (isSponsorRep) void loadMealPlan();
+    }, [isSponsorRep, loadMealPlan]),
+  );
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState<Error | null>(null);
   const [languageRetry, setLanguageRetry] = useState<Lang | null>(null);
@@ -121,21 +123,23 @@ export default function AccountScreen() {
     }
   }
 
-  // #933: each toggle submits the whole plan as shown (PUT replace semantics).
-  async function toggleMeal(activityId: number, attending: boolean) {
+  // #933: Save submits the whole plan as shown (PUT replace semantics), the
+  // same explicit-submit model as the web checklist.
+  async function saveMeals() {
     const plan = mealPlan.data;
-    if (!plan || offline || savingMealId !== null) return;
-    setSavingMealId(activityId);
+    if (!plan || offline || savingMeals) return;
+    setSavingMeals(true);
     setMealPlanError(null);
     try {
-      mealPlan.setData(await saveMealPlan(plan, { [activityId]: attending }));
+      mealPlan.setData(await saveMealPlan(plan, mealAnswers));
+      setMealAnswers({});
       void refetch();
     } catch (cause) {
       setMealPlanError(cause instanceof Error ? cause : new Error(t("mealPlanSaveError")));
       // A meal may have locked since the list loaded; show the server's state.
       void mealPlan.load();
     } finally {
-      setSavingMealId(null);
+      setSavingMeals(false);
     }
   }
 
@@ -228,6 +232,15 @@ export default function AccountScreen() {
   const dietaryLabels = me.foodIntolerances
     .map((id) => intolerances.find((item) => item.id === id)?.label[language] ?? String(id))
     .join(", ");
+  // An open meal without an answer still needs a submit, even with nothing ticked.
+  const mealsUnsaved = Boolean(
+    mealPlan.data?.meals.some(
+      (meal) =>
+        !meal.locked &&
+        (meal.attending === null ||
+          (mealAnswers[meal.activityId] ?? meal.attending) !== meal.attending),
+    ),
+  );
   const dietaryValue =
     dietaryLabels || (me.dietaryConfirmedAt ? t("noRestrictions") : t("accountNoneDeclared"));
 
@@ -423,13 +436,25 @@ export default function AccountScreen() {
                 {index > 0 ? <Separator /> : null}
                 <ToggleRow
                   label={mealLabel(meal, language)}
-                  value={meal.attending ?? false}
+                  value={mealAnswers[meal.activityId] ?? meal.attending ?? false}
                   // Offline the cached plan stays visible but read-only.
-                  disabled={offline || meal.locked || savingMealId !== null}
-                  onChange={(on) => void toggleMeal(meal.activityId, on)}
+                  disabled={offline || meal.locked || savingMeals}
+                  onChange={(on) =>
+                    setMealAnswers((current) => ({ ...current, [meal.activityId]: on }))
+                  }
                 />
               </View>
             ))}
+            {offline || !mealsUnsaved ? null : (
+              <>
+                <Separator />
+                <ActionButton
+                  label={t("save")}
+                  busy={savingMeals}
+                  onPress={() => void saveMeals()}
+                />
+              </>
+            )}
           </Section>
         ) : null}
 
