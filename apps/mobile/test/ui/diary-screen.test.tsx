@@ -43,10 +43,42 @@ jest.mock("@/components/QrCamera", () => ({
     );
   },
 }));
-jest.mock("expo-router", () => ({ useScrollToTop: () => {}, useIsFocused: () => true }));
+const mockPush = jest.fn();
+jest.mock("expo-router", () => ({
+  useScrollToTop: () => {},
+  useIsFocused: () => true,
+  useRouter: () => ({ push: mockPush }),
+  useFocusEffect: (effect: () => void) => require("react").useEffect(effect, [effect]),
+}));
+let mockCapabilities: string[] = [];
+jest.mock("@/lib/me-context", () => ({
+  useMeContext: () => ({ me: { capabilities: mockCapabilities } }),
+}));
+jest.mock("@/components/segmented-control", () => ({
+  SegmentedControl: ({
+    values,
+    onChange,
+  }: {
+    values: string[];
+    onChange: (index: number) => void;
+  }) => {
+    const { Pressable, Text } = require("react-native");
+    return values.map((value, index) => (
+      <Pressable
+        key={value}
+        accessibilityRole="tab"
+        accessibilityLabel={value}
+        onPress={() => onChange(index)}
+      >
+        <Text>{value}</Text>
+      </Pressable>
+    ));
+  },
+}));
 jest.mock("@/lib/i18n", () => ({ useLocale: () => ({ language: "en", t: (key: string) => key }) }));
 jest.mock("@/lib/api", () => ({
   apiFetch: jest.fn(),
+  getCurrentSessionCookie: () => "session=1",
   ApiError: class ApiError extends Error {
     status: number;
     code?: string;
@@ -114,6 +146,8 @@ let scanResult: DiaryEntry | Error;
 
 beforeEach(() => {
   mockNfcSupported = true;
+  mockCapabilities = [];
+  mockPush.mockReset();
   mockMenus = [];
   mockNfc = null;
   mockQrMounts = 0;
@@ -221,4 +255,78 @@ it("toggles a favourite through an idempotent PATCH", async () => {
       expect.objectContaining({ method: "PATCH", body: JSON.stringify({ starred: false }) }),
     ),
   );
+});
+
+it("opens a saved person's profile, but not an unavailable one", async () => {
+  await renderMobile(<DiaryScreen />);
+  await fireEvent.press(await screen.findByRole("button", { name: "Ana S." }));
+  expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "101" } });
+  expect(screen.queryByRole("button", { name: "diaryUnavailablePerson" })).toBeNull();
+});
+
+it("searches saved cards locally, ignoring accents and case", async () => {
+  diary = [person(1, "José P."), person(2, "Bea R.", { note: "Met at the robotics stand" })];
+  await renderMobile(<DiaryScreen />);
+  await screen.findByText("José P.");
+  await fireEvent.changeText(screen.getByLabelText("scheduleSearch"), "jose");
+  expect(screen.getByText("José P.")).toBeTruthy();
+  expect(screen.queryByText("Bea R.")).toBeNull();
+  await fireEvent.changeText(screen.getByLabelText("scheduleSearch"), "ROBOTICS STAND");
+  expect(screen.getByText("Bea R.")).toBeTruthy();
+  expect(screen.queryByText("José P.")).toBeNull();
+  await fireEvent.changeText(screen.getByLabelText("scheduleSearch"), "nobody");
+  expect(screen.getByText("scannerNoResults")).toBeTruthy();
+  // Searching saved cards is local: only diary reads reach the API.
+  expect(jest.mocked(apiFetch).mock.calls.every(([path]) => path === "/api/me/diary")).toBe(true);
+});
+
+it("filters to favourites", async () => {
+  await renderMobile(<DiaryScreen />);
+  await screen.findByText("Acme");
+  await fireEvent.press(screen.getByLabelText("diaryShowFavourites"));
+  expect(screen.getByText("Ana S.")).toBeTruthy();
+  expect(screen.queryByText("Acme")).toBeNull();
+});
+
+it("hides the directory tab without directory:read", async () => {
+  await renderMobile(<DiaryScreen />);
+  await screen.findByText("Ana S.");
+  expect(screen.queryByRole("tab", { name: "diaryDirectoryTab" })).toBeNull();
+});
+
+it("lets a directory reader browse, search and save people", async () => {
+  mockCapabilities = ["directory:read"];
+  const directoryPerson = {
+    userId: 300,
+    displayName: "Carla M.",
+    photoUrl: null,
+    headline: "Data",
+    bio: null,
+    locationNote: null,
+    socials: [],
+    cvUrl: null,
+    project: null,
+    challenges: [],
+  };
+  jest.mocked(apiFetch).mockImplementation(async (path: string) => {
+    if (path === "/api/me/diary") return { items: diary };
+    if (path.startsWith("/api/directory?")) return { items: [directoryPerson], nextCursor: null };
+    if (path === "/api/me/diary/people") return person(9, "Carla M.");
+    return undefined;
+  });
+  await renderMobile(<DiaryScreen />);
+  await screen.findByText("Ana S.");
+  await fireEvent.press(screen.getByRole("tab", { name: "diaryDirectoryTab" }));
+  expect(await screen.findByText("Carla M.")).toBeTruthy();
+  await fireEvent.changeText(screen.getByLabelText("scheduleSearch"), "car");
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/directory?limit=30&q=car"));
+  await fireEvent.press(screen.getByRole("button", { name: "directorySave, Carla M." }));
+  await waitFor(() =>
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/me/diary/people",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ userId: 300 }) }),
+    ),
+  );
+  await fireEvent.press(screen.getByRole("button", { name: "Carla M., Data" }));
+  expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "300" } });
 });

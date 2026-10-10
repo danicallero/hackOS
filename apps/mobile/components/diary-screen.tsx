@@ -1,12 +1,15 @@
 import { MenuView } from "@expo/ui/community/menu";
-import { useScrollToTop } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { useFocusEffect, useRouter, useScrollToTop } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   AppState,
-  Image,
   Linking,
   Modal,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -16,24 +19,29 @@ import {
   View,
 } from "react-native";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
-import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
+import { DiaryNoteEditor } from "@/components/diary-note-editor";
+import { EmptyState, Section, Separator } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
+import { PersonAvatar } from "@/components/person-avatar";
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
+import { SegmentedControl } from "@/components/segmented-control";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import {
   type DiaryEntry,
-  diaryInitials,
   diaryScanErrorKey,
   isDiaryEntryAvailable,
   upsertDiaryEntry,
 } from "@/lib/diary";
+import { type DirectoryEntry, type DirectoryPage, filterDiaryEntries } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
+import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { has } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { colors } from "@/theme/colors";
 
@@ -44,24 +52,36 @@ const SCAN_LABELS: ScanActionLabels = {
   options: "diaryScanOptions",
 };
 
-const NOTE_MAX_LENGTH = 500;
+const DIRECTORY_PAGE_SIZE = 30;
+const SEARCH_DEBOUNCE_MS = 300;
+const ROW_TEXT_INSET = 72;
 
 type ScanInput = "nfc" | "qr" | "manual";
+type DiaryView = "saved" | "directory";
 
 /**
  * Event diary (#935): the people and sponsor stands this attendee saved,
  * favourites first. Scanning starts NFC directly where supported (R008); QR
  * and manual entry stay in the compact menu. Cards come live from the API and
  * are never cached on the device, so a profile hidden later disappears here.
+ * Saved entries are searched locally (cards never carry an email); a
+ * `directory:read` holder also browses the whole directory, searched by name
+ * on the server. People open their full profile (`app/people/[id].tsx`).
  */
 export function DiaryScreen() {
   useColorScheme();
   const { t } = useLocale();
+  const router = useRouter();
+  const { me } = useMeContext();
+  const canBrowse = has(me?.capabilities ?? [], CAPABILITIES.DIRECTORY_READ);
   const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
 
+  const [view, setView] = useState<DiaryView>("saved");
+  const [query, setQuery] = useState("");
+  const [favouritesOnly, setFavouritesOnly] = useState(false);
   const [entries, setEntries] = useState<DiaryEntry[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<Error | null>(null);
@@ -73,6 +93,8 @@ export function DiaryScreen() {
   const [noteEntry, setNoteEntry] = useState<DiaryEntry | null>(null);
   const requestId = useRef(0);
   const scanInFlight = useRef(false);
+  const directory = useDirectory(canBrowse && view === "directory", query);
+  const showDirectory = canBrowse && view === "directory";
 
   const load = useCallback(async () => {
     const request = ++requestId.current;
@@ -89,8 +111,14 @@ export function DiaryScreen() {
     }
   }, []);
 
+  // Also refreshes after returning from a profile, where the entry may change.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
   useEffect(() => {
-    void load();
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") void load();
     });
@@ -107,7 +135,7 @@ export function DiaryScreen() {
   async function onRefresh() {
     setRefreshing(true);
     try {
-      await load();
+      await (showDirectory ? directory.reload() : load());
     } finally {
       setRefreshing(false);
     }
@@ -126,6 +154,7 @@ export function DiaryScreen() {
       });
       applyEntry(entry);
       setSavedId(entry.id);
+      setView("saved");
       void haptic("success");
       scrollRef.current?.scrollTo?.({ y: 0, animated: true });
     } catch (error) {
@@ -185,16 +214,61 @@ export function DiaryScreen() {
     ]);
   }
 
+  const [savingUserId, setSavingUserId] = useState<number | null>(null);
+  async function savePerson(person: DirectoryEntry) {
+    if (savingUserId !== null) return;
+    setSavingUserId(person.userId);
+    try {
+      const entry = await apiFetch<DiaryEntry>("/api/me/diary/people", {
+        method: "POST",
+        headers: { "content-type": "application/json", "Idempotency-Key": createIdempotencyKey() },
+        body: JSON.stringify({ userId: person.userId }),
+      });
+      applyEntry(entry);
+      void haptic("success");
+    } catch {
+      void haptic("error");
+      Alert.alert(t("tabDiary"), t("directorySaveError"));
+    } finally {
+      setSavingUserId(null);
+    }
+  }
+
+  const openPerson = useCallback(
+    (userId: number) => router.push({ pathname: "/people/[id]", params: { id: String(userId) } }),
+    [router],
+  );
+
   const inputOpen = input !== null;
-  const saved = entries?.find((entry) => entry.id === savedId) ?? null;
-  const rest = (entries ?? []).filter((entry) => entry.id !== saved?.id);
+  const searching = query.trim() !== "" || favouritesOnly;
+  const visible = useMemo(
+    () => filterDiaryEntries(entries ?? [], { query, favouritesOnly }),
+    [entries, query, favouritesOnly],
+  );
+  // The just-scanned card is pinned on top only while nothing filters the list.
+  const saved = searching ? null : (visible.find((entry) => entry.id === savedId) ?? null);
+  const rest = visible.filter((entry) => entry.id !== saved?.id);
+  const savedUserIds = useMemo(
+    () => new Set((entries ?? []).flatMap((entry) => (entry.person ? [entry.person.userId] : []))),
+    [entries],
+  );
   const rowProps = (entry: DiaryEntry) => ({
     entry,
     busy: busyIds.has(entry.id),
+    onOpen:
+      entry.kind === "person" && entry.person ? () => openPerson(entry.person!.userId) : undefined,
     onToggleStar: () => void update(entry, { starred: !entry.starred }),
     onEditNote: () => setNoteEntry(entry),
     onRemove: () => confirmRemove(entry),
   });
+
+  function onScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    if (!showDirectory) return;
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    if (contentOffset.y + layoutMeasurement.height > contentSize.height - 400) {
+      void directory.loadMore();
+    }
+  }
 
   return (
     <>
@@ -219,7 +293,7 @@ export function DiaryScreen() {
           />
         ) : null}
       </Modal>
-      <NoteEditor
+      <DiaryNoteEditor
         entry={noteEntry}
         onClose={() => setNoteEntry(null)}
         onSave={(entry, note) => {
@@ -229,12 +303,17 @@ export function DiaryScreen() {
       />
       <ScrollView
         ref={scrollRef}
+        testID="diary-scroll"
         accessibilityElementsHidden={inputOpen}
         importantForAccessibility={inputOpen ? "no-hide-descendants" : "auto"}
         contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        onScroll={onScroll}
+        scrollEventThrottle={200}
         style={{ backgroundColor: colors.background }}
         contentContainerStyle={{
-          gap: 20,
+          gap: 16,
           padding: 16,
           paddingBottom: Math.max(32, tabBarBottomInset + 16),
           paddingTop: 16 + androidTopInset,
@@ -250,30 +329,95 @@ export function DiaryScreen() {
           onNfc={() => setInput("nfc")}
           onAlternative={setInput}
         />
-        {loadError ? <RequestFeedback error={loadError} onRetry={() => void load()} /> : null}
-        {entries === null ? (
-          loadError ? null : (
-            <RequestFeedback loading={loading} error={null} onRetry={() => void load()} />
-          )
-        ) : entries.length === 0 ? (
-          <EmptyState icon="person.2.crop.square.stack" title={t("diaryEmptyTitle")} />
+        {canBrowse ? (
+          <SegmentedControl
+            label={t("diaryViews")}
+            values={[t("diarySavedTab"), t("diaryDirectoryTab")]}
+            selectedIndex={view === "saved" ? 0 : 1}
+            onChange={(index) => setView(index === 0 ? "saved" : "directory")}
+          />
+        ) : null}
+        <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
+          <SearchField
+            value={query}
+            onChangeText={setQuery}
+            placeholder={t(showDirectory ? "directorySearchPlaceholder" : "diarySearchPlaceholder")}
+            label={t("scheduleSearch")}
+            clearLabel={t("cancel")}
+          />
+          {showDirectory ? null : (
+            <Pressable
+              accessibilityRole="togglebutton"
+              accessibilityLabel={t("diaryShowFavourites")}
+              accessibilityState={{ checked: favouritesOnly }}
+              hitSlop={4}
+              onPress={() => {
+                void haptic("selection");
+                setFavouritesOnly((value) => !value);
+              }}
+              style={({ pressed }) => ({
+                alignItems: "center",
+                backgroundColor: favouritesOnly ? colors.warning : colors.surface,
+                borderCurve: "continuous",
+                borderRadius: 12,
+                height: 44,
+                justifyContent: "center",
+                opacity: pressed ? 0.7 : 1,
+                width: 44,
+              })}
+            >
+              <SymbolView
+                accessible={false}
+                name={favouritesOnly ? "star.fill" : "star"}
+                size={20}
+                tintColor={favouritesOnly ? colors.background : colors.secondaryLabel}
+              />
+            </Pressable>
+          )}
+        </View>
+        {showDirectory ? (
+          <DirectoryResults
+            state={directory}
+            query={query}
+            savedUserIds={savedUserIds}
+            savingUserId={savingUserId}
+            onOpen={openPerson}
+            onSave={(person) => void savePerson(person)}
+          />
         ) : (
           <>
-            {saved ? (
-              <Section title={t("diarySaved")}>
-                <DiaryRow {...rowProps(saved)} />
-              </Section>
-            ) : null}
-            {rest.length > 0 ? (
-              <Section>
-                {rest.map((entry, index) => (
-                  <View key={entry.id}>
-                    {index > 0 ? <Separator /> : null}
-                    <DiaryRow {...rowProps(entry)} />
-                  </View>
-                ))}
-              </Section>
-            ) : null}
+            {loadError ? <RequestFeedback error={loadError} onRetry={() => void load()} /> : null}
+            {entries === null ? (
+              loadError ? null : (
+                <RequestFeedback loading={loading} error={null} onRetry={() => void load()} />
+              )
+            ) : entries.length === 0 ? (
+              <EmptyState icon="person.2.crop.square.stack" title={t("diaryEmptyTitle")} />
+            ) : visible.length === 0 ? (
+              favouritesOnly && !query.trim() ? (
+                <EmptyState icon="star" title={t("diaryNoFavourites")} />
+              ) : (
+                <EmptyState icon="magnifyingglass" title={t("scannerNoResults")} />
+              )
+            ) : (
+              <>
+                {saved ? (
+                  <Section title={t("diarySaved")}>
+                    <DiaryRow {...rowProps(saved)} />
+                  </Section>
+                ) : null}
+                {rest.length > 0 ? (
+                  <Section>
+                    {rest.map((entry, index) => (
+                      <View key={entry.id}>
+                        {index > 0 ? <Separator inset={ROW_TEXT_INSET} /> : null}
+                        <DiaryRow {...rowProps(entry)} />
+                      </View>
+                    ))}
+                  </Section>
+                ) : null}
+              </>
+            )}
           </>
         )}
       </ScrollView>
@@ -281,60 +425,284 @@ export function DiaryScreen() {
   );
 }
 
-function DiaryAvatar({ entry }: { entry: DiaryEntry }) {
-  const size = 44;
-  const uri = entry.person?.photoUrl ?? entry.sponsor?.logoUrl ?? null;
-  const frame = {
-    alignItems: "center" as const,
-    backgroundColor: colors.elevatedSurface,
-    borderRadius: entry.kind === "person" ? size / 2 : 10,
-    height: size,
-    justifyContent: "center" as const,
-    overflow: "hidden" as const,
-    width: size,
-  };
-  if (uri) {
-    return (
-      <View style={frame}>
-        <Image
-          accessible={false}
-          source={{ uri }}
-          resizeMode={entry.kind === "person" ? "cover" : "contain"}
-          style={{ height: size, width: size }}
-        />
-      </View>
+function SearchField({
+  value,
+  onChangeText,
+  placeholder,
+  label,
+  clearLabel,
+}: {
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  label: string;
+  clearLabel: string;
+}) {
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        backgroundColor: colors.surface,
+        borderCurve: "continuous",
+        borderRadius: 12,
+        flex: 1,
+        flexDirection: "row",
+        gap: 8,
+        height: 44,
+        paddingHorizontal: 12,
+      }}
+    >
+      <SymbolView
+        accessible={false}
+        name="magnifyingglass"
+        size={17}
+        tintColor={colors.secondaryLabel}
+      />
+      <TextInput
+        accessibilityLabel={label}
+        autoCapitalize="none"
+        autoCorrect={false}
+        clearButtonMode="never"
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={colors.tertiaryLabel}
+        returnKeyType="search"
+        style={{ color: colors.label, flex: 1, fontSize: 17, paddingVertical: 0 }}
+        value={value}
+      />
+      {value ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={clearLabel}
+          hitSlop={8}
+          onPress={() => onChangeText("")}
+        >
+          <SymbolView
+            accessible={false}
+            name="xmark.circle.fill"
+            size={17}
+            tintColor={colors.tertiaryLabel}
+          />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+interface DirectoryState {
+  items: DirectoryEntry[] | null;
+  error: Error | null;
+  loadingMore: boolean;
+  reload: () => Promise<void>;
+  loadMore: () => Promise<void>;
+}
+
+/** Server-side directory pages for `directory:read` holders (#934). */
+function useDirectory(enabled: boolean, query: string): DirectoryState {
+  const [items, setItems] = useState<DirectoryEntry[] | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [debounced, setDebounced] = useState(query.trim());
+  const requestId = useRef(0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(query.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const fetchPage = useCallback(
+    (after: string | null) => {
+      const params = new URLSearchParams({ limit: String(DIRECTORY_PAGE_SIZE) });
+      if (debounced) params.set("q", debounced);
+      if (after) params.set("cursor", after);
+      return apiFetch<DirectoryPage>(`/api/directory?${params.toString()}`);
+    },
+    [debounced],
+  );
+
+  const reload = useCallback(async () => {
+    const request = ++requestId.current;
+    try {
+      const page = await fetchPage(null);
+      if (request !== requestId.current) return;
+      setItems(page.items);
+      setCursor(page.nextCursor);
+      setError(null);
+    } catch (cause) {
+      if (request !== requestId.current) return;
+      setError(cause instanceof Error ? cause : new Error(String(cause)));
+    }
+  }, [fetchPage]);
+
+  useEffect(() => {
+    if (enabled) void reload();
+  }, [enabled, reload]);
+
+  const loadMore = useCallback(async () => {
+    if (!cursor || loadingMore) return;
+    const request = requestId.current;
+    setLoadingMore(true);
+    try {
+      const page = await fetchPage(cursor);
+      if (request !== requestId.current) return;
+      setItems((current) => [...(current ?? []), ...page.items]);
+      setCursor(page.nextCursor);
+    } catch {
+      // The next scroll retries; the loaded page stays visible.
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [cursor, fetchPage, loadingMore]);
+
+  return { items, error, loadingMore, reload, loadMore };
+}
+
+function DirectoryResults({
+  state,
+  query,
+  savedUserIds,
+  savingUserId,
+  onOpen,
+  onSave,
+}: {
+  state: DirectoryState;
+  query: string;
+  savedUserIds: ReadonlySet<number>;
+  savingUserId: number | null;
+  onOpen: (userId: number) => void;
+  onSave: (person: DirectoryEntry) => void;
+}) {
+  const { t } = useLocale();
+  if (state.items === null) {
+    return state.error ? (
+      <RequestFeedback error={state.error} onRetry={() => void state.reload()} />
+    ) : (
+      <RequestFeedback loading />
     );
   }
-  if (entry.person) {
-    return (
-      <View style={frame}>
-        <Text style={{ color: colors.secondaryLabel, fontSize: 16, fontWeight: "600" }}>
-          {diaryInitials(entry.person.displayName)}
-        </Text>
-      </View>
+  if (state.items.length === 0) {
+    return query.trim() ? (
+      <EmptyState icon="magnifyingglass" title={t("scannerNoResults")} />
+    ) : (
+      <EmptyState icon="person.2" title={t("directoryEmpty")} />
     );
   }
   return (
-    <View style={frame}>
-      <SymbolView
-        accessible={false}
-        name={entry.kind === "person" ? "person.fill" : "building.2"}
-        size={20}
-        tintColor={colors.secondaryLabel}
-      />
+    <View style={{ gap: 16 }}>
+      {state.error ? (
+        <RequestFeedback error={state.error} onRetry={() => void state.reload()} />
+      ) : null}
+      <Section>
+        {state.items.map((person, index) => {
+          const saved = savedUserIds.has(person.userId);
+          return (
+            <View key={person.userId}>
+              {index > 0 ? <Separator inset={ROW_TEXT_INSET} /> : null}
+              <View style={{ alignItems: "center", flexDirection: "row" }}>
+                <PersonSummary
+                  name={person.displayName}
+                  photoUrl={person.photoUrl}
+                  lines={[person.headline, person.project?.name]}
+                  onPress={() => onOpen(person.userId)}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t(saved ? "directorySaved" : "directorySave")}, ${person.displayName}`}
+                  accessibilityState={{ disabled: saved, busy: savingUserId === person.userId }}
+                  disabled={saved || savingUserId !== null}
+                  hitSlop={6}
+                  onPress={() => onSave(person)}
+                  style={({ pressed }) => ({
+                    alignItems: "center",
+                    height: 44,
+                    justifyContent: "center",
+                    marginRight: 6,
+                    opacity: pressed ? 0.6 : 1,
+                    width: 44,
+                  })}
+                >
+                  {savingUserId === person.userId ? (
+                    <ActivityIndicator color={colors.accent} />
+                  ) : (
+                    <SymbolView
+                      accessible={false}
+                      name={saved ? "checkmark.circle.fill" : "plus.circle"}
+                      size={22}
+                      tintColor={saved ? colors.success : colors.accent}
+                    />
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          );
+        })}
+      </Section>
+      {state.loadingMore ? <ActivityIndicator color={colors.secondaryLabel} /> : null}
     </View>
+  );
+}
+
+/** Avatar, name and secondary lines; the whole block opens the profile. */
+function PersonSummary({
+  name,
+  photoUrl,
+  lines,
+  onPress,
+}: {
+  name: string;
+  photoUrl: string | null;
+  lines: (string | null | undefined)[];
+  onPress: () => void;
+}) {
+  const secondary = lines.filter(Boolean) as string[];
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={[name, ...secondary].join(", ")}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        backgroundColor: pressed ? colors.elevatedSurface : undefined,
+        flex: 1,
+        flexDirection: "row",
+        gap: 12,
+        minHeight: 64,
+        paddingLeft: 16,
+        paddingRight: 8,
+        paddingVertical: 10,
+      })}
+    >
+      <PersonAvatar size={44} name={name} uri={photoUrl} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text numberOfLines={1} style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+          {name}
+        </Text>
+        {secondary.map((line) => (
+          <Text
+            key={line}
+            numberOfLines={1}
+            style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 19 }}
+          >
+            {line}
+          </Text>
+        ))}
+      </View>
+    </Pressable>
   );
 }
 
 function DiaryRow({
   entry,
   busy,
+  onOpen,
   onToggleStar,
   onEditNote,
   onRemove,
 }: {
   entry: DiaryEntry;
   busy: boolean;
+  onOpen?: () => void;
   onToggleStar: () => void;
   onEditNote: () => void;
   onRemove: () => void;
@@ -349,15 +717,17 @@ function DiaryRow({
   const secondary = { color: colors.secondaryLabel, fontSize: 14, lineHeight: 19 };
   const website = entry.sponsor?.website ?? null;
 
-  return (
-    <View
-      testID={`diary-entry-${entry.id}`}
-      style={{ flexDirection: "row", gap: 12, paddingHorizontal: 16, paddingVertical: 12 }}
-    >
-      <DiaryAvatar entry={entry} />
+  const body = (
+    <>
+      <PersonAvatar
+        size={44}
+        kind={entry.kind}
+        name={entry.person?.displayName}
+        uri={entry.person?.photoUrl ?? entry.sponsor?.logoUrl ?? null}
+      />
       <View style={{ flex: 1, gap: 3 }}>
         <Text
-          selectable
+          selectable={!onOpen}
           style={{
             color: available ? colors.label : colors.secondaryLabel,
             fontSize: 17,
@@ -367,12 +737,12 @@ function DiaryRow({
           {title}
         </Text>
         {entry.person?.headline ? (
-          <Text selectable style={secondary}>
+          <Text numberOfLines={2} style={secondary}>
             {entry.person.headline}
           </Text>
         ) : null}
         {entry.person?.project ? (
-          <Text selectable style={secondary}>
+          <Text numberOfLines={1} style={secondary}>
             {entry.person.project.name}
           </Text>
         ) : null}
@@ -382,13 +752,8 @@ function DiaryRow({
           </Text>
         ) : null}
         {challenges.length > 0 ? (
-          <Text selectable style={{ ...secondary, color: colors.accent }}>
+          <Text numberOfLines={2} style={{ ...secondary, color: colors.accent }}>
             {challenges.map((challenge) => challenge.name).join(" · ")}
-          </Text>
-        ) : null}
-        {entry.person?.locationNote ? (
-          <Text selectable style={secondary}>
-            {entry.person.locationNote}
           </Text>
         ) : null}
         {website ? (
@@ -399,12 +764,48 @@ function DiaryRow({
           </Pressable>
         ) : null}
         {entry.note ? (
-          <Text selectable style={{ ...secondary, color: colors.label, fontStyle: "italic" }}>
+          <Text numberOfLines={2} style={{ ...secondary, color: colors.label, fontStyle: "italic" }}>
             {entry.note}
           </Text>
         ) : null}
       </View>
-      <View style={{ alignItems: "center", flexDirection: "row", alignSelf: "flex-start" }}>
+    </>
+  );
+
+  const bodyStyle = {
+    flex: 1,
+    flexDirection: "row" as const,
+    gap: 12,
+    paddingLeft: 16,
+    paddingVertical: 12,
+  };
+
+  return (
+    <View testID={`diary-entry-${entry.id}`} style={{ flexDirection: "row" }}>
+      {onOpen ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={title}
+          onPress={onOpen}
+          style={({ pressed }) => ({
+            ...bodyStyle,
+            backgroundColor: pressed ? colors.elevatedSurface : undefined,
+          })}
+        >
+          {body}
+        </Pressable>
+      ) : (
+        <View style={bodyStyle}>{body}</View>
+      )}
+      <View
+        style={{
+          alignItems: "center",
+          alignSelf: "flex-start",
+          flexDirection: "row",
+          paddingRight: 8,
+          paddingTop: 8,
+        }}
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t(entry.starred ? "diaryUnfavourite" : "diaryFavourite")}
@@ -467,82 +868,5 @@ function DiaryRow({
         </MenuView>
       </View>
     </View>
-  );
-}
-
-function NoteEditor({
-  entry,
-  onClose,
-  onSave,
-}: {
-  entry: DiaryEntry | null;
-  onClose: () => void;
-  onSave: (entry: DiaryEntry, note: string) => void;
-}) {
-  const { t } = useLocale();
-  const [note, setNote] = useState("");
-  useEffect(() => {
-    setNote(entry?.note ?? "");
-  }, [entry]);
-  return (
-    <Modal transparent visible={entry !== null} animationType="fade" onRequestClose={onClose}>
-      <Pressable
-        accessibilityLabel={t("close")}
-        accessibilityRole="button"
-        onPress={onClose}
-        style={{ backgroundColor: "rgba(0,0,0,0.4)", position: "absolute", inset: 0 }}
-      />
-      <View
-        pointerEvents="box-none"
-        style={{ flex: 1, justifyContent: "center", paddingHorizontal: 20 }}
-      >
-        <View
-          accessibilityViewIsModal
-          style={{
-            alignSelf: "center",
-            backgroundColor: colors.background,
-            borderCurve: "continuous",
-            borderRadius: 24,
-            gap: 14,
-            maxWidth: 420,
-            padding: 20,
-            width: "100%",
-          }}
-        >
-          <Text
-            accessibilityRole="header"
-            style={{ color: colors.label, fontSize: 18, fontWeight: "700" }}
-          >
-            {t("diaryNote")}
-          </Text>
-          <TextInput
-            accessibilityLabel={t("diaryNote")}
-            autoFocus
-            multiline
-            maxLength={NOTE_MAX_LENGTH}
-            value={note}
-            onChangeText={setNote}
-            style={{
-              backgroundColor: colors.surface,
-              borderCurve: "continuous",
-              borderRadius: 12,
-              color: colors.label,
-              fontSize: 17,
-              minHeight: 110,
-              padding: 14,
-              textAlignVertical: "top",
-            }}
-          />
-          <ActionButton
-            variant="filled"
-            label={t("save")}
-            onPress={() => {
-              if (entry) onSave(entry, note);
-            }}
-          />
-          <ActionButton label={t("cancel")} onPress={onClose} />
-        </View>
-      </View>
-    </Modal>
   );
 }
