@@ -96,13 +96,15 @@ async function planHeader(
   );
   return {
     confirmedAt: rows[0]?.meal_plan_confirmed_at?.toISOString() ?? null,
-    cutoffHours: rows[0]?.cutoff_hours ?? 24,
+    // CUTOFF_HOURS_SQL already falls back to the default.
+    cutoffHours: rows[0]!.cutoff_hours,
   };
 }
 
 export async function getMealPlan(db: Queryable, userId: number): Promise<MealPlan> {
   await assertSponsor(db, userId);
-  return { ...(await planHeader(db, userId)), meals: await offeredMeals(db, userId) };
+  const [header, meals] = await Promise.all([planHeader(db, userId), offeredMeals(db, userId)]);
+  return { ...header, meals };
 }
 
 /** True when a sponsor still has an open (unlocked) offered meal with no answer. */
@@ -206,10 +208,8 @@ export async function replaceMealPlan(
       [userId],
     );
     return {
-      plan: {
-        ...(await planHeader(client, userId)),
-        meals: await offeredMeals(client, userId),
-      },
+      // Sequential: one transaction client cannot run queries concurrently.
+      plan: { ...(await planHeader(client, userId)), meals: await offeredMeals(client, userId) },
       written: changed,
     };
   });

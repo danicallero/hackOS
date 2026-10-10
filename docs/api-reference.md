@@ -114,7 +114,8 @@ event-access account gives an explicit dietary answer (its own `PATCH /api/me`
 with `foodIntolerances`/`foodIntoleranceNotes`, an empty list included; an
 invite claim whose kind shows the dietary fields; or an application form that
 asks for dietary data — staff edits through `PATCH /api/users/:id` do not
-count), and `meal_plan` while a sponsor representative has an open offered
+count; never for a locked profile, H7, which cannot change it), and
+`meal_plan` while a sponsor representative has an open offered
 meal without an answer. Sponsors read and replace their plan through `GET`/`PUT
 /api/me/meal-plan`; a meal is offered when its activity kind has meal semantics
 and its shown schedule entry includes the `sponsor` audience (an entry without
@@ -127,7 +128,10 @@ On the web, the `(app)` layout shows a dismissable dialog with one step per
 pending task ("Later" hides it for the browser session via `sessionStorage`),
 and My profile shows a sponsor-only Meals section plus an explicit "No
 restrictions" option; the profile form only sends dietary fields when they were
-edited, so saving a name never records an empty dietary answer.
+edited, so saving a name never records an empty dietary answer, and both
+refuse an empty answer unless "No restrictions" is ticked. Both surfaces share
+one copy of the meal plan; a save refused because the plan changed
+(`meal_plan_incomplete`, `meal_plan_locked`, `meal_not_offered`) reloads it.
 
 Primary-email verification is deliberately not required by Better Auth at sign
 in: H1 allows an unverified account to establish a session and use read-only

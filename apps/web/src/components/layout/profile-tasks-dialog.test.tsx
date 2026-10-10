@@ -18,7 +18,15 @@ const session = vi.hoisted(() => ({
 
 vi.mock("@/lib/session", () => ({ useSessionContext: () => session }));
 vi.mock("@/lib/api", () => ({
-  ApiError: class ApiError extends Error {},
+  ApiError: class ApiError extends Error {
+    constructor(
+      public status: number,
+      public code: string,
+      message: string,
+    ) {
+      super(message);
+    }
+  },
   api: { get: vi.fn(), patch: vi.fn(), put: vi.fn() },
 }));
 vi.mock("@/lib/i18n", () => ({
@@ -52,7 +60,9 @@ vi.mock("@/components/common/modal", () => ({
 }));
 vi.mock("@/components/common/multi-select", () => ({ MultiSelect: () => <div /> }));
 
-import { api } from "@/lib/api";
+import { resetFoodIntolerancesCache } from "@/hooks/use-food-intolerances";
+import { resetMealPlanStore } from "@/hooks/use-meal-plan";
+import { ApiError, api } from "@/lib/api";
 import { ProfileTasksDialog } from "./profile-tasks-dialog";
 
 const baseMe = {
@@ -103,6 +113,8 @@ describe("ProfileTasksDialog (#933)", () => {
         setItem: (key: string, value: string) => storage.set(key, value),
       },
     });
+    resetMealPlanStore();
+    resetFoodIntolerancesCache();
     session.me = { ...baseMe };
     vi.mocked(api.get).mockImplementation(async (path: string) =>
       path === "/api/me/meal-plan" ? plan : { intolerances: [] },
@@ -129,7 +141,7 @@ describe("ProfileTasksDialog (#933)", () => {
       (b) => b.textContent === name || b.getAttribute("aria-label") === name,
     );
     if (!match) throw new Error(`no button ${name}`);
-    return match;
+    return match as HTMLButtonElement;
   }
 
   it("requires an explicit answer, then saves No restrictions and the meal plan", async () => {
@@ -201,5 +213,84 @@ describe("ProfileTasksDialog (#933)", () => {
     session.me = { ...baseMe, pendingProfileTasks: [] };
     await render();
     expect(container.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("skips the dietary step for a locked profile (H7)", async () => {
+    session.me = { ...baseMe, profileLocked: true };
+    await render();
+    expect(container.textContent).not.toContain("foodIntolerances");
+    expect(container.textContent).toContain("meals");
+    expect(container.textContent).not.toContain("stepOfTotal");
+  });
+
+  it("sends untouched notes exactly as stored", async () => {
+    session.me = { ...baseMe, foodIntoleranceNotes: " Vegan " };
+    const user = userEvent.setup();
+    await render();
+    await user.click(button("next"));
+    expect(api.patch).toHaveBeenCalledWith("/api/me", {
+      foodIntolerances: [],
+      foodIntoleranceNotes: " Vegan ",
+    });
+  });
+
+  it("disables the meal step until the plan loads, and offers a retry", async () => {
+    session.me = { ...baseMe, pendingProfileTasks: ["meal_plan"] };
+    let fail: (err: Error) => void = () => {};
+    vi.mocked(api.get).mockImplementationOnce(
+      () => new Promise((_, reject) => (fail = reject)) as never,
+    );
+    const user = userEvent.setup();
+    await render();
+    expect(button("done").disabled).toBe(true);
+
+    await act(async () => fail(new Error("offline")));
+    expect(container.textContent).toContain("couldNotLoadMealPlan");
+    expect(button("done").disabled).toBe(true);
+
+    await user.click(button("retry"));
+    expect(api.get).toHaveBeenCalledTimes(2);
+    expect(button("done").disabled).toBe(false);
+  });
+
+  it("refreshes the plan and explains a closed meal when saving fails", async () => {
+    session.me = { ...baseMe, pendingProfileTasks: ["meal_plan"] };
+    vi.mocked(api.put).mockRejectedValueOnce(
+      new ApiError(409, "meal_plan_locked", "Changes to this meal are closed"),
+    );
+    const user = userEvent.setup();
+    await render();
+    expect(api.get).toHaveBeenCalledTimes(1);
+    await user.click(button("done"));
+    expect(api.get).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("mealPlanLockedReview");
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it("uses the meal message for other meal failures", async () => {
+    session.me = { ...baseMe, pendingProfileTasks: ["meal_plan"] };
+    vi.mocked(api.put).mockRejectedValueOnce(new Error("network"));
+    const user = userEvent.setup();
+    await render();
+    await user.click(button("done"));
+    expect(container.textContent).toContain("couldNotSaveMealPlan");
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes the session when closed after a saved step", async () => {
+    const user = userEvent.setup();
+    await render();
+    await user.click(container.querySelector('button[role="checkbox"]') as HTMLElement);
+    await user.click(button("next"));
+    expect(session.refresh).not.toHaveBeenCalled();
+    await user.click(button("later"));
+    expect(session.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refresh the session when closed without saving", async () => {
+    const user = userEvent.setup();
+    await render();
+    await user.click(button("later"));
+    expect(session.refresh).not.toHaveBeenCalled();
   });
 });

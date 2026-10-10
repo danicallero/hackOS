@@ -3513,5 +3513,7 @@
   "toastSaveMealPlan": "Gardar comidas",
   "couldNotSaveMealPlan": "Non se puideron gardar as túas comidas",
   "couldNotLoadMealPlan": "Non se puideron cargar as túas comidas",
+  "mealPlanChangedReview": "As túas comidas cambiaron. Revísaas e garda de novo.",
+  "mealPlanLockedReview": "Os cambios dunha destas comidas acaban de pecharse. Revísaas e garda de novo.",
   "dietaryAnswerRequired": "Escolle as túas restricións ou marca Sen restricións."
 }

@@ -471,7 +471,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "entry eligibility, and the caller's complete assigned-role set (H8) alongside " +
           "the single highest-visible `visibleRoleName` shown elsewhere. `pendingProfileTasks` " +
           "(#933) lists what to ask for on next entry: `dietary` when the caller has event access " +
-          "but never gave an explicit dietary answer, `meal_plan` when a sponsor representative " +
+          "but never gave an explicit dietary answer and the profile is not locked (H7), `meal_plan` when a sponsor representative " +
           "has an open offered meal without an answer. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
         summary: "Get my profile",
         response: {
@@ -571,7 +571,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           hasEventAccess(client, userId),
         ]);
         const pendingProfileTasks: (typeof PENDING_PROFILE_TASKS)[number][] = [];
-        if (eventAccess && row.dietary_confirmed_at === null) pendingProfileTasks.push("dietary");
+        // H7: a locked profile cannot change its dietary data, so don't ask for it.
+        if (eventAccess && !profileLocked && row.dietary_confirmed_at === null) {
+          pendingProfileTasks.push("dietary");
+        }
         if (membership.isSponsorRep && (await hasPendingMealPlan(client, userId))) {
           pendingProfileTasks.push("meal_plan");
         }

@@ -6,19 +6,26 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { MealPlanChecklist } from "@/components/profile/meal-plan-checklist";
-import { useMealPlan } from "@/hooks/use-meal-plan";
-import { ApiError } from "@/lib/api";
+import { mealPlanSaveErrorKey, useMealPlan } from "@/hooks/use-meal-plan";
 import { useLocale } from "@/lib/i18n";
 import { answersFromPlan, type MealAnswers, type MealPlan } from "@/lib/meal-plan";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 
 /** Sponsor meal plan on My profile (#933). Rendered only for sponsor representatives. */
-export function MealsSection({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
-  const { plan, loadError, save } = useMealPlan(true);
+export function MealsSection({
+  userId,
+  onDirtyChange,
+}: {
+  userId: number;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
+  const { plan, loadError, reload, save } = useMealPlan(userId);
   const { t } = useLocale();
 
-  if (loadError) return <ContextualError message={t("couldNotLoadMealPlan")} />;
+  if (loadError && !plan) {
+    return <ContextualError message={t("couldNotLoadMealPlan")} onRetry={reload} />;
+  }
   // Nothing offered yet: the section would be an empty list.
   if (!plan || plan.meals.length === 0) return null;
   // Remount on every saved/loaded plan so the draft restarts from the stored answers.
@@ -61,7 +68,8 @@ function MealsForm({
       await refresh();
       toast.success(t("mealPlanSaved"), { compactTitle: t("toastSaveMealPlan") });
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotSaveMealPlan");
+      // A stale-plan error has already refreshed the shared plan, remounting this form.
+      const message = t(mealPlanSaveErrorKey(err));
       setSaveError(message);
       toast.error(message, t("toastSaveMealPlan"));
     } finally {

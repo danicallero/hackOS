@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Section } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
+import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { languageName, type MessageKey, pickText, type Translate, useLocale } from "@/lib/i18n";
@@ -118,15 +119,8 @@ function valuesFromMe(me: Me): Values {
 
 export default function ProfileSettingsPage() {
   const { me } = useSessionContext();
-  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
-
   // Dictionary options for the picker (H12/H25).
-  useEffect(() => {
-    api
-      .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
-      .then((r) => setIntolerances(r.intolerances))
-      .catch(() => setIntolerances([]));
-  }, []);
+  const intolerances = useFoodIntolerances();
 
   if (!me) return null;
 
@@ -157,6 +151,8 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
   const onMealsDirtyChange = useCallback((dirty: boolean) => setMealsDirty(dirty), []);
   useUnsavedChangesGuard(form.formState.isDirty || mealsDirty);
   const noRestrictions = form.watch("noRestrictions");
+  // Restored when "No restrictions" is unticked again.
+  const dietaryBeforeNone = useRef({ foodIntolerances: [] as string[], foodIntoleranceNotes: "" });
 
   async function onSubmit(values: Values) {
     setSaveError(null);
@@ -165,6 +161,16 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
     const dietaryEdited = Boolean(
       dirty.foodIntolerances || dirty.foodIntoleranceNotes || dirty.noRestrictions,
     );
+    // Same rule as the next-entry prompt: an empty answer must be "No restrictions".
+    if (
+      dietaryEdited &&
+      !values.noRestrictions &&
+      values.foodIntolerances.length === 0 &&
+      !values.foodIntoleranceNotes.trim()
+    ) {
+      form.setError("noRestrictions", { message: t("dietaryAnswerRequired") });
+      return;
+    }
     try {
       await api.patch<Me>("/api/me", {
         name: values.name,
@@ -334,7 +340,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                 control={form.control}
                 name="noRestrictions"
                 render={({ field }) => (
-                  <FormItem className="flex items-center gap-2">
+                  <FormItem className="flex flex-wrap items-center gap-2">
                     <FormControl>
                       <Checkbox
                         checked={field.value}
@@ -342,15 +348,29 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                         onCheckedChange={(checked) => {
                           const none = checked === true;
                           field.onChange(none);
+                          form.clearErrors("noRestrictions");
+                          const opts = { shouldDirty: true };
                           if (none) {
-                            const opts = { shouldDirty: true };
+                            dietaryBeforeNone.current = {
+                              foodIntolerances: form.getValues("foodIntolerances"),
+                              foodIntoleranceNotes: form.getValues("foodIntoleranceNotes"),
+                            };
                             form.setValue("foodIntolerances", [], opts);
                             form.setValue("foodIntoleranceNotes", "", opts);
+                          } else {
+                            const before = dietaryBeforeNone.current;
+                            form.setValue("foodIntolerances", before.foodIntolerances, opts);
+                            form.setValue(
+                              "foodIntoleranceNotes",
+                              before.foodIntoleranceNotes,
+                              opts,
+                            );
                           }
                         }}
                       />
                     </FormControl>
                     <FormLabel className="font-normal">{t("noRestrictions")}</FormLabel>
+                    <FormMessage className="basis-full" />
                   </FormItem>
                 )}
               />
@@ -358,7 +378,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
           </form>
         </Form>
         <div className="min-w-0 space-y-(--space-between-sections)">
-          {me.isSponsorRep && <MealsSection onDirtyChange={onMealsDirtyChange} />}
+          {me.isSponsorRep && <MealsSection userId={me.id} onDirtyChange={onMealsDirtyChange} />}
           <EmailCard />
           <PasswordCard />
         </div>

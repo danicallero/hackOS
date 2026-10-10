@@ -3513,5 +3513,7 @@
   "toastSaveMealPlan": "Save meals",
   "couldNotSaveMealPlan": "Could not save your meals",
   "couldNotLoadMealPlan": "Could not load your meals",
+  "mealPlanChangedReview": "Your meals changed. Review them and save again.",
+  "mealPlanLockedReview": "Changes to one of these meals just closed. Review them and save again.",
   "dietaryAnswerRequired": "Choose your restrictions or tick No restrictions."
 }

@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useMealPlan } from "@/hooks/use-meal-plan";
+import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
+import { mealPlanSaveErrorKey, useMealPlan } from "@/hooks/use-meal-plan";
 import { ApiError, api } from "@/lib/api";
 import { pickText, useLocale } from "@/lib/i18n";
 import {
@@ -19,7 +20,7 @@ import {
   type MealAnswers,
 } from "@/lib/meal-plan";
 import { useSessionContext } from "@/lib/session";
-import type { Intolerance, Me } from "@/lib/types";
+import type { Me } from "@/lib/types";
 
 type Task = Me["pendingProfileTasks"][number];
 
@@ -34,7 +35,10 @@ export function ProfileTasksDialog() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
 
   const userId = me?.id;
-  const pending = me?.pendingProfileTasks ?? [];
+  // H7: a locked profile can't change its dietary data (the API also omits the task).
+  const pending = (me?.pendingProfileTasks ?? []).filter(
+    (task) => task !== "dietary" || !me?.profileLocked,
+  );
   const hasPending = pending.length > 0;
   useEffect(() => {
     // Safe: sessionStorage is only readable after mount (SSR has no window).
@@ -74,8 +78,17 @@ function ProfileTasksSteps({
   const [index, setIndex] = useState(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Any saved step changes `me`; refresh it however the prompt closes.
+  const [saved, setSaved] = useState(false);
   const task = tasks[index];
   const formId = "profile-task-step";
+  const meals = useMealPlan(task === "meal_plan" ? me.id : null);
+  const blocked = task === "meal_plan" && !meals.plan;
+
+  function close() {
+    if (saved) void refresh();
+    onLater();
+  }
 
   async function advance() {
     if (index + 1 < tasks.length) {
@@ -91,9 +104,16 @@ function ProfileTasksSteps({
     setPending(true);
     try {
       await action();
+      setSaved(true);
       await advance();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("couldNotSaveProfile"));
+      setError(
+        task === "meal_plan"
+          ? t(mealPlanSaveErrorKey(err))
+          : err instanceof ApiError
+            ? err.message
+            : t("couldNotSaveProfile"),
+      );
     } finally {
       setPending(false);
     }
@@ -103,7 +123,7 @@ function ProfileTasksSteps({
     <Modal
       open
       onOpenChange={(open) => {
-        if (!open) onLater();
+        if (!open) close();
       }}
       title={t("completeYourProfile")}
       size="md"
@@ -114,10 +134,10 @@ function ProfileTasksSteps({
               {t("stepOfTotal", { current: index + 1, total: tasks.length })}
             </span>
           )}
-          <Button type="button" variant="ghost" onClick={onLater} disabled={pending}>
+          <Button type="button" variant="ghost" onClick={close} disabled={pending}>
             {t("later")}
           </Button>
-          <Button type="submit" form={formId} loading={pending}>
+          <Button type="submit" form={formId} loading={pending} disabled={blocked}>
             {index + 1 < tasks.length ? t("next") : t("done")}
           </Button>
         </>
@@ -128,7 +148,13 @@ function ProfileTasksSteps({
         {task === "dietary" ? (
           <DietaryStep key="dietary" me={me} formId={formId} disabled={pending} onSubmit={run} />
         ) : (
-          <MealPlanStep key="meal_plan" formId={formId} disabled={pending} onSubmit={run} />
+          <MealPlanStep
+            key="meal_plan"
+            formId={formId}
+            meals={meals}
+            disabled={pending}
+            onSubmit={run}
+          />
         )}
       </div>
     </Modal>
@@ -149,18 +175,12 @@ function DietaryStep({
   onSubmit: StepSubmit;
 }) {
   const { t, language } = useLocale();
-  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
+  const intolerances = useFoodIntolerances();
   const [selected, setSelected] = useState<string[]>(me.foodIntolerances.map(String));
-  const [notes, setNotes] = useState(me.foodIntoleranceNotes ?? "");
+  const originalNotes = me.foodIntoleranceNotes ?? "";
+  const [notes, setNotes] = useState(originalNotes);
   const [none, setNone] = useState(false);
   const [missing, setMissing] = useState(false);
-
-  useEffect(() => {
-    api
-      .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
-      .then((r) => setIntolerances(r.intolerances))
-      .catch(() => setIntolerances([]));
-  }, []);
 
   const options = intolerances.map((i) => ({
     value: String(i.id),
@@ -179,10 +199,12 @@ function DietaryStep({
           setMissing(true);
           return;
         }
+        // Untouched notes are sent as stored so a lock check sees no change.
+        const nextNotes = notes === originalNotes ? me.foodIntoleranceNotes : notes.trim() || null;
         void onSubmit(async () => {
           await api.patch<Me>("/api/me", {
             foodIntolerances: none ? [] : selected.map(Number),
-            foodIntoleranceNotes: none ? null : notes.trim() || null,
+            foodIntoleranceNotes: none ? null : nextNotes,
           });
         });
       }}
@@ -239,15 +261,17 @@ function DietaryStep({
 
 function MealPlanStep({
   formId,
+  meals,
   disabled,
   onSubmit,
 }: {
   formId: string;
+  meals: ReturnType<typeof useMealPlan>;
   disabled: boolean;
   onSubmit: StepSubmit;
 }) {
   const { t } = useLocale();
-  const { plan, loadError, save } = useMealPlan(true);
+  const { plan, loadError, reload, save } = meals;
   const [answers, setAnswers] = useState<MealAnswers | null>(null);
   const current = answers ?? (plan ? answersFromPlan(plan) : {});
 
@@ -264,7 +288,9 @@ function MealPlanStep({
       }}
     >
       <h3 className="type-label">{t("meals")}</h3>
-      {loadError && <ContextualError message={t("couldNotLoadMealPlan")} />}
+      {loadError && !plan && (
+        <ContextualError message={t("couldNotLoadMealPlan")} onRetry={reload} />
+      )}
       {plan && (
         <MealPlanChecklist
           plan={plan}
