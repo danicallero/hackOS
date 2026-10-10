@@ -1,5 +1,5 @@
 import MaskedView from "@react-native-masked-view/masked-view";
-import { type ReactNode, useCallback, useId, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Image, Platform, useWindowDimensions, View } from "react-native";
 import Animated, {
   useAnimatedProps,
@@ -81,8 +81,20 @@ export function useProfileAvatarCollapse() {
     });
   }, [scrollOffset]);
 
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(
+    () => () => {
+      for (const timer of timers.current) clearTimeout(timer);
+    },
+    [],
+  );
+  // A screen pushed in a stack or presented as a modal is still sliding when
+  // it first lays out, so a single measurement leaves the host origin (and the
+  // island target derived from it) offset. Re-measure once the transition ends.
   const measureAfterLayout = useCallback(() => {
     requestAnimationFrame(() => requestAnimationFrame(measureAnchor));
+    for (const timer of timers.current) clearTimeout(timer);
+    timers.current = [450, 900].map((delay) => setTimeout(measureAnchor, delay));
   }, [measureAnchor]);
 
   return {

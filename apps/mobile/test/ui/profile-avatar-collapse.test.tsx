@@ -67,11 +67,11 @@ describe("profile avatar collapse geometry", () => {
     expect(halfway.borderRadius).toBeCloseTo(halfway.height / 2);
 
     const collapsed = profileAvatarMaskFrame(112, start, island, 1);
-    expect(collapsed.width).toBe(125.33);
-    expect(collapsed.height).toBe(36.67);
-    expect(collapsed.borderRadius).toBe(18.335);
-    expect(collapsed.left).toBe(138.335);
-    expect(collapsed.top).toBe(14);
+    expect(collapsed.width).toBeCloseTo(125.33);
+    expect(collapsed.height).toBeCloseTo(36.67);
+    expect(collapsed.borderRadius).toBeCloseTo(18.335);
+    expect(collapsed.left).toBeCloseTo(138.335);
+    expect(collapsed.top).toBeCloseTo(14);
     const descendingScrollFrames = [1, 0.75, 0.5, 0.25, 0].map((progress) =>
       profileAvatarMaskFrame(112, start, island, progress),
     );
@@ -79,6 +79,42 @@ describe("profile avatar collapse geometry", () => {
       expect(descendingScrollFrames[index].width).toBeCloseTo(width);
     });
     expect(descendingScrollFrames.at(-1)).toEqual(profileAvatarMaskFrame(112, start, island, 0));
+  });
+
+  it("keeps the mask frame centred on the same line as the morph path for an off-center start", () => {
+    const offCenter = { left: 20, top: 300, width: 112, height: 112 };
+    const target = resolveProfileCameraTarget({
+      height: 852,
+      platform: "ios",
+      safeAreaTop: 59,
+      screenWidth: 393,
+    });
+    for (const p of [0, 0.25, 0.5, 0.75, 1]) {
+      const frame = profileAvatarMaskFrame(112, offCenter, target, p);
+      const expectedX = 76 + (target.left + target.width / 2 - 76) * p;
+      const expectedY = 356 + (target.top + target.height / 2 - 356) * p;
+      expect(frame.left + frame.width / 2).toBeCloseTo(expectedX);
+      expect(frame.top + frame.height / 2).toBeCloseTo(expectedY);
+    }
+    const end = profileAvatarMaskFrame(112, offCenter, target, 1);
+    expect(end.left + end.width / 2).toBeCloseTo(393 / 2);
+  });
+
+  it("never lets the island lip path exceed the target width", () => {
+    const wide = { left: 0, top: 200, width: 200, height: 200 };
+    const target = resolveProfileCameraTarget({
+      height: 852,
+      platform: "ios",
+      safeAreaTop: 59,
+      screenWidth: 393,
+    });
+    const path = profileAvatarMorphPath(200, wide, target, 0.6);
+    const xs = [...path.matchAll(/(-?\d+\.?\d*) (-?\d+\.?\d*)/g)].map((m) => Number(m[1]));
+    expect(xs.length).toBeGreaterThan(0);
+    // Every coordinate sits within the target width around the travelling centre.
+    const centerX = 100 + (target.left + target.width / 2 - 100) * 0.6;
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(centerX - target.width / 2 - 0.01);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(centerX + target.width / 2 + 0.01);
   });
 
   it("keeps every interpolated state circular or capsule-clipped", () => {
@@ -130,28 +166,52 @@ describe("profile camera target", () => {
     hasCutout: false,
   });
 
-  it("targets a Dynamic Island using safe-area geometry", () => {
-    expect(resolveProfileCameraTarget(base)).toEqual({
-      left: 134,
-      top: expect.closeTo(11.33),
-      width: 125,
-      height: 36.67,
-      hasCutout: true,
-    });
+  // Hardware island: 126 x 37.33 pt, top = safe-area inset - 48.
+  const insideIsland = (
+    target: { left: number; top: number; width: number; height: number },
+    screenWidth: number,
+    safeAreaTop: number,
+  ) => {
+    const islandLeft = (screenWidth - 126) / 2;
+    const islandTop = safeAreaTop - 48;
+    expect(target.left).toBeGreaterThan(islandLeft);
+    expect(target.left + target.width).toBeLessThan(islandLeft + 126);
+    expect(target.top).toBeGreaterThan(islandTop);
+    expect(target.top + target.height).toBeLessThan(islandTop + 37.33);
+    expect(target.left + target.width / 2).toBeCloseTo(screenWidth / 2);
+    expect(target.top + target.height / 2).toBeCloseTo(islandTop + 37.33 / 2);
+  };
+
+  it("targets a Dynamic Island on 393 pt devices, inside the hardware island", () => {
+    const target = resolveProfileCameraTarget(base);
+    expect(target.hasCutout).toBe(true);
+    expect(target.top).toBeCloseTo(12);
+    insideIsland(target, 393, 59);
   });
 
-  it("matches the iPhone 16/17 Pro Dynamic Island frame to the screen metrics", () => {
+  it("targets the iPhone 16/17 Pro island on 402 pt devices, inside the hardware island", () => {
     const target = resolveProfileCameraTarget({
       ...base,
       height: 874,
       safeAreaTop: 62,
       screenWidth: 402,
     });
-    expect(target.left).toBeCloseTo(138.335);
-    expect(target.top).toBe(14);
-    expect(target.width).toBe(125.33);
-    expect(target.height).toBe(36.67);
+    expect(target.top).toBeCloseTo(15);
     expect(target.hasCutout).toBe(true);
+    insideIsland(target, 402, 62);
+  });
+
+  it("targets Plus/Max widths (430, 440) inside the island", () => {
+    insideIsland(
+      resolveProfileCameraTarget({ ...base, height: 932, safeAreaTop: 59, screenWidth: 430 }),
+      430,
+      59,
+    );
+    insideIsland(
+      resolveProfileCameraTarget({ ...base, height: 956, safeAreaTop: 62, screenWidth: 440 }),
+      440,
+      62,
+    );
   });
 
   it("does not morph on notch iPhones or iPhones without a cutout", () => {

@@ -726,11 +726,18 @@ The React Native cover currently uses dark paint rather than UIKit's animated
 native blur. Static photos and initials share the mask; optional live avatar
 children remain inside it.
 On iOS, the target uses window-space safe-area geometry because UIKit does not
-expose the Dynamic Island frame to apps: the iPhone 17 Pro target is centered at
-125.33 × 36.67 pt with a 14 pt top offset, and the iPhone 15 class uses 125 ×
-36.67 pt with an 11.33 pt top offset. The avatar and target are both measured in
-the same `measureInWindow` coordinate space, so the collapsed mask lines up with
-the cutout instead of drifting by the host view's safe-area inset.
+expose the Dynamic Island frame to apps. The hardware island is 126 x 37.33 pt
+with its top at `safeAreaTop - 48` (11 pt on a 59 pt inset, 14 pt on a 62 pt
+inset; screens 393/402/430/440 wide). The target is that rectangle inset 1 pt on
+every side (124 x 35.33 pt, horizontally centred on the window) so the shrinking
+avatar and black backing hide inside the island instead of poking out. The
+avatar and target are both measured in the same `measureInWindow` coordinate
+space, and the host is re-measured about 450 and 900 ms after layout so a screen
+that is still sliding in (stack push, modal) does not leave a stale origin. The
+mask frame centre travels linearly from the avatar centre to the target centre,
+matching the Telegram path canvas, so the image, mask and backing stay on one
+centre line and end on the island centre. The thin lower-lip track of the
+Telegram path is narrowed horizontally to never exceed the target width.
 The morph only runs where a real camera cutout exists:
 
 - **iPhone with Dynamic Island** (safe-area top >= 55 pt, portrait): the island
@@ -778,7 +785,7 @@ three-column grid in the API's order (sponsor priority, then name, as the public
 and open a company sheet (logo, collected date, Favourite / Note (or Edit
 note) / Web, the
 description, challenges, note and "Remove from collection"); companies still to
-find are dashed slots with a silhouette of the logo, a lock and their name
+find (every revealed scannable one, even before its tags are generated) are dashed slots with a silhouette of the logo, a lock and their name
 only (never opened; the sheet and its description, challenges and website
 exist only once collected).
 Stand favourites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.
@@ -827,23 +834,23 @@ call, with a fresh `Idempotency-Key`). The switch flips at once and rolls
 back with an alert if the request fails.
 
 **Provisioning a tag.** Each row's "Link tag" starts reading at once (R008).
-It is the same tap as accrediting a badge: `startNfcRead` with `claimBadge`
-(`lib/nfc-reader.ts`, serialized with the other scanners) plus a `beforeClaim`
-hook:
+It is the same tap as accrediting a badge, in the same order:
 
-1. reads the UID (`lib/nfc-uid.ts`, the encoding every scanner uses);
-2. links it: `POST /api/enterprises/:id/stand-tags` `{ kind: "nfc", uid }`
-   with a fresh `Idempotency-Key`, before anything is written. A 409 rejects
-   the read with nothing written and says whether the wristband is already
-   someone's badge ("use an unassigned one") or already a company tag
-   (`standLinkErrorKey`, from `usedBy`);
-3. writes only the Android package claim of the badge flow
+1. `startNfcRead` with `claimBadge` (`lib/nfc-reader.ts`, serialized with the
+   other scanners) reads the UID (`lib/nfc-uid.ts`, the encoding every scanner
+   uses) and writes only the Android package claim of the badge flow
    (`nfc-badge-claim.ts`: MifareUltralight pages on Android, the iOS
    tag-reader session on iOS), so Android hands the tag to hackOS. No
-   `/s/<code>` link is written: the company is identified by the linked
-   serial and the Diary collects it by serial like any scanned UID. A failed
-   claim write still leaves the serial linked and says so
-   (`claimFailed()`).
+   `/s/<code>` link is written: the company is identified by the serial;
+2. after the NFC session ends, the screen links the serial:
+   `POST /api/enterprises/:id/stand-tags` `{ kind: "nfc", uid }` with a fresh
+   `Idempotency-Key`. The API call never runs while the tag is held: waiting
+   on the network inside the session lost the tag on real hardware. Writing
+   first is harmless because the claim is the record every badge already
+   carries. A 409 says whether the wristband is already someone's badge ("use
+   an unassigned one") or already a company tag (`standLinkErrorKey`, from
+   `usedBy`); any other failure shows the server's reason. A failed claim
+   write still links the serial and says so (`claimFailed()`).
 
 A company must also be scannable before its tags award the medal: a new
 company is not (its row switch is off), and scanning answers
@@ -874,8 +881,8 @@ signed out, it keeps the code (`lib/company-tag-link.ts`, in memory) and
   ([`deploy/README.md`](../deploy/README.md)).
 
 These native changes need a new build. The flow is covered by
-`lib/nfc-reader.test.ts` (`beforeClaim` runs before the claim write and a
-refusal writes nothing, with `react-native-nfc-manager` mocked),
+`lib/nfc-reader.test.ts` (claim writes, with `react-native-nfc-manager`
+mocked),
 `test/ui/stands-screen.test.tsx`, `test/ui/company-tag-link.test.tsx`,
 `lib/company-tag-link.test.ts`, `test/company-tag-links-plugin.test.tsx`, the
 Diary `collect` test and `lib/tabs.test.ts`. It has not been tested on NFC

@@ -102,14 +102,8 @@ export function startNfcRead(
   message: string,
   {
     claimBadge = false,
-    beforeClaim,
   }: {
     claimBadge?: boolean;
-    /**
-     * #935 company tags: runs with the UID before the claim is written.
-     * Throwing (the API refused the serial) rejects the read and writes nothing.
-     */
-    beforeClaim?: (uid: string) => Promise<void>;
   } = {},
 ) {
   let cancelled = false;
@@ -185,7 +179,6 @@ export function startNfcRead(
           requested = connected !== null;
           const tag = cancelled ? null : await discoveredTag;
           const uid = cancelled || !tag ? null : normalizeNfcUid(tag.id);
-          if (uid && beforeClaim) await beforeClaim(uid);
           if (uid && connected) {
             const outcome = await connected;
             if (cancelled) {
@@ -231,7 +224,6 @@ export function startNfcRead(
         }
         const tag = await NfcManager.getTag();
         const uid = normalizeNfcUid(tag?.id);
-        if (beforeClaim && !cancelled) await beforeClaim(uid);
         if (claimBadge && !cancelled) {
           await claim(() => writeBadgeClaim(iosPageIo, claimPackageName()));
         }
