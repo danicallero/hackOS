@@ -171,7 +171,17 @@ export default function EnterpriseDetailPage() {
         )}
         {tabs.includes("stand") && (
           <TabsContent value="stand" className="pt-2">
-            <StandTagsCard enterpriseId={enterprise.id} enterpriseName={enterprise.name} />
+            <StandTagsCard
+              enterpriseId={enterprise.id}
+              enterpriseName={enterprise.name}
+              scannable={enterprise.stand_scannable}
+              canManage={canManage}
+              onScannableChange={(scannable) =>
+                setEnterprise((current) =>
+                  current ? { ...current, stand_scannable: scannable } : current,
+                )
+              }
+            />
           </TabsContent>
         )}
       </Tabs>

@@ -40,6 +40,7 @@ the hardware-free native screen suite.
 - [Auth flow](#auth-flow)
 - [Participant screens](#participant-screens)
 - [Event diary (#935)](#event-diary-935)
+- [Company tags (#935)](#company-tags-935)
 - [Operator screens](#operator-screens)
   - [Queue operations](#queue-operations)
   - [Scanner](#scanner)
@@ -380,7 +381,8 @@ distributed to other Expo Router apps without importing hackOS code.
   Signing out while offline with a scanning capability warns first that
   re-authentication needs a live server. The overview is grouped into Profile, Contact, Event
   details, App, Account, and Session; staff with personal logistics-statistics
-  access also see a Staff section. Its Storage row opens
+  access or `sponsors:manage` also see a Staff section (Statistics and Company
+  tags respectively, [below](#company-tags-935)). Its Storage row opens
   `app/(tabs)/others/storage.tsx`, which contains storage controls only. Staff
   Statistics opens `app/(tabs)/others/statistics.tsx`, with personal scan
   counts and a link to scan history; Legal opens
@@ -699,8 +701,16 @@ then), bio, links, location (a `mappin`), project or work group, challenges and
 "Remove from diary", which then returns to the diary. iOS uses the transparent native detail
 header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
 no bar covers the centred avatar; Android floats its own glass back button. The CV route needs the session, so it is
-downloaded with the session cookie (`expo-file-system`) and opened in the share
-sheet. A hidden profile and a person the reader may not open both answer 404
+downloaded with the session cookie (`expo-file-system`) into the cache and shown
+in the in-app viewer (`components/cv-viewer.tsx`): a page-sheet modal titled
+with the person's name, a circular close button, and pages that scroll with
+pinch and double-tap zoom, rendered by the native `react-native-pdf` (with its
+peer `react-native-blob-util`). Share stays in the viewer header for anyone who
+wants the file. A CV that is gone or no longer shared (404) shows "Profile not
+available"; any other failure offers Retry. **Native dependency:** adding
+`react-native-pdf` means the development client and store builds must be
+rebuilt; Jest mocks it in `jest.setup.js`. The app does not show the user's own
+CV anywhere yet, so the viewer has one caller. A hidden profile and a person the reader may not open both answer 404
 and show one "Profile not available" state. Photos are authenticated API
 routes: `lib/directory.ts` fetches them with the session and shows them from
 memory (Android's image pipeline drops a `Cookie` header), never from disk.
@@ -741,6 +751,77 @@ before the menu on Android, so the menu never opened.
 Physical NFC and camera verification is still pending; tests mock both
 (`lib/diary.test.ts`, `lib/directory.test.ts`, `test/ui/diary-screen.test.tsx`,
 `test/ui/person-profile.test.tsx`).
+
+### Company tags (#935)
+
+Company tags are what attendees scan to collect a company in their Diary
+([`diary.md`](./diary.md#company-tags)): NFC tags or wristbands linked by
+serial number, and printed QR codes. Staff with `sponsors:manage`
+(`canManageStands` in `lib/tabs.ts`, the same gate as the web Company tags
+page) open Account → Staff → Company tags (`components/stands-screen.tsx`,
+routed as `app/(tabs)/others/stands.tsx`). The screen lists
+`GET /api/enterprises/stands` alphabetically with a name search (accent- and
+case-insensitive), each row showing the logo, the NFC and QR counts and "Not
+scannable" when staff have not turned scanning on.
+
+**Provisioning a tag.** Each row's "Link tag" starts reading at once (R008).
+One tap (`startCompanyTagSession` in `lib/company-tag-nfc.ts`, serialized with
+the other scanners by `runExclusiveNfcSession`):
+
+1. reads the UID (iOS tag-reader session; Android NDEF or NFC-A);
+2. links it: `POST /api/enterprises/:id/stand-tags` `{ kind: "nfc", uid }`
+   with a fresh `Idempotency-Key`. A 409 stops here with nothing written and
+   says whether the wristband is already someone's badge ("use an unassigned
+   one") or already a company tag (`standLinkErrorKey`, from `usedBy`);
+3. writes an NDEF message with a URI record
+   `https://<EXPO_PUBLIC_EVENT_WEBSITE_URL host>/s/<UID>` and an Android
+   Application Record for the release package, then reads it back and
+   compares the bytes.
+
+Writing is safe by construction: a tag that is empty or only holds the badge
+claim record (`nfc-badge-claim.ts`) is written directly; one that already
+holds this link is left alone; one holding other data is linked and then
+asks "Replace the data on this tag?" — Replace needs a second tap of the same
+tag (a different UID writes nothing), Keep leaves the data and says the tag
+won't open hackOS by itself. A read-only or locked tag, or one without NDEF
+support, stays linked by serial and says scanning it from the Diary still
+works; so does a write that fails its read-back. A failed read of existing
+records skips writing rather than treating unreadable content as empty.
+Cancellation while the server links the serial also skips the subsequent write.
+On iOS the next scanner waits for Core NFC's session-closed event after a
+company-tag session, just as it does after a badge read.
+The result line offers "Link another" for the same company, so several tags or wristbands are linked in a
+row without leaving the screen. On hardware without NFC the actions stay
+disabled and one line points to serial-number entry on the web. QR codes are
+generated and printed from the web.
+
+**Opening the app from a tag.** The link opens `app/s/[code].tsx`, which is
+outside the session guard: signed in, it sends the code to the Diary
+(`?view=companies&collect=<code>`, `collectCompanyTagHref`), which collects it
+through `POST /api/me/diary/scan` once and celebrates on the Companies album;
+signed out, it keeps the code (`lib/company-tag-link.ts`, in memory) and
+`RootLayout` resumes it after sign-in. Native wiring in `app.config.ts`:
+
+- iOS: the `react-native-nfc-manager` plugin with `includeNdefEntitlement:
+  true` (NDEF and TAG reader formats) and `applinks:<host>` next to
+  `webcredentials` in `associatedDomains`; the web serves the matching
+  `apple-app-site-association` (`applinks` for `/s/*`);
+- Android: `plugins/withAndroidCompanyTagLinks.js` adds a VIEW + BROWSABLE
+  `autoVerify` filter and an `NDEF_DISCOVERED` filter for
+  `https://<host>/s/…` to the main activity, so a tapped tag hands its link to
+  the app; the badge `TECH_DISCOVERED` filter (`withAndroidNfcTagClaim.js`) is
+  unchanged. App Link verification needs `ANDROID_APP_CERT_SHA256` on the web
+  ([`deploy/README.md`](../deploy/README.md)). The AAR makes Android open the
+  app even before verification.
+
+These native changes need a new build. The flow is covered by
+`lib/company-tag-nfc.test.ts` (NDEF message, write, read-back, overwrite and
+locked-tag paths with `react-native-nfc-manager` mocked),
+`test/ui/stands-screen.test.tsx`, `test/ui/company-tag-link.test.tsx`,
+`lib/company-tag-link.test.ts`, `test/company-tag-links-plugin.test.tsx`, the
+Diary `collect` test and `lib/tabs.test.ts`. It has not been tested on NFC
+hardware, and the universal/app links have not been opened on a device or
+simulator build yet.
 
 ## Operator screens
 
@@ -1174,6 +1255,11 @@ physical iOS/Android and EAS verification remains a release-gate task in
   that matches iOS SF Symbol badge behavior without altering geometry. (issue #625)
 
 ## Other infrastructure
+
+- `lib/app-version.ts` shows the installed binary's version and a seven-character
+  commit in Sign in and Account. `app.config.ts` captures EAS/CI commit metadata,
+  falling back to the checkout's HEAD when building locally; builds without Git
+  metadata retain the version alone.
 
 - `lib/i18n.tsx` — react-i18next wrapper (`useLocale()` keeps the original
   `{ language, setLanguage, t }` shape) reading `packages/shared/locales/

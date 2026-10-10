@@ -442,6 +442,8 @@ services:
     environment:
       API_DOMAIN: "${API_DOMAIN}"
       WEB_DOMAIN: "${WEB_DOMAIN}"
+      # #935 Android App Links for company-tag links (/.well-known/assetlinks.json).
+      ANDROID_APP_CERT_SHA256: "${ANDROID_APP_CERT_SHA256:-}"
     ports:
       - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${WEB_PUBLISH_PORT:-3001}:3001"
     networks:

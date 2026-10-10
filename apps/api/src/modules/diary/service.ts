@@ -1,4 +1,5 @@
 import type pg from "pg";
+import { config } from "../../config.js";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { type DirectoryEntry, visibleDirectoryEntries } from "../directory/service.js";
@@ -114,8 +115,10 @@ const NAME_ORDER = new Intl.Collator("en", { sensitivity: "base", numeric: true 
 
 /**
  * The sponsor stands an attendee can collect (#935): every revealed sponsor
- * with a stand tag, plus revealed sponsors the caller already collected even
- * if their tags were removed since. Hidden sponsors never count. Collected
+ * whose stand staff made scannable and that has a stand tag, plus revealed
+ * sponsors the caller already collected even if their tags were removed or
+ * scanning was turned off since (they count in both `collected` and `total`,
+ * so progress never goes backwards). Hidden sponsors never count. Collected
  * first (newest first), then the rest by name. Tag codes never leave the API.
  */
 export async function listSponsorCollection(owner: number): Promise<{
@@ -130,7 +133,9 @@ export async function listSponsorCollection(owner: number): Promise<{
     [owner],
   );
   const { rows: tagged } = await pool.query<{ enterprise_id: number }>(
-    `SELECT DISTINCT enterprise_id FROM sponsor_stand_tags`,
+    `SELECT DISTINCT t.enterprise_id
+       FROM sponsor_stand_tags t JOIN enterprises e ON e.id = t.enterprise_id
+      WHERE e.stand_scannable`,
   );
   const ids = new Set([
     ...tagged.map((row) => Number(row.enterprise_id)),
@@ -213,17 +218,47 @@ async function personForCode(db: Queryable, code: string): Promise<number> {
 }
 
 /**
- * Save whatever was scanned: a sponsor stand tag/QR, or a person's badge or
- * ticket. Nothing about a person is revealed unless their profile is visible
- * right now; otherwise the answer is `profile_not_shared` and nothing is
- * stored. The scanned person is never notified.
+ * A company tag link `https://<web host>/s/<code>` (QR content, NDEF URI
+ * record, #935) carries the tag's own code. Links on another host are left
+ * as they are and answer `diary_code_unknown`.
  */
-export async function saveScanned(owner: number, code: string) {
+export function codeFromScan(raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return raw;
+  }
+  const webHost = new URL(config.WEB_URL).host;
+  const match = /^\/s\/([^/]+)\/?$/.exec(url.pathname);
+  if (url.host !== webHost || !match?.[1]) return raw;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Save whatever was scanned: a company tag (NFC UID, QR token or its link),
+ * or a person's badge or ticket. A person's badge only ever saves that person
+ * (a sponsor rep's badge never grants their company). Nothing about a person
+ * is revealed unless their profile is visible right now; otherwise the answer
+ * is `profile_not_shared` and nothing is stored. The scanned person is never
+ * notified.
+ */
+export async function saveScanned(owner: number, scanned: string) {
+  const code = codeFromScan(scanned);
   return withTransaction(async (db) => {
     await lockOwner(db, owner);
-    const enterpriseId = await standEnterpriseForCode(db, code);
-    if (enterpriseId !== null) {
-      const cards = await visibleSponsorCards(db, [enterpriseId]);
+    const stand = await standEnterpriseForCode(db, code);
+    if (stand !== null) {
+      const { enterpriseId } = stand;
+      // Staff decide which stands can be collected (0703); a stand that is
+      // not scannable answers like an unrevealed sponsor and names no one.
+      const cards = stand.scannable
+        ? await visibleSponsorCards(db, [enterpriseId])
+        : new Map<number, SponsorCard>();
       if (!cards.has(enterpriseId)) {
         throw new AppError(409, "stand_unavailable", "This sponsor is not available yet");
       }

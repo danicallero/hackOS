@@ -219,6 +219,18 @@ export function DiaryScreen() {
     }
   }
 
+  // #935 company-tag links (`app/s/[code].tsx`) open the diary with
+  // `?collect=<code>`: collect it once, with the same celebration as a scan.
+  const { collect } = useLocalSearchParams<{ collect?: string }>();
+  const collected = useRef<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: submitScan is recreated each render; the code itself is the trigger.
+  useEffect(() => {
+    if (!collect || collected.current === collect) return;
+    collected.current = collect;
+    router.setParams({ collect: undefined });
+    void submitScan(collect);
+  }, [collect]);
+
   async function submitScan(code: string) {
     const value = code.trim();
     if (!value || scanInFlight.current) return;

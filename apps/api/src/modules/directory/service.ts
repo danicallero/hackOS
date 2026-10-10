@@ -1,7 +1,13 @@
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import {
+  AppError,
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from "../../lib/errors.js";
 import { photoUrl, safePdfFilename } from "../../lib/profile-files.js";
 import { hasEventAccess } from "../identity/role.js";
 import type { PublicProfileInput, SocialLink } from "./schemas.js";
@@ -324,8 +330,18 @@ const DEFAULT_PROFILE: ProfileRow = {
   consented_at: null,
 };
 
-/** Owner preview: the card exactly as readers would see it if visible. */
-async function preview(db: Queryable, userId: number, profile: ProfileRow) {
+const OWN_CV_PATH = "/api/me/public-profile/cv";
+
+/** The staff CV route of user management (#935 moderation). */
+export function staffCvPath(userId: number): string {
+  return `/api/users/${userId}/public-profile/cv`;
+}
+
+/**
+ * Preview: the card exactly as readers would see it if visible. `cvPath` is
+ * the route the previewer itself may download the CV from (owner or staff).
+ */
+async function preview(db: Queryable, userId: number, profile: ProfileRow, cvPath: string) {
   const { rows } = await db.query<EntryRow>(
     `WITH p AS (
        SELECT $1::int AS user_id, $2::boolean AS show_surname, $3::boolean AS show_photo,
@@ -347,10 +363,15 @@ async function preview(db: Queryable, userId: number, profile: ProfileRow) {
     ],
   );
   if (!rows[0]) throw new NotFoundError("User not found");
-  return toEntry(rows[0], "/api/me/public-profile/cv");
+  return toEntry(rows[0], cvPath);
 }
 
-async function presentProfile(db: Queryable, userId: number, profile: ProfileRow) {
+async function presentProfile(
+  db: Queryable,
+  userId: number,
+  profile: ProfileRow,
+  cvPath = OWN_CV_PATH,
+) {
   const formCv = await readFormCv(db, userId);
   return {
     directoryVisible: profile.directory_visible,
@@ -376,7 +397,7 @@ async function presentProfile(db: Queryable, userId: number, profile: ProfileRow
           }
         : null,
     consentedAt: profile.consented_at ? profile.consented_at.toISOString() : null,
-    preview: await preview(db, userId, profile),
+    preview: await preview(db, userId, profile, cvPath),
   };
 }
 
@@ -394,6 +415,32 @@ async function readProfile(db: Queryable, userId: number, lock = false): Promise
 export async function getMyPublicProfile(userId: number) {
   await assertReaderAdmitted(userId);
   return presentProfile(pool, userId, await readProfile(pool, userId));
+}
+
+/**
+ * Who writes a public profile: the owner, or user-management staff
+ * moderating it (#935). Staff writes are audited with source `admin`, skip
+ * the event-access gate (a profile can outlive the person's access) and can
+ * never turn sharing on: opting in stays the person's own consent.
+ */
+export interface ProfileActor {
+  actorId: number;
+  source: "participant" | "admin";
+}
+
+function ownActor(userId: number): ProfileActor {
+  return { actorId: userId, source: "participant" };
+}
+
+function cvPathFor(userId: number, actor: ProfileActor): string {
+  return actor.source === "admin" ? staffCvPath(userId) : OWN_CV_PATH;
+}
+
+/** Staff view of any user's profile, opted in or not (#935 moderation). */
+export async function getStaffPublicProfile(userId: number) {
+  const { rows } = await pool.query(`SELECT 1 FROM users WHERE id = $1`, [userId]);
+  if (!rows[0]) throw new NotFoundError("User not found");
+  return presentProfile(pool, userId, await readProfile(pool, userId), staffCvPath(userId));
 }
 
 type ProfileSettings = Required<PublicProfileInput>;
@@ -435,10 +482,39 @@ async function lockProfileOwner(db: Queryable, userId: number): Promise<void> {
   }
 }
 
+/**
+ * Staff lock (#935 moderation): the same user-row lock as the owner's, without
+ * the event-access gate; unknown and anonymized accounts are 404 and accounts
+ * being removed (H54) 409.
+ */
+async function lockProfileSubject(db: Queryable, userId: number): Promise<void> {
+  const { rows } = await db.query<{ account_state: string }>(
+    `SELECT account_state FROM users WHERE id = $1 AND anonymized_at IS NULL FOR NO KEY UPDATE`,
+    [userId],
+  );
+  if (!rows[0]) throw new NotFoundError("User not found");
+  if (rows[0].account_state === "removal_pending") {
+    throw new ConflictError("This account is being removed");
+  }
+}
+
+async function lockFor(db: Queryable, userId: number, actor: ProfileActor): Promise<void> {
+  if (actor.source === "admin") await lockProfileSubject(db, userId);
+  else await lockProfileOwner(db, userId);
+}
+
 /** `changed` is false when the request repeats the stored state (#934). */
 export async function updateMyPublicProfile(userId: number, input: PublicProfileInput) {
+  return updatePublicProfile(userId, input, ownActor(userId));
+}
+
+export async function updatePublicProfile(
+  userId: number,
+  input: PublicProfileInput,
+  actor: ProfileActor,
+) {
   return withTransaction(async (db) => {
-    await lockProfileOwner(db, userId);
+    await lockFor(db, userId, actor);
     const before = await readProfile(db, userId);
     // Omitted #935 fields keep their stored values.
     const next = Object.fromEntries(
@@ -448,7 +524,17 @@ export async function updateMyPublicProfile(userId: number, input: PublicProfile
       ]),
     ) as ProfileSettings;
     if (SETTINGS_FIELDS.every((field) => sameValue(before[FIELD_COLUMNS[field]], next[field]))) {
-      return { changed: false, profile: await presentProfile(db, userId, before) };
+      return {
+        changed: false,
+        profile: await presentProfile(db, userId, before, cvPathFor(userId, actor)),
+      };
+    }
+    if (actor.source === "admin" && next.directoryVisible && !before.directory_visible) {
+      throw new AppError(
+        409,
+        "profile_consent_required",
+        "Only the person can start sharing their profile",
+      );
     }
     if (next.shareCv && !before.cv_key && !(await readFormCv(db, userId))) {
       throw new BadRequestError("Upload a CV before sharing it");
@@ -492,15 +578,18 @@ export async function updateMyPublicProfile(userId: number, input: PublicProfile
     );
     // Free text and links stay out of the audit log; only which fields changed.
     await audit(db, {
-      actorId: userId,
+      actorId: actor.actorId,
       entityType: "user_public_profile",
       entityId: userId,
       action: "public_profile.updated",
       before: { directoryVisible: before.directory_visible },
       after: { directoryVisible: after.directory_visible, changedFields },
-      source: "participant",
+      source: actor.source,
     });
-    return { changed: true, profile: await presentProfile(db, userId, after) };
+    return {
+      changed: true,
+      profile: await presentProfile(db, userId, after, cvPathFor(userId, actor)),
+    };
   });
 }
 
@@ -554,15 +643,20 @@ async function assertNoFormCv(db: Queryable, userId: number): Promise<void> {
 
 /** Removes the owner's CV and stops sharing it (#935). */
 export async function removeMyCv(userId: number) {
+  return removeCv(userId, ownActor(userId));
+}
+
+/** Removes an uploaded CV and stops sharing it; staff use it to moderate (#935). */
+export async function removeCv(userId: number, actor: ProfileActor) {
   return withTransaction(async (db) => {
-    await lockProfileOwner(db, userId);
+    await lockFor(db, userId, actor);
     await assertNoFormCv(db, userId);
     const before = await readProfile(db, userId, true);
     if (!before.cv_key) {
       return {
         changed: false,
         removedKey: null,
-        profile: await presentProfile(db, userId, before),
+        profile: await presentProfile(db, userId, before, cvPathFor(userId, actor)),
       };
     }
     const { rows } = await db.query<ProfileRow>(
@@ -573,7 +667,7 @@ export async function removeMyCv(userId: number) {
       [userId],
     );
     await audit(db, {
-      actorId: userId,
+      actorId: actor.actorId,
       entityType: "user_public_profile",
       entityId: userId,
       action: "public_profile.updated",
@@ -582,17 +676,20 @@ export async function removeMyCv(userId: number) {
         directoryVisible: before.directory_visible,
         changedFields: before.share_cv ? ["cv", "shareCv"] : ["cv"],
       },
-      source: "participant",
+      source: actor.source,
     });
     return {
       changed: true,
       removedKey: before.cv_key,
-      profile: await presentProfile(db, userId, rows[0] as ProfileRow),
+      profile: await presentProfile(db, userId, rows[0] as ProfileRow, cvPathFor(userId, actor)),
     };
   });
 }
 
-/** The owner's own CV (the application's when there is one), shared or not (#935). */
+/**
+ * The person's own CV (the application's when there is one), shared or not:
+ * for the owner, and for user-management staff moderating it (#935).
+ */
 export async function getMyCv(userId: number): Promise<{ key: string; filename: string }> {
   const formCv = await readFormCv(pool, userId);
   if (formCv) return { key: formCv.key, filename: formCv.filename };

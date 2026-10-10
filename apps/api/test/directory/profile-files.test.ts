@@ -678,3 +678,160 @@ describe("account removal and export (H54)", () => {
     expect(rows[0]?.photo_key ?? null).toBeNull();
   });
 });
+
+describe("user-management moderation (#935)", () => {
+  function staffPut(
+    staff: number,
+    userId: number,
+    payload: Record<string, unknown>,
+    key = `sp-${++keySeq}`,
+  ) {
+    return app.inject({
+      method: "PUT",
+      url: `/api/users/${userId}/public-profile`,
+      headers: { ...asUser(staff), "idempotency-key": key },
+      payload,
+    });
+  }
+
+  it("reads anyone's profile with users:read, shared or not", async () => {
+    const me = await person();
+    await putProfile(me, { ...VISIBLE, directoryVisible: false, headline: "Hidden headline" });
+    const staffReader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const res = await get(`/api/users/${me}/public-profile`, staffReader);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      directoryVisible: false,
+      headline: "Hidden headline",
+      preview: { displayName: "Ana P.", headline: "Hidden headline" },
+    });
+
+    const participant = await person("Other", "Participant");
+    expect((await get(`/api/users/${me}/public-profile`, participant)).statusCode).toBe(403);
+    expect((await get("/api/users/999999/public-profile", staffReader)).statusCode).toBe(404);
+  });
+
+  it("edits with the owner's validation, stops sharing, and audits as admin", async () => {
+    const me = await person();
+    await putProfile(me, { ...VISIBLE, headline: "Rude", bio: "Rude bio" });
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const staffReader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+
+    expect((await staffPut(staffReader, me, { ...VISIBLE, headline: null })).statusCode).toBe(403);
+    expect((await staffPut(staff, 999_999, VISIBLE)).statusCode).toBe(404);
+    const invalid = await staffPut(staff, me, {
+      ...VISIBLE,
+      socials: [{ kind: "x", url: "http://x.com/a" }],
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const body = { ...VISIBLE, directoryVisible: false, headline: null, bio: null };
+    const edited = await staffPut(staff, me, body, "moderate-1");
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json()).toMatchObject({ directoryVisible: false, headline: null, bio: null });
+    // A retry with the same key replays the response and writes nothing new.
+    const replay = await staffPut(staff, me, body, "moderate-1");
+    expect(replay.json()).toEqual(edited.json());
+    const { rows } = await pool.query(
+      `SELECT actor_id, source, before, after FROM audit_log
+        WHERE action = 'public_profile.updated' AND actor_id = $1`,
+      [staff],
+    );
+    expect(rows).toEqual([
+      {
+        actor_id: staff,
+        source: "admin",
+        before: { directoryVisible: true },
+        after: { directoryVisible: false, changedFields: ["directoryVisible", "headline", "bio"] },
+      },
+    ]);
+    expect(JSON.stringify(rows)).not.toContain("Rude");
+
+    // Sharing is the person's own consent: staff can never turn it on.
+    const optIn = await staffPut(staff, me, VISIBLE);
+    expect(optIn.statusCode).toBe(409);
+    expect(optIn.json().error.code).toBe("profile_consent_required");
+  });
+
+  it("reads an unshared CV and removes it, audited", async () => {
+    const me = await person();
+    await upload("/api/me/public-profile/cv", me, PDF, "cv.pdf", "application/pdf");
+    const key = await cvKey(me);
+    await putProfile(me, { ...VISIBLE, shareCv: true });
+    const staff = await createUserWithCapabilities([
+      CAPABILITIES.USERS_READ,
+      CAPABILITIES.USERS_WRITE,
+    ]);
+    const profile = (await get(`/api/users/${me}/public-profile`, staff)).json();
+    expect(profile.preview.cvUrl).toBe(`/api/users/${me}/public-profile/cv`);
+    const download = await get(`/api/users/${me}/public-profile/cv`, staff);
+    expect(download.statusCode).toBe(200);
+    expect(download.rawPayload.equals(PDF)).toBe(true);
+
+    const staffReader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    expect((await remove(`/api/users/${me}/public-profile/cv`, staffReader)).statusCode).toBe(403);
+    expect((await remove("/api/users/999999/public-profile/cv", staff)).statusCode).toBe(404);
+    const removed = await remove(`/api/users/${me}/public-profile/cv`, staff);
+    expect(removed.statusCode).toBe(200);
+    expect(removed.json()).toMatchObject({ cv: null, shareCv: false });
+    expect(await stored(key)).toBe(false);
+    expect((await get(`/api/users/${me}/public-profile/cv`, staff)).statusCode).toBe(404);
+    const { rows } = await pool.query(
+      `SELECT source, after FROM audit_log WHERE action = 'public_profile.updated' AND actor_id = $1`,
+      [staff],
+    );
+    expect(rows).toEqual([
+      { source: "admin", after: { directoryVisible: true, changedFields: ["cv", "shareCv"] } },
+    ]);
+  });
+
+  it("allows staff to edit hidden fields after event access ends, but refuses account removal", async () => {
+    const me = await person();
+    await putProfile(me, { ...VISIBLE, directoryVisible: false });
+    await pool.query("DELETE FROM user_roles WHERE user_id = $1", [me]);
+    const staff = await createUserWithCapabilities([
+      CAPABILITIES.USERS_READ,
+      CAPABILITIES.USERS_WRITE,
+    ]);
+    expect(
+      (await staffPut(staff, me, { ...VISIBLE, directoryVisible: false, bio: "Corrected" }))
+        .statusCode,
+    ).toBe(200);
+    await pool.query("UPDATE users SET account_state = 'removal_pending' WHERE id = $1", [me]);
+    expect((await staffPut(staff, me, { ...VISIBLE, directoryVisible: false })).statusCode).toBe(
+      409,
+    );
+    expect((await remove(`/api/users/${me}/public-profile/cv`, staff)).statusCode).toBe(409);
+  });
+
+  it("enforces synthetic subject boundaries for profile and CV reads and writes", async () => {
+    const real = await person();
+    const fixture = await person("Synthetic", "Participant");
+    await pool.query("UPDATE users SET is_test_account = true WHERE id = $1", [fixture]);
+    const staff = await createUserWithCapabilities([
+      CAPABILITIES.USERS_READ,
+      CAPABILITIES.USERS_WRITE,
+    ]);
+    const syntheticStaff = await createUserWithCapabilities([
+      CAPABILITIES.USERS_READ,
+      CAPABILITIES.USERS_WRITE,
+    ]);
+    await pool.query("UPDATE users SET is_test_account = true WHERE id = $1", [syntheticStaff]);
+    for (const path of [
+      `/api/users/${fixture}/public-profile`,
+      `/api/users/${fixture}/public-profile/cv`,
+    ]) {
+      expect((await get(path, staff)).statusCode).toBe(404);
+    }
+    expect((await staffPut(staff, fixture, VISIBLE)).statusCode).toBe(404);
+    expect((await get(`/api/users/${real}/public-profile`, syntheticStaff)).statusCode).toBe(403);
+    expect((await staffPut(syntheticStaff, real, VISIBLE)).statusCode).toBe(403);
+    const legacy = await app.inject({
+      method: "DELETE",
+      url: `/api/users/${fixture}/public-profile`,
+      headers: { ...asUser(staff), "idempotency-key": "legacy-fixture" },
+      payload: { reason: "Moderation" },
+    });
+    expect(legacy.statusCode).toBe(404);
+  });
+});

@@ -67,7 +67,7 @@ export function registerDiaryRoutes(app: FastifyInstance): void {
         body: scanBody,
         summary: "Save a scanned person or stand",
         description:
-          "Resolves `code` — a sponsor stand NFC UID or `STAND-…` QR token, a badge NFC UID or badge QR, or a ticket QR — and saves it to the caller's diary. 201 for a new entry; a re-scan returns the existing entry with 200. Errors store nothing and name no one: `diary_code_unknown` (404), `badge_revoked` (409), `profile_not_shared` (409, the person does not share a public profile), `stand_unavailable` (409, sponsor not revealed), `diary_self` (409). Scanning is the only way to add a person; any attendee may do it, and only shared public profiles are ever saved or shown. 20 scans per minute per account (429). The scanned person is not notified (#935).",
+          "Resolves `code` — a company tag (NFC tag or wristband UID, `STAND-…` QR token, or its link `https://<web host>/s/<code>`), a badge NFC UID or badge QR, or a ticket QR — and saves it to the caller's diary. 201 for a new entry; a re-scan returns the existing entry with 200. Errors store nothing and name no one: `diary_code_unknown` (404), `badge_revoked` (409), `profile_not_shared` (409, the person does not share a public profile), `stand_unavailable` (409, sponsor not revealed), `diary_self` (409). Scanning is the only way to add a person; any attendee may save people; only shared public profiles are ever saved or shown. 20 scans per minute per account (429). The scanned person is not notified (#935).",
       },
     },
     async (req, reply) => {

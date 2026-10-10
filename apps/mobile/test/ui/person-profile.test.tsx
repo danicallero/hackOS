@@ -131,15 +131,53 @@ it("shows the whole profile with the saved note", async () => {
   expect(open).toHaveBeenCalledWith("https://github.com/ana");
 });
 
-it("downloads the CV with the session before sharing it", async () => {
+it("opens the CV in the in-app viewer after downloading it with the session", async () => {
+  mockDownload.mockResolvedValue({ uri: "file:///cache/ana-souto-cv.pdf" });
   await renderMobile(<PersonProfileScreen />);
   await fireEvent.press(await screen.findByRole("button", { name: "directoryCv" }));
-  await waitFor(() => expect(mockShare).toHaveBeenCalled());
+  const pdf = await screen.findByTestId("cv-viewer-pdf");
+  expect(pdf.props.source).toEqual({ uri: "file:///cache/ana-souto-cv.pdf" });
   expect(mockDownload).toHaveBeenCalledWith(
     "https://api.test/api/directory/101/cv",
     expect.anything(),
     expect.objectContaining({ headers: { Cookie: "session=1" } }),
   );
+  // Nothing is shared until the reader asks for the file.
+  expect(mockShare).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByRole("button", { name: "directoryCvShare" }));
+  await waitFor(() =>
+    expect(mockShare).toHaveBeenCalledWith(
+      "file:///cache/ana-souto-cv.pdf",
+      expect.objectContaining({ mimeType: "application/pdf" }),
+    ),
+  );
+});
+
+it("shows the not-available state when the CV is gone", async () => {
+  mockDownload.mockRejectedValue(new Error("download failed"));
+  const fetchSpy = jest.spyOn(globalThis, "fetch").mockResolvedValue({ status: 404 } as Response);
+  await renderMobile(<PersonProfileScreen />);
+  await fireEvent.press(await screen.findByRole("button", { name: "directoryCv" }));
+  expect(await screen.findByText("directoryPersonNotFound")).toBeTruthy();
+  expect(screen.queryByTestId("cv-viewer-pdf")).toBeNull();
+  expect(screen.queryByRole("button", { name: "directoryCvShare" })).toBeNull();
+  expect(fetchSpy).toHaveBeenCalledWith(
+    "https://api.test/api/directory/101/cv",
+    expect.objectContaining({ method: "HEAD" }),
+  );
+  fetchSpy.mockRestore();
+});
+
+it("offers a retry when the CV download fails for another reason", async () => {
+  mockDownload.mockRejectedValueOnce(new Error("offline"));
+  const fetchSpy = jest.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+  await renderMobile(<PersonProfileScreen />);
+  await fireEvent.press(await screen.findByRole("button", { name: "directoryCv" }));
+  expect(await screen.findByText("directoryCvError")).toBeTruthy();
+  mockDownload.mockResolvedValue({ uri: "file:///cache/ana-souto-cv.pdf" });
+  await fireEvent.press(screen.getByRole("button", { name: "retry" }));
+  expect(await screen.findByTestId("cv-viewer-pdf")).toBeTruthy();
+  fetchSpy.mockRestore();
 });
 
 it("toggles the favourite of the saved entry", async () => {

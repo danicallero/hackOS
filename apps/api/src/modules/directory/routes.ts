@@ -1,6 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { pool } from "../../db/pool.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError } from "../../lib/errors.js";
 import { idempotencyGuard, requireIdempotencyKey } from "../../lib/idempotency.js";
@@ -15,21 +16,41 @@ import {
   uploadOperation,
 } from "../../lib/profile-files.js";
 import { putObject } from "../../lib/storage.js";
+import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import { moderationBody, moderationParams, publicProfileBody, userParams } from "./schemas.js";
 import {
   getDirectoryCv,
   getDirectoryEntry,
   getMyCv,
   getMyPublicProfile,
+  getStaffPublicProfile,
   moderatePublicProfile,
+  removeCv,
   removeMyCv,
   setMyCv,
   updateMyPublicProfile,
+  updatePublicProfile,
 } from "./service.js";
 
 const PDF_CACHE = "private, no-store";
 
 const authenticated = { routeAccessPolicy: { kind: "authenticated" as const } };
+const usersReader = {
+  routeAccessPolicy: { kind: "capability" as const, capability: CAPABILITIES.USERS_READ },
+};
+const usersWriter = {
+  routeAccessPolicy: { kind: "capability" as const, capability: CAPABILITIES.USERS_WRITE },
+};
+
+/**
+ * User-management staff act on someone's public profile within the same
+ * synthetic-account boundary as every user edit (H8); unknown accounts are 404.
+ */
+async function staffSubject(req: FastifyRequest<{ Params: { id: number } }>): Promise<number> {
+  await assertFixtureSubjectScope(pool, req.userId as number, req.params.id);
+  return req.params.id;
+}
+
 /** An attendee who saved this person in their diary by scanning them (#935). */
 const personReader = {
   routeAccessPolicy: {
@@ -102,8 +123,90 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       },
     },
     async (req, reply) => {
-      await moderatePublicProfile(req.userId as number, req.params.id, req.body.reason);
+      await moderatePublicProfile(req.userId as number, await staffSubject(req), req.body.reason);
       return reply.code(204).send();
+    },
+  );
+
+  r.get(
+    "/api/users/:id/public-profile",
+    {
+      config: usersReader,
+      preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      schema: {
+        params: moderationParams,
+        summary: "Read a person's public profile",
+        description:
+          "User management: anyone's public profile settings, shared or not, in the same shape as GET /api/me/public-profile. `preview` is the card the people who scan them see while it is shared; its `cvUrl` points at the staff CV route. Not audited, like every user-management read. 404 for an unknown or out-of-scope account (#935, H8).",
+      },
+    },
+    async (req) => getStaffPublicProfile(await staffSubject(req)),
+  );
+  r.put(
+    "/api/users/:id/public-profile",
+    {
+      config: usersWriter,
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
+      schema: {
+        params: moderationParams,
+        body: publicProfileBody,
+        summary: "Edit a person's public profile",
+        description:
+          "User-management moderation: replaces someone's public profile settings with the same body and validation as PUT /api/me/public-profile. Staff may stop sharing (`directoryVisible: false`) but never start it: turning sharing on for a hidden profile answers 409 `profile_consent_required`. Audited as `public_profile.updated` with source `admin` and the changed field names only; repeating the stored settings writes nothing. 404 for an unknown or out-of-scope account; accounts being removed (H54) answer 409 (#935, H8, H53).",
+      },
+    },
+    async (req) => {
+      const userId = await staffSubject(req);
+      const { changed, profile } = await updatePublicProfile(userId, req.body, {
+        actorId: req.userId as number,
+        source: "admin",
+      });
+      req.domainUnchanged = !changed;
+      return profile;
+    },
+  );
+  r.get(
+    "/api/users/:id/public-profile/cv",
+    {
+      config: usersReader,
+      preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      schema: {
+        params: moderationParams,
+        summary: "Download a person's CV",
+        description:
+          "User management: streams someone's profile CV, shared or not, so staff can review it: the application CV when there is one, otherwise the upload. 404 without either, or for an unknown or out-of-scope account. Never cached by shared proxies (#935, H8).",
+      },
+    },
+    async (req, reply) => {
+      const cv = await getMyCv(await staffSubject(req));
+      return sendProfileObject(reply, cv.key, {
+        contentType: "application/pdf",
+        cacheControl: PDF_CACHE,
+        filename: cv.filename,
+      });
+    },
+  );
+  r.delete(
+    "/api/users/:id/public-profile/cv",
+    {
+      config: usersWriter,
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
+      schema: {
+        params: moderationParams,
+        summary: "Remove a person's CV",
+        description:
+          "User-management moderation: deletes someone's uploaded profile CV and stops sharing it, audited as `public_profile.updated` with source `admin` and `changedFields: [\"cv\"]`. Removing when there is no CV changes nothing. A CV that comes from the person's application answers 409; staff stop sharing it with PUT instead. Returns the profile. 404 for an unknown or out-of-scope account (#935, H8, H53).",
+      },
+    },
+    async (req) => {
+      const userId = await staffSubject(req);
+      const { changed, removedKey, profile } = await removeCv(userId, {
+        actorId: req.userId as number,
+        source: "admin",
+      });
+      req.domainUnchanged = !changed;
+      await deleteReplacedObject(req, removedKey);
+      return profile;
     },
   );
 

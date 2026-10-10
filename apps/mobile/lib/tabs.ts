@@ -33,6 +33,14 @@ export function canViewStaffStatistics(capabilities: string[]): boolean {
   return isOperator(capabilities) || has(capabilities, CAPABILITIES.LOGISTICS_STATS);
 }
 
+/**
+ * #935: global sponsor administrators link NFC tags to sponsor stands by
+ * tapping them. The same `sponsors:manage` gate as the web Stands page.
+ */
+export function canManageStands(capabilities: string[]): boolean {
+  return has(capabilities, CAPABILITIES.SPONSORS_MANAGE);
+}
+
 export function canScanActivities(capabilities: string[]): boolean {
   return has(capabilities, CAPABILITIES.ACTIVITY_SCAN);
 }

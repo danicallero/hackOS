@@ -128,6 +128,36 @@ export async function apiUpload<T = unknown>(path: string, body: FormData): Prom
   return payload as T;
 }
 
+/**
+ * Download an authenticated API file (CSV, SVG, zip) and save it under the
+ * name from its `content-disposition`, or `fallbackName`. Errors use the same
+ * `ApiError` envelope as `apiFetch`.
+ */
+export async function apiDownload(path: string, fallbackName: string): Promise<void> {
+  const res = await fetch(buildUrl(path), { credentials: "include" });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => null)) as {
+      error?: { code?: string; message?: string; details?: unknown };
+    } | null;
+    throw new ApiError(
+      res.status,
+      payload?.error?.code ?? "unknown",
+      payload?.error?.message ?? res.statusText ?? "Download failed",
+      payload?.error?.details,
+    );
+  }
+  const name =
+    /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   get: <T>(path: string, options?: RequestOptions) =>
     apiFetch<T>(path, { ...options, method: "GET" }),

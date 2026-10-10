@@ -214,8 +214,9 @@ indirect, through `repo_devpost_prizes.prize` matching a challenge's
 
 ### diary (#935)
 The caller's private event diary under `/api/me/diary`: people saved by
-scanning a badge/ticket (the only way to add one), and sponsor stands saved by
-scanning a stand tag. Cards are projected live from `directory` and the
+scanning a badge/ticket (the only way to add a person), and companies collected by
+scanning one of their company tags (NFC tag or wristband, QR, or the tag link
+`/s/<code>`). Cards are projected live from `directory` and the
 public sponsor profile. Full detail: [`diary.md`](./diary.md).
 
 ### directory (#934)

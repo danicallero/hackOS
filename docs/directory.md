@@ -171,7 +171,8 @@ a test account. The same rule decides whether a scan saves the person
 | `GET /api/users/:id/photo` | the person; or `users:read`; or event access + the person is in the caller's diary, while their profile is shared with `show_photo` |
 | `DELETE /api/users/:id/public-profile` | `users:write` (moderation), `Idempotency-Key` |
 
-No capability reads profiles. The former `directory:read` (seeded by
+No capability grants directory browsing. Staff may read profiles through
+user management as described below. The former `directory:read` (seeded by
 `0101_public_profile.sql`) is retired by `0801_retire_directory_read.sql`,
 which deletes its grants and seeded-role defaults and removes it from the
 catalogue constraint. Admins (`*`) and user staff get no browsing shortcut:
@@ -273,3 +274,30 @@ The profile row (with `consented_at`, bio, links, `share_cv` and the CV's file
 name and upload time) is part of the personal export bundle (`publicProfile`,
 `null` without a row), and `subject.photo` records the photo's type and upload
 time; both files stay downloadable by their owner through the routes above.
+
+## User-management profile moderation (#935, H8, H53)
+
+The user detail page includes a Public profile tab. `users:read` can see the
+stored profile and its reader preview even when sharing is off, with the CV
+available independently of its sharing switch. `users:write` can edit the
+profile's text, links and display switches, stop sharing, remove the account
+photo and delete an uploaded profile CV. Each moderation action requires
+confirmation; unsaved text survives file removal. Staff cannot turn sharing
+back on: that consent belongs to the person. An application CV stays attached
+to its application; staff can stop sharing it through the profile switch.
+No moderation notification is sent.
+
+| Route | Access |
+| --- | --- |
+| `GET /api/users/:id/public-profile` | `users:read`, shared or hidden |
+| `PUT /api/users/:id/public-profile` | `users:write`, idempotency, audited |
+| `GET /api/users/:id/public-profile/cv` | `users:read`, shared or unshared |
+| `DELETE /api/users/:id/public-profile/cv` | `users:write`, idempotency, audited |
+
+These routes enforce the same synthetic-account boundary as other user edits.
+Staff writes use the owner's row lock and refuse pending account removal;
+they do not require the target to retain event access. Audit records identify
+the staff actor, source `admin` and changed fields without retaining profile
+text, links or filenames. Repeating unchanged settings writes and broadcasts
+nothing. The existing photo removal route records its own audit entry.
+The legacy hide-and-clear route also enforces the synthetic-account boundary.

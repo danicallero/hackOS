@@ -59,6 +59,7 @@ siguiente especifica cada variable individualmente.
 | `API_IMAGE_TAG`, `WEB_IMAGE_TAG` | derivadas por el despliegue | no | Tags inmutables independientes para la imagen API y web. `incus-deploy.sh` los exporta para un release parcial y conserva el tag de la unidad que no cambió; no hace falta añadirlos al fichero del host. |
 | `API_DOMAIN` | configuración | sí | Hostname público del API, sin esquema. Se convierte en `https://...` para Better Auth y el runtime web. |
 | `WEB_DOMAIN` | configuración | sí | Hostname público del frontend, sin esquema. |
+| `ANDROID_APP_CERT_SHA256` | configuración | no | Huellas SHA-256 (separadas por comas, formato `AA:BB:…`) de los certificados de firma de la app Android (subida y firma de Play). `web` las publica en `/.well-known/assetlinks.json` para que los enlaces de etiquetas de empresa `https://${WEB_DOMAIN}/s/<código>` abran la app (#935). Vacía: el fichero no lista apps y el enlace abre la web. |
 | `CORS_ORIGINS` | configuración | sí | Lista separada por comas; debe incluir `https://${WEB_DOMAIN}`. |
 | `PUBLISH_BIND_ADDRESS` | configuración | no | Dirección de publicación HTTP; `0.0.0.0` para el proxy de otro LXC y `127.0.0.1` si comparte host. |
 | `API_PUBLISH_PORT`, `WEB_PUBLISH_PORT` | configuración | no | Puertos del host para API y web; por defecto `3000` y `3001`. |
@@ -125,7 +126,7 @@ variables agrupadas se detallan en las secciones siguientes.
 | `migrate` | `NODE_ENV=production`, `DATABASE_URL`, `BETTER_AUTH_SECRET` |
 | `api` | `NODE_ENV`, `WORKERS_INLINE`, `DATABASE_URL`, `VALKEY_URL`, auth, URLs públicas, almacenamiento, Wallet, traducción, observabilidad, límites operativos y fixtures API-only |
 | `worker` | `NODE_ENV`, `WORKERS_INLINE`, `DATABASE_URL`, `VALKEY_URL`, auth/URLs para enlaces, almacenamiento, Wallet, correo y tuning del worker |
-| `web` | `API_DOMAIN`, `WEB_DOMAIN` |
+| `web` | `API_DOMAIN`, `WEB_DOMAIN`, `ANDROID_APP_CERT_SHA256` |
 
 `DATABASE_URL` y `VALKEY_URL` se ensamblan dentro de Compose a partir de las
 credenciales del fichero de secretos. El puerto del API (`3000`) y el del web
@@ -248,8 +249,9 @@ mantenimiento, administración y superusuario.
 compatibilidad. No recibe Valkey, S3, correo, Wallet ni configuración web.
 
 `web` sólo recibe `API_DOMAIN` y `WEB_DOMAIN`, que el servidor Next.js expone
-en `/runtime-config.js`. No recibe ninguna variable secreta ni dependencias de
-datos.
+en `/runtime-config.js`, y la configuración pública `ANDROID_APP_CERT_SHA256`
+para `/.well-known/assetlinks.json` (#935). No recibe ninguna variable secreta
+ni dependencias de datos.
 
 ## Secretos opcionales del relay SMTP
 

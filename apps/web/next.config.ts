@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
   // @hackos/shared ships raw TypeScript (exports point at src/*.ts); let Next
   // compile it as part of the app build.
   transpilePackages: ["@hackos/shared"],
+  async rewrites() {
+    // #935 Android App Links: generated from deployment env, see the route.
+    return [{ source: "/.well-known/assetlinks.json", destination: "/android-assetlinks.json" }];
+  },
   async headers() {
     return [
       {

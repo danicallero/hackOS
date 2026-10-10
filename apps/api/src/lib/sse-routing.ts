@@ -42,7 +42,10 @@ export function mutationDomainForPath(url: string): string | null {
 
   // Public-profile writes, including staff moderation, only change the
   // public profile cards (#934).
-  if (matches("/api/me/public-profile") || /^\/api\/users\/[^/]+\/public-profile$/.test(path)) {
+  if (
+    matches("/api/me/public-profile") ||
+    /^\/api\/users\/[^/]+\/public-profile(?:\/cv)?$/.test(path)
+  ) {
     return SSE_TOPICS.DIRECTORY;
   }
 

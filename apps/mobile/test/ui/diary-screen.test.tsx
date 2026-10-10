@@ -48,13 +48,14 @@ const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
 // Stable, as the real navigation object is: the header effect depends on it.
 const mockNavigation = { setOptions: (options: unknown) => mockSetOptions(options) };
-let mockParams: { view?: string } = {};
+let mockParams: { view?: string; collect?: string } = {};
+const mockSetParams = jest.fn();
 jest.mock("expo-router", () => ({
   useScrollToTop: () => {},
   useIsFocused: () => true,
   useLocalSearchParams: () => mockParams,
   useNavigation: () => mockNavigation,
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, setParams: mockSetParams }),
   useFocusEffect: (effect: () => void) => require("react").useEffect(effect, [effect]),
 }));
 jest.mock("expo-router/stack", () => {
@@ -487,6 +488,20 @@ describe("People", () => {
 });
 
 describe("Companies", () => {
+  it("collects a company-tag link once, on the Companies album (#935)", async () => {
+    scanResult = sponsorEntry;
+    mockParams = { view: "companies", collect: "04A1B2C3D4E5F6" };
+    await renderMobile(<DiaryScreen />);
+    await waitFor(() => expect(calls("/api/me/diary/scan")).toHaveLength(1));
+    expect(JSON.parse(String(calls("/api/me/diary/scan")[0]?.[1]?.body))).toEqual({
+      code: "04A1B2C3D4E5F6",
+    });
+    // The link is consumed so returning to the Diary does not collect again.
+    expect(mockSetParams).toHaveBeenCalledWith({ collect: undefined });
+    expect(await screen.findByText("Acme")).toBeTruthy();
+    expect(calls("/api/me/diary/scan")).toHaveLength(1);
+  });
+
   it("shows the album with progress, collected badges and locked ones", async () => {
     mockParams = { view: "companies" };
     await renderMobile(<DiaryScreen />);

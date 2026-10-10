@@ -15,6 +15,7 @@ import { SessionState } from "@/components/session-state";
 import { useColorScheme } from "@/components/useColorScheme";
 import { ApiModeProvider, useApiMode } from "@/lib/api-mode";
 import { signOut } from "@/lib/auth-client";
+import { collectCompanyTagHref, takePendingCompanyTag } from "@/lib/company-tag-link";
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
 import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
@@ -98,6 +99,7 @@ function RootLayoutSessionContents() {
       <MobileAccessGate authenticated={authenticated} />
       <PersonalEventStream authenticated={authenticated} />
       <ProfileTasksPrompt authenticated={authenticated} sessionPending={initialSessionPending} />
+      <PendingCompanyTagResume authenticated={authenticated} />
       <RootLayoutNav
         authenticated={authenticated}
         pending={initialSessionPending}
@@ -294,6 +296,26 @@ function ProfileTasksPrompt({
   return null;
 }
 
+/**
+ * #935: a company-tag link opened while signed out (`app/s/[code].tsx`) is
+ * collected once the account may enter the app.
+ */
+function PendingCompanyTagResume({ authenticated }: { authenticated: boolean }) {
+  const router = useRouter();
+  const { me } = useMeContext();
+  const navigationState = useRootNavigationState();
+  const canEnter = canEnterMobileApp(authenticated, me?.hasEventAccess);
+  const ready = Boolean(navigationState?.key);
+
+  useEffect(() => {
+    if (!canEnter || !ready || !me) return;
+    const code = takePendingCompanyTag();
+    if (code) router.replace(collectCompanyTagHref(code, me.capabilities));
+  }, [canEnter, ready, me, router]);
+
+  return null;
+}
+
 /** Signs ordinary applicants back out before they can enter event-day routes. */
 function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
   const { me, loading } = useMeContext();
@@ -418,6 +440,8 @@ function RootLayoutNav({
             options={{ headerShown: false, presentation: "modal" }}
           />
         </Stack.Protected>
+        {/* #935 company-tag links resolve for any session state. */}
+        <Stack.Screen name="s/[code]" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );

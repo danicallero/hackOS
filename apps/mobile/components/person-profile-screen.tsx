@@ -1,10 +1,9 @@
-import { File, Paths } from "expo-file-system";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
-import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CvViewer } from "@/components/cv-viewer";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
 import { GlassView } from "@/components/glass-view";
@@ -18,15 +17,9 @@ import {
 import { PersonAvatar } from "@/components/person-avatar";
 import { DetailRow, NoteRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { ApiError, apiFetch, getCurrentSessionCookie } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
-import {
-  apiAssetUrl,
-  cvFileName,
-  type DirectoryEntry,
-  displayUrl,
-  socialLabel,
-} from "@/lib/directory";
+import { type DirectoryEntry, displayUrl, socialLabel } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
@@ -57,7 +50,8 @@ export function PersonProfileScreen() {
   const [state, setState] = useState<State>({ status: "loading" });
   const [entry, setEntry] = useState<DiaryEntry | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [busy, setBusy] = useState<"star" | "remove" | "note" | "cv" | null>(null);
+  const [busy, setBusy] = useState<"star" | "remove" | "note" | null>(null);
+  const [cvOpen, setCvOpen] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
   const requestId = useRef(0);
   const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
@@ -116,7 +110,7 @@ export function PersonProfileScreen() {
       await action();
     } catch {
       void haptic("error");
-      Alert.alert(t("tabDiary"), t(kind === "cv" ? "directoryCvError" : "diaryActionError"));
+      Alert.alert(t("tabDiary"), t("diaryActionError"));
     } finally {
       setBusy(null);
     }
@@ -157,26 +151,6 @@ export function PersonProfileScreen() {
     ]);
   }
 
-  /** The CV route needs the session cookie, so it is downloaded in-app first. */
-  function openCv(person: DirectoryEntry) {
-    const cvUrl = person.cvUrl;
-    if (!cvUrl) return;
-    void run("cv", async () => {
-      const destination = new File(Paths.cache, cvFileName(person.displayName));
-      if (destination.exists) destination.delete();
-      const file = await File.downloadFileAsync(apiAssetUrl(cvUrl), destination, {
-        headers: { Cookie: getCurrentSessionCookie() },
-        idempotent: true,
-      });
-      if (!(await Sharing.isAvailableAsync())) throw new Error("Sharing unavailable");
-      await Sharing.shareAsync(file.uri, {
-        mimeType: "application/pdf",
-        UTI: "com.adobe.pdf",
-        dialogTitle: person.displayName,
-      });
-    });
-  }
-
   const goBack = () => safeBack(router, "/");
   const person = state.status === "ready" ? state.person : null;
 
@@ -207,6 +181,14 @@ export function PersonProfileScreen() {
       ) : null}
       {process.env.EXPO_OS === "ios" ? (
         <Stack.Screen options={{ title: "", headerBackVisible: !floatingBack }} />
+      ) : null}
+      {person?.cvUrl ? (
+        <CvViewer
+          visible={cvOpen}
+          title={person.displayName}
+          cvPath={person.cvUrl}
+          onClose={() => setCvOpen(false)}
+        />
       ) : null}
       <DiaryNoteEditor
         visible={editingNote && entry !== null}
@@ -299,8 +281,8 @@ export function PersonProfileScreen() {
                   icon="doc.text"
                   label={t("directoryCv")}
                   title={t("directoryCv")}
-                  busy={busy === "cv"}
-                  onPress={() => openCv(person)}
+                  busy={false}
+                  onPress={() => setCvOpen(true)}
                 />
               ) : null}
             </View>
