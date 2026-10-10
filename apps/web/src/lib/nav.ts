@@ -154,9 +154,8 @@ export const PERSONAL_NAV: NavItem[] = [
   { title: "wallet", href: "/wallet", icon: WalletIcon, hideForPureApplicant: true },
   // Hidden for pure applicants — decision emails go out regardless (H50/H51).
   { title: "inbox", href: "/inbox", icon: TrayIcon, hideForPureApplicant: true },
-  // Event diary (#935): saved people and sponsor stands, with the opt-in
-  // directory (#934, directory:read) as a secondary view. Like the API, it
-  // needs current event access only.
+  // Event diary (#935): people saved by scanning their badge and sponsor
+  // stands. Like the API, it needs current event access only.
   { title: "diary", href: "/people", icon: AddressBookIcon, hideForPureApplicant: true },
   { title: "myProfile", href: "/settings/profile", icon: UserIcon },
 ];

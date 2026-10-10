@@ -12,7 +12,7 @@ import {
 } from "../helpers.js";
 import { admitParticipant, createChallenge } from "../projects/fixtures.js";
 
-/** #934: opt-in people directory and the owner's public profile. */
+/** #934, #935: the owner's public profile and the saved-person card. */
 
 const VISIBLE = {
   directoryVisible: true,
@@ -31,7 +31,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await truncateAll();
-  reader = await createUserWithCapabilities([CAPABILITIES.DIRECTORY_READ]);
+  reader = await person("Reader", "Zed");
 });
 afterAll(async () => {
   await app.close();
@@ -63,8 +63,16 @@ function putProfile(userId: number, payload: Record<string, unknown>, key = `k-$
   });
 }
 
-async function directory(query = "", as = reader) {
-  return app.inject({ method: "GET", url: `/api/directory${query}`, headers: asUser(as) });
+/** Saves `target` in the reader's diary, as a badge scan would (#935). */
+async function save(target: number, as = reader) {
+  await pool.query(`INSERT INTO diary_entries (owner_id, target_user_id) VALUES ($1, $2)`, [
+    as,
+    target,
+  ]);
+}
+
+function card(id: number, as = reader) {
+  return app.inject({ method: "GET", url: `/api/directory/${id}`, headers: asUser(as) });
 }
 
 async function publishChallenge(title: string) {
@@ -245,32 +253,30 @@ describe("public profile owner routes (#934)", () => {
   });
 });
 
-describe("directory reads (#934)", () => {
-  it("lists opted-in people with project and published challenges, without private fields", async () => {
+describe("saved profile reads (#934, #935)", () => {
+  it("shows a saved person's card with project and published challenges, without private fields", async () => {
     const challenge = await publishChallenge("Green AI");
     const hidden = await createChallenge("Draft challenge", []);
     const jose = await person("José", "Álvarez");
     const teammate = await person("Hidden", "Mate");
     await activeRepo("Neural Beans", [jose, teammate], [challenge, hidden]);
     await putProfile(jose, { ...VISIBLE, showPhoto: true, locationNote: "Planta 1, mesa 12" });
+    await save(jose);
 
-    const res = await directory();
+    const res = await card(jose);
     expect(res.statusCode).toBe(200);
-    expect(res.json().nextCursor).toBeNull();
-    expect(res.json().items).toEqual([
-      {
-        userId: jose,
-        displayName: "José Á.",
-        photoUrl: `/api/users/${jose}/photo?v=aaaaaaaaaaaa`,
-        headline: null,
-        bio: null,
-        locationNote: "Planta 1, mesa 12",
-        socials: [],
-        cvUrl: null,
-        project: { kind: "project", id: expect.any(Number), name: "Neural Beans" },
-        challenges: [{ id: challenge, name: "Green AI" }],
-      },
-    ]);
+    expect(res.json()).toEqual({
+      userId: jose,
+      displayName: "José Á.",
+      photoUrl: `/api/users/${jose}/photo?v=aaaaaaaaaaaa`,
+      headline: null,
+      bio: null,
+      locationNote: "Planta 1, mesa 12",
+      socials: [],
+      cvUrl: null,
+      project: { kind: "project", id: expect.any(Number), name: "Neural Beans" },
+      challenges: [{ id: challenge, name: "Green AI" }],
+    });
     const body = res.body;
     for (const forbidden of [
       "email",
@@ -286,7 +292,7 @@ describe("directory reads (#934)", () => {
     }
   });
 
-  it("ignores cancelled and disqualified queue entries in challenges and the filter", async () => {
+  it("ignores cancelled and disqualified queue entries in challenges", async () => {
     const kept = await publishChallenge("Kept");
     const cancelled = await publishChallenge("Cancelled");
     const disqualified = await publishChallenge("Disqualified");
@@ -298,11 +304,8 @@ describe("directory reads (#934)", () => {
       [repoId, cancelled, disqualified],
     );
     await putProfile(me, VISIBLE);
-    expect((await directory()).json().items[0].challenges).toEqual([{ id: kept, name: "Kept" }]);
-    expect((await directory(`?challengeId=${kept}`)).json().items).toHaveLength(1);
-    for (const id of [cancelled, disqualified]) {
-      expect((await directory(`?challengeId=${id}`)).json().items).toEqual([]);
-    }
+    await save(me);
+    expect((await card(me)).json().challenges).toEqual([{ id: kept, name: "Kept" }]);
   });
 
   it("falls back to an unlinked planned work group", async () => {
@@ -321,47 +324,18 @@ describe("directory reads (#934)", () => {
       [rows[0].id, challenge],
     );
     await putProfile(me, VISIBLE);
-    const [entry] = (await directory()).json().items;
+    await save(me);
+    const entry = (await card(me)).json();
     expect(entry.project).toEqual({ kind: "workGroup", id: Number(rows[0].id), name: "Planners" });
     expect(entry.challenges).toEqual([{ id: challenge, name: "Planned" }]);
 
     await putProfile(me, { ...VISIBLE, showProject: false });
-    const [withoutProject] = (await directory()).json().items;
+    const withoutProject = (await card(me)).json();
     expect(withoutProject.project).toBeNull();
     expect(withoutProject.challenges).toEqual([]);
   });
 
-  it("searches ignoring accents, filters by challenge and pages stably", async () => {
-    const challenge = await publishChallenge("Filter");
-    const jose = await person("José", "Martínez");
-    const people = [jose];
-    for (const name of ["Bea", "Carla", "Dani", "Eva"]) people.push(await person(name, "Test"));
-    await activeRepo("Filtered", [people[2] as number], [challenge]);
-    for (const id of people) await putProfile(id, VISIBLE);
-
-    const search = await directory("?q=jose");
-    expect(search.json().items.map((i: { userId: number }) => i.userId)).toEqual([jose]);
-    expect((await directory("?q=%25")).json().items).toEqual([]);
-
-    const filtered = await directory(`?challengeId=${challenge}`);
-    expect(filtered.json().items.map((i: { displayName: string }) => i.displayName)).toEqual([
-      "Carla T.",
-    ]);
-
-    const seen: string[] = [];
-    let cursor: string | null = null;
-    do {
-      const page = await directory(`?limit=2${cursor ? `&cursor=${cursor}` : ""}`);
-      expect(page.statusCode).toBe(200);
-      seen.push(...page.json().items.map((i: { displayName: string }) => i.displayName));
-      cursor = page.json().nextCursor;
-    } while (cursor);
-    expect(seen).toEqual(["Bea T.", "Carla T.", "Dani T.", "Eva T.", "José M."]);
-    expect((await directory("?cursor=garbage")).statusCode).toBe(400);
-    expect((await directory("?limit=51")).statusCode).toBe(400);
-  });
-
-  it("never exposes hidden, test, removal-pending or non-attendee profiles", async () => {
+  it("never exposes hidden, test, removal-pending or non-attendee profiles, even when saved", async () => {
     const hidden = await person("Hidden", "One");
     await putProfile(hidden, { ...VISIBLE, directoryVisible: false });
     const noRow = await person("No", "Row");
@@ -378,33 +352,33 @@ describe("directory reads (#934)", () => {
     await putProfile(revoked, VISIBLE);
     await pool.query(`DELETE FROM user_roles WHERE user_id = $1`, [revoked]);
 
-    expect((await directory()).json().items).toEqual([]);
+    for (const id of [hidden, noRow, testAccount, revoked]) await save(id);
     for (const id of [hidden, noRow, testAccount, pending, revoked]) {
-      const res = await app.inject({
-        method: "GET",
-        url: `/api/directory/${id}`,
-        headers: asUser(reader),
-      });
-      expect(res.statusCode).toBe(404);
+      expect((await card(id)).statusCode).toBe(404);
     }
   });
 
-  it("requires directory:read and event access to read", async () => {
+  it("has no listing, and reads only people the caller saved, with event access", async () => {
     const me = await person("Ana", "Pérez");
     await putProfile(me, VISIBLE);
-    const ok = await app.inject({
-      method: "GET",
-      url: `/api/directory/${me}`,
-      headers: asUser(reader),
-    });
-    expect(ok.statusCode).toBe(200);
+    // The browsable directory is retired (#935): people are added only by scanning.
+    expect((await app.inject({ url: "/api/directory", headers: asUser(reader) })).statusCode).toBe(
+      404,
+    );
+    expect((await card(me)).statusCode).toBe(404);
+    await save(me);
+    expect((await card(me)).statusCode).toBe(200);
 
-    // A participant without the capability (Sponsor/Judging Team by default).
-    expect((await directory("", me)).statusCode).toBe(403);
+    // Admins and user staff hold no browsing shortcut either.
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    await admitParticipant(admin);
+    expect((await card(me, admin)).statusCode).toBe(404);
+
     const noAccess = await createUser();
-    const role = await createRole([CAPABILITIES.DIRECTORY_READ], { eventAccess: false });
+    const role = await createRole([], { eventAccess: false });
     await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [noAccess, role]);
-    expect((await directory("", noAccess)).statusCode).toBe(403);
+    await save(me, noAccess);
+    expect((await card(me, noAccess)).statusCode).toBe(403);
   });
 });
 
@@ -433,7 +407,8 @@ describe("moderation and removal (#934)", () => {
       `SELECT actor_id, reason FROM audit_log WHERE action = 'public_profile.moderated'`,
     );
     expect(audits.rows).toEqual([{ actor_id: staff, reason: "Offensive headline" }]);
-    expect((await directory()).json().items).toEqual([]);
+    await save(me);
+    expect((await card(me)).statusCode).toBe(404);
 
     const missing = await app.inject({
       method: "DELETE",

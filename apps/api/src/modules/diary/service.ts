@@ -13,8 +13,10 @@ import type { UpdateEntryInput } from "./schemas.js";
 
 /**
  * Event diary (#935): an attendee's private list of the people and sponsor
- * stands they met. Only the owner's own choices (favourite, note) are stored;
- * cards are projected live from the #934 directory and the public sponsor
+ * stands they met. Entries are added only by scanning a badge, ticket or stand
+ * tag; there is no browsable directory. Only the owner's own choices
+ * (favourite, note) are stored;
+ * cards are projected live from the #934 public profile and the public sponsor
  * profile, so a person who hides their profile — or a sponsor that is hidden
  * again — shows as unavailable instead of as a stale copy.
  */
@@ -25,7 +27,7 @@ export interface DiaryEntry {
   note: string | null;
   createdAt: string;
   updatedAt: string;
-  /** The person's current directory card; null while their profile is not visible. */
+  /** The person's current public profile card; null while their profile is not visible. */
   person: DirectoryEntry | null;
   /** The sponsor's current public card; null while the sponsor is not revealed. */
   sponsor: SponsorCard | null;
@@ -45,7 +47,7 @@ const ENTRY_COLUMNS = `id, target_user_id, enterprise_id, starred, note, created
 
 async function present(db: Queryable, rows: EntryRow[]) {
   // Every attendee may keep the people they met (#935), but only cards that
-  // are directory-visible right now are ever shown.
+  // are publicly shared right now are ever shown.
   const people = await visibleDirectoryEntries(
     db,
     rows.flatMap((row) => (row.target_user_id ? [Number(row.target_user_id)] : [])),
@@ -234,18 +236,6 @@ export async function saveScanned(owner: number, code: string) {
     const people = await visibleDirectoryEntries(db, [userId]);
     if (!people.has(userId)) {
       throw new AppError(409, "profile_not_shared", "This person does not share a profile");
-    }
-    return save(db, owner, { userId });
-  });
-}
-
-/** Save someone found in the directory; hidden and missing are the same 404 (#934). */
-export async function savePerson(owner: number, userId: number) {
-  return withTransaction(async (db) => {
-    await lockOwner(db, owner);
-    const people = await visibleDirectoryEntries(db, [userId]);
-    if (userId === owner || !people.has(userId)) {
-      throw new NotFoundError("Person not found");
     }
     return save(db, owner, { userId });
   });

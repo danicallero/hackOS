@@ -12,8 +12,8 @@ import { useSessionContext } from "@/lib/session";
 /**
  * The account photo (#934). It saves on its own, outside the personal-details
  * form: the API stores it privately and every surface reads it through the
- * authenticated photo route. The directory shows it only when the public
- * profile's photo switch is on.
+ * authenticated photo route. People who scanned the owner see it only when
+ * the public profile's photo switch is on.
  */
 export function ProfilePhoto() {
   const { me, refresh } = useSessionContext();

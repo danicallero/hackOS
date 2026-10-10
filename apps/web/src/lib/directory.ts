@@ -2,7 +2,7 @@ import { API_URL } from "./env";
 import type { MessageKey } from "./i18n";
 
 /**
- * People directory types and helpers shared by the directory pages and the
+ * Public profile types and helpers shared by the diary's person pages and the
  * public-profile section of My profile (#934, #935, docs/directory.md).
  */
 
@@ -15,7 +15,7 @@ export interface SocialLink {
   url: string;
 }
 
-/** `DirectoryEntry` from the API: everything a directory reader may see. */
+/** `DirectoryEntry` from the API: everything someone who scanned the person may see. */
 export interface DirectoryEntry {
   userId: number;
   displayName: string;

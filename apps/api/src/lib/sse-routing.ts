@@ -41,7 +41,7 @@ export function mutationDomainForPath(url: string): string | null {
   }
 
   // Public-profile writes, including staff moderation, only change the
-  // directory read model (#934).
+  // public profile cards (#934).
   if (matches("/api/me/public-profile") || /^\/api\/users\/[^/]+\/public-profile$/.test(path)) {
     return SSE_TOPICS.DIRECTORY;
   }
@@ -122,11 +122,11 @@ export function publicContentMutationForPath(url: string): boolean {
 }
 
 /**
- * Writes owned by other domains that still change a directory card: the
+ * Writes owned by other domains that still change a public profile card: the
  * person's name, surname or photo, account removal, project and work-group
  * membership, and challenge publication or titles. They also wake the
  * payload-free `directory` topic (#934). Event-access and queue-status
- * changes are rarer; open directory views pick those up when refocused.
+ * changes are rarer; open profile views pick those up when refocused.
  */
 export function directoryMutationForPath(url: string): boolean {
   const path = url.split("?", 1)[0] ?? url;

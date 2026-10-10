@@ -296,7 +296,7 @@ describe("multiplexed authorization and wire contract (#892)", () => {
 
   it("wakes directory views from card-changing writes, skipping no-op profile saves (#934)", async () => {
     const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
-    // Sponsor/Judging Team shape: event access without directory:read.
+    // Any event attendee may subscribe; no capability is needed.
     const owner = await createUser();
     const role = await createRole([], { eventAccess: true });
     await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [owner, role]);

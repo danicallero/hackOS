@@ -23,7 +23,7 @@ import { initials } from "@/lib/initials";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { type DiaryMark, FavouritesToggle, NoteDialog, type SponsorCard } from "./diary-actions";
-import { type ChallengeName, Challenges } from "./people-directory";
+import { type ChallengeName, Challenges } from "./person-row";
 
 /** One company of `GET /api/me/diary/sponsors` (#935). */
 export interface CollectionItem extends SponsorCard {

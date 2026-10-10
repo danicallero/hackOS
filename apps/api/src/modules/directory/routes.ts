@@ -1,12 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import {
-  getRequestAuthorizationContext,
-  requireAuth,
-  requireCapability,
-  userHasCapability,
-} from "../../lib/capabilities.js";
+import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError } from "../../lib/errors.js";
 import { idempotencyGuard, requireIdempotencyKey } from "../../lib/idempotency.js";
 import {
@@ -20,19 +15,12 @@ import {
   uploadOperation,
 } from "../../lib/profile-files.js";
 import { putObject } from "../../lib/storage.js";
-import {
-  directoryQuery,
-  moderationBody,
-  moderationParams,
-  publicProfileBody,
-  userParams,
-} from "./schemas.js";
+import { moderationBody, moderationParams, publicProfileBody, userParams } from "./schemas.js";
 import {
   getDirectoryCv,
   getDirectoryEntry,
   getMyCv,
   getMyPublicProfile,
-  listDirectory,
   moderatePublicProfile,
   removeMyCv,
   setMyCv,
@@ -42,10 +30,7 @@ import {
 const PDF_CACHE = "private, no-store";
 
 const authenticated = { routeAccessPolicy: { kind: "authenticated" as const } };
-const directoryReader = {
-  routeAccessPolicy: { kind: "capability" as const, capability: CAPABILITIES.DIRECTORY_READ },
-};
-/** A directory reader, or an attendee who saved this person in their diary (#935). */
+/** An attendee who saved this person in their diary by scanning them (#935). */
 const personReader = {
   routeAccessPolicy: {
     kind: "contextual" as const,
@@ -53,10 +38,6 @@ const personReader = {
     resource: { source: "params" as const, field: "userId" },
   },
 };
-
-function canBrowse(req: FastifyRequest): Promise<boolean> {
-  return userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.DIRECTORY_READ);
-}
 
 export function registerDirectoryRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -68,7 +49,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my public profile",
         description:
-          "Directory opt-in settings shown on My profile for an event attendee, including bio, social links, `shareCv` and the CV (`cv.source`: `application` when it comes from the file field the organizer marked as the profile CV in the person's latest submitted application, which then wins over any upload; otherwise `upload`), with `preview`: the directory entry exactly as readers would see it if visible (its `cvUrl` points at the owner's own CV route). Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown, no CV shared) (#934, #935).",
+          "Public profile opt-in settings shown on My profile for an event attendee, including bio, social links, `shareCv` and the CV (`cv.source`: `application` when it comes from the file field the organizer marked as the profile CV in the person's latest submitted application, which then wins over any upload; otherwise `upload`), with `preview`: the card exactly as people who scan the owner would see it if visible (its `cvUrl` points at the owner's own CV route). Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown, no CV shared) (#934, #935).",
       },
     },
     async (req) => getMyPublicProfile(req.userId as number),
@@ -82,7 +63,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         body: publicProfileBody,
         summary: "Update my public profile",
         description:
-          "Replaces the caller's directory settings. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded or application CV (400 otherwise). `bio`, `socials` and `shareCv` may be omitted to keep their stored values. consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
+          "Replaces the caller's public profile settings. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded or application CV (400 otherwise). `bio`, `socials` and `shareCv` may be omitted to keep their stored values. consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
       },
     },
     async (req) => {
@@ -92,32 +73,18 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
     },
   );
   r.get(
-    "/api/directory",
-    {
-      config: directoryReader,
-      preHandler: requireCapability(CAPABILITIES.DIRECTORY_READ),
-      schema: {
-        querystring: directoryQuery,
-        summary: "Browse the people directory",
-        description:
-          "Opted-in event attendees only, ordered by display name. `q` matches the display name ignoring accents and case; `challengeId` keeps people whose shown project takes part in that challenge. Page with the opaque `nextCursor`. Test, anonymized and removal-pending accounts are never listed; the reader must also have event access (#934).",
-      },
-    },
-    async (req) => listDirectory(req.userId as number, req.query),
-  );
-  r.get(
     "/api/directory/:userId",
     {
       config: personReader,
       preHandler: requireAuth,
       schema: {
         params: userParams,
-        summary: "Read one directory entry",
+        summary: "Read a saved person's public profile",
         description:
-          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared), project and challenges. Open to `directory:read` holders and to attendees who saved this person in their diary. A missing or hidden profile, and a person the caller may not read, all answer 404, so visibility cannot be probed (#934, #935).",
+          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared), project and challenges. Only attendees who saved this person in their diary (by scanning their badge or ticket) may read it. A missing or hidden profile, and a person the caller has not saved, all answer 404, so visibility cannot be probed (#934, #935).",
       },
     },
-    async (req) => getDirectoryEntry(req.userId as number, req.params.userId, await canBrowse(req)),
+    async (req) => getDirectoryEntry(req.userId as number, req.params.userId),
   );
   r.delete(
     "/api/users/:id/public-profile",
@@ -131,7 +98,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         body: moderationBody,
         summary: "Hide a public profile",
         description:
-          "Moderation: removes the person from the directory, clears their headline, location note, bio and social links and stops sharing their CV, with an audited reason. The person may opt in again (#934, #935).",
+          "Moderation: hides the person's public profile, clears their headline, location note, bio and social links and stops sharing their CV, with an audited reason. The person may opt in again (#934, #935).",
       },
     },
     async (req, reply) => {
@@ -214,15 +181,11 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         params: userParams,
         summary: "Download a shared CV",
         description:
-          "Streams the CV of an opted-in person who shares it: their application CV when there is one, otherwise their upload. A hidden profile, an unshared CV and a missing CV all answer 404. Open to `directory:read` holders and to attendees who saved this person; the access check runs on every request and the reader must also have event access (#935).",
+          "Streams the CV of an opted-in person who shares it: their application CV when there is one, otherwise their upload. A hidden profile, an unshared CV and a missing CV all answer 404. Only for attendees who saved this person; the access check runs on every request and the reader must also have event access (#935).",
       },
     },
     async (req, reply) => {
-      const cv = await getDirectoryCv(
-        req.userId as number,
-        req.params.userId,
-        await canBrowse(req),
-      );
+      const cv = await getDirectoryCv(req.userId as number, req.params.userId);
       return sendProfileObject(reply, cv.key, {
         contentType: "application/pdf",
         cacheControl: PDF_CACHE,

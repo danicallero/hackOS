@@ -214,17 +214,17 @@ indirect, through `repo_devpost_prizes.prize` matching a challenge's
 
 ### diary (#935)
 The caller's private event diary under `/api/me/diary`: people saved by
-scanning a badge/ticket or from the directory, and sponsor stands saved by
+scanning a badge/ticket (the only way to add one), and sponsor stands saved by
 scanning a stand tag. Cards are projected live from `directory` and the
 public sponsor profile. Full detail: [`diary.md`](./diary.md).
 
 ### directory (#934)
-Opt-in people directory: the caller's public profile (bio, links and a
-shareable CV) under `/api/me/public-profile`, the `directory:read` listing,
-entry and shared-CV reads, and `users:write` moderation. The account photo
-(`/api/me/photo`, staff edits through `POST`/`DELETE /api/users/:id/photo`,
-read through `GET /api/users/:id/photo`) lives in identity
-but follows the directory's photo switch. Full detail:
+Opt-in public profile: the caller's profile (bio, links and a shareable CV)
+under `/api/me/public-profile`, the profile and shared-CV reads of people the
+caller saved in their diary (there is no listing), and `users:write`
+moderation. The account photo (`/api/me/photo`, staff edits through
+`POST`/`DELETE /api/users/:id/photo`, read through `GET /api/users/:id/photo`)
+lives in identity but follows the profile's photo switch. Full detail:
 [`directory.md`](./directory.md).
 
 ### challenges (H44)

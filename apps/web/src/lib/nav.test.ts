@@ -120,13 +120,12 @@ describe("event diary (#934, #935)", () => {
   const hrefs = (ctx: NavVisibilityContext) =>
     PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map((item) => item.href);
 
-  it("shows the diary to attendees without directory:read", () => {
+  it("shows the diary to every attendee, with no capability", () => {
     expect(hrefs(contextFor([]))).toContain("/people");
-    expect(hrefs(contextFor([CAPABILITIES.DIRECTORY_READ]))).toContain("/people");
   });
 
-  it("hides the diary without current event access, even with directory:read", () => {
-    const ctx = contextFor([CAPABILITIES.DIRECTORY_READ], { isPureApplicant: true });
+  it("hides the diary without current event access", () => {
+    const ctx = contextFor([], { isPureApplicant: true });
     expect(hrefs(ctx)).not.toContain("/people");
   });
 });

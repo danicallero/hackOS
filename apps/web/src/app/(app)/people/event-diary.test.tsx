@@ -8,7 +8,6 @@ import type { DiaryEntry } from "./event-diary";
 
 const navigation = vi.hoisted(() => ({ search: "", replace: vi.fn(), push: vi.fn() }));
 const env = vi.hoisted(() => ({
-  canReadDirectory: true,
   isPureApplicant: false,
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -28,7 +27,6 @@ vi.mock("@/lib/api", () => ({
 }));
 vi.mock("@/hooks/use-auto-refresh", () => ({ useAutoRefresh: () => 0 }));
 vi.mock("@/lib/session", () => ({
-  useCan: () => env.canReadDirectory,
   useSessionContext: () => ({ isPureApplicant: env.isPureApplicant }),
 }));
 vi.mock("@/lib/toast", () => ({
@@ -116,7 +114,6 @@ beforeEach(() => {
   navigation.search = "";
   navigation.replace.mockReset();
   navigation.push.mockReset();
-  env.canReadDirectory = true;
   env.isPureApplicant = false;
   env.toastError.mockReset();
   env.toastSuccess.mockReset();
@@ -126,14 +123,6 @@ beforeEach(() => {
   get.mockImplementation(((path: string) => {
     if (path === "/api/me/diary") return Promise.resolve({ items: diary });
     if (path === "/api/me/diary/sponsors") return Promise.resolve(collection);
-    if (path === "/api/directory")
-      return Promise.resolve({
-        items: [
-          person().person,
-          { ...person().person, userId: 42, displayName: "Bea R.", headline: null },
-        ],
-        nextCursor: null,
-      });
     return Promise.resolve({ items: [] });
   }) as typeof api.get);
   container = document.createElement("div");
@@ -316,51 +305,24 @@ describe("EventDiary (#935)", () => {
     expect(table().textContent).toContain("Ana P.");
   });
 
-  it("saves from the directory, then offers Favourite instead of Save", async () => {
+  it("offers only People and Companies, even from an old directory link", async () => {
     diary = [person()];
-    post.mockResolvedValue(
-      person({ id: 9, person: { ...person().person!, userId: 42, displayName: "Bea R." } }),
-    );
+    navigation.search = "tab=directory";
     await render();
-    const user = userEvent.setup();
-    await act(async () => user.click(tab("diaryDirectoryTab")));
-    // The mocked URL never updates, so Radix's mousedown and focus activations
-    // both see the old URL; both target the same canonical view.
-    expect(new Set(navigation.replace.mock.calls.map(([url]) => url))).toEqual(
-      new Set(["/people?tab=directory"]),
-    );
-    expect(get).toHaveBeenCalledWith("/api/directory", expect.anything());
-    // Ana is already saved: the row says so and offers Favourite, not Save.
-    expect(button("diarySave: Ana P.")).toBeNull();
-    expect(button("diaryFavourite: Ana P.")).not.toBeNull();
-    expect(table().textContent).toContain("diarySaved");
-    await act(async () => user.click(button("diarySave: Bea R.")!));
-    expect(post).toHaveBeenCalledWith("/api/me/diary/people", { userId: 42 });
-    expect(navigation.push).not.toHaveBeenCalled();
-    expect(button("diarySave: Bea R.")).toBeNull();
-    expect(button("diaryFavourite: Bea R.")).not.toBeNull();
-    // No visible remove action on directory rows; only the overflow menu has it.
-    expect(table().textContent).not.toContain("diaryRemoveTitle");
+    const tabs = [...container.querySelectorAll('[role="tab"]')].map((el) => el.textContent);
+    expect(tabs).toEqual(["diaryPeopleTab", "diaryCompaniesTab"]);
+    expect(table().textContent).toContain("Ana P.");
+    expect(get).not.toHaveBeenCalledWith("/api/directory", expect.anything());
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("does not rewrite the URL when the current view is selected again (R003)", async () => {
-    navigation.search = "tab=directory";
+    navigation.search = "tab=companies";
     await render();
     const user = userEvent.setup();
-    await act(async () => user.click(tab("diaryDirectoryTab")));
+    await act(async () => user.click(tab("diaryCompaniesTab")));
     await render();
     expect(navigation.replace).not.toHaveBeenCalled();
-  });
-
-  it("hides the directory without directory:read", async () => {
-    env.canReadDirectory = false;
-    diary = [person()];
-    navigation.search = "tab=directory";
-    await render();
-    expect(tab("diaryDirectoryTab")).toBeUndefined();
-    expect(tab("diaryPeopleTab")).toBeDefined();
-    expect(table().textContent).toContain("Ana P.");
-    expect(get).not.toHaveBeenCalledWith("/api/directory", expect.anything());
   });
 
   it("denies access without event access and opens no request", async () => {

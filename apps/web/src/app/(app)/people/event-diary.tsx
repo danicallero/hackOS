@@ -1,6 +1,5 @@
 "use client";
 
-import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { AddressBookIcon } from "@phosphor-icons/react/dist/csr/AddressBook";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,7 +15,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { useCan, useSessionContext } from "@/lib/session";
+import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { useUrlTab } from "@/lib/url-tab";
 import { CompanyCollection } from "./company-collection";
@@ -29,15 +28,13 @@ import {
   type SponsorCard,
 } from "./diary-actions";
 import {
-  type DirectoryDiary,
   type DirectoryEntry,
-  PeopleDirectory,
   PersonMobileRow,
   type PersonRowModel,
   personColumns,
   personHref,
   useChallengeNames,
-} from "./people-directory";
+} from "./person-row";
 
 export type { SponsorCard } from "./diary-actions";
 
@@ -92,8 +89,8 @@ function searchText(entry: DiaryEntry): string {
 
 /**
  * People destination (#935): the caller's event diary. People are the contacts
- * met at the event; Companies is the separate collection of sponsor stands;
- * the opt-in directory (#934) is a secondary view for `directory:read`.
+ * saved by scanning their badge (there is no browsable directory); Companies
+ * is the separate collection of sponsor stands.
  */
 export function EventDiary() {
   const { t } = useLocale();
@@ -102,19 +99,16 @@ export function EventDiary() {
   return <DiaryPage />;
 }
 
-type DiaryView = "people" | "companies" | "directory";
+type DiaryView = "people" | "companies";
+
+const VIEWS: DiaryView[] = ["people", "companies"];
 
 type PeopleRow = PersonRowModel & { entry: DiaryEntry };
 
 function DiaryPage() {
   const { t } = useLocale();
   const isMobile = useIsMobile();
-  const canReadDirectory = useCan(CAPABILITIES.DIRECTORY_READ);
-  const views = useMemo<DiaryView[]>(
-    () => (canReadDirectory ? ["people", "companies", "directory"] : ["people", "companies"]),
-    [canReadDirectory],
-  );
-  const { tab, setTab } = useUrlTab<DiaryView>({ values: views, defaultValue: "people" });
+  const { tab, setTab } = useUrlTab<DiaryView>({ values: VIEWS, defaultValue: "people" });
   const { nameOf } = useChallengeNames();
 
   const [entries, setEntries] = useState<DiaryEntry[] | null>(null);
@@ -162,7 +156,6 @@ function DiaryPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [noteTarget, setNoteTarget] = useState<(DiaryMark & { title: string }) | null>(null);
   const [removeTarget, setRemoveTarget] = useState<(DiaryMark & { title: string }) | null>(null);
-  const [savingUserId, setSavingUserId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [favouritesOnly, setFavouritesOnly] = useState(false);
 
@@ -233,37 +226,6 @@ function DiaryPage() {
   const people = useMemo(
     () => (entries ?? []).filter((entry) => entry.kind === "person"),
     [entries],
-  );
-  const marksByUser = useMemo(
-    () =>
-      new Map(
-        people.flatMap((entry) => (entry.person ? [[entry.person.userId, entry] as const] : [])),
-      ),
-    [people],
-  );
-
-  const directoryDiary = useMemo<DirectoryDiary>(
-    () => ({
-      markFor: (userId) => marksByUser.get(userId) ?? null,
-      savingUserId,
-      handlers,
-      onSave: async (person) => {
-        setSavingUserId(person.userId);
-        try {
-          replaceEntry(
-            await api.post<DiaryEntry>("/api/me/diary/people", { userId: person.userId }),
-          );
-        } catch (err) {
-          toast.error(
-            err instanceof ApiError ? err.message : t("diaryCouldNotSave"),
-            t("diarySave"),
-          );
-        } finally {
-          setSavingUserId(null);
-        }
-      },
-    }),
-    [marksByUser, savingUserId, handlers, replaceEntry, t],
   );
 
   const columns = useMemo(() => personColumns<PeopleRow>(t, nameOf), [t, nameOf]);
@@ -338,9 +300,6 @@ function DiaryPage() {
         <TabBar width="content" aria-label={t("diary")}>
           <TabsTrigger value="people">{t("diaryPeopleTab")}</TabsTrigger>
           <TabsTrigger value="companies">{t("diaryCompaniesTab")}</TabsTrigger>
-          {canReadDirectory && (
-            <TabsTrigger value="directory">{t("diaryDirectoryTab")}</TabsTrigger>
-          )}
         </TabBar>
         <TabsContent value="people" className="pt-2">
           {peopleView}
@@ -348,11 +307,6 @@ function DiaryPage() {
         <TabsContent value="companies" className="pt-4">
           <CompanyCollection nameOf={nameOf} />
         </TabsContent>
-        {canReadDirectory && (
-          <TabsContent value="directory" className="pt-2">
-            <PeopleDirectory diary={directoryDiary} />
-          </TabsContent>
-        )}
       </Tabs>
       <NoteDialog
         target={noteTarget}

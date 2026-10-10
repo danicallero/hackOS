@@ -82,14 +82,6 @@ export const publicProfileBody = z.object({
 });
 export type PublicProfileInput = z.infer<typeof publicProfileBody>;
 
-export const directoryQuery = z.object({
-  q: z.string().trim().max(80).optional(),
-  challengeId: z.coerce.number().int().positive().optional(),
-  cursor: z.string().max(512).optional(),
-  limit: z.coerce.number().int().min(1).max(50).default(25),
-});
-export type DirectoryQuery = z.infer<typeof directoryQuery>;
-
 export const userParams = z.object({ userId: z.coerce.number().int().positive() });
 export const moderationParams = z.object({ id: z.coerce.number().int().positive() });
 export const moderationBody = z.object({ reason: z.string().trim().min(1).max(500) });

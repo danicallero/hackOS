@@ -1,7 +1,5 @@
 "use client";
 
-import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/csr/BookmarkSimple";
-import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { StarIcon } from "@phosphor-icons/react/dist/csr/Star";
 import { useState } from "react";
@@ -115,24 +113,18 @@ export function DiaryMenu({
 }
 
 /**
- * Trailing actions of a person row, shared by People and Directory (#935):
- * Save while not in the diary; once saved, Favourite and the overflow menu.
- * Clicks never reach the row link underneath, including those from the menu,
- * whose portal still bubbles through this React subtree.
+ * Trailing actions of a saved person row (#935): Favourite and the overflow
+ * menu. Clicks never reach the row link underneath, including those from the
+ * menu, whose portal still bubbles through this React subtree.
  */
 export function PersonActions({
   name,
   mark,
   handlers,
-  save,
-  showSaved = false,
 }: {
   name: string;
-  mark: DiaryMark | null;
+  mark: DiaryMark;
   handlers: DiaryHandlers;
-  save?: { pending: boolean; disabled: boolean; onSave: () => void };
-  /** Directory rows say "Saved" where there is room; in People every row is saved. */
-  showSaved?: boolean;
 }) {
   const { t } = useLocale();
   return (
@@ -141,31 +133,8 @@ export function PersonActions({
       className="flex items-center justify-end gap-0.5"
       onClick={(event) => event.stopPropagation()}
     >
-      {mark ? (
-        <>
-          {showSaved && (
-            <span className="text-muted-foreground mr-1.5 hidden items-center gap-1 text-sm md:inline-flex">
-              <CheckIcon aria-hidden="true" className="size-4" />
-              {t("diarySaved")}
-            </span>
-          )}
-          <StarButton mark={mark} name={name} handlers={handlers} t={t} />
-          <DiaryMenu mark={mark} name={name} handlers={handlers} t={t} />
-        </>
-      ) : save ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={save.disabled}
-          loading={save.pending}
-          aria-label={`${t("diarySave")}: ${name}`}
-          onClick={save.onSave}
-        >
-          <BookmarkSimpleIcon aria-hidden="true" className="size-4" />
-          {t("diarySave")}
-        </Button>
-      ) : null}
+      <StarButton mark={mark} name={name} handlers={handlers} t={t} />
+      <DiaryMenu mark={mark} name={name} handlers={handlers} t={t} />
     </div>
   );
 }

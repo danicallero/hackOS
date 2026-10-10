@@ -45,7 +45,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await truncateAll();
-  reader = await createUserWithCapabilities([CAPABILITIES.DIRECTORY_READ]);
+  reader = await person("Reader", "Zed");
 });
 afterAll(async () => {
   await app.close();
@@ -60,6 +60,14 @@ async function person(name = "Ana", surname = "Pérez") {
   const id = rows[0].id as number;
   await admitParticipant(id);
   return id;
+}
+
+/** The reader saved `target` in their diary, as a badge scan would (#935). */
+async function savedByReader(target: number) {
+  await pool.query(`INSERT INTO diary_entries (owner_id, target_user_id) VALUES ($1, $2)`, [
+    reader,
+    target,
+  ]);
 }
 
 function multipart(bytes: Buffer, filename: string, contentType: string) {
@@ -154,6 +162,7 @@ describe("bio and social links (#935)", () => {
       cv: null,
       preview: { bio: "Line one\nLine two", socials, cvUrl: null },
     });
+    await savedByReader(me);
     const entry = await get(`/api/directory/${me}`, reader);
     expect(entry.json()).toMatchObject({ bio: "Line one\nLine two", socials, cvUrl: null });
 
@@ -269,6 +278,7 @@ describe("profile CV (#935)", () => {
 
     // Not shared yet: hidden from readers, still downloadable by the owner.
     await putProfile(me, VISIBLE);
+    await savedByReader(me);
     expect((await get(`/api/directory/${me}`, reader)).json().cvUrl).toBeNull();
     expect((await get(`/api/directory/${me}/cv`, reader)).statusCode).toBe(404);
     const own = await get("/api/me/public-profile/cv", me);
@@ -296,8 +306,8 @@ describe("profile CV (#935)", () => {
     });
     expect(crossOrigin.headers["access-control-expose-headers"]).toContain("content-disposition");
 
-    // Readers without the capability who did not save the person (#935: the same
-    // 404 as a hidden profile), without event access, or of a hidden profile.
+    // Readers who did not save the person (#935: the same 404 as a hidden
+    // profile), anonymous readers, or readers of a hidden profile.
     const participant = await person("Other", "Participant");
     expect((await get(`/api/directory/${me}/cv`, participant)).statusCode).toBe(404);
     expect((await get(`/api/directory/${me}/cv`)).statusCode).toBe(401);
@@ -411,6 +421,7 @@ describe("application CV (#935, H11)", () => {
     const shared = await putProfile(me, { ...VISIBLE, shareCv: true });
     expect(shared.statusCode).toBe(200);
     expect(shared.json().preview.cvUrl).toBe("/api/me/public-profile/cv");
+    await savedByReader(me);
     expect((await get(`/api/directory/${me}`, reader)).json().cvUrl).toBe(
       `/api/directory/${me}/cv`,
     );
@@ -481,8 +492,10 @@ describe("account photo (#934)", () => {
     expect(own.headers["cache-control"]).toBe("private, max-age=300");
     expect(own.rawPayload.equals(PNG)).toBe(true);
 
-    // The directory sees it only while the profile is visible with the photo on.
+    // A reader who saved the person sees it only while the profile is visible
+    // with the photo on (#935).
     expect((await get(image)).statusCode).toBe(401);
+    await savedByReader(me);
     expect((await get(image, reader)).statusCode).toBe(404);
     await putProfile(me, VISIBLE);
     expect((await get(image, reader)).statusCode).toBe(404);
@@ -493,7 +506,7 @@ describe("account photo (#934)", () => {
     const participant = await person("Other", "Participant");
     expect((await get(image, participant)).statusCode).toBe(404);
 
-    // Staff who read users see it regardless of the directory.
+    // Staff who read users see it regardless of the public profile.
     await putProfile(me, VISIBLE);
     const staff = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
     expect((await get(image, staff)).statusCode).toBe(200);

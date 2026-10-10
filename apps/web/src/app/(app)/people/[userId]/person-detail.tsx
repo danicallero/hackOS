@@ -34,9 +34,9 @@ const PROJECT_KIND: Record<"project" | "workGroup", MessageKey> = {
 };
 
 /**
- * One opted-in person from `GET /api/directory/:userId` (#934, #935). Not gated
- * on `directory:read` here: attendees may read the people they saved in their
- * diary, and the API answers the same 404 for anyone else.
+ * One opted-in person from `GET /api/directory/:userId` (#934, #935): only
+ * someone the reader saved in their diary by scanning; the API answers the
+ * same 404 for anyone else.
  */
 export function PersonDetail({ userId }: { userId: number }) {
   return <PersonReader userId={userId} />;
@@ -59,7 +59,7 @@ function PersonReader({ userId }: { userId: number }) {
         if (!cancelled) setChallenges(r.items);
       })
       .catch(() => {
-        // Challenge chips fall back to the names the directory returns.
+        // Challenge chips fall back to the names the profile returns.
       });
     return () => {
       cancelled = true;

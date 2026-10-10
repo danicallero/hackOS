@@ -58,13 +58,11 @@ and My profile stay, since applying (or checking an application's status) is
 exactly what they still need.
 
 **Diary** (`/people`, #935, address-book icon) is the attendee's event diary:
-saved people and sponsor stands first, with the opt-in directory (#934) as a
-secondary `Directory` tab (`?tab=directory`). It needs only current event
-access, like Wallet and Inbox, and every attendee can save people and stands
-in it. Only the Directory tab needs `directory:read` (seeded for every role
-except Sponsor and Judging Team; see `directory.md`). It sits just above
-My profile, where each person manages whether they appear in the directory.
-See [`diary.md`](./diary.md).
+the people and sponsor stands they scanned, in People and Companies tabs.
+There is no people directory to browse. It needs only current event access,
+like Wallet and Inbox, and no capability. It sits just above My profile,
+where each person decides whether to share a public profile with the people
+who scan their badge. See [`diary.md`](./diary.md).
 
 There is deliberately no dashboard/home page: `/timetable` (Schedule) is the
 landing destination after sign-in and email verification

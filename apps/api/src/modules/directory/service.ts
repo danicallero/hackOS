@@ -4,10 +4,11 @@ import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { photoUrl, safePdfFilename } from "../../lib/profile-files.js";
 import { hasEventAccess } from "../identity/role.js";
-import type { DirectoryQuery, PublicProfileInput, SocialLink } from "./schemas.js";
+import type { PublicProfileInput, SocialLink } from "./schemas.js";
 
 /**
- * People directory (#934, #935). Every field a reader can see is listed in
+ * Opt-in public profiles (#934, #935), shown to the attendees who scan the
+ * person's badge; there is no browsable listing. Every field a reader can see is listed in
  * `entrySql`; anything else about a person (email, badge, intolerances,
  * roles, presence, teammates, storage keys) never leaves this module.
  */
@@ -29,7 +30,6 @@ export interface DirectoryEntry {
 interface EntryRow {
   user_id: number;
   display_name: string;
-  sort_key: string;
   photo_key: string | null;
   headline: string | null;
   bio: string | null;
@@ -143,13 +143,12 @@ const DISPLAY_NAME_JOIN = `
 
 /**
  * Every field a reader can see. `profiles` is the FROM item that binds `p`:
- * the stored table, the paged CTE joined to it, or the owner's unsaved preview.
+ * the stored table or the owner's unsaved preview.
  */
 function entrySql(profiles: string): string {
   return `
   SELECT u.id AS user_id,
          e.display_name,
-         lower(unaccent(e.display_name)) AS sort_key,
          CASE WHEN p.show_photo THEN u.photo_key END AS photo_key,
          p.headline,
          p.bio,
@@ -173,13 +172,13 @@ function entrySql(profiles: string): string {
     LEFT JOIN LATERAL (${formCvSql("u.id")}) fcv ON true`;
 }
 
-/** Directory universe: opted in, admitted to the event, never a test account. */
+/** Shared profiles: opted in, admitted to the event, never a test account. */
 const VISIBLE_WHERE = `
   p.directory_visible
   AND u.is_test_account = false
   AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id = u.id)`;
 
-/** `cvPath` differs for the owner's preview, who may not read the directory. */
+/** `cvPath` differs for the owner's preview, which reads their own CV route. */
 function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): DirectoryEntry {
   const userId = Number(row.user_id);
   return {
@@ -197,8 +196,8 @@ function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): Di
 }
 
 /**
- * Whether `userId`'s photo is published to directory readers: the same
- * universe as the listing, with the photo switch on (#934).
+ * Whether `userId`'s photo is published to profile readers: the same
+ * shared-profile set as the cards, with the photo switch on (#934).
  */
 export async function photoPublishedInDirectory(db: Queryable, userId: number): Promise<boolean> {
   const { rows } = await db.query(
@@ -211,93 +210,15 @@ export async function photoPublishedInDirectory(db: Queryable, userId: number): 
 
 async function assertReaderAdmitted(userId: number): Promise<void> {
   if (!(await hasEventAccess(pool, userId))) {
-    throw new ForbiddenError("The people directory is only available to event attendees");
+    throw new ForbiddenError("Public profiles are only available to event attendees");
   }
 }
 
-function encodeCursor(row: EntryRow): string {
-  return Buffer.from(JSON.stringify([row.sort_key, Number(row.user_id)])).toString("base64url");
-}
-
-function decodeCursor(cursor: string): [string, number] {
-  try {
-    const value: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
-    if (
-      Array.isArray(value) &&
-      value.length === 2 &&
-      typeof value[0] === "string" &&
-      Number.isSafeInteger(value[1])
-    ) {
-      return [value[0], value[1] as number];
-    }
-  } catch {
-    // Fall through to the explicit business error below.
-  }
-  throw new BadRequestError("Invalid directory cursor");
-}
-
-function likePattern(text: string): string {
-  return `%${text.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
-}
-
-export async function listDirectory(
-  readerId: number,
-  query: DirectoryQuery,
-): Promise<{ items: DirectoryEntry[]; nextCursor: string | null }> {
-  await assertReaderAdmitted(readerId);
-  const params: unknown[] = [];
-  const filters = [VISIBLE_WHERE];
-  if (query.q) {
-    params.push(likePattern(query.q));
-    filters.push(`unaccent(e.display_name) ILIKE unaccent($${params.length})`);
-  }
-  if (query.challengeId) {
-    params.push(query.challengeId);
-    filters.push(`EXISTS (
-      SELECT 1 FROM challenges c
-       WHERE c.id = $${params.length}
-         AND ${challengeOfProject(
-           `(SELECT shown.id FROM (${SHOWN_REPO_SQL}) shown)`,
-           `(SELECT shown.id FROM (${SHOWN_GROUP_SQL}) shown)`,
-         )})`);
-  }
-  if (query.cursor) {
-    const [sortKey, userId] = decodeCursor(query.cursor);
-    params.push(sortKey, userId);
-    filters.push(
-      `(lower(unaccent(e.display_name)), p.user_id) > ($${params.length - 1}::text, $${params.length}::int)`,
-    );
-  }
-  params.push(query.limit + 1);
-  // Page over the visible ids first; only the page gets the project and
-  // challenge projections. Both orderings use the same (sort_key, user_id).
-  const { rows } = await pool.query<EntryRow>(
-    `WITH page AS (
-       SELECT p.user_id, lower(unaccent(e.display_name)) AS sort_key
-         FROM user_public_profiles p
-         JOIN users u ON u.id = p.user_id
-         ${DISPLAY_NAME_JOIN}
-        WHERE ${filters.join(" AND ")}
-        ORDER BY sort_key, p.user_id
-        LIMIT $${params.length}
-     )
-     ${entrySql("page JOIN user_public_profiles p ON p.user_id = page.user_id")}
-     ORDER BY page.sort_key, page.user_id`,
-    params,
-  );
-  const page = rows.slice(0, query.limit);
-  const last = page.at(-1);
-  return {
-    items: page.map((row) => toEntry(row)),
-    nextCursor: rows.length > query.limit && last ? encodeCursor(last) : null,
-  };
-}
-
-/** Hidden and missing profiles are deliberately indistinguishable (#934). */
 /**
- * Whether the reader saved this person in their event diary (#935). Saving is
- * open to every attendee, so a saved person stays readable without
- * `directory:read`; visibility is still enforced by the caller's query.
+ * Whether the reader saved this person in their event diary (#935). There is
+ * no browsable directory: a person's public profile is readable only by the
+ * attendees who scanned them; visibility is still enforced by the caller's
+ * query.
  */
 export async function savedByReader(
   db: Queryable,
@@ -311,20 +232,19 @@ export async function savedByReader(
   return (rowCount ?? 0) > 0;
 }
 
-/** Directory readers see any listed person; others only the people they saved. */
-async function assertMayReadPerson(readerId: number, userId: number, canBrowse: boolean) {
+/**
+ * Readers see only the people they saved; hidden, missing and unsaved people
+ * are deliberately indistinguishable (#934, #935).
+ */
+async function assertMayReadPerson(readerId: number, userId: number) {
   await assertReaderAdmitted(readerId);
-  if (!canBrowse && !(await savedByReader(pool, readerId, userId))) {
+  if (!(await savedByReader(pool, readerId, userId))) {
     throw new NotFoundError("Person not found");
   }
 }
 
-export async function getDirectoryEntry(
-  readerId: number,
-  userId: number,
-  canBrowse: boolean,
-): Promise<DirectoryEntry> {
-  await assertMayReadPerson(readerId, userId, canBrowse);
+export async function getDirectoryEntry(readerId: number, userId: number): Promise<DirectoryEntry> {
+  await assertMayReadPerson(readerId, userId);
   const { rows } = await pool.query<EntryRow>(
     `${entrySql("user_public_profiles p")} WHERE ${VISIBLE_WHERE} AND u.id = $1`,
     [userId],
@@ -340,9 +260,8 @@ export async function getDirectoryEntry(
 export async function getDirectoryCv(
   readerId: number,
   userId: number,
-  canBrowse: boolean,
 ): Promise<{ key: string; filename: string }> {
-  await assertMayReadPerson(readerId, userId, canBrowse);
+  await assertMayReadPerson(readerId, userId);
   const { rows } = await pool.query<{ cv_key: string | null; cv_filename: string | null }>(
     `SELECT p.cv_key, p.cv_filename
        FROM user_public_profiles p JOIN users u ON u.id = p.user_id
@@ -359,7 +278,7 @@ export async function getDirectoryCv(
 /**
  * Live cards of the given people that are visible right now, keyed by user id
  * (#935 event diary). Anyone hidden, missing or no longer admitted is simply
- * absent, exactly as in the directory itself; no reader gate is applied here.
+ * absent; no reader gate is applied here.
  */
 export async function visibleDirectoryEntries(
   db: Queryable,

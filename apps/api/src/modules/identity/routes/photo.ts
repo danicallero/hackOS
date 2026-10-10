@@ -39,8 +39,8 @@ import { hasEventAccess } from "../role.js";
  * Account photo (#934). The owner uploads it to private object storage; it
  * is never served from a public bucket URL. `GET /api/users/:id/photo`
  * re-checks access on every request: the person, staff who can read users,
- * or a directory reader (or an attendee who saved the person, #935) while the
- * person shows the photo in the directory.
+ * or an attendee who saved the person in their diary (#935) while the person
+ * shows the photo on their public profile.
  */
 
 const photoParams = z.object({ id: z.coerce.number().int().positive() });
@@ -61,8 +61,7 @@ async function canSeePhoto(req: FastifyRequest, subjectId: number): Promise<bool
     }
   }
   return (
-    ((await userHasCapability(context, CAPABILITIES.DIRECTORY_READ)) ||
-      (await savedByReader(pool, readerId, subjectId))) &&
+    (await savedByReader(pool, readerId, subjectId)) &&
     (await hasEventAccess(pool, readerId)) &&
     (await photoPublishedInDirectory(pool, subjectId))
   );
@@ -255,7 +254,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
         params: photoParams,
         summary: "Read a person's photo",
         description:
-          "Streams an account photo after checking this request: the person themself, a user reader, or a directory reader (or an attendee who saved the person) with event access while the person is listed and shows the photo. Any other case, and a missing photo, answer 404. The `v` query parameter only versions the URL. Cached privately for 5 minutes (#934).",
+          "Streams an account photo after checking this request: the person themself, a user reader, or an attendee with event access who saved the person in their diary, while the person shares a public profile with the photo. Any other case, and a missing photo, answer 404. The `v` query parameter only versions the URL. Cached privately for 5 minutes (#934).",
       },
     },
     async (req, reply) => {

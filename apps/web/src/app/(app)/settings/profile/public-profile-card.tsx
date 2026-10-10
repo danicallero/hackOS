@@ -166,7 +166,8 @@ export function previewEntry(
 }
 
 /**
- * Directory opt-in and public card (#934, #935), managed from My profile.
+ * Public profile opt-in and card (#934, #935), managed from My profile: what
+ * the people who scan the owner's badge see.
  * Without event access the API answers 403 and the section stays hidden.
  *
  * Refreshes ride the personal stream the shell already holds (event access
@@ -685,7 +686,7 @@ const PROJECT_KIND: Record<"project" | "workGroup", MessageKey> = {
   workGroup: "publicProfileWorkGroup",
 };
 
-/** The card as directory readers see it. */
+/** The card as the people who scanned the owner see it. */
 export function DirectoryCard({ entry }: { entry: DirectoryEntry }) {
   const { t } = useLocale();
   return (

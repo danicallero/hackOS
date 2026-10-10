@@ -4,12 +4,11 @@ import { requireAuth } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { keyByUser, rateLimitGuard } from "../../lib/rate-limit.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
-import { entryParams, savePersonBody, scanBody, updateEntryBody } from "./schemas.js";
+import { entryParams, scanBody, updateEntryBody } from "./schemas.js";
 import {
   listDiary,
   listSponsorCollection,
   removeEntry,
-  savePerson,
   saveScanned,
   updateEntry,
 } from "./service.js";
@@ -35,7 +34,7 @@ export function registerDiaryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my event diary",
         description:
-          "The caller's saved people and sponsor stands, favourites first, then newest. Each entry carries the person's current directory card or the sponsor's current public card (name, logo, description, website, published challenges); either is null while the profile is hidden or the sponsor is not revealed. Private to the caller; requires event access (#935).",
+          "The caller's saved people and sponsor stands, favourites first, then newest. Each entry carries the person's current public profile card or the sponsor's current public card (name, logo, description, website, published challenges); either is null while the profile is hidden or the sponsor is not revealed. Private to the caller; requires event access (#935).",
       },
     },
     async (req) => listDiary(ownerOf(req)),
@@ -68,30 +67,11 @@ export function registerDiaryRoutes(app: FastifyInstance): void {
         body: scanBody,
         summary: "Save a scanned person or stand",
         description:
-          "Resolves `code` — a sponsor stand NFC UID or `STAND-…` QR token, a badge NFC UID or badge QR, or a ticket QR — and saves it to the caller's diary. 201 for a new entry; a re-scan returns the existing entry with 200. Errors store nothing and name no one: `diary_code_unknown` (404), `badge_revoked` (409), `profile_not_shared` (409, the person's directory profile is hidden), `stand_unavailable` (409, sponsor not revealed), `diary_self` (409). Any attendee may save people; only directory-visible profiles are ever saved or shown. 20 scans per minute per account (429). The scanned person is not notified (#935).",
+          "Resolves `code` — a sponsor stand NFC UID or `STAND-…` QR token, a badge NFC UID or badge QR, or a ticket QR — and saves it to the caller's diary. 201 for a new entry; a re-scan returns the existing entry with 200. Errors store nothing and name no one: `diary_code_unknown` (404), `badge_revoked` (409), `profile_not_shared` (409, the person does not share a public profile), `stand_unavailable` (409, sponsor not revealed), `diary_self` (409). Scanning is the only way to add a person; any attendee may do it, and only shared public profiles are ever saved or shown. 20 scans per minute per account (429). The scanned person is not notified (#935).",
       },
     },
     async (req, reply) => {
       const { created, entry } = await saveScanned(ownerOf(req), req.body.code);
-      reply.code(created ? 201 : 200);
-      return entry;
-    },
-  );
-
-  r.post(
-    "/api/me/diary/people",
-    {
-      ...access({ kind: "authenticated" }),
-      preHandler: [requireAuth, idempotencyGuard],
-      schema: {
-        body: savePersonBody,
-        summary: "Save a person from the directory",
-        description:
-          "Adds a currently visible directory person to the caller's diary; any attendee with event access may save people. 201 for a new entry, 200 with the existing one when already saved. A hidden or missing profile answers 404, as in the directory (#935).",
-      },
-    },
-    async (req, reply) => {
-      const { created, entry } = await savePerson(ownerOf(req), req.body.userId);
       reply.code(created ? 201 : 200);
       return entry;
     },

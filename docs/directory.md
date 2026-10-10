@@ -1,20 +1,23 @@
-# People directory (#934)
+# Public profile (#934, #935)
 
-An opt-in directory where event attendees find each other: name, photo, an
-optional headline, bio, location note, links and CV and, if they choose, their
-project and its challenges. It is also the profile base that the NFC contact
-card (#935) extends. There is no Hxx story yet; code and commits reference
-`#934` and `#935`.
+An opt-in public profile that an attendee shares with the people who scan
+their badge: name, photo, an optional headline, bio, location note, links and
+CV and, if they choose, their project and its challenges. There is no
+browsable people directory: the product owner retired it on #935 ("al final
+queremos que sea dinámico"), so a person enters someone's event diary only by
+a scan ([`diary.md`](./diary.md)), and only then can that attendee read their
+profile. The module and routes keep their `directory` names. There is no Hxx
+story; code and commits reference `#934` and `#935`.
 
 People manage their public profile (opt-in, surname/photo/project, headline,
 location note, bio, links, CV and preview) from My profile
 (`/settings/profile`); there is no separate settings page. The account photo
 is uploaded in the same page's Personal details section, because it is the
-account's photo everywhere, not only in the directory.
+account's photo everywhere, not only on the public profile.
 
 The "Public profile" section (`settings/profile/public-profile-card.tsx`)
-shows only the opt-in switch, with one line naming who will see it, until the
-person opts in; then it reveals the surname, photo and project switches, the
+shows only the opt-in switch ("Share my profile"), with one line saying that
+only people who scan the person's badge will see it, until the person opts in; then it reveals the surname, photo and project switches, the
 headline and location note, the bio (with a character count), up to six links
 (type + address rows; empty rows are not saved), the CV and a preview card.
 The preview is the server's `preview` until something changes; then name
@@ -111,8 +114,8 @@ their profile CV:
   unused; `GET /api/me/public-profile` reports `cv.source: "application"`
   (`"upload"` otherwise) with the submission time as `uploadedAt`;
 - `POST` and `DELETE /api/me/public-profile/cv` answer 409 while it exists;
-- `shareCv` can be turned on without an upload. Sharing with directory
-  readers stays the person's own consent: the H56 sponsor consent does not
+- `shareCv` can be turned on without an upload. Sharing with the people who
+  scanned them stays the person's own consent: the H56 sponsor consent does not
   imply it;
 - both CV download routes stream the application object, named after the
   uploaded file. Unmarking the field in the form, or a non-PDF upload, falls
@@ -122,6 +125,9 @@ Application objects are removed with the application responses on H54
 removal, like any other upload.
 
 ## What a reader sees
+
+A reader is an attendee who saved the person in their diary by scanning their
+badge or ticket.
 
 `DirectoryEntry` is the complete list of exposed fields:
 
@@ -142,9 +148,10 @@ flag, teammates or storage keys (the CV download names the file as uploaded).
 A project name may appear while its other members stay hidden; members are
 never listed.
 
-The directory contains a person only when the profile is visible, the person
-is in `user_event_access` (active, not anonymized, an event-access role) and
-is not a test account.
+A profile is shared only while it is visible, the person is in
+`user_event_access` (active, not anonymized, an event-access role) and is not
+a test account. The same rule decides whether a scan saves the person
+(`profile_not_shared` otherwise) and whether a saved entry shows its card.
 
 ## Access
 
@@ -152,8 +159,7 @@ is not a test account.
 | --- | --- |
 | `GET /api/me/public-profile` | authenticated + event access |
 | `PUT /api/me/public-profile` | authenticated + event access, `Idempotency-Key` |
-| `GET /api/directory` | `directory:read` + event access |
-| `GET /api/directory/:userId` | event access + (`directory:read` or the person is in the caller's diary, #935) |
+| `GET /api/directory/:userId` | event access + the person is in the caller's diary (#935) |
 | `GET /api/directory/:userId/cv` | as above; visible profile with `share_cv` |
 | `POST /api/me/public-profile/cv` | authenticated + event access, multipart, `Idempotency-Key` |
 | `DELETE /api/me/public-profile/cv` | authenticated + event access, `Idempotency-Key` |
@@ -162,18 +168,20 @@ is not a test account.
 | `DELETE /api/me/photo` | authenticated, `Idempotency-Key` |
 | `POST /api/users/:id/photo` | `users:write`, multipart, `Idempotency-Key` |
 | `DELETE /api/users/:id/photo` | `users:write`, `Idempotency-Key` |
-| `GET /api/users/:id/photo` | the person; or `users:read`; or event access + (`directory:read` or the person is in the caller's diary) while the person is listed with `show_photo` |
+| `GET /api/users/:id/photo` | the person; or `users:read`; or event access + the person is in the caller's diary, while their profile is shared with `show_photo` |
 | `DELETE /api/users/:id/public-profile` | `users:write` (moderation), `Idempotency-Key` |
 
-`directory:read` is seeded for every seeded role except Sponsor and Judging
-Team; `*` covers admins. The route schemas in `/documentation` are the request
-and response reference.
+No capability reads profiles. The former `directory:read` (seeded by
+`0101_public_profile.sql`) is retired by `0801_retire_directory_read.sql`,
+which deletes its grants and seeded-role defaults and removes it from the
+catalogue constraint. Admins (`*`) and user staff get no browsing shortcut:
+only `users:read` still reaches photos, as the staff user pages need. The
+route schemas in `/documentation` are the request and response reference.
 
-- `GET /api/directory` takes `q` (≤80, display name, accent- and
-  case-insensitive), `challengeId`, `limit` (≤50, default 25) and the opaque
-  `cursor` from the previous page. Order is display name, then user id.
-- `GET /api/directory/:userId` answers 404 for both missing and hidden
-  profiles, so visibility cannot be probed.
+- There is no listing route and no save-by-id route; people are added to a
+  diary only by `POST /api/me/diary/scan`.
+- `GET /api/directory/:userId` answers 404 for missing, hidden and unsaved
+  people alike, so visibility cannot be probed.
 - `GET /api/me/public-profile` returns the settings plus `preview`, the entry
   as readers would see it if visible.
 - `GET /api/directory/:userId/cv` and `GET /api/users/:id/photo` answer the
@@ -189,27 +197,8 @@ and response reference.
 ## Web
 
 `/people` (`apps/web/src/app/(app)/people/`) is the event diary (#935,
-[`diary.md`](./diary.md)); the directory is its secondary `Directory` tab
-(`?tab=directory`, shown with `directory:read`), where each row also has a
-Save action (`POST /api/me/diary/people`); once saved, the row shows Saved,
-Favourite and the diary's `…` menu, exactly like the People tab.
-Saving people into a diary, by scan or by id, only needs event access, so
-attendees without `directory:read` can keep the people they meet; they still
-only ever see directory-visible cards.
-That tab lists `GET /api/directory` with
-the shared `ListToolbar`: a name search, a single challenge filter (options
-from `GET /api/public/challenges`) and Previous/Next over the opaque cursor.
-`q`, `challenge` and `cursor` live in the URL so a view can be shared; writes
-are skipped when the query string would not change (R003). A row shows the
-photo or initials, display name, headline, project, challenges and location
-note; challenge chips use the localized title from those options. The search
-field resyncs from the URL only on navigation it did not write, and `q` is
-trimmed on both sides. The page refetches in place on `domain.changed` for the
-`directory` topic; a failed refresh keeps the rows and shows a toast. Paging
-is disabled while a new query loads. Without `directory:read` the tab is
-hidden and opens no directory request; the nav entry (personal area) needs
-event access (`docs/navigation.md`). Each directory row links to the
-person's page (the desktop row link and the whole narrow-screen row).
+[`diary.md`](./diary.md)), with People and Companies tabs only; there is no
+directory tab.
 
 `/people/<userId>` (`people/[userId]/person-detail.tsx`) reads
 `GET /api/directory/:userId`: a header with the photo, name, headline and a
@@ -218,9 +207,9 @@ address stays visible next to the icon; links open with
 `rel="noopener noreferrer nofollow ugc"`), where to find the person, project
 and challenges. Empty rows are omitted. A 404 (hidden or missing) shows
 "Person not found"; other failures keep an inline error with Retry. It
-refetches on `domain.changed` for the `directory` topic. It is not gated on
-`directory:read`: attendees who saved the person in their diary may open it,
-and the API answers the same 404 to anyone else.
+refetches on `domain.changed` for the `directory` topic. Only attendees who
+saved the person in their diary may open it; the API answers the same 404 to
+anyone else.
 
 Every CV link on the web (the person page, the owner's file name and the
 "View CV" link of the My profile preview) opens the shared viewer
@@ -252,18 +241,15 @@ entity with only `hasPhoto` before/after. Moderation writes
 `public_profile.moderated` with the staff reason and answers 409 for an account
 being removed.
 
-Listing pages first over the visible ids (search, `challengeId` as an `EXISTS`
-over the shown project, keyset cursor and `LIMIT`) and only then projects the
-project and challenges of that page. Challenges exclude cancelled and
-disqualified queue entries.
+A card's challenges exclude cancelled and disqualified queue entries.
 
 ## Realtime and caching
 
 There is no server read cache (see `architecture.md`). The generic mutation
 hook emits the payload-free `domain.changed` on the `directory` topic
-(`domain:directory` scope: `directory:read` or event access, since Sponsor and
-Judging Team attendees own a profile and its preview without reading the
-directory), so open views refetch without receiving personal data over SSE.
+(`domain:directory` scope: event access, since every attendee owns a profile
+preview and a diary of saved cards), so open views refetch without receiving
+personal data over SSE.
 It fires after a successful profile `PUT` that changed something, CV writes,
 moderation, and writes owned by other domains that change a card
 (`directoryMutationForPath`): `/api/me`, `/api/me/photo` and `/api/users/:id`

@@ -1,5 +1,4 @@
 import "./env.js";
-import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
@@ -26,7 +25,7 @@ beforeEach(async () => {
   await truncateAll();
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
-  owner = await createUserWithCapabilities([CAPABILITIES.DIRECTORY_READ]);
+  owner = await createUserWithCapabilities([]);
 });
 afterAll(async () => {
   await app.close();
@@ -94,15 +93,6 @@ function scan(code: string, as = owner, key = `scan-${++keySeq}`) {
     url: "/api/me/diary/scan",
     headers: { ...asUser(as), "idempotency-key": key },
     payload: { code },
-  });
-}
-
-function saveFromDirectory(userId: number, as = owner) {
-  return app.inject({
-    method: "POST",
-    url: "/api/me/diary/people",
-    headers: { ...asUser(as), "idempotency-key": `save-${++keySeq}` },
-    payload: { userId },
   });
 }
 
@@ -178,8 +168,8 @@ describe("scanning people", () => {
     expect(res.json().error.code).toBe("diary_self");
   });
 
-  it("lets any attendee save people, including a sponsor without directory:read", async () => {
-    // A seeded-style Sponsor role: event access, no directory:read (#934 D3).
+  it("lets any attendee save people, including a sponsor", async () => {
+    // A seeded-style Sponsor role: event access and no capabilities.
     const sponsorRole = await createRole([], { name: "Sponsor" });
     const rep = await createUser();
     await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [
@@ -202,7 +192,7 @@ describe("scanning people", () => {
     expect((await scan("04ACAC00000001", rep)).statusCode).toBe(201);
   });
 
-  it("lets a sponsor without directory:read open only the people they saved", async () => {
+  it("lets an attendee open only the people they saved", async () => {
     const sponsorRole = await createRole([], { name: "Sponsor" });
     const rep = await createUser();
     await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [
@@ -268,7 +258,7 @@ describe("scanning people", () => {
     }
     const limited = await scan("04FFFFFFFFFFAA");
     expect(limited.statusCode).toBe(429);
-    const other = await createUserWithCapabilities([CAPABILITIES.DIRECTORY_READ]);
+    const other = await createUserWithCapabilities([]);
     expect((await scan("04FFFFFFFFFFAA", other)).statusCode).toBe(404);
   });
 });
@@ -366,7 +356,7 @@ describe("the sponsor stand collection", () => {
     const acme = await enterprise("Acme");
     await standTag(acme, "04ACAC00000001");
     await scan("04ACAC00000001");
-    const other = await createUserWithCapabilities([CAPABILITIES.DIRECTORY_READ]);
+    const other = await createUserWithCapabilities([]);
     const theirs = (await collection(other)).json();
     expect(theirs).toMatchObject({ total: 1, collected: 0 });
     expect(theirs.items[0].entry).toBeNull();
@@ -375,28 +365,17 @@ describe("the sponsor stand collection", () => {
   });
 });
 
-describe("saving from the directory", () => {
-  it("saves a visible person and answers 404 for hidden, missing or self", async () => {
+describe("no save by id", () => {
+  it("adds people only by scanning, never from a browsed id", async () => {
     const ana = await person("Ana");
-    const hidden = await person("Hidden", { visible: false });
-    const saved = await saveFromDirectory(ana.id);
-    expect(saved.statusCode).toBe(201);
-    expect(saved.json().person.userId).toBe(ana.id);
-    expect((await saveFromDirectory(ana.id)).statusCode).toBe(200);
-    expect((await saveFromDirectory(hidden.id)).statusCode).toBe(404);
-    expect((await saveFromDirectory(999_999)).statusCode).toBe(404);
-    expect((await saveFromDirectory(owner)).statusCode).toBe(404);
-    expect(await rowCount()).toBe(1);
-  });
-
-  it("is open to any attendee but not to accounts without event access", async () => {
-    const ana = await person("Ana");
-    const role = await createRole([]);
-    const attendee = await createUser();
-    await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [attendee, role]);
-    expect((await saveFromDirectory(ana.id, attendee)).statusCode).toBe(201);
-    const outsider = await createUser();
-    expect((await saveFromDirectory(ana.id, outsider)).statusCode).toBe(403);
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/me/diary/people",
+      headers: { ...asUser(owner), "idempotency-key": `save-${++keySeq}` },
+      payload: { userId: ana.id },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(await rowCount()).toBe(0);
   });
 });
 
@@ -439,7 +418,7 @@ describe("reading and editing the diary", () => {
   it("keeps entries private to their owner", async () => {
     const ana = await person("Ana");
     const entry = (await scan(ana.badge)).json();
-    const other = await createUserWithCapabilities([CAPABILITIES.DIRECTORY_READ]);
+    const other = await createUserWithCapabilities([]);
     expect((await list(other)).json().items).toEqual([]);
     const patch = await app.inject({
       method: "PATCH",
