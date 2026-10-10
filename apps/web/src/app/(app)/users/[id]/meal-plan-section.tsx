@@ -64,7 +64,7 @@ export function MealPlanSection({ userId }: { userId: number }) {
     return (
       <SectionCard variant="plain" title={t("meals")} icon={BowlFoodIcon}>
         <ContextualError
-          message={t("couldNotLoadMealPlan")}
+          message={t("couldNotLoadUserMealPlan")}
           onRetry={() => setReload((n) => n + 1)}
         />
       </SectionCard>
@@ -90,11 +90,11 @@ export function MealPlanSection({ userId }: { userId: number }) {
         { headers: idempotencyHeaders("meal-plan") },
       );
       apply(next);
-      toast.success(t("mealPlanSaved"), { compactTitle: t("toastSaveMealPlan") });
+      toast.success(t("mealPlanSaved"), { compactTitle: t("toastSaveUserMealPlan") });
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveMealPlan"),
-        t("toastSaveMealPlan"),
+        err instanceof ApiError ? err.message : t("couldNotSaveUserMealPlan"),
+        t("toastSaveUserMealPlan"),
       );
     } finally {
       setSaving(false);

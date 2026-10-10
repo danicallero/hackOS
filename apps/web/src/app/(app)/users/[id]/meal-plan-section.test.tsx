@@ -110,7 +110,7 @@ describe("MealPlanSection (#933)", () => {
     mocks.get.mockRejectedValueOnce(new Error("network")).mockResolvedValueOnce(PLAN);
     await render();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "couldNotLoadMealPlan",
+      "couldNotLoadUserMealPlan",
     );
     await act(async () => container.querySelector<HTMLButtonElement>("[data-retry]")?.click());
     expect(mocks.get).toHaveBeenCalledTimes(2);
