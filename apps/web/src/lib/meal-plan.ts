@@ -43,11 +43,13 @@ export function mealName(meal: MealPlanMeal, lang: Language): string {
   return pickText(meal.nameI18n, lang) || meal.name;
 }
 
-/** "Sat 12, 14:00–15:00" in the viewer's locale. */
+/** "Sat, Oct 12, 14:00–15:00" in the viewer's locale. */
 export function mealWhen(meal: MealPlanMeal, lang: Language): string {
-  const day = new Intl.DateTimeFormat(lang, { weekday: "short", day: "numeric" }).format(
-    new Date(meal.startsAt),
-  );
+  const day = new Intl.DateTimeFormat(lang, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(new Date(meal.startsAt));
   const time = new Intl.DateTimeFormat(lang, { hour: "2-digit", minute: "2-digit" });
   return `${day}, ${time.format(new Date(meal.startsAt))}–${time.format(new Date(meal.endsAt))}`;
 }
