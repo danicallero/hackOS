@@ -89,9 +89,10 @@ export function MealPlanSection({ userId }: { userId: number }) {
 
   return (
     <SectionCard
+      variant="plain"
       title={t("meals")}
       icon={BowlFoodIcon}
-      action={
+      footer={
         canManage ? (
           <Button onClick={() => void save()} disabled={!dirty || saving} loading={saving}>
             {t("saveChanges")}

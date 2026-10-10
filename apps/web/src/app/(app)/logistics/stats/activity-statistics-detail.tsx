@@ -2,7 +2,6 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
-import type { ReactNode } from "react";
 import { Modal } from "@/components/common/modal";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
@@ -90,12 +89,10 @@ export function ActivityStatisticsDetail({
             rows={[{ label: t(meal ? "columnServed" : "columnScans"), n: served }, ...servings]}
           />
           {mealPlan ? (
-            <StatsSection
-              title={t("mealPlanBreakdown")}
-              data={planned}
-              rows={planned}
-              action={
-                canExportPlan ? (
+            <section className="min-w-0 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="type-section-title">{t("mealPlanBreakdown")}</h2>
+                {canExportPlan ? (
                   <Button asChild variant="outline" size="sm">
                     <a
                       href={`${API_URL}/api/logistics/meal-plans/${mealPlan.activityId}/export.csv?language=${language}`}
@@ -104,9 +101,10 @@ export function ActivityStatisticsDetail({
                       {t("exportCsv")}
                     </a>
                   </Button>
-                ) : null
-              }
-            />
+                ) : null}
+              </div>
+              <FigureList rows={planned} />
+            </section>
           ) : null}
           {mealPlan ? (
             <section className="min-w-0 space-y-3">
@@ -144,33 +142,34 @@ function StatsSection({
   title,
   data,
   rows,
-  action,
 }: {
   title: string;
   data: { label: string; n: number }[];
   rows: { label: string; n: number }[];
-  action?: ReactNode;
 }) {
   return (
     <section className="min-w-0 space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="type-section-title">{title}</h2>
-        {action}
-      </div>
+      <h2 className="type-section-title">{title}</h2>
       <StatsChart
         height="clamp(280px, min(calc(100dvh - 27rem), 60vw), 640px)"
         type="pie"
         title={title}
         data={data}
       />
-      <dl className="divide-y divide-border/60 border-y border-border/60">
-        {rows.map((item) => (
-          <div key={item.label} className="flex items-baseline justify-between gap-4 py-2">
-            <dt className="text-sm text-muted-foreground">{item.label}</dt>
-            <dd className="text-lg tabular-nums">{item.n}</dd>
-          </div>
-        ))}
-      </dl>
+      <FigureList rows={rows} />
     </section>
+  );
+}
+
+function FigureList({ rows }: { rows: { label: string; n: number }[] }) {
+  return (
+    <dl className="divide-y divide-border/60 border-y border-border/60">
+      {rows.map((item) => (
+        <div key={item.label} className="flex items-baseline justify-between gap-4 py-2">
+          <dt className="text-sm text-muted-foreground">{item.label}</dt>
+          <dd className="text-lg tabular-nums">{item.n}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

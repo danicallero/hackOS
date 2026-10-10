@@ -87,13 +87,6 @@ export function DuringPanel({
       cell: (row) => row.repeats,
       sortValue: (row) => row.repeats,
     },
-    {
-      id: "unanswered",
-      header: t("columnUnanswered"),
-      align: "right",
-      cell: (row) => planByMeal.get(row.activityId)?.unanswered ?? "—",
-      sortValue: (row) => planByMeal.get(row.activityId)?.unanswered ?? -1,
-    },
   ];
   const activityColumns: Column<LogisticsStats["activities"][number]>[] = [
     {

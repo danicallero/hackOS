@@ -19,9 +19,9 @@ vi.mock("@/lib/i18n", () => ({
 vi.mock("@/lib/session", () => ({ useCan: () => mocks.canManage }));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/common/section-card", () => ({
-  SectionCard: ({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) => (
+  SectionCard: ({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) => (
     <div>
-      {action}
+      {footer}
       {children}
     </div>
   ),

@@ -69,8 +69,8 @@ refresh the operational totals and charts during the event.
 
 Sponsor meal plans (#933) add planned-versus-served figures to the During
 meals table: **Planned** (sponsor representatives who said they attend) next
-to **Served**, and **No answer**. Meals not offered to sponsors show `—`. The
-meal detail adds the plan ring (attending, not attending, no answer) and the
+to **Served**. Meals not offered to sponsors show `—`. The
+meal detail adds the plan figures (attending, not attending, no answer) and the
 intolerance breakdown among attendees, read from aggregate-only
 `GET /api/logistics/meal-plans` under `logistics:stats` and refreshed by
 `logistics.meal_plan.updated`. Holders of `meal-plans:export` also get the
