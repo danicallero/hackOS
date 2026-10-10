@@ -540,7 +540,6 @@ export default function QueuePage() {
               <PresentationPanel
                 entry={active}
                 challenge={activeChallenge}
-                pace={pace.data}
                 waitingRoomCount={view.called.length}
                 firstCalledEntry={view.called[0] ?? null}
                 canJudge={canJudge}
