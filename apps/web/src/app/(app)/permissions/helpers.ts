@@ -86,6 +86,8 @@ const CAPABILITY_DESCRIPTION_KEYS: Partial<Record<string, MessageKey>> = {
   "activity:scan": "capabilityDescriptionActivityScan",
   "logistics:stats": "capabilityDescriptionLogisticsStats",
   "intolerances:manage": "capabilityDescriptionIntolerancesManage",
+  "meal-plans:export": "capabilityDescriptionMealPlansExport",
+  "meal-plans:manage": "capabilityDescriptionMealPlansManage",
   "queue:status": "capabilityDescriptionQueueStatus",
   "queue:operate": "capabilityDescriptionQueueOperate",
   "queue:admin": "capabilityDescriptionQueueAdmin",

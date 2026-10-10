@@ -77,6 +77,7 @@ export const EVENTS = {
   LOGISTICS_ACTIVITY_SCAN: "logistics.activity.scan", // H25/H26
   LOGISTICS_MEAL_SCAN_BATCH: "logistics.meal_scan_batch.processed", // H25
   LOGISTICS_WALLET_PASS_UPDATED: "logistics.wallet_pass.updated", // H28
+  LOGISTICS_MEAL_PLAN_UPDATED: "logistics.meal_plan.updated", // #933, { activityIds } only
   USER_QUEUE_CALLED: "user.queue.called", // H29/H38 "go wait at room X"
   USER_QUEUE_PRECALL: "user.queue.precall", // H38 pre-aviso
   USER_QUEUE_CHANGED: "user.queue.changed", // H38: one of the user's challenge queues changed

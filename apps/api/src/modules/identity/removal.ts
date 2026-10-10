@@ -776,10 +776,16 @@ async function prepareAccountRemoval(
           `UPDATE users
               SET food_intolerances = ARRAY[]::integer[],
                   food_intolerance_notes = NULL,
-                  dietary_data_state = 'not_provided'
+                  dietary_data_state = 'not_provided',
+                  dietary_confirmed_at = NULL,
+                  meal_plan_confirmed_at = NULL
             WHERE id = $1`,
           [options.targetId],
         );
+        // #933: meal plans are personal data; the row CASCADE covers final deletion.
+        await client.query(`DELETE FROM meal_attendance_plans WHERE user_id = $1`, [
+          options.targetId,
+        ]);
       }
       if (options.preserveIdempotency) {
         // Keep the marker in the identity-free completion scope selected by
@@ -1795,6 +1801,7 @@ export async function resetReviewFixtureAccount(
   await scrubRelationships(client, user);
   await client.query(`DELETE FROM user_roles WHERE user_id = $1`, [user.id]);
   await client.query(`DELETE FROM user_email_history WHERE user_id = $1`, [user.id]);
+  await client.query(`DELETE FROM meal_attendance_plans WHERE user_id = $1`, [user.id]);
   await client.query(
     `UPDATE users
         SET email = $2,
@@ -1808,6 +1815,8 @@ export async function resetReviewFixtureAccount(
             food_intolerances = ARRAY[]::integer[],
             food_intolerance_notes = NULL,
             dietary_data_state = 'not_provided',
+            dietary_confirmed_at = NULL,
+            meal_plan_confirmed_at = NULL,
             university_id = NULL,
             shirt_size = NULL,
             language = 'en',

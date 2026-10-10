@@ -109,6 +109,20 @@ mix values from different authorization moments. Ticket QR/wallet exposure, scan
 eligibility, and physical check-in use the same live query; role transitions
 reconcile wallet passes and retain the historical ticket row.
 
+`/api/me` also returns `pendingProfileTasks` (#933): `dietary` until an
+event-access account gives an explicit dietary answer (its own `PATCH /api/me`
+with `foodIntolerances`/`foodIntoleranceNotes`, an empty list included; an
+invite claim whose kind shows the dietary fields; or an application form that
+asks for dietary data — staff edits through `PATCH /api/users/:id` do not
+count), and `meal_plan` while a sponsor representative has an open offered
+meal without an answer. Sponsors read and replace their plan through `GET`/`PUT
+/api/me/meal-plan`; a meal is offered when its activity kind has meal semantics
+and its shown schedule entry includes the `sponsor` audience (an entry without
+audiences is staff-only), and it locks `event_config.meal_plan_cutoff_hours`
+(24 by default, set through `PUT /api/event` `mealPlanCutoffHours`) before it
+starts. `PUT` ignores meals that ended or stopped being offered since the list
+was loaded, and locked meals that were never answered.
+
 Primary-email verification is deliberately not required by Better Auth at sign
 in: H1 allows an unverified account to establish a session and use read-only
 or preparation surfaces. The shared route-policy layer requires a verified

@@ -2955,6 +2955,8 @@
   "capabilityDescriptionActivityScan": "Escanear comidas e actividades con inscrición",
   "capabilityDescriptionLogisticsStats": "Ver os paneis de estatísticas de asistencia e loxística",
   "capabilityDescriptionIntolerancesManage": "Manter o catálogo de intolerancias alimentarias",
+  "capabilityDescriptionMealPlansExport": "Exportar os plans de comidas por persoa con datos alimentarios",
+  "capabilityDescriptionMealPlansManage": "Editar o plan de comidas de calquera persoa",
   "capabilityDescriptionQueueStatus": "Ver a túa propia cola de avaliación e o seu estado",
   "capabilityDescriptionQueueOperate": "Chamar, saltar, marcar ausencia, pausar ou volver poñer en cola equipos",
   "capabilityDescriptionQueueAdmin": "Xestionar salas, asignacións, configuración e descualificacións",

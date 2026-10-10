@@ -791,7 +791,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         // event-configurable (H10). Dietary restrictions are collected
         // whenever the event asks for them but — like everywhere else in the
         // app (H12) — are never a hard block: an invitee may simply have none.
-        const { requireShirtSize } = await inviteRequirements(kind);
+        const { requireShirtSize, requireDietary } = await inviteRequirements(kind);
         if (requireShirtSize && !req.body.shirtSize) {
           throw new BadRequestError("Shirt size is required", { field: "shirtSize" });
         }
@@ -824,6 +824,9 @@ export function registerInviteRoutes(app: FastifyInstance): void {
                  THEN 'present'
                  ELSE 'not_provided'
                END,
+               -- #933: an answer counts only when this invite kind showed the
+               -- dietary fields (H10) and the claimant sent them.
+               dietary_confirmed_at = CASE WHEN $7 THEN now() ELSE dietary_confirmed_at END,
                shirt_size = COALESCE($5, shirt_size)
            WHERE id = $1`,
           [
@@ -833,6 +836,9 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             req.body.foodIntoleranceNotes ?? null,
             req.body.shirtSize ?? null,
             Boolean(invite),
+            requireDietary &&
+              (req.body.foodIntolerances !== undefined ||
+                req.body.foodIntoleranceNotes !== undefined),
           ],
         );
         if (invite) {
