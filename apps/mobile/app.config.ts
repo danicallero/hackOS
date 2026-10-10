@@ -2,7 +2,28 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 
 // app.config.ts runs in Node, but the mobile tsconfig intentionally does not
 // include @types/node for the client bundle.
-declare function require(moduleName: string): { existsSync(path: string): boolean };
+declare function require(moduleName: string): {
+  existsSync(path: string): boolean;
+  execSync(command: string, options: { stdio: string[] }): { toString(): string };
+};
+
+/**
+ * Short commit of the source this binary was built from, shown beside the
+ * version so a tester can tell which build they are running. EAS and GitHub
+ * Actions provide it; local builds read the checkout.
+ */
+function buildCommit(): string | null {
+  const fromCi = process.env.EAS_BUILD_GIT_COMMIT_HASH ?? process.env.GITHUB_SHA;
+  if (fromCi) return fromCi.slice(0, 7);
+  try {
+    return require("node:child_process")
+      .execSync("git rev-parse --short=7 HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+  } catch {
+    return null;
+  }
+}
 
 const eventWebsiteUrl = process.env.EXPO_PUBLIC_EVENT_WEBSITE_URL ?? "https://os.hackudc.com";
 const isDevelopmentBuild = process.env.APP_VARIANT === "development";
@@ -49,6 +70,7 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
       "./plugins/withAndroidResConfigs.js",
       "./plugins/withAndroidNfcTagClaim.js",
     ],
+    extra: { ...config.extra, buildCommit: buildCommit() },
     name: isDevelopmentBuild ? `${config.name} (Debug)` : config.name,
     ios: {
       ...config.ios,
