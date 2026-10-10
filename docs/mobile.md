@@ -5,6 +5,10 @@ capability-driven tabs, participant-facing screens, authenticated realtime,
 and offline SQLite scanners for accreditation, badge rotation, presence,
 meals, and registrable activities.
 
+**Build identification.** The installed-version footer in Account and Sign in reads
+`v<version> · <commit>`: `app.config.ts` embeds the short commit the binary was built
+from (`EAS_BUILD_GIT_COMMIT_HASH`, `GITHUB_SHA`, or the local checkout).
+
 **Developer API mode.** Seven taps on the understated installed-version footer in Account
 or Sign in reveals a confirmation that switches between production
 (`api.hackudc.com`) and development (`api.dani.md`). The choice is persisted

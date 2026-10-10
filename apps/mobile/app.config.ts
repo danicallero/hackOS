@@ -46,7 +46,6 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
 
   return {
     ...config,
-    extra: { ...config.extra, buildCommit: buildCommit() },
     plugins: [
       ...(config.plugins ?? []),
       "expo-font",
@@ -68,6 +67,7 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
       // #935: company-tag links https://<event host>/s/<code> open the app.
       ["./plugins/withAndroidCompanyTagLinks.js", { host: eventWebsiteHost }],
     ],
+    extra: { ...config.extra, buildCommit: buildCommit() },
     name: isDevelopmentBuild ? `${config.name} (Debug)` : config.name,
     ios: {
       ...config.ios,
