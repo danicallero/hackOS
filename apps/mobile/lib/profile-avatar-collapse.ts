@@ -11,7 +11,17 @@ export type ProfileCameraCutoutFrame = {
 
 type ProfileAvatarFrame = ProfileCameraCutoutFrame;
 
-const DYNAMIC_ISLAND_HEIGHT = 36.67;
+/**
+ * Hardware Dynamic Island, portrait points: 126 x 37.33 on iPhone 14 Pro
+ * through 17 (top 11 pt on a 59 pt safe-area inset, 14 pt on a 62 pt inset, so
+ * the top is always `safeAreaTop - 48`). The morph target is inset by this
+ * much on every side so the shrinking avatar and its black backing hide inside
+ * the island and never poke out.
+ */
+const DYNAMIC_ISLAND_WIDTH = 126;
+const DYNAMIC_ISLAND_HEIGHT = 37.33;
+const DYNAMIC_ISLAND_TOP_OFFSET = 48;
+const DYNAMIC_ISLAND_INSET = 1;
 
 /** Largest side (dp) of a display-cutout rect still treated as a hole punch or waterdrop. */
 const MAX_HOLE_PUNCH_SIZE = 72;
@@ -74,19 +84,14 @@ export function resolveProfileCameraTarget({
   if (cameraCutoutFrame) return { ...cameraCutoutFrame, hasCutout: true };
 
   if (!isLandscape && platform === "ios" && safeAreaTop >= 55) {
-    // iOS does not expose a public Dynamic Island frame. Use its measured
-    // safe-area/viewport geometry in points, relative to the app window.
-    const width = Math.min(screenWidth >= 400 ? 125.33 : 125, screenWidth - 32);
-    // The iPhone 15 viewport is 393×852 with a 59 pt top inset and an
-    // 11.33 pt island top. iPhone 16/17 Pro is 402×874 with a 62 pt inset
-    // and a 14 pt island top. Newer tall cutout areas retain the same
-    // 48 pt separation from their safe-area edge (for example iPhone Air).
-    const islandTop = safeAreaTop >= 60 ? safeAreaTop - 48 : safeAreaTop - 47.67;
+    // iOS does not expose a public Dynamic Island frame. Use its published
+    // geometry (points, relative to the app window), inset so it stays inside.
+    const width = Math.min(DYNAMIC_ISLAND_WIDTH, screenWidth - 32) - 2 * DYNAMIC_ISLAND_INSET;
     return {
       left: (screenWidth - width) / 2,
-      top: islandTop,
+      top: safeAreaTop - DYNAMIC_ISLAND_TOP_OFFSET + DYNAMIC_ISLAND_INSET,
       width,
-      height: DYNAMIC_ISLAND_HEIGHT,
+      height: DYNAMIC_ISLAND_HEIGHT - 2 * DYNAMIC_ISLAND_INSET,
       hasCutout: true,
     };
   }
@@ -119,12 +124,23 @@ export function profileAvatarMaskFrame(
   const endWidth = reduceMotion ? target.height : target.width;
   const width = expandedSize + (endWidth - expandedSize) * value;
   const height = expandedSize + (target.height - expandedSize) * value;
+  // The frame centre travels linearly from the start centre to the target
+  // centre, exactly like the morph path's canvas, so the clip, the image and
+  // the black backing share one centre line at every progress.
+  const centerX =
+    start.left +
+    start.width / 2 +
+    (target.left + target.width / 2 - start.left - start.width / 2) * value;
+  const centerY =
+    start.top +
+    start.height / 2 +
+    (target.top + target.height / 2 - start.top - start.height / 2) * value;
   return {
     width,
     height,
     borderRadius: height / 2,
-    left: start.left + (target.left + (target.width - width) / 2 - start.left) * value,
-    top: start.top + (target.top + (target.height - height) / 2 - start.top) * value,
+    left: centerX - width / 2,
+    top: centerY - height / 2,
   };
 }
 
@@ -201,7 +217,9 @@ export function profileAvatarMorphPath(
       point[0] + (next.path.o[i][0] - point[0]) * fraction,
       point[1] + (next.path.o[i][1] - point[1]) * fraction,
     ]);
-    const x = (value: number) => canvasX + (track.offset[0] + value) * scale;
+    // The thin bar is the island's lower lip: never wider than the target.
+    const xScale = track.end === 544 ? Math.min(scale, Math.max(0, target.width) / 290) : scale;
+    const x = (value: number) => canvasX + track.offset[0] * scale + value * xScale;
     const y = (value: number) => canvasY + (track.offset[1] + value) * scale;
     result += `M ${x(vertices[0][0])} ${y(vertices[0][1])} `;
     for (let i = 0; i < vertices.length; i++) {
