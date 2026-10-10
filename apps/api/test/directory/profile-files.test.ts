@@ -542,6 +542,73 @@ describe("account photo (#934)", () => {
   });
 });
 
+describe("staff photo management (#934, H8)", () => {
+  it("lets user staff replace and remove someone's photo, audited as an admin change", async () => {
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const subject = await person();
+    await upload("/api/me/photo", subject, PNG, "own.png", "image/png");
+    const own = await photoKey(subject);
+
+    const url = `/api/users/${subject}/photo`;
+    const first = await upload(url, staff, WEBP, "b.webp", "image/webp", "staff-photo");
+    expect(first.statusCode).toBe(200);
+    const replay = await upload(url, staff, WEBP, "b.webp", "image/webp", "staff-photo");
+    expect(replay.json()).toEqual(first.json());
+    const current = await photoKey(subject);
+    expect(current).toMatch(new RegExp(`^profiles/${subject}/photo/.+\\.webp$`));
+    expect(first.json().image).toMatch(new RegExp(`^/api/users/${subject}/photo\\?v=`));
+    expect(await stored(own)).toBe(false);
+    expect(await stored(current)).toBe(true);
+
+    const removed = await remove(url, staff);
+    expect(removed.statusCode).toBe(200);
+    expect(removed.json()).toEqual({ image: null });
+    expect(await photoKey(subject)).toBeNull();
+    expect(await stored(current)).toBe(false);
+    expect((await remove(url, staff)).json()).toEqual({ image: null });
+
+    const { rows } = await pool.query(
+      `SELECT action, actor_id, source FROM audit_log
+        WHERE entity_type = 'user' AND entity_id = $1 ORDER BY id`,
+      [String(subject)],
+    );
+    expect(rows).toEqual([
+      { action: "user.photo_updated", actor_id: subject, source: "participant" },
+      { action: "user.photo_updated", actor_id: staff, source: "admin" },
+      { action: "user.photo_removed", actor_id: staff, source: "admin" },
+    ]);
+  });
+
+  it("refuses readers without users:write, unknown and out-of-scope accounts, and removals", async () => {
+    const subject = await person();
+    const url = `/api/users/${subject}/photo`;
+    const readOnly = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    expect((await upload(url, readOnly, PNG, "a.png", "image/png")).statusCode).toBe(403);
+    expect((await remove(url, subject)).statusCode).toBe(403);
+
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    expect((await upload(url, staff, Buffer.from("nope"), "a.gif", "image/gif")).statusCode).toBe(
+      400,
+    );
+    expect(
+      (await upload("/api/users/999999/photo", staff, PNG, "a.png", "image/png")).statusCode,
+    ).toBe(404);
+
+    // An ordinary operator cannot see synthetic review accounts (H8 fixture scope).
+    const fixture = await person("Test", "Account");
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [fixture]);
+    expect(
+      (await upload(`/api/users/${fixture}/photo`, staff, PNG, "a.png", "image/png")).statusCode,
+    ).toBe(404);
+    expect(await photoKey(fixture)).toBeNull();
+
+    await pool.query(`UPDATE users SET account_state = 'removal_pending' WHERE id = $1`, [subject]);
+    expect((await upload(url, staff, PNG, "a.png", "image/png")).statusCode).toBe(409);
+    expect((await remove(url, staff)).statusCode).toBe(409);
+    expect(await photoKey(subject)).toBeNull();
+  });
+});
+
 describe("account removal and export (H54)", () => {
   it("exports photo and profile metadata, then removal deletes every profile object", async () => {
     const admin = await createUserWithCapabilities(["*"]);

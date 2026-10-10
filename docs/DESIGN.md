@@ -595,6 +595,9 @@ without context are not an adequate mobile adaptation.
 - No decorative page symbol by default. `leading` is a real record identity
   (logo/photo); section icons are optional scanning aids when several distinct
   domains appear together, not mandatory decoration. Never fabricate avatars.
+  When the reader may edit that image (user staff on a person's record), the
+  avatar itself opens a small change/remove menu, marked with a camera badge;
+  it never carries other page actions.
 - Status belongs next to the subject it describes. A count is neutral text
   with tabular numerals; email/date/ownership are metadata. A description only
   earns space when it explains policy, risk, consequence or an unfamiliar state.

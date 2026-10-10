@@ -7,6 +7,7 @@ import { audit } from "../../../lib/audit.js";
 import {
   getRequestAuthorizationContext,
   requireAuth,
+  requireCapability,
   userHasCapability,
 } from "../../../lib/capabilities.js";
 import {
@@ -67,20 +68,114 @@ async function canSeePhoto(req: FastifyRequest, subjectId: number): Promise<bool
   );
 }
 
-/** Lock the active owner; H54 removal takes the same row lock. */
-async function lockPhotoOwner(db: Queryable, userId: number): Promise<string | null> {
+/**
+ * Lock the active owner; H54 removal takes the same row lock. `missing` is
+ * what an absent account answers: 401 for the caller's own session, 404 for a
+ * staff target.
+ */
+async function lockPhotoOwner(
+  db: Queryable,
+  userId: number,
+  missing: () => AppError,
+): Promise<string | null> {
   const { rows } = await db.query<{ account_state: string; photo_key: string | null }>(
     `SELECT account_state, photo_key FROM users
       WHERE id = $1 AND anonymized_at IS NULL
       FOR NO KEY UPDATE`,
     [userId],
   );
-  if (!rows[0]) throw new UnauthorizedError();
+  if (!rows[0]) throw missing();
   if (rows[0].account_state === "removal_pending") {
     throw new ConflictError("This account is being removed");
   }
   return rows[0].photo_key;
 }
+
+/** Who is changing whose photo: the owner themself, or user staff (H8). */
+interface PhotoChange {
+  actorId: number;
+  subjectId: number;
+  source: "participant" | "admin";
+  missing: () => AppError;
+}
+
+/** Store a new photo for the subject and audit it in the same transaction (H53). */
+async function replacePhoto(req: FastifyRequest, change: PhotoChange) {
+  const { actorId, subjectId, source, missing } = change;
+  const { bytes } = await readUpload(req, PHOTO_MAX_BYTES);
+  const type = sniffPhoto(bytes);
+  if (!type) throw new BadRequestError("The photo must be a PNG, JPEG or WebP image");
+  const key = `${profilePrefix(subjectId)}photo/${uploadOperation(req)}.${type.ext}`;
+  const previous = await withTransaction(async (db) => {
+    const before = await lockPhotoOwner(db, subjectId, missing);
+    await putObject(key, bytes, type.contentType);
+    await db.query(`UPDATE users SET photo_key = $2, photo_updated_at = now() WHERE id = $1`, [
+      subjectId,
+      key,
+    ]);
+    await audit(db, {
+      actorId,
+      entityType: "user",
+      entityId: subjectId,
+      action: "user.photo_updated",
+      before: { hasPhoto: before !== null },
+      after: { hasPhoto: true },
+      source,
+    });
+    return before;
+  });
+  await deleteReplacedObject(req, previous !== key ? previous : null);
+  return { image: photoUrl(subjectId, key) };
+}
+
+/** Clear the subject's photo; removing when there is none changes nothing. */
+async function clearPhoto(req: FastifyRequest, change: PhotoChange) {
+  const { actorId, subjectId, source, missing } = change;
+  const removed = await withTransaction(async (db) => {
+    const before = await lockPhotoOwner(db, subjectId, missing);
+    if (!before) return null;
+    await db.query(`UPDATE users SET photo_key = NULL, photo_updated_at = NULL WHERE id = $1`, [
+      subjectId,
+    ]);
+    await audit(db, {
+      actorId,
+      entityType: "user",
+      entityId: subjectId,
+      action: "user.photo_removed",
+      before: { hasPhoto: true },
+      after: { hasPhoto: false },
+      source,
+    });
+    return before;
+  });
+  req.domainUnchanged = removed === null;
+  await deleteReplacedObject(req, removed);
+  return { image: null };
+}
+
+function ownChange(req: FastifyRequest): PhotoChange {
+  const userId = req.userId as number;
+  return {
+    actorId: userId,
+    subjectId: userId,
+    source: "participant",
+    missing: () => new UnauthorizedError(),
+  };
+}
+
+/** Staff change: the same synthetic-account boundary as every user edit (H8). */
+async function staffChange(req: FastifyRequest, subjectId: number): Promise<PhotoChange> {
+  const actorId = req.userId as number;
+  await assertFixtureSubjectScope(pool, actorId, subjectId);
+  return {
+    actorId,
+    subjectId,
+    source: "admin",
+    missing: () => new NotFoundError("User not found"),
+  };
+}
+
+const usersWriter = routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_WRITE });
 
 export function registerPhotoRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -97,33 +192,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
         response: { 200: photoResponse },
       },
     },
-    async (req) => {
-      const userId = req.userId as number;
-      const { bytes } = await readUpload(req, PHOTO_MAX_BYTES);
-      const type = sniffPhoto(bytes);
-      if (!type) throw new BadRequestError("The photo must be a PNG, JPEG or WebP image");
-      const key = `${profilePrefix(userId)}photo/${uploadOperation(req)}.${type.ext}`;
-      const previous = await withTransaction(async (db) => {
-        const before = await lockPhotoOwner(db, userId);
-        await putObject(key, bytes, type.contentType);
-        await db.query(`UPDATE users SET photo_key = $2, photo_updated_at = now() WHERE id = $1`, [
-          userId,
-          key,
-        ]);
-        await audit(db, {
-          actorId: userId,
-          entityType: "user",
-          entityId: userId,
-          action: "user.photo_updated",
-          before: { hasPhoto: before !== null },
-          after: { hasPhoto: true },
-          source: "participant",
-        });
-        return before;
-      });
-      await deleteReplacedObject(req, previous !== key ? previous : null);
-      return { image: photoUrl(userId, key) };
-    },
+    async (req) => replacePhoto(req, ownChange(req)),
   );
 
   r.delete(
@@ -138,29 +207,39 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
         response: { 200: photoResponse },
       },
     },
-    async (req) => {
-      const userId = req.userId as number;
-      const removed = await withTransaction(async (db) => {
-        const before = await lockPhotoOwner(db, userId);
-        if (!before) return null;
-        await db.query(`UPDATE users SET photo_key = NULL, photo_updated_at = NULL WHERE id = $1`, [
-          userId,
-        ]);
-        await audit(db, {
-          actorId: userId,
-          entityType: "user",
-          entityId: userId,
-          action: "user.photo_removed",
-          before: { hasPhoto: true },
-          after: { hasPhoto: false },
-          source: "participant",
-        });
-        return before;
-      });
-      req.domainUnchanged = removed === null;
-      await deleteReplacedObject(req, removed);
-      return { image: null };
+    async (req) => clearPhoto(req, ownChange(req)),
+  );
+
+  r.post(
+    "/api/users/:id/photo",
+    {
+      config: usersWriter,
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), requireIdempotencyKey],
+      schema: {
+        params: photoParams,
+        summary: "Upload a person's photo",
+        description:
+          "Staff replace someone's account photo from user management, with the same rules as POST /api/me/photo: PNG, JPEG or WebP identified from the bytes, up to 2 MB, stored privately under that person's profile prefix; the previous object is deleted. Returns the new `image` route. Audited as an admin change without the file. 404 for an unknown or out-of-scope account; accounts being removed (H54) answer 409 (#934, H8).",
+        response: { 200: photoResponse },
+      },
     },
+    async (req) => replacePhoto(req, await staffChange(req, req.params.id)),
+  );
+
+  r.delete(
+    "/api/users/:id/photo",
+    {
+      config: usersWriter,
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
+      schema: {
+        params: photoParams,
+        summary: "Remove a person's photo",
+        description:
+          "Staff clear someone's account photo from user management and delete its object, audited as an admin change. Removing when there is no photo changes nothing. 404 for an unknown or out-of-scope account; accounts being removed (H54) answer 409 (#934, H8).",
+        response: { 200: photoResponse },
+      },
+    },
+    async (req) => clearPhoto(req, await staffChange(req, req.params.id)),
   );
 
   r.get(

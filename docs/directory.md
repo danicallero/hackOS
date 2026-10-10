@@ -83,6 +83,12 @@ Oversize, empty and unsupported files are explicit 400s. The object is written
 while the owner's `users` row is locked, the same lock H54 removal takes, and
 a replaced or removed object is deleted after the row commits.
 
+User staff (`users:write`) can replace or remove someone else's photo from the
+user detail page (`POST`/`DELETE /api/users/:id/photo`). The same storage
+rules and locks apply; the audit row records the staff actor with source
+`admin`, and the synthetic review-account boundary of every user edit applies
+(H8).
+
 `users.photo_key` replaces the old free URL in `users.image`, which hackOS no
 longer reads or writes (`PATCH /api/me` refuses `image`). Every `image` field
 the API returns (`/api/me`, `/api/users/:id`) and every `photoUrl` is the
@@ -154,6 +160,8 @@ is not a test account.
 | `GET /api/me/public-profile/cv` | authenticated (own CV, shared or not) |
 | `POST /api/me/photo` | authenticated, multipart, `Idempotency-Key` |
 | `DELETE /api/me/photo` | authenticated, `Idempotency-Key` |
+| `POST /api/users/:id/photo` | `users:write`, multipart, `Idempotency-Key` |
+| `DELETE /api/users/:id/photo` | `users:write`, `Idempotency-Key` |
 | `GET /api/users/:id/photo` | the person; or `users:read`; or event access + (`directory:read` or the person is in the caller's diary) while the person is listed with `show_photo` |
 | `DELETE /api/users/:id/public-profile` | `users:write` (moderation), `Idempotency-Key` |
 

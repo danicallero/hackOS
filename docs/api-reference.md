@@ -222,7 +222,8 @@ public sponsor profile. Full detail: [`diary.md`](./diary.md).
 Opt-in people directory: the caller's public profile (bio, links and a
 shareable CV) under `/api/me/public-profile`, the `directory:read` listing,
 entry and shared-CV reads, and `users:write` moderation. The account photo
-(`/api/me/photo`, read through `GET /api/users/:id/photo`) lives in identity
+(`/api/me/photo`, staff edits through `POST`/`DELETE /api/users/:id/photo`,
+read through `GET /api/users/:id/photo`) lives in identity
 but follows the directory's photo switch. Full detail:
 [`directory.md`](./directory.md).
 

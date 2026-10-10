@@ -102,7 +102,7 @@ export default function UserProfilePage() {
 
   return (
     <PageLayout>
-      <ProfileHeader user={user} />
+      <ProfileHeader user={user} onPhotoChanged={load} />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar aria-label={t("profileSections")}>
