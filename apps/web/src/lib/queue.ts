@@ -400,6 +400,9 @@ export interface RepoChallenge {
   room_id: number | null;
   room_name: string | null;
   judging_rooms: Array<{ id: number; name: string }>;
+  /** #931: room where a team member is called or being evaluated elsewhere (H30). */
+  busy_room_name: string | null;
+  busy_status: "called" | "in_room" | "presenting" | null;
 }
 
 const queueStatusPriority: Record<string, number> = {
@@ -410,6 +413,16 @@ const queueStatusPriority: Record<string, number> = {
   completed: 4,
   disqualified: 5,
 };
+
+/**
+ * #931/H30: what a member's occupancy elsewhere blocks. Any called/active
+ * room blocks calling the team; only an evaluation blocks moving it, matching
+ * the API guards.
+ */
+export function membershipBusyState(entry: Pick<RepoChallenge, "busy_status">) {
+  const evaluating = entry.busy_status === "in_room" || entry.busy_status === "presenting";
+  return { blocksCall: entry.busy_status != null, blocksMove: evaluating, evaluating };
+}
 
 /** Collapse one project's challenge entries to one row per queue group. */
 export function collapseRepoQueueMemberships(entries: RepoChallenge[]): RepoChallenge[] {

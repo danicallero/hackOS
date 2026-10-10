@@ -317,6 +317,8 @@
   "queueTeamDisqualified": "Equipo descalificado.",
   "queueTeamDisqualifyFailed": "Non se puido descalificar o equipo.",
   "queueActionBlockedBusy": "Non dispoñible mentres o equipo está activo noutra sala.",
+  "queueBusyWaitingAt": "Agardando en {room}",
+  "queueBusyEvaluatingIn": "En avaliación en {room}",
   "queueNeedsAction": "Necesitan acción",
   "queueSearchResults": "Resultados da busca",
   "queueCalledNow": "Chamados agora",

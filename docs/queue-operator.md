@@ -39,6 +39,19 @@ cannot be reordered; and queue actions are blocked while one of the team's
 members is actively being evaluated in another room. The API enforces the
 same guard inside the transaction, so a stale screen cannot bypass it.
 
+Each queue row shows where a member is occupied before any action is tried
+(#931): “Waiting at {room}” when a member is called to another room's door,
+which only blocks calling the team, and “Being judged in {room}” when a member
+is in a room or presenting, which also blocks moves. Occupancy is resolved
+through the same shared-member relation as the H30 guard, so a member shared
+with another team counts, and it clears as soon as that entry leaves
+`called`/`in_room`/`presenting`. Reordering (`move-top`, `move-to`, `skip`,
+`requeue`) never calls a team, so project eligibility does not block it; an
+ineligible project is still never called, and a manual call answers
+“Project is not eligible for judging” instead of reporting it busy. A blocked
+move names the room where the shared member is being evaluated
+(`Busy in {room}`).
+
 ## Data contract
 
 The board consumes the live `RoomView[]` projection returned by

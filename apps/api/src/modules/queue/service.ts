@@ -15,8 +15,9 @@ import {
   assertQueueRoomScope,
 } from "./fixture-scope.js";
 import { challengeQueueGroupId, roomChallengeIds } from "./groups.js";
-import { isRepoBlockedByBusyMember } from "./guard.js";
+import { isRepoBlockedByBusyMember, isRepoIneligibleForJudging } from "./guard.js";
 import { writeQueueHistory } from "./history.js";
+import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 import {
   notifyChallengeQueueChanged,
   notifyRoomQueueChanged,
@@ -792,37 +793,53 @@ const MOVE_TOP_FROM = ["waiting", "called"];
 const EVALUATING_STATUSES = ["in_room", "presenting"];
 
 /**
- * H58: is this repo currently being evaluated in some room?
- * Returns that room's name so callers can surface `Busy in <room>` instead of
- * silently yanking the team out of its current room.
+ * H58/#931: the room where one of this team's members is being evaluated,
+ * outside the entry's own room. Mirrors the shared-member relation the H30
+ * guard uses, so the error names the real blocker even when it is another
+ * team that shares a member.
  */
 async function repoBusyRoomName(
   client: pg.PoolClient,
-  repoId: number,
-  excludeEntryId?: number | null,
+  entry: QueueEntryRow,
   fixtureMarker?: boolean,
 ): Promise<string | null> {
   const { rows } = await client.query(
-    `SELECT r.name
+    `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL})
+     SELECT r.name
        FROM queue_entries qe
        JOIN rooms r ON r.id = qe.assigned_room_id
        JOIN challenges c ON c.id = qe.challenge_id
        JOIN repos repo ON repo.id = qe.repo_id
-      WHERE qe.repo_id = $1 AND qe.status = ANY($2)
-        AND ($3::int IS NULL OR qe.id <> $3::int)
-        AND ($4::boolean IS NULL OR c.is_test_account = $4::boolean)
-        AND ($4::boolean IS NULL OR repo.is_test_account = $4::boolean)
+      WHERE qe.status = ANY($2)
+        AND qe.id <> $3
+        AND ($4::int IS NULL OR qe.assigned_room_id <> $4::int)
+        AND ($5::boolean IS NULL OR c.is_test_account = $5::boolean)
+        AND ($5::boolean IS NULL OR repo.is_test_account = $5::boolean)
+        AND (qe.repo_id = $1 OR EXISTS (
+          SELECT 1
+            FROM repo_members candidate
+            JOIN repo_members active ON active.user_id = candidate.user_id
+           WHERE candidate.repo_id = $1 AND active.repo_id = qe.repo_id
+        ))
+      ORDER BY qe.id
       LIMIT 1`,
-    [repoId, EVALUATING_STATUSES, excludeEntryId ?? null, fixtureMarker ?? null],
+    [
+      entry.repo_id,
+      EVALUATING_STATUSES,
+      entry.id,
+      entry.assigned_room_id ?? null,
+      fixtureMarker ?? null,
+    ],
   );
   return rows[0]?.name ?? null;
 }
 
 /**
  * Reordering is safe only while this entry is not being evaluated and none
- * of the team's members is active in another room. A called entry may still
- * be moved out of its own waiting room; the current entry is therefore
- * excluded from the shared-member guard.
+ * of the team's members is being evaluated in another room. A called entry
+ * may still be moved out of its own waiting room; the current entry is
+ * therefore excluded from the shared-member guard. A move never calls a
+ * team, so project eligibility (a call-time rule) does not block it (#931).
  */
 async function assertEntryCanMove(
   client: pg.PoolClient,
@@ -834,9 +851,10 @@ async function assertEntryCanMove(
     excludeEntryId: entry.id,
     statuses: EVALUATING_STATUSES,
     fixtureMarker,
+    includeEligibility: false,
   });
   if (!blocked) return;
-  const busyRoom = await repoBusyRoomName(client, entry.repo_id, entry.id, fixtureMarker);
+  const busyRoom = await repoBusyRoomName(client, entry, fixtureMarker);
   throw new ConflictError(
     busyRoom ? `Busy in ${busyRoom}` : "Team has a member busy in another room (H30)",
     { entryId: entry.id, repoId: entry.repo_id, ...(busyRoom ? { roomName: busyRoom } : {}) },
@@ -1080,11 +1098,18 @@ export async function manualCall(
         roomId,
       });
     }
+    if (await isRepoIneligibleForJudging(client, entry.repo_id)) {
+      throw new ConflictError("Project is not eligible for judging", {
+        entryId,
+        repoId: entry.repo_id,
+      });
+    }
     if (
       await isRepoBlockedByBusyMember(client, entry.repo_id, {
         roomId,
         excludeEntryId: entry.id,
         fixtureMarker,
+        includeEligibility: false,
       })
     ) {
       throw new ConflictError("Team has a member busy in another room (H30)", { entryId });

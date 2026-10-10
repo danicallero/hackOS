@@ -1172,7 +1172,8 @@ export async function roomPace(roomId: number, requestedChallengeId?: number) {
  */
 export async function repoChallenges(repoId: number) {
   const { rows } = await pool.query(
-    `SELECT qe.id AS entry_id, qe.repo_id, qe.challenge_id AS id, c.title, qe.status,
+    `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL})
+     SELECT qe.id AS entry_id, qe.repo_id, qe.challenge_id AS id, c.title, qe.status,
             CASE WHEN qe.status = 'waiting' THEN (
               -- Teams ahead of entering the waiting room (ordering.ts): a
               -- rank over waiting entries only, deduped by repo, in this
@@ -1204,13 +1205,34 @@ export async function repoChallenges(repoId: number) {
                  JOIN rooms rm ON rm.id = rqg.room_id
                 WHERE self.challenge_id = qe.challenge_id),
               '[]'::jsonb
-            ) AS judging_rooms
+            ) AS judging_rooms,
+            busy.room_name AS busy_room_name, busy.status AS busy_status
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
        JOIN repos repo ON repo.id = qe.repo_id AND repo.is_test_account = false
        LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
        LEFT JOIN queue_groups qg ON qg.id = qgc.queue_group_id
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
+       -- H30/#931: where a member of this team is occupied elsewhere, using
+       -- the guard's shared-member relation. Evaluation (in_room/presenting)
+       -- blocks moves; a called team only blocks calls.
+       LEFT JOIN LATERAL (
+         SELECT br.name AS room_name, bqe.status
+           FROM queue_entries bqe
+           JOIN rooms br ON br.id = bqe.assigned_room_id
+           JOIN repos brepo ON brepo.id = bqe.repo_id AND brepo.is_test_account = false
+          WHERE bqe.status IN ('called', 'in_room', 'presenting')
+            AND bqe.id <> qe.id
+            AND bqe.assigned_room_id IS DISTINCT FROM qe.assigned_room_id
+            AND (bqe.repo_id = qe.repo_id OR EXISTS (
+              SELECT 1
+                FROM repo_members candidate
+                JOIN repo_members active ON active.user_id = candidate.user_id
+               WHERE candidate.repo_id = qe.repo_id AND active.repo_id = bqe.repo_id
+            ))
+          ORDER BY (bqe.status = 'called'), bqe.id
+          LIMIT 1
+       ) busy ON true
       WHERE qe.repo_id = $1 AND qe.status != 'cancelled'
       ORDER BY qg.display_name ASC NULLS LAST, c.title ASC`,
     [repoId],

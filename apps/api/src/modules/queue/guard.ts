@@ -31,6 +31,18 @@ import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 const H30_LOCK_NAMESPACE = 815_030;
 const H30_REPO_LOCK_NAMESPACE = 815_031;
 
+/** H30/H38: an ineligible project is never called, but it is not "busy" (#931). */
+export async function isRepoIneligibleForJudging(
+  client: Queryable,
+  repoId: number,
+): Promise<boolean> {
+  const { rows } = await client.query(
+    `SELECT eligible FROM project_reconciliation_state WHERE id=$1`,
+    [repoId],
+  );
+  return rows[0]?.eligible === false;
+}
+
 export async function isRepoBlockedByBusyMember(
   client: Queryable,
   repoId: number,
@@ -39,13 +51,17 @@ export async function isRepoBlockedByBusyMember(
     excludeEntryId?: number | null;
     statuses?: readonly string[];
     fixtureMarker?: boolean;
+    /**
+     * Call paths also treat an ineligible project as uncallable. Reordering
+     * never calls a team, so moves opt out and only real occupancy blocks
+     * them (#931).
+     */
+    includeEligibility?: boolean;
   } = {},
 ): Promise<boolean> {
-  const eligibility = await client.query(
-    `SELECT eligible FROM project_reconciliation_state WHERE id=$1`,
-    [repoId],
-  );
-  if (eligibility.rows[0]?.eligible === false) return true;
+  if ((opts.includeEligibility ?? true) && (await isRepoIneligibleForJudging(client, repoId))) {
+    return true;
+  }
   const statuses = opts.statuses ?? ["called", "in_room", "presenting"];
   const fixtureMarker = opts.fixtureMarker ?? null;
   await client.query(`SELECT pg_advisory_xact_lock($1::int, $2::int)`, [

@@ -82,7 +82,12 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "repoId" },
         },
       },
-      schema: { params: repoIdParam },
+      schema: {
+        params: repoIdParam,
+        summary: "List a team's queue memberships",
+        description:
+          "Every non-cancelled queue entry of the team with its waiting rank, ETA, assigned room and the rooms serving its queue. `busy_room_name`/`busy_status` report where a team member (shared-member relation of the H30 guard) is `called`, `in_room` or `presenting` in another room; an evaluation blocks moves, any of them blocks calls (#931).",
+      },
     },
     async (req) => repoChallenges(req.params.repoId),
   );
