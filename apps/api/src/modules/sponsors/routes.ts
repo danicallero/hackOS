@@ -25,6 +25,8 @@ import {
   memberParams,
   OWNER_EDITABLE_KEYS,
   sponsorFaqBody,
+  standTagBody,
+  standTagParams,
   updateEnterpriseBody,
 } from "./schemas.js";
 import {
@@ -47,6 +49,7 @@ import {
   updateEnterprise,
   updateSponsorFaq,
 } from "./service.js";
+import { addStandTag, listStandTags, removeStandTag } from "./stands.js";
 
 function actor(userId: number | null): number {
   if (userId == null) throw new UnauthorizedError();
@@ -316,6 +319,60 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     async (req) => {
       await removeEnterpriseJudge(req.params.id, req.params.userId, req.userId);
       return { removed: true as const };
+    },
+  );
+
+  // ── #935: stand tags that attendees scan into their event diary ─────────────
+  r.get(
+    "/api/enterprises/:id/stand-tags",
+    {
+      ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
+      preHandler: requireEnterpriseAccess(enterpriseParam),
+      schema: {
+        params: enterpriseIdParam,
+        summary: "List stand tags",
+        description:
+          "NFC tag UIDs and printable QR tokens that identify this enterprise's stand. Attendees scan one to save the sponsor's public card in their event diary. Readable by the enterprise's own sponsor representatives or a global sponsor administrator (#935).",
+      },
+    },
+    async (req) => ({ tags: await listStandTags(actor(req.userId), req.params.id) }),
+  );
+
+  r.post(
+    "/api/enterprises/:id/stand-tags",
+    {
+      ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
+      preHandler: [requireEnterpriseAccess(enterpriseParam), requireIdempotencyKey],
+      schema: {
+        params: enterpriseIdParam,
+        body: standTagBody,
+        summary: "Add a stand tag",
+        description:
+          "`kind: nfc` links a tag by its 7-byte UID (hex; separators ignored, stored uppercase like badges). `kind: qr` generates a printable `STAND-…` token. A code already used by a stand, a badge (current or rotated away) or a ticket answers 409. The enterprise's own sponsor representatives or a global sponsor administrator; audited (#935).",
+      },
+    },
+    async (req, reply) => {
+      const tag = await addStandTag(actor(req.userId), req.params.id, req.body);
+      reply.code(201);
+      return tag;
+    },
+  );
+
+  r.delete(
+    "/api/enterprises/:id/stand-tags/:tagId",
+    {
+      ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
+      preHandler: [requireEnterpriseAccess(enterpriseParam), requireIdempotencyKey],
+      schema: {
+        params: standTagParams,
+        summary: "Remove a stand tag",
+        description:
+          "Unlinks a stand tag; scanning it afterwards is an unknown code. Diary entries already saved for the sponsor stay. The enterprise's own sponsor representatives or a global sponsor administrator; audited (#935).",
+      },
+    },
+    async (req, reply) => {
+      await removeStandTag(actor(req.userId), req.params.id, req.params.tagId);
+      return reply.code(204).send();
     },
   );
 

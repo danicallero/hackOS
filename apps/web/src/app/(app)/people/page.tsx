@@ -1,7 +1,7 @@
 "use client";
 
-import { PeopleDirectory } from "./people-directory";
+import { EventDiary } from "./event-diary";
 
 export default function PeoplePage() {
-  return <PeopleDirectory />;
+  return <EventDiary />;
 }

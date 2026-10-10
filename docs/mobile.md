@@ -39,6 +39,7 @@ the hardware-free native screen suite.
 - [Navigation & tabs](#navigation--tabs)
 - [Auth flow](#auth-flow)
 - [Participant screens](#participant-screens)
+- [Event diary (#935)](#event-diary-935)
 - [Operator screens](#operator-screens)
   - [Queue operations](#queue-operations)
   - [Scanner](#scanner)
@@ -624,6 +625,34 @@ distributed to other Expo Router apps without importing hackOS code.
   list's swipe-to-edit. List cards visibly mark staff-only, sponsor-only, and
   mentor-only activities when their audience is restricted to exactly that
   group.
+
+### Event diary (#935)
+
+`components/diary-screen.tsx`, routed as `app/(tabs)/diary.tsx` when the tab is
+direct and `app/(tabs)/others/diary.tsx` inside Others (`diary` is an
+`OVERFLOW_TAB_KEYS` entry; see `docs/navigation.md` for placement). It lists
+`GET /api/me/diary` in API order (favourites first): people with their live
+directory card, sponsors with their public card, and a quiet unavailable row
+when the person hid their profile or the sponsor is hidden. Each row has a star
+toggle and a menu with Note (modal editor, 500 characters) and Remove (with
+confirmation); a row is disabled while its update is in flight. Pull-to-refresh
+and foregrounding refetch. The diary is never written to the offline cache, so
+a profile hidden later cannot reappear from device storage.
+
+Scanning follows R008: the primary "Scan with NFC" control opens the existing
+reader immediately (`lib/nfc-reader.ts`, UID only, never writes or claims the
+tag; `lib/nfc-uid.ts` normalization), one tap from the list. "Scan QR code"
+(the gated `QrCamera`) and "Enter code" sit in the compact ellipsis menu. On
+hardware without NFC the primary control becomes "Scan QR code". Cancelling any
+input sends nothing. Each scan is `POST /api/me/diary/scan` with a fresh
+`Idempotency-Key`; the saved card appears in a Saved section at the top with
+its favourite and note actions. Every error code (`diary_code_unknown`,
+`badge_revoked`, `profile_not_shared`, `stand_unavailable`, `diary_self`, 403
+for an account without event access, 429) maps to its own localized alert (`lib/diary.ts`); none names a person.
+Badges, stand tags and the staff scanners share the NFC-A UID encoding, so a
+stand tag is never accepted as a badge (`diary.md`). Physical NFC and camera
+verification is still pending; tests mock both (`lib/diary.test.ts`,
+`test/ui/diary-screen.test.tsx`).
 
 ## Operator screens
 

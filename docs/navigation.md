@@ -57,11 +57,14 @@ hide (`NavItem.hideForPureApplicant` in `nav.ts`) — Schedule, My applications,
 and My profile stay, since applying (or checking an application's status) is
 exactly what they still need.
 
-**People** (`/people`, #934) is the one capability-gated personal entry: it
-shows with `directory:read` (seeded for every role except Sponsor and Judging
-Team; see `directory.md`) plus current event access, like Wallet and Inbox,
-and sits just above My profile, where each person
-manages whether they appear in it.
+**Diary** (`/people`, #935, address-book icon) is the attendee's event diary:
+saved people and sponsor stands first, with the opt-in directory (#934) as a
+secondary `Directory` tab (`?tab=directory`). It needs only current event
+access, like Wallet and Inbox, and every attendee can save people and stands
+in it. Only the Directory tab needs `directory:read` (seeded for every role
+except Sponsor and Judging Team; see `directory.md`). It sits just above
+My profile, where each person manages whether they appear in the directory.
+See [`diary.md`](./diary.md).
 
 There is deliberately no dashboard/home page: `/timetable` (Schedule) is the
 landing destination after sign-in and email verification
@@ -165,8 +168,9 @@ directly on compact layouts; tablet-width layouts can fit up to six before the
 separate `Others` circle is needed. The full route registry remains mounted so
 hidden destinations stay routable:
 
-- **Non-operator account**: schedule, wallet, notifications, and **Account**
-  are direct. **My queue** is visible to participants even before their first
+- **Non-operator account**: schedule, wallet, notifications, **Diary** (#935,
+  [`diary.md`](./diary.md)) and **Account** are direct; with a personal queue
+  the set grows to six, so Diary and Account move to Others. **My queue** is visible to participants even before their first
   queue entry so they can see the empty state and tutorial; mentors, sponsors,
   and other accounts only see it once they have an actual queue entry. Wallet
   remains unconditional for every mobile account.
@@ -175,12 +179,12 @@ hidden destinations stay routable:
   **Scanner**, Activities (`activity:scan` holders only), notifications —
   scanning must never sit behind an ellipsis. The separate
   **"Others" overflow selector** holds eligible personal Queue, Wallet,
-  Account, and any queue operations destination as pseudo-tabs. Account's
+  Diary, Account, and any queue operations destination as pseudo-tabs. Account's
   Statistics destination is the staff operations hub for the person finder,
   scan history, and sync reconciliation.
 - **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
   scanner capability): Queue operations is a direct tab alongside Schedule and
-  Alerts; an eligible personal Queue, Wallet, and Account move to Others. If
+  Alerts; an eligible personal Queue, Wallet, Diary and Account move to Others. If
   the person also has a scanner capability, Queue operations joins Others so
   Scanner stays directly reachable.
 

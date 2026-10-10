@@ -10,6 +10,7 @@ import {
   NotFoundError,
   ServiceUnavailableError,
 } from "../../lib/errors.js";
+import { profilePrefix } from "../../lib/profile-files.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { deleteObject, deletePrefix, deleteSubjectUploadObjects } from "../../lib/storage.js";
 import type { TemplateField } from "../applications/schemas.js";
@@ -871,6 +872,10 @@ async function deleteStorageArtifacts(
 ): Promise<void> {
   try {
     await deleteSubjectUploadObjects(preparation.targetId);
+    // #934/#935: account photo and directory CV, including any object a
+    // replaced upload left behind. The users/profile rows holding their keys
+    // are deleted or scrubbed by the same removal.
+    await deletePrefix(profilePrefix(preparation.targetId));
     for (const prefix of preparation.uploadPrefixes) await deletePrefix(prefix);
     for (const prefix of preparation.exportPrefixes) await deletePrefix(prefix);
     for (const key of preparation.storageKeys) await deleteObject(key);
@@ -1406,6 +1411,11 @@ async function scrubRelationships(
   // #934: the opted-in public profile is identity-bearing; anonymized rows
   // keep the users row, so the cascade alone would not remove it.
   await client.query(`DELETE FROM user_public_profiles WHERE user_id = $1`, [userId]);
+  // #935: the subject's own event diary, and every entry in other attendees'
+  // diaries that points at them.
+  await client.query(`DELETE FROM diary_entries WHERE owner_id = $1 OR target_user_id = $1`, [
+    userId,
+  ]);
   await client.query(`DELETE FROM submissions WHERE user_id = $1`, [userId]);
   await client.query(
     `DELETE FROM devpost_participants
@@ -1810,6 +1820,8 @@ export async function resetReviewFixtureAccount(
         SET email = $2,
             email_verified = true,
             image = NULL,
+            photo_key = NULL,
+            photo_updated_at = NULL,
             name = $3,
             surname = $4,
             dni = NULL,

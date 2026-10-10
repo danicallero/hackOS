@@ -21,7 +21,6 @@ import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
-import { TabBar } from "@/components/common/tab-bar";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -36,7 +35,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api, apiUpload } from "@/lib/api";
@@ -385,60 +383,58 @@ export function LogoCard({
   }
 
   return (
-    <SectionCard variant="plain">
-      <div className="flex items-center gap-4">
-        <Avatar size="lg" className="rounded-md">
-          {enterprise.logo_url ? (
-            <SponsorLogo
-              logoUrl={enterprise.logo_url}
-              logoNegativeUrl={enterprise.logo_negative_url}
-              alt={enterprise.name}
-              className="size-full object-contain"
-            />
-          ) : (
-            <AvatarFallback className="rounded-md">{initials(enterprise.name)}</AvatarFallback>
-          )}
-        </Avatar>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => defaultInputRef.current?.click()}
-            disabled={uploading}
-            loading={uploading}
-          >
-            {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
-            {enterprise.logo_url ? t("replaceLogo") : t("uploadLogo")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => negativeInputRef.current?.click()}
-            disabled={uploading}
-            loading={uploading}
-          >
-            {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
-            {enterprise.logo_negative_url === enterprise.logo_url
-              ? t("uploadDarkLogo")
-              : t("replaceDarkLogo")}
-          </Button>
-        </div>
-        <input
-          ref={defaultInputRef}
-          type="file"
-          accept={LOGO_ACCEPT}
-          className="hidden"
-          onChange={(e) => onFile(e, "default")}
-        />
-        <input
-          ref={negativeInputRef}
-          type="file"
-          accept={LOGO_ACCEPT}
-          className="hidden"
-          onChange={(e) => onFile(e, "negative")}
-        />
+    <div className="flex items-center gap-4">
+      <Avatar size="lg" className="rounded-md">
+        {enterprise.logo_url ? (
+          <SponsorLogo
+            logoUrl={enterprise.logo_url}
+            logoNegativeUrl={enterprise.logo_negative_url}
+            alt={enterprise.name}
+            className="size-full object-contain"
+          />
+        ) : (
+          <AvatarFallback className="rounded-md">{initials(enterprise.name)}</AvatarFallback>
+        )}
+      </Avatar>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => defaultInputRef.current?.click()}
+          disabled={uploading}
+          loading={uploading}
+        >
+          {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
+          {enterprise.logo_url ? t("replaceLogo") : t("uploadLogo")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => negativeInputRef.current?.click()}
+          disabled={uploading}
+          loading={uploading}
+        >
+          {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
+          {enterprise.logo_negative_url === enterprise.logo_url
+            ? t("uploadDarkLogo")
+            : t("replaceDarkLogo")}
+        </Button>
       </div>
-    </SectionCard>
+      <input
+        ref={defaultInputRef}
+        type="file"
+        accept={LOGO_ACCEPT}
+        className="hidden"
+        onChange={(e) => onFile(e, "default")}
+      />
+      <input
+        ref={negativeInputRef}
+        type="file"
+        accept={LOGO_ACCEPT}
+        className="hidden"
+        onChange={(e) => onFile(e, "negative")}
+      />
+    </div>
   );
 }
 
@@ -457,7 +453,6 @@ export function EditCard({
   logoUploader: React.ReactNode;
 }) {
   const { t } = useLocale();
-  const [view, setView] = useState("details");
   const form = useForm<EditValues>({
     resolver: zodResolver(editSchema),
     defaultValues: toFormValues(enterprise),
@@ -509,26 +504,19 @@ export function EditCard({
   return (
     <Form {...form}>
       <form id="profile-edit" onSubmit={form.handleSubmit(onSubmit)} className="scroll-mt-6">
-        <Tabs value={view} onValueChange={setView}>
-          <TabBar>
-            <TabsTrigger value="details">{t("enterpriseDetailsTab")}</TabsTrigger>
-            <TabsTrigger value="logos">{t("logoTitle")}</TabsTrigger>
-            <TabsTrigger value="publication">{t("publicationTitle")}</TabsTrigger>
-          </TabBar>
-          <SectionCard
-            variant="plain"
-            stickyFooter
-            footerClassName="justify-end"
-            footer={
-              <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
-            }
-          >
-            <TabsContent
-              value="details"
-              forceMount
-              hidden={view !== "details"}
-              className="space-y-5"
-            >
+        <SectionCard
+          variant="plain"
+          stickyFooter
+          footerClassName="justify-end"
+          footer={
+            <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+          }
+        >
+          <div className="space-y-6">
+            <section aria-labelledby="enterprise-details" className="space-y-5">
+              <h2 id="enterprise-details" className="type-section-title">
+                {t("enterpriseDetailsTab")}
+              </h2>
               <FormField
                 control={form.control}
                 name="name"
@@ -589,8 +577,11 @@ export function EditCard({
                   />
                 </div>
               )}
-            </TabsContent>
-            <TabsContent value="logos" forceMount hidden={view !== "logos"} className="space-y-5">
+            </section>
+            <section aria-labelledby="enterprise-logos" className="space-y-5 border-t pt-6">
+              <h2 id="enterprise-logos" className="type-section-title">
+                {t("logoTitle")}
+              </h2>
               {logoUploader}
               <FormField
                 control={form.control}
@@ -618,13 +609,11 @@ export function EditCard({
                   </FormItem>
                 )}
               />
-            </TabsContent>
-            <TabsContent
-              value="publication"
-              forceMount
-              hidden={view !== "publication"}
-              className="space-y-5"
-            >
+            </section>
+            <section aria-labelledby="enterprise-publication" className="space-y-5 border-t pt-6">
+              <h2 id="enterprise-publication" className="type-section-title">
+                {t("publicationTitle")}
+              </h2>
               {canManage ? (
                 <PublicationControls
                   id="enterprise-publication"
@@ -662,9 +651,9 @@ export function EditCard({
               ) : (
                 <PublicationSummary enterprise={enterprise} />
               )}
-            </TabsContent>
-          </SectionCard>
-        </Tabs>
+            </section>
+          </div>
+        </SectionCard>
       </form>
     </Form>
   );

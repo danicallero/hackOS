@@ -8,6 +8,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -21,6 +22,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan, useSessionContext } from "@/lib/session";
@@ -29,9 +31,11 @@ import { ENTERPRISE_TAB_ALIASES, type Enterprise, enterpriseTabs, initials } fro
 
 import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterprise-cards";
 import { JudgesCard } from "./judges-card";
+import { StandTagsCard } from "./stand-tags-card";
 
 export default function EnterpriseDetailPage() {
   const { t } = useLocale();
+  const isMobile = useIsMobile();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const router = useRouter();
@@ -117,10 +121,18 @@ export default function EnterpriseDetailPage() {
           </Avatar>
         }
         title={enterprise.name}
+        className="flex-row items-center justify-between gap-2 md:items-center"
         actions={
           canManage && (
-            <Button asChild variant="outline">
-              <Link href="/users/invites">{t("invitationManagement")}</Link>
+            <Button
+              asChild
+              variant="outline"
+              size={isMobile ? "icon" : "default"}
+              aria-label={isMobile ? t("invitationManagement") : undefined}
+            >
+              <Link href="/users/invites">
+                {isMobile ? <EnvelopeSimpleIcon aria-hidden="true" /> : t("invitationManagement")}
+              </Link>
             </Button>
           )
         }
@@ -128,12 +140,13 @@ export default function EnterpriseDetailPage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar aria-label={t("enterpriseSections")}>
-          <TabsTrigger value="profile">{t("enterpriseProfileTab")}</TabsTrigger>
+          <TabsTrigger value="profile">{t("profileTitle")}</TabsTrigger>
           {tabs.includes("challenges") && (
             <TabsTrigger value="challenges">{t("challenges")}</TabsTrigger>
           )}
           <TabsTrigger value="judges">{t("judges")}</TabsTrigger>
           {canManage && <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>}
+          {tabs.includes("stand") && <TabsTrigger value="stand">{t("standTags")}</TabsTrigger>}
         </TabBar>
         <TabsContent value="profile" className="space-y-6 pt-2">
           <EditCard
@@ -154,6 +167,11 @@ export default function EnterpriseDetailPage() {
         {canManage && (
           <TabsContent value="members" className="pt-2">
             <MembersCard enterpriseId={enterprise.id} />
+          </TabsContent>
+        )}
+        {tabs.includes("stand") && (
+          <TabsContent value="stand" className="pt-2">
+            <StandTagsCard enterpriseId={enterprise.id} enterpriseName={enterprise.name} />
           </TabsContent>
         )}
       </Tabs>

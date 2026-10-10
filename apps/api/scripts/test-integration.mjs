@@ -7,7 +7,7 @@ const baseDatabaseUrl = new URL(
 const shards = [
   ["identity", "applications"],
   ["queue", "logistics"],
-  ["projects", "work-groups", "directory", "challenges", "sponsors", "event"],
+  ["projects", "work-groups", "diary", "directory", "challenges", "sponsors", "event"],
   ["notifications", "exports", "test/*.test.ts", "test/statistics"],
 ];
 

@@ -13,6 +13,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
+import { apiAssetUrl } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
 import {
   type AccountRemovalEligibility,
@@ -30,7 +31,7 @@ export function ProfileHeader({ user }: { user: UserDetail }) {
     <PageHeader
       leading={
         <Avatar size="lg">
-          {user.image && <AvatarImage src={user.image} alt={fullName(user)} />}
+          {user.image && <AvatarImage src={apiAssetUrl(user.image)} alt={fullName(user)} />}
           <AvatarFallback>{initials(user)}</AvatarFallback>
         </Avatar>
       }

@@ -1,8 +1,25 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { requireAuth, requireCapability } from "../../lib/capabilities.js";
-import { idempotencyGuard } from "../../lib/idempotency.js";
+import {
+  getRequestAuthorizationContext,
+  requireAuth,
+  requireCapability,
+  userHasCapability,
+} from "../../lib/capabilities.js";
+import { BadRequestError } from "../../lib/errors.js";
+import { idempotencyGuard, requireIdempotencyKey } from "../../lib/idempotency.js";
+import {
+  CV_MAX_BYTES,
+  deleteReplacedObject,
+  isPdf,
+  profilePrefix,
+  readUpload,
+  safePdfFilename,
+  sendProfileObject,
+  uploadOperation,
+} from "../../lib/profile-files.js";
+import { putObject } from "../../lib/storage.js";
 import {
   directoryQuery,
   moderationBody,
@@ -11,17 +28,35 @@ import {
   userParams,
 } from "./schemas.js";
 import {
+  getDirectoryCv,
   getDirectoryEntry,
+  getMyCv,
   getMyPublicProfile,
   listDirectory,
   moderatePublicProfile,
+  removeMyCv,
+  setMyCv,
   updateMyPublicProfile,
 } from "./service.js";
+
+const PDF_CACHE = "private, no-store";
 
 const authenticated = { routeAccessPolicy: { kind: "authenticated" as const } };
 const directoryReader = {
   routeAccessPolicy: { kind: "capability" as const, capability: CAPABILITIES.DIRECTORY_READ },
 };
+/** A directory reader, or an attendee who saved this person in their diary (#935). */
+const personReader = {
+  routeAccessPolicy: {
+    kind: "contextual" as const,
+    policy: "directory-person-access",
+    resource: { source: "params" as const, field: "userId" },
+  },
+};
+
+function canBrowse(req: FastifyRequest): Promise<boolean> {
+  return userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.DIRECTORY_READ);
+}
 
 export function registerDirectoryRoutes(app: FastifyInstance): void {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -33,7 +68,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my public profile",
         description:
-          "Directory opt-in settings shown on My profile for an event attendee, with `preview`: the directory entry exactly as readers would see it if visible. Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown) (#934).",
+          "Directory opt-in settings shown on My profile for an event attendee, including bio, social links, `shareCv` and the uploaded CV's file name, with `preview`: the directory entry exactly as readers would see it if visible (its `cvUrl` points at the owner's own CV route). Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown, no CV shared) (#934, #935).",
       },
     },
     async (req) => getMyPublicProfile(req.userId as number),
@@ -47,7 +82,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         body: publicProfileBody,
         summary: "Update my public profile",
         description:
-          "Replaces the caller's directory settings. Text is trimmed and empty text clears the field; headline ≤80 and locationNote ≤60 characters, no control characters. consentedAt is stamped on each hidden→visible transition. Audited without free text when something changes; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934).",
+          "Replaces the caller's directory settings. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded CV (400 otherwise). `bio`, `socials` and `shareCv` may be omitted to keep their stored values. consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
       },
     },
     async (req) => {
@@ -73,16 +108,16 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
   r.get(
     "/api/directory/:userId",
     {
-      config: directoryReader,
-      preHandler: requireCapability(CAPABILITIES.DIRECTORY_READ),
+      config: personReader,
+      preHandler: requireAuth,
       schema: {
         params: userParams,
         summary: "Read one directory entry",
         description:
-          "Returns one opted-in person. A missing and a hidden profile both answer 404, so visibility cannot be probed (#934).",
+          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared), project and challenges. Open to `directory:read` holders and to attendees who saved this person in their diary. A missing or hidden profile, and a person the caller may not read, all answer 404, so visibility cannot be probed (#934, #935).",
       },
     },
-    async (req) => getDirectoryEntry(req.userId as number, req.params.userId),
+    async (req) => getDirectoryEntry(req.userId as number, req.params.userId, await canBrowse(req)),
   );
   r.delete(
     "/api/users/:id/public-profile",
@@ -96,12 +131,103 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         body: moderationBody,
         summary: "Hide a public profile",
         description:
-          "Moderation: removes the person from the directory and clears their headline and location note, with an audited reason. The person may opt in again (#934).",
+          "Moderation: removes the person from the directory, clears their headline, location note, bio and social links and stops sharing their CV, with an audited reason. The person may opt in again (#934, #935).",
       },
     },
     async (req, reply) => {
       await moderatePublicProfile(req.userId as number, req.params.id, req.body.reason);
       return reply.code(204).send();
+    },
+  );
+
+  r.post(
+    "/api/me/public-profile/cv",
+    {
+      config: authenticated,
+      preHandler: [requireAuth, requireIdempotencyKey],
+      schema: {
+        summary: "Upload my CV",
+        description:
+          "Multipart upload of the caller's CV for the public profile: one PDF (checked from its bytes) up to 5 MB, stored privately under the caller's profile prefix and never at a public URL. Replaces and deletes any previous CV. Readers see it only while the profile is visible and `shareCv` is on. Returns the public profile; audited as a `cv` change without the file name. 403 without event access; accounts being removed (H54) are refused (#935).",
+      },
+    },
+    async (req) => {
+      const userId = req.userId as number;
+      const { file, bytes } = await readUpload(req, CV_MAX_BYTES);
+      if (!isPdf(bytes)) throw new BadRequestError("The CV must be a PDF");
+      const key = `${profilePrefix(userId)}cv/${uploadOperation(req)}.pdf`;
+      const { replacedKey, profile } = await setMyCv(
+        userId,
+        { key, filename: safePdfFilename(file.filename) },
+        async () => {
+          await putObject(key, bytes, "application/pdf");
+        },
+      );
+      await deleteReplacedObject(req, replacedKey);
+      return profile;
+    },
+  );
+  r.delete(
+    "/api/me/public-profile/cv",
+    {
+      config: authenticated,
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        summary: "Remove my CV",
+        description:
+          "Deletes the caller's CV object and turns `shareCv` off. Returns the public profile; removing when there is no CV changes nothing (#935).",
+      },
+    },
+    async (req) => {
+      const { changed, removedKey, profile } = await removeMyCv(req.userId as number);
+      req.domainUnchanged = !changed;
+      await deleteReplacedObject(req, removedKey);
+      return profile;
+    },
+  );
+  r.get(
+    "/api/me/public-profile/cv",
+    {
+      config: authenticated,
+      preHandler: requireAuth,
+      schema: {
+        summary: "Download my CV",
+        description:
+          "Streams the caller's own CV, shared or not. 404 without one. Never cached by shared proxies (#935).",
+      },
+    },
+    async (req, reply) => {
+      const cv = await getMyCv(req.userId as number);
+      return sendProfileObject(reply, cv.key, {
+        contentType: "application/pdf",
+        cacheControl: PDF_CACHE,
+        filename: cv.filename,
+      });
+    },
+  );
+  r.get(
+    "/api/directory/:userId/cv",
+    {
+      config: personReader,
+      preHandler: requireAuth,
+      schema: {
+        params: userParams,
+        summary: "Download a shared CV",
+        description:
+          "Streams the CV of an opted-in person who shares it. A hidden profile, an unshared CV and a missing CV all answer 404. Open to `directory:read` holders and to attendees who saved this person; the access check runs on every request and the reader must also have event access (#935).",
+      },
+    },
+    async (req, reply) => {
+      const cv = await getDirectoryCv(
+        req.userId as number,
+        req.params.userId,
+        await canBrowse(req),
+      );
+      return sendProfileObject(reply, cv.key, {
+        contentType: "application/pdf",
+        cacheControl: PDF_CACHE,
+        filename: cv.filename,
+      });
     },
   );
 }

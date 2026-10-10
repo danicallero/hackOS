@@ -21,7 +21,8 @@ vi.mock("@/lib/api", () => ({
       super(message);
     }
   },
-  api: { get: vi.fn(), put: vi.fn() },
+  api: { get: vi.fn(), put: vi.fn(), delete: vi.fn() },
+  apiUpload: vi.fn(),
 }));
 vi.mock("@/lib/i18n", () => {
   const t = (key: string) => key;
@@ -63,7 +64,8 @@ vi.mock("@/hooks/use-event-source", async () => {
 });
 
 import { EVENTS } from "@hackos/shared/events";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, apiUpload } from "@/lib/api";
+import { API_URL } from "@/lib/env";
 import { showErrorToast, toast } from "@/lib/toast";
 import {
   DirectoryCard,
@@ -79,14 +81,21 @@ function profile(overrides: Record<string, unknown> = {}, preview: Partial<Direc
     showPhoto: false,
     showProject: true,
     headline: null,
+    bio: null,
     locationNote: null,
+    socials: [],
+    shareCv: false,
+    cv: null,
     consentedAt: null,
     preview: {
       userId: 7,
       displayName: "María José F.",
       photoUrl: null,
       headline: null,
+      bio: null,
       locationNote: null,
+      socials: [],
+      cvUrl: null,
       project: null,
       challenges: [],
       ...preview,
@@ -184,6 +193,9 @@ describe("PublicProfileCard", () => {
         showProject: true,
         headline: "Rust",
         locationNote: null,
+        bio: null,
+        socials: [],
+        shareCv: false,
       },
       { headers: { "Idempotency-Key": expect.any(String) } },
     );
@@ -293,6 +305,92 @@ describe("PublicProfileCard", () => {
     );
   });
 
+  it("saves the bio and links, skipping empty link rows", async () => {
+    vi.mocked(api.get).mockResolvedValue(profile({ directoryVisible: true }));
+    vi.mocked(api.put).mockResolvedValue(profile({ directoryVisible: true }));
+    await render(<PublicProfileCard />);
+    const user = userEvent.setup();
+
+    await act(async () => user.type(byLabel("publicProfileBio") as HTMLTextAreaElement, "Hi"));
+    const addLink = () =>
+      [...container.querySelectorAll("button")].find(
+        (b) => b.textContent === "publicProfileAddLink",
+      ) as HTMLButtonElement;
+    await act(async () => user.click(addLink()));
+    await act(async () => user.click(addLink()));
+    const urls = container.querySelectorAll<HTMLInputElement>(
+      "input[aria-label=publicProfileLinkUrl]",
+    );
+    expect(urls).toHaveLength(2);
+    await act(async () => user.type(urls[0] as HTMLInputElement, " github.com/maria "));
+    expect(container.textContent).toContain("github.com/maria");
+    await save();
+
+    expect(api.put).toHaveBeenCalledWith(
+      "/api/me/public-profile",
+      expect.objectContaining({
+        bio: "Hi",
+        socials: [{ kind: "linkedin", url: "github.com/maria" }],
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("removes a link row and stops offering more after six", async () => {
+    const socials = Array.from({ length: 6 }, (_, i) => ({
+      kind: "other",
+      url: `https://example.com/${i}`,
+    }));
+    vi.mocked(api.get).mockResolvedValue(profile({ directoryVisible: true, socials }));
+    await render(<PublicProfileCard />);
+    const buttons = () => [...container.querySelectorAll("button")];
+    expect(buttons().some((b) => b.textContent === "publicProfileAddLink")).toBe(false);
+
+    const user = userEvent.setup();
+    const removeLink = container.querySelector<HTMLButtonElement>(
+      "button[aria-label=publicProfileRemoveLink]",
+    );
+    await act(async () => user.click(removeLink as HTMLButtonElement));
+    expect(container.querySelectorAll("input[aria-label=publicProfileLinkUrl]")).toHaveLength(5);
+    expect(buttons().some((b) => b.textContent === "publicProfileAddLink")).toBe(true);
+    expect(submit()?.disabled).toBe(false);
+  });
+
+  it("uploads a CV on its own and only then offers to share it", async () => {
+    vi.mocked(api.get).mockResolvedValue(profile({ directoryVisible: true }));
+    const withCv = profile({
+      directoryVisible: true,
+      cv: { filename: "maria.pdf", uploadedAt: "2026-10-10T10:00:00.000Z" },
+    });
+    vi.mocked(apiUpload).mockResolvedValue(withCv);
+    await render(<PublicProfileCard />);
+    expect(byLabel("publicProfileShareCv")).toBeNull();
+
+    const input = container.querySelector<HTMLInputElement>("input[type=file]");
+    const file = new File(["%PDF-1.7"], "maria.pdf", { type: "application/pdf" });
+    const user = userEvent.setup();
+    await act(async () => user.upload(input as HTMLInputElement, file));
+
+    expect(apiUpload).toHaveBeenCalledWith("/api/me/public-profile/cv", expect.any(FormData));
+    expect(container.textContent).toContain("maria.pdf");
+    expect(byLabel("publicProfileShareCv")).not.toBeNull();
+    // The file saved itself; the form has nothing new to save.
+    expect(submit()?.disabled).toBe(true);
+  });
+
+  it("refuses a non-PDF CV before uploading", async () => {
+    vi.mocked(apiUpload).mockReset();
+    vi.mocked(api.get).mockResolvedValue(profile({ directoryVisible: true }));
+    await render(<PublicProfileCard />);
+    const input = container.querySelector<HTMLInputElement>("input[type=file]");
+    const user = userEvent.setup({ applyAccept: false });
+    await act(async () =>
+      user.upload(input as HTMLInputElement, new File(["x"], "cv.png", { type: "image/png" })),
+    );
+    expect(apiUpload).not.toHaveBeenCalled();
+    expect(container.querySelector("[role=alert]")?.textContent).toBe("cvFileHint");
+  });
+
   it("previews the server card until something changes", async () => {
     vi.mocked(api.get).mockResolvedValue(
       profile({ directoryVisible: true }, { displayName: "Server Card" }),
@@ -333,7 +431,10 @@ describe("DirectoryCard", () => {
     displayName: "María José F.",
     photoUrl: null,
     headline: null,
+    bio: null,
     locationNote: null,
+    socials: [],
+    cvUrl: null,
     project: null,
     challenges: [],
   };
@@ -372,5 +473,29 @@ describe("DirectoryCard", () => {
       ),
     );
     expect(container.querySelectorAll("li")).toHaveLength(6);
+  });
+
+  it("shows the bio, links and CV through the authenticated API", () => {
+    act(() =>
+      root.render(
+        <DirectoryCard
+          entry={{
+            ...entry,
+            photoUrl: "/api/users/7/photo?v=abc",
+            bio: "Line one\nLine two",
+            socials: [{ kind: "github", url: "https://github.com/maria/" }],
+            cvUrl: "/api/directory/7/cv",
+          }}
+        />,
+      ),
+    );
+    expect(container.textContent).toContain("Line one\nLine two");
+    const link = container.querySelector<HTMLAnchorElement>("a[href='https://github.com/maria/']");
+    expect(link?.textContent).toBe("socialGithub: github.com/maria");
+    expect(link?.rel).toContain("noopener");
+    expect(
+      container.querySelector<HTMLAnchorElement>(`a[href='${API_URL}/api/directory/7/cv']`)
+        ?.textContent,
+    ).toBe("downloadCv");
   });
 });
