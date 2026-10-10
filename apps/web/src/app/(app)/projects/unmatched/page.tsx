@@ -21,13 +21,8 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
-import { type UserOption, UserPicker } from "@/components/common/user-picker";
-import {
-  matchingQueries,
-  rankMatchingUsers,
-  searchableIdentity,
-  unambiguousFullNameMatch,
-} from "@/components/projects/identity-matches";
+import { IdentityAccountPicker } from "@/components/projects/identity-account-picker";
+import { searchableIdentity } from "@/components/projects/identity-matches";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -118,28 +113,6 @@ export default function UnmatchedProjectsPage() {
       setLoading(false);
     }
   }, [canImport, t]);
-
-  const searchUsers = useCallback(
-    async (query: string, row: UnmatchedRow): Promise<UserOption[]> => {
-      if (query.trim() && query.trim().length < 2) return [];
-      const queries = query.trim() ? [query.trim()] : matchingQueries(row);
-      if (!queries.length) return [];
-      const results = await Promise.all(
-        queries.map((q) =>
-          api.get<{ users: UserOption[] }>("/api/projects/member-candidates", {
-            query: { q, limit: 25 },
-          }),
-        ),
-      );
-      const users = [
-        ...new Map(
-          results.flatMap((result) => result.users).map((user) => [user.id, user]),
-        ).values(),
-      ];
-      return rankMatchingUsers(row, users, !query.trim()).slice(0, 25);
-    },
-    [],
-  );
 
   // Soft, in-place refresh instead of a hard reload when a project/repo
   // changes elsewhere.
@@ -256,17 +229,15 @@ export default function UnmatchedProjectsPage() {
                     <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
                       <div className="space-y-2">
                         <Label htmlFor={`user-${key}`}>{t("linkToUserLabel")}</Label>
-                        <UserPicker
+                        <IdentityAccountPicker
                           id={`user-${key}`}
+                          person={row}
                           value={selectedUserId}
                           onChange={(value) =>
                             setSelectedUsers((current) => ({ ...current, [key]: value }))
                           }
                           placeholder={t("projectSuggestedMatches")}
-                          search={(query) => searchUsers(query, row)}
                           disabled={busy !== null}
-                          initialQuery=""
-                          autoSelect={(users) => unambiguousFullNameMatch(row, users)}
                         />
                       </div>
                       <div className="flex flex-wrap gap-2">

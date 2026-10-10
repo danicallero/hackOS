@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   matchingQueries,
   rankMatchingUsers,
+  safeSuggestion,
   searchableIdentity,
-  unambiguousFullNameMatch,
+  searchIdentityCandidates,
 } from "./identity-matches";
 
 describe("unmatched identity suggestions (H17)", () => {
@@ -34,22 +35,41 @@ describe("unmatched identity suggestions (H17)", () => {
   it("normalizes accents, case and spaces for the bounded list search", () => {
     expect(searchableIdentity("  MARÍA  López ")).toBe("maria lopez");
   });
-  it("loads the complete profile name before broader fallback queries", () => {
-    expect(matchingQueries(person)).toEqual(["María López", "López", "María", "maria"]);
+  it("queries only the complete name and email handle, never lone name parts", () => {
+    expect(matchingQueries(person)).toEqual(["María López", "maria"]);
+    expect(matchingQueries({ name: "María", surname: null, email: person.email })).toEqual([
+      "maria",
+    ]);
   });
-  it("preselects one accent-insensitive complete-name match but not an ambiguous one", () => {
-    expect(unambiguousFullNameMatch(person, [sameHandle, sameName])).toEqual(sameName);
+  it("preselects only a unique top-ranked candidate", () => {
+    const ranked = rankMatchingUsers(person, [sameHandle, sameName], true);
+    expect(safeSuggestion(person, ranked, true)).toEqual(sameName);
+    const tie = { ...sameName, id: 4, email: "other@platform.test" };
     expect(
-      unambiguousFullNameMatch(person, [
-        sameName,
-        { id: 4, name: "María", surname: "López", email: "other@platform.test" },
-      ]),
+      safeSuggestion(person, rankMatchingUsers(person, [sameName, tie], true), true),
     ).toBeNull();
+    // A full-name match plus an email handle outranks a plain full-name twin.
+    const both = { ...sameName, id: 5, email: "maria@elsewhere.test" };
+    expect(safeSuggestion(person, rankMatchingUsers(person, [sameName, both], true), true)).toEqual(
+      both,
+    );
   });
-  it("does not preselect a partial profile or an unrelated result", () => {
-    expect(
-      unambiguousFullNameMatch({ name: "María", surname: null, email: person.email }, [sameName]),
-    ).toBeNull();
-    expect(unambiguousFullNameMatch(person, [unrelated])).toBeNull();
+  it("does not preselect from a handle alone or a truncated candidate list", () => {
+    expect(safeSuggestion(person, [sameHandle], true)).toBeNull();
+    expect(safeSuggestion(person, [sameName], false)).toBeNull();
+  });
+  it("bounds suggestion and manual searches with separate limits", async () => {
+    const fetchUsers = vi.fn().mockResolvedValue([sameName, unrelated]);
+    expect(await searchIdentityCandidates(person, "", fetchUsers)).toEqual({
+      users: [sameName],
+      complete: true,
+    });
+    expect(fetchUsers.mock.calls).toEqual([
+      ["María López", 50],
+      ["maria", 50],
+    ]);
+    fetchUsers.mockClear();
+    await searchIdentityCandidates(person, "Mar", fetchUsers);
+    expect(fetchUsers.mock.calls).toEqual([["Mar", 20]]);
   });
 });

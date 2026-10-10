@@ -527,11 +527,13 @@ compact project code/copy action without instructions to link them again.
 
 Unmatched people are searchable by name, email, project or username and paginated
 in groups of ten. For an unmatched participant or an imported project roster
-member, opening the account picker immediately loads profile-name and email-handle
-suggestions, with accents normalized for ranking. It preselects only one exact
-complete-name match; an ambiguous, partial, or absent match stays unselected,
-and every link still needs the operator's explicit action. Manual name/email
-search remains available. The minimal
+member, opening the account picker loads suggestions from two bounded queries
+(the complete profile name and the email handle, 50 results each), ranked by
+exact email, accent-insensitive complete name and email handle. It preselects
+the top suggestion only when it is a complete-name or exact-email match with no
+tie at the top score and neither query hit its limit; once the operator types or
+chooses, nothing is preselected. Every link still needs the operator's explicit
+action. Manual name/email search (20 results) remains available. The minimal
 `GET /api/projects/member-candidates` read is authorized for either project editing
 or Devpost importing, rather than requiring general user-management access.
 Direct linking, secondary-email confirmation and account-claim mail remain
