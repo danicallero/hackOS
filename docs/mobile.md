@@ -1497,24 +1497,56 @@ app renders the pre-localized props of `@hackos/shared/live-activities`.
 (`QueueActivity`) and `widgets/staff-activity.tsx` (`StaffActivity`) are
 `'widget'` layouts serialized into the `ExpoWidgetsTarget` extension, so they
 use only `@expo/ui/swift-ui` and declare every helper and colour inside the
-function (accent = `theme/colors.ts` systemBlue, dropped in Always-On). The
-names must equal `LIVE_ACTIVITY_WIDGET_NAMES`. Following Apple's HIG:
+function. The names must equal `LIVE_ACTIVITY_WIDGET_NAMES`. Each state
+answers one question with one hero value; everything else is secondary.
+Colours: waiting/upcoming = systemBlue, called = systemGreen (go), in room =
+neutral grey; Always-On drops the accent fills. Lock Screen colours are
+dynamic (`{ dynamic: { light, dark } }`, light green `#248A3D` for contrast)
+because the layout's `environment.colorScheme` does not reliably match the
+Lock Screen's appearance; the Dynamic Island is always dark. Following
+Apple's HIG:
 
 | Presentation | Queue | Staff activity |
 | --- | --- | --- |
-| Compact leading / trailing | `#4` / `~12m` (an estimate, never a ticking timer); called: door symbol / room | category symbol (`fork.knife`, `mic.fill`, …) / countdown timer to the start, then the scanned count |
-| Minimal | ETA, or the room's initial once called | countdown or count |
-| Expanded | position and ETA in the compact positions, challenge below; called: "Go to" + room, location | symbol, countdown/counter, name, `hh:mm–hh:mm · location`, and once live the single **Scan** link |
-| Lock Screen | challenge, large position/ETA or the room, `+N more queues` | the same content as expanded, 14 pt margins, default background |
-| Watch Smart Stack / CarPlay (`bannerSmall`) | challenge + `#4 · ~12 min` or the room | name + countdown/count, no buttons |
+| Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: the count (still to eat for meals, else scanned) |
+| Minimal | ring of the climb to the front with the position inside; called/in room: the phase symbol | meals: ring of the served share; else the count or countdown |
+| Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: stage track, location · called count-up, challenge · +N more queues | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live meal: served / still to eat, served-share bar, inside, ends-in, **Scan**; live other: symbol / scanned, elapsed-time bar, name, ends-in, **Scan** |
+| Lock Screen | challenge … +N more queues; hero ETA (34 pt, accent) and position; called: "Go to" room (green) + location and the count-up since the call; stage track with labels | upcoming: symbol, name, time · location … starts-in countdown; live: symbol, name … ends-in; stats (served · **still to eat** · inside for meals, else scanned); bar with **Scan** in the bottom trailing corner |
+| Watch Smart Stack / CarPlay (`bannerSmall`) | challenge + `#4 · ~12 min` or the room | name + countdown or hero count, no buttons |
 
-Numbers use `monospacedDigit` with numeric content transitions; countdowns
-are SwiftUI timer texts, so they tick without updates. Taps open the props'
-`url` (passed as the activity's static URL); the API must send the same
-`attributes.url` on push-to-start. APNs props reach the layouts directly, so a
-props version other than `1` renders only the title. Room names shrink, then
-truncate; only numbers keep their full width. `test/live-activity-widgets.test.tsx`
-evaluates the serialized layouts with nothing but `@expo/ui/swift-ui` in scope.
+**Queue stage track.** Three nodes (In line → Called → In room) and two
+segments; completed parts take the phase colour and the current node is
+larger with a halo. Waiting is the long part of the journey, so the first
+segment takes two thirds of the width: with no GeometryReader (and
+`containerRelativeFrame` needing iOS 17), the row is built from three equally
+flexible units, the first segment being two ProgressViews overlapped by 4 pt
+and filled half by half. While waiting it fills with
+`(startPosition − position) / startPosition` (#1 of 4 → 0.75; empty on the
+first sighting or without `startPosition`). The node labels repeat the same
+units so each sits under its node. Meals use `(inside − remaining) / inside`
+(no bar when nobody is inside); other live activities show elapsed time with
+a `ProgressView` timer between `startsAt` and `endsAt`.
+
+**Margins and shapes.** The Lock Screen uses one 14 pt margin on every edge
+and stays within the 160 pt height (the live header is a single line for
+that reason). The only filled control, **Scan**, sits in the bottom trailing
+corner with a `containerRelativeShape` background, so it is concentric with
+the Live Activity's (or the island's) corner. There are no tiles or cards
+behind symbols. Fields and labels added after v1 (`calledAt`,
+`startPosition`, `inside`, `remaining`, `labels.estimating` …) are optional:
+an absent one hides its element; the widget never falls back to hardcoded
+copy.
+
+Numbers use `monospacedDigit` with numeric content transitions; countdowns,
+the count-up since the call and the elapsed-time bar are SwiftUI timers, so
+they tick without updates. Taps open the props' `url` (passed as the
+activity's static URL); the API must send the same `attributes.url` on
+push-to-start. APNs props reach the layouts directly, so a props version
+other than `1` renders only the title. Room and activity names truncate;
+only numbers keep their full width. `test/live-activity-widgets.test.tsx`
+evaluates the serialized layouts with nothing but `@expo/ui/swift-ui` in
+scope and covers the track fill, the meal breakdown and the old-server
+(v1 labels) fallbacks.
 
 **Surfaces (Android).** `lib/live-activities/model.ts` `toLiveUpdateSpec`
 maps the same props to `modules/live-updates` promoted ongoing notifications.
