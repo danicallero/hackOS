@@ -36,7 +36,7 @@ const base: ScheduleInput = {
 
 let container: HTMLDivElement;
 let root: Root;
-let onSubmit: ReturnType<typeof vi.fn>;
+let onSubmit: ReturnType<typeof vi.fn<(values: ScheduleInput) => Promise<{ id: number }>>>;
 
 async function render(initial: ScheduleInput) {
   await act(async () => {
@@ -58,7 +58,9 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  onSubmit = vi.fn().mockResolvedValue({ id: 1 });
+  onSubmit = vi
+    .fn<(values: ScheduleInput) => Promise<{ id: number }>>()
+    .mockResolvedValue({ id: 1 });
 });
 
 afterEach(() => {

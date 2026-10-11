@@ -3,7 +3,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
-import type { RoleSummary } from "@/lib/types";
 import { LiveActivitiesTab } from "./live-activities-tab";
 
 // #966: the Live Activities category — priority is list order, every kind is
@@ -40,6 +39,7 @@ const KINDS = ["activity", "attendee_activity", "queue", "deadline", "judging", 
 function settings() {
   return {
     maxConcurrent: 2,
+    roles,
     kinds: KINDS.map((kind, priority) => ({
       kind,
       enabled: true,
@@ -53,11 +53,11 @@ function settings() {
 const roles = [
   { id: 1, name: "Staff" },
   { id: 2, name: "Participants" },
-] as RoleSummary[];
+];
 
 let container: HTMLDivElement;
 let root: Root;
-let onDirtyChange: ReturnType<typeof vi.fn>;
+let onDirtyChange: ReturnType<typeof vi.fn<(dirty: boolean) => void>>;
 
 async function render() {
   await act(async () => {
@@ -97,14 +97,13 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   mobile = false;
-  onDirtyChange = vi.fn();
-  vi.mocked(api.get).mockImplementation((path: string) =>
-    Promise.resolve(path === "/api/roles" ? roles : settings()),
-  );
+  onDirtyChange = vi.fn<(dirty: boolean) => void>();
+  vi.mocked(api.get).mockImplementation(() => Promise.resolve(settings()));
   vi.mocked(api.put).mockImplementation((_path: string, body: unknown) => {
     const b = body as ReturnType<typeof lastPutBody>;
     return Promise.resolve({
       maxConcurrent: b.maxConcurrent,
+      roles,
       kinds: b.kinds.map((k, priority) => ({ ...k, priority, requiredCapability: null })),
     });
   });
@@ -114,6 +113,7 @@ afterEach(() => {
   act(() => root.unmount());
   container.remove();
   vi.mocked(api.put).mockReset();
+  vi.mocked(api.get).mockReset();
 });
 
 describe("LiveActivitiesTab", () => {
@@ -146,6 +146,7 @@ describe("LiveActivitiesTab", () => {
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
 
     await act(async () => user.click(button("saveChanges")));
+    expect(api.get).toHaveBeenCalledTimes(1);
     expect(api.put).toHaveBeenCalledWith("/api/live-activities/settings", expect.anything());
     const body = lastPutBody();
     expect(body.kinds.map((k) => k.kind)).toEqual([
@@ -201,14 +202,9 @@ describe("LiveActivitiesTab", () => {
 
   it("shows a retryable error when the settings cannot load", async () => {
     const user = userEvent.setup();
-    vi.mocked(api.get).mockImplementation((path: string) =>
-      path === "/api/roles" ? Promise.resolve(roles) : Promise.reject(new Error("down")),
-    );
+    vi.mocked(api.get).mockRejectedValueOnce(new Error("down"));
     await render();
     expect(container.textContent).toContain("couldNotLoadLiveActivities");
-    vi.mocked(api.get).mockImplementation((path: string) =>
-      Promise.resolve(path === "/api/roles" ? roles : settings()),
-    );
     await act(async () => user.click(button("retry")));
     expect(rowNames()).toHaveLength(KINDS.length);
   });

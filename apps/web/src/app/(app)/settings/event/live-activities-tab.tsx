@@ -47,7 +47,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
-import type { RoleSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { capabilityDescription, prettifyCapability } from "../../permissions/helpers";
 import { DrilldownBackButton } from "../../permissions/role-editor";
@@ -68,9 +67,14 @@ interface LiveActivityKindSetting {
   roleIds: number[];
   requiredCapability: string | null;
 }
+interface LiveActivityRole {
+  id: number;
+  name: string;
+}
 interface LiveActivitySettings {
   maxConcurrent: number;
   kinds: LiveActivityKindSetting[];
+  roles: LiveActivityRole[];
 }
 
 const MAX_CONCURRENT_OPTIONS = [1, 2, 3, 4, 5] as const;
@@ -133,8 +137,9 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
   const isMobile = useIsMobile();
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [roles, setRoles] = useState<RoleSummary[] | null>(null);
-  const [rolesError, setRolesError] = useState<string | null>(null);
+  // The settings response carries every assignable role, so a manager without
+  // roles-manager access can still target them (#966, H8).
+  const [roles, setRoles] = useState<LiveActivityRole[]>([]);
   const [saved, setSaved] = useState<Draft | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [selected, setSelected] = useState<LiveActivityConfigKind | null>(null);
@@ -146,32 +151,15 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
   const load = useCallback(async () => {
     setStatus("loading");
     setLoadError(null);
-    const [settingsResult, rolesResult] = await Promise.allSettled([
-      api.get<LiveActivitySettings>("/api/live-activities/settings"),
-      api.get<RoleSummary[]>("/api/roles"),
-    ]);
-    if (rolesResult.status === "fulfilled") {
-      setRoles(rolesResult.value);
-      setRolesError(null);
-    } else {
-      setRoles(null);
-      setRolesError(
-        rolesResult.reason instanceof ApiError
-          ? rolesResult.reason.message
-          : t("couldNotLoadRoles"),
-      );
-    }
-    if (settingsResult.status === "fulfilled") {
-      const next = toDraft(settingsResult.value);
+    try {
+      const settings = await api.get<LiveActivitySettings>("/api/live-activities/settings");
+      const next = toDraft(settings);
+      setRoles(settings.roles);
       setSaved(next);
       setDraft(next);
       setStatus("ready");
-    } else {
-      setLoadError(
-        settingsResult.reason instanceof ApiError
-          ? settingsResult.reason.message
-          : t("couldNotLoadLiveActivities"),
-      );
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadLiveActivities"));
       setStatus("error");
     }
   }, [t]);
@@ -181,7 +169,7 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
     void load();
   }, [load]);
 
-  const roleNames = useMemo(() => new Map((roles ?? []).map((r) => [r.id, r.name])), [roles]);
+  const roleNames = useMemo(() => new Map(roles.map((r) => [r.id, r.name])), [roles]);
 
   function updateKind(kind: LiveActivityConfigKind, patch: Partial<DraftKind>) {
     setDraft((prev) =>
@@ -208,9 +196,12 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
     setPending(true);
     setSaveState("saving");
     try {
-      const next = toDraft(
-        await api.put<LiveActivitySettings>("/api/live-activities/settings", toPayload(draft)),
+      const settings = await api.put<LiveActivitySettings>(
+        "/api/live-activities/settings",
+        toPayload(draft),
       );
+      const next = toDraft(settings);
+      setRoles(settings.roles);
       setSaved(next);
       setDraft(next);
       setSaveState("saved");
@@ -265,8 +256,6 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
       index={currentIndex}
       count={draft.kinds.length}
       roles={roles}
-      rolesError={rolesError}
-      onRetryRoles={() => void load()}
       onChange={(patch) => updateKind(current.kind, patch)}
       onMove={(toIndex) => move(current.kind, toIndex)}
     />
@@ -435,17 +424,13 @@ function KindEditor({
   index,
   count,
   roles,
-  rolesError,
-  onRetryRoles,
   onChange,
   onMove,
 }: {
   setting: DraftKind;
   index: number;
   count: number;
-  roles: RoleSummary[] | null;
-  rolesError: string | null;
-  onRetryRoles: () => void;
+  roles: LiveActivityRole[];
   onChange: (patch: Partial<DraftKind>) => void;
   onMove: (toIndex: number) => void;
 }) {
@@ -518,9 +503,7 @@ function KindEditor({
         {setting.enabled && setting.roleIds.length === 0 && (
           <p className="text-muted-foreground text-sm">{t("liveActivityNoRolesHint")}</p>
         )}
-        {rolesError ? (
-          <ContextualError message={rolesError} onRetry={onRetryRoles} />
-        ) : roles === null ? null : (
+        {roles.length > 0 && (
           <ul className="grid gap-2 sm:grid-cols-2">
             {roles.map((role) => {
               const id = `live-activity-${setting.kind}-role-${role.id}`;
