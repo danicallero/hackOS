@@ -1,9 +1,11 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { act, screen, userEvent, waitFor } from "@testing-library/react-native";
-import { Alert } from "react-native";
+import { act, fireEvent, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { Alert, ScrollView } from "react-native";
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockSetParams = jest.fn();
+let mockSearchParams: Record<string, string | undefined> = {};
 const mockFocusEffect = jest.fn();
 const mockApiFetch = jest.fn();
 const mockDeleteOwnAccount = jest.fn();
@@ -49,7 +51,8 @@ jest.mock("expo-router", () => ({
     const ReactLib = require("react");
     ReactLib.useEffect(callback, []);
   },
-  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useLocalSearchParams: () => mockSearchParams,
+  useRouter: () => ({ push: mockPush, replace: mockReplace, setParams: mockSetParams }),
   useScrollToTop: jest.fn(),
 }));
 jest.mock("expo-router/stack", () => ({ Stack: { Screen: () => null } }));
@@ -299,6 +302,7 @@ describe("account removal UI flow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockMeContext.me.capabilities = [];
+    mockSearchParams = {};
     mockApiFetch.mockResolvedValue({ intolerances: [] });
     mockFetchAccountRemovalEligibility.mockResolvedValue({
       action: "delete",
@@ -393,6 +397,47 @@ describe("account removal UI flow", () => {
     expect(mockPush).toHaveBeenCalledWith("/(tabs)/others/legal");
     await user.press(screen.getByRole("button", { name: "Delete account" }));
     expect(mockPush).toHaveBeenCalledWith("/(tabs)/others/delete-account");
+  });
+
+  it("consumes the alerts highlight param once: scroll to Notifications, flash, clear", async () => {
+    // The jest ScrollView has no native view behind it; observe its ref method.
+    const scrollTo = jest.spyOn(ScrollView.prototype, "scrollTo").mockImplementation(() => {});
+    mockSearchParams = { highlight: "notifications" };
+    await renderMobile(<AccountScreen />);
+    const scroll = screen.getByTestId("account-scroll");
+
+    await act(async () => {
+      fireEvent(scroll, "layout", { nativeEvent: { layout: { height: 600 } } });
+      fireEvent(screen.getByTestId("account-notifications"), "layout", {
+        nativeEvent: { layout: { y: 900 } },
+      });
+    });
+
+    expect(mockSetParams).toHaveBeenCalledTimes(1);
+    expect(mockSetParams).toHaveBeenCalledWith({ highlight: undefined });
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ y: 700 }));
+    expect(screen.getByTestId("account-notifications-highlight")).toBeTruthy();
+
+    // Later layout passes before the router drops the param must not replay it.
+    await act(async () => {
+      fireEvent(scroll, "layout", { nativeEvent: { layout: { height: 640 } } });
+      fireEvent(screen.getByTestId("account-notifications"), "layout", {
+        nativeEvent: { layout: { y: 920 } },
+      });
+    });
+    expect(mockSetParams).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    scrollTo.mockRestore();
+  });
+
+  it("leaves scroll position alone without a highlight param", async () => {
+    await renderMobile(<AccountScreen />);
+    await act(async () => {
+      fireEvent(screen.getByTestId("account-notifications"), "layout", {
+        nativeEvent: { layout: { y: 900 } },
+      });
+    });
+    expect(mockSetParams).not.toHaveBeenCalled();
   });
 
   it("shows Statistics only with staff statistics access", async () => {

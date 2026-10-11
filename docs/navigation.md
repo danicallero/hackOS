@@ -178,7 +178,9 @@ hidden destinations stay routable:
   is not a tab: every account reaches it from Account → Wallet → View tickets
   (H28). Alerts are not a tab either: the Schedule header bell (with an unread
   badge) presents the inbox as a sheet, and every notification setting lives in
-  Account → Notifications (H51, H59).
+  Account → Notifications (H51, H59); the sheet's gear dismisses it and
+  navigates to `/(tabs)/others/account?highlight=notifications`, so the tab bar
+  selection follows the pathname to Account.
 - **Operator** (any of `accredit:scan`, `presence:scan`, `activity:scan`, or
   the admin wildcard): the daily shift tools take the bar — schedule,
   **Scanner**, Activities (`activity:scan` holders only) —

@@ -502,15 +502,21 @@ distributed to other Expo Router apps without importing hackOS code.
   The inbox (`components/alerts-screen.tsx`, presented as a modal sheet from
   the Schedule bell at `schedule/alerts`) pages past the initial 20 messages on
   demand. A row swipes left to delete (after native confirmation) and right to
-  mark read/unread (`POST /api/me/notifications/:id/unread`); the header holds
-  the unread-only filter. Settings are not in the sheet: Account →
+  mark read/unread (`POST /api/me/notifications/:id/unread`). The sheet header
+  has an inline centered title, close (X) grouped with the unread-only filter
+  on the left and a gear on the right (`Stack.Toolbar` on Liquid Glass,
+  `headerLeft`/`headerRight` elsewhere). Settings are not in the sheet: the
+  gear dismisses it and opens `others/account?highlight=notifications`, which
+  Account consumes once (scrolls the Notifications row into view, flashes it
+  for about a second — no animation under Reduce Motion — then clears the
+  param). Account →
   Notifications (`components/notification-settings-screen.tsx`,
   `others/notification-settings/`) lists each notification type with its state;
   a type opens its channel switches, and Activity reminders also lists the
   upcoming reminders, an "Add an activity" picker (`others/reminders/[kind]`)
   and a bulk switch per activity type (`components/reminders-view.tsx`).
   Announcement management (`others/announcements`) sits under Notifications →
-  Send for `announcements:manage` holders. On Android the inbox
+  Send for `announcements:manage` holders. On Android the
   inbox mounts the same native scroll gesture boundary as Schedule, so
   vertical scrolling takes precedence over a row's horizontal delete reveal.
   A third "Manage"

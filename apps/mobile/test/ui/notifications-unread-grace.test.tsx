@@ -1,14 +1,27 @@
 import { act, fireEvent, waitFor } from "@testing-library/react-native";
-import type { ReactElement } from "react";
+import { Children, type ReactElement } from "react";
 import { Platform } from "react-native";
 
-// The unread filter is a header action; capture it to press it like the header would.
-const mockNavOptions: { headerRight?: () => ReactElement } = {};
+// Header actions are captured to press them like the native header would.
+type HeaderButton = ReactElement<{ accessibilityLabel: string; onPress: () => void }>;
+const mockNavOptions: { headerLeft?: () => ReactElement; headerRight?: () => ReactElement } = {};
+const mockRouter = { dismiss: jest.fn(), navigate: jest.fn(), push: jest.fn() };
+function headerButtons(side: "headerLeft" | "headerRight"): HeaderButton[] {
+  const element = mockNavOptions[side]?.() as ReactElement<{ children?: HeaderButton[] }>;
+  return element.props.children
+    ? (Children.toArray(element.props.children) as HeaderButton[])
+    : [element as HeaderButton];
+}
+function headerButton(side: "headerLeft" | "headerRight", label: string) {
+  const button = headerButtons(side).find((item) => item.props.accessibilityLabel === label);
+  if (!button) throw new Error(`No ${label} header button`);
+  return button;
+}
 jest.mock("expo-router", () => ({
   useNavigation: () => ({
     setOptions: (options: object) => Object.assign(mockNavOptions, options),
   }),
-  useRouter: () => ({ push: () => {} }),
+  useRouter: () => mockRouter,
   useScrollToTop: () => {},
 }));
 
@@ -101,6 +114,7 @@ jest.mock("@/lib/i18n", () => ({
           notificationsNoUnread: "No unread notifications",
           notificationsPreferences: "Preferences",
           notificationsUnreadOnly: "Unread only",
+          close: "Close",
           tabNotifications: "Notifications",
         }) as Record<string, string>
       )[key] ?? key,
@@ -186,13 +200,8 @@ describe("unread-only grace period (H489)", () => {
     const inbox = await renderMobile(<NotificationsScreen />);
 
     // Press the header's Unread only action, as the native header would.
-    const headerRight = mockNavOptions.headerRight?.() as ReactElement<{
-      accessibilityLabel: string;
-      onPress: () => void;
-    }>;
-    expect(headerRight.props.accessibilityLabel).toBe("Unread only");
     await act(async () => {
-      headerRight.props.onPress();
+      headerButton("headerLeft", "Unread only").props.onPress();
     });
 
     const row = await inbox.findByRole("button", { name: /Kickoff moved/ });
@@ -216,5 +225,33 @@ describe("unread-only grace period (H489)", () => {
 
     await waitFor(() => expect(inbox.queryByText("Kickoff moved")).toBeNull());
     expect(inbox.getByText("No unread notifications")).toBeTruthy();
+  });
+});
+
+describe("alerts sheet header (H51)", () => {
+  it("groups close with the filter and sends the gear to Account → Notifications", async () => {
+    await renderMobile(<NotificationsScreen />);
+    expect(headerButtons("headerLeft").map((button) => button.props.accessibilityLabel)).toEqual([
+      "Close",
+      "Unread only",
+    ]);
+
+    headerButton("headerLeft", "Close").props.onPress();
+    expect(mockRouter.dismiss).toHaveBeenCalledTimes(1);
+    expect(mockRouter.navigate).not.toHaveBeenCalled();
+
+    mockRouter.dismiss.mockClear();
+    headerButton("headerRight", "Preferences").props.onPress();
+
+    // The sheet closes first so the Schedule stack does not keep it on top.
+    expect(mockRouter.dismiss).toHaveBeenCalledTimes(1);
+    expect(mockRouter.navigate).toHaveBeenCalledWith({
+      pathname: "/(tabs)/others/account",
+      params: { highlight: "notifications" },
+    });
+    expect(mockRouter.dismiss.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRouter.navigate.mock.invocationCallOrder[0],
+    );
+    expect(mockRouter.push).not.toHaveBeenCalled();
   });
 });
