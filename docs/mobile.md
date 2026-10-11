@@ -541,7 +541,8 @@ distributed to other Expo Router apps without importing hackOS code.
   `others/notification-settings/`) lists each notification type with its state;
   a type opens its channel switches. Activity reminders
   (`components/reminders-view.tsx`) continues with a bulk switch per activity
-  type (the label side opens that type's activities) and then "Coming up":
+  type (the label side, marked by a chevron, opens that type's activities)
+  and then "Coming up":
   the next three reminders, "See all" when there are more (the same
   `others/reminders/[kind]` route with `kind=all&subscribed=1`, where a row
   switched off stays until the person leaves), and an "Add an activity"
@@ -1716,16 +1717,26 @@ projects; the deadline goes to `queue:status` holders, who always have it.
 updates (Android) switch: off ends every surface immediately and registers the
 device with `enabled: false`.
 
-**Per-kind choice.** Under that switch, one switch per kind the account
-receives (`GET /api/me/live-activities/preferences`, in priority order; kinds
-the account is not entitled to are not listed), labelled with the
-`liveActivityKind*` mobile copy keys
-(`lib/live-activities/use-live-activity-kinds.ts`). A toggle is optimistic,
-sends only that kind (`PUT`), then runs `reconcileLiveActivities()` so a kind
-turned off ends on this device at once; a failed save flips the switch back.
-The choice is per account, so the worker applies it on every device.
-**Decision:** the per-kind rows are hidden while the device switch is off,
-because nothing shows on this device then and the rows would be inert.
+**Per-kind choice and order.** The switch row's label side (detail
+"n of m on", chevron) opens Notifications → Live Activities
+(`app/(tabs)/others/notification-settings/live-activities.tsx`,
+`components/live-activity-kinds-screen.tsx`): one row per kind the account
+receives (`GET /api/me/live-activities/preferences`, in the person's order;
+kinds the account is not entitled to are not listed), labelled with the
+`liveActivityKind*` mobile copy keys, each with its switch and a drag handle.
+Dragging a handle (gesture-handler `Pan` + Reanimated, fixed-height slots,
+scroll disabled while dragging) sets the person's priority: the top kinds
+take the device's few slots first when several apply. VoiceOver users get
+Move up / Move down custom actions on the handle, whose value is the
+position ("2 of 3"). "Reset to default order" appears only for a customized
+order (`customOrder`) and sends `order: null`. Toggles and reorders are
+optimistic (`lib/live-activities/use-live-activity-kinds.ts`), send only the
+change (`PUT` with `kinds` or `order`), then run `reconcileLiveActivities()`
+so this device follows at once; a failed save restores the previous state.
+Both are per account, so the worker applies them on every device.
+**Decision:** the device switch stays the only master; the detail screen is
+reachable only while it is on, because nothing shows on this device then and
+the rows would be inert.
 
 **Development samples.** Debug builds only: opening
 `hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-submitted|accreditation|all|end>`

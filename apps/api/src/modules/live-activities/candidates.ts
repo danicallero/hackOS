@@ -34,6 +34,7 @@ import {
   readDeadlineWindow,
   type SubmissionFact,
 } from "./kinds.js";
+import { userKindRank } from "./preferences.js";
 import {
   buildActivityLiveProps,
   type JudgingWindow,
@@ -55,7 +56,8 @@ import {
  *    may receive that kind and its window is open).
  * 2. `candidatesFor` applies the gates — kind enabled, the user holds one of
  *    its configured roles, and the kind's intrinsic capability or data — and
- *    returns the user's candidates in kind-priority order.
+ *    returns the user's candidates in kind-priority order (the user's own
+ *    kind order when they set one, else the organizer priority).
  * 3. `selectForDevice` keeps at most `maxConcurrent` of them per device.
  */
 
@@ -65,13 +67,15 @@ export interface Candidate {
   kind: LiveActivityKind;
   subject: string;
   props: LiveActivityProps;
-  /** Kind priority from the configuration (0 = highest). */
+  /** Kind priority for this user (lowest first): `userKindRank`. */
   priority: number;
 }
 
 interface UserFacts {
   isTestAccount: boolean;
   kinds: Set<LiveActivityConfigKind>;
+  /** The user's own kind order (`live_activity_kind_orders`); null = organizer order. */
+  order: LiveActivityConfigKind[] | null;
   capabilities: Set<string>;
   eventAccess: boolean;
 }
@@ -79,6 +83,7 @@ interface UserFacts {
 export interface LiveActivityContext {
   now: Date;
   maxConcurrent: number;
+  /** Organizer rank of each kind (0 = highest). */
   priority: Map<LiveActivityConfigKind, number>;
   users: Map<number, UserFacts>;
   judgingWindow: JudgingWindow;
@@ -137,6 +142,7 @@ export async function loadLiveActivityContext(
       id: number;
       is_test_account: boolean;
       kinds: LiveActivityConfigKind[] | null;
+      kind_order: LiveActivityConfigKind[] | null;
       capabilities: string[] | null;
       event_access: boolean;
     }>(
@@ -150,6 +156,8 @@ export async function loadLiveActivityContext(
                   -- The user's own per-kind opt-out (preferences.ts).
                   AND NOT EXISTS (SELECT 1 FROM live_activity_kind_opt_outs o
                                    WHERE o.user_id = u.id AND o.kind = kr.kind)) AS kinds,
+              (SELECT ko.kinds FROM live_activity_kind_orders ko
+                WHERE ko.user_id = u.id) AS kind_order,
               (SELECT array_agg(uec.capability)
                  FROM user_effective_capabilities uec
                 WHERE uec.user_id = u.id AND uec.capability = ANY($2::text[])) AS capabilities,
@@ -162,6 +170,7 @@ export async function loadLiveActivityContext(
       users.set(row.id, {
         isTestAccount: row.is_test_account,
         kinds: new Set(row.kinds ?? []),
+        order: row.kind_order,
         capabilities: new Set(row.capabilities ?? []),
         eventAccess: row.event_access,
       });
@@ -267,8 +276,8 @@ export async function loadLiveActivityContext(
 
 /**
  * Every Live Activity `userId` may have now, in priority order: kinds by
- * their configured priority, then each kind's own order (earliest activity
- * first). Props carry no `rank` yet.
+ * the user's own order, else their configured priority, then each kind's
+ * own order (earliest activity first). Props carry no `rank` yet.
  */
 export async function candidatesFor(
   userId: number,
@@ -280,7 +289,12 @@ export async function candidatesFor(
   const { now } = ctx;
   const out: Candidate[] = [];
   const add = (kind: LiveActivityConfigKind, subject: string, props: LiveActivityProps) =>
-    out.push({ kind, subject, props, priority: ctx.priority.get(kind) ?? 1_000 });
+    out.push({
+      kind,
+      subject,
+      props,
+      priority: userKindRank(kind, ctx.priority.get(kind) ?? 1_000, user.order),
+    });
 
   if (user.kinds.has("activity") && hasCapability(user, CAPABILITIES.ACTIVITY_SCAN)) {
     for (const activity of ctx.activities) {
@@ -367,7 +381,7 @@ export interface Selection {
 
 /**
  * Keeps at most `maxConcurrent` candidates for one device. Order: kind
- * priority, then — the hysteresis — subjects already open on the device
+ * priority (the user's, see `candidatesFor`), then — the hysteresis — subjects already open on the device
  * before new ones of the same kind, then the kind's own order. A new
  * candidate of a higher-priority kind displaces a running lower one (which
  * is ended and restarts when a slot frees); within a kind a running activity

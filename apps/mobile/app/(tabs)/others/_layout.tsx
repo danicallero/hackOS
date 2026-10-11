@@ -50,6 +50,10 @@ export default function OthersLayout() {
         options={{ headerShown: true, headerLargeTitle: true, title: t("alertsNotifications") }}
       />
       <Stack.Screen
+        name="notification-settings/live-activities"
+        options={{ headerShown: true, headerLargeTitle: true }}
+      />
+      <Stack.Screen
         name="notification-settings/[category]"
         options={{ headerShown: true, headerLargeTitle: true }}
       />

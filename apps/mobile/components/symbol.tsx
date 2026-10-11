@@ -86,6 +86,7 @@ const ANDROID_SYMBOL_NAMES = {
   "key.card.fill": "key",
   "key.fill": "vpn_key",
   keyboard: "keyboard",
+  "line.3.horizontal": "drag_handle",
   "line.3.horizontal.decrease": "filter_list",
   "line.3.horizontal.decrease.circle.fill": "filter_alt",
   lanyardcard: "badge",
