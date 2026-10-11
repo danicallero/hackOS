@@ -1,7 +1,17 @@
 import MaskedView from "@react-native-masked-view/masked-view";
-import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Image, Platform, useWindowDimensions, View } from "react-native";
+import {
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Image, Platform, type ScrollView, useWindowDimensions, View } from "react-native";
 import Animated, {
+  runOnJS,
   useAnimatedProps,
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -15,12 +25,14 @@ import { avatarInitials } from "@/components/user-avatar";
 import { diaryInitials } from "@/lib/diary";
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
+  PROFILE_AVATAR_SNAP_REST_VELOCITY,
   type ProfileCameraCutoutFrame,
   profileAvatarCollapseBounds,
   profileAvatarContentFrame,
   profileAvatarCoverOpacity,
   profileAvatarMaskFrame,
   profileAvatarMorphPath,
+  profileAvatarSnapTarget,
   resolveProfileCameraTarget,
 } from "@/lib/profile-avatar-collapse";
 import CameraCapabilities from "@/modules/camera-capabilities";
@@ -35,28 +47,64 @@ export type ProfileAvatarCollapseController = ReturnType<typeof useProfileAvatar
  * Scroll-driven profile-avatar morph based on Telegram's PeerInfoHeaderNode:
  * the scroll offset drives one mask/cover progress value, with an always-clipped
  * avatar, a cutout-sized black backing and a dark radial gradient on top.
+ *
+ * A released drag never leaves the morph half-way (#935): it settles at fully
+ * expanded or fully collapsed. Pass the screen's own scroll ref when it has
+ * one; otherwise spread the returned `scrollRef` onto the scroll view.
  */
-export function useProfileAvatarCollapse() {
+export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView | null>) {
   const scrollOffset = useSharedValue(0);
   const restingOffset = useSharedValue(0);
   const hasDragged = useSharedValue(false);
+  // Only a user drag arms the snap, so programmatic scrolls are left alone.
+  const snapArmed = useSharedValue(false);
+  const releaseVelocity = useSharedValue(0);
+  const ownScrollRef = useRef<ScrollView>(null);
+  const scrollRef = screenScrollRef ?? ownScrollRef;
+  const reduceMotion = useReducedMotion();
   const hostRef = useRef<View>(null);
   const anchorRef = useRef<View>(null);
   const [hostOrigin, setHostOrigin] = useState({ x: 0, y: 0 });
   const [anchorFrame, setAnchorFrame] = useState<ProfileAvatarFrame | null>(null);
 
-  const onScroll = useAnimatedScrollHandler({
-    onBeginDrag: () => {
-      hasDragged.value = true;
+  const scrollToOffset = useCallback(
+    (y: number) => scrollRef.current?.scrollTo({ animated: !reduceMotion, y }),
+    [reduceMotion, scrollRef],
+  );
+
+  const settle = (contentOffset: number, velocity: number) => {
+    "worklet";
+    snapArmed.value = false;
+    const target = profileAvatarSnapTarget(contentOffset - restingOffset.value, velocity);
+    if (target !== null) runOnJS(scrollToOffset)(restingOffset.value + target);
+  };
+
+  const onScroll = useAnimatedScrollHandler(
+    {
+      onBeginDrag: () => {
+        hasDragged.value = true;
+        snapArmed.value = true;
+      },
+      onScroll: (event) => {
+        // Capture automatic inset adjustments before the first gesture.
+        // A later pull-to-refresh bounce must not redefine the resting offset.
+        if (!hasDragged.value)
+          restingOffset.value = Math.min(restingOffset.value, event.contentOffset.y);
+        scrollOffset.value = Math.max(0, event.contentOffset.y - restingOffset.value);
+      },
+      onEndDrag: (event) => {
+        const velocity = event.velocity?.y ?? 0;
+        releaseVelocity.value = velocity;
+        // A moving release decelerates first; its momentum end decides.
+        if (Math.abs(velocity) >= PROFILE_AVATAR_SNAP_REST_VELOCITY) return;
+        settle(event.contentOffset.y, velocity);
+      },
+      onMomentumEnd: (event) => {
+        if (snapArmed.value) settle(event.contentOffset.y, releaseVelocity.value);
+      },
     },
-    onScroll: (event) => {
-      // Capture automatic inset adjustments before the first gesture.
-      // A later pull-to-refresh bounce must not redefine the resting offset.
-      if (!hasDragged.value)
-        restingOffset.value = Math.min(restingOffset.value, event.contentOffset.y);
-      scrollOffset.value = Math.max(0, event.contentOffset.y - restingOffset.value);
-    },
-  });
+    [scrollToOffset],
+  );
 
   const measureAnchor = useCallback(() => {
     const host = hostRef.current;
@@ -109,6 +157,7 @@ export function useProfileAvatarCollapse() {
     onContentSizeChange: measureAfterLayout,
     onScroll,
     scrollOffset,
+    scrollRef,
   };
 }
 

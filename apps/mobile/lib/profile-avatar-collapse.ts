@@ -2,6 +2,29 @@ import telegramMaskTracks from "./telegram-avatar-mask.json";
 
 export const PROFILE_AVATAR_COLLAPSE_DISTANCE = 120;
 
+/** Release speed (points/ms, positive while the offset grows) that reads as a flick. */
+const PROFILE_AVATAR_SNAP_FLICK_VELOCITY = 0.3;
+/** Below this release speed the scroll view does not decelerate, so no momentum end follows. */
+export const PROFILE_AVATAR_SNAP_REST_VELOCITY = 0.05;
+
+/**
+ * Where a released scroll should settle so the avatar never rests half-morphed
+ * (#935): null outside the open collapse range, otherwise fully expanded (0) or
+ * fully collapsed (`distance`). A flick decides by direction, a slow release by
+ * which half of the range the offset is in.
+ */
+export function profileAvatarSnapTarget(
+  offset: number,
+  velocity: number,
+  distance = PROFILE_AVATAR_COLLAPSE_DISTANCE,
+): number | null {
+  "worklet";
+  if (!(offset > 0 && offset < distance)) return null;
+  if (velocity >= PROFILE_AVATAR_SNAP_FLICK_VELOCITY) return distance;
+  if (velocity <= -PROFILE_AVATAR_SNAP_FLICK_VELOCITY) return 0;
+  return offset >= distance / 2 ? distance : 0;
+}
+
 export type ProfileCameraCutoutFrame = {
   left: number;
   top: number;
