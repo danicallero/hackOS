@@ -14,6 +14,10 @@ import type { Language } from "./locale.js";
 export const LIVE_ACTIVITY_KINDS = {
   QUEUE: "queue",
   ACTIVITY: "activity",
+  ATTENDEE_ACTIVITY: "attendee_activity",
+  DEADLINE: "deadline",
+  JUDGING: "judging",
+  ACCREDITATION: "accreditation",
 } as const;
 
 export type LiveActivityKind = (typeof LIVE_ACTIVITY_KINDS)[keyof typeof LIVE_ACTIVITY_KINDS];
@@ -25,7 +29,54 @@ export type LiveActivityKind = (typeof LIVE_ACTIVITY_KINDS)[keyof typeof LIVE_AC
 export const LIVE_ACTIVITY_WIDGET_NAMES: Record<LiveActivityKind, string> = {
   queue: "QueueActivity",
   activity: "StaffActivity",
+  attendee_activity: "AttendeeActivity",
+  deadline: "DeadlineActivity",
+  judging: "JudgingActivity",
+  accreditation: "AccreditationActivity",
 };
+
+/**
+ * Kinds organizers configure (`GET/PUT /api/live-activities/settings`), in
+ * their default priority order. Same ids as `LiveActivityKind`.
+ */
+export const LIVE_ACTIVITY_CONFIG_KINDS = [
+  "activity",
+  "attendee_activity",
+  "queue",
+  "deadline",
+  "judging",
+  "accreditation",
+] as const;
+
+export type LiveActivityConfigKind = (typeof LIVE_ACTIVITY_CONFIG_KINDS)[number];
+
+export interface LiveActivityKindSetting {
+  kind: LiveActivityConfigKind;
+  enabled: boolean;
+  /** 0 = highest priority. */
+  priority: number;
+  /** Roles allowed to receive it (H8 roles table ids). */
+  roleIds: number[];
+  /** Intrinsic capability still required on top of the role (null = none), shown read-only in the UI. */
+  requiredCapability: string | null;
+}
+
+export interface LiveActivitySettings {
+  /** Most Live Activities one device shows at once (1–5). */
+  maxConcurrent: number;
+  /** Sorted by priority. */
+  kinds: LiveActivityKindSetting[];
+  /**
+   * Every assignable (non-deleted) role, highest position first, with the
+   * same raw `name` `GET /api/roles` returns — so the settings UI can render
+   * role checkboxes without the roles-manager capability.
+   */
+  roles: { id: number; name: string }[];
+}
+
+/** Bounds of `LiveActivitySettings.maxConcurrent`. */
+export const LIVE_ACTIVITY_MAX_CONCURRENT_MIN = 1;
+export const LIVE_ACTIVITY_MAX_CONCURRENT_MAX = 5;
 
 /** Subject key of the single queue Live Activity a participant can have. */
 export const QUEUE_LIVE_ACTIVITY_SUBJECT = "judging";

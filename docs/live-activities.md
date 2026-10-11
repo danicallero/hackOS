@@ -108,6 +108,48 @@ notification category. The opt-out is therefore the device's `enabled` flag
 (`PUT /api/me/live-activities/device`) rather than an H51 preference row. A
 dismissed activity stays away until its phase changes (see the state machine).
 
+## Configuration
+
+Organizers configure the kinds in event settings (`event:manage`, the
+capability that owns event identity and timing):
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/live-activities/settings` | `LiveActivitySettings`: `maxConcurrent`, `kinds` sorted by priority, and `roles` (every non-deleted role, highest position first, raw name as `GET /api/roles` returns it) so the editor needs no roles-manager permission. |
+| `PUT /api/live-activities/settings` | `{ maxConcurrent: 1–5, kinds: [{ kind, enabled, roleIds }] }`. `kinds` lists every kind exactly once and its **array order is the priority** (first = 0 = highest). Unknown or deleted role ids are a 400. Audited (`live_activity_settings`, H53) in the same transaction; `Idempotency-Key` replays. |
+
+Kinds (`LIVE_ACTIVITY_CONFIG_KINDS`) and the gate each keeps on top of its
+role list (`requiredCapability` in the response):
+
+| Kind | Who | Intrinsic gate |
+| --- | --- | --- |
+| `activity` | staff at a meal or scannable activity | `activity:scan` |
+| `attendee_activity` | the audience of an opted-in schedule item | schedule audience (data) |
+| `queue` | participants in a judging queue | a live queue entry (data) |
+| `deadline` | participants before submissions close | `queue:status` + event access |
+| `judging` | judges of a room | a room their enterprise judges (data) |
+| `accreditation` | the check-in desk | `accredit:scan` |
+
+A user receives a kind only when it is **enabled**, they hold **at least one
+of its roles** (a non-deleted role from `live_activity_kind_roles`), and the
+intrinsic gate still holds. An empty role list means nobody receives it.
+**Decision (H8):** roles here select an *audience*; they never grant
+anything — the capability or data gate always applies as well.
+
+Storage (migration `0605_live_activity_settings.sql`): the singleton
+`live_activity_settings.max_concurrent` (default 2),
+`live_activity_kind_settings (kind, enabled, priority)` with a deferred
+unique priority, and `live_activity_kind_roles (kind, role_id)` (cascade on a
+hard role delete; a soft-deleted role is ignored when reading). The migration
+seeds every kind enabled in the order `activity`, `attendee_activity`,
+`queue`, `judging`, `accreditation`, `deadline` (the product owner ranks
+meals and activities above the submission countdown). Role lists are seeded
+from the roles that explicitly allow the kind's capability (`activity`,
+`accreditation`, `deadline`), or from every role with event access for the
+data-gated kinds (`judging` also adds the `judge:panel` roles). **Roles created
+later are not added to any kind automatically**; organizers tick them in the
+editor. A missing kind row reads as disabled with no roles (fail closed).
+
 ## Registry
 
 | Route | Purpose |
