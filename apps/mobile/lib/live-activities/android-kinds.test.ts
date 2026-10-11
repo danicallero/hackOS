@@ -123,13 +123,13 @@ describe("attendee activity (H59)", () => {
     expect(result.progress ?? null).toBeNull();
   });
 
-  it("reads Now · name while live, counts down to the end and tracks the elapsed time", () => {
+  it("reads Live · name while live, counts down to the end and tracks the elapsed time", () => {
     const result = spec(
       attendee({ phase: "live", startsAt: iso(NOW - 20 * MIN), endsAt: iso(NOW + 20 * MIN) }),
     );
     expect(result).toMatchObject({
-      title: "Now · Intro to Rust",
-      emphasis: "Now",
+      title: "Live · Intro to Rust",
+      emphasis: "Live",
       subText: "Ends in",
       countdownTo: NOW + 20 * MIN,
       progress: {
@@ -140,8 +140,13 @@ describe("attendee activity (H59)", () => {
         ],
         tracker: "mic",
       },
-      card: { header: "Now · Intro to Rust", lead: { caption: "Ends in", timer: "countDown" } },
+      card: { header: "Live · Intro to Rust", lead: { caption: "Ends in", timer: "countDown" } },
     });
+    // A server without the `live` label: its "Now".
+    const { live: _live, ...older } = attendeeActivityLiveLabels("en");
+    expect(
+      spec(attendee({ phase: "live", labels: older as AttendeeActivityLiveProps["labels"] })).title,
+    ).toBe("Now · Intro to Rust");
   });
 
   it("maps categories like the iOS widget and omits missing labels", () => {

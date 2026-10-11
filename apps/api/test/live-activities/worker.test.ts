@@ -1,6 +1,9 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { AndroidLiveUpdateMessage } from "@hackos/shared/live-activities";
+import {
+  type AndroidLiveUpdateMessage,
+  LIVE_ACTIVITY_STALE_LEEWAY_MS,
+} from "@hackos/shared/live-activities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { AndroidLiveUpdateTransport } from "../../src/modules/live-activities/android.js";
 import type {
@@ -559,7 +562,11 @@ describe("staff activity Live Activity (H25, H26)", () => {
       startsAt,
       endsAt,
     });
-    expect(aps["stale-date"]).toBe(Math.floor(rows[0]!.ends_at.getTime() / 1000));
+    // Still upcoming: stale at the new start (minus iOS's leeway), when the
+    // widget turns live.
+    expect(aps["stale-date"]).toBe(
+      Math.floor((rows[0]!.starts_at.getTime() - LIVE_ACTIVITY_STALE_LEEWAY_MS) / 1000),
+    );
     expect(android.sent[1]).toMatchObject({
       token: `ExponentPushToken[${tablet.deviceId}]`,
       message: { hackosLiveUpdate: { event: "update", props: { startsAt, endsAt } } },
@@ -742,6 +749,59 @@ describe("configurable kinds in the worker (#966)", () => {
     ]);
     expect(await tick()).toMatchObject({ ended: 1 });
     expect(await sessionsOf(device.id)).toMatchObject([{ end_reason: "finished" }]);
+  });
+
+  it("turns live on time: stale at the start, a tick scheduled at the start and the end (H25, H26, H59)", async () => {
+    const db = await pool();
+    const { getQueue } = await import("../../src/lib/queues.js");
+    const { LIVE_ACTIVITIES_BOUNDARY_MARGIN_MS, LIVE_ACTIVITIES_QUEUE, liveActivityBoundaryJobId } =
+      await import("../../src/modules/live-activities/kick.js");
+    const queue = getQueue(LIVE_ACTIVITIES_QUEUE);
+    await queue.obliterate({ force: true });
+    const attendee = await createUser();
+    const { rows } = await db.query<{ id: number; starts_at: Date; ends_at: Date }>(
+      `INSERT INTO schedule (title, type, starts_at, ends_at, visibility, audiences,
+                             live_activity_audience)
+       VALUES ('Keynote', 'talk', now() + interval '5 minutes', now() + interval '50 minutes',
+               'shown', '{participant}', true) RETURNING id, starts_at, ends_at`,
+    );
+    const { id: scheduleId, starts_at: startsAt, ends_at: endsAt } = rows[0]!;
+    const device = await registerDevice(attendee, { language: "es" });
+
+    const before = Date.now();
+    expect(await tick()).toMatchObject({ started: 1 });
+    // iOS marks the upcoming state stale at the start and re-renders it as
+    // live then, without the push below.
+    expect(apsOf(0)["stale-date"]).toBe(
+      Math.floor((startsAt.getTime() - LIVE_ACTIVITY_STALE_LEEWAY_MS) / 1000),
+    );
+    expect(propsOf(0)).toMatchObject({
+      phase: "upcoming",
+      labels: { live: "En curso", endsIn: "Acaba en" },
+    });
+    const atStart = await queue.getJob(liveActivityBoundaryJobId(startsAt));
+    expect(atStart?.name).toBe("boundary");
+    const delay = atStart!.opts.delay!;
+    expect(delay).toBeLessThanOrEqual(
+      startsAt.getTime() - before + LIVE_ACTIVITIES_BOUNDARY_MARGIN_MS,
+    );
+    expect(delay).toBeGreaterThan(startsAt.getTime() - Date.now());
+    // Requested again by the next tick, still one job for the instant.
+    await tick();
+    const pending = await queue.getJobs(["delayed"]);
+    expect(pending.filter((job) => job.id === atStart!.id)).toHaveLength(1);
+    await setActivityToken(device.id, "keynote-token");
+
+    // The boundary tick: the start has passed.
+    await db.query(`UPDATE schedule SET starts_at = now() - interval '1 second' WHERE id = $1`, [
+      scheduleId,
+    ]);
+    expect(await tick()).toMatchObject({ updated: 1 });
+    expect(apns.sent.at(-1)!.priority).toBe(10);
+    const live = apns.sent.at(-1)!.payload.aps as Record<string, unknown>;
+    expect(JSON.parse((live["content-state"] as { props: string }).props).phase).toBe("live");
+    expect(live["stale-date"]).toBe(Math.floor(endsAt.getTime() / 1000));
+    expect(await queue.getJob(liveActivityBoundaryJobId(endsAt))).toBeTruthy();
   });
 
   it("a higher-priority kind displaces a running lower one beyond maxConcurrent", async () => {

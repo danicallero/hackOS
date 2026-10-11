@@ -23,9 +23,10 @@ import type { DesiredActivity } from "./model";
  * `__DEV__`, so production bundles drop this module entirely.
  *
  * Samples: queue-waiting, queue-estimating, queue-called, queue-in-room,
- * staff-upcoming, staff-live (a meal), staff-live-other, all, plus the
- * attendee, deadline and accreditation ones in `KIND_SAMPLES`;
- * `end` removes them.
+ * staff-upcoming, staff-live (a meal), staff-live-other, staff-starting,
+ * all, plus the attendee, deadline and accreditation ones in `KIND_SAMPLES`;
+ * `end` removes them. The `-starting` samples start a minute later and turn
+ * live then on their own (H25, H59: stale at the start).
  */
 const MINUTE = 60_000;
 
@@ -55,11 +56,11 @@ function queue(sample: QueueSample): DesiredActivity {
   };
 }
 
-type StaffSample = { phase: ActivityLiveProps["phase"]; meal: boolean };
+type StaffSample = { phase: ActivityLiveProps["phase"]; meal: boolean; startsIn?: number };
 
-function staff({ phase, meal }: StaffSample): DesiredActivity {
+function staff({ phase, meal, startsIn = 18 * MINUTE }: StaffSample): DesiredActivity {
   const now = Date.now();
-  const startsAt = phase === "upcoming" ? now + 18 * MINUTE : now - 25 * MINUTE;
+  const startsAt = phase === "upcoming" ? now + startsIn : now - 25 * MINUTE;
   const live = phase === "live";
   const id = meal ? 7 : 8;
   return {
@@ -74,7 +75,7 @@ function staff({ phase, meal }: StaffSample): DesiredActivity {
       category: meal ? "meal" : "ceremony",
       location: meal ? "Cafeteria" : "Main hall",
       startsAt: new Date(startsAt).toISOString(),
-      endsAt: new Date(startsAt + 90 * MINUTE).toISOString(),
+      endsAt: new Date(startsAt + (startsIn < MINUTE * 2 ? 65 : 90) * MINUTE).toISOString(),
       scanned: live ? 142 : 0,
       accredited: live ? 180 : null,
       scanUrl: `hackos://scan?activity=${id}`,
@@ -120,6 +121,7 @@ const SAMPLES: Record<string, () => DesiredActivity[]> = {
   "staff-upcoming": () => [staff({ phase: "upcoming", meal: true })],
   "staff-live": () => [staff({ phase: "live", meal: true })],
   "staff-live-other": () => [staff({ phase: "live", meal: false })],
+  "staff-starting": () => [staff({ phase: "upcoming", meal: true, startsIn: MINUTE })],
   all: () => [queue(waiting), staff({ phase: "live", meal: true })],
 };
 
@@ -139,9 +141,9 @@ export function handleDevLiveActivityLink(path: string): string | null {
 
 // ── Attendee, deadline and accreditation kinds (H59, H19, H22) ──
 
-function attendee(phase: "upcoming" | "live"): DesiredActivity {
+function attendee(phase: "upcoming" | "live", startsIn = 12 * MINUTE): DesiredActivity {
   const now = Date.now();
-  const startsAt = phase === "upcoming" ? now + 12 * MINUTE : now - 20 * MINUTE;
+  const startsAt = phase === "upcoming" ? now + startsIn : now - 20 * MINUTE;
   return {
     kind: "attendee_activity",
     subject: attendeeActivityLiveActivitySubject(21),
@@ -154,7 +156,7 @@ function attendee(phase: "upcoming" | "live"): DesiredActivity {
       category: "workshop",
       location: "Room A2",
       startsAt: new Date(startsAt).toISOString(),
-      endsAt: new Date(startsAt + 60 * MINUTE).toISOString(),
+      endsAt: new Date(startsAt + (startsIn < MINUTE * 2 ? 35 : 60) * MINUTE).toISOString(),
       url: "hackos://schedule/21",
       labels: attendeeActivityLiveLabels("en"),
       rank: 0,
@@ -214,6 +216,7 @@ function accreditation(): DesiredActivity {
 const KIND_SAMPLES: Record<string, () => DesiredActivity[]> = {
   "attendee-upcoming": () => [attendee("upcoming")],
   "attendee-live": () => [attendee("live")],
+  "attendee-starting": () => [attendee("upcoming", MINUTE)],
   "deadline-open": () => [deadline("open", "draft")],
   "deadline-open-unknown": () => [deadline("open", null)],
   "deadline-closing": () => [deadline("closing", "draft")],

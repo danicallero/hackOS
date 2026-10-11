@@ -3,6 +3,7 @@ import {
   DEADLINE_LIVE_ACTIVITY_SUBJECT,
   type LiveActivityKind,
   type LiveActivityProps,
+  liveActivityStaleDate,
   QUEUE_LIVE_ACTIVITY_SUBJECT,
   relevanceForRank,
 } from "@hackos/shared/live-activities";
@@ -74,18 +75,14 @@ void readLiveActivityState().then((state) => {
 
 /** After an activity ends, how long its final state may stay on the Lock Screen (HIG). */
 const FINISHED_DISMISSAL_MS = 15 * 60 * 1000;
-/** The queue has no end instant; the server refreshes it well within this. */
-const OPEN_ENDED_STALE_MS = 30 * 60 * 1000;
-
 /**
- * Same `stale-date` the API sends (docs/live-activities.md): the item's own
- * end, or 30 min ahead for the queue. A local activity the app can no longer
- * refresh or end (the server never got its token) is then shown as outdated
- * instead of current.
+ * Same `stale-date` the API sends (`liveActivityStaleDate`): an upcoming
+ * staff or attendee activity turns live at its start (the widget reads
+ * `isStale`, H25, H26, H59), everything else is shown as outdated after its
+ * own end, or 30 min ahead for the queue.
  */
-export function staleDateFor(props: LiveActivityProps, now = Date.now()): Date {
-  if (props.kind === "queue") return new Date(now + OPEN_ENDED_STALE_MS);
-  return new Date(props.endsAt);
+function staleDateFor(props: LiveActivityProps): Date {
+  return liveActivityStaleDate(props, Date.now());
 }
 
 function safeInstances(factory: Factory): AnyInstance[] {

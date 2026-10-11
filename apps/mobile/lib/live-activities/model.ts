@@ -594,7 +594,7 @@ function attendeeGlyph(category: string): LiveUpdateGlyph {
 }
 
 /**
- * H59 attendee activity: upcoming counts down to the start, live ("Now ·
+ * H59 attendee activity: upcoming counts down to the start, live ("Live ·
  * name") to the end with the elapsed time as the track. No action: the whole
  * surface opens the schedule item. The chip shows the countdown itself.
  */
@@ -605,7 +605,7 @@ function attendeeSpec(props: AttendeeActivityLiveProps, now: number): LiveUpdate
   const where = props.location ? `${when} · ${props.location}` : when;
   const icon = attendeeGlyph(props.category);
   const caption = (live ? labels.endsIn : labels.startsIn) ?? null;
-  const nowLabel = live ? (labels.now ?? null) : null;
+  const nowLabel = live ? labels.live || labels.now || null : null;
   const title = nowLabel ? `${nowLabel} · ${props.name}` : props.name;
   const elapsed = live
     ? elapsedShare(Date.parse(props.startsAt), Date.parse(props.endsAt), now)

@@ -552,8 +552,18 @@ stays on the device.
   it is sent only when the team is called (queue) or a known draft enters the
   last 15 minutes (deadline). It carries no `sound`, because the
   non-optional `queue.called` push notification already rings.
-- `stale-date`: now + 30 min for the queue, which has no end instant. Otherwise the item's own end: the activity or schedule item end,
-  the deadline, or the accreditation window end.
+- `stale-date` (`liveActivityStaleDate`, shared with the app's local
+  starts): now + 30 min for the queue, which has no end instant. An
+  **upcoming** staff or attendee activity goes stale at its start, minus
+  60 s (`LIVE_ACTIVITY_STALE_LEEWAY_MS`: iOS marks an activity stale about a
+  minute after its `staleDate`). iOS then re-renders it with `isStale`, and
+  the widget shows the live layout on time without waiting for a push
+  (H25, H26, H59). Otherwise it is the item's own end: the activity or
+  schedule item end, the deadline, or the accreditation window end.
+- Phase boundaries: the worker also schedules a tick at each desired staff
+  or attendee activity's start and end (`scheduleLiveActivityBoundaries`,
+  kick.ts), so the push that flips `phase` (and the end) goes out on time
+  and the server state converges with what the widget already shows.
 - `relevance-score`: `100 − 10 × rank` (see
   [Ranking](#ranking-and-the-per-device-limit)).
 - `attributes` is expo-widgets' `LiveActivityAttributes { url: String? }`,
@@ -644,7 +654,7 @@ Meal / activity (staff):
 | Presentation | Upcoming | Live |
 |---|---|---|
 | Compact leading | category symbol (fork.knife / person.3) | same |
-| Compact trailing | countdown timer to start | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`) |
+| Compact trailing | countdown to start (`1h 05m` / `34m 21s`) | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`); "Live" from the start until the live update brings the counts |
 | Minimal | countdown | progress ring `scanned / accredited` (the count without `accredited`) |
 | Expanded | name, location, `hh:mm–hh:mm`, countdown | symbol, Scanned `42/180`, scanned-share bar, name, ends in, **Scan** button |
 | Lock Screen | as expanded | as expanded |
@@ -654,11 +664,15 @@ Attendee activity:
 | Presentation | Upcoming | Live |
 |---|---|---|
 | Compact leading | category symbol | same |
-| Compact trailing | countdown timer to start | countdown to end |
-| Minimal | countdown | countdown |
-| Expanded | name, location, `hh:mm–hh:mm`, "Starts in" timer | name, location, "Now · ends in" timer |
+| Compact trailing | countdown to start (`1h 05m` / `34m 21s`) | "Live" (`labels.live`; older servers: "Now") |
+| Minimal | countdown | symbol with a live dot |
+| Expanded | name, location, `hh:mm–hh:mm`, "Starts in" timer | "● Live" badge + name, location, "Ends in" countdown to the end |
 | Lock Screen | as expanded | as expanded, with a progress bar from `startsAt` to `endsAt` |
-| Watch / CarPlay | name + countdown | name + "Now" |
+| Watch / CarPlay | name + countdown | name + "Live" |
+
+Live starts at `startsAt` on the device itself: the upcoming state is stale
+from then (see `stale-date`), and the layout treats a stale upcoming state
+as live.
 
 Submission deadline:
 
