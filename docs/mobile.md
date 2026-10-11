@@ -879,22 +879,21 @@ and the native view exists; every other case keeps the paths above unchanged
   `avatarX`, `avatarY`, `avatarDiameter`, `darkness`, `blurRadius`,
   `bridgeReach`, `pill`, `drip`, all computed by `profileGooeyFrame` in
   `lib/profile-avatar-collapse.ts` from `profileGooeyProgress(scrollOffset, 120)`.
-- **Timeline**: until progress 0.12 (`PROFILE_GOOEY_LIFT_END`) the avatar
-  rides up with the content at full size. Then, until 0.65
-  (`PROFILE_GOOEY_SHRINK_END`), it stays a circle and shrinks uniformly from
-  the bottom up: its top edge keeps rising with the content (faster if needed,
-  never past its end height) while the bottom comes up, landing at the lens
-  diameter minus 1 dp per side (`profileGooeyEndDiameter` /
-  `profileGooeyEndScale`) centred under the lens, a gap of 0.9 lens diameters
-  below it. From 0.3 (`PROFILE_GOOEY_FADE_START`) it blurs (up to 6 dp) and
-  darkens (`darkness`, eased in, 0 → 1), so it stays readable most of the way
-  and arrives as a black disc. Then it rises to the lens centre
-  (`profileGooeyEndOffset` is the full travel): a black metaball neck
-  (two-circle tangent construction, spread growing from 0 so it emerges from a
-  point) joins it to the lens, fattens into a straight-sided pill (`pill`)
-  that shortens into the lens as the droplet rises, and a short drip bulges
-  from the lens and retracts. Everything is a pure function of progress and
-  the scroll distance, so scrolling back retraces it exactly.
+- **Timeline** (`profileGooeyFrame`, a pure function of progress and the
+  scroll distance, so scrolling back retraces it exactly). The avatar never
+  stops rising: its bottom edge moves up with the content, keeping its gap to
+  the text below, or along an ease-in path to the lens centre when that is
+  higher, so it is in the lens by progress 1. It stays a circle and shrinks
+  uniformly towards its top to the lens diameter minus 1 dp per side by 0.55
+  (`PROFILE_GOOEY_SHRINK_END`; `profileGooeyEndDiameter` /
+  `profileGooeyEndScale`), gliding to the lens column; until then it also
+  keeps at least the staging gap (0.9 lens diameters) below the lens, so a
+  photo never touches it. It blurs (up to 6 dp) and darkens (`darkness`) from
+  55% of the shrink (`PROFILE_GOOEY_FADE_START`), is 85% black once fully
+  shrunk, and turns fully black exactly at the staging gap, where the black
+  metaball neck starts (two-circle tangent construction, emerging from a
+  point), fattens into a straight-sided pill (`pill`) that shortens into the
+  lens, and a short drip bulges from the lens and retracts.
 - **Rendering**: while `darkness < 1` the avatar is drawn clipped to its
   circle (which also trims the blur, so nothing bleeds outside it) over a black
   underlay that fills the rim the blur leaves translucent, with a black wash of

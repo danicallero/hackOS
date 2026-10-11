@@ -398,16 +398,36 @@ export function profileAvatarBlobBounds(
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
   let maxY = Number.NEGATIVE_INFINITY;
-  // The blob's handles are tangent at its extremes, so its vertices bound it.
-  for (let i = 0; i < first.path.v.length; i++) {
-    const vx = first.path.v[i][0] + (next.path.v[i][0] - first.path.v[i][0]) * fraction;
-    const vy = first.path.v[i][1] + (next.path.v[i][1] - first.path.v[i][1]) * fraction;
-    const x = canvasX + (track.offset[0] + vx) * scale;
-    const y = canvasY + (track.offset[1] + vy) * scale;
-    minX = Math.min(minX, x);
-    minY = Math.min(minY, y);
-    maxX = Math.max(maxX, x);
-    maxY = Math.max(maxY, y);
+  // The vertices are not the blob's extremes (its curves bulge past them),
+  // so sample each cubic segment: a vertex-only box made the photo smaller
+  // than the mask around it (#935).
+  const n = first.path.v.length;
+  const at = (key: "v" | "i" | "o", i: number, axis: number) =>
+    first.path[key][i][axis] + (next.path[key][i][axis] - first.path[key][i][axis]) * fraction;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    for (let axis = 0; axis < 2; axis++) {
+      const p0 = at("v", i, axis);
+      const p1 = p0 + at("o", i, axis);
+      const p3 = at("v", j, axis);
+      const p2 = p3 + at("i", j, axis);
+      for (let k = 0; k <= 8; k++) {
+        const u = k / 8;
+        const w = 1 - u;
+        const value = w * w * w * p0 + 3 * w * w * u * p1 + 3 * w * u * u * p2 + u * u * u * p3;
+        const pos =
+          axis === 0
+            ? canvasX + (track.offset[0] + value) * scale
+            : canvasY + (track.offset[1] + value) * scale;
+        if (axis === 0) {
+          minX = Math.min(minX, pos);
+          maxX = Math.max(maxX, pos);
+        } else {
+          minY = Math.min(minY, pos);
+          maxY = Math.max(maxY, pos);
+        }
+      }
+    }
   }
   return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
 }
@@ -520,17 +540,13 @@ export function profileAvatarMorphPath(
 /** A circle in view-local dp: centre and diameter. */
 export type ProfileGooeyCircle = { x: number; y: number; diameter: number };
 
-/**
- * Progress at which the shrinking avatar reaches the lens size, centred under
- * it and fully black. The liquid neck only forms after this, so a photo never
- * stretches towards the lens.
- */
-export const PROFILE_GOOEY_SHRINK_END = 0.65;
-/** Progress until which the avatar only rides up with the content, full size. */
-export const PROFILE_GOOEY_LIFT_END = 0.12;
-/** Progress at which the avatar starts darkening and blurring. */
-export const PROFILE_GOOEY_FADE_START = 0.3;
-/** Edge-to-edge gap (in lens diameters) between the shrunken avatar and the lens. */
+/** Progress at which the shrinking avatar reaches the lens size. */
+export const PROFILE_GOOEY_SHRINK_END = 0.55;
+/** Share of the shrink after which the avatar starts darkening and blurring. */
+export const PROFILE_GOOEY_FADE_START = 0.55;
+/** How dark the avatar is once fully shrunk; the rest comes as it nears the lens. */
+const PROFILE_GOOEY_SHRUNK_DARKNESS = 0.85;
+/** Edge-to-edge gap (in lens diameters) at which the avatar is fully black and the neck may form. */
 const PROFILE_GOOEY_STAGING_GAP = 0.9;
 /** The end circle sits this far (dp) inside the lens edge so it never pokes out. */
 const PROFILE_GOOEY_LENS_INSET = 1;
@@ -574,19 +590,18 @@ export function profileGooeyProgress(scrollOffset: number, distance: number): nu
 }
 
 /**
- * Everything the native gooey view draws at `progress`, in its local dp:
- * - Until `PROFILE_GOOEY_LIFT_END` it rides up with the content (`distance`
- *   is the scroll offset of progress 1) at full size.
- * - Then, until `PROFILE_GOOEY_SHRINK_END`, it shrinks uniformly from the
- *   bottom up: its top edge keeps rising with the content (faster if needed,
- *   never past its end height) while the bottom edge comes up to meet it, so
- *   it lands as a circle the end diameter, centred under the lens. From
- *   `PROFILE_GOOEY_FADE_START` it darkens (`darkness`, 0 → 1) and blurs, so
- *   it arrives as a black disc.
- * - Afterwards it rises into the lens; the neck may form (`bridgeReach` is
- *   how far apart the two circles' edges can be and still join), fattens into
- *   a straight-sided pill (`pill`, 0 → 1) that shortens into the lens as the
- *   droplet rises, and a short drip hangs from the lens.
+ * Everything the native gooey view draws at `progress`, in its local dp. It
+ * never stops rising:
+ * - Its bottom edge moves up with the content (`distance` is the scroll
+ *   offset of progress 1), keeping its gap to the text below, or along an
+ *   ease-in path to the lens centre when that is higher, so it lands in the
+ *   lens at progress 1 at the latest. Meanwhile it shrinks uniformly to the
+ *   end diameter by `PROFILE_GOOEY_SHRINK_END` and glides to the lens column.
+ * - It blurs and darkens (`darkness`) with the shrink, almost black
+ *   (`PROFILE_GOOEY_SHRUNK_DARKNESS`) once fully shrunk, and is fully black
+ *   at the staging gap to the lens; only then the neck forms (`bridgeReach`),
+ *   fattens into a straight-sided pill (`pill`) that shortens into the lens,
+ *   and a short drip hangs from the lens.
  */
 export function profileGooeyFrame(
   start: ProfileCameraCutoutFrame,
@@ -600,42 +615,47 @@ export function profileGooeyFrame(
   const holeDiameter = Math.min(hole.width, hole.height);
   const holeX = hole.left + hole.width / 2;
   const holeY = hole.top + hole.height / 2;
-  const gap = holeDiameter * PROFILE_GOOEY_STAGING_GAP;
-  const stagingY = holeY + holeDiameter / 2 + endDiameter / 2 + gap;
+  const holeBottom = holeY + holeDiameter / 2;
+  const stageGap = holeDiameter * PROFILE_GOOEY_STAGING_GAP;
   const startX = start.left + start.width / 2;
   const startY = start.top + start.height / 2;
-  const shrink = clamp01(
-    (t - PROFILE_GOOEY_LIFT_END) / (PROFILE_GOOEY_SHRINK_END - PROFILE_GOOEY_LIFT_END),
-  );
+  const shrink = clamp01(t / PROFILE_GOOEY_SHRINK_END);
   const diameter = start.width + (endDiameter - start.width) * shrink;
-  // The top edge follows the content, or the straight path from where the
-  // lift ends to its end height if that is higher, and never goes above it.
-  const startTop = startY - start.width / 2;
-  const endTop = stagingY - endDiameter / 2;
-  const liftTop = startTop - PROFILE_GOOEY_LIFT_END * distance;
-  const top = Math.max(
-    endTop,
-    Math.min(
-      startTop - t * distance,
-      shrink > 0 ? liftTop + (Math.min(liftTop, endTop) - liftTop) * shrink : startTop,
-    ),
-  );
-  const fade = clamp01(
-    (t - PROFILE_GOOEY_FADE_START) / (PROFILE_GOOEY_SHRINK_END - PROFILE_GOOEY_FADE_START),
-  );
-  const rise = clamp01((t - PROFILE_GOOEY_SHRINK_END) / (1 - PROFILE_GOOEY_SHRINK_END));
-  const neck = clamp01((t - PROFILE_GOOEY_SHRINK_END) / 0.08);
-  const pill = clamp01((rise - 0.15) / 0.45);
+  const carried = startY + start.width / 2 - t * distance - diameter / 2;
+  const path = startY + (holeY - startY) * t * t;
+  // Until it has shrunk it keeps the staging gap to the lens (that bound still
+  // rises as it shrinks), so a photo never touches the lens.
+  const free = Math.max(holeY, Math.min(carried, path));
+  const y = shrink < 1 ? Math.max(free, holeBottom + stageGap + diameter / 2) : free;
+  // Edge-to-edge gap to the lens (negative once they overlap).
+  const lensGap = y - diameter / 2 - holeBottom;
+  // Darkens with the shrink (almost black once fully shrunk), then finishes
+  // over the last lens diameter of the approach, fully black exactly as the
+  // neck starts to deform the lens.
+  const shrinkFade = clamp01((shrink - PROFILE_GOOEY_FADE_START) / (1 - PROFILE_GOOEY_FADE_START));
+  const shrunkDark = PROFILE_GOOEY_SHRUNK_DARKNESS * shrinkFade * shrinkFade * (3 - 2 * shrinkFade);
+  const approach = clamp01((stageGap + holeDiameter - lensGap) / holeDiameter);
+  const fade =
+    shrunkDark +
+    (1 - shrunkDark) * approach * approach * (3 - 2 * approach) * shrinkFade * shrinkFade;
+  const merging = shrink >= 1 && lensGap <= stageGap;
+  const merge = merging ? clamp01((stageGap - lensGap) / stageGap) : 0;
+  const pill = merging
+    ? clamp01((0.6 * stageGap - lensGap) / (0.6 * stageGap + holeDiameter / 2))
+    : 0;
+  // 0 at the staging gap, 1 once the disc sits on the lens centre.
+  const rise = merging
+    ? clamp01((stageGap - lensGap) / (stageGap + endDiameter / 2 + holeDiameter / 2))
+    : 0;
   return {
     avatarX: startX + (holeX - startX) * shrink,
-    avatarY: top + diameter / 2 + (holeY - stagingY) * rise,
+    avatarY: y,
     avatarDiameter: diameter,
-    // Eases in so the picture stays readable most of the way, reaching
-    // exactly 1 at the shrink end.
-    darkness: fade * fade * fade,
+    darkness: merging ? 1 : fade,
     blurRadius: PROFILE_GOOEY_MAX_BLUR * fade,
-    bridgeReach: gap * 1.2 * neck,
-    // The neck then fattens into a pill (lens to droplet) that shortens into the lens.
+    // The reach starts at the staging gap itself, so the neck emerges from a
+    // point exactly as the disc turns fully black.
+    bridgeReach: merging ? stageGap * 1.2 * Math.min(1, 1 / 1.2 + merge * 4) : 0,
     pill: pill * pill * (3 - 2 * pill),
     drip: holeDiameter * 0.25 * Math.sin(Math.PI * rise),
   };
