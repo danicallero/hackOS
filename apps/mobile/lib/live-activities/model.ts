@@ -328,13 +328,24 @@ const IN_LINE_LENGTH = 200;
 const CALLED_LENGTH = 100;
 
 /**
- * Share of the line already behind the team, from the server's high-water
- * mark: #1 of 4 → 0.75, first sighting → 0. Zero when either side is unknown.
+ * How far the team is through its current stage (H38, #966), 0 to 1, as on
+ * iOS. Waiting: `(queueTotal - position + 1) / (queueTotal + 1)`, so #1 of 10
+ * → 10/11 and #10 of 10 → 1/11. Called: `2 / (calledAhead + 3)` (⅔ with
+ * nobody called earlier still outside the room). Never 0 or 1 inside a
+ * stage; 0 without the counts (older server: the track shows the stage only).
  */
-export function queueWaitingFraction(props: QueueLiveProps): number {
-  const start = props.startPosition ?? null;
-  if (start === null || props.position === null || start <= 0) return 0;
-  return clamp01((start - props.position) / start);
+export function queueStageFill(props: QueueLiveProps): number {
+  if (props.phase === "waiting") {
+    const total = count(props.queueTotal);
+    const position = count(props.position);
+    if (total === null || position === null || position < 1 || position > total) return 0;
+    return (total - position + 1) / (total + 1);
+  }
+  if (props.phase === "called") {
+    const ahead = count(props.calledAhead);
+    return ahead === null ? 0 : 2 / (ahead + 3);
+  }
+  return 1;
 }
 
 /**
@@ -360,9 +371,9 @@ export function trackSegments(
 function queueProgress(props: QueueLiveProps): LiveUpdateProgress {
   const value =
     props.phase === "waiting"
-      ? Math.round(queueWaitingFraction(props) * IN_LINE_LENGTH)
+      ? Math.round(queueStageFill(props) * IN_LINE_LENGTH)
       : props.phase === "called"
-        ? IN_LINE_LENGTH
+        ? IN_LINE_LENGTH + Math.round(queueStageFill(props) * CALLED_LENGTH)
         : IN_LINE_LENGTH + CALLED_LENGTH;
   return {
     value,

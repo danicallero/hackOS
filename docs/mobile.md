@@ -1541,8 +1541,11 @@ segment takes two thirds of the width: with no GeometryReader (and
 `containerRelativeFrame` needing iOS 17), the row is built from three equally
 flexible units, the first segment being two ProgressViews overlapped by 4 pt
 and filled half by half. While waiting it fills with
-`(startPosition − position) / startPosition` (#1 of 4 → 0.75; empty on the
-first sighting or without `startPosition`). The node labels repeat the same
+`(queueTotal − position + 1) / (queueTotal + 1)` (#1 of 10 → 10/11, #10 of
+10 → 1/11); once called the second segment fills with
+`2 / (calledAhead + 3)` (⅔ when no team called earlier to the room is still
+outside) and the room completes it. Without the counts (older server) only
+the stage shows. The node labels repeat the same
 units so each sits under its node. Meals use `(inside − remaining) / inside`
 (no bar when nobody is inside); other live activities show elapsed time with
 a `ProgressView` timer between `startsAt` and `endsAt`.
@@ -1553,7 +1556,7 @@ that reason). The only filled control, **Scan**, sits in the bottom trailing
 corner with a `containerRelativeShape` background, so it is concentric with
 the Live Activity's (or the island's) corner. There are no tiles or cards
 behind symbols. Fields and labels added after v1 (`calledAt`,
-`startPosition`, `accredited`, `labels.estimating` …) are optional:
+`queueTotal`, `calledAhead`, `accredited`, `labels.estimating` …) are optional:
 an absent one hides its element; the widget never falls back to hardcoded
 copy.
 
@@ -1612,10 +1615,10 @@ current value and the rest of it stays grey, stages separated by the segment
 gaps, with a round tracker (white disc, glyph in the phase colour) at the
 current value (`trackSegments`). The queue has two stages,
 In line and Called, the first two thirds of the width as on iOS, filled in
-the phase colour (blue waiting, green called, grey in the room); the tracker sits at `(startPosition − position) / startPosition` of the
-first stage while waiting (#1 of 4 → 0.75; at the start on the first
-sighting or without `startPosition`), at the boundary once called and at the
-end in the room, with the door as the end icon. Live staff activities track
+the phase colour (blue waiting, green called, grey in the room); the tracker sits at `queueStageFill` of the current stage, the iOS
+formulas: `(queueTotal − position + 1) / (queueTotal + 1)` of the first
+stage while waiting, `2 / (calledAhead + 3)` of the second once called (at
+the stage start without the counts), and at the end in the room, with the door as the end icon. Live staff activities track
 the scanned share `scanned / accredited` (the elapsed time when an older
 server sends no `accredited`); live attendee items the time elapsed between start and end,
 the deadline the hacking window's elapsed time (in its phase colour), and the
