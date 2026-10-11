@@ -52,6 +52,8 @@ export interface LiveActivityPushInput {
   attributes?: { url: string };
   staleDate?: Date;
   relevanceScore?: number;
+  /** End only: when iOS removes it from the Lock Screen (default: 15 min later). */
+  dismissalDate?: Date;
 }
 
 const seconds = (date: Date) => Math.floor(date.getTime() / 1000);
@@ -79,7 +81,9 @@ export function liveActivityApnsPayload(input: LiveActivityPushInput): Record<st
   if (input.staleDate) aps["stale-date"] = seconds(input.staleDate);
   if (input.relevanceScore !== undefined) aps["relevance-score"] = input.relevanceScore;
   if (input.event === "end") {
-    aps["dismissal-date"] = seconds(input.now) + END_DISMISSAL_SECONDS;
+    aps["dismissal-date"] = input.dismissalDate
+      ? seconds(input.dismissalDate)
+      : seconds(input.now) + END_DISMISSAL_SECONDS;
   }
   return { aps };
 }

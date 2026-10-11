@@ -3,8 +3,8 @@ import { getQueue } from "../../lib/queues.js";
 /**
  * Early Live Activity tick (#966) after a change that can start, update or
  * end Live Activities: a queue transition, call or deletion (H29, H38), the
- * judging window, a schedule or activity edit (H25, H59), a configuration
- * save. Separate from worker.ts so domain modules enqueue it without
+ * judging window, a schedule or activity edit (H25, H59), an event timing
+ * edit (H19, H22), a configuration save. Separate from worker.ts so domain modules enqueue it without
  * importing the worker (which imports them).
  */
 

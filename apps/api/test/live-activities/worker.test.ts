@@ -529,6 +529,72 @@ describe("staff activity Live Activity (H25, H26)", () => {
     expect(await sessionsOf(device.id)).toHaveLength(0);
   });
 
+  it("pushes a rescheduled activity at once on both platforms, past the counter throttle", async () => {
+    const staffId = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    const phone = await registerDevice(staffId, { platform: "ios" });
+    const tablet = await registerDevice(staffId, { platform: "android" });
+    const activityId = await createScannableActivity({ startsInMinutes: 10 });
+    expect(await tick()).toMatchObject({ started: 2 });
+    await setActivityToken(phone.id, "activity-token");
+    const { pool } = await import("../../src/db/pool.js");
+
+    // An organizer moves it 5 minutes later, right after the start push.
+    const { rows } = await pool.query<{ starts_at: Date; ends_at: Date }>(
+      `UPDATE schedule SET starts_at = starts_at + interval '5 minutes',
+              ends_at = ends_at + interval '5 minutes'
+        WHERE id = (SELECT schedule_id FROM activities WHERE id = $1)
+        RETURNING starts_at, ends_at`,
+      [activityId],
+    );
+    const startsAt = rows[0]!.starts_at.toISOString();
+    const endsAt = rows[0]!.ends_at.toISOString();
+    expect(await tick()).toMatchObject({ updated: 2 });
+
+    const ios = apns.sent[1]!;
+    expect(ios.priority).toBe(10);
+    const aps = ios.payload.aps as Record<string, unknown>;
+    expect(aps.event).toBe("update");
+    expect(JSON.parse((aps["content-state"] as { props: string }).props)).toMatchObject({
+      phase: "upcoming",
+      startsAt,
+      endsAt,
+    });
+    expect(aps["stale-date"]).toBe(Math.floor(rows[0]!.ends_at.getTime() / 1000));
+    expect(android.sent[1]).toMatchObject({
+      token: `ExponentPushToken[${tablet.deviceId}]`,
+      message: { hackosLiveUpdate: { event: "update", props: { startsAt, endsAt } } },
+    });
+  });
+
+  it("replaces an iOS activity before ActivityKit's 8-hour limit", async () => {
+    const staffId = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    const device = await registerDevice(staffId);
+    await createScannableActivity({ startsInMinutes: -60, durationMinutes: 12 * 60 });
+    expect(await tick()).toMatchObject({ started: 1 });
+    await setActivityToken(device.id, "old-token");
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE live_activity_sessions SET started_at = now() - interval '7 hours 46 minutes'
+        WHERE device_id = $1`,
+      [device.id],
+    );
+
+    expect(await tick()).toMatchObject({ ended: 1, started: 1 });
+    expect(apns.events()).toEqual(["start", "end", "start"]);
+    const end = apns.sent[1]!;
+    expect(end.token).toBe("old-token");
+    const aps = end.payload.aps as Record<string, number>;
+    // Gone from the Lock Screen at once: the replacement takes its place.
+    expect(aps["dismissal-date"]).toBe(aps.timestamp);
+    expect(apns.sent[2]!.token).toBe(`pts-${device.deviceId}`);
+    const [session] = await sessionsOf(device.id);
+    expect(session).toMatchObject({ ended_at: null, activity_push_token: null });
+
+    // The fresh one is not replaced again.
+    await setActivityToken(device.id, "new-token");
+    expect(await tick()).toMatchObject({ ended: 0, started: 0 });
+  });
+
   it("starts a finished activity again when it becomes relevant again", async () => {
     const staffId = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
     const device = await registerDevice(staffId, { platform: "android" });
@@ -583,8 +649,10 @@ describe("configurable kinds in the worker (#966)", () => {
       [group.rows[0]!.id, userId],
     );
     await db.query(
-      `INSERT INTO event_config (id, hacking_ends_at) VALUES (1, now() + interval '1 hour')
-       ON CONFLICT (id) DO UPDATE SET hacking_ends_at = EXCLUDED.hacking_ends_at`,
+      `INSERT INTO event_config (id, hacking_starts_at, hacking_ends_at)
+       VALUES (1, now() - interval '20 hours', now() + interval '1 hour')
+       ON CONFLICT (id) DO UPDATE SET hacking_starts_at = EXCLUDED.hacking_starts_at,
+                                      hacking_ends_at = EXCLUDED.hacking_ends_at`,
     );
     const device = await registerDevice(userId, { language: "en" });
 

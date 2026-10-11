@@ -23,6 +23,7 @@ import {
   type RouteAccessPolicy,
   routeAccessOption as routeAccess,
 } from "../../lib/route-policy.js";
+import { requestLiveActivitySync } from "../live-activities/kick.js";
 import {
   bumpAllAppleWalletUpdateTags,
   listActiveWalletPassIds,
@@ -382,7 +383,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update event config",
         description:
-          "Atomically saves an optional eventReminderScheduledAt (null cancels a pending pre-event email) alongside the event settings. The reminder requires event:manage and a future send before doors open. Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), presence-detection policy, whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), the shirt-size options offered by every picker in the app (H12), and `mealPlanCutoffHours` (0–168, #933): how many hours before each meal sponsor meal plans lock. Fields omitted from the body are left unchanged. Each field is additionally gated by its own owning capability (EVENT_MANAGE for identity/timing, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE for the sponsor/staff requirements, INTOLERANCES_MANAGE for shirtSizes and mealPlanCutoffHours) — a 403 names exactly which field(s) the caller lacks rights to. When the saved config actually changes, Apple Wallet devices are pushed and the shared Google Wallet event-ticket class is refreshed for saved tickets.",
+          "Atomically saves an optional eventReminderScheduledAt (null cancels a pending pre-event email) alongside the event settings. The reminder requires event:manage and a future send before doors open. Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), presence-detection policy, whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), the shirt-size options offered by every picker in the app (H12), and `mealPlanCutoffHours` (0–168, #933): how many hours before each meal sponsor meal plans lock. Fields omitted from the body are left unchanged. Each field is additionally gated by its own owning capability (EVENT_MANAGE for identity/timing, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE for the sponsor/staff requirements, INTOLERANCES_MANAGE for shirtSizes and mealPlanCutoffHours) — a 403 names exactly which field(s) the caller lacks rights to. When the saved config actually changes, Apple Wallet devices are pushed and the shared Google Wallet event-ticket class is refreshed for saved tickets. A change to the event start, the hacking window or the timezone also runs the Live Activity worker early, so running deadline and accreditation Live Activities follow it within seconds.",
         body: eventConfigBody,
       },
     },
@@ -616,6 +617,18 @@ export function registerEventRoutes(app: FastifyInstance): void {
         const applePassIds = await bumpAllAppleWalletUpdateTags();
         const activePassIds = await listActiveWalletPassIds();
         await enqueueWalletSync([...new Set([...applePassIds, ...activePassIds])], "refresh");
+      }
+      // The deadline and accreditation Live Activities are timed from these
+      // (H19, H22), and alerts format times in the event timezone: a running
+      // one must follow the edit now, not on the next repeat (#966).
+      const liveActivityTiming = [
+        "event_starts_at",
+        "hacking_starts_at",
+        "hacking_ends_at",
+        "timezone",
+      ] as const;
+      if (liveActivityTiming.some((key) => String(current[key]) !== String(row[key]))) {
+        await requestLiveActivitySync();
       }
 
       return toAdmin(row, judging, reminder);
