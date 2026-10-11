@@ -1511,6 +1511,12 @@ updates (APNs ActivityKit pushes on iOS, data-only Expo pushes on Android) and
 documents the contract in [`live-activities.md`](./live-activities.md); the
 app renders the pre-localized props of `@hackos/shared/live-activities`.
 
+At an upcoming staff or attendee activity's start the widget switches to its
+live layout by itself ("Live" in the compact island, "Ends in" in the
+expanded and Lock Screen views): the state's `staleDate` is the start, and
+the layouts read `environment.isStale` as live. See
+[live-activities.md](./live-activities.md) (`stale-date`).
+
 **Surfaces (iOS, `expo-widgets`).** `widgets/queue-activity.tsx`
 (`QueueActivity`), `widgets/staff-activity.tsx` (`StaffActivity`),
 `widgets/attendee-activity.tsx` (`AttendeeActivity`),

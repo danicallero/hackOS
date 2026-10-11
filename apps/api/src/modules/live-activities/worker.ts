@@ -1,7 +1,9 @@
 import {
   type AndroidLiveUpdateMessage,
+  LIVE_ACTIVITY_OPEN_ENDED_STALE_MS,
   type LiveActivityKind,
   type LiveActivityProps,
+  liveActivityStaleDate,
   relevanceForRank,
 } from "@hackos/shared/live-activities";
 import type { Language } from "@hackos/shared/locale";
@@ -26,9 +28,11 @@ import {
 } from "./candidates.js";
 import { foregroundDevices } from "./foreground.js";
 import {
+  LIVE_ACTIVITIES_BOUNDARY_JOB,
   LIVE_ACTIVITIES_KICK_JOB,
   LIVE_ACTIVITIES_QUEUE,
   requestLiveActivitySync,
+  scheduleLiveActivityBoundaries,
 } from "./kick.js";
 import { liveStateHash } from "./state.js";
 
@@ -66,15 +70,11 @@ const ACTIVITY_UPDATE_THROTTLE_SECONDS = 30;
 /** Arbitrary constant for pg_try_advisory_lock; unique among this codebase's advisory keys. */
 const TICK_LOCK_KEY = 966_001;
 /**
- * Without an update for this long, iOS greys a queue activity out as
- * stale (it has no natural end instant).
- */
-const OPEN_ENDED_STALE_MS = 30 * 60 * 1000;
-/**
  * An unchanged queue state is re-sent after this long, so a team waiting
- * without any visible change is not greyed out.
+ * without any visible change is not greyed out (its `stale-date` is 30 min
+ * ahead, `liveActivityStaleDate`).
  */
-const OPEN_ENDED_REFRESH_MS = OPEN_ENDED_STALE_MS / 2;
+const OPEN_ENDED_REFRESH_MS = LIVE_ACTIVITY_OPEN_ENDED_STALE_MS / 2;
 /**
  * ActivityKit ends an activity after 8 h and removes it from the Lock Screen
  * at most 4 h later. An iOS session the server could never address (no
@@ -221,16 +221,14 @@ function updateAlert(props: LiveActivityProps, previousPhase: string | null): bo
   return false;
 }
 
-function staleDateFor(props: LiveActivityProps, now: Date): Date {
-  switch (props.kind) {
-    case "activity":
-    case "attendee_activity":
-    case "deadline":
-    case "accreditation":
-      return new Date(props.endsAt);
-    default:
-      return new Date(now.getTime() + OPEN_ENDED_STALE_MS);
-  }
+/**
+ * The next instant a desired staff or attendee activity changes phase on its
+ * own: the start while upcoming, the end while live (H25, H26, H59).
+ */
+function phaseBoundary(props: LiveActivityProps, now: Date): Date | null {
+  if (props.kind !== "activity" && props.kind !== "attendee_activity") return null;
+  const at = new Date(props.phase === "upcoming" ? props.startsAt : props.endsAt);
+  return Number.isFinite(at.getTime()) && at > now ? at : null;
 }
 
 async function loadDevices(): Promise<DeviceRow[]> {
@@ -333,6 +331,8 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
   );
   const sendCtx: SendContext = { apns, android, now, timezone, summary, foreground };
 
+  // Phase boundaries of the desired activities, each ticked on time.
+  const boundaries = new Map<number, Date>();
   try {
     const actionableIds = new Set(actionable.map((d) => d.id));
     for (const device of devices) {
@@ -359,6 +359,8 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
 
       const desiredKeys = new Set<string>();
       for (const want of desired) {
+        const boundary = phaseBoundary(want.props, now);
+        if (boundary) boundaries.set(boundary.getTime(), boundary);
         const key = sessionKey(device.id, want.kind, want.subject);
         desiredKeys.add(key);
         const session = sessions.get(key);
@@ -405,6 +407,7 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
   } finally {
     apns?.close();
   }
+  await scheduleLiveActivityBoundaries([...boundaries.values()]);
 }
 
 interface SendContext {
@@ -457,7 +460,7 @@ async function send(
         props: input.props,
         now: ctx.now,
         alert: input.alert,
-        staleDate: input.event === "end" ? undefined : staleDateFor(input.props, ctx.now),
+        staleDate: input.event === "end" ? undefined : liveActivityStaleDate(input.props, ctx.now),
         relevanceScore: relevanceForRank(input.props.rank),
         dismissalDate: input.dismissNow ? ctx.now : undefined,
       }),
@@ -779,8 +782,14 @@ async function endSession(
 registerWorker(LIVE_ACTIVITIES_QUEUE, async (job) => {
   const summary = await runLiveActivitiesTick();
   // Another replica's tick held the lock and may have read the state before
-  // the change this kick is for: try again shortly rather than wait 20 s.
-  if (summary.skipped && job.name === LIVE_ACTIVITIES_KICK_JOB) await requestLiveActivitySync();
+  // the change (or the phase boundary) this job is for: try again shortly
+  // rather than wait 20 s.
+  if (
+    summary.skipped &&
+    (job.name === LIVE_ACTIVITIES_KICK_JOB || job.name === LIVE_ACTIVITIES_BOUNDARY_JOB)
+  ) {
+    await requestLiveActivitySync();
+  }
 });
 
 export async function scheduleLiveActivitiesWorker(): Promise<void> {

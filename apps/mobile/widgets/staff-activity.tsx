@@ -29,6 +29,11 @@ import { createLiveActivity, type LiveActivityEnvironment } from "expo-widgets";
  * time. While live, the single Scan action opens the scanner bound to the
  * activity.
  *
+ * Live begins at the start without a push: an upcoming state is stale from
+ * `startsAt` (`liveActivityStaleDate`), and iOS re-renders it then with
+ * `environment.isStale`, which this layout reads as live. Until the live
+ * update brings the counts, the island shows "Live" where the ratio goes.
+ *
  * See `queue-activity.tsx` for the `'widget'` runtime constraints: everything
  * the layout needs is declared inside the function or arrives in props.
  * Countdowns and time bars are SwiftUI timers, so they tick without updates.
@@ -119,7 +124,11 @@ export const StaffActivityLayout = (
     type: "hierarchical",
     style: "secondary",
   });
-  const live = props.phase === "live";
+  // An upcoming state goes stale at the start: it is live from then on, even
+  // before the push that flips `phase` (and brings the counts) arrives.
+  const live =
+    props.phase === "live" || (props.phase === "upcoming" && environment.isStale === true);
+  const liveLabel = labels.live;
   const symbol =
     props.category === "meal"
       ? "fork.knife"
@@ -145,7 +154,7 @@ export const StaffActivityLayout = (
   const count = (value: unknown) =>
     typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
   const scannedCount = count(props.scanned) ?? 0;
-  const accredited = live ? count(props.accredited) : null;
+  const accredited = props.phase === "live" ? count(props.accredited) : null;
   const share = accredited ? Math.min(1, scannedCount / accredited) : null;
   const scanned = String(scannedCount);
 
@@ -299,12 +308,45 @@ export const StaffActivityLayout = (
       </Link>
     ) : null;
 
+  // The running badge: a dot and "Live" in the accent, no container.
+  const liveBadge = (size: number, color: string) =>
+    liveLabel ? (
+      <HStack spacing={Math.round(size / 3)} modifiers={[fixedSize({ horizontal: true })]}>
+        <Image systemName="circle.fill" color={color} size={Math.round(size * 0.5)} />
+        <Text
+          modifiers={[font({ size, weight: "semibold" }), lineLimit(1), foregroundStyle(color)]}
+        >
+          {liveLabel}
+        </Text>
+      </HStack>
+    ) : null;
+
   // Compact: the symbol a little larger than the text so both sides weigh
   // about the same; the countdown is as wide as its value, snug to the camera.
+  // Live shows `scanned/accredited`, the operational datum; until the counts
+  // arrive (an older server, or the start before its update), "Live".
   const compactLeading = <Image systemName={symbol} color={islandAccent} size={15} />;
-  const compactTrailing = live ? ratio(15, 11, null, "semibold") : countdown(12, islandAccent, 56);
+  const liveText = liveLabel ? (
+    <Text
+      modifiers={[
+        font({ size: 12, weight: "semibold" }),
+        lineLimit(1),
+        minimumScaleFactor(0.6),
+        foregroundStyle(islandAccent),
+      ]}
+    >
+      {liveLabel}
+    </Text>
+  ) : null;
+  const compactTrailing = !live
+    ? countdown(12, islandAccent, 56)
+    : accredited || !liveText
+      ? ratio(15, 11, null, "semibold")
+      : liveText;
 
-  // Minimal: the scanned share as a ring, else the count or the countdown.
+  // Minimal: the scanned share as a ring; live without it, the symbol with a
+  // live dot (or the bare count from a build without the label); else the
+  // countdown.
   const minimal =
     share !== null ? (
       <Gauge
@@ -316,6 +358,11 @@ export const StaffActivityLayout = (
           frame({ width: 28, height: 28 }),
         ]}
       />
+    ) : live && liveLabel ? (
+      <HStack spacing={2}>
+        {glyph(islandAccent, 12)}
+        <Image systemName="circle.fill" color={islandAccent} size={5} />
+      </HStack>
     ) : live ? (
       counter(scanned, 13, islandAccent, "semibold")
     ) : (
@@ -365,7 +412,12 @@ export const StaffActivityLayout = (
       {bar(islandAccent)}
       <HStack spacing={8}>
         <VStack alignment="leading" spacing={1}>
-          <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1)]}>{props.name}</Text>
+          <HStack spacing={6}>
+            {liveBadge(13, islandAccent)}
+            <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1)]}>
+              {props.name}
+            </Text>
+          </HStack>
           {endsIn(13, 52)}
         </VStack>
         <Spacer />
@@ -386,16 +438,16 @@ export const StaffActivityLayout = (
         {text}
       </Text>
     ) : null;
-  // Live packs the header into one line (name … ends in; the place is
-  // known by then and shown before the start) so the
-  // stats and the bottom row fit the Lock Screen's 160 pt height with the
-  // full 14 pt margin at the bottom too.
+  // Live packs the header into one line (name … Live; the place is known by
+  // then and shown before the start) and puts "Ends in" beside the stats, so
+  // the stats and the bottom row fit the Lock Screen's 160 pt height with
+  // the full 14 pt margin at the bottom too.
   const header = live ? (
     <HStack alignment="firstTextBaseline" spacing={8}>
       {glyph(bannerAccent, 17)}
       <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>{props.name}</Text>
       <Spacer />
-      {endsIn(13, 56)}
+      {liveBadge(13, bannerAccent ?? neutral)}
     </HStack>
   ) : (
     <HStack alignment="center" spacing={10}>
@@ -412,6 +464,7 @@ export const StaffActivityLayout = (
     <HStack alignment="top">
       {stat(labels.scanned, bannerAccent, "leading")}
       <Spacer />
+      {endsIn(13, 56)}
     </HStack>
   );
 

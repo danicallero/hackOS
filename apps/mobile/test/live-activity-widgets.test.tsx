@@ -302,16 +302,52 @@ describe("Live Activity layouts (#966)", () => {
     expect(nodes(over.minimal, "Gauge")[0]?.props?.value).toBe(1);
   });
 
-  it("keeps the bare scanned count without a denominator", () => {
+  it("shows Live in the island without a denominator, the count in the stats", () => {
     for (const accredited of [undefined, null, 0]) {
       const layout = StaffActivityLayout(
         activity({ phase: "live", scanned: 37, accredited }),
         environment,
       );
-      expect(texts(layout.compactTrailing)).toEqual(["37"]);
-      expect(texts(layout.minimal)).toEqual(["37"]);
+      expect(texts(layout.compactTrailing)).toEqual(["Live"]);
       expect(nodes(layout.minimal, "Gauge")).toHaveLength(0);
+      expect(nodes(layout.minimal, "Image").map((image) => image.props?.systemName)).toEqual([
+        "fork.knife",
+        "circle.fill",
+      ]);
+      expect(texts(layout.expandedTrailing)).toEqual(["Scanned", "37"]);
     }
+    // A server without the `live` label: the bare count, as before.
+    const { live: _live, ...older } = activityLiveLabels("en");
+    const bare = StaffActivityLayout(
+      activity({ phase: "live", scanned: 37, labels: older }),
+      environment,
+    );
+    expect(texts(bare.compactTrailing)).toEqual(["37"]);
+    expect(texts(bare.minimal)).toEqual(["37"]);
+  });
+
+  it("turns live at the start without a push: stale upcoming reads as live (H25)", () => {
+    const stale = { ...environment, isStale: true } as LiveActivityEnvironment;
+    const layout = StaffActivityLayout(activity({ scanned: 0, accredited: null }), stale);
+    expect(texts(layout.compactTrailing)).toEqual(["Live"]);
+    expect(nodes(layout.compactTrailing, "Text")[0]?.props?.timerInterval).toBeUndefined();
+    expect(texts(layout.banner)).toEqual(expect.arrayContaining(["Live", "Ends in", "Scanned"]));
+    expect(allTexts(layout)).not.toContain("Starts in");
+    // The Scan action is there from the start.
+    expect(nodes(layout.banner, "Link")).toHaveLength(1);
+    // Ends in: a countdown to the end in units.
+    const [ends] = nodes(layout.banner, "Text").filter((text) => text.props?.timerInterval);
+    expect((ends?.props?.timerInterval as { upper: Date }).upper).toEqual(
+      new Date("2026-02-20T13:30:00.000Z"),
+    );
+    expect(ends?.props?.compactCountdown).toBe("full");
+    // Once the live update brings the counts, the island shows the ratio.
+    const counted = StaffActivityLayout(
+      activity({ phase: "live", scanned: 42, accredited: 180 }),
+      stale,
+    );
+    expect(texts(counted.compactTrailing)).toEqual(["42", "/180"]);
+    expect(texts(counted.banner)).toEqual(expect.arrayContaining(["Live", "Ends in"]));
   });
 
   it("keeps the countdown while upcoming, whatever the counts", () => {
@@ -462,7 +498,7 @@ describe("New Live Activity kinds (#966)", () => {
   });
 
   describe("attendee activity (H59)", () => {
-    it("counts down to the start, then shows Now with an elapsed-time bar", () => {
+    it("counts down to the start, then shows Live with an elapsed-time bar", () => {
       const upcoming = AttendeeActivityLayout(attendee(), environment);
       expect(texts(upcoming.banner)).toEqual(
         expect.arrayContaining(["Starts in", "Rust workshop"]),
@@ -477,9 +513,50 @@ describe("New Live Activity kinds (#966)", () => {
         attendee({ phase: "live", startsAt: "2026-02-20T11:40:00.000Z" }),
         environment,
       );
-      expect(texts(live.banner)).toEqual(expect.arrayContaining(["Now", "Ends in"]));
+      expect(texts(live.banner)).toEqual(expect.arrayContaining(["Live", "Ends in"]));
       expect(nodes(live.banner, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
-      expect(nodes(live.minimal, "Text")[0]?.props?.timerInterval).toBeTruthy();
+      expect(texts(live.compactTrailing)).toEqual(["Live"]);
+      expect(nodes(live.minimal, "Image").map((image) => image.props?.systemName)).toEqual([
+        "mic.fill",
+        "circle.fill",
+      ]);
+    });
+
+    it.each([
+      ["live", attendee({ phase: "live", startsAt: "2026-02-20T11:40:00.000Z" }), environment],
+      // At the start iOS re-renders the upcoming state as stale: live without a push.
+      ["stale upcoming", attendee(), { ...environment, isStale: true } as LiveActivityEnvironment],
+    ] as const)("%s: Live in the island, Ends in on the expanded and Lock Screen", (_name, props, env) => {
+      const layout = AttendeeActivityLayout(props, env);
+      expect(texts(layout.compactTrailing)).toEqual(["Live"]);
+      expect(allTexts(layout)).not.toContain("Starts in");
+      for (const slot of ["expandedTrailing", "banner"]) {
+        expect(texts(layout[slot])).toContain("Ends in");
+        const [timer] = nodes(layout[slot], "Text").filter((text) => text.props?.timerInterval);
+        expect((timer?.props?.timerInterval as { upper: Date }).upper).toEqual(
+          new Date("2026-02-20T13:10:00.000Z"),
+        );
+        expect(timer?.props?.compactCountdown).toBe("full");
+      }
+      expect(texts(layout.banner)).toContain("Live");
+      expect(texts(layout.expandedBottom)).toContain("Live");
+      expect(nodes(layout.banner, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
+    });
+
+    it("keeps the countdown to the start while upcoming and not stale", () => {
+      const layout = AttendeeActivityLayout(attendee(), { ...environment, isStale: false });
+      expect(allTexts(layout)).not.toContain("Live");
+      expect(texts(layout.expandedTrailing)).toContain("Starts in");
+      expect(nodes(layout.minimal, "Text")[0]?.props?.compactCountdown).toBe("short");
+    });
+
+    it("falls back to Now from a server without the live label", () => {
+      const { live: _live, ...older } = attendeeActivityLiveLabels("en");
+      const layout = AttendeeActivityLayout(
+        attendee({ phase: "live", labels: older as AttendeeActivityLiveProps["labels"] }),
+        environment,
+      );
+      expect(texts(layout.compactTrailing)).toEqual(["Now"]);
     });
 
     it("has no buttons on any presentation", () => {

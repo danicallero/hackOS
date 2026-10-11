@@ -18,9 +18,13 @@ import { createLiveActivity, type LiveActivityEnvironment } from "expo-widgets";
 /**
  * H59 attendee Live Activity (#966): a schedule item organizers opted in for
  * its audience. Upcoming answers "how long until it starts?" (countdown hero,
- * name, time · place); live answers "how long is left?" ("Now", the name, an
- * ends-in countdown and a bar of the elapsed time). No buttons: the whole
- * surface opens the item (`hackos://schedule/<id>`).
+ * name, time · place); live answers "how long is left?" (a "Live" badge, the
+ * name, an ends-in countdown and a bar of the elapsed time). No buttons: the
+ * whole surface opens the item (`hackos://schedule/<id>`).
+ *
+ * Live begins at the start without a push: an upcoming state is stale from
+ * `startsAt` (`liveActivityStaleDate`), and iOS re-renders it then with
+ * `environment.isStale`, which this layout reads as live.
  *
  * See `queue-activity.tsx` for the `'widget'` runtime constraints: everything
  * the layout needs is declared inside the function or arrives in props.
@@ -106,7 +110,12 @@ export const AttendeeActivityLayout = (
     : ({ dynamic: { light: "#007AFF", dark: "#0A84FF" } } as unknown as string);
   const colorMods = (color: string | null) => (color ? [foregroundStyle(color)] : []);
   const secondary = foregroundStyle({ type: "hierarchical", style: "secondary" });
-  const live = props.phase === "live";
+  // An upcoming state goes stale at the start: it is live from then on, even
+  // before the push that flips `phase` arrives.
+  const live =
+    props.phase === "live" || (props.phase === "upcoming" && environment.isStale === true);
+  // "Live" (older servers: "Now"); absent, the badge is left out.
+  const liveLabel = labels.live || labels.now;
   // Mirrors `ActivityKind.symbol` (packages/shared/src/activity-kinds.ts).
   const symbol =
     props.category === "meal"
@@ -168,9 +177,10 @@ export const AttendeeActivityLayout = (
       </Text>
     ) : null;
 
-  // Countdown with its caption above ("Starts in" / "Ends in").
+  // Countdown with its caption above: "Starts in" with the seconds, or
+  // "Ends in" (`1h 05m` / `34m 21s`).
   const countdownStat = (size: number, color: string | null, width: number) => {
-    const value = timer(size, color, width, "bold", "long");
+    const value = timer(size, color, width, "bold", live ? "full" : "long");
     return value ? (
       <VStack alignment="trailing" spacing={0}>
         {caption(live ? labels.endsIn : labels.startsIn)}
@@ -208,24 +218,27 @@ export const AttendeeActivityLayout = (
     </HStack>
   );
 
-  // Name with "Now" ahead of it while live, then time · place.
+  // The running badge: a dot and "Live" in the accent, no container.
+  const liveBadge = (size: number, color: string) =>
+    liveLabel ? (
+      <HStack spacing={Math.round(size / 3)} modifiers={[fixedSize({ horizontal: true })]}>
+        <Image systemName="circle.fill" color={color} size={Math.round(size * 0.5)} />
+        <Text
+          modifiers={[font({ size, weight: "semibold" }), lineLimit(1), foregroundStyle(color)]}
+        >
+          {liveLabel}
+        </Text>
+      </HStack>
+    ) : null;
+
+  // Name with the live badge above it while live, then time · place.
   const nameBlock = (nameSize: number) => (
     <VStack
       alignment="leading"
       spacing={1}
       modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}
     >
-      {live && labels.now ? (
-        <Text
-          modifiers={[
-            font({ size: 12, weight: "semibold" }),
-            lineLimit(1),
-            ...colorMods(bannerAccent ?? neutral),
-          ]}
-        >
-          {labels.now}
-        </Text>
-      ) : null}
+      {live ? liveBadge(12, bannerAccent ?? neutral) : null}
       <Text modifiers={[font({ size: nameSize, weight: "semibold" }), lineLimit(1)]}>
         {props.name}
       </Text>
@@ -238,12 +251,33 @@ export const AttendeeActivityLayout = (
   // Compact: the symbol a little larger than the text so both sides weigh
   // about the same; the countdown is as wide as its value, snug to the camera.
   const compactLeading = glyph(islandAccent, 15);
-  // The accent countdown to the start, or to the end while live (one colour
-  // with the symbol, so both sides read as one piece of information).
-  const compactTrailing = timer(12, islandAccent, 56) ?? <Text> </Text>;
+  // The accent countdown to the start, then "Live" (one colour with the
+  // symbol, so both sides read as one piece of information).
+  const liveText = (size: number) =>
+    liveLabel ? (
+      <Text
+        modifiers={[
+          font({ size, weight: "semibold" }),
+          lineLimit(1),
+          minimumScaleFactor(0.6),
+          foregroundStyle(islandAccent),
+        ]}
+      >
+        {liveLabel}
+      </Text>
+    ) : null;
+  const compactTrailing = (live ? liveText(12) : timer(12, islandAccent, 56)) ?? <Text> </Text>;
 
-  // Minimal: the time left.
-  const minimal = timer(10, islandAccent, 36, "semibold", "short") ?? glyph(islandAccent, 14);
+  // Minimal: the time to the start, then the symbol with a live dot, which
+  // still says which activity it is.
+  const minimal = live ? (
+    <HStack spacing={2}>
+      {glyph(islandAccent, 12)}
+      <Image systemName="circle.fill" color={islandAccent} size={5} />
+    </HStack>
+  ) : (
+    (timer(10, islandAccent, 36, "semibold", "short") ?? glyph(islandAccent, 14))
+  );
 
   const expandedLeading = (
     <VStack modifiers={[padding({ leading: 8, top: 6 })]}>{glyph(islandAccent, 24)}</VStack>
@@ -254,7 +288,7 @@ export const AttendeeActivityLayout = (
       {countdownStat(28, live ? null : islandAccent, 160) ?? <Text> </Text>}
     </VStack>
   );
-  // Live: "Now" leads the name on one line, so the bar, the name and the
+  // Live: the badge leads the name on one line, so the bar, the name and the
   // time · place fit the island's expanded height.
   const expandedBottom = (
     <VStack
@@ -270,18 +304,7 @@ export const AttendeeActivityLayout = (
           modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}
         >
           <HStack spacing={6}>
-            {labels.now ? (
-              <Text
-                modifiers={[
-                  font({ size: 15, weight: "semibold" }),
-                  lineLimit(1),
-                  fixedSize({ horizontal: true }),
-                  foregroundStyle(islandAccent),
-                ]}
-              >
-                {labels.now}
-              </Text>
-            ) : null}
+            {liveBadge(15, islandAccent)}
             <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
               {props.name}
             </Text>
@@ -314,7 +337,7 @@ export const AttendeeActivityLayout = (
     </VStack>
   );
 
-  // watchOS Smart Stack and CarPlay: name plus the countdown (or "Now").
+  // watchOS Smart Stack and CarPlay: name plus the countdown (or "Live").
   const bannerSmall = (
     <VStack alignment="leading" spacing={2} modifiers={[padding({ all: 8 })]}>
       <HStack spacing={4}>
@@ -325,7 +348,7 @@ export const AttendeeActivityLayout = (
       </HStack>
       {live ? (
         <HStack spacing={6} alignment="firstTextBaseline">
-          {labels.now ? (
+          {liveLabel ? (
             <Text
               modifiers={[
                 font({ size: 20, weight: "bold" }),
@@ -334,7 +357,7 @@ export const AttendeeActivityLayout = (
                 ...colorMods(bannerAccent),
               ]}
             >
-              {labels.now}
+              {liveLabel}
             </Text>
           ) : null}
           <Spacer />

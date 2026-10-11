@@ -59,14 +59,14 @@ index 7dfe0a9..0e8ec04 100644
    }
  
    internal func buildText(applyModifiers: Bool = true) -> Text {
-@@ -73,3 +89,76 @@ public struct TextView: ExpoSwiftUI.View {
+@@ -73,3 +89,80 @@ public struct TextView: ExpoSwiftUI.View {
      return result
    }
  }
 +
-+/// hackOS patch (#966): a live countdown with units, `2h 34m` from one hour
-+/// and `34m 21s` below it (`short`: `2h` / `34m`; `long`: `2h 34m 21s` from
-+/// one hour), never `H:MM:SS`.
++/// hackOS patch (#966): a live countdown with units, `2h 34m` from one hour,
++/// `34m 21s` below it and `48s` below a minute (`short`: `2h` / `34m`;
++/// `long`: `2h 34m 21s` from one hour), never `H:MM:SS`.
 +///
 +/// Only timer text ticks inside a Live Activity (unit format styles render
 +/// once and freeze, custom ones are redacted), so each number is one field
@@ -124,6 +124,10 @@ index 7dfe0a9..0e8ec04 100644
 +            unit("s")
 +          }
 +        }
++      } else if left < 60 {
++        // Under a minute: the seconds alone (`48s`), never `0m 48s`.
++        field(skip: 0, digits: left >= 10 ? 2 : 1)
++        unit("s")
 +      } else {
 +        field(skip: colon + 2 * digit, digits: left >= 600 ? 2 : 1)
 +        unit(short ? "m" : "m ")

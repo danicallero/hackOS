@@ -165,6 +165,7 @@ const activityLivePropsSchema = z.object({
     scanned: z.string(),
     scan: z.string(),
     endsIn: z.string().optional(),
+    live: z.string().optional(),
   }),
   rank,
   updatedAt: isoString,
@@ -181,7 +182,12 @@ const attendeeActivityLivePropsSchema = z.object({
   startsAt: isoString,
   endsAt: isoString,
   url: z.string(),
-  labels: z.object({ startsIn: z.string(), now: z.string(), endsIn: z.string() }),
+  labels: z.object({
+    startsIn: z.string(),
+    now: z.string(),
+    endsIn: z.string(),
+    live: z.string().optional(),
+  }),
   rank,
   updatedAt: isoString,
 });

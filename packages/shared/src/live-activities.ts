@@ -190,6 +190,11 @@ export interface ActivityLiveLabels {
   scan: string;
   /** "Ends in" — labels the live countdown to the end. Optional: added after v1 shipped. */
   endsIn?: string;
+  /**
+   * "Live" — marks the activity as running, once it starts (`phase: live`, or
+   * an upcoming state iOS marks stale at `startsAt`). Optional (post-v1).
+   */
+  live?: string;
 }
 
 export interface ActivityLiveProps {
@@ -236,10 +241,16 @@ export type AttendeeActivityLivePhase = "upcoming" | "live";
 export interface AttendeeActivityLiveLabels {
   /** "Starts in" — labels the countdown while upcoming. */
   startsIn: string;
-  /** "Now" — marks the item as running. */
+  /** "Now" — marks the item as running on app builds without `live`. */
   now: string;
   /** "Ends in" — labels the countdown to the end while live. */
   endsIn: string;
+  /**
+   * "Live" — the running badge (compact, minimal, Lock Screen), once it
+   * starts (`phase: live`, or an upcoming state iOS marks stale at
+   * `startsAt`). Optional (post-v1); renderers fall back to `now`.
+   */
+  live?: string;
 }
 
 /**
@@ -387,6 +398,41 @@ export function relevanceForRank(rank: number | undefined): number {
   return Math.max(1, 100 - 10 * (rank ?? 0));
 }
 
+/** The queue has no end instant; the server refreshes it well within this. */
+export const LIVE_ACTIVITY_OPEN_ENDED_STALE_MS = 30 * 60 * 1000;
+
+/**
+ * ActivityKit marks an activity stale on a non-waking timer one minute after
+ * its `staleDate` (observed: `liveactivitiesd` "Marking activities stale" is
+ * scheduled at staleDate + 60 s), so a state meant to turn stale at an
+ * instant asks for it this much earlier.
+ */
+export const LIVE_ACTIVITY_STALE_LEEWAY_MS = 60_000;
+
+/**
+ * ActivityKit `staleDate` of a state, sent as APNs `stale-date` and passed on
+ * every local start and update (#966). An upcoming staff or attendee activity
+ * goes stale at its start (H25, H26, H59; requested a leeway earlier, see
+ * above): iOS re-renders it then with `isStale`, and the widget shows the
+ * live layout on time, without waiting for the push that flips `phase`.
+ * Everything else goes stale at its own end, or, for the queue, 30 minutes
+ * ahead.
+ */
+export function liveActivityStaleDate(props: LiveActivityProps, now: Date | number): Date {
+  if (props.kind === "queue") {
+    return new Date(
+      (typeof now === "number" ? now : now.getTime()) + LIVE_ACTIVITY_OPEN_ENDED_STALE_MS,
+    );
+  }
+  if (
+    (props.kind === "activity" || props.kind === "attendee_activity") &&
+    props.phase === "upcoming"
+  ) {
+    return new Date(Date.parse(props.startsAt) - LIVE_ACTIVITY_STALE_LEEWAY_MS);
+  }
+  return new Date(props.endsAt);
+}
+
 /**
  * Response of `GET /api/me/live-activities`: what this device should show
  * now, after kind configuration, role gating and the per-device
@@ -472,18 +518,21 @@ const ACTIVITY_LABELS: Record<Language, Required<ActivityLiveLabels>> = {
     scanned: "Scanned",
     scan: "Scan",
     endsIn: "Ends in",
+    live: "Live",
   },
   es: {
     startsIn: "Empieza en",
     scanned: "Escaneados",
     scan: "Escanear",
     endsIn: "Acaba en",
+    live: "En curso",
   },
   gl: {
     startsIn: "Comeza en",
     scanned: "Escaneados",
     scan: "Escanear",
     endsIn: "Remata en",
+    live: "En curso",
   },
 };
 
@@ -499,10 +548,10 @@ export function activityLiveLabels(lang: Language): ActivityLiveLabels {
   return ACTIVITY_LABELS[lang];
 }
 
-const ATTENDEE_ACTIVITY_LABELS: Record<Language, AttendeeActivityLiveLabels> = {
-  en: { startsIn: "Starts in", now: "Now", endsIn: "Ends in" },
-  es: { startsIn: "Empieza en", now: "Ahora", endsIn: "Acaba en" },
-  gl: { startsIn: "Comeza en", now: "Agora", endsIn: "Remata en" },
+const ATTENDEE_ACTIVITY_LABELS: Record<Language, Required<AttendeeActivityLiveLabels>> = {
+  en: { startsIn: "Starts in", now: "Now", endsIn: "Ends in", live: "Live" },
+  es: { startsIn: "Empieza en", now: "Ahora", endsIn: "Acaba en", live: "En curso" },
+  gl: { startsIn: "Comeza en", now: "Agora", endsIn: "Remata en", live: "En curso" },
 };
 
 const DEADLINE_LABELS: Record<Language, DeadlineLiveLabels> = {

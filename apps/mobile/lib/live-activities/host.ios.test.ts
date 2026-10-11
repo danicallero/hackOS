@@ -17,6 +17,7 @@ type FakeInstance = {
 const mockActive: FakeInstance[] = [];
 const mockCreated = new Map<string, FakeInstance>();
 const mockStart = jest.fn();
+const mockAttendeeStart = jest.fn();
 
 function mockInstance(id: string): FakeInstance {
   const instance: FakeInstance = {
@@ -50,7 +51,13 @@ jest.mock("@/widgets/staff-activity", () => ({
   StaffActivity: { start: jest.fn(), getInstances: () => [] },
 }));
 jest.mock("@/widgets/attendee-activity", () => ({
-  AttendeeActivity: { start: jest.fn(), getInstances: () => [] },
+  AttendeeActivity: {
+    start: (...args: unknown[]) => {
+      mockAttendeeStart(...args);
+      return mockInstance(`a${mockAttendeeStart.mock.calls.length}`);
+    },
+    getInstances: () => [],
+  },
 }));
 jest.mock("@/widgets/deadline-activity", () => ({
   DeadlineActivity: { start: jest.fn(), getInstances: () => [] },
@@ -63,8 +70,8 @@ jest.mock("./store", () => ({
   updateLiveActivityState: async () => undefined,
 }));
 
-import { queueLiveLabels } from "@hackos/shared/live-activities";
-import { liveActivityHost, staleDateFor } from "./host.ios";
+import { attendeeActivityLiveLabels, queueLiveLabels } from "@hackos/shared/live-activities";
+import { liveActivityHost } from "./host.ios";
 
 const props = {
   v: 1 as const,
@@ -142,10 +149,38 @@ describe("iOS Live Activity host (#966)", () => {
     expect(ended?.end).not.toHaveBeenCalled();
   });
 
-  it("marks local activities stale like the server does", () => {
-    const now = Date.parse("2026-10-11T10:00:00.000Z");
-    expect(staleDateFor(props, now).toISOString()).toBe("2026-10-11T10:30:00.000Z");
-    const ending = { ...props, kind: "deadline", endsAt: "2026-10-11T12:00:00.000Z" };
-    expect(staleDateFor(ending as never, now).toISOString()).toBe("2026-10-11T12:00:00.000Z");
+  it("marks local activities stale like the server does", async () => {
+    jest.useFakeTimers({ now: Date.parse("2026-10-11T10:00:00.000Z") });
+    try {
+      mockStart.mockClear();
+      await liveActivityHost.start({ kind: "queue", subject: "judging", props }, null);
+      expect((mockStart.mock.calls[0]![2] as Date).toISOString()).toBe("2026-10-11T10:30:00.000Z");
+
+      // H59: an upcoming item goes stale at its start, when the widget turns
+      // live on its own; a live one at its end.
+      const attendee = {
+        v: 1 as const,
+        kind: "attendee_activity" as const,
+        phase: "upcoming" as const,
+        scheduleId: 21,
+        name: "Keynote",
+        category: "talk",
+        location: null,
+        startsAt: "2026-10-11T10:01:00.000Z",
+        endsAt: "2026-10-11T11:00:00.000Z",
+        url: "hackos://schedule/21",
+        labels: attendeeActivityLiveLabels("en"),
+        updatedAt: "2026-10-11T10:00:00.000Z",
+      };
+      const item = { kind: "attendee_activity" as const, subject: "schedule:21" };
+      const id = await liveActivityHost.start({ ...item, props: attendee }, null);
+      // The start minus the leeway iOS adds before marking it stale.
+      expect((mockAttendeeStart.mock.calls[0]![2] as Date).toISOString()).toBe(
+        "2026-10-11T10:00:00.000Z",
+      );
+      expect(id).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
