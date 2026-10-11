@@ -270,3 +270,20 @@ export const putLiveActivitySettingsBodySchema = z
     message: "kinds must list every Live Activity kind exactly once",
     path: ["kinds"],
   });
+
+const kindPreferenceSchema = z.object({ kind: configKindSchema, enabled: z.boolean() }).strict();
+
+export const myLiveActivityPreferencesSchema = z.object({
+  kinds: z.array(kindPreferenceSchema),
+});
+
+/** The kinds to change (each at most once); unlisted kinds keep their choice. */
+export const putMyLiveActivityPreferencesBodySchema = z
+  .object({
+    kinds: z.array(kindPreferenceSchema).min(1).max(LIVE_ACTIVITY_CONFIG_KINDS.length),
+  })
+  .strict()
+  .refine((body) => new Set(body.kinds.map((k) => k.kind)).size === body.kinds.length, {
+    message: "kinds must list each Live Activity kind at most once",
+    path: ["kinds"],
+  });

@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import type { LiveActivityConfigKind } from "@hackos/shared/live-activities";
 import { useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useLayoutEffect, useState } from "react";
@@ -18,6 +19,7 @@ import { StaleDataBanner } from "@/components/stale-data-banner";
 import type { SymbolViewProps } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { useLiveActivitiesSetting } from "@/lib/live-activities/use-live-activities-setting";
+import { useLiveActivityKinds } from "@/lib/live-activities/use-live-activity-kinds";
 import { useMeContext } from "@/lib/me-context";
 import type { NotificationChannel } from "@/lib/notification-preferences";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
@@ -44,6 +46,14 @@ export function categoryTitle(category: NotificationCategory, t: Translate): str
   if (category === "schedule") return t("notificationsActivityReminders");
   return t("notificationsQueueStaff");
 }
+
+const LIVE_ACTIVITY_KIND_LABEL = {
+  activity: "liveActivityKindActivity",
+  attendee_activity: "liveActivityKindAttendeeActivity",
+  queue: "liveActivityKindQueue",
+  deadline: "liveActivityKindDeadline",
+  accreditation: "liveActivityKindAccreditation",
+} as const satisfies Record<LiveActivityConfigKind, string>;
 
 function channelLabel(channel: NotificationChannel, t: Translate) {
   const labels: Record<NotificationChannel, string> = {
@@ -113,6 +123,11 @@ export function NotificationSettingsScreen() {
   const preferences = useNotificationPreferences();
   const reminders = useScheduleReminders();
   const liveActivities = useLiveActivitiesSetting();
+  // Per-kind rows only while this device shows Live Activities at all: with
+  // the master switch off nothing appears here, so they would be inert.
+  const liveActivityKinds = useLiveActivityKinds(
+    liveActivities.available && liveActivities.enabled,
+  );
   const [refreshing, setRefreshing] = useState(false);
   const contentContainerStyle = useScrollContentStyle();
   const capabilities = me?.capabilities ?? [];
@@ -139,7 +154,7 @@ export function NotificationSettingsScreen() {
   async function onRefresh() {
     setRefreshing(true);
     try {
-      await Promise.all([preferences.load(), reminders.reload()]);
+      await Promise.all([preferences.load(), reminders.reload(), liveActivityKinds.load()]);
     } finally {
       setRefreshing(false);
     }
@@ -191,6 +206,17 @@ export function NotificationSettingsScreen() {
                 value={liveActivities.enabled}
                 onChange={(enabled) => void liveActivities.toggle(enabled)}
               />
+              {liveActivityKinds.kinds.map(({ kind, enabled }) => (
+                <View key={kind}>
+                  <Separator />
+                  <ToggleRow
+                    label={t(LIVE_ACTIVITY_KIND_LABEL[kind])}
+                    busy={liveActivityKinds.busyKind === kind}
+                    value={enabled}
+                    onChange={(next) => void liveActivityKinds.toggle(kind, next)}
+                  />
+                </View>
+              ))}
             </Section>
           ) : null}
 
