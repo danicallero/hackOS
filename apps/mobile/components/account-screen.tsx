@@ -751,14 +751,22 @@ function LanguageRow({
   if (Platform.OS !== "android") {
     return (
       <View onLayout={({ nativeEvent }) => setRowWidth(nativeEvent.layout.width)}>
-        <MenuView
-          actions={actions}
-          onPressAction={({ nativeEvent }) => onChange(nativeEvent.event as Lang)}
-        >
-          <View {...accessibility} style={{ width: rowWidth }}>
-            {row}
-          </View>
-        </MenuView>
+        {rowWidth === undefined ? (
+          row
+        ) : (
+          // Mount the SwiftUI host only once the row is measured and pin its
+          // width: a host sized from an earlier intrinsic width keeps a narrow
+          // frame, centring the row off to the left and swallowing taps.
+          <MenuView
+            actions={actions}
+            onPressAction={({ nativeEvent }) => onChange(nativeEvent.event as Lang)}
+            style={{ width: rowWidth }}
+          >
+            <View {...accessibility} style={{ width: rowWidth }}>
+              {row}
+            </View>
+          </MenuView>
+        )}
       </View>
     );
   }
