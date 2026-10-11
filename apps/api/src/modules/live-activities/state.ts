@@ -1,12 +1,10 @@
 import { createHash } from "node:crypto";
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
-import { CAPABILITIES } from "@hackos/shared/capabilities";
 import {
   type ActivityLiveProps,
   activityLiveLabels,
   LIVE_ACTIVITY_PROPS_VERSION,
   type LiveActivityProps,
-  type MyLiveActivities,
   type QueueLiveProps,
   queueLiveLabels,
 } from "@hackos/shared/live-activities";
@@ -223,21 +221,6 @@ export function scannedKey(activityId: number, testAccount: boolean): string {
   return `${activityId}:${testAccount ? 1 : 0}`;
 }
 
-/** Of `userIds`, those currently holding ACTIVITY_SCAN (or `*`), resolved in one query (H8). */
-export async function usersWithActivityScan(
-  userIds: number[],
-  db: Queryable = pool,
-): Promise<Set<number>> {
-  if (userIds.length === 0) return new Set();
-  const { rows } = await db.query<{ user_id: number }>(
-    `SELECT DISTINCT uec.user_id
-       FROM user_effective_capabilities uec
-      WHERE uec.user_id = ANY($1::int[]) AND uec.capability = ANY($2::text[])`,
-    [userIds, [CAPABILITIES.ACTIVITY_SCAN, CAPABILITIES.ADMIN_ALL]],
-  );
-  return new Set(rows.map((r) => r.user_id));
-}
-
 /** True when `activity` is a meal that has started (the only case `expected` applies). */
 export function isLiveMeal(activity: LiveScannableActivity, now: Date): boolean {
   return (
@@ -357,43 +340,4 @@ export function buildActivityLiveProps(
 export function liveStateHash(props: LiveActivityProps): string {
   const { updatedAt: _ignored, ...rest } = props;
   return createHash("sha256").update(JSON.stringify(rest)).digest("hex").slice(0, 32);
-}
-
-/** `GET /api/me/live-activities` for one user (the app's foreground source). */
-export async function myLiveActivities(
-  userId: number,
-  language: Language,
-  canScanActivities: boolean,
-): Promise<MyLiveActivities> {
-  const now = new Date();
-  const window = await readJudgingWindow();
-  const queue = window.open
-    ? await withStartPosition(
-        selectQueueLiveProps(await participantQueueStatuses(userId), language, now),
-      )
-    : null;
-
-  let activities: ActivityLiveProps[] = [];
-  if (canScanActivities) {
-    const rows = await loadLiveScannableActivities();
-    if (rows.length > 0) {
-      const { rows: userRows } = await pool.query<{ is_test_account: boolean }>(
-        `SELECT is_test_account FROM users WHERE id = $1`,
-        [userId],
-      );
-      const testAccount = userRows[0]?.is_test_account === true;
-      const counts = await loadScannedCounts(rows.map((r) => r.id));
-      const meals = testAccount ? new Map() : await loadMealPresence(rows, now);
-      activities = rows.map((row) =>
-        buildActivityLiveProps(
-          row,
-          counts.get(scannedKey(row.id, testAccount)) ?? 0,
-          language,
-          now,
-          meals.get(row.id) ?? null,
-        ),
-      );
-    }
-  }
-  return { judgingWindowOpen: window.open, queue, activities };
 }

@@ -10,6 +10,7 @@ import {
   truncateAll,
 } from "../helpers.js";
 import {
+  allowLiveActivities,
   createScannableActivity,
   openJudgingWindow,
   participantInQueue,
@@ -258,6 +259,7 @@ describe("GET /api/me/live-activities", () => {
     await openJudgingWindow();
     const { userId } = await participantInQueue({ position: 1 });
     await createScannableActivity({ startsInMinutes: 5 });
+    await allowLiveActivities();
 
     const participant = await app.inject({
       method: "GET",
@@ -270,9 +272,18 @@ describe("GET /api/me/live-activities", () => {
       judgingWindowOpen: true,
       queue: { kind: "queue", phase: "waiting", position: 1, labels: { goTo: "Vai a" } },
       activities: [],
+      attendeeActivities: [],
+      deadline: null,
+      judging: [],
+      accreditation: null,
+      maxConcurrent: 5,
     });
+    // Fields added after v1 survive response serialization.
+    expect(body.queue).toMatchObject({ calledAt: null, startPosition: 1, rank: 0 });
+    expect(body.queue.labels.stageInLine).toBe("Na cola");
 
     const staffId = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    await allowLiveActivities();
     const staff = await app.inject({
       method: "GET",
       url: "/api/me/live-activities",
@@ -287,5 +298,48 @@ describe("GET /api/me/live-activities", () => {
 
     const anonymous = await app.inject({ method: "GET", url: "/api/me/live-activities" });
     expect(anonymous.statusCode).toBe(401);
+  });
+
+  it("cuts to maxConcurrent by kind priority and keeps the device's running activity", async () => {
+    const staffId = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    const first = await createScannableActivity({ name: "First", startsInMinutes: 2 });
+    const second = await createScannableActivity({ name: "Second", startsInMinutes: 5 });
+    await allowLiveActivities({ maxConcurrent: 1 });
+    const get = (query = "") =>
+      app.inject({
+        method: "GET",
+        url: `/api/me/live-activities${query}`,
+        headers: asUser(staffId),
+      });
+    const plain = (await get()).json();
+    expect(plain.maxConcurrent).toBe(1);
+    expect(plain.activities.map((a: { activityId: number }) => a.activityId)).toEqual([first]);
+
+    // The device already runs the second one: within a kind it is not swapped.
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query<{ id: number }>(
+      `INSERT INTO live_activity_devices (user_id, device_id, platform) VALUES ($1, 'phone', 'ios')
+       RETURNING id`,
+      [staffId],
+    );
+    await pool.query(
+      `INSERT INTO live_activity_sessions (device_id, kind, subject) VALUES ($1, 'activity', $2)`,
+      [rows[0]!.id, `activity:${second}`],
+    );
+    const device = (await get("?deviceId=phone")).json();
+    expect(
+      device.activities.map((a: { activityId: number; rank: number }) => [a.activityId, a.rank]),
+    ).toEqual([[second, 0]]);
+    // Another account's device id does not leak its sessions.
+    const other = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    await allowLiveActivities({ maxConcurrent: 1 });
+    const foreign = await app.inject({
+      method: "GET",
+      url: "/api/me/live-activities?deviceId=phone",
+      headers: asUser(other),
+    });
+    expect(foreign.json().activities.map((a: { activityId: number }) => a.activityId)).toEqual([
+      first,
+    ]);
   });
 });

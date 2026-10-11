@@ -3,10 +3,6 @@ import type {
   LiveActivityKind,
   LiveActivityProps,
 } from "@hackos/shared/live-activities";
-import {
-  activityLiveActivitySubject,
-  QUEUE_LIVE_ACTIVITY_SUBJECT,
-} from "@hackos/shared/live-activities";
 import type { Language } from "@hackos/shared/locale";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
@@ -22,35 +18,32 @@ import {
   liveActivityApnsPayload,
 } from "./apns.js";
 import {
-  buildActivityLiveProps,
-  type LiveScannableActivity,
-  liveStateHash,
-  loadLiveScannableActivities,
-  loadMealPresence,
-  loadScannedCounts,
-  type MealPresence,
-  participantQueueStatuses,
-  readJudgingWindow,
-  scannedKey,
-  selectQueueLiveProps,
-  usersWithActivityScan,
-  withStartPosition,
-} from "./state.js";
+  candidatesFor,
+  type KnownSession,
+  loadLiveActivityContext,
+  relevanceForRank,
+  selectForDevice,
+} from "./candidates.js";
+import { liveStateHash } from "./state.js";
 
 /**
- * Live Activity push worker (#966; H38, H25, H26). Every tick compares the
- * desired Live Activities (state.ts) of each enabled device with the
- * sessions the server knows about and sends the difference:
+ * Live Activity push worker (#966; H38, H25, H26, H59, H19, H29-H36, H22).
+ * Every tick compares the desired Live Activities of each enabled device —
+ * the user's candidates (candidates.ts: kind configuration, role and
+ * intrinsic gates) cut to the device's `maxConcurrent` — with the sessions
+ * the server knows about and sends the difference:
  *
  * - desired, no session (or one the server finished, or one the user
  *   dismissed in a different phase) + a start path
  *   (iOS push-to-start token, Android Expo token) → start;
- * - desired, open session, visible state changed → update (activity counter
- *   updates throttled to one per 30 s per session; queue changes and phase
- *   changes go out immediately);
+ * - desired, open session, visible state changed → update (counter updates
+ *   of staff/attendee activities, the deadline and the accreditation desk
+ *   are throttled to one per 30 s per session; queue and judging changes and
+ *   phase changes go out immediately);
  * - open session no longer desired (window closed, team finished, activity
- *   over, device disabled) → end; a dismissed one no longer desired → finished,
- *   so the subject's next run starts again.
+ *   over, kind disabled or not allowed, outranked by a higher-priority kind,
+ *   device disabled) → end; a dismissed one no longer relevant → finished, so
+ *   the subject's next run starts again.
  *
  * Concurrency: a session-level advisory lock admits one tick at a time
  * across worker replicas, and every send is preceded by an atomic row claim
@@ -64,13 +57,19 @@ const TICK_EVERY_MS = 20_000;
 const ACTIVITY_UPDATE_THROTTLE_SECONDS = 30;
 /** Arbitrary constant for pg_try_advisory_lock; unique among this codebase's advisory keys. */
 const TICK_LOCK_KEY = 966_001;
-/** Without an update for this long, iOS greys the queue activity out as stale. */
-const QUEUE_STALE_MS = 30 * 60 * 1000;
 /**
- * An unchanged queue state is re-sent after this long, so a participant who
- * waits without any visible change is not greyed out by the stale date.
+ * Without an update for this long, iOS greys a queue or judging activity
+ * out as stale (both have no natural end instant).
  */
-const QUEUE_REFRESH_MS = QUEUE_STALE_MS / 2;
+const OPEN_ENDED_STALE_MS = 30 * 60 * 1000;
+/**
+ * An unchanged queue or judging state is re-sent after this long, so a team
+ * waiting (or a long pitch) without any visible change is not greyed out.
+ */
+const OPEN_ENDED_REFRESH_MS = OPEN_ENDED_STALE_MS / 2;
+/** Kinds whose every change goes out immediately (no counter throttle). */
+const URGENT_KINDS = new Set<LiveActivityKind>(["queue", "judging"]);
+const OPEN_ENDED_KINDS = new Set<LiveActivityKind>(["queue", "judging"]);
 
 interface DeviceRow {
   id: number;
@@ -124,46 +123,89 @@ const sessionKey = (deviceId: number, kind: string, subject: string) =>
 
 let warnedApnsMissing = false;
 
-function timeRange(props: { startsAt: string; endsAt: string }, timezone: string): string {
-  const format = new Intl.DateTimeFormat("en-GB", {
+function clock(instant: string, timezone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
     timeZone: timezone,
-  });
-  return `${format.format(new Date(props.startsAt))}–${format.format(new Date(props.endsAt))}`;
+  }).format(new Date(instant));
+}
+
+function timeRange(props: { startsAt: string; endsAt: string }, timezone: string): string {
+  return `${clock(props.startsAt, timezone)}–${clock(props.endsAt, timezone)}`;
 }
 
 /**
- * The alert iOS requires on a remote start, and the single essential update
- * alert (HIG): the team being called. No sound: the queue.called
- * notification (H51, non-optional) already rings.
+ * The alert iOS requires on a remote start (shown without sound), and the
+ * only alerting updates (HIG: essential changes only): the team being called
+ * (queue) and submissions entering their last minutes while the team's
+ * project is unsubmitted (deadline). The queue.called notification (H51,
+ * non-optional) already rings, so no alert carries a sound.
  */
-function alertFor(props: LiveActivityProps, timezone: string): ApnsAlert {
-  if (props.kind === "activity") {
-    const range = timeRange(props, timezone);
-    return { title: props.name, body: props.location ? `${range} · ${props.location}` : range };
+export function alertFor(props: LiveActivityProps, timezone: string): ApnsAlert {
+  switch (props.kind) {
+    case "activity":
+    case "attendee_activity": {
+      const range = timeRange(props, timezone);
+      return { title: props.name, body: props.location ? `${range} · ${props.location}` : range };
+    }
+    case "deadline": {
+      const closes = `${props.labels.closesIn} ${clock(props.endsAt, timezone)}`;
+      if (props.phase === "submitted") {
+        return { title: props.labels.title, body: `${props.labels.submitted} · ${closes}` };
+      }
+      const status = props.phase === "closing" ? props.labels.notSubmitted : null;
+      return {
+        title: props.labels.title,
+        body: [status, props.projectName, closes].filter(Boolean).join(" · "),
+      };
+    }
+    case "judging": {
+      const { labels } = props;
+      const body = props.current
+        ? `${props.phase === "presenting" ? labels.presenting : labels.inRoom}: ${props.current.name}`
+        : props.next
+          ? `${labels.next}: ${props.next.name}`
+          : labels.noTeam;
+      return { title: props.roomName, body };
+    }
+    case "accreditation":
+      return {
+        title: props.labels.title,
+        body: `${props.labels.accredited} ${props.accredited}/${props.eligible}`,
+      };
+    case "queue": {
+      const { labels } = props;
+      if (props.phase === "waiting") {
+        const position = props.position != null ? `${labels.position} #${props.position}` : "";
+        const eta = props.etaMinutes != null ? `~${props.etaMinutes} ${labels.minutes}` : "";
+        return { title: props.challengeTitle, body: [position, eta].filter(Boolean).join(" · ") };
+      }
+      const room = [props.roomName, props.roomLocation].filter(Boolean).join(" — ");
+      const prefix = props.phase === "called" ? labels.goTo : labels.inRoom;
+      return { title: props.challengeTitle, body: room ? `${prefix} ${room}` : prefix };
+    }
   }
-  const { labels } = props;
-  if (props.phase === "waiting") {
-    const position = props.position != null ? `${labels.position} #${props.position}` : "";
-    const eta = props.etaMinutes != null ? `~${props.etaMinutes} ${labels.minutes}` : "";
-    return { title: props.challengeTitle, body: [position, eta].filter(Boolean).join(" · ") };
-  }
-  const room = [props.roomName, props.roomLocation].filter(Boolean).join(" — ");
-  const prefix = props.phase === "called" ? labels.goTo : labels.inRoom;
-  return { title: props.challengeTitle, body: room ? `${prefix} ${room}` : prefix };
+}
+
+/** The one update that alerts, if this transition is it. */
+function updateAlert(props: LiveActivityProps, previousPhase: string | null): boolean {
+  if (props.kind === "queue") return props.phase === "called" && previousPhase !== "called";
+  if (props.kind === "deadline") return props.phase === "closing" && previousPhase !== "closing";
+  return false;
 }
 
 function staleDateFor(props: LiveActivityProps, now: Date): Date {
-  return props.kind === "activity"
-    ? new Date(props.endsAt)
-    : new Date(now.getTime() + QUEUE_STALE_MS);
-}
-
-function relevanceFor(props: LiveActivityProps): number {
-  if (props.kind === "queue") return props.phase === "waiting" ? 50 : 100;
-  return props.phase === "live" ? 75 : 25;
+  switch (props.kind) {
+    case "activity":
+    case "attendee_activity":
+    case "deadline":
+    case "accreditation":
+      return new Date(props.endsAt);
+    default:
+      return new Date(now.getTime() + OPEN_ENDED_STALE_MS);
+  }
 }
 
 async function loadDevices(): Promise<DeviceRow[]> {
@@ -245,31 +287,10 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
         (d.platform === "ios" ? d.push_to_start_token !== null : d.expo_push_token !== null)),
   );
   const userIds = [...new Set(actionable.map((d) => d.user_id))];
+  const ctx = await loadLiveActivityContext(userIds, now);
 
-  const window = await readJudgingWindow();
-  const queueStatuses = new Map<number, Awaited<ReturnType<typeof participantQueueStatuses>>>();
-  if (window.open) {
-    // Bounded: only users with an actionable device, and myQueueStatus only
-    // for those with queue entries (participantQueueStatuses pre-checks).
-    for (const userId of userIds) {
-      queueStatuses.set(userId, await participantQueueStatuses(userId));
-    }
-  }
-
-  let activities: LiveScannableActivity[] = [];
-  let scanners = new Set<number>();
-  let counts = new Map<string, number>();
-  let meals = new Map<number, MealPresence>();
   let timezone = "UTC";
   if (userIds.length > 0) {
-    activities = await loadLiveScannableActivities();
-    if (activities.length > 0) {
-      scanners = await usersWithActivityScan(userIds);
-      counts = await loadScannedCounts(activities.map((a) => a.id));
-      meals = await loadMealPresence(activities, now);
-    }
-  }
-  if (activities.length > 0 || window.open) {
     const { rows } = await pool.query<{ timezone: string | null }>(
       `SELECT timezone FROM event_config WHERE id = 1`,
     );
@@ -282,36 +303,30 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
     console.warn("live-activities: APNs is not configured; skipping iOS Live Activity pushes");
   }
   const android = deps.android ?? expoAndroidTransport;
-  const ctx: SendContext = { apns, android, now, timezone, summary };
+  const sendCtx: SendContext = { apns, android, now, timezone, summary };
 
   try {
     const actionableIds = new Set(actionable.map((d) => d.id));
     for (const device of devices) {
       const desired: Desired[] = [];
       if (actionableIds.has(device.id)) {
-        const statuses = queueStatuses.get(device.user_id);
-        const queueProps = statuses
-          ? await withStartPosition(selectQueueLiveProps(statuses, device.language, now))
-          : null;
-        if (queueProps) {
-          desired.push({ kind: "queue", subject: QUEUE_LIVE_ACTIVITY_SUBJECT, props: queueProps });
-        }
-        if (scanners.has(device.user_id)) {
-          for (const activity of activities) {
-            const scanned = counts.get(scannedKey(activity.id, device.is_test_account)) ?? 0;
-            desired.push({
-              kind: "activity",
-              subject: activityLiveActivitySubject(activity.id),
-              props: buildActivityLiveProps(
-                activity,
-                scanned,
-                device.language,
-                now,
-                device.is_test_account ? null : (meals.get(activity.id) ?? null),
-              ),
-            });
-          }
-        }
+        const candidates = await candidatesFor(device.user_id, device.language, ctx);
+        const { shown, suppressed } = selectForDevice(
+          candidates,
+          (c): KnownSession | undefined => {
+            const session = sessions.get(sessionKey(device.id, c.kind, c.subject));
+            if (!session) return undefined;
+            return {
+              open: session.ended_at === null,
+              dismissed: session.end_reason === "dismissed",
+              dismissedPhase: session.dismissed_phase,
+            };
+          },
+          ctx.maxConcurrent,
+        );
+        // Suppressed (dismissed in this phase) stay desired so their
+        // dismissal is kept; the branches below send them nothing.
+        desired.push(...shown, ...suppressed);
       }
 
       const desiredKeys = new Set<string>();
@@ -320,9 +335,9 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
         desiredKeys.add(key);
         const session = sessions.get(key);
         if (!session || session.end_reason === "finished") {
-          await startSession(ctx, device, want, session);
+          await startSession(sendCtx, device, want, session);
         } else if (session.ended_at === null) {
-          await updateSession(ctx, device, session, want);
+          await updateSession(sendCtx, device, session, want);
         } else if (session.dismissed_phase === null) {
           // Dismissed before the server knew its phase: remember the phase
           // the user dismissed, so only a later change brings it back.
@@ -334,7 +349,7 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
         } else if (session.dismissed_phase !== want.props.phase) {
           // The user swiped it away, but its phase changed since (e.g.
           // waiting → called): that is new, essential information.
-          await startSession(ctx, device, want, session);
+          await startSession(sendCtx, device, want, session);
         }
       }
 
@@ -342,7 +357,7 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
         if (session.device_id !== device.id) continue;
         if (desiredKeys.has(sessionKey(device.id, session.kind, session.subject))) continue;
         if (session.ended_at === null) {
-          await endSession(ctx, device, session);
+          await endSession(sendCtx, device, session);
         } else if (session.end_reason === "dismissed" && actionableIds.has(device.id)) {
           // A dismissal covers the run of the subject the user swiped away.
           // Once it is no longer relevant at all (team done, window closed),
@@ -389,7 +404,9 @@ async function send(
           event: input.event,
           kind: input.kind,
           subject: input.subject,
-          ...(input.event !== "end" && input.props ? { props: input.props } : {}),
+          ...(input.event !== "end" && input.props
+            ? { props: input.props, rank: input.props.rank ?? 0 }
+            : {}),
         },
       };
       return await ctx.android.send(input.token, message);
@@ -405,7 +422,7 @@ async function send(
         now: ctx.now,
         alert: input.alert,
         staleDate: input.event === "end" ? undefined : staleDateFor(input.props, ctx.now),
-        relevanceScore: relevanceFor(input.props),
+        relevanceScore: relevanceForRank(input.props.rank),
       }),
     });
     if (response.status === 200) return "ok";
@@ -528,9 +545,9 @@ async function updateSession(
 ): Promise<void> {
   const hash = liveStateHash(want.props);
   const refreshDue =
-    want.kind === "queue" &&
+    OPEN_ENDED_KINDS.has(want.kind) &&
     session.last_sent_at !== null &&
-    ctx.now.getTime() - new Date(session.last_sent_at).getTime() >= QUEUE_REFRESH_MS;
+    ctx.now.getTime() - new Date(session.last_sent_at).getTime() >= OPEN_ENDED_REFRESH_MS;
   if (session.state_hash === hash && !refreshDue) return;
   const token = device.platform === "ios" ? session.activity_push_token : device.expo_push_token;
   // iOS can't be updated until the app reports the activity's own token.
@@ -538,7 +555,7 @@ async function updateSession(
 
   const previousPhase = session.props?.phase ?? null;
   const phaseChanged = previousPhase !== want.props.phase;
-  const urgent = want.kind === "queue" || phaseChanged;
+  const urgent = URGENT_KINDS.has(want.kind) || phaseChanged;
   const { rows } = await pool.query<{ id: number }>(
     `UPDATE live_activity_sessions
         SET state_hash = $2, props = $3, last_sent_at = now()
@@ -557,21 +574,20 @@ async function updateSession(
       urgent,
       ACTIVITY_UPDATE_THROTTLE_SECONDS,
       session.state_hash === hash,
-      QUEUE_REFRESH_MS / 1000,
+      OPEN_ENDED_REFRESH_MS / 1000,
     ],
   );
   if (rows.length === 0) return;
 
-  const called =
-    want.props.kind === "queue" && want.props.phase === "called" && previousPhase !== "called";
+  const alerting = updateAlert(want.props, previousPhase);
   const result = await send(ctx, device, {
     event: "update",
     kind: want.kind,
     subject: want.subject,
     props: want.props,
     token,
-    alert: called ? alertFor(want.props, ctx.timezone) : undefined,
-    priority: called || phaseChanged ? 10 : 5,
+    alert: alerting ? alertFor(want.props, ctx.timezone) : undefined,
+    priority: alerting || phaseChanged ? 10 : 5,
   });
   if (result === "ok") {
     ctx.summary.updated += 1;

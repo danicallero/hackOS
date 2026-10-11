@@ -257,6 +257,21 @@ const envSchema = z.object({
     (v) => (v === "" ? undefined : v),
     z.coerce.number().int().min(1).max(240).default(15),
   ),
+  /** Minutes before submissions close (`hacking_ends_at`) that participants get the deadline Live Activity (H19, #966). */
+  LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().int().min(15).max(1440).default(180),
+  ),
+  /** Minutes before the event starts that the accreditation desk Live Activity opens (H22, #966). */
+  LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().int().min(0).max(1440).default(60),
+  ),
+  /** Minutes after hacking starts that the accreditation desk Live Activity stays open (H22, #966). */
+  LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().int().min(0).max(1440).default(60),
+  ),
 
   /**
    * Google Wallet (H28). Same "optional but never silently broken" posture

@@ -330,6 +330,13 @@ export const scheduleBody = z.object({
   audiences: z.array(scheduleAudience).max(3).default([]),
   contactNote: z.string().max(300).nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
+  liveActivityAudience: z
+    .boolean()
+    .optional()
+    .describe(
+      "Opt-in (#966): the item's audience gets an attendee Live Activity (countdown from " +
+        "LIVE_ACTIVITY_LEAD_MINUTES before the start, then 'now, ends in'). Defaults to false.",
+    ),
 });
 
 /**

@@ -856,7 +856,17 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/schedule",
-    { ...routeAccess(access.scheduleManage), preHandler: scheduleManage },
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: {
+        summary: "Manage the schedule",
+        description:
+          "Every schedule item, drafts included, with owners, for the staff run-of-show " +
+          "(H48, H59). `liveActivityAudience` says whether the item's audience gets an " +
+          "attendee Live Activity (#966).",
+      },
+    },
     async () => listSchedule(),
   );
 
@@ -865,7 +875,14 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(access.scheduleManage),
       preHandler: scheduleManage,
-      schema: { body: scheduleBody },
+      schema: {
+        body: scheduleBody,
+        summary: "Create a schedule item",
+        description:
+          "Creates a schedule item and its linked scanner activity (H48, H25, H26). " +
+          "`audiences` decides who sees it once shown (H59); `liveActivityAudience` " +
+          "(default false) also gives that audience an attendee Live Activity (#966).",
+      },
     },
     async (req, reply) =>
       reply.code(201).send(
@@ -882,6 +899,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           audiences: req.body.audiences,
           contactNote: req.body.contactNote ?? null,
           notes: req.body.notes ?? null,
+          liveActivityAudience: req.body.liveActivityAudience,
         }),
       ),
   );
@@ -891,7 +909,14 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(access.scheduleManage),
       preHandler: scheduleManage,
-      schema: { params: scheduleIdParam, body: schedulePatchBody },
+      schema: {
+        params: scheduleIdParam,
+        body: schedulePatchBody,
+        summary: "Edit a schedule item",
+        description:
+          "Partial edit: only the fields sent change (H48, H59). `liveActivityAudience` " +
+          "turns the attendee Live Activity for the item's audience on or off (#966). Audited.",
+      },
     },
     async (req) =>
       updateScheduleItem(actor(req.userId), req.params.id, {
@@ -907,6 +932,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         audiences: req.body.audiences,
         contactNote: req.body.contactNote,
         notes: req.body.notes,
+        liveActivityAudience: req.body.liveActivityAudience,
       }),
   );
 

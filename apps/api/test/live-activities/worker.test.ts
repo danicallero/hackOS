@@ -8,8 +8,15 @@ import type {
   ApnsResponse,
   ApnsTransport,
 } from "../../src/modules/live-activities/apns.js";
-import { createUser, createUserWithCapabilities, truncateAll } from "../helpers.js";
 import {
+  assignRole,
+  createRole,
+  createUser,
+  createUserWithCapabilities,
+  truncateAll,
+} from "../helpers.js";
+import {
+  allowLiveActivities,
   callEntry,
   closeJudgingWindow,
   createScannableActivity,
@@ -48,7 +55,14 @@ class StubAndroid implements AndroidLiveUpdateTransport {
 let apns: StubApns;
 let android: StubAndroid;
 
+/** A tick with the permissive test configuration (every kind, every user). */
 async function tick() {
+  await allowLiveActivities();
+  return rawTick();
+}
+
+/** A tick with whatever configuration the test set up itself. */
+async function rawTick() {
   const { runLiveActivitiesTick } = await import("../../src/modules/live-activities/worker.js");
   return runLiveActivitiesTick({ apns, android });
 }
@@ -304,7 +318,8 @@ describe("queue Live Activity (H38)", () => {
     await openJudgingWindow();
     const { userId } = await participantInQueue();
     const device = await registerDevice(userId);
-    const results = await Promise.all([tick(), tick(), tick()]);
+    await allowLiveActivities();
+    const results = await Promise.all([rawTick(), rawTick(), rawTick()]);
     expect(apns.events()).toEqual(["start"]);
     expect(results.reduce((n, r) => n + r.started, 0)).toBe(1);
     expect(await sessionsOf(device.id)).toHaveLength(1);
@@ -461,5 +476,207 @@ describe("staff activity Live Activity (H25, H26)", () => {
     ]);
     const [session] = await sessionsOf(device.id);
     expect(session.ended_at).toBeNull();
+  });
+});
+
+describe("configurable kinds in the worker (#966)", () => {
+  async function pool() {
+    return (await import("../../src/db/pool.js")).pool;
+  }
+
+  function apsOf(index: number) {
+    return apns.sent[index]!.payload.aps as Record<string, unknown>;
+  }
+
+  function propsOf(index: number) {
+    return JSON.parse((apsOf(index)["content-state"] as { props: string }).props);
+  }
+
+  it("deadline: starts with the countdown, alerts once when a draft enters closing, ends at the deadline", async () => {
+    const db = await pool();
+    const userId = await createUser();
+    await assignRole(userId, await createRole([CAPABILITIES.QUEUE_STATUS], { eventAccess: true }));
+    const group = await db.query<{ id: number }>(
+      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Rocket', $1) RETURNING id`,
+      [userId],
+    );
+    await db.query(
+      `INSERT INTO planned_work_group_members (group_id, user_id, status) VALUES ($1, $2, 'active')`,
+      [group.rows[0]!.id, userId],
+    );
+    await db.query(
+      `INSERT INTO event_config (id, hacking_ends_at) VALUES (1, now() + interval '1 hour')
+       ON CONFLICT (id) DO UPDATE SET hacking_ends_at = EXCLUDED.hacking_ends_at`,
+    );
+    const device = await registerDevice(userId, { language: "en" });
+
+    expect(await tick()).toMatchObject({ started: 1 });
+    expect(apsOf(0)).toMatchObject({
+      event: "start",
+      attributes: { url: "hackos://project" },
+      alert: { title: "Submissions close" },
+    });
+    expect((apsOf(0)["content-state"] as { name: string }).name).toBe("DeadlineActivity");
+    expect(propsOf(0)).toMatchObject({ kind: "deadline", phase: "open", submission: "draft" });
+    // stale-date is the deadline itself.
+    const ends = Math.floor(new Date(propsOf(0).endsAt).getTime() / 1000);
+    expect(apsOf(0)["stale-date"]).toBe(ends);
+    await setActivityToken(device.id, "deadline-token");
+
+    await db.query(`UPDATE event_config SET hacking_ends_at = now() + interval '10 minutes'`);
+    expect(await tick()).toMatchObject({ updated: 1 });
+    expect(apns.sent[1]!.priority).toBe(10);
+    expect(apsOf(1).alert).toMatchObject({ title: "Submissions close" });
+    expect((apsOf(1).alert as { body: string }).body).toContain("Not submitted · Rocket");
+    expect(propsOf(1).phase).toBe("closing");
+
+    await db.query(`UPDATE event_config SET hacking_ends_at = now() - interval '1 second'`);
+    expect(await tick()).toMatchObject({ ended: 1 });
+    expect(apsOf(2).event).toBe("end");
+  });
+
+  it("judging: room changes go out immediately and the window closing ends it", async () => {
+    const db = await pool();
+    await openJudgingWindow();
+    const { entryId, challengeId, roomId } = await participantInQueue();
+    const judge = await createUser();
+    const { addChallengeJudge } = await import("../queue/fixtures.js");
+    await addChallengeJudge(challengeId, judge);
+    const device = await registerDevice(judge, { platform: "android", language: "en" });
+
+    await tick();
+    const starts = android.sent.filter((s) => s.token === `ExponentPushToken[${device.deviceId}]`);
+    expect(starts[0]!.message.hackosLiveUpdate).toMatchObject({
+      event: "start",
+      kind: "judging",
+      subject: `room:${roomId}`,
+      rank: 0,
+      props: { phase: "idle", rank: 0 },
+    });
+
+    await callEntry(entryId, roomId);
+    expect(await tick()).toMatchObject({ updated: 1 });
+    await db.query(
+      `UPDATE queue_entries SET status = 'in_room', room_entered_at = now() WHERE id = $1`,
+      [entryId],
+    );
+    // A second change within 30 s is not throttled for judging.
+    expect(await tick()).toMatchObject({ updated: 1 });
+    const mine = android.sent.filter((s) => s.token === `ExponentPushToken[${device.deviceId}]`);
+    expect(mine.map((s) => s.message.hackosLiveUpdate.props?.phase)).toEqual([
+      "idle",
+      "called",
+      "in_room",
+    ]);
+
+    await closeJudgingWindow();
+    await tick();
+    expect(
+      android.sent.filter((s) => s.token === `ExponentPushToken[${device.deviceId}]`).at(-1)!
+        .message.hackosLiveUpdate.event,
+    ).toBe("end");
+  });
+
+  it("accreditation: Scan opens the scanner; counters are throttled", async () => {
+    const db = await pool();
+    const desk = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
+    await db.query(
+      `INSERT INTO event_config (id, event_starts_at) VALUES (1, now() + interval '10 minutes')
+       ON CONFLICT (id) DO UPDATE SET event_starts_at = EXCLUDED.event_starts_at,
+                                      hacking_starts_at = NULL`,
+    );
+    const device = await registerDevice(desk);
+    expect(await tick()).toMatchObject({ started: 1 });
+    expect(apsOf(0)).toMatchObject({ attributes: { url: "hackos://scan" } });
+    expect(propsOf(0)).toMatchObject({
+      kind: "accreditation",
+      accredited: 0,
+      scanUrl: "hackos://scan",
+    });
+    await setActivityToken(device.id, "desk-token");
+
+    const arrival = await createUser();
+    await db.query(`UPDATE users SET badge_id = 'B-1' WHERE id = $1`, [arrival]);
+    expect(await tick()).toMatchObject({ updated: 0 });
+    await db.query(
+      `UPDATE live_activity_sessions SET last_sent_at = now() - interval '31 seconds'
+        WHERE device_id = $1`,
+      [device.id],
+    );
+    expect(await tick()).toMatchObject({ updated: 1 });
+    expect(apns.sent[1]!.priority).toBe(5);
+    expect(propsOf(1)).toMatchObject({ accredited: 1, recentArrivals: 1 });
+  });
+
+  it("attendee activity: countdown, then live, then ended", async () => {
+    const db = await pool();
+    const attendee = await createUser();
+    const { rows } = await db.query<{ id: number }>(
+      `INSERT INTO schedule (title, location, type, starts_at, ends_at, visibility, audiences,
+                             live_activity_audience)
+       VALUES ('Keynote', 'Aula 1', 'talk', now() + interval '5 minutes', now() + interval '50 minutes',
+               'shown', '{participant}', true) RETURNING id`,
+    );
+    const scheduleId = rows[0]!.id;
+    const device = await registerDevice(attendee, { platform: "android" });
+
+    expect(await tick()).toMatchObject({ started: 1 });
+    expect(android.sent[0]!.message.hackosLiveUpdate).toMatchObject({
+      kind: "attendee_activity",
+      subject: `schedule:${scheduleId}`,
+      props: { phase: "upcoming", url: `hackos://schedule/${scheduleId}` },
+    });
+
+    await db.query(`UPDATE schedule SET starts_at = now() - interval '1 minute' WHERE id = $1`, [
+      scheduleId,
+    ]);
+    expect(await tick()).toMatchObject({ updated: 1 });
+    expect(android.sent[1]!.message.hackosLiveUpdate.props?.phase).toBe("live");
+
+    await db.query(`UPDATE schedule SET ends_at = now() - interval '1 second' WHERE id = $1`, [
+      scheduleId,
+    ]);
+    expect(await tick()).toMatchObject({ ended: 1 });
+    expect(await sessionsOf(device.id)).toMatchObject([{ end_reason: "finished" }]);
+  });
+
+  it("a higher-priority kind displaces a running lower one beyond maxConcurrent", async () => {
+    const db = await pool();
+    await openJudgingWindow();
+    const { userId } = await participantInQueue();
+    const device = await registerDevice(userId);
+    await allowLiveActivities({ maxConcurrent: 1 });
+    expect(await rawTick()).toMatchObject({ started: 1 });
+    expect(propsOf(0)).toMatchObject({ kind: "queue", rank: 0 });
+    expect(apsOf(0)["relevance-score"]).toBe(100);
+    await setActivityToken(device.id, "queue-token");
+
+    // An opted-in talk for the participant outranks the queue by default.
+    await db.query(
+      `INSERT INTO schedule (title, starts_at, ends_at, visibility, audiences, live_activity_audience)
+       VALUES ('Keynote', now() + interval '5 minutes', now() + interval '1 hour', 'shown',
+               '{participant}', true)`,
+    );
+    await allowLiveActivities({ maxConcurrent: 1 });
+    expect(await rawTick()).toMatchObject({ started: 1, ended: 1 });
+    expect(apns.events()).toEqual(["start", "start", "end"]);
+    const sessions = await sessionsOf(device.id);
+    expect(sessions.find((s) => s.kind === "queue")).toMatchObject({ end_reason: "finished" });
+
+    // Within a kind nothing flaps: a re-run changes nothing.
+    await allowLiveActivities({ maxConcurrent: 1 });
+    expect(await rawTick()).toMatchObject({ started: 0, ended: 0, updated: 0 });
+  });
+
+  it("ends a running activity once its kind is disabled", async () => {
+    const db = await pool();
+    const staffId = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    await registerDevice(staffId, { platform: "android" });
+    await createScannableActivity({ startsInMinutes: 5 });
+    await tick();
+    await db.query(
+      `UPDATE live_activity_kind_settings SET enabled = false WHERE kind = 'activity'`,
+    );
+    expect(await rawTick()).toMatchObject({ ended: 1 });
   });
 });

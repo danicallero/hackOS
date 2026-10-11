@@ -1,6 +1,8 @@
 # Live Activities and Live Updates (#966)
 
-System-level, glanceable surfaces for two time-bound moments of the event:
+System-level, glanceable surfaces for the time-bound moments of the event.
+Organizers turn each kind on or off, rank them and choose the roles that
+receive them ([Configuration](#configuration)):
 
 - **Participant queue (H38)**: during the judging window only, the
   participant's *nearest* queue, with position and ETA, then the room once the
@@ -9,6 +11,19 @@ System-level, glanceable surfaces for two time-bound moments of the event:
   `LIVE_ACTIVITY_LEAD_MINUTES` before a scannable activity starts until it
   ends, a countdown and then a live attendance counter with one **Scan**
   action that opens the scanner already bound to that activity.
+- **Attendee activity (H59)**: for a schedule item organizers opted in
+  (`liveActivityAudience`), its audience gets a countdown from
+  `LIVE_ACTIVITY_LEAD_MINUTES` before the start, then "Now · ends in". No
+  buttons.
+- **Submission deadline (H19, H20)**: for participants, from
+  `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` before submissions close, a countdown
+  with the team's hackOS submission status.
+- **Judging room (H29–H36)**: for judges, during the judging window, their
+  room: the team inside with its pitch timer, the next team on its way and
+  how many are waiting.
+- **Accreditation desk (H22, H24)**: for `accredit:scan` holders, around the
+  arrival rush, accredited/eligible, people inside and arrivals in the last
+  10 minutes, with one **Scan** action.
 
 On iOS these are ActivityKit Live Activities (Dynamic Island, Lock Screen,
 Apple Watch Smart Stack, CarPlay), rendered by `expo-widgets`. On Android they
@@ -20,7 +35,7 @@ the client side is in [mobile.md](./mobile.md).
 ## Architecture
 
 ```
-            state.ts (single builder)
+   candidates.ts (gates, ranking, per-device cut) ← state.ts, kinds.ts (builders)
            /                         \
 GET /api/me/live-activities      worker.ts (every 20 s)
 (app in foreground: starts         ├─ iOS: apns.ts → APNs HTTP/2, token auth
@@ -29,8 +44,11 @@ GET /api/me/live-activities      worker.ts (every 20 s)
 
 | File (`apps/api/src/modules/live-activities/`) | Role |
 | --- | --- |
-| `state.ts` | Builds `QueueLiveProps` and `ActivityLiveProps` (`@hackos/shared/live-activities`). Both the read endpoint and the worker call it, so a local refresh and a remote push never disagree. |
-| `routes.ts`, `schemas.ts` | Device/session registry and the read model. |
+| `state.ts` | Builds `QueueLiveProps` and `ActivityLiveProps` (`@hackos/shared/live-activities`), the judging window and the state hash. |
+| `kinds.ts` | Loaders and builders for `AttendeeActivityLiveProps`, `DeadlineLiveProps`, `JudgingLiveProps` and `AccreditationLiveProps`. Each loader reads its data set once for every candidate user. |
+| `candidates.ts` | `loadLiveActivityContext` (every data set once per tick or request), `candidatesFor` (kind configuration, roles and intrinsic gates, in priority order), `selectForDevice` (the `maxConcurrent` cut) and the read model. Both the read endpoint and the worker call it, so a local refresh and a remote push never disagree. |
+| `settings.ts` | Organizer configuration: read, save (audited) and each kind's required capability. |
+| `routes.ts`, `schemas.ts` | Device/session registry, the read model and the configuration routes. |
 | `apns.ts` | ES256 provider token, the `aps` payload, and the HTTP/2 transport. |
 | `android.ts` | Data-only Expo push through `postExpoPushMessages` (shared with the notification push channel). |
 | `worker.ts` | The `live-activities` repeatable job: desired state against known sessions, then start, update or end. |
@@ -100,7 +118,98 @@ the account language.
   button both open the scanner bound to that activity. iOS keeps the tap URL
   in the static `attributes.url`.
 
+### Attendee activity (H59)
+
+- Items: `schedule.live_activity_audience = true`, live for their audience
+  with the same rule as the audience-aware schedule feed (`visibility =
+  'shown'`, `publish_at` unset or past, at least one audience tag), starting
+  within `LIVE_ACTIVITY_LEAD_MINUTES` or still running. `phase` is `upcoming`
+  before `starts_at` and `live` until `ends_at`, when it ends.
+- Audience: `attendeeScheduleAudiencesForUsers` (logistics/schedule.ts), the
+  bulk form of `callerScheduleAudiences`. Everyone has `participant`; a
+  linked sponsor rep adds `sponsor`; a user whose displayed role is Mentor
+  adds `mentor`. **Decision:** the staff override of the schedule feed (any
+  capability holder sees every item) is not applied, because it exists so
+  staff can run the show. Since `participant` is universal, staff still get
+  participant items unless organizers untick their roles for this kind.
+- Opt-in is edited with the item: `liveActivityAudience` on `POST
+  /api/schedule` (default false), `PATCH /api/schedule/:id` and `GET
+  /api/schedule`. **Decision:** the flag lives on `schedule`, beside
+  `audiences`, not on the mirrored `activities` row.
+- `name`: `title_i18n[language]`, then `title_i18n.en`, then `title`.
+- `url`: `hackos://schedule/<id>`.
+
+### Submission deadline (H19, H20)
+
+- **Decision:** submissions close at `event_config.hacking_ends_at`. That is
+  the instant `projects/lifecycle.ts` enforces ("The submission deadline has
+  passed"), Devpost imports lock at and the reconciliation overview calls
+  `deadline`. The participant self-service window only bounds editing.
+- Window: from `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` (default 180) before the
+  deadline until it passes. `startsAt` is `hacking_starts_at` (for a
+  progress bar), or null.
+- Who: holders of `queue:status` (the participant capability; `*` passes)
+  with event access (`user_event_access`).
+- `submission`: every project or work group the user is an active member of
+  (the three membership sources of `isActiveProjectMember`, H54 boundary
+  included). `submitted` only when all are submitted, `draft` when one is
+  not (an unlinked work group counts as draft), and `null` when the user has
+  none in hackOS, for example a Devpost team that is not imported yet. A
+  `null` status is unknown and is never shown as "not submitted".
+- `phase`: `submitted`; `closing` in the last 15 minutes
+  (`DEADLINE_CLOSING_MINUTES`) for a known draft; otherwise `open`.
+- **Alert policy:** one alerting update, when a known draft enters
+  `closing`. A `null` status never alerts.
+- `url`: `hackos://project` (proposed; the app has no project screen yet).
+
+### Judging room (H29–H36)
+
+- Only while the judging window is open.
+- Rooms: those whose queue group belongs to an enterprise the user judges for
+  (enterprise roster or sponsor rep), the association the room view grants
+  (`judgesRoomEnterprise`). Subject `room:<id>`, one per room.
+  **Decision:** a `judge:panel` holder with no such association has no room
+  of their own, so gets no judging activity.
+- **Decision:** a paused room (H35) with nobody inside or called has no
+  activity, so a room that has not opened yet adds nothing. A paused room
+  still finishing a team keeps its phase with `roomPaused: true`.
+- `phase`: `presenting`, `in_room`, `called` (someone on the way) or `idle`.
+- `current`: the team in the room, with `enteredAt` and the pitch timer as
+  instants: `presentationStartedAt`, `presentationPausedAt`,
+  `presentationPausedSeconds` (#926) and `presentationSeconds` (the entry's
+  frozen goal, else the challenge's `max_presentation_seconds`). Devices tick
+  locally: elapsed = (pausedAt ?? now) − startedAt − pausedSeconds.
+- `next`: the earliest-called team, with `calledAt`; `calledCount` and
+  `waitingCount` (the room's queue group).
+- H54: entries count only when repo and challenge are on the same side of
+  the fixture boundary, and a viewer only gets rooms whose queue is on their
+  side.
+- **Alert policy:** none. The judge panel is the working surface, and a
+  pitch timer must not buzz the room.
+- `url`: `hackos://judging?room=<id>` (proposed).
+
+### Accreditation desk (H22, H24, H27)
+
+- **Decision:** `event_config` has no check-in window, so the desk's window
+  is derived. It opens `LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES` (default 60)
+  before `event_starts_at` (else `hacking_starts_at`) and closes
+  `LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES` (default 60) after
+  `hacking_starts_at` (else the event start). Outside it, staff are not
+  interrupted all event long.
+- Who: holders of `accredit:scan` (or `*`).
+- Counts follow the scanner home tile (`scannerRoleStats`): `eligible` is
+  active accounts with event access, and `accredited` is active accounts
+  with a badge. `recentArrivals` is badges assigned in the last 10 minutes.
+  These are split by the H54 fixture marker. `inside` is the presence
+  estimate (`occupancyEstimate`, real accounts only, read once per tick);
+  synthetic operators get `null`.
+- Single phase `live`. Counter updates are throttled like activity counters.
+- `url` and `scanUrl`: `hackos://scan`.
+
 ### Preferences
+
+Organizers decide which kinds exist and for which roles
+([Configuration](#configuration)).
 
 **Decision:** queue calls are already non-optional operational notices (H51),
 and the Live Activity mirrors the queue screen rather than adding a new
@@ -162,6 +271,31 @@ Save footer and unsaved-changes guard, sent as one `PUT`. Per schedule item,
 the item editor's "Show Live Activity to audience" switch (only for items with
 an audience) sets `liveActivityAudience`.
 
+### Ranking and the per-device limit
+
+A user's candidates are ranked by kind priority, then by each kind's own
+order: earliest activity or schedule item first, and rooms by id. Each
+device keeps at most `maxConcurrent` of them:
+
+- **Hysteresis:** within a kind, a subject already open on the device
+  sorts before a new one, so two activities of the same kind never swap
+  back and forth. A candidate of a **higher-priority kind** displaces a
+  running lower one. The displaced one is ended (`finished`) and starts again
+  when a slot frees.
+- A candidate the user dismissed in its current phase takes no slot. It
+  stays desired, so its dismissal is kept.
+- `rank` (0 = most important) goes into every props object and the Android
+  message (`hackosLiveUpdate.rank`, for the notification sort key). iOS gets
+  `relevance-score = 100 − 10 × rank`, so the Dynamic Island shows the top
+  one. A rank change is a visible change, so it is pushed.
+- `GET /api/me/live-activities?deviceId=` applies the same cut with that
+  device's sessions. Without `deviceId`, it treats the device as showing
+  nothing yet.
+
+**Product note:** with the default order, a participant with two opted-in
+schedule items running gets no queue activity when `maxConcurrent` is 2.
+Organizers can rank `queue` higher.
+
 ## Registry
 
 | Route | Purpose |
@@ -177,15 +311,31 @@ because this is delivery plumbing. Every write is an idempotent upsert. The
 `/api/me/live-activities` paths are excluded from SSE identity invalidation
 and session invalidation, as push tokens are, to avoid refresh loops.
 
-Subjects: `judging` for the queue (one per participant) and `activity:<id>`
-for activities.
+Subjects: `judging` for the queue (one per participant), `activity:<id>`
+for staff activities, `schedule:<id>` for attendee activities, `deadline`,
+`room:<id>` for judging and `accreditation`. The session routes reject a
+subject that does not match its kind.
 
-### Schema (migration `0604_live_activities.sql`)
+Deep links (the app maps them; the ones marked *proposed* need a screen or a
+route mapping in `apps/mobile`):
+
+| Kind | Tap | Action |
+| --- | --- | --- |
+| `queue` | `hackos://queue` | — |
+| `activity` | `hackos://scan?activity=<id>` | Scan: same URL |
+| `attendee_activity` | `hackos://schedule/<scheduleId>` (`app/schedule/[id].tsx`) | — |
+| `deadline` | `hackos://project` (*proposed*) | — |
+| `judging` | `hackos://judging?room=<roomId>` (*proposed*) | — |
+| `accreditation` | `hackos://scan` | Scan: same URL |
+
+### Schema (migrations `0604_live_activities.sql`, `0605_live_activity_settings.sql`)
 
 - `live_activity_devices`: one row per install (`device_id` unique), with
   `user_id` (cascade), `platform`, `push_to_start_token`, `expo_push_token`,
   `language` and `enabled`.
-- `live_activity_sessions`: one row per `(device, kind, subject)`, with
+- `live_activity_sessions`: one row per `(device, kind, subject)` (kind one
+  of `queue`, `activity`, `attendee_activity`, `deadline`, `judging`,
+  `accreditation`), with
   `activity_push_token`, `state_hash`/`props` for the last state sent,
   `last_sent_at`, `started_at`, `ended_at`, `end_reason` and
   `dismissed_phase` (`finished` = the server ended it and may restart it;
@@ -200,7 +350,9 @@ date), never tokens.
 
 `live-activities` runs every 20 s. A call (H29) also schedules a deduplicated
 early run 2 s later, so the alerting "go to room" update does not wait for the
-next repetition. Each tick does the following:
+next repetition. Other room changes (a team entering, the pitch
+timer starting) reach judges within one repetition; the timer instants are
+exact, so only the start of the ticking is delayed. Each tick does the following:
 
 1. Loads enabled devices of active users, plus any device that still has an
    open session (to end it). Only *actionable* devices (with a start path or
@@ -212,19 +364,21 @@ next repetition. Each tick does the following:
 | Known session | Action |
 | --- | --- |
 | none, or `finished` | **start**, if a start path exists: iOS `push_to_start_token` (and APNs configured) or Android `expo_push_token` |
-| open, state hash changed | **update**. Activity updates where only the counter changed are throttled to one per 30 s per session; queue changes and phase changes go out immediately. iOS waits until the app reports the activity's own token. |
+| open, state hash changed | **update**. Same-phase changes of staff and attendee activities, the deadline and the accreditation desk are throttled to one per 30 s per session; queue and judging changes and every phase change go out immediately. iOS waits until the app reports the activity's own token. |
 | open, hash unchanged | nothing |
 | `dismissed`, same phase as `dismissed_phase` | nothing (the user removed it) |
 | `dismissed`, phase changed (e.g. waiting → called, upcoming → live) | **start** again: new, essential information |
 | `dismissed`, no `dismissed_phase` yet | record the current phase, send nothing |
 
-   An open queue session whose state has not changed for 15 minutes gets a
-   routine (priority 5) refresh, so its 30-minute `stale-date` never greys
-   out a participant who is still waiting.
+   An open queue or judging session whose state has not changed for 15
+   minutes gets a routine (priority 5) refresh, so its 30-minute
+   `stale-date` never greys out a team that is still waiting or a long
+   pitch.
 
 3. Every open session that is no longer desired is **ended**. This happens
    when the window closes, the team is done, the activity ends, the
-   capability is revoked, or the device is disabled. A `dismissed` session
+   capability or role is revoked, the kind is disabled, a higher-priority
+   kind outranks it, or the device is disabled. A `dismissed` session
    that is no longer desired on a device that can still receive starts is
    turned into `finished`: the dismissal covered that run, so a later one
    (for example the next queue the team waits in) starts again.
@@ -290,21 +444,24 @@ next repetition. Each tick does the following:
 - `content-state` must match `expo-widgets`'
   `LiveActivityAttributes.ContentState { name: String, props: String? }`
   exactly. `name` is `LIVE_ACTIVITY_WIDGET_NAMES[kind]` (`QueueActivity`,
-  `StaffActivity`), and `props` is the props JSON *string*.
+  `StaffActivity`, `AttendeeActivity`, `DeadlineActivity`, `JudgingActivity`,
+  `AccreditationActivity`), and `props` is the props JSON *string*.
 - `attributes-type` and `attributes` are sent on `start` only.
   `LiveActivityAttributes` is the struct name in
   `expo-widgets/ios/Widgets/WidgetLiveActivity.swift`, and its only field is
   `url`.
 - `alert` is required on `start`, or iOS silently drops the start. On updates
-  it is sent only when the team is called. It carries no `sound`, because the
+  it is sent only when the team is called (queue) or a known draft enters the
+  last 15 minutes (deadline). It carries no `sound`, because the
   non-optional `queue.called` push notification already rings.
-- `stale-date`: now + 30 min for the queue, and the activity's end for staff
-  activities.
-- `relevance-score`: 100 when called or in a room, 50 while waiting, 75 for a
-  live activity and 25 for an upcoming one.
-- `attributes` is expo-widgets' `LiveActivityAttributes { url: String? }`:
-  `hackos://queue` or `hackos://scan?activity=<id>`. It is the tap target, so
-  it must be present on every remote start.
+- `stale-date`: now + 30 min for the queue and judging, which have no end
+  instant. Otherwise the item's own end: the activity or schedule item end,
+  the deadline, or the accreditation window end.
+- `relevance-score`: `100 − 10 × rank` (see
+  [Ranking](#ranking-and-the-per-device-limit)).
+- `attributes` is expo-widgets' `LiveActivityAttributes { url: String? }`,
+  the props `url` (see the deep link table). It is the tap target, so it must
+  be present on every remote start.
 - `dismissal-date` (on `end` only): 15 minutes after the end.
 
 ### Android (Expo data push)
@@ -314,10 +471,10 @@ background notification task receives it and renders it through
 `modules/live-updates`:
 
 ```json
-{ "hackosLiveUpdate": { "event": "start | update | end", "kind": "queue", "subject": "judging", "props": { … } } }
+{ "hackosLiveUpdate": { "event": "start | update | end", "kind": "queue", "subject": "judging", "rank": 0, "props": { … } } }
 ```
 
-`props` is omitted on `end`.
+`props` and `rank` are omitted on `end`.
 
 ## Design rationale (Apple HIG)
 
@@ -328,10 +485,15 @@ Followed: <https://developer.apple.com/design/human-interface-guidelines/live-ac
   with a single Live Activity").
 - **Update only when content changes.** Updates are hash-gated, and counters
   are throttled.
-- **Alert only for essential updates.** The only alert is the call.
+- **Alert only for essential updates.** The only alerting updates are the
+  call and an unsubmitted team's final 15 minutes.
 - **End when the task ends**, with a custom dismissal of about 15 minutes.
-- **Single interactive element at most** (staff **Scan**). Every tap
-  deep-links to the related screen.
+- **Single interactive element at most** (staff and desk **Scan**). Every
+  tap deep-links to the related screen.
+- **Live timers tick on the device.** Countdowns and the pitch timer travel
+  as instants, never as per-second pushes.
+- **Few at once.** A device shows at most `maxConcurrent` (default 2), the
+  most important leading the Dynamic Island.
 
 Queue (participant):
 
@@ -355,6 +517,50 @@ Meal / activity (staff):
 | Expanded | name, location, `hh:mm–hh:mm`, countdown | name, location, time range, counter, **Scan** button |
 | Lock Screen | as expanded | as expanded |
 
+Attendee activity:
+
+| Presentation | Upcoming | Live |
+|---|---|---|
+| Compact leading | category symbol | same |
+| Compact trailing | countdown timer to start | countdown to end |
+| Minimal | countdown | countdown |
+| Expanded | name, location, `hh:mm–hh:mm`, "Starts in" timer | name, location, "Now · ends in" timer |
+| Lock Screen | as expanded | as expanded, with a progress bar from `startsAt` to `endsAt` |
+| Watch / CarPlay | name + countdown | name + "Now" |
+
+Submission deadline:
+
+| Presentation | Open | Closing | Submitted |
+|---|---|---|---|
+| Compact leading | `hourglass` | `exclamationmark.circle` (tinted) | `checkmark.circle` |
+| Compact trailing | countdown timer | countdown timer | countdown timer (muted) |
+| Minimal | countdown | countdown (tinted) | checkmark |
+| Expanded | title, countdown, project name; status only when known | "Not submitted · project", countdown | "Submitted ✓ · project", countdown |
+| Lock Screen | as expanded, with a progress bar from `startsAt` to `endsAt` | as expanded | as expanded |
+| Watch | countdown | countdown + "Not submitted" | "Submitted" |
+
+Judging room:
+
+| Presentation | Presenting | In room | Called / idle |
+|---|---|---|---|
+| Compact leading | room name | room name | room name |
+| Compact trailing | pitch timer (counts up, tinted past `presentationSeconds`, frozen while paused) | setup timer from `enteredAt` | "Next" + team / waiting count |
+| Minimal | pitch timer | setup timer | waiting count |
+| Expanded | team, pitch timer with a progress bar against `presentationSeconds`, next team + "on the way" timer, waiting count | team, setup timer, next team | next team + "on the way" timer, or "No team called"; waiting count; "Paused" when `roomPaused` |
+| Lock Screen | as expanded | as expanded | as expanded |
+| Watch | team + pitch timer | team | next team |
+
+Accreditation desk:
+
+| Presentation | Content |
+|---|---|
+| Compact leading | `person.badge.key` |
+| Compact trailing | `accredited` |
+| Minimal | progress ring `accredited / eligible` |
+| Expanded | `accredited / eligible` with a ring, `inside`, arrivals in the last 10 min, **Scan** |
+| Lock Screen | as expanded |
+| Watch | `accredited / eligible` |
+
 ## Operational setup
 
 ### Environment
@@ -366,7 +572,10 @@ Meal / activity (staff):
 | `APPLE_TEAM_IDENTIFIER` | unset | Shared with Wallet; required when `APNS_KEY_ID` is set. |
 | `APPLE_APNS_ENVIRONMENT` | `production` | Shared with Wallet. TestFlight and App Store builds use `production`; `sandbox` is only for development-signed builds and must not be set on a host that also pushes Wallet passes. |
 | `APNS_BUNDLE_ID` | `com.hackudc.os` | Development builds use `com.hackudc.os.debug`. |
-| `LIVE_ACTIVITY_LEAD_MINUTES` | `15` | Minutes before a scannable activity starts that staff get its Live Activity (1–240). |
+| `LIVE_ACTIVITY_LEAD_MINUTES` | `15` | Minutes before a scannable activity (staff) or an opted-in schedule item (attendees) starts that its Live Activity appears (1–240). |
+| `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` | `180` | Minutes before submissions close (`hacking_ends_at`) that participants get the deadline countdown (15–1440). |
+| `LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES` | `60` | Minutes before the event start that the accreditation desk activity opens (0–1440). |
+| `LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES` | `60` | Minutes after hacking starts that the accreditation desk activity stays open (0–1440). |
 
 Without the key, the API boots normally. The read endpoint and Android
 delivery work, and the worker logs one warning and skips iOS. A half-set pair
@@ -412,5 +621,17 @@ and `deploy/README.md`.
   concurrent ticks giving one start, and token cleanup. It uses stubbed
   APNs/Expo transports.
 - `apns.test.ts`: payload shape and JWT signing with a generated P-256 key.
-- `routes.test.ts`: auth, upsert/reassign, validation, ownership, and
-  dismissal.
+- `routes.test.ts`: auth, upsert/reassign, validation, ownership,
+  dismissal, the full GET shape and the per-device cut with `deviceId`.
+- `kinds.test.ts`: configuration gates (disabled kind, missing role, deleted
+  role, capability still required), priority and `maxConcurrent`, and each
+  new kind's state, gates and H54 isolation.
+- `settings.test.ts`: configuration routes (access, validation, priorities,
+  audit, idempotent replay).
+- `worker.test.ts` also covers start, update and end per new kind, the
+  deadline alert, unthrottled judging updates, throttled desk counters,
+  displacement by a higher-priority kind without flapping, and ending a
+  disabled kind.
+
+Tests run with `allowLiveActivities()` (fixtures.ts), because `truncateAll`
+wipes 0605's seeded configuration and roles.
