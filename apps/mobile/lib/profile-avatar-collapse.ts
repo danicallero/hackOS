@@ -76,16 +76,21 @@ const MAX_HOLE_PUNCH_TOP = 96;
  * Absolute content offset a released scroll should settle at, or null (#935).
  * `restingOffset` is the content offset of the true top: negative under iOS's
  * automatic inset, where y 0 sits that far past the top, inside the morph.
+ * `maxOffset` is the furthest offset the content surely reaches.
  */
 export function profileAvatarSnapOffset(
   contentOffset: number,
   restingOffset: number,
   direction: number,
   distance: number,
+  maxOffset: number,
 ): number | null {
   "worklet";
   const target = profileAvatarSnapTarget(contentOffset - restingOffset, direction, distance);
-  return target === null ? null : restingOffset + target;
+  if (target === null) return null;
+  // A page too short to reach the collapsed rest expands instead of leaving
+  // the scroll past its end.
+  return target > 0 && restingOffset + target > maxOffset ? restingOffset : restingOffset + target;
 }
 
 /**

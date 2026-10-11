@@ -220,6 +220,9 @@ export function PersonProfileScreen() {
         onContentSizeChange={avatarCollapse.onContentSizeChange}
         scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="automatic"
+        // iOS clamps programmatic scrolls to the raw inset (0), not the
+        // automatic one, so the avatar's true top would land mid-morph (#935).
+        scrollToOverflowEnabled
         style={{ backgroundColor: colors.background, flex: 1 }}
         contentContainerStyle={{
           flexGrow: 1,

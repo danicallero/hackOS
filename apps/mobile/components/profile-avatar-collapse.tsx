@@ -9,7 +9,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { Image, Platform, type ScrollView, useWindowDimensions, View } from "react-native";
+import {
+  Image,
+  type LayoutChangeEvent,
+  Platform,
+  type ScrollView,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Animated, {
   runOnJS,
   useAnimatedProps,
@@ -64,6 +71,10 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
   const snapArmed = useSharedValue(false);
   // Last non-zero scroll delta: the direction of the drag or momentum (#935).
   const lastDelta = useSharedValue(0);
+  // Content height minus the viewport: an offset the page surely reaches.
+  const maxOffset = useSharedValue(Number.POSITIVE_INFINITY);
+  const contentHeight = useRef(0);
+  const viewportHeight = useRef(0);
   const ownScrollRef = useRef<ScrollView>(null);
   const scrollRef = screenScrollRef ?? ownScrollRef;
   const reduceMotion = useReducedMotion();
@@ -95,6 +106,7 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
       restingOffset.value,
       direction,
       collapseDistance,
+      maxOffset.value,
     );
     if (target === null) return;
     runOnJS(snapHaptic)();
@@ -216,6 +228,11 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     [restingOffset, scrollToOffset],
   );
 
+  const updateMaxOffset = () => {
+    if (contentHeight.current > 0 && viewportHeight.current > 0)
+      maxOffset.value = contentHeight.current - viewportHeight.current;
+  };
+
   /** Move a scroll left inside the morph by a non-drag (remount, focus) to the nearer rest. */
   const settleAtRest = useCallback(() => {
     requestAnimationFrame(() => {
@@ -224,10 +241,11 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
         restingOffset.value,
         0,
         PROFILE_AVATAR_COLLAPSE_DISTANCE,
+        maxOffset.value,
       );
       if (target !== null) scrollRef.current?.scrollTo({ animated: false, y: target });
     });
-  }, [contentOffset, restingOffset, scrollRef]);
+  }, [contentOffset, maxOffset, restingOffset, scrollRef]);
 
   return {
     anchorFrame,
@@ -235,9 +253,17 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     hostOrigin,
     hostRef,
     onAnchorLayout: measureAfterLayout,
-    onHostLayout: measureAfterLayout,
+    onHostLayout: ({ nativeEvent }: LayoutChangeEvent) => {
+      viewportHeight.current = nativeEvent.layout.height;
+      updateMaxOffset();
+      measureAfterLayout();
+    },
     onScrollBeginDrag: measureAnchor,
-    onContentSizeChange: measureAfterLayout,
+    onContentSizeChange: (_width: number, height: number) => {
+      contentHeight.current = height;
+      updateMaxOffset();
+      measureAfterLayout();
+    },
     onScroll,
     /** Content offset of the true top (negative under an automatic inset). */
     restingOffset,

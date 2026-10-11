@@ -228,15 +228,22 @@ describe("profile avatar snap (#935)", () => {
   it("measures snap targets from the true top under an automatic inset", () => {
     const resting = -59;
     // y 0 is 59 pt past the true top: inside the morph, so it is not a rest.
-    expect(profileAvatarSnapOffset(0, resting, 0, distance)).toBe(resting);
-    expect(profileAvatarSnapOffset(10, resting, 0, distance)).toBe(resting + distance);
-    expect(profileAvatarSnapOffset(-20, resting, 0, distance)).toBe(resting);
-    expect(profileAvatarSnapOffset(-50, resting, 1, distance)).toBe(resting + distance);
-    expect(profileAvatarSnapOffset(55, resting, -1, distance)).toBe(resting);
+    expect(profileAvatarSnapOffset(0, resting, 0, distance, Infinity)).toBe(resting);
+    expect(profileAvatarSnapOffset(10, resting, 0, distance, Infinity)).toBe(resting + distance);
+    expect(profileAvatarSnapOffset(-20, resting, 0, distance, Infinity)).toBe(resting);
+    expect(profileAvatarSnapOffset(-50, resting, 1, distance, Infinity)).toBe(resting + distance);
+    expect(profileAvatarSnapOffset(55, resting, -1, distance, Infinity)).toBe(resting);
     // Exactly two rests: the true top and the collapsed offset.
-    expect(profileAvatarSnapOffset(resting, resting, 0, distance)).toBeNull();
-    expect(profileAvatarSnapOffset(resting + distance, resting, 0, distance)).toBeNull();
-    expect(profileAvatarSnapOffset(-80, resting, 0, distance)).toBeNull();
+    expect(profileAvatarSnapOffset(resting, resting, 0, distance, Infinity)).toBeNull();
+    expect(profileAvatarSnapOffset(resting + distance, resting, 0, distance, Infinity)).toBeNull();
+    expect(profileAvatarSnapOffset(-80, resting, 0, distance, Infinity)).toBeNull();
+  });
+
+  it("expands instead of collapsing past the end of a short page", () => {
+    // The content only scrolls 40 pt past y 0: the collapsed rest (61) is unreachable.
+    expect(profileAvatarSnapOffset(-40, -59, 1, distance, 40)).toBe(-59);
+    expect(profileAvatarSnapOffset(-40, -59, -1, distance, 40)).toBe(-59);
+    expect(profileAvatarSnapOffset(-40, -59, 1, distance, 61)).toBe(61);
   });
 
   it("bounds the iOS true top by the status-bar overlap of the scroll host", () => {
