@@ -42,8 +42,8 @@ let deviceSynced = false;
 let apiMissing = false;
 /** `key@phase` dismissal reports in flight, so overlapping reconciles send one. */
 const reportingDismissals = new Set<string>();
-/** Key → per-activity APNs token the API already has. */
-const sessionTokens = new Map<string, string>();
+/** Key → per-activity APNs token the API already has (null: registered, token pending). */
+const sessionTokens = new Map<string, string | null>();
 
 // Subscribed at import (app launch): iOS may deliver the push-to-start token
 // before anyone signs in, and the event is not replayed for late listeners.
@@ -131,9 +131,15 @@ export async function registerLiveActivityDevice(nextLanguage: string | null): P
   await syncDevice(state.enabled);
 }
 
-async function registerSessionToken(kind: LiveActivityKind, subject: string, token: string) {
+/**
+ * Tells the API this device shows `kind`/`subject`, with its per-activity
+ * token once iOS has one. Registering before the token exists keeps the
+ * server from push-starting a second activity of the same subject, and lets
+ * it end this one as soon as the token follows.
+ */
+async function registerSessionToken(kind: LiveActivityKind, subject: string, token: string | null) {
   const key = liveActivityKey(kind, subject);
-  if (sessionTokens.get(key) === token) return;
+  if (sessionTokens.has(key) && (token === null || sessionTokens.get(key) === token)) return;
   await apiFetch("/api/me/live-activities/sessions", {
     method: "PUT",
     headers: JSON_HEADERS,
@@ -141,10 +147,10 @@ async function registerSessionToken(kind: LiveActivityKind, subject: string, tok
       deviceId: await liveActivityDeviceId(),
       kind,
       subject,
-      activityPushToken: token,
+      ...(token ? { activityPushToken: token } : {}),
     }),
   });
-  sessionTokens.set(key, token);
+  sessionTokens.set(key, token ?? sessionTokens.get(key) ?? null);
 }
 
 async function unregisterSession(kind: LiveActivityKind, subject: string, phase?: string) {
@@ -156,9 +162,12 @@ async function unregisterSession(kind: LiveActivityKind, subject: string, phase?
   });
 }
 
-async function apply(desired: DesiredActivity[]): Promise<DesiredActivity[]> {
+async function apply(
+  desired: DesiredActivity[],
+  options: { reopen?: boolean } = {},
+): Promise<DesiredActivity[]> {
   lastDesired = desired;
-  const result = await applyDesiredActivities(desired);
+  const result = await applyDesiredActivities(desired, options);
   // A swiped-away activity: tell the server not to start it again in the
   // phase it was dismissed in. Kept until the API accepts it (a dismissal
   // recorded while offline or headless is reported on a later sync).
@@ -180,24 +189,46 @@ async function apply(desired: DesiredActivity[]): Promise<DesiredActivity[]> {
     for (const [, surface] of result.running) {
       const subject = surface.subject ?? (surface.kind === "queue" ? "judging" : null);
       if (!subject) continue;
-      const send = (token: string) =>
+      const send = (token: string | null) =>
         void registerSessionToken(surface.kind, subject, token).catch(() => undefined);
       liveActivityHost.onPushToken(surface.id, send);
-      const token = await liveActivityHost.pushToken(surface.id);
-      if (token) send(token);
+      send(await liveActivityHost.pushToken(surface.id));
     }
   }
   return desired;
 }
 
-/** Fetches the server's state and mirrors it. Returns what should be showing. */
-export async function reconcileLiveActivities(): Promise<DesiredActivity[]> {
+/** App opened: asks the API to release this device's dismissals. True when it did. */
+async function reopenDismissed(): Promise<boolean> {
+  if (!deviceSynced) return false;
+  try {
+    await apiFetch("/api/me/live-activities/dismissals/reopen", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ deviceId: await liveActivityDeviceId() }),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetches the server's state and mirrors it. Returns what should be showing.
+ * `reopenDismissed` (app launch or foreground): Live Activities the person
+ * swiped away come back if still relevant; other triggers keep dismissals.
+ */
+export async function reconcileLiveActivities(
+  options: { reopenDismissed?: boolean } = {},
+): Promise<DesiredActivity[]> {
   if (!platform() || !liveActivityHost.supported() || apiMissing) return [];
   const startedIn = generation;
   if (registeredCookie && !deviceSynced) {
     await syncDevice((await readLiveActivityState()).enabled).catch(() => undefined);
     if (apiMissing) return [];
   }
+  // Before the read, which otherwise leaves dismissed activities out.
+  const reopen = options.reopenDismissed === true && (await reopenDismissed());
   const seq = ++reconcileSeq;
   let response: MyLiveActivities;
   try {
@@ -214,7 +245,7 @@ export async function reconcileLiveActivities(): Promise<DesiredActivity[]> {
   if (startedIn !== generation) return [];
   if (seq < appliedSeq) return lastDesired;
   appliedSeq = seq;
-  return apply(desiredActivities(response));
+  return apply(desiredActivities(response), { reopen });
 }
 
 /**

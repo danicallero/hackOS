@@ -5,7 +5,7 @@ import { pool } from "../../db/pool.js";
 import { observeParticipantInvalidation } from "../../lib/metrics.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
-import { requestLiveActivitySync } from "../live-activities/worker.js";
+import { requestLiveActivitySync } from "../live-activities/kick.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
 import { broadcastQueueEventWithMarker, queueFixtureMarker } from "./broadcast.js";
 import { roomChallengeIds } from "./groups.js";
@@ -319,6 +319,9 @@ export async function notifyChallengeQueueChanged(
   requestedGroupId?: number,
   relatedChallengeIds: readonly number[] = [],
 ): Promise<"queued" | "coalesced" | "dropped"> {
+  // #966 (H38): the same change can start, move or end a queue Live
+  // Activity; the debounced kick runs the worker without waiting 20 s.
+  await requestLiveActivitySync();
   const queue = getQueue(QUEUE_PARTICIPANT_INVALIDATIONS);
   let queueGroupId: number | null = null;
   try {

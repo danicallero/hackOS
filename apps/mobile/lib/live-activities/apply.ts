@@ -49,14 +49,23 @@ function keyOf(surface: RunningActivity): string | null {
   return surface.kind === "queue" ? liveActivityKey("queue", "judging") : null;
 }
 
-export function applyDesiredActivities(desired: DesiredActivity[]): Promise<ApplyResult> {
+/**
+ * `reopen`: the app was just opened and the API released this device's
+ * dismissals, so everything swiped away comes back: no dismissal is kept,
+ * inferred or reported this time.
+ */
+export function applyDesiredActivities(
+  desired: DesiredActivity[],
+  options: { reopen?: boolean } = {},
+): Promise<ApplyResult> {
   return serialized(async () => {
     const host = liveActivityHost;
     const state = await readLiveActivityState();
     if (!host.supported()) return { running: new Map(), dismissed: {} };
     const effective = state.enabled ? desired : [];
     const recorded = consumeDismissals(host);
-    const dismissed = pruneDismissed({ ...state.dismissed, ...recorded }, effective);
+    const reopen = options.reopen === true;
+    const dismissed = reopen ? {} : pruneDismissed({ ...state.dismissed, ...recorded }, effective);
     // A changed rendering (promotion turned back on) reposts everything.
     const renderMode = host.renderMode?.() ?? null;
     const knownSignatures = renderMode === state.renderMode ? state.signatures : {};
@@ -65,7 +74,7 @@ export function applyDesiredActivities(desired: DesiredActivity[]): Promise<Appl
       dismissed: new Map(Object.entries(dismissed)),
       // Android knows its real dismissals: a notification missing for any
       // other reason (force-stop, reboot) is simply posted again.
-      previouslyRunning: recorded ? new Set() : new Set(state.running),
+      previouslyRunning: recorded || reopen ? new Set() : new Set(state.running),
     });
 
     const signatures: Record<string, string> = {};
@@ -84,10 +93,9 @@ export function applyDesiredActivities(desired: DesiredActivity[]): Promise<Appl
     for (const entry of plan.dismissed) dismissed[entry.key] = entry.phase;
     const fresh = Object.fromEntries(plan.dismissed.map((entry) => [entry.key, entry.phase]));
     // Only dismissals the server still lists in that phase are worth reporting.
-    const unreported = pruneDismissed(
-      { ...state.unreportedDismissals, ...recorded, ...fresh },
-      effective,
-    );
+    const unreported = reopen
+      ? {}
+      : pruneDismissed({ ...state.unreportedDismissals, ...recorded, ...fresh }, effective);
 
     const running = new Map<string, RunningActivity>();
     for (const surface of host.running()) {

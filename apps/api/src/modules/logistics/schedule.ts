@@ -7,6 +7,7 @@ import { type AuthorizationContext, getEffectiveCapabilities } from "../../lib/c
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { computeMembershipFlags, mentorOrParticipantType } from "../identity/role.js";
+import { requestLiveActivitySync } from "../live-activities/kick.js";
 import { normalizeLanguage } from "../notifications/templates.js";
 import type { Language } from "../notifications/translate/index.js";
 import { isTranslationAvailable, translateFields } from "../notifications/translate/index.js";
@@ -175,6 +176,8 @@ function assertScanRequiresParticipantAudience(
 
 export async function emitScheduleChanged(data: unknown) {
   await broadcast(SSE_TOPICS.CONTENT, EVENTS.CONTENT_SCHEDULE_CHANGED, data);
+  // #966 (H25, H59): staff and attendee Live Activities follow schedule items.
+  await requestLiveActivitySync();
 }
 
 /**
