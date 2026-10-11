@@ -12,6 +12,7 @@ import {
 import {
   allowsTightening,
   contentTransition,
+  dynamicTypeSize,
   fixedSize,
   font,
   foregroundStyle,
@@ -52,6 +53,42 @@ export const QueueActivityLayout = (
   environment: LiveActivityEnvironment,
 ) => {
   "widget";
+
+  // Hard caps for the Dynamic Island (HIG: narrow, balanced, snug against
+  // the camera): whatever the value, locale or text size, the island never
+  // grows past them. Each slot is as wide as its content up to the cap; text
+  // scales down rather than truncating, and the type size stays fixed.
+  const islandSlot = (
+    view: Parameters<typeof HStack>[0]["children"],
+    width: number,
+    alignment: "leading" | "center" | "trailing",
+    // The outer end's inset, so the content's margin to the pill's rounded
+    // end matches its top and bottom margins (HIG: concentric margins).
+    inset: { leading?: number; trailing?: number } = {},
+  ) => (
+    <HStack
+      spacing={0}
+      modifiers={[
+        frame({ maxWidth: width, alignment }),
+        fixedSize({ horizontal: true }),
+        padding(inset),
+        minimumScaleFactor(0.6),
+        dynamicTypeSize("large"),
+      ]}
+    >
+      {view}
+    </HStack>
+  );
+  const capped = <
+    L extends { compactLeading: unknown; compactTrailing: unknown; minimal: unknown },
+  >(
+    layout: L,
+  ) => ({
+    ...layout,
+    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing", { leading: 3 }),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { trailing: 7 }),
+    minimal: islandSlot(layout.minimal as never, 36, "center"),
+  });
   // APNs delivers props straight to this layout, so a newer, incompatible
   // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the title
   // instead of rendering half-understood fields.
@@ -62,7 +99,7 @@ export const QueueActivityLayout = (
       </Text>
     );
     const symbol = <Image systemName="person.3.sequence.fill" color="#0A84FF" size={15} />;
-    return {
+    return capped({
       banner: (
         <VStack
           alignment="leading"
@@ -78,7 +115,7 @@ export const QueueActivityLayout = (
       expandedLeading: symbol,
       expandedTrailing: <Text> </Text>,
       expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
-    };
+    });
   }
   const labels = props.labels;
   const called = props.phase === "called";
@@ -554,7 +591,7 @@ export const QueueActivityLayout = (
     </VStack>
   );
 
-  return {
+  return capped({
     banner,
     bannerSmall,
     compactLeading,
@@ -563,7 +600,7 @@ export const QueueActivityLayout = (
     expandedLeading,
     expandedTrailing,
     expandedBottom,
-  };
+  });
 };
 
 export const QueueActivity = createLiveActivity<QueueLiveProps>(

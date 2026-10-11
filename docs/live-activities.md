@@ -616,7 +616,14 @@ Followed: <https://developer.apple.com/design/human-interface-guidelines/live-ac
   radio-waves symbol for the NFC badge: `wave.3.right` on iOS). Every tap
   deep-links to the related screen.
 - **Live timers tick on the device.** Countdowns and the pitch timer travel
-  as instants, never as per-second pushes.
+  as instants, never as per-second pushes. Countdowns read `2h 34m` /
+  `34m 21s` (rendering in [mobile.md](./mobile.md#live-activities-and-live-updates-966)).
+  The widget picks the form when it renders, so the staff activity,
+  attendee activity and deadline props carry `countdownUnderHour`
+  (`countdownUnderHour()`, `@hackos/shared/live-activities`; optional, older
+  apps ignore it). It flips once, an hour before the countdown's target
+  (the start while upcoming, else the end), which changes the state hash and
+  sends one routine update.
 - **Few at once.** A device shows at most `maxConcurrent` (default 2), the
   most important leading the Dynamic Island.
 

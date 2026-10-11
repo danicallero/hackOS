@@ -1,5 +1,6 @@
-import { HStack, Image, ProgressView, Spacer, Text, VStack, ZStack } from "@expo/ui/swift-ui";
+import { HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
+  dynamicTypeSize,
   fixedSize,
   font,
   foregroundStyle,
@@ -7,10 +8,8 @@ import {
   labelsHidden,
   lineLimit,
   minimumScaleFactor,
-  monospacedDigit,
   multilineTextAlignment,
   padding,
-  progressViewStyle,
   tint,
 } from "@expo/ui/swift-ui/modifiers";
 import type { DeadlineLiveProps } from "@hackos/shared/live-activities";
@@ -34,6 +33,42 @@ export const DeadlineActivityLayout = (
   environment: LiveActivityEnvironment,
 ) => {
   "widget";
+
+  // Hard caps for the Dynamic Island (HIG: narrow, balanced, snug against
+  // the camera): whatever the value, locale or text size, the island never
+  // grows past them. Each slot is as wide as its content up to the cap; text
+  // scales down rather than truncating, and the type size stays fixed.
+  const islandSlot = (
+    view: Parameters<typeof HStack>[0]["children"],
+    width: number,
+    alignment: "leading" | "center" | "trailing",
+    // The outer end's inset, so the content's margin to the pill's rounded
+    // end matches its top and bottom margins (HIG: concentric margins).
+    inset: { leading?: number; trailing?: number } = {},
+  ) => (
+    <HStack
+      spacing={0}
+      modifiers={[
+        frame({ maxWidth: width, alignment }),
+        fixedSize({ horizontal: true }),
+        padding(inset),
+        minimumScaleFactor(0.6),
+        dynamicTypeSize("large"),
+      ]}
+    >
+      {view}
+    </HStack>
+  );
+  const capped = <
+    L extends { compactLeading: unknown; compactTrailing: unknown; minimal: unknown },
+  >(
+    layout: L,
+  ) => ({
+    ...layout,
+    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing", { leading: 3 }),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { trailing: 7 }),
+    minimal: islandSlot(layout.minimal as never, 36, "center"),
+  });
   // A newer, incompatible props shape degrades to the title.
   if (props.v !== 1 || !props.labels) {
     const title = (
@@ -42,7 +77,7 @@ export const DeadlineActivityLayout = (
       </Text>
     );
     const symbol = <Image systemName="hourglass" color="#0A84FF" size={15} />;
-    return {
+    return capped({
       banner: (
         <VStack
           alignment="leading"
@@ -58,7 +93,7 @@ export const DeadlineActivityLayout = (
       expandedLeading: symbol,
       expandedTrailing: <Text> </Text>,
       expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
-    };
+    });
   }
   const labels = props.labels;
   const closing = props.phase === "closing";
@@ -105,22 +140,28 @@ export const DeadlineActivityLayout = (
     ),
   );
 
-  // Timer texts are greedy: `width` caps them.
+  // `2h 34m` from an hour, `34m 21s` below it, ticking live and never
+  // H:MM:SS (`compactCountdown`); `short` keeps the leading unit (`2h`,
+  // `34m`), `long` adds the seconds from an hour (`2h 34m 21s`). It is as wide as its value; a width cap scales it down rather
+  // than truncating.
   const countdown = (
     size: number,
     color: string | null,
     width: number | null,
-    weight = "bold",
+    weight: "semibold" | "bold" = "bold",
     align: "leading" | "trailing" = "trailing",
+    form: "full" | "short" | "long" = "full",
   ) =>
     validEnd ? (
       <Text
         timerInterval={{ lower, upper: endsAt }}
         countsDown
+        compactCountdown={form}
+        compactCountdownSize={size}
+        compactCountdownWeight={weight}
         modifiers={[
-          font({ size, weight: weight as "bold" | "semibold" }),
-          monospacedDigit(),
-          multilineTextAlignment(align),
+          lineLimit(1),
+          minimumScaleFactor(0.6),
           ...(width ? [frame({ maxWidth: width, alignment: align })] : []),
           ...colorMods(color),
         ]}
@@ -205,31 +246,21 @@ export const DeadlineActivityLayout = (
     <Image systemName={symbol} color={color ?? neutral} size={size} />
   );
 
+  // Compact: the symbol a little larger than the text so both sides weigh
+  // about the same; the countdown is as wide as its value, snug to the camera.
   const compactLeading = glyph(islandColor, 15);
-  const compactTrailing = countdown(15, submitted ? neutral : islandColor, 64, "semibold") ?? (
-    <Text> </Text>
-  );
+  const compactTrailing = countdown(
+    12,
+    submitted ? neutral : islandColor,
+    56,
+    "semibold",
+    "leading",
+  ) ?? <Text> </Text>;
 
-  // Minimal: the window's elapsed share as a ring around the symbol; done:
-  // the check alone.
-  const minimal =
-    !submitted && startsAt && validEnd ? (
-      <ZStack>
-        <ProgressView
-          timerInterval={{ lower: startsAt, upper: endsAt }}
-          countsDown={false}
-          modifiers={[
-            progressViewStyle("circular"),
-            tint(islandColor),
-            labelsHidden(),
-            frame({ width: 22, height: 22 }),
-          ]}
-        />
-        {glyph(islandColor, 9)}
-      </ZStack>
-    ) : (
-      glyph(islandColor, 14)
-    );
+  // Minimal: the time left; done: the check alone.
+  const minimal = submitted
+    ? glyph(islandColor, 14)
+    : (countdown(10, islandColor, 36, "semibold", "leading", "short") ?? glyph(islandColor, 14));
 
   const expandedLeading = (
     <VStack modifiers={[padding({ leading: 8, top: 6 })]}>{glyph(islandColor, 24)}</VStack>
@@ -240,9 +271,9 @@ export const DeadlineActivityLayout = (
     <VStack alignment="trailing" spacing={0} modifiers={[padding({ trailing: 8, top: 4 })]}>
       {caption(labels.closesIn, "trailing")}
       {submitted
-        ? countdown(17, neutral, 120, "semibold")
+        ? countdown(17, neutral, 140, "semibold", "trailing", "long")
         : // Hours long (h:mm:ss): a little smaller than the other kinds' 28 pt.
-          (countdown(24, islandColor, 120) ?? <Text> </Text>)}
+          (countdown(24, islandColor, 160, "bold", "trailing", "long") ?? <Text> </Text>)}
     </VStack>
   );
   const expandedBottom = (
@@ -297,14 +328,14 @@ export const DeadlineActivityLayout = (
       <Spacer />
       <VStack alignment="trailing" spacing={0}>
         {caption(labels.closesIn, "trailing")}
-        {countdown(17, null, 120, "semibold")}
+        {countdown(17, null, 140, "semibold", "trailing", "long")}
       </VStack>
     </HStack>
   ) : (
     <HStack alignment="bottom" spacing={12}>
       <VStack alignment="leading" spacing={0}>
         {caption(labels.closesIn)}
-        {countdown(34, bannerColor, 180, "bold", "leading")}
+        {countdown(34, bannerColor, 220, "bold", "leading", "long")}
       </VStack>
       <Spacer />
       {statusText ? (
@@ -366,7 +397,7 @@ export const DeadlineActivityLayout = (
     </VStack>
   );
 
-  return {
+  return capped({
     banner,
     bannerSmall,
     compactLeading,
@@ -375,7 +406,7 @@ export const DeadlineActivityLayout = (
     expandedLeading,
     expandedTrailing,
     expandedBottom,
-  };
+  });
 };
 
 export const DeadlineActivity = createLiveActivity<DeadlineLiveProps>(

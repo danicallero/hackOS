@@ -1537,8 +1537,8 @@ Apple's HIG:
 
 | Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
 | --- | --- | --- | --- |
-| Compact leading / trailing | category symbol / countdown to the start (blue); live: countdown to the end | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (grey once submitted) | `person.badge.key` / accredited count |
-| Minimal | countdown; live: elapsed-time ring around the symbol | ring of the hacking window's elapsed time around the symbol (none without `startsAt`); submitted: the check | ring of accredited / eligible |
+| Compact leading / trailing | category symbol / countdown to the start; live: to the end (both blue) | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (grey once submitted) | `person.badge.key` / accredited count |
+| Minimal | countdown (to the start; live: to the end) | countdown; submitted: the check | ring of accredited / eligible |
 | Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: live elapsed-time bar, "Now" + name, `hh:mm–hh:mm · place` | symbol / "Closes in" countdown (24 pt, hours long; small and grey once submitted); bottom: window bar, title, project, status | Accredited `412 /600` / Last 10 min `+23`; bottom: share bar, Inside 380, closing time, **Scan** |
 | Lock Screen | symbol, ("Now"), name, time · place … countdown hero; live adds the elapsed-time bar | symbol + title; hero "Closes in" countdown (34 pt) with project and status opposite; window bar. Closing: red. Submitted: green "Submitted" hero, the time left small, no bar | symbol + title … closing time; Accredited (hero) · Last 10 min · Inside; share bar with **Scan** in the bottom trailing corner |
 | Watch / CarPlay | name + countdown, or "Now" + time left | title + countdown ("Not submitted" while closing) or "Submitted" | title + `412 /600` |
@@ -1577,7 +1577,34 @@ copy.
 
 Numbers use `monospacedDigit` with numeric content transitions; countdowns,
 the count-up since the call and the elapsed-time bar are SwiftUI timers, so
-they tick without updates. Taps open the props' `url` (passed as the
+they tick without updates.
+
+**Fitting the Dynamic Island (#966).** Every widget wraps its compact
+leading, compact trailing and minimal views in hard width caps of 24, 56 and
+36 pt with a fixed Dynamic Type size (`dynamicTypeSize("large")`), so no
+value, locale or text size can widen the island; text scales down
+(`minimumScaleFactor(0.6)`) instead of truncating. The slots get a 3 pt
+leading / 7 pt trailing inset so the glyph and the time sit on the pill's
+concentric margin (HIG). Countdowns read `2h 34m` from an hour and `34m 21s`
+below it, ticking on the device, never `H:MM:SS`: the compact view shows
+that form at 12 pt, the minimal view the leading unit only (`2h`, `34m`) at
+10 pt, and the expanded and Lock Screen heroes add the seconds from an hour
+(`2h 34m 21s`). `Text`'s `compactCountdown` (`full`, `short`, `long`; a
+`patches/@expo__ui@57.0.22.patch` addition) draws it natively: each number
+is one field cut out of a live `Text(timerInterval:)` (trailing-aligned,
+shifted by the width of what follows it, clipped to its digits; monospaced
+digits keep each field at a fixed offset) next to static `h`/`m`/`s`.
+**Decision:** checked on the iOS 26.5 simulator over 90 s, a unit format
+over a live date source (`Duration.UnitsFormatStyle` over
+`.durationOffset`) renders nothing, `Date.ComponentsFormatStyle` renders
+once and freezes (19–29 s off the timer), `SystemFormatStyle.Timer`,
+`.offset` and `.reference` spell units out, and a custom format style is
+redacted; only timer text ticks. The form is chosen when the activity
+renders, and a stale date does not re-render it, so the props carry
+`countdownUnderHour`: it flips once, an hour before the countdown's
+target, which sends one update (the worker's normal hash path) and makes
+the foreground app reconcile then (`nextPhaseBoundary`). Between the hour
+and that update the compact view can read `h 59m` for up to a tick. Taps open the props' `url` (passed as the
 activity's static URL); the API must send the same `attributes.url` on
 push-to-start. APNs props reach the layouts directly, so a props version
 other than `1` renders only the title. Room and activity names truncate;
@@ -1867,9 +1894,12 @@ an id's first post).
   status bar.
 - Chip and `when`: the chip shows `shortCriticalText` whenever it is set,
   even with a running chronometer, so the called state counts up in the
-  header while the chip keeps the room. `countdownTo` (future) counts down,
-  `countUpFrom` counts up, anything else hides `when` (live staff updates),
-  so a count is never displaced. Tapping the chip opens the notification as a
+  header while the chip keeps the room. `countdownTo` (future) is shown as
+  the system's own short time delta (`5min`; `LiveUpdatePoster.whenStyle`),
+  not a chronometer, so the chip never shows `H:MM:SS`; the system shows it
+  from 2 minutes ahead. `countUpFrom` counts up as a chronometer, anything
+  else hides `when` (live staff updates), so a count is never displaced.
+  The custom card (the pre-Android 16 fallback) keeps its chronometers. Tapping the chip opens the notification as a
   popup and the popup opens the deep link (`hackos://queue`, the scan link).
   The chip is hidden while hackOS is in the foreground, and it shows the
   icon alone while its own heads-up or popup is on screen and for a moment

@@ -3,6 +3,7 @@ import {
   type AttendeeActivityLiveProps,
   accreditationLiveLabels,
   attendeeActivityLiveLabels,
+  countdownUnderHour,
   type DeadlineLiveProps,
   deadlineLiveLabels,
   LIVE_ACTIVITY_PROPS_VERSION,
@@ -98,6 +99,8 @@ export function buildAttendeeActivityLiveProps(
     endsAt: item.endsAt.toISOString(),
     url: scheduleDeepLink(item.id),
     labels: attendeeActivityLiveLabels(language),
+    // #966: flips once, at the hour, so the widget re-renders as `34m 21s`.
+    countdownUnderHour: countdownUnderHour(now < item.startsAt ? item.startsAt : item.endsAt, now),
     updatedAt: now.toISOString(),
   };
 }
@@ -219,6 +222,7 @@ export function buildDeadlineLiveProps(
     projectName: fact?.projectName ?? null,
     url: projectDeepLink(),
     labels: deadlineLiveLabels(language),
+    countdownUnderHour: countdownUnderHour(window.endsAt, now),
     updatedAt: now.toISOString(),
   };
 }

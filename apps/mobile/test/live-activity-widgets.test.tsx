@@ -479,7 +479,7 @@ describe("New Live Activity kinds (#966)", () => {
       );
       expect(texts(live.banner)).toEqual(expect.arrayContaining(["Now", "Ends in"]));
       expect(nodes(live.banner, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
-      expect(nodes(live.minimal, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
+      expect(nodes(live.minimal, "Text")[0]?.props?.timerInterval).toBeTruthy();
     });
 
     it("has no buttons on any presentation", () => {
@@ -532,10 +532,17 @@ describe("New Live Activity kinds (#966)", () => {
       expect(nodes(submitted.banner, "ProgressView")).toHaveLength(0);
     });
 
-    it("works without a window start (no bar, plain minimal symbol)", () => {
+    it("works without a window start (no bar, the time left still minimal)", () => {
       const layout = DeadlineActivityLayout(deadline({ startsAt: null }), environment);
       expect(nodes(layout.banner, "ProgressView")).toHaveLength(0);
-      expect(nodes(layout.minimal, "Image")).toHaveLength(1);
+      expect(nodes(layout.minimal, "Text")[0]?.props?.timerInterval).toBeTruthy();
+
+      const submitted = DeadlineActivityLayout(
+        deadline({ phase: "submitted", submission: "submitted" }),
+        environment,
+      );
+      expect(nodes(submitted.minimal, "Text")).toHaveLength(0);
+      expect(nodes(submitted.minimal, "Image")).toHaveLength(1);
     });
   });
 
@@ -574,6 +581,124 @@ describe("New Live Activity kinds (#966)", () => {
       expect(texts(layout.banner)).not.toContain("Inside");
       expect(nodes(layout.minimal, "Gauge")).toHaveLength(0);
       expect(nodes(layout.banner, "ProgressView")).toHaveLength(0);
+    });
+  });
+
+  describe("countdowns that fit the Dynamic Island", () => {
+    const states: [string, Record<string, unknown>][] = [
+      ["staff upcoming", StaffActivityLayout(activity(), environment)],
+      [
+        "staff live",
+        StaffActivityLayout(activity({ phase: "live", accredited: 180 }), environment),
+      ],
+      ["attendee upcoming", AttendeeActivityLayout(attendee(), environment)],
+      [
+        "attendee live",
+        AttendeeActivityLayout(
+          attendee({ phase: "live", startsAt: "2026-02-20T11:40:00.000Z" }),
+          environment,
+        ),
+      ],
+      ["deadline open", DeadlineActivityLayout(deadline(), environment)],
+      [
+        "deadline submitted",
+        DeadlineActivityLayout(
+          deadline({ phase: "submitted", submission: "submitted" }),
+          environment,
+        ),
+      ],
+    ];
+
+    /** Every counting-down timer text of a layout, by slot. */
+    function countdowns(layout: Record<string, unknown>): [string, Node][] {
+      return SLOTS.flatMap((slot) =>
+        nodes(layout[slot], "Text")
+          .filter((text) => text.props?.timerInterval && text.props?.countsDown !== false)
+          .map((text): [string, Node] => [slot, text]),
+      );
+    }
+
+    it.each(states)("%s: `2h 34m` / `34m 21s` units, never H:MM:SS", (_name, layout) => {
+      const found = countdowns(layout);
+      expect(found.length).toBeGreaterThan(0);
+      for (const [slot, text] of found) {
+        // The minimal view keeps the leading unit (`2h`, `34m`); expanded and
+        // Lock Screen heroes add the seconds from an hour (`2h 34m 21s`).
+        const expected =
+          slot === "minimal" ? ["short"] : slot === "compactTrailing" ? ["full"] : ["full", "long"];
+        expect(expected).toContain(text.props?.compactCountdown);
+        expect(typeof text.props?.compactCountdownSize).toBe("number");
+        const modifiers = (text.props?.modifiers as { modifier: string }[]).map((m) => m.modifier);
+        expect(modifiers).toEqual(expect.arrayContaining(["lineLimit", "minimumScaleFactor"]));
+      }
+    });
+
+    it("shows the seconds in the expanded and Lock Screen heroes", () => {
+      const layout = DeadlineActivityLayout(deadline(), environment);
+      for (const slot of ["expandedTrailing", "banner"]) {
+        const forms = nodes(layout[slot], "Text").map((text) => text.props?.compactCountdown);
+        expect(forms).toContain("long");
+      }
+    });
+
+    it("keeps the island sizes fixed: 12 pt compact, 10 pt minimal", () => {
+      const layout = DeadlineActivityLayout(deadline(), environment);
+      const size = (slot: string) => nodes(layout[slot], "Text")[0]?.props?.compactCountdownSize;
+      expect(size("compactTrailing")).toBe(12);
+      expect(size("minimal")).toBe(10);
+    });
+
+    it.each([
+      ["queue", QueueActivityLayout(queue(), environment)],
+      [
+        "queue called",
+        QueueActivityLayout(
+          queue({
+            phase: "called",
+            position: null,
+            etaMinutes: null,
+            roomName: "A very long room name that must not widen the island",
+          }),
+          environment,
+        ),
+      ],
+      ...states,
+      ["accreditation", AccreditationActivityLayout(accreditation(), environment)],
+      [
+        "future props version",
+        DeadlineActivityLayout({ v: 2, kind: "deadline" } as never, environment),
+      ],
+    ] as [
+      string,
+      Record<string, unknown>,
+    ][])("%s: hard island caps, whatever the value", (_name, layout) => {
+      const caps = { compactLeading: 24, compactTrailing: 56, minimal: 36 } as const;
+      for (const [slot, width] of Object.entries(caps)) {
+        const root = layout[slot] as Node;
+        const modifiers = root.props?.modifiers as { modifier: string; args: unknown[] }[];
+        const frame = modifiers.find((m) => m.modifier === "frame");
+        expect((frame?.args[0] as { maxWidth: number }).maxWidth).toBe(width);
+        expect(modifiers.map((m) => m.modifier)).toEqual(
+          expect.arrayContaining(["minimumScaleFactor", "dynamicTypeSize"]),
+        );
+      }
+    });
+
+    it("keeps the count-up since the call a plain timer", () => {
+      const called = QueueActivityLayout(
+        queue({
+          phase: "called",
+          position: null,
+          etaMinutes: null,
+          calledAt: "2026-02-20T09:58:00.000Z",
+        }),
+        environment,
+      );
+      const timers = SLOTS.flatMap((slot) => nodes(called[slot], "Text")).filter(
+        (text) => text.props?.timerInterval,
+      );
+      expect(timers.length).toBeGreaterThan(0);
+      for (const text of timers) expect(text.props?.compactCountdown).toBeUndefined();
     });
   });
 
