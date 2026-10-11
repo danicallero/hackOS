@@ -745,10 +745,14 @@ header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
 no bar covers the centred avatar; Android floats its own glass back button.
 That public photo uses the same `ProfileAvatarCollapse` overlay as the signed-in
 account: Reanimated maps 120 pt of upward scroll to the shared mask and dark
-cover progress. A released drag never rests half-morphed: inside that range it
-auto-scrolls to fully expanded or collapsed by release direction on a flick,
-otherwise by the nearer half (after momentum, instantly under Reduce Motion);
-programmatic scrolls are never snapped. Both rests are measured from the true
+cover progress. A released drag never rests half-morphed: inside that range direction
+decides, from the last non-zero scroll delta (the release velocity only
+without one). Moving up, with the merge started, auto-collapses; moving down,
+with the droplet coming out, auto-expands; only a release with no movement
+takes the nearer rest. A moving release decides when its momentum ends, by the
+momentum's own direction. Each snap starts with one light haptic (also under
+Reduce Motion, where the scroll is instant); programmatic scrolls are never
+snapped and never tap. Both rests are measured from the true
 top, which on iOS sits at a negative content offset under the automatic inset
 (at least the status-bar overlap, seeded once the host is measured, then
 lowered by scroll events before the first drag), never from y 0, which is

@@ -2,29 +2,47 @@ import telegramMaskTracks from "./telegram-avatar-mask.json";
 
 export const PROFILE_AVATAR_COLLAPSE_DISTANCE = 120;
 
-/** Release speed (points/ms, positive while the offset grows) that reads as a flick. */
-const PROFILE_AVATAR_SNAP_FLICK_VELOCITY = 0.3;
 /** Below this release speed the scroll view does not decelerate, so no momentum end follows. */
 export const PROFILE_AVATAR_SNAP_REST_VELOCITY = 0.05;
 
 /**
+ * Direction of the scroll being released (#935): positive while the offset
+ * grows (content moving up, avatar heading into the camera), negative while it
+ * shrinks, 0 with no movement. The last non-zero scroll delta decides; the
+ * release velocity only stands in when no delta was seen, because its sign is
+ * not consistent across platforms (iOS reports the offset's, Android the
+ * finger's).
+ */
+export function profileAvatarSnapDirection(
+  lastDelta: number,
+  velocity: number,
+  platform: string,
+): number {
+  "worklet";
+  if (lastDelta !== 0) return Math.sign(lastDelta);
+  if (Math.abs(velocity) < PROFILE_AVATAR_SNAP_REST_VELOCITY) return 0;
+  return platform === "android" ? -Math.sign(velocity) : Math.sign(velocity);
+}
+
+/**
  * Where a released scroll should settle so the avatar never rests half-morphed
  * (#935): null outside the open collapse range, otherwise fully expanded (0) or
- * fully collapsed (`distance`). A flick decides by direction, a slow release by
- * which half of the range the offset is in.
+ * fully collapsed (`distance`). Direction decides: moving up (merge started)
+ * collapses, moving down (droplet coming out) expands; with no movement at
+ * all, the nearer rest wins.
  *
  * `distance` is required: a worklet's default-parameter expression is not
  * captured into its UI-thread closure, so a module constant there is undefined.
  */
 export function profileAvatarSnapTarget(
   offset: number,
-  velocity: number,
+  direction: number,
   distance: number,
 ): number | null {
   "worklet";
   if (!(offset > 0 && offset < distance)) return null;
-  if (velocity >= PROFILE_AVATAR_SNAP_FLICK_VELOCITY) return distance;
-  if (velocity <= -PROFILE_AVATAR_SNAP_FLICK_VELOCITY) return 0;
+  if (direction > 0) return distance;
+  if (direction < 0) return 0;
   return offset >= distance / 2 ? distance : 0;
 }
 
@@ -62,11 +80,11 @@ const MAX_HOLE_PUNCH_TOP = 96;
 export function profileAvatarSnapOffset(
   contentOffset: number,
   restingOffset: number,
-  velocity: number,
+  direction: number,
   distance: number,
 ): number | null {
   "worklet";
-  const target = profileAvatarSnapTarget(contentOffset - restingOffset, velocity, distance);
+  const target = profileAvatarSnapTarget(contentOffset - restingOffset, direction, distance);
   return target === null ? null : restingOffset + target;
 }
 

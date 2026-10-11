@@ -16,6 +16,7 @@ import {
   profileAvatarMaskFrame,
   profileAvatarMorphPath,
   profileAvatarRestingOffsetBound,
+  profileAvatarSnapDirection,
   profileAvatarSnapOffset,
   profileAvatarSnapTarget,
   resolveProfileCameraTarget,
@@ -23,6 +24,14 @@ import {
 import { renderMobile } from "./render";
 
 jest.mock("@/components/person-avatar", () => ({ useApiImage: () => null }));
+// Expose the scroll worklets as plain callbacks so a drag can be replayed.
+jest.mock("react-native-reanimated", () => ({
+  ...require("react-native-reanimated/mock"),
+  useReducedMotion: () => false,
+  useAnimatedScrollHandler: (handlers: unknown) => handlers,
+}));
+const mockHaptic = jest.fn();
+jest.mock("@/lib/haptics", () => ({ haptic: (intent: string) => mockHaptic(intent) }));
 jest.mock("@/modules/camera-capabilities", () => ({
   __esModule: true,
   default: { getDisplayCutoutRects: () => [] },
@@ -185,16 +194,29 @@ describe("profile avatar snap (#935)", () => {
     expect(profileAvatarSnapTarget(distance + 300, 2, distance)).toBeNull();
   });
 
-  it("settles a slow release at the nearer end of the range", () => {
-    expect(profileAvatarSnapTarget(10, 0, distance)).toBe(0);
-    expect(profileAvatarSnapTarget(distance / 2 - 1, 0.1, distance)).toBe(0);
-    expect(profileAvatarSnapTarget(distance / 2, 0, distance)).toBe(distance);
-    expect(profileAvatarSnapTarget(distance - 10, -0.1, distance)).toBe(distance);
+  it("collapses on any upward release and expands on any downward one", () => {
+    // Up even 10% into the range collapses; down even at 90% expands.
+    expect(profileAvatarSnapTarget(distance * 0.1, 1, distance)).toBe(distance);
+    expect(profileAvatarSnapTarget(distance * 0.9, -1, distance)).toBe(0);
+    expect(profileAvatarSnapTarget(distance * 0.9, 1, distance)).toBe(distance);
+    expect(profileAvatarSnapTarget(distance * 0.1, -1, distance)).toBe(0);
   });
 
-  it("follows the flick direction over the halfway threshold", () => {
-    expect(profileAvatarSnapTarget(10, 0.6, distance)).toBe(distance);
-    expect(profileAvatarSnapTarget(distance - 10, -0.6, distance)).toBe(0);
+  it("falls back to the nearer rest only with no movement", () => {
+    expect(profileAvatarSnapTarget(10, 0, distance)).toBe(0);
+    expect(profileAvatarSnapTarget(distance / 2 - 1, 0, distance)).toBe(0);
+    expect(profileAvatarSnapTarget(distance / 2, 0, distance)).toBe(distance);
+    expect(profileAvatarSnapTarget(distance - 10, 0, distance)).toBe(distance);
+  });
+
+  it("takes the direction from the last scroll delta, then the release velocity", () => {
+    expect(profileAvatarSnapDirection(3, -2, "ios")).toBe(1);
+    expect(profileAvatarSnapDirection(-0.5, 2, "android")).toBe(-1);
+    expect(profileAvatarSnapDirection(0, 0.6, "ios")).toBe(1);
+    // Android reports the finger's velocity, opposite to the offset's.
+    expect(profileAvatarSnapDirection(0, 0.6, "android")).toBe(-1);
+    expect(profileAvatarSnapDirection(0, 0.01, "ios")).toBe(0);
+    expect(profileAvatarSnapDirection(0, 0, "android")).toBe(0);
   });
 
   it("takes the distance explicitly, with no worklet default parameter", () => {
@@ -209,8 +231,8 @@ describe("profile avatar snap (#935)", () => {
     expect(profileAvatarSnapOffset(0, resting, 0, distance)).toBe(resting);
     expect(profileAvatarSnapOffset(10, resting, 0, distance)).toBe(resting + distance);
     expect(profileAvatarSnapOffset(-20, resting, 0, distance)).toBe(resting);
-    expect(profileAvatarSnapOffset(-20, resting, 0.6, distance)).toBe(resting + distance);
-    expect(profileAvatarSnapOffset(40, resting, -0.6, distance)).toBe(resting);
+    expect(profileAvatarSnapOffset(-50, resting, 1, distance)).toBe(resting + distance);
+    expect(profileAvatarSnapOffset(55, resting, -1, distance)).toBe(resting);
     // Exactly two rests: the true top and the collapsed offset.
     expect(profileAvatarSnapOffset(resting, resting, 0, distance)).toBeNull();
     expect(profileAvatarSnapOffset(resting + distance, resting, 0, distance)).toBeNull();
@@ -474,5 +496,112 @@ describe("profile avatar anchor measurement (#935)", () => {
 
     // The stale result (y 300 + offset 150) is dropped; the settled one maps back to 300.
     expect(result.current.anchorFrame).toEqual({ left: 100, top: 300, width: 96, height: 96 });
+  });
+});
+
+type ScrollHandlers = Record<
+  "onBeginDrag" | "onScroll" | "onEndDrag" | "onMomentumEnd",
+  (event: { contentOffset: { x: number; y: number }; velocity?: { x: number; y: number } }) => void
+>;
+
+describe("profile avatar snap on release (#935)", () => {
+  const event = (y: number, velocity = 0) => ({
+    contentOffset: { x: 0, y },
+    velocity: { x: 0, y: velocity },
+  });
+
+  async function setup() {
+    const { result } = await renderHook(() => useProfileAvatarCollapse(), {
+      wrapper: ({ children }) => (
+        <SafeAreaProvider
+          initialMetrics={{
+            frame: { x: 0, y: 0, width: 393, height: 852 },
+            insets: { top: 0, left: 0, right: 0, bottom: 0 },
+          }}
+        >
+          {children}
+        </SafeAreaProvider>
+      ),
+    });
+    const scrollTo = jest.fn();
+    Object.assign(result.current.scrollRef, { current: { scrollTo } });
+    const handlers = result.current.onScroll as unknown as ScrollHandlers;
+    const drag = (start: number, ...moves: number[]) => {
+      handlers.onBeginDrag(event(start));
+      for (const y of moves) handlers.onScroll(event(y));
+    };
+    return { controller: result.current, handlers, drag, scrollTo };
+  }
+
+  beforeEach(() => mockHaptic.mockClear());
+
+  it("collapses an upward release 10% into the range with one light haptic", async () => {
+    const { handlers, drag, scrollTo } = await setup();
+    drag(0, 6, 12);
+    handlers.onEndDrag(event(12));
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: PROFILE_AVATAR_COLLAPSE_DISTANCE });
+    expect(mockHaptic).toHaveBeenCalledTimes(1);
+    expect(mockHaptic).toHaveBeenCalledWith("light");
+    // The snap's own scroll and momentum end neither re-snap nor tap again.
+    handlers.onScroll(event(PROFILE_AVATAR_COLLAPSE_DISTANCE));
+    handlers.onMomentumEnd(event(PROFILE_AVATAR_COLLAPSE_DISTANCE));
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(mockHaptic).toHaveBeenCalledTimes(1);
+  });
+
+  it("expands a downward release 90% into the range", async () => {
+    const { handlers, drag, scrollTo } = await setup();
+    drag(200, 120, 112, 108);
+    handlers.onEndDrag(event(108));
+    expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: 0 });
+    expect(mockHaptic).toHaveBeenCalledTimes(1);
+  });
+
+  it("follows the momentum's own direction when it ends inside the range", async () => {
+    const { handlers, drag, scrollTo } = await setup();
+    drag(200, 150);
+    handlers.onEndDrag(event(150, -1.2));
+    expect(scrollTo).not.toHaveBeenCalled();
+    handlers.onScroll(event(100));
+    handlers.onScroll(event(90));
+    handlers.onMomentumEnd(event(90));
+    expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: 0 });
+    expect(mockHaptic).toHaveBeenCalledTimes(1);
+  });
+
+  it("measures the snap from a non-zero true top", async () => {
+    const { handlers, drag, scrollTo } = await setup();
+    // The automatic inset's first scroll event, before any drag.
+    handlers.onScroll(event(-59));
+    drag(-59, -50, -40);
+    handlers.onEndDrag(event(-40));
+    expect(scrollTo).toHaveBeenCalledWith({
+      animated: true,
+      y: -59 + PROFILE_AVATAR_COLLAPSE_DISTANCE,
+    });
+  });
+
+  it("falls back to the nearer rest for a release with no movement", async () => {
+    const { handlers, scrollTo } = await setup();
+    handlers.onScroll(event(80));
+    handlers.onBeginDrag(event(80));
+    handlers.onEndDrag(event(80));
+    expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: PROFILE_AVATAR_COLLAPSE_DISTANCE });
+  });
+
+  it("never snaps or taps for programmatic scrolls", async () => {
+    jest.useFakeTimers();
+    const { controller, handlers, scrollTo } = await setup();
+    handlers.onScroll(event(30));
+    handlers.onScroll(event(40));
+    handlers.onMomentumEnd(event(40));
+    expect(scrollTo).not.toHaveBeenCalled();
+    // The focus correction still moves to a rest, silently.
+    controller.settleAtRest();
+    jest.advanceTimersByTime(50);
+    expect(scrollTo).toHaveBeenCalledWith({ animated: false, y: 0 });
+    expect(mockHaptic).not.toHaveBeenCalled();
+    jest.useRealTimers();
   });
 });
