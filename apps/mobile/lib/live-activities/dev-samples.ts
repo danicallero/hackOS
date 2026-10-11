@@ -31,7 +31,7 @@ const MINUTE = 60_000;
 
 type QueueSample = Pick<
   QueueLiveProps,
-  "phase" | "position" | "etaMinutes" | "startPosition" | "calledAt"
+  "phase" | "position" | "etaMinutes" | "queueTotal" | "calledAhead" | "calledAt"
 >;
 
 function queue(sample: QueueSample): DesiredActivity {
@@ -89,7 +89,8 @@ const waiting: QueueSample = {
   phase: "waiting",
   position: 4,
   etaMinutes: 12,
-  startPosition: 9,
+  queueTotal: 9,
+  calledAhead: null,
   calledAt: null,
 };
 
@@ -101,7 +102,8 @@ const SAMPLES: Record<string, () => DesiredActivity[]> = {
       phase: "called",
       position: null,
       etaMinutes: null,
-      startPosition: null,
+      queueTotal: null,
+      calledAhead: 1,
       calledAt: new Date(Date.now() - 2 * MINUTE).toISOString(),
     }),
   ],
@@ -110,7 +112,8 @@ const SAMPLES: Record<string, () => DesiredActivity[]> = {
       phase: "in_room",
       position: null,
       etaMinutes: null,
-      startPosition: null,
+      queueTotal: null,
+      calledAhead: null,
       calledAt: new Date(Date.now() - 6 * MINUTE).toISOString(),
     }),
   ],

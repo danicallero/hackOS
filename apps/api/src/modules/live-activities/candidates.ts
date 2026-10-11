@@ -44,7 +44,6 @@ import {
   readJudgingWindow,
   scannedKey,
   selectQueueLiveProps,
-  withStartPosition,
 } from "./state.js";
 
 /**
@@ -307,9 +306,7 @@ export async function candidatesFor(
 
   if (user.kinds.has("queue")) {
     const statuses = ctx.queueStatuses.get(userId);
-    const queue = statuses
-      ? await withStartPosition(selectQueueLiveProps(statuses, language, now))
-      : null;
+    const queue = statuses ? selectQueueLiveProps(statuses, language, now) : null;
     if (queue) add("queue", QUEUE_LIVE_ACTIVITY_SUBJECT, queue);
   }
 
