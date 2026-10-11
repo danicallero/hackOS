@@ -215,7 +215,7 @@ intrinsic gate still holds. An empty role list means nobody receives it.
 **Decision (H8):** roles here select an *audience*; they never grant
 anything — the capability or data gate always applies as well.
 
-Storage (migration `0605_live_activity_settings.sql`): the singleton
+Storage (migration `0604_live_activities.sql`): the singleton
 `live_activity_settings.max_concurrent` (default 2),
 `live_activity_kind_settings (kind, enabled, priority)` with a deferred
 unique priority, and `live_activity_kind_roles (kind, role_id)` (cascade on a
@@ -297,7 +297,7 @@ route mapping in `apps/mobile`):
 | `deadline` | `hackos://project` (*proposed*) | — |
 | `accreditation` | `hackos://scan` | Scan: same URL |
 
-### Schema (migrations `0604_live_activities.sql`, `0605_live_activity_settings.sql`)
+### Schema (migration `0604_live_activities.sql`)
 
 - `live_activity_devices`: one row per install (`device_id` unique), with
   `user_id` (cascade), `platform`, `push_to_start_token`, `expo_push_token`,
@@ -588,4 +588,4 @@ and `deploy/README.md`.
   disabled kind.
 
 Tests run with `allowLiveActivities()` (fixtures.ts), because `truncateAll`
-wipes 0605's seeded configuration and roles.
+wipes 0604's seeded configuration and roles.

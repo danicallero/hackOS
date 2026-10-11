@@ -167,7 +167,7 @@ const DEFAULT_KIND_ORDER = [
 ] as const;
 
 /**
- * truncateAll wipes 0605's seeded configuration and roles. Recreate it the
+ * truncateAll wipes 0604's seeded configuration and roles. Recreate it the
  * permissive way for tests about a kind's own gates: every kind enabled in
  * the default order, one role (without event access, so it changes no other
  * fact) allowed for every kind and held by every user existing now.
