@@ -13,6 +13,7 @@ export type ProfileGooeyViewProps = ViewProps & {
   darkness?: number;
   blurRadius?: number;
   bridgeReach?: number;
+  pill?: number;
   drip?: number;
 };
 

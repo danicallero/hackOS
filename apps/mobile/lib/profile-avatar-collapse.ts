@@ -526,8 +526,10 @@ export type ProfileGooeyCircle = { x: number; y: number; diameter: number };
  * stretches towards the lens.
  */
 export const PROFILE_GOOEY_SHRINK_END = 0.65;
+/** Progress until which the avatar only rides up with the content, full size. */
+export const PROFILE_GOOEY_LIFT_END = 0.12;
 /** Progress at which the avatar starts darkening and blurring. */
-const PROFILE_GOOEY_FADE_START = 0.15;
+export const PROFILE_GOOEY_FADE_START = 0.3;
 /** Edge-to-edge gap (in lens diameters) between the shrunken avatar and the lens. */
 const PROFILE_GOOEY_STAGING_GAP = 0.9;
 /** The end circle sits this far (dp) inside the lens edge so it never pokes out. */
@@ -573,18 +575,24 @@ export function profileGooeyProgress(scrollOffset: number, distance: number): nu
 
 /**
  * Everything the native gooey view draws at `progress`, in its local dp:
- * - Until `PROFILE_GOOEY_SHRINK_END` the avatar shrinks uniformly to the end
- *   diameter while travelling at a constant rate (carried by the scroll) to a
- *   point centred under the lens; from `PROFILE_GOOEY_FADE_START` it darkens
- *   (`darkness`, 0 → 1) and blurs, so it arrives as a black disc.
+ * - Until `PROFILE_GOOEY_LIFT_END` it rides up with the content (`distance`
+ *   is the scroll offset of progress 1) at full size.
+ * - Then, until `PROFILE_GOOEY_SHRINK_END`, it shrinks uniformly from the
+ *   bottom up: its top edge keeps rising with the content (faster if needed,
+ *   never past its end height) while the bottom edge comes up to meet it, so
+ *   it lands as a circle the end diameter, centred under the lens. From
+ *   `PROFILE_GOOEY_FADE_START` it darkens (`darkness`, 0 → 1) and blurs, so
+ *   it arrives as a black disc.
  * - Afterwards it rises into the lens; the neck may form (`bridgeReach` is
- *   how far apart the two circles' edges can be and still join) and a short
- *   drip hangs from the lens: a droplet sinking into the camera.
+ *   how far apart the two circles' edges can be and still join), fattens into
+ *   a straight-sided pill (`pill`, 0 → 1) that shortens into the lens as the
+ *   droplet rises, and a short drip hangs from the lens.
  */
 export function profileGooeyFrame(
   start: ProfileCameraCutoutFrame,
   hole: ProfileCameraCutoutFrame,
   progress: number,
+  distance: number,
 ) {
   "worklet";
   const t = clamp01(progress);
@@ -596,20 +604,39 @@ export function profileGooeyFrame(
   const stagingY = holeY + holeDiameter / 2 + endDiameter / 2 + gap;
   const startX = start.left + start.width / 2;
   const startY = start.top + start.height / 2;
-  const shrink = clamp01(t / PROFILE_GOOEY_SHRINK_END);
+  const shrink = clamp01(
+    (t - PROFILE_GOOEY_LIFT_END) / (PROFILE_GOOEY_SHRINK_END - PROFILE_GOOEY_LIFT_END),
+  );
+  const diameter = start.width + (endDiameter - start.width) * shrink;
+  // The top edge follows the content, or the straight path from where the
+  // lift ends to its end height if that is higher, and never goes above it.
+  const startTop = startY - start.width / 2;
+  const endTop = stagingY - endDiameter / 2;
+  const liftTop = startTop - PROFILE_GOOEY_LIFT_END * distance;
+  const top = Math.max(
+    endTop,
+    Math.min(
+      startTop - t * distance,
+      shrink > 0 ? liftTop + (Math.min(liftTop, endTop) - liftTop) * shrink : startTop,
+    ),
+  );
   const fade = clamp01(
     (t - PROFILE_GOOEY_FADE_START) / (PROFILE_GOOEY_SHRINK_END - PROFILE_GOOEY_FADE_START),
   );
   const rise = clamp01((t - PROFILE_GOOEY_SHRINK_END) / (1 - PROFILE_GOOEY_SHRINK_END));
   const neck = clamp01((t - PROFILE_GOOEY_SHRINK_END) / 0.08);
+  const pill = clamp01((rise - 0.15) / 0.45);
   return {
     avatarX: startX + (holeX - startX) * shrink,
-    avatarY: startY + (stagingY - startY) * shrink + (holeY - stagingY) * rise,
-    avatarDiameter: start.width + (endDiameter - start.width) * shrink,
-    // Smoothstep, reaching exactly 1 at the shrink end.
-    darkness: fade * fade * (3 - 2 * fade),
+    avatarY: top + diameter / 2 + (holeY - stagingY) * rise,
+    avatarDiameter: diameter,
+    // Eases in so the picture stays readable most of the way, reaching
+    // exactly 1 at the shrink end.
+    darkness: fade * fade * fade,
     blurRadius: PROFILE_GOOEY_MAX_BLUR * fade,
     bridgeReach: gap * 1.2 * neck,
+    // The neck then fattens into a pill (lens to droplet) that shortens into the lens.
+    pill: pill * pill * (3 - 2 * pill),
     drip: holeDiameter * 0.25 * Math.sin(Math.PI * rise),
   };
 }

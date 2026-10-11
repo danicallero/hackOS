@@ -20,6 +20,7 @@ class ProfileGooeyModule : Module() {
       Prop("darkness") { view: ProfileGooeyView, value: Float -> view.darkness = value; view.invalidate() }
       Prop("blurRadius") { view: ProfileGooeyView, value: Float -> view.blurRadius = value; view.invalidate() }
       Prop("bridgeReach") { view: ProfileGooeyView, value: Float -> view.bridgeReach = value; view.invalidate() }
+      Prop("pill") { view: ProfileGooeyView, value: Float -> view.pill = value; view.invalidate() }
       Prop("drip") { view: ProfileGooeyView, value: Float -> view.drip = value; view.invalidate() }
     }
   }

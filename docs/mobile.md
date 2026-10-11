@@ -877,23 +877,30 @@ and the native view exists; every other case keeps the paths above unchanged
 - **Static props** (dp, view-local): `holeX`, `holeY`, `holeDiameter`.
 - **Animated props** from `useAnimatedProps` on the UI thread, no per-frame JS:
   `avatarX`, `avatarY`, `avatarDiameter`, `darkness`, `blurRadius`,
-  `bridgeReach`, `drip`, all computed by `profileGooeyFrame` in
+  `bridgeReach`, `pill`, `drip`, all computed by `profileGooeyFrame` in
   `lib/profile-avatar-collapse.ts` from `profileGooeyProgress(scrollOffset, 120)`.
-- **Timeline**: until progress 0.65 (`PROFILE_GOOEY_SHRINK_END`) the avatar
-  stays a circle, rides up with the scroll at a constant rate, shrinks
-  uniformly to the lens diameter minus 1 dp per side
-  (`profileGooeyEndDiameter` / `profileGooeyEndScale`) and reaches a point
-  centred under the lens, a gap of 0.9 lens diameters below it. From 0.15 it
-  darkens (`darkness`, smoothstep 0 → 1) and blurs (up to 6 dp), so it arrives
-  as a black disc. Then it rises to the lens centre (`profileGooeyEndOffset` is
-  the full travel); a black metaball neck (two-circle tangent construction,
-  spread growing from 0 so it emerges from a point) joins it to the lens and a
-  short drip bulges from the lens and retracts. Everything is a pure function
-  of progress, so scrolling back retraces it exactly.
-- **Rendering**: while `darkness < 1` only the avatar is drawn: clipped to its
-  circle (which also trims the blur, so nothing bleeds outside it) with a black
-  wash of `darkness` on top. Once fully black, the black ink (lens, avatar,
-  neck, drip) replaces it, so there is never a second blob or a coloured halo.
+- **Timeline**: until progress 0.12 (`PROFILE_GOOEY_LIFT_END`) the avatar
+  rides up with the content at full size. Then, until 0.65
+  (`PROFILE_GOOEY_SHRINK_END`), it stays a circle and shrinks uniformly from
+  the bottom up: its top edge keeps rising with the content (faster if needed,
+  never past its end height) while the bottom comes up, landing at the lens
+  diameter minus 1 dp per side (`profileGooeyEndDiameter` /
+  `profileGooeyEndScale`) centred under the lens, a gap of 0.9 lens diameters
+  below it. From 0.3 (`PROFILE_GOOEY_FADE_START`) it blurs (up to 6 dp) and
+  darkens (`darkness`, eased in, 0 → 1), so it stays readable most of the way
+  and arrives as a black disc. Then it rises to the lens centre
+  (`profileGooeyEndOffset` is the full travel): a black metaball neck
+  (two-circle tangent construction, spread growing from 0 so it emerges from a
+  point) joins it to the lens, fattens into a straight-sided pill (`pill`)
+  that shortens into the lens as the droplet rises, and a short drip bulges
+  from the lens and retracts. Everything is a pure function of progress and
+  the scroll distance, so scrolling back retraces it exactly.
+- **Rendering**: while `darkness < 1` the avatar is drawn clipped to its
+  circle (which also trims the blur, so nothing bleeds outside it) over a black
+  underlay that fills the rim the blur leaves translucent, with a black wash of
+  `darkness` on top; above it the ink draws only the lens. Once fully black,
+  the ink's own avatar disc, neck, pill and drip replace it at the same size
+  and position, so there is never a second blob or a coloured halo.
   Android 12+ (API 31) records the ink into a reused `RenderNode`, blurs it with
   `RenderEffect` and composites it through an alpha-threshold color matrix
   (liquid edges); the avatar goes through a second reused node with the
