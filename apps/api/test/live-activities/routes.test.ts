@@ -384,3 +384,64 @@ describe("GET /api/me/live-activities", () => {
     ]);
   });
 });
+
+describe("POST /api/me/live-activities/dismissals/reopen", () => {
+  it("brings back what the user dismissed on this device when the app is opened", async () => {
+    await openJudgingWindow();
+    const { userId } = await participantInQueue();
+    await allowLiveActivities();
+    await putDevice(userId, { deviceId: "phone", platform: "ios", pushToStartToken: "pts" });
+    const dismiss = await app.inject({
+      method: "DELETE",
+      url: "/api/me/live-activities/sessions",
+      headers: asUser(userId),
+      payload: { deviceId: "phone", kind: "queue", subject: "judging", phase: "waiting" },
+    });
+    expect(dismiss.statusCode).toBe(200);
+    const read = () =>
+      app.inject({
+        method: "GET",
+        url: "/api/me/live-activities?deviceId=phone",
+        headers: asUser(userId),
+      });
+    expect((await read()).json().queue).toBeNull();
+
+    const reopen = () =>
+      app.inject({
+        method: "POST",
+        url: "/api/me/live-activities/dismissals/reopen",
+        headers: asUser(userId),
+        payload: { deviceId: "phone" },
+      });
+    const first = await reopen();
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toEqual({ status: true, reopened: 1 });
+    expect((await read()).json().queue).toMatchObject({ kind: "queue", phase: "waiting" });
+    const row = await deviceRow("phone");
+    expect(await sessionsOf(row.id)).toEqual([
+      expect.objectContaining({ end_reason: "finished", dismissed_phase: null }),
+    ]);
+
+    // Idempotent: nothing left to release.
+    expect((await reopen()).json()).toEqual({ status: true, reopened: 0 });
+  });
+
+  it("is limited to the caller's own registered device", async () => {
+    const owner = await createUser();
+    const other = await createUser();
+    await putDevice(owner, { deviceId: "phone", platform: "android" });
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/me/live-activities/dismissals/reopen",
+      headers: asUser(other),
+      payload: { deviceId: "phone" },
+    });
+    expect(res.statusCode).toBe(404);
+    const anonymous = await app.inject({
+      method: "POST",
+      url: "/api/me/live-activities/dismissals/reopen",
+      payload: { deviceId: "phone" },
+    });
+    expect(anonymous.statusCode).toBe(401);
+  });
+});

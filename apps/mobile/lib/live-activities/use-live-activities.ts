@@ -15,11 +15,12 @@ const LIVE_COUNTER_REFRESH_MS = 60_000;
 
 /**
  * Drives the Live Activity orchestration from the root layout (#966): device
- * registration after sign-in, a reconcile on foreground, on the personal
- * queue events (H38), on a received or tapped queue or schedule push
- * notification and at the next staff start/end boundary, and cleanup on
- * sign-out. Background delivery is the server's job (APNs / data pushes);
- * background-task.ts adds the iOS refresh for a push received in background.
+ * registration after sign-in, a reconcile on launch and foreground (which
+ * also brings back swiped-away activities), on the personal queue events
+ * (H38), on a received or tapped queue or schedule push notification and at
+ * the next staff start/end boundary, and cleanup on sign-out. Background
+ * delivery is the server's job (APNs / data pushes); background-task.ts adds
+ * the iOS refresh for a push received in background.
  */
 export function useLiveActivities({
   signedIn,
@@ -73,9 +74,10 @@ export function useLiveActivities({
       }
     };
 
-    const run = async () => {
+    /** `reopen`: the app was opened, so swiped-away activities come back. */
+    const run = async (reopen = false) => {
       try {
-        const desired = await reconcileLiveActivities();
+        const desired = await reconcileLiveActivities({ reopenDismissed: reopen });
         if (!cancelled) schedule(desired);
       } catch {
         // Offline or the endpoint is unavailable: keep what is showing.
@@ -90,11 +92,11 @@ export function useLiveActivities({
     void registerLiveActivityDevice(language)
       .catch(() => undefined)
       .then(() => {
-        if (!cancelled) void run();
+        if (!cancelled) void run(true);
       });
 
     const appState = AppState.addEventListener("change", (state) => {
-      if (state === "active") void run();
+      if (state === "active") void run(true);
     });
     const unsubscribes = [
       EVENTS.USER_QUEUE_CHANGED,

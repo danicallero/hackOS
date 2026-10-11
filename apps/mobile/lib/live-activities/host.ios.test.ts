@@ -64,7 +64,7 @@ jest.mock("./store", () => ({
 }));
 
 import { queueLiveLabels } from "@hackos/shared/live-activities";
-import { liveActivityHost } from "./host.ios";
+import { liveActivityHost, staleDateFor } from "./host.ios";
 
 const props = {
   v: 1 as const,
@@ -111,7 +111,7 @@ describe("iOS Live Activity host (#966)", () => {
     expect(mockStart).toHaveBeenCalledWith(
       expect.objectContaining({ rank: 1 }),
       "hackos://queue",
-      undefined,
+      expect.any(Date),
       90,
     );
 
@@ -124,7 +124,7 @@ describe("iOS Live Activity host (#966)", () => {
     );
     expect(mockCreated.get(id!)?.update).toHaveBeenLastCalledWith(
       expect.objectContaining({ rank: 0 }),
-      undefined,
+      expect.any(Date),
       100,
     );
     await liveActivityHost.end(liveActivityHost.running()[0]!, "immediate");
@@ -140,5 +140,12 @@ describe("iOS Live Activity host (#966)", () => {
     ended?.end.mockClear();
     await liveActivityHost.dismissEnded();
     expect(ended?.end).not.toHaveBeenCalled();
+  });
+
+  it("marks local activities stale like the server does", () => {
+    const now = Date.parse("2026-10-11T10:00:00.000Z");
+    expect(staleDateFor(props, now).toISOString()).toBe("2026-10-11T10:30:00.000Z");
+    const ending = { ...props, kind: "deadline", endsAt: "2026-10-11T12:00:00.000Z" };
+    expect(staleDateFor(ending as never, now).toISOString()).toBe("2026-10-11T12:00:00.000Z");
   });
 });

@@ -74,6 +74,19 @@ void readLiveActivityState().then((state) => {
 
 /** After an activity ends, how long its final state may stay on the Lock Screen (HIG). */
 const FINISHED_DISMISSAL_MS = 15 * 60 * 1000;
+/** The queue has no end instant; the server refreshes it well within this. */
+const OPEN_ENDED_STALE_MS = 30 * 60 * 1000;
+
+/**
+ * Same `stale-date` the API sends (docs/live-activities.md): the item's own
+ * end, or 30 min ahead for the queue. A local activity the app can no longer
+ * refresh or end (the server never got its token) is then shown as outdated
+ * instead of current.
+ */
+export function staleDateFor(props: LiveActivityProps, now = Date.now()): Date {
+  if (props.kind === "queue") return new Date(now + OPEN_ENDED_STALE_MS);
+  return new Date(props.endsAt);
+}
 
 function safeInstances(factory: Factory): AnyInstance[] {
   try {
@@ -131,7 +144,7 @@ export const liveActivityHost: LiveActivityHost = {
       const instance = factory.start(
         item.props,
         item.props.url,
-        undefined,
+        staleDateFor(item.props),
         relevanceForRank(item.props.rank),
       );
       const id = instance.getId();
@@ -148,7 +161,7 @@ export const liveActivityHost: LiveActivityHost = {
     const instance = instances.get(id);
     if (!instance) return;
     if (!(item.kind in FIXED_SUBJECTS)) rememberSubject(id, item.subject);
-    await instance.update(item.props, undefined, relevanceForRank(item.props.rank));
+    await instance.update(item.props, staleDateFor(item.props), relevanceForRank(item.props.rank));
   },
   async end(surface, mode) {
     const instance = instances.get(surface.id);
