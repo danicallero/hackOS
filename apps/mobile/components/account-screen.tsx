@@ -1,8 +1,9 @@
 import { type MenuAction, MenuView } from "@expo/ui/community/menu";
-import { useFocusEffect, useRouter, useScrollToTop } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter, useScrollToTop } from "expo-router";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
+  type LayoutChangeEvent,
   Pressable,
   RefreshControl,
   type ScrollView,
@@ -10,7 +11,14 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import Animated from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import {
   ActionButton,
   AndroidStatusBarScrim,
@@ -93,6 +101,7 @@ export default function AccountScreen() {
   const [signOutError, setSignOutError] = useState<Error | null>(null);
   const developerTapCount = useRef(0);
   const developerTapTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlight = useNotificationsHighlight(scrollRef);
 
   function returnToSignIn() {
     forceLocalSignOut();
@@ -254,6 +263,7 @@ export default function AccountScreen() {
         ref={scrollRef}
         style={{ flex: 1 }}
         testID="account-scroll"
+        onLayout={highlight.onScrollLayout}
         onScroll={avatarCollapse.onScroll}
         onTouchStart={avatarCollapse.onScrollBeginDrag}
         onContentSizeChange={avatarCollapse.onContentSizeChange}
@@ -437,13 +447,32 @@ export default function AccountScreen() {
         </Section>
 
         {/* H51: every notification setting lives here; the Schedule bell only shows the inbox. */}
-        <Section title={t("alertsNotifications")}>
-          <AccountSubpageRow
-            label={t("notificationsPreferences")}
-            icon="bell"
-            onPress={() => router.push("/(tabs)/others/notification-settings")}
-          />
-        </Section>
+        <View testID="account-notifications" onLayout={highlight.onRowLayout}>
+          <Section title={t("alertsNotifications")}>
+            <View>
+              <AccountSubpageRow
+                label={t("notificationsPreferences")}
+                icon="bell"
+                onPress={() => router.push("/(tabs)/others/notification-settings")}
+              />
+              <Animated.View
+                pointerEvents="none"
+                testID="account-notifications-highlight"
+                style={[
+                  {
+                    backgroundColor: colors.accent,
+                    bottom: 0,
+                    left: 0,
+                    position: "absolute",
+                    right: 0,
+                    top: 0,
+                  },
+                  highlight.style,
+                ]}
+              />
+            </View>
+          </Section>
+        </View>
 
         {isSponsorRep && mealPlan.data && mealPlan.data.meals.length > 0 ? (
           <Section title={t("mealsTitle")} footer={t("mealsLockNote")}>
@@ -581,6 +610,56 @@ export default function AccountScreen() {
       />
     </View>
   );
+}
+
+/**
+ * H51: the alerts gear opens Account with `?highlight=notifications`. The
+ * param is consumed once: scroll the Notifications section into view, flash
+ * the Preferences row, then clear the param so a re-render or refocus does
+ * not replay it.
+ */
+function useNotificationsHighlight(scrollRef: RefObject<ScrollView | null>) {
+  const router = useRouter();
+  const { highlight } = useLocalSearchParams<{ highlight?: string }>();
+  const reduceMotion = useReducedMotion();
+  const opacity = useSharedValue(0);
+  const [rowY, setRowY] = useState<number | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const handled = useRef(false);
+  const requested = highlight === "notifications";
+
+  useEffect(() => {
+    if (!requested) {
+      handled.current = false;
+      return;
+    }
+    // Wait for both layouts; children can report before the scroll view.
+    if (handled.current || rowY === null || viewportHeight === 0) return;
+    handled.current = true;
+    router.setParams({ highlight: undefined });
+    // Leave the row a third of the way down so the section header shows too.
+    scrollRef.current?.scrollTo({
+      animated: !reduceMotion,
+      y: Math.max(0, rowY - viewportHeight / 3),
+    });
+    opacity.value = reduceMotion
+      ? withSequence(
+          withTiming(0.18, { duration: 0 }),
+          withDelay(1000, withTiming(0, { duration: 0 })),
+        )
+      : withSequence(
+          withDelay(250, withTiming(0.18, { duration: 200 })),
+          withDelay(400, withTiming(0, { duration: 450 })),
+        );
+  }, [opacity, reduceMotion, requested, router, rowY, scrollRef, viewportHeight]);
+
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return {
+    style,
+    onRowLayout: ({ nativeEvent }: LayoutChangeEvent) => setRowY(nativeEvent.layout.y),
+    onScrollLayout: ({ nativeEvent }: LayoutChangeEvent) =>
+      setViewportHeight(nativeEvent.layout.height),
+  };
 }
 
 function AccountSubpageRow({
