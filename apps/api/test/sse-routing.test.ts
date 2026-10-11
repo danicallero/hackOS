@@ -113,6 +113,7 @@ describe("domain mutation routing", () => {
     expect(mutationDomainForPath("/api/me/push-tokens")).toBeNull();
     expect(mutationDomainForPath("/api/me/live-activities/device")).toBeNull();
     expect(mutationDomainForPath("/api/me/live-activities/sessions")).toBeNull();
+    expect(mutationDomainForPath("/api/me/live-activities/preferences")).toBeNull();
   });
 
   it("keeps public-content mirrors narrower than the authenticated sponsor domain", () => {

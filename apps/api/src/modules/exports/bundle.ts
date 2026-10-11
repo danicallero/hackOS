@@ -176,6 +176,14 @@ export async function buildExportBundle(
       [subjectUserId],
     )
   ).rows;
+  // #966: the Live Activity kinds the user turned off for their account.
+  const liveActivityKindOptOuts = (
+    await db.query(
+      `SELECT kind, created_at FROM live_activity_kind_opt_outs
+        WHERE user_id = $1 ORDER BY kind`,
+      [subjectUserId],
+    )
+  ).rows;
   const announcementReads = (
     await db.query(
       `SELECT an.announcement_id, a.title, an.read_at
@@ -234,6 +242,7 @@ export async function buildExportBundle(
       outbox: notificationOutbox,
       pushTokens,
       liveActivityDevices,
+      liveActivityKindOptOuts,
       announcementReads,
     },
     audit: auditLog,

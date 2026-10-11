@@ -71,6 +71,15 @@ export interface LiveActivitySettings {
   roles: { id: number; name: string }[];
 }
 
+/**
+ * `GET/PUT /api/me/live-activities/preferences`: the kinds the caller may
+ * receive (enabled, role-allowed, capability held), in priority order, with
+ * their own on/off choice.
+ */
+export interface MyLiveActivityPreferences {
+  kinds: { kind: LiveActivityConfigKind; enabled: boolean }[];
+}
+
 /** Bounds of `LiveActivitySettings.maxConcurrent`. */
 export const LIVE_ACTIVITY_MAX_CONCURRENT_MIN = 1;
 export const LIVE_ACTIVITY_MAX_CONCURRENT_MAX = 5;
