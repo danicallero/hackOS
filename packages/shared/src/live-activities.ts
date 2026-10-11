@@ -163,10 +163,6 @@ export interface ActivityLiveLabels {
   scan: string;
   /** "Ends in" — labels the live countdown to the end. Optional: added after v1 shipped. */
   endsIn?: string;
-  /** Meal breakdown: "Served", "Still to eat", "Inside". Optional. */
-  served?: string;
-  remaining?: string;
-  inside?: string;
 }
 
 export interface ActivityLiveProps {
@@ -184,13 +180,11 @@ export interface ActivityLiveProps {
   /** Distinct people registered so far (first-time scans). */
   scanned: number;
   /**
-   * Live meals only (H24/H27): people estimated in the venue right now — the
-   * logistics panel's served-vs-present denominator. Null for other
-   * activities, before the start, or when unknown. Optional (post-v1).
+   * Live only (H24/H25): accredited people (active accounts with a badge, the
+   * desk's `accredited`), the denominator shown as `scanned/accredited`. Null
+   * before the start or when unknown. Optional (post-v1).
    */
-  inside?: number | null;
-  /** Live meals only: of `inside`, people with no scan for this meal yet. */
-  remaining?: number | null;
+  accredited?: number | null;
   /** Deep link that opens the scanner bound to this activity. */
   scanUrl: string;
   /** Deep link opened on tap. */
@@ -340,6 +334,27 @@ export type LiveActivityProps =
   | AccreditationLiveProps;
 
 /**
+ * Notification push categories that announce a change a Live Activity shows:
+ * the participant's queue (H29 call and pre-call) and schedule reminders
+ * (`schedule:<id>`, H59). The API marks their iOS pushes `content-available`
+ * and the app refreshes its Live Activities when one arrives, in case the
+ * activity's own APNs update is late.
+ */
+export function isLiveActivityPushCategory(category: unknown): boolean {
+  return typeof category === "string" && (category === "queue" || category.startsWith("schedule:"));
+}
+
+/**
+ * ActivityKit relevance for a device rank (0 = most important): the
+ * highest score leads the Dynamic Island and the Lock Screen order. The API
+ * sends it as APNs `relevance-score` and the app passes it on every local
+ * start and update, which would otherwise reset it to 0.
+ */
+export function relevanceForRank(rank: number | undefined): number {
+  return Math.max(1, 100 - 10 * (rank ?? 0));
+}
+
+/**
  * Response of `GET /api/me/live-activities`: what this device should show
  * now, after kind configuration, role gating and the per-device
  * `maxConcurrent` cut. Every field added after v1 is optional for older
@@ -424,27 +439,18 @@ const ACTIVITY_LABELS: Record<Language, Required<ActivityLiveLabels>> = {
     scanned: "Scanned",
     scan: "Scan",
     endsIn: "Ends in",
-    served: "Served",
-    remaining: "Still to eat",
-    inside: "Inside",
   },
   es: {
     startsIn: "Empieza en",
     scanned: "Escaneados",
     scan: "Escanear",
     endsIn: "Acaba en",
-    served: "Servidos",
-    remaining: "Por comer",
-    inside: "Dentro",
   },
   gl: {
     startsIn: "Comeza en",
     scanned: "Escaneados",
     scan: "Escanear",
     endsIn: "Remata en",
-    served: "Servidos",
-    remaining: "Por comer",
-    inside: "Dentro",
   },
 };
 

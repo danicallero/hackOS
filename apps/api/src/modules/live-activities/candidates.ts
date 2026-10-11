@@ -39,9 +39,7 @@ import {
   type JudgingWindow,
   type LiveScannableActivity,
   loadLiveScannableActivities,
-  loadMealPresence,
   loadScannedCounts,
-  type MealPresence,
   participantQueueStatuses,
   readJudgingWindow,
   scannedKey,
@@ -87,7 +85,6 @@ export interface LiveActivityContext {
   queueStatuses: Map<number, QueueStatus[]>;
   activities: LiveScannableActivity[];
   scannedCounts: Map<string, number>;
-  meals: Map<number, MealPresence>;
   attendeeItems: LiveAttendeeItem[];
   audiences: Map<number, Set<string>>;
   deadline: DeadlineWindow | null;
@@ -177,7 +174,6 @@ export async function loadLiveActivityContext(
     queueStatuses: new Map(),
     activities: [],
     scannedCounts: new Map(),
-    meals: new Map(),
     attendeeItems: [],
     audiences: new Map(),
     deadline: null,
@@ -192,6 +188,12 @@ export async function loadLiveActivityContext(
   const presentCount = () => {
     occupancy ??= occupancyEstimate().then((o) => o.presentCount);
     return occupancy;
+  };
+  // Staff activities (denominator) and the desk share one read per tick.
+  let accreditation: Promise<Map<boolean, AccreditationCounts>> | undefined;
+  const accreditationCounts = () => {
+    accreditation ??= loadAccreditationCounts(db);
+    return accreditation;
   };
 
   // Queue (H38): only inside the judging window.
@@ -216,7 +218,10 @@ export async function loadLiveActivityContext(
         ctx.activities.map((a) => a.id),
         db,
       );
-      ctx.meals = await loadMealPresence(ctx.activities, now, db);
+      // H24/H25: accredited people are the denominator of `scanned`.
+      if (ctx.activities.some((a) => now >= a.startsAt)) {
+        ctx.accreditationCounts = await accreditationCounts();
+      }
     }
   }
 
@@ -247,8 +252,8 @@ export async function loadLiveActivityContext(
   if (accreditors.length > 0) {
     ctx.accreditation = await readAccreditationWindow(db);
     if (ctx.accreditation) {
-      ctx.accreditationCounts = await loadAccreditationCounts(db);
-      // The presence estimate covers real accounts only (as for meals).
+      ctx.accreditationCounts = await accreditationCounts();
+      // The presence estimate covers real accounts only.
       if (accreditors.some((id) => !users.get(id)?.isTestAccount)) {
         ctx.inside = await presentCount();
       }
@@ -277,16 +282,12 @@ export async function candidatesFor(
   if (user.kinds.has("activity") && hasCapability(user, CAPABILITIES.ACTIVITY_SCAN)) {
     for (const activity of ctx.activities) {
       const scanned = ctx.scannedCounts.get(scannedKey(activity.id, user.isTestAccount)) ?? 0;
+      // Same H54 side as `scanned`; null when that side has no accounts.
+      const accredited = ctx.accreditationCounts.get(user.isTestAccount)?.accredited ?? null;
       add(
         "activity",
         activityLiveActivitySubject(activity.id),
-        buildActivityLiveProps(
-          activity,
-          scanned,
-          language,
-          now,
-          user.isTestAccount ? null : (ctx.meals.get(activity.id) ?? null),
-        ),
+        buildActivityLiveProps(activity, scanned, accredited, language, now),
       );
     }
   }
@@ -398,11 +399,6 @@ export function selectForDevice(
     props: { ...candidate.props, rank } as LiveActivityProps,
   }));
   return { shown, suppressed };
-}
-
-/** iOS `relevance-score`: the device's top-ranked activity leads the Dynamic Island. */
-export function relevanceForRank(rank: number | undefined): number {
-  return Math.max(1, 100 - 10 * (rank ?? 0));
 }
 
 /**

@@ -9,7 +9,7 @@ receive them ([Configuration](#configuration)):
   team is called (H29).
 - **Staff meal or activity (H25, H26)**: for holders of `activity:scan`, from
   `LIVE_ACTIVITY_LEAD_MINUTES` before a scannable activity starts until it
-  ends, a countdown and then a live attendance counter with one **Scan**
+  ends, a countdown and then `scanned/accredited` with one **Scan**
   action that opens the scanner already bound to that activity.
 - **Attendee activity (H59)**: for a schedule item organizers opted in
   (`liveActivityAudience`), its audience gets a countdown from
@@ -118,13 +118,14 @@ the account language.
   elsewhere for H54, these are split by `is_test_account`: a synthetic
   (review fixture) operator counts only synthetic subjects, and a real
   operator only real ones.
-- `inside`/`remaining` (live meals only, H24/H27): `inside` is the presence
-  estimate (`occupancyEstimate`, the logistics panel's served-vs-present
-  denominator) and `remaining` is how many of those people have no scan for
-  the meal yet. Computed once per tick and only while a meal is live, since
-  the estimate reads every presence event. A synthetic operator gets `null`
-  (the estimate covers real accounts only). Other activities and upcoming
-  meals get `null`.
+- `accredited` (live only, H24/H25): the denominator of `scanned`, active
+  accounts with a badge, the desk's `accredited` (`loadAccreditationCounts`,
+  read once per tick and shared with the desk): the people the operator's
+  people finder lists with a badge (`scannerSubjectScope`).
+  Upcoming activities get `null`; they show the countdown. **Decision:** this
+  replaced the meal-only `inside`/`remaining` presence breakdown, so every
+  live activity shows one ratio against one denominator; app builds that
+  still read those fields fall back to the bare count.
 - `name`: `name_i18n[language]`, then `name_i18n.en`, then `name`.
 - `url` and `scanUrl`: both `hackos://scan?activity=<id>`. A tap and the Scan
   button both open the scanner bound to that activity. iOS keeps the tap URL
@@ -186,7 +187,9 @@ the account language.
 - Counts follow the scanner home tile (`scannerRoleStats`): `eligible` is
   active accounts with event access, and `accredited` is active accounts
   with a badge. `recentArrivals` is badges assigned in the last 10 minutes.
-  These are split by the H54 fixture marker. `inside` is the presence
+  These cover the operator's scanner roster (`scannerSubjectScope`, the
+  people finder's population): every real account for a real operator, only
+  the synthetic participant fixtures for a synthetic one (H54). `inside` is the presence
   estimate (`occupancyEstimate`, real accounts only, read once per tick);
   synthetic operators get `null`.
 - Single phase `live`. Counter updates are throttled like activity counters.
@@ -271,8 +274,24 @@ device keeps at most `maxConcurrent` of them:
   stays desired, so its dismissal is kept.
 - `rank` (0 = most important) goes into every props object and the Android
   message (`hackosLiveUpdate.rank`, for the notification sort key). iOS gets
-  `relevance-score = 100 − 10 × rank`, so the Dynamic Island shows the top
+  `relevance-score = 100 − 10 × rank` (`relevanceForRank`,
+  `@hackos/shared/live-activities`), so the Dynamic Island shows the top
   one. A rank change is a visible change, so it is pushed.
+- **The app must send the same score.** ActivityKit's `relevanceScore`
+  belongs to the activity's *content*, and every update, remote or local,
+  replaces the whole content; an update without a score sets it to 0, and
+  ActivityKit shows the first-started of equal-score activities. Without a
+  score, the app's own starts and updates (every foreground reconcile, through
+  `expo-widgets`, which had no relevance parameter) reset the score to 0, so
+  the oldest activity led the island whatever the Settings order; the
+  server's hash was already current and never re-sent it. The app now passes
+  `relevanceForRank(rank)` on each local start and update (a pnpm patch of
+  `expo-widgets` adds the argument; see [mobile.md](./mobile.md)).
+- **Platform limits.** The order applies among this app's activities. Which
+  app's activity the Dynamic Island shows when several apps have one is the
+  system's choice. On Android the sort key orders the app's own
+  notifications only while their priorities match, so an alerting post may
+  sort first regardless of rank.
 - `GET /api/me/live-activities?deviceId=` applies the same cut with that
   device's sessions. Without `deviceId`, it treats the device as showing
   nothing yet.
@@ -456,6 +475,30 @@ background notification task receives it and renders it through
 
 `props` and `rank` are omitted on `end`.
 
+### Push-triggered refresh (app side)
+
+A notification push can reach the phone before the Live Activity update for
+the same change: the worker's early run follows a call by 2 s, and iOS can
+only update a push-started activity after the app has reported its token.
+The app therefore re-reads `GET /api/me/live-activities` when a queue or
+schedule notification (`isLiveActivityPushCategory`: `queue`,
+`schedule:<id>`) arrives:
+
+- Foreground (received) and tap (response): a reconcile, debounced with the
+  SSE events that the same change publishes.
+- iOS background: the notification channel sends those pushes with
+  `_contentAvailable: true` (Expo's `content-available`; ignored on Android),
+  which wakes a backgrounded app; its notification task runs the same
+  reconcile. The alert is unchanged, so this costs no extra push. iOS does not
+  wake a force-quit app and throttles background wakes; a backgrounded app can
+  update or end an activity but not start one. Those cases rely on APNs alone
+  until the next foreground reconcile.
+
+The refresh does not fight a newer APNs update: the notification is sent
+after the change it announces is committed, so the read returns at least that
+state; reads are applied in order (an older response never overwrites a
+newer one); and identical props cause no update.
+
 ## Design rationale (Apple HIG)
 
 Followed: <https://developer.apple.com/design/human-interface-guidelines/live-activities>.
@@ -468,8 +511,9 @@ Followed: <https://developer.apple.com/design/human-interface-guidelines/live-ac
 - **Alert only for essential updates.** The only alerting updates are the
   call and an unsubmitted team's final 15 minutes.
 - **End when the task ends**, with a custom dismissal of about 15 minutes.
-- **Single interactive element at most** (staff and desk **Scan**). Every
-  tap deep-links to the related screen.
+- **Single interactive element at most** (staff and desk **Scan**, with a
+  radio-waves symbol for the NFC badge: `wave.3.right` on iOS). Every tap
+  deep-links to the related screen.
 - **Live timers tick on the device.** Countdowns and the pitch timer travel
   as instants, never as per-second pushes.
 - **Few at once.** A device shows at most `maxConcurrent` (default 2), the
@@ -492,9 +536,9 @@ Meal / activity (staff):
 | Presentation | Upcoming | Live |
 |---|---|---|
 | Compact leading | category symbol (fork.knife / person.3) | same |
-| Compact trailing | countdown timer to start | scanned count |
-| Minimal | countdown | count |
-| Expanded | name, location, `hh:mm–hh:mm`, countdown | name, location, time range, counter, **Scan** button |
+| Compact trailing | countdown timer to start | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`) |
+| Minimal | countdown | progress ring `scanned / accredited` (the count without `accredited`) |
+| Expanded | name, location, `hh:mm–hh:mm`, countdown | symbol, Scanned `42/180`, scanned-share bar, name, ends in, **Scan** button |
 | Lock Screen | as expanded | as expanded |
 
 Attendee activity:
@@ -597,6 +641,8 @@ and `deploy/README.md`.
   new kind's state, gates and H54 isolation.
 - `settings.test.ts`: configuration routes (access, validation, priorities,
   audit, idempotent replay).
+- `test/notifications/push.test.ts`: queue and schedule pushes are
+  `content-available`; others are not.
 - `worker.test.ts` also covers start, update and end per new kind, the
   deadline alert, throttled desk counters,
   displacement by a higher-priority kind without flapping, and ending a

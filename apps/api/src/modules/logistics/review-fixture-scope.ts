@@ -16,6 +16,23 @@ export async function isSyntheticOperator(db: Queryable, actorId: number): Promi
 }
 
 /**
+ * H22-H27/H54: the people a scanner works with, as a SQL fragment over
+ * `users u`. A real operator sees every real account; a synthetic operator
+ * only the synthetic participant fixtures. Shared by the scanner roster (the
+ * people finder), the role stats and the Live Activity counts so they always
+ * describe the same population.
+ */
+export function scannerSubjectScope(fixtureOnly: boolean): string {
+  return fixtureOnly
+    ? ` AND u.is_test_account = true
+        AND EXISTS (
+          SELECT 1 FROM user_effective_role_name subject_role
+           WHERE subject_role.user_id = u.id AND subject_role.role_name = 'Participant'
+        )`
+    : " AND u.is_test_account = false";
+}
+
+/**
  * Enforce the synthetic-operator boundary for a subject-targeted operation.
  * Ordinary event operators cannot discover synthetic subjects through a stale
  * id; the dedicated synthetic operator is restricted to synthetic subjects.
