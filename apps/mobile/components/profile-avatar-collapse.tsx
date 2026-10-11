@@ -106,34 +106,57 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     [scrollToOffset],
   );
 
-  const measureAnchor = useCallback(() => {
-    const host = hostRef.current;
-    const anchor = anchorRef.current;
-    if (!host || !anchor || !host.measureInWindow || !anchor.measureInWindow) return;
-
-    host.measureInWindow((hostX, hostY) => {
-      anchor.measureInWindow((x, y, width, height) => {
-        setHostOrigin((previous) =>
-          previous.x === hostX && previous.y === hostY ? previous : { x: hostX, y: hostY },
-        );
-        const next = { left: x - hostX, top: y - hostY + scrollOffset.value, width, height };
-        setAnchorFrame((previous) =>
-          previous &&
-          previous.left === next.left &&
-          previous.top === next.top &&
-          previous.width === next.width &&
-          previous.height === next.height
-            ? previous
-            : next,
-        );
+  const measureFrame = useRef<number | null>(null);
+  // Fabric measures the committed shadow tree, whose scroll state trails the
+  // live offset. Mixing a measurement taken during a scroll (the gear's jump
+  // to the top and scroll to preferences, a fling) with the offset read when
+  // it lands bakes the scrolled distance into the anchor, drawing the mask
+  // away from the hidden avatar (#935). Measure only once the offset has held
+  // still for a frame, and retry if it moved before the result arrived.
+  const measureAnchor = useCallback(
+    function measure() {
+      if (measureFrame.current !== null) cancelAnimationFrame(measureFrame.current);
+      const offset = scrollOffset.value;
+      measureFrame.current = requestAnimationFrame(() => {
+        measureFrame.current = null;
+        const host = hostRef.current;
+        const anchor = anchorRef.current;
+        if (!host || !anchor || !host.measureInWindow || !anchor.measureInWindow) return;
+        if (scrollOffset.value !== offset) {
+          measure();
+          return;
+        }
+        host.measureInWindow((hostX, hostY) => {
+          anchor.measureInWindow((x, y, width, height) => {
+            if (scrollOffset.value !== offset) {
+              measure();
+              return;
+            }
+            setHostOrigin((previous) =>
+              previous.x === hostX && previous.y === hostY ? previous : { x: hostX, y: hostY },
+            );
+            const next = { left: x - hostX, top: y - hostY + offset, width, height };
+            setAnchorFrame((previous) =>
+              previous &&
+              previous.left === next.left &&
+              previous.top === next.top &&
+              previous.width === next.width &&
+              previous.height === next.height
+                ? previous
+                : next,
+            );
+          });
+        });
       });
-    });
-  }, [scrollOffset]);
+    },
+    [scrollOffset],
+  );
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(
     () => () => {
       for (const timer of timers.current) clearTimeout(timer);
+      if (measureFrame.current !== null) cancelAnimationFrame(measureFrame.current);
     },
     [],
   );
@@ -141,7 +164,7 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
   // it first lays out, so a single measurement leaves the host origin (and the
   // island target derived from it) offset. Re-measure once the transition ends.
   const measureAfterLayout = useCallback(() => {
-    requestAnimationFrame(() => requestAnimationFrame(measureAnchor));
+    requestAnimationFrame(measureAnchor);
     for (const timer of timers.current) clearTimeout(timer);
     timers.current = [450, 900].map((delay) => setTimeout(measureAnchor, delay));
   }, [measureAnchor]);

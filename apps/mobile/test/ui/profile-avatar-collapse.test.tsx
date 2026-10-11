@@ -1,9 +1,10 @@
-import { screen } from "@testing-library/react-native";
+import { act, renderHook, screen } from "@testing-library/react-native";
 import { Text } from "react-native";
 import {
   ProfileAvatarCollapse,
   ProfileAvatarCollapseAnchor,
   type ProfileAvatarCollapseController,
+  useProfileAvatarCollapse,
 } from "@/components/profile-avatar-collapse";
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
@@ -392,5 +393,46 @@ describe("profile avatar placeholder", () => {
       screen.getByTestId("profile-avatar-collapse-mask", { includeHiddenElements: true }),
     ).toBeTruthy();
     expect(screen.getByText("AH", { includeHiddenElements: true })).toBeTruthy();
+  });
+});
+
+describe("profile avatar anchor measurement (#935)", () => {
+  afterEach(() => jest.useRealTimers());
+
+  it("drops a measurement taken while the scroll moves and remeasures once it holds still", async () => {
+    jest.useFakeTimers();
+    const { result } = await renderHook(() => useProfileAvatarCollapse());
+    const controller = result.current;
+    // Window position of the avatar for the scroll offset the shadow tree saw.
+    let anchorY = 300;
+    const scrollTo = (offset: number) => {
+      controller.scrollOffset.value = offset;
+      anchorY = 300 - offset;
+    };
+    let moveDuringMeasurement = true;
+    Object.assign(controller.hostRef, {
+      current: { measureInWindow: (cb: (x: number, y: number) => void) => cb(0, 0) },
+    });
+    Object.assign(controller.anchorRef, {
+      current: {
+        measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => {
+          const measuredY = anchorY;
+          // A programmatic scroll lands between the native measurement and the callback.
+          if (moveDuringMeasurement) {
+            moveDuringMeasurement = false;
+            scrollTo(150);
+          }
+          cb(100, measuredY, 96, 96);
+        },
+      },
+    });
+
+    await act(async () => {
+      controller.onScrollBeginDrag();
+      jest.advanceTimersByTime(200);
+    });
+
+    // The stale result (y 300 + offset 150) is dropped; the settled one maps back to 300.
+    expect(result.current.anchorFrame).toEqual({ left: 100, top: 300, width: 96, height: 96 });
   });
 });
