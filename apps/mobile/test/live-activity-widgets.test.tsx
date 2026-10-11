@@ -479,7 +479,7 @@ describe("New Live Activity kinds (#966)", () => {
       );
       expect(texts(live.banner)).toEqual(expect.arrayContaining(["Now", "Ends in"]));
       expect(nodes(live.banner, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
-      expect(nodes(live.minimal, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
+      expect(nodes(live.minimal, "Text")[0]?.props?.countdownMaxUnits).toBe(1);
     });
 
     it("has no buttons on any presentation", () => {
@@ -532,10 +532,17 @@ describe("New Live Activity kinds (#966)", () => {
       expect(nodes(submitted.banner, "ProgressView")).toHaveLength(0);
     });
 
-    it("works without a window start (no bar, plain minimal symbol)", () => {
+    it("works without a window start (no bar, the time left still minimal)", () => {
       const layout = DeadlineActivityLayout(deadline({ startsAt: null }), environment);
       expect(nodes(layout.banner, "ProgressView")).toHaveLength(0);
-      expect(nodes(layout.minimal, "Image")).toHaveLength(1);
+      expect(nodes(layout.minimal, "Text")[0]?.props?.countdownMaxUnits).toBe(1);
+
+      const submitted = DeadlineActivityLayout(
+        deadline({ phase: "submitted", submission: "submitted" }),
+        environment,
+      );
+      expect(nodes(submitted.minimal, "Text")).toHaveLength(0);
+      expect(nodes(submitted.minimal, "Image")).toHaveLength(1);
     });
   });
 
@@ -574,6 +581,96 @@ describe("New Live Activity kinds (#966)", () => {
       expect(texts(layout.banner)).not.toContain("Inside");
       expect(nodes(layout.minimal, "Gauge")).toHaveLength(0);
       expect(nodes(layout.banner, "ProgressView")).toHaveLength(0);
+    });
+  });
+
+  describe("compact countdowns, never H:MM:SS", () => {
+    // `units` false: the labels of a server older than the compact countdown.
+    const without = <L extends { units?: unknown }>({ units: _, ...rest }: L) => rest as L;
+    const staffLabels = (units: boolean) => ({
+      labels: units ? activityLiveLabels("en") : without(activityLiveLabels("en")),
+    });
+    const attendeeLabels = (units: boolean) => ({
+      labels: units ? attendeeActivityLiveLabels("en") : without(attendeeActivityLiveLabels("en")),
+    });
+    const deadlineLabels = (units: boolean) => ({
+      labels: units ? deadlineLiveLabels("en") : without(deadlineLiveLabels("en")),
+    });
+    const states: [string, (units: boolean) => Record<string, unknown>][] = [
+      ["staff upcoming", (units) => StaffActivityLayout(activity(staffLabels(units)), environment)],
+      [
+        "staff live",
+        (units) =>
+          StaffActivityLayout(
+            activity({ phase: "live", accredited: 180, ...staffLabels(units) }),
+            environment,
+          ),
+      ],
+      [
+        "attendee upcoming",
+        (units) => AttendeeActivityLayout(attendee(attendeeLabels(units)), environment),
+      ],
+      [
+        "attendee live",
+        (units) =>
+          AttendeeActivityLayout(
+            attendee({
+              phase: "live",
+              startsAt: "2026-02-20T11:40:00.000Z",
+              ...attendeeLabels(units),
+            }),
+            environment,
+          ),
+      ],
+      [
+        "deadline open",
+        (units) => DeadlineActivityLayout(deadline(deadlineLabels(units)), environment),
+      ],
+      [
+        "deadline submitted",
+        (units) =>
+          DeadlineActivityLayout(
+            deadline({ phase: "submitted", submission: "submitted", ...deadlineLabels(units) }),
+            environment,
+          ),
+      ],
+    ];
+
+    /** Every counting-down timer text of a layout, by slot. */
+    function countdowns(layout: Record<string, unknown>): [string, Node][] {
+      return SLOTS.flatMap((slot) =>
+        nodes(layout[slot], "Text")
+          .filter((text) => text.props?.timerInterval && text.props?.countsDown !== false)
+          .map((text): [string, Node] => [slot, text]),
+      );
+    }
+
+    it.each(
+      states,
+    )("%s: one line in the server's units, scaled rather than cut", (_name, build) => {
+      const found = countdowns(build(true));
+      expect(found.length).toBeGreaterThan(0);
+      for (const [slot, text] of found) {
+        expect(text.props?.countdownUnits).toEqual({ hour: "h", minute: "m", second: "s" });
+        const modifiers = (text.props?.modifiers as { modifier: string }[]).map((m) => m.modifier);
+        expect(modifiers).toEqual(expect.arrayContaining(["lineLimit", "minimumScaleFactor"]));
+        // The minimal view keeps the leading unit only.
+        if (slot === "minimal") expect(text.props?.countdownMaxUnits).toBe(1);
+      }
+    });
+
+    it.each(states)("%s: an older server's props keep the system timer", (_name, build) => {
+      for (const [, text] of countdowns(build(false))) {
+        expect(text.props?.countdownUnits).toBeUndefined();
+      }
+    });
+
+    it("puts the countdown in the compact trailing and minimal views", () => {
+      const layout = DeadlineActivityLayout(deadline(), environment);
+      const slots = countdowns(layout).map(([slot]) => slot);
+      expect(slots).toEqual(
+        expect.arrayContaining(["compactTrailing", "minimal", "expandedTrailing", "banner"]),
+      );
     });
   });
 

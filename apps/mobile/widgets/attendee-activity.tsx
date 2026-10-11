@@ -1,4 +1,4 @@
-import { HStack, Image, ProgressView, Spacer, Text, VStack, ZStack } from "@expo/ui/swift-ui";
+import { HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
   fixedSize,
   font,
@@ -6,10 +6,10 @@ import {
   frame,
   labelsHidden,
   lineLimit,
+  minimumScaleFactor,
   monospacedDigit,
   multilineTextAlignment,
   padding,
-  progressViewStyle,
   tint,
 } from "@expo/ui/swift-ui/modifiers";
 import type { AttendeeActivityLiveProps } from "@hackos/shared/live-activities";
@@ -25,8 +25,8 @@ import { createLiveActivity, type LiveActivityEnvironment } from "expo-widgets";
  *
  * See `queue-activity.tsx` for the `'widget'` runtime constraints: everything
  * the layout needs is declared inside the function or arrives in props.
- * Countdowns and the time bar are SwiftUI timers, so they tick without
- * updates. A missing label hides its element, never falls back to copy.
+ * Countdowns (`1h 20m`, never H:MM:SS) and the time bar are SwiftUI
+ * timers, so they tick without updates. A missing label hides its element, never falls back to copy.
  */
 export const AttendeeActivityLayout = (
   props: AttendeeActivityLiveProps,
@@ -99,15 +99,27 @@ export const AttendeeActivityLayout = (
       : startsAt.getTime() - 3_600_000,
   );
 
-  // Upcoming counts down to the start, live to the end.
-  const timer = (size: number, color: string | null, width: number | null, weight = "semibold") =>
+  // Upcoming counts down to the start, live to the end: `1h 20m`, `10m`,
+  // `59s` (`labels.units`; an older server's props keep the H:MM:SS timer).
+  // One line that scales down rather than truncating in every presentation.
+  const timer = (
+    size: number,
+    color: string | null,
+    width: number | null,
+    weight = "semibold",
+    maxUnits = 2,
+  ) =>
     (live ? validEnd : validStart) ? (
       <Text
         timerInterval={live ? { lower: startsAt, upper: endsAt } : { lower, upper: startsAt }}
         countsDown
+        countdownUnits={labels.units}
+        countdownMaxUnits={maxUnits}
         modifiers={[
           font({ size, weight: weight as "semibold" | "bold" }),
           monospacedDigit(),
+          lineLimit(1),
+          minimumScaleFactor(0.6),
           multilineTextAlignment("trailing"),
           ...(width ? [frame({ maxWidth: width, alignment: "trailing" })] : []),
           ...colorMods(color),
@@ -191,27 +203,10 @@ export const AttendeeActivityLayout = (
 
   const compactLeading = glyph(islandAccent, 15);
   // Upcoming: the accent countdown to the start; live: the plain one to the end.
-  const compactTrailing = timer(15, live ? null : islandAccent, 52) ?? <Text> </Text>;
+  const compactTrailing = timer(15, live ? null : islandAccent, 64) ?? <Text> </Text>;
 
-  // Minimal: the elapsed time as a ring while live, else the countdown.
-  const minimal =
-    live && validEnd ? (
-      <ZStack>
-        <ProgressView
-          timerInterval={{ lower: startsAt, upper: endsAt }}
-          countsDown={false}
-          modifiers={[
-            progressViewStyle("circular"),
-            tint(islandAccent),
-            labelsHidden(),
-            frame({ width: 22, height: 22 }),
-          ]}
-        />
-        {glyph(islandAccent, 9)}
-      </ZStack>
-    ) : (
-      (timer(11, islandAccent, 34) ?? glyph(islandAccent, 14))
-    );
+  // Minimal: the time left in its leading unit (`2h`, `45m`).
+  const minimal = timer(11, islandAccent, 34, "semibold", 1) ?? glyph(islandAccent, 14);
 
   const expandedLeading = (
     <VStack modifiers={[padding({ leading: 8, top: 6 })]}>{glyph(islandAccent, 24)}</VStack>

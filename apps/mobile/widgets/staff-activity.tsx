@@ -10,6 +10,7 @@ import {
   gaugeStyle,
   labelsHidden,
   lineLimit,
+  minimumScaleFactor,
   monospacedDigit,
   multilineTextAlignment,
   padding,
@@ -30,7 +31,8 @@ import { createLiveActivity, type LiveActivityEnvironment } from "expo-widgets";
  *
  * See `queue-activity.tsx` for the `'widget'` runtime constraints: everything
  * the layout needs is declared inside the function or arrives in props.
- * Countdowns and time bars are SwiftUI timers, so they tick without updates.
+ * Countdowns (`1h 20m`, never H:MM:SS) and time bars are SwiftUI timers, so
+ * they tick without updates.
  * Fields and labels added after v1 are optional: an absent one hides its
  * element, never falls back to hardcoded copy.
  */
@@ -112,13 +114,19 @@ export const StaffActivityLayout = (
   const share = accredited ? Math.min(1, scannedCount / accredited) : null;
   const scanned = String(scannedCount);
 
-  const countdown = (size: number, color: string | null, width: number | null) => (
+  // `1h 20m`, `10m`, `59s` (`labels.units`; an older server's props keep the
+  // H:MM:SS timer), on one line that scales down rather than truncating.
+  const countdown = (size: number, color: string | null, width: number | null, maxUnits = 2) => (
     <Text
       timerInterval={{ lower, upper: startsAt }}
       countsDown
+      countdownUnits={labels.units}
+      countdownMaxUnits={maxUnits}
       modifiers={[
         font({ size, weight: "semibold" }),
         monospacedDigit(),
+        lineLimit(1),
+        minimumScaleFactor(0.6),
         multilineTextAlignment("trailing"),
         ...(width ? [frame({ maxWidth: width, alignment: "trailing" })] : []),
         ...colorMods(color),
@@ -138,9 +146,12 @@ export const StaffActivityLayout = (
         <Text
           timerInterval={{ lower: startsAt, upper: endsAt }}
           countsDown
+          countdownUnits={labels.units}
           modifiers={[
             font({ size, weight: "semibold" }),
             monospacedDigit(),
+            lineLimit(1),
+            minimumScaleFactor(0.6),
             multilineTextAlignment("trailing"),
             frame({ width, alignment: "trailing" }),
           ]}
@@ -252,7 +263,7 @@ export const StaffActivityLayout = (
     ) : null;
 
   const compactLeading = <Image systemName={symbol} color={islandAccent} size={15} />;
-  const compactTrailing = live ? ratio(15, 11, null, "semibold") : countdown(15, islandAccent, 52);
+  const compactTrailing = live ? ratio(15, 11, null, "semibold") : countdown(15, islandAccent, 64);
 
   // Minimal: the scanned share as a ring, else the count or the countdown.
   const minimal =
@@ -269,7 +280,7 @@ export const StaffActivityLayout = (
     ) : live ? (
       counter(scanned, 13, islandAccent, "semibold")
     ) : (
-      countdown(11, islandAccent, 34)
+      countdown(11, islandAccent, 34, 1)
     );
 
   const expandedLeading = (

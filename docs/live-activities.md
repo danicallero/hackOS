@@ -580,7 +580,11 @@ Followed: <https://developer.apple.com/design/human-interface-guidelines/live-ac
   radio-waves symbol for the NFC badge: `wave.3.right` on iOS). Every tap
   deep-links to the related screen.
 - **Live timers tick on the device.** Countdowns and the pitch timer travel
-  as instants, never as per-second pushes.
+  as instants, never as per-second pushes. Countdowns read `1h 20m` / `10m` /
+  `59s`, never `H:MM:SS`, so they fit every Dynamic Island presentation; the
+  unit suffixes travel pre-localized as `labels.units` (staff activity,
+  attendee activity, deadline; optional, an older app ignores them). The rule
+  and its rendering are in [mobile.md](./mobile.md#live-activities-and-live-updates-966).
 - **Few at once.** A device shows at most `maxConcurrent` (default 2), the
   most important leading the Dynamic Island.
 
@@ -602,7 +606,7 @@ Meal / activity (staff):
 |---|---|---|
 | Compact leading | category symbol (fork.knife / person.3) | same |
 | Compact trailing | countdown timer to start | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`) |
-| Minimal | countdown | progress ring `scanned / accredited` (the count without `accredited`) |
+| Minimal | time left (`45m`) | progress ring `scanned / accredited` (the count without `accredited`) |
 | Expanded | name, location, `hh:mm–hh:mm`, countdown | symbol, Scanned `42/180`, scanned-share bar, name, ends in, **Scan** button |
 | Lock Screen | as expanded | as expanded |
 
@@ -612,7 +616,7 @@ Attendee activity:
 |---|---|---|
 | Compact leading | category symbol | same |
 | Compact trailing | countdown timer to start | countdown to end |
-| Minimal | countdown | countdown |
+| Minimal | time left (`45m`) | time left |
 | Expanded | name, location, `hh:mm–hh:mm`, "Starts in" timer | name, location, "Now · ends in" timer |
 | Lock Screen | as expanded | as expanded, with a progress bar from `startsAt` to `endsAt` |
 | Watch / CarPlay | name + countdown | name + "Now" |
@@ -623,7 +627,7 @@ Submission deadline:
 |---|---|---|---|
 | Compact leading | `hourglass` | `exclamationmark.circle` (tinted) | `checkmark.circle` |
 | Compact trailing | countdown timer | countdown timer | countdown timer (muted) |
-| Minimal | countdown | countdown (tinted) | checkmark |
+| Minimal | time left (`2h`) | time left (tinted) | checkmark |
 | Expanded | title, countdown, project name; status only when known | "Not submitted · project", countdown | "Submitted ✓ · project", countdown |
 | Lock Screen | as expanded, with a progress bar from `startsAt` to `endsAt` | as expanded | as expanded |
 | Watch | countdown | countdown + "Not submitted" | "Submitted" |

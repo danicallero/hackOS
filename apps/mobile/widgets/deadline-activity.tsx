@@ -1,4 +1,4 @@
-import { HStack, Image, ProgressView, Spacer, Text, VStack, ZStack } from "@expo/ui/swift-ui";
+import { HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
   fixedSize,
   font,
@@ -10,7 +10,6 @@ import {
   monospacedDigit,
   multilineTextAlignment,
   padding,
-  progressViewStyle,
   tint,
 } from "@expo/ui/swift-ui/modifiers";
 import type { DeadlineLiveProps } from "@hackos/shared/live-activities";
@@ -105,21 +104,28 @@ export const DeadlineActivityLayout = (
     ),
   );
 
-  // Timer texts are greedy: `width` caps them.
+  // `1h 20m`, `10m`, `59s` (`labels.units`; an older server's props keep the
+  // greedy H:MM:SS timer, which `width` caps), on one line that scales down
+  // rather than truncating.
   const countdown = (
     size: number,
     color: string | null,
     width: number | null,
     weight = "bold",
     align: "leading" | "trailing" = "trailing",
+    maxUnits = 2,
   ) =>
     validEnd ? (
       <Text
         timerInterval={{ lower, upper: endsAt }}
         countsDown
+        countdownUnits={labels.units}
+        countdownMaxUnits={maxUnits}
         modifiers={[
           font({ size, weight: weight as "bold" | "semibold" }),
           monospacedDigit(),
+          lineLimit(1),
+          minimumScaleFactor(0.6),
           multilineTextAlignment(align),
           ...(width ? [frame({ maxWidth: width, alignment: align })] : []),
           ...colorMods(color),
@@ -210,26 +216,11 @@ export const DeadlineActivityLayout = (
     <Text> </Text>
   );
 
-  // Minimal: the window's elapsed share as a ring around the symbol; done:
-  // the check alone.
-  const minimal =
-    !submitted && startsAt && validEnd ? (
-      <ZStack>
-        <ProgressView
-          timerInterval={{ lower: startsAt, upper: endsAt }}
-          countsDown={false}
-          modifiers={[
-            progressViewStyle("circular"),
-            tint(islandColor),
-            labelsHidden(),
-            frame({ width: 22, height: 22 }),
-          ]}
-        />
-        {glyph(islandColor, 9)}
-      </ZStack>
-    ) : (
-      glyph(islandColor, 14)
-    );
+  // Minimal: the time left in its leading unit (`2h`, `45m`); done: the
+  // check alone.
+  const minimal = submitted
+    ? glyph(islandColor, 14)
+    : (countdown(11, islandColor, 34, "semibold", "trailing", 1) ?? glyph(islandColor, 14));
 
   const expandedLeading = (
     <VStack modifiers={[padding({ leading: 8, top: 6 })]}>{glyph(islandColor, 24)}</VStack>
@@ -241,7 +232,7 @@ export const DeadlineActivityLayout = (
       {caption(labels.closesIn, "trailing")}
       {submitted
         ? countdown(17, neutral, 120, "semibold")
-        : // Hours long (h:mm:ss): a little smaller than the other kinds' 28 pt.
+        : // Hours long: a little smaller than the other kinds' 28 pt.
           (countdown(24, islandColor, 120) ?? <Text> </Text>)}
     </VStack>
   );

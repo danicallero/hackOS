@@ -31,5 +31,6 @@ supportedArchitectures:
 
 patchedDependencies:
   '@expo/cli': patches/@expo__cli.patch
+  '@expo/ui@57.0.22': patches/@expo__ui@57.0.22.patch
   expo-widgets@57.0.23: patches/expo-widgets@57.0.23.patch
   react-native-nfc-manager@3.17.2: patches/react-native-nfc-manager@3.17.2.patch
