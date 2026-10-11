@@ -45,6 +45,7 @@ GET /api/me/live-activities      worker.ts (every 20 s)
 | `kinds.ts` | Loaders and builders for `AttendeeActivityLiveProps`, `DeadlineLiveProps` and `AccreditationLiveProps`. Each loader reads its data set once for every candidate user. |
 | `candidates.ts` | `loadLiveActivityContext` (every data set once per tick or request), `candidatesFor` (kind configuration, roles and intrinsic gates, in priority order), `selectForDevice` (the `maxConcurrent` cut) and the read model. Both the read endpoint and the worker call it, so a local refresh and a remote push never disagree. |
 | `settings.ts` | Organizer configuration: read, save (audited) and each kind's required capability. |
+| `preferences.ts` | The caller's available kinds and per-kind opt-outs. |
 | `routes.ts`, `schemas.ts` | Device/session registry, the read model and the configuration routes. |
 | `apns.ts` | ES256 provider token, the `aps` payload, and the HTTP/2 transport. |
 | `android.ts` | Data-only Expo push through `postExpoPushMessages` (shared with the notification push channel). |
@@ -198,13 +199,34 @@ the account language.
 ### Preferences
 
 Organizers decide which kinds exist and for which roles
-([Configuration](#configuration)).
+([Configuration](#configuration)). Each person then has two switches:
+
+- **Device:** the device's `enabled` flag (`PUT
+  /api/me/live-activities/device`) turns every Live Activity off on that
+  install.
+- **Per kind (per account):** `GET/PUT /api/me/live-activities/preferences`
+  lists the kinds the caller may receive and lets them turn each one off.
+  A kind is listed when it is enabled, role-allowed for the caller and its
+  capability holds (`activity:scan`, `accredit:scan`, or `queue:status` with
+  event access for the deadline). Data gates (a queue entry, a schedule
+  audience, an open window) are not applied, so the choice can be made before
+  the moment arrives. `candidates.ts` drops opted-out kinds, so the worker
+  ends a running session of a kind turned off (`finished`) and never starts
+  it; turning it back on lets it start again on the next tick.
+
+**Decision:** the per-kind choice is stored per user, not per device. The
+candidates are computed per user, the choice follows the account to every
+install (and survives a reinstall's new `deviceId`), and the device flag
+already covers "not on this phone". Only opt-outs are stored, so a kind the
+user becomes entitled to later starts on. A self-preference about delivery
+has the device route's posture: no capability, no audit row, idempotent
+writes.
 
 **Decision:** queue calls are already non-optional operational notices (H51),
 and the Live Activity mirrors the queue screen rather than adding a new
-notification category. The opt-out is therefore the device's `enabled` flag
-(`PUT /api/me/live-activities/device`) rather than an H51 preference row. A
-dismissed activity stays away until its phase changes (see the state machine).
+notification category. The opt-outs above are therefore Live Activity
+settings rather than H51 preference rows. A dismissed activity stays away
+until its phase changes (see the state machine).
 
 ## Configuration
 
@@ -308,6 +330,8 @@ Organizers can rank `queue` higher.
 | `PUT /api/me/live-activities/sessions` | `{deviceId, kind, subject, activityPushToken}`. Registers or rotates the iOS per-activity token after a local start, a remote start, or a token rotation. Re-registering a dismissed activity reopens it. |
 | `DELETE /api/me/live-activities/sessions` | `{deviceId, kind, subject, phase?}`. The user swiped it away, or the app ended it locally. `phase` is the phase it showed; without it the server uses the last phase it sent, or records the next one it computes. |
 | `GET /api/me/live-activities[?language=]` | `MyLiveActivities` for the caller. |
+| `GET /api/me/live-activities/preferences` | `MyLiveActivityPreferences`: `{ kinds: [{ kind, enabled }] }`, the kinds the caller may receive in priority order (see [Preferences](#preferences)). |
+| `PUT /api/me/live-activities/preferences` | `{ kinds: [{ kind, enabled }] }`, 1–5 entries, each kind at most once; unlisted kinds keep their choice. An unknown kind is a 400. A kind the caller does not receive may be set and applies if they receive it later. Returns the GET shape. |
 
 The access posture matches `POST /api/me/push-tokens`: any signed-in, active
 account may manage its own devices, with no capability and no audit row,
@@ -344,10 +368,14 @@ route mapping in `apps/mobile`):
   `dismissed_phase` (`finished` = the server ended it and may restart it;
   `dismissed` = restart remotely only once the phase differs from
   `dismissed_phase`).
+- `live_activity_kind_opt_outs` (migration
+  `0605_live_activity_kind_opt_outs.sql`): `(user_id, kind)` primary key
+  (user cascade) and `created_at`. A row means the user turned that kind off.
 
-Account removal deletes the devices together with `push_tokens`. The H54
-export lists only device metadata (platform, language, opt-out, creation
-date), never tokens.
+Account removal deletes the devices and the kind opt-outs together with
+`push_tokens`. The H54 export lists only device metadata (platform,
+language, opt-out, creation date), never tokens, plus the kind opt-outs
+(`notifications.liveActivityKindOptOuts`).
 
 ## Worker state machine
 
@@ -377,8 +405,8 @@ next repetition. Each tick does the following:
 
 3. Every open session that is no longer desired is **ended**. This happens
    when the window closes, the team is done, the activity ends, the
-   capability or role is revoked, the kind is disabled, a higher-priority
-   kind outranks it, or the device is disabled. A `dismissed` session
+   capability or role is revoked, the kind is disabled, the user turned the
+   kind off, a higher-priority kind outranks it, or the device is disabled. A `dismissed` session
    that is no longer desired on a device that can still receive starts is
    turned into `finished`: the dismissal covered that run, so a later one
    (for example the next queue the team waits in) starts again.
@@ -641,6 +669,9 @@ and `deploy/README.md`.
   new kind's state, gates and H54 isolation.
 - `settings.test.ts`: configuration routes (access, validation, priorities,
   audit, idempotent replay).
+- `preferences.test.ts`: per-kind preferences (entitlement, partial and
+  idempotent writes, validation, the export bundle) and the worker ending an
+  opted-out kind and starting it again once back on.
 - `test/notifications/push.test.ts`: queue and schedule pushes are
   `content-available`; others are not.
 - `worker.test.ts` also covers start, update and end per new kind, the
