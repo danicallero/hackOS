@@ -1,3 +1,4 @@
+import { isLiveActivityPushCategory } from "@hackos/shared/live-activities";
 import { config } from "../../../config.js";
 import type { Queryable } from "../../../db/pool.js";
 import { QUEUE_CATEGORY, QUEUE_STAFF_CATEGORY } from "../service.js";
@@ -295,6 +296,9 @@ export async function dispatchPush(
     data,
     channelId: "default",
     ...timeSensitive,
+    // #966: wakes a backgrounded iOS app so it refreshes its Live
+    // Activities itself when their APNs update is late. Ignored on Android.
+    ...(isLiveActivityPushCategory(category) ? { _contentAvailable: true } : {}),
   }));
 
   const tickets = await postExpoPushMessages(messages, { userId, category, payload });
