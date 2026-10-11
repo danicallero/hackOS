@@ -2,10 +2,16 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useLayoutEffect, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Switch, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { ManageAnnouncementsView } from "@/components/announcement-manage-view";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
-import { InfoRow, LegacyHeaderIconButton, Section, Separator } from "@/components/native-ui";
+import {
+  InfoRow,
+  LegacyHeaderIconButton,
+  Section,
+  Separator,
+  ToggleRow,
+} from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScheduleReminderSections, useScheduleReminders } from "@/components/reminders-view";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -16,7 +22,6 @@ import type { NotificationChannel } from "@/lib/notification-preferences";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { has } from "@/lib/tabs";
 import { useNotificationPreferences } from "@/lib/use-notification-preferences";
-import { colors } from "@/theme/colors";
 
 type Translate = ReturnType<typeof useLocale>["t"];
 
@@ -246,24 +251,13 @@ export function NotificationCategoryScreen({ category }: { category: Notificatio
           {channels.map((channel, index) => (
             <View key={channel}>
               {index > 0 ? <Separator /> : null}
-              <View
-                style={{
-                  alignItems: "center",
-                  flexDirection: "row",
-                  minHeight: 50,
-                  paddingHorizontal: 16,
-                }}
-              >
-                <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
-                  {channelLabel(channel, t)}
-                </Text>
-                <Switch
-                  accessibilityLabel={`${title}, ${channelLabel(channel, t)}`}
-                  disabled={preferences.savingKey === `${category}:${channel}`}
-                  value={preferences.enabledFor(category, channel)}
-                  onValueChange={(enabled) => void preferences.toggle(category, channel, enabled)}
-                />
-              </View>
+              <ToggleRow
+                label={channelLabel(channel, t)}
+                accessibilityLabel={`${title}, ${channelLabel(channel, t)}`}
+                busy={preferences.savingKey === `${category}:${channel}`}
+                value={preferences.enabledFor(category, channel)}
+                onChange={(enabled) => void preferences.toggle(category, channel, enabled)}
+              />
             </View>
           ))}
         </Section>

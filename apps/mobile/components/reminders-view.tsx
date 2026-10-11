@@ -1,7 +1,14 @@
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Pressable, ScrollView, Switch, Text, View } from "react-native";
-import { EmptyState, Section, Separator } from "@/components/native-ui";
+import {
+  EmptyState,
+  InfoRow,
+  Section,
+  Separator,
+  SWITCH_IN_ROW_STYLE,
+  ToggleRow,
+} from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
@@ -21,9 +28,28 @@ import {
 } from "@/lib/use-schedule-notifications";
 import { colors } from "@/theme/colors";
 
-/** Reminder rows reserve this leading column for the start time. */
-const TIME_COLUMN_WIDTH = 56;
-const ROW_SEPARATOR_INSET = 16 + TIME_COLUMN_WIDTH + 12;
+/** "Coming up" shows this many reminders before "See all" (H59). */
+export const UPCOMING_PREVIEW_LIMIT = 3;
+
+/**
+ * Reminder rows reserve a leading column for the start time, wide enough for
+ * the locale's longest time ("10:00 PM" in 12-hour locales, "22:00" in 24-hour
+ * ones) so it never wraps and every row's title starts at the same edge.
+ */
+function useTimeColumnWidth() {
+  const { language } = useLocale();
+  return useMemo(() => {
+    const sample = new Date(2000, 0, 1, 22, 0).toLocaleTimeString(language, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return /[^\d\s:.,]/.test(sample) ? 76 : 50;
+  }, [language]);
+}
+
+function rowSeparatorInset(timeColumnWidth: number) {
+  return 16 + timeColumnWidth + 12;
+}
 
 /**
  * H59: the schedule plus the person's reminder preferences, sharing the
@@ -66,9 +92,11 @@ function isUpcoming(item: ScheduleItem, now: number) {
 }
 
 /**
- * H59: the reminder part of Account → Notifications → Activity reminders:
- * what the person will be notified about, a picker to add more, and a bulk
- * switch per activity type. Rendered inside the caller's ScrollView.
+ * H59: the reminder part of Account → Notifications → Activity reminders,
+ * below the channel switches: a bulk switch per activity type, then the next
+ * few reminders with "See all" and an activity picker to add more. Bulk
+ * switches come first so a long reminder list never pushes them out of
+ * reach. Rendered inside the caller's ScrollView.
  */
 export function ScheduleReminderSections({
   reminders,
@@ -77,6 +105,7 @@ export function ScheduleReminderSections({
 }) {
   const { t } = useLocale();
   const router = useRouter();
+  const timeColumnWidth = useTimeColumnWidth();
   const { items, kinds, notifications, loading, error, reload } = reminders;
 
   const now = Date.now();
@@ -84,6 +113,7 @@ export function ScheduleReminderSections({
   const upcomingReminders = ready
     ? items.filter((item) => isUpcoming(item, now) && notifications.isEntrySubscribed(item))
     : [];
+  const previewReminders = upcomingReminders.slice(0, UPCOMING_PREVIEW_LIMIT);
 
   if (!ready) {
     if (error && !loading) return <RequestFeedback error={error} onRetry={() => void reload()} />;
@@ -101,37 +131,71 @@ export function ScheduleReminderSections({
           retrying={notifications.savingKey !== null}
         />
       ) : null}
+
+      {kinds.length > 0 ? (
+        <Section title={t("alertsByKind")}>
+          {kinds.map((kind, index) => {
+            const kindItems = items.filter((item) => item.type === kind);
+            const notifiedCount = kindItems.filter(notifications.isEntrySubscribed).length;
+            return (
+              <View key={kind}>
+                {index > 0 ? <Separator /> : null}
+                <ToggleRow
+                  label={scheduleTypeLabel(kind, t)}
+                  detail={t("alertsKindCount", {
+                    count: String(notifiedCount),
+                    total: String(kindItems.length),
+                  })}
+                  busy={notifications.savingKey === kindCategory(kind)}
+                  value={notifications.categoryState(kind) !== "off"}
+                  onChange={(next) => void notifications.toggleCategory(kind, next)}
+                  onPress={() =>
+                    router.push({ pathname: "/(tabs)/others/reminders/[kind]", params: { kind } })
+                  }
+                />
+              </View>
+            );
+          })}
+        </Section>
+      ) : null}
+
       <Section title={t("alertsUpcoming")} footer={t("scheduleNotificationsSubtitle")}>
-        {upcomingReminders.length === 0 ? (
-          <View style={{ alignItems: "center", gap: 6, paddingHorizontal: 16, paddingTop: 20 }}>
-            <SymbolView
-              name="bell.slash"
-              tintColor={colors.tertiaryLabel}
-              size={26}
-              accessible={false}
+        {previewReminders.map((item, index) => (
+          <View key={item.id}>
+            {index > 0 ? <Separator inset={rowSeparatorInset(timeColumnWidth)} /> : null}
+            <ReminderRow
+              item={item}
+              showDay
+              subscribed
+              timeColumnWidth={timeColumnWidth}
+              busy={notifications.savingKey === itemCategory(item.id)}
+              onToggle={() => void notifications.toggleEntry(item)}
             />
-            <Text
-              selectable
-              style={{ color: colors.secondaryLabel, fontSize: 15, textAlign: "center" }}
-            >
-              {t("notificationsNoActiveReminders")}
-            </Text>
           </View>
-        ) : (
-          upcomingReminders.map((item, index) => (
-            <View key={item.id}>
-              {index > 0 ? <Separator inset={ROW_SEPARATOR_INSET} /> : null}
-              <ReminderRow
-                item={item}
-                showDay
-                subscribed
-                busy={notifications.savingKey === itemCategory(item.id)}
-                onToggle={() => void notifications.toggleEntry(item)}
+        ))}
+        {upcomingReminders.length > UPCOMING_PREVIEW_LIMIT ? (
+          <>
+            <Separator />
+            <Pressable
+              accessibilityLabel={`${t("alertsSeeAll")}, ${upcomingReminders.length}`}
+              accessibilityRole="button"
+              onPress={() =>
+                router.push({
+                  pathname: "/(tabs)/others/reminders/[kind]",
+                  params: { kind: "all", subscribed: "1" },
+                })
+              }
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <InfoRow
+                accessoryIcon="chevron.right"
+                label={t("alertsSeeAll")}
+                value={String(upcomingReminders.length)}
               />
-            </View>
-          ))
-        )}
-        {upcomingReminders.length > 0 ? <Separator /> : null}
+            </Pressable>
+          </>
+        ) : null}
+        {previewReminders.length > 0 ? <Separator /> : null}
         <Pressable
           accessibilityRole="button"
           onPress={() =>
@@ -155,70 +219,11 @@ export function ScheduleReminderSections({
             size={22}
             accessible={false}
           />
-          <Text style={{ color: colors.accent, flex: 1, fontSize: 16, fontWeight: "500" }}>
+          <Text style={{ color: colors.accent, flex: 1, fontSize: 16 }}>
             {t("notificationsAddActivityReminder")}
           </Text>
         </Pressable>
       </Section>
-
-      {kinds.length > 0 ? (
-        <Section title={t("alertsByKind")}>
-          {kinds.map((kind, index) => {
-            const kindItems = items.filter((item) => item.type === kind);
-            const notifiedCount = kindItems.filter(notifications.isEntrySubscribed).length;
-            const label = scheduleTypeLabel(kind, t);
-            return (
-              <View key={kind}>
-                {index > 0 ? <Separator /> : null}
-                <View
-                  style={{
-                    alignItems: "center",
-                    flexDirection: "row",
-                    gap: 10,
-                    minHeight: 56,
-                    paddingLeft: 16,
-                    paddingRight: 12,
-                    paddingVertical: 8,
-                  }}
-                >
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={label}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/(tabs)/others/reminders/[kind]",
-                        params: { kind },
-                      })
-                    }
-                    style={({ pressed }) => ({ flex: 1, gap: 2, opacity: pressed ? 0.6 : 1 })}
-                  >
-                    <Text style={{ color: colors.label, fontSize: 16 }}>{label}</Text>
-                    <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                      {t("alertsKindCount", {
-                        count: String(notifiedCount),
-                        total: String(kindItems.length),
-                      })}
-                    </Text>
-                  </Pressable>
-                  <Switch
-                    accessibilityLabel={label}
-                    disabled={notifications.savingKey === kindCategory(kind)}
-                    onValueChange={(next) => void notifications.toggleCategory(kind, next)}
-                    value={notifications.categoryState(kind) !== "off"}
-                  />
-                  <SymbolView
-                    name="chevron.right"
-                    tintColor={colors.tertiaryLabel}
-                    size={13}
-                    weight="semibold"
-                    accessible={false}
-                  />
-                </View>
-              </View>
-            );
-          })}
-        </Section>
-      ) : null}
     </>
   );
 }
@@ -227,15 +232,29 @@ export function ScheduleReminderSections({
  * H59: every activity of one kind (or every upcoming activity for `all`),
  * grouped by day, each with its own reminder toggle — how a person adds a
  * reminder from Alerts without hunting for the card in the schedule.
+ * `subscribedOnly` is the full "Coming up" list: the upcoming activities the
+ * person is reminded about. A row switched off there stays until the person
+ * leaves, so a mistaken tap can be undone in place.
  */
-export function ReminderPickerScreen({ kind }: { kind: string }) {
+export function ReminderPickerScreen({
+  kind,
+  subscribedOnly = false,
+}: {
+  kind: string;
+  subscribedOnly?: boolean;
+}) {
   const { t, language } = useLocale();
   const { items, notifications, loading, error, staleSince, reload } = useScheduleReminders();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
+  const timeColumnWidth = useTimeColumnWidth();
+  const shownSubscribed = useRef(new Set<number>());
   const now = Date.now();
-  const visible = items.filter((item) =>
-    kind === "all" ? isUpcoming(item, now) : item.type === kind,
-  );
+  const visible = items.filter((item) => {
+    if (kind === "all" ? !isUpcoming(item, now) : item.type !== kind) return false;
+    if (!subscribedOnly || !notifications.ready) return true;
+    if (notifications.isEntrySubscribed(item)) shownSubscribed.current.add(item.id);
+    return shownSubscribed.current.has(item.id);
+  });
   const days = useMemo(() => {
     const groups = new Map<string, ScheduleItem[]>();
     for (const item of visible) {
@@ -278,16 +297,22 @@ export function ReminderPickerScreen({ kind }: { kind: string }) {
           onRetry={() => void reload()}
         />
       ) : days.length === 0 ? (
-        <EmptyState icon="calendar.badge.clock" title={t("notificationsNoUpcomingActivities")} />
+        <EmptyState
+          icon={subscribedOnly ? "bell.slash" : "calendar.badge.clock"}
+          title={t(
+            subscribedOnly ? "notificationsNoActiveReminders" : "notificationsNoUpcomingActivities",
+          )}
+        />
       ) : (
         days.map((day) => (
           <Section key={day.key} title={day.title}>
             {day.items.map((item, index) => (
               <View key={item.id}>
-                {index > 0 ? <Separator inset={ROW_SEPARATOR_INSET} /> : null}
+                {index > 0 ? <Separator inset={rowSeparatorInset(timeColumnWidth)} /> : null}
                 <ReminderRow
                   item={item}
                   subscribed={notifications.isEntrySubscribed(item)}
+                  timeColumnWidth={timeColumnWidth}
                   busy={notifications.savingKey === itemCategory(item.id)}
                   onToggle={() => void notifications.toggleEntry(item)}
                 />
@@ -305,12 +330,14 @@ function ReminderRow({
   subscribed,
   busy,
   showDay = false,
+  timeColumnWidth,
   onToggle,
 }: {
   item: ScheduleItem;
   subscribed: boolean;
   busy: boolean;
   showDay?: boolean;
+  timeColumnWidth: number;
   onToggle: () => void;
 }) {
   const { t, language } = useLocale();
@@ -345,8 +372,11 @@ function ReminderRow({
           opacity: pressed ? 0.6 : 1,
         })}
       >
-        <View style={{ width: TIME_COLUMN_WIDTH }}>
+        <View style={{ width: timeColumnWidth }}>
           <Text
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+            numberOfLines={1}
             style={{
               color: subscribed ? colors.accent : colors.label,
               fontSize: 15,
@@ -358,6 +388,7 @@ function ReminderRow({
           </Text>
           {showDay ? (
             <Text
+              numberOfLines={1}
               style={{
                 color: colors.secondaryLabel,
                 fontSize: 12,
@@ -387,6 +418,7 @@ function ReminderRow({
         }
         disabled={busy}
         onValueChange={onToggle}
+        style={SWITCH_IN_ROW_STYLE}
         value={subscribed}
       />
     </View>

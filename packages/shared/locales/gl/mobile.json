@@ -31,6 +31,7 @@
   "alertsUpcoming": "Próximos",
   "alertsByKind": "Por tipo de actividade",
   "alertsKindCount": "{count} de {total} activados",
+  "alertsSeeAll": "Ver todos",
   "alertsOpenUnread": "Avisos, {count} sen ler",
   "alertsNotifications": "Notificacións",
   "alertsTypes": "Tipos de aviso",

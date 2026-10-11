@@ -512,9 +512,18 @@ distributed to other Expo Router apps without importing hackOS code.
   param). Account →
   Notifications (`components/notification-settings-screen.tsx`,
   `others/notification-settings/`) lists each notification type with its state;
-  a type opens its channel switches, and Activity reminders also lists the
-  upcoming reminders, an "Add an activity" picker (`others/reminders/[kind]`)
-  and a bulk switch per activity type (`components/reminders-view.tsx`).
+  a type opens its channel switches. Activity reminders
+  (`components/reminders-view.tsx`) continues with a bulk switch per activity
+  type (the label side opens that type's activities) and then "Coming up":
+  the next three reminders, "See all" when there are more (the same
+  `others/reminders/[kind]` route with `kind=all&subscribed=1`, where a row
+  switched off stays until the person leaves), and an "Add an activity"
+  picker (`kind=all`). Switch rows use `ToggleRow` from
+  `components/native-ui.tsx`; any other `Switch` placed in a row needs
+  `SWITCH_IN_ROW_STYLE`, because React Native's iOS Switch defaults to
+  `alignSelf: "flex-start"` and otherwise sits at the top of the row.
+  Reminder times use a leading column sized for the locale's longest time
+  (12-hour vs 24-hour), on one line.
   Announcement management (`others/announcements`) sits under Notifications →
   Send for `announcements:manage` holders. On Android the
   inbox mounts the same native scroll gesture boundary as Schedule, so
