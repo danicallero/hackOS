@@ -52,6 +52,14 @@ export interface QueueLiveLabels {
   moreQueues: string | null;
   /** Minutes unit, e.g. "min". */
   minutes: string;
+  /** "Called" — labels the time elapsed since the call. Optional: added after v1 shipped. */
+  called?: string;
+  /** "Estimating…" — active placeholder while the ETA is unknown, never an empty value. */
+  estimating?: string;
+  /** Progress track stage names: "In line", "Called", "In room". Optional. */
+  stageInLine?: string;
+  stageCalled?: string;
+  stageInRoom?: string;
 }
 
 export interface QueueLiveProps {
@@ -67,6 +75,19 @@ export interface QueueLiveProps {
   /** Only set once called (H29): the concrete room the team must go to. */
   roomName: string | null;
   roomLocation: string | null;
+  /**
+   * ISO instant the team was called (H34 shows operators the same elapsed
+   * time); null while waiting. Rendered as a count-up timer, not a deadline.
+   * Optional: added after v1 shipped.
+   */
+  calledAt?: string | null;
+  /**
+   * Highest position this entry has had while waiting (server high-water
+   * mark), so the queue progress track can fill as the team moves up:
+   * `(startPosition - position) / startPosition`. Null once called or when
+   * unknown. Optional: added after v1 shipped.
+   */
+  startPosition?: number | null;
   /** Other queues this participant is still waiting in. */
   otherQueues: number;
   /** Deep link opened on tap. */
@@ -85,6 +106,12 @@ export interface ActivityLiveLabels {
   scanned: string;
   /** "Scan" — the single action. */
   scan: string;
+  /** "Ends in" — labels the live countdown to the end. Optional: added after v1 shipped. */
+  endsIn?: string;
+  /** Meal breakdown: "Served", "Still to eat", "Inside". Optional. */
+  served?: string;
+  remaining?: string;
+  inside?: string;
 }
 
 export interface ActivityLiveProps {
@@ -101,6 +128,14 @@ export interface ActivityLiveProps {
   endsAt: string;
   /** Distinct people registered so far (first-time scans). */
   scanned: number;
+  /**
+   * Live meals only (H24/H27): people estimated in the venue right now — the
+   * logistics panel's served-vs-present denominator. Null for other
+   * activities, before the start, or when unknown. Optional (post-v1).
+   */
+  inside?: number | null;
+  /** Live meals only: of `inside`, people with no scan for this meal yet. */
+  remaining?: number | null;
   /** Deep link that opens the scanner bound to this activity. */
   scanUrl: string;
   /** Deep link opened on tap. */
@@ -133,38 +168,79 @@ export interface AndroidLiveUpdateMessage {
   };
 }
 
-const QUEUE_LABELS: Record<Language, Omit<QueueLiveLabels, "moreQueues"> & { moreQueues: string }> =
-  {
-    en: {
-      position: "Position",
-      wait: "Wait",
-      goTo: "Go to",
-      inRoom: "In room",
-      moreQueues: "+{count} more queues",
-      minutes: "min",
-    },
-    es: {
-      position: "Posición",
-      wait: "Espera",
-      goTo: "Ve a",
-      inRoom: "En sala",
-      moreQueues: "+{count} colas más",
-      minutes: "min",
-    },
-    gl: {
-      position: "Posición",
-      wait: "Espera",
-      goTo: "Vai a",
-      inRoom: "Na sala",
-      moreQueues: "+{count} colas máis",
-      minutes: "min",
-    },
-  };
+const QUEUE_LABELS: Record<
+  Language,
+  Required<Omit<QueueLiveLabels, "moreQueues">> & { moreQueues: string }
+> = {
+  en: {
+    position: "Position",
+    wait: "Wait",
+    goTo: "Go to",
+    inRoom: "In room",
+    moreQueues: "+{count} more queues",
+    minutes: "min",
+    called: "Called",
+    estimating: "Estimating…",
+    stageInLine: "In line",
+    stageCalled: "Called",
+    stageInRoom: "In room",
+  },
+  es: {
+    position: "Posición",
+    wait: "Espera",
+    goTo: "Ve a",
+    inRoom: "En sala",
+    moreQueues: "+{count} colas más",
+    minutes: "min",
+    called: "Llamados",
+    estimating: "Calculando…",
+    stageInLine: "En cola",
+    stageCalled: "Llamados",
+    stageInRoom: "En sala",
+  },
+  gl: {
+    position: "Posición",
+    wait: "Espera",
+    goTo: "Vai a",
+    inRoom: "Na sala",
+    moreQueues: "+{count} colas máis",
+    minutes: "min",
+    called: "Chamados",
+    estimating: "Calculando…",
+    stageInLine: "Na cola",
+    stageCalled: "Chamados",
+    stageInRoom: "Na sala",
+  },
+};
 
-const ACTIVITY_LABELS: Record<Language, ActivityLiveLabels> = {
-  en: { startsIn: "Starts in", scanned: "Scanned", scan: "Scan" },
-  es: { startsIn: "Empieza en", scanned: "Escaneados", scan: "Escanear" },
-  gl: { startsIn: "Comeza en", scanned: "Escaneados", scan: "Escanear" },
+const ACTIVITY_LABELS: Record<Language, Required<ActivityLiveLabels>> = {
+  en: {
+    startsIn: "Starts in",
+    scanned: "Scanned",
+    scan: "Scan",
+    endsIn: "Ends in",
+    served: "Served",
+    remaining: "Still to eat",
+    inside: "Inside",
+  },
+  es: {
+    startsIn: "Empieza en",
+    scanned: "Escaneados",
+    scan: "Escanear",
+    endsIn: "Acaba en",
+    served: "Servidos",
+    remaining: "Por comer",
+    inside: "Dentro",
+  },
+  gl: {
+    startsIn: "Comeza en",
+    scanned: "Escaneados",
+    scan: "Escanear",
+    endsIn: "Remata en",
+    served: "Servidos",
+    remaining: "Por comer",
+    inside: "Dentro",
+  },
 };
 
 export function queueLiveLabels(lang: Language, otherQueues: number): QueueLiveLabels {
