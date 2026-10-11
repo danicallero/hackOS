@@ -22,6 +22,13 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import {
+  LIVE_ACTIVITY_MAX_CONCURRENT_MAX,
+  LIVE_ACTIVITY_MAX_CONCURRENT_MIN,
+  type LiveActivityConfigKind,
+  type LiveActivityKindSetting,
+  type LiveActivitySettings,
+} from "@hackos/shared/live-activities";
 import { ArrowDownIcon } from "@phosphor-icons/react/dist/csr/ArrowDown";
 import { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
@@ -52,32 +59,12 @@ import { capabilityDescription, prettifyCapability } from "../../permissions/hel
 import { DrilldownBackButton } from "../../permissions/role-editor";
 import { useCategorySaveState } from "./use-category-save-state";
 
-// TODO(#966): replace with @hackos/shared/live-activities once the API lands.
-type LiveActivityConfigKind =
-  | "activity"
-  | "attendee_activity"
-  | "queue"
-  | "deadline"
-  | "judging"
-  | "accreditation";
-interface LiveActivityKindSetting {
-  kind: LiveActivityConfigKind;
-  enabled: boolean;
-  priority: number;
-  roleIds: number[];
-  requiredCapability: string | null;
-}
-interface LiveActivityRole {
-  id: number;
-  name: string;
-}
-interface LiveActivitySettings {
-  maxConcurrent: number;
-  kinds: LiveActivityKindSetting[];
-  roles: LiveActivityRole[];
-}
+type LiveActivityRole = LiveActivitySettings["roles"][number];
 
-const MAX_CONCURRENT_OPTIONS = [1, 2, 3, 4, 5] as const;
+const MAX_CONCURRENT_OPTIONS = Array.from(
+  { length: LIVE_ACTIVITY_MAX_CONCURRENT_MAX - LIVE_ACTIVITY_MAX_CONCURRENT_MIN + 1 },
+  (_, i) => LIVE_ACTIVITY_MAX_CONCURRENT_MIN + i,
+);
 
 const KIND_COPY: Record<LiveActivityConfigKind, { name: MessageKey; description: MessageKey }> = {
   activity: { name: "liveActivityKindActivity", description: "liveActivityKindActivityDesc" },
