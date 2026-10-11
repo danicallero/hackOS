@@ -190,9 +190,9 @@ object LiveUpdatePoster {
   }
 
   /**
-   * Maps-style track: the JS mapping already split the segments into a grey
-   * travelled part and the coloured stages ahead (the platform draws the gaps
-   * between segments), so the colours are used as given, not faded by progress.
+   * The JS mapping already split each stage into its filled part (stage
+   * colour) and its grey rest (the platform draws the gaps between segments),
+   * so the colours are used as given, not faded by progress.
    */
   private fun progressStyle(context: Context, progress: LiveUpdateProgress): NotificationCompat.ProgressStyle {
     val style = NotificationCompat.ProgressStyle()

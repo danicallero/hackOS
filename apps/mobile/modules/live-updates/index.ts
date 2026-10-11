@@ -34,14 +34,14 @@ export type LiveUpdateGlyph =
 /**
  * Colour resolved natively for light and dark: blue, green (go), grey
  * (neutral), amber (warning), red (alert), and the lighter grey of a track's
- * travelled part.
+ * unfilled rest.
  */
-export type LiveUpdateTone = "accent" | "go" | "neutral" | "warning" | "alert" | "travelled";
+export type LiveUpdateTone = "accent" | "go" | "neutral" | "warning" | "alert" | "rest";
 
 /**
- * A track like Google Maps' navigation Live Update: the travelled part grey,
- * a round tracker at `value`, the remaining part in each stage's colour with
- * gaps between stages. `ProgressStyle` on the promoted path, a drawn bitmap
+ * A track like the iOS ProgressView: each stage filled in its colour up to
+ * `value`, the rest grey, gaps between stages and a round tracker at
+ * `value`. `ProgressStyle` on the promoted path, a drawn bitmap
  * on the card. Segment lengths are relative; `value` is on their sum.
  */
 export interface LiveUpdateProgress {

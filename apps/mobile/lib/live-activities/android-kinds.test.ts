@@ -135,8 +135,8 @@ describe("attendee activity (H59)", () => {
       progress: {
         value: 50,
         segments: [
-          { length: 50, tone: "travelled" },
           { length: 50, tone: "accent" },
+          { length: 50, tone: "rest" },
         ],
         tracker: "mic",
       },

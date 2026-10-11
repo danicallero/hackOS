@@ -1594,10 +1594,10 @@ device within `maxConcurrent` on both platforms.
 | Deadline submitted | countdown (time left) | Submitted / project · "Closes in" + countdown; check, green; no track | Submitted (green) under the project · Closes in + a small countdown |
 | Accreditation (H22) | accredited count | **412**/600 accredited / +23 last 10 min · 380 inside · title; accredited-share track; **Scan** | Accredited `412/600` (blue) · Last 10 min · Inside; share track + **Scan** |
 
-**Tracks.** Like Google Maps' navigation Live Update: the travelled part is
-one grey segment, a round tracker (white disc, glyph in the phase colour)
-sits at the current value, and the stages still ahead keep their colours,
-separated by the segment gaps (`trackSegments`). The queue has two stages,
+**Tracks.** Like the iOS bars: each stage fills in its colour up to the
+current value and the rest of it stays grey, stages separated by the segment
+gaps, with a round tracker (white disc, glyph in the phase colour) at the
+current value (`trackSegments`). The queue has two stages,
 In line (blue) and Called (green), the first two thirds of the width as on
 iOS; the tracker sits at `(startPosition − position) / startPosition` of the
 first stage while waiting (#1 of 4 → 0.75; at the start on the first
@@ -1744,7 +1744,7 @@ custom views, so the poster picks one of two renderings per post
 
 | Device | Rendering |
 | --- | --- |
-| Android 16+ (API 36), `canPostPromotedNotifications()` and `hasPromotableCharacteristics()` | **Promoted Live Update** (default): hero datum as title with the number in bold, round badge as large icon (white glyph on the phase colour), Maps-style `ProgressStyle` track, chip text, single Scan action |
+| Android 16+ (API 36), `canPostPromotedNotifications()` and `hasPromotableCharacteristics()` | **Promoted Live Update** (default): hero datum as title with the number in bold, round badge as large icon (white glyph on the phase colour), segmented `ProgressStyle` track, chip text, single Scan action |
 | Android 16+ with promotion revoked (user/OEM) or a build the system would not promote; Android 8–15 (API 26–35) | **Custom card**: `DecoratedCustomViewStyle` with collapsed and expanded layouts (`res/layout/hackos_live_update_card_*.xml`): header, 34 sp metrics (one in the phase colour), meal stats row, the same track drawn as a bitmap with stage labels, a capsule Scan button inside the card, chronometers for countdowns/count-ups |
 | < 8 (API 24–25) | `isSupported()` is false; `show` posts nothing |
 
@@ -1781,7 +1781,7 @@ an id's first post).
   Android 17-era and absent from compileSdk 36, so it is not used.
 - Colours: blue (waiting, upcoming, live, deadline open), green (called,
   submitted), grey (in room), red (deadline closing), amber (a draft's "Not
-  submitted" on the card), a lighter grey for travelled track. Text colours are resources with
+  submitted" on the card), a lighter grey for the unfilled rest of a track. Text colours are resources with
   `values-night` variants, resolved by SystemUI (`RemoteViews.setColor` on
   API 31+), so the card follows the shade's light/dark mode; bitmaps (badge,
   tracker, card track) use the mode at post time.

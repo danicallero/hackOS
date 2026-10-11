@@ -251,35 +251,39 @@ describe("toLiveUpdateSpec (Android, #966)", () => {
     expect(spec(queueProps({ position: 123, etaMinutes: 150 })).shortCriticalText).toBe("#123");
   });
 
-  it("draws the queue like Maps: grey behind, the 2:1 stages ahead, the tracker at the team", () => {
+  it("fills the queue track up to the team: 2:1 stages, grey rest, the tracker at the team", () => {
     const track = spec(waiting()).progress!;
     // (9 - 4) / 9 of the first (two-thirds) stage is behind the team.
     const value = Math.round((5 / 9) * 200);
     expect(track.value).toBe(value);
     expect(track.segments).toEqual([
-      { length: value, tone: "travelled" },
-      { length: 200 - value, tone: "accent" },
-      { length: 100, tone: "go" },
+      { length: value, tone: "accent" },
+      { length: 200 - value, tone: "rest" },
+      { length: 100, tone: "rest" },
     ]);
     expect(track).toMatchObject({ tracker: "people", trackerTone: "accent", stops: [0, 200, 300] });
-    // First sighting, or no high-water mark: nothing travelled, no fake progress.
+    // First sighting, or no high-water mark: nothing filled, no fake progress.
     expect(spec(queueProps({ startPosition: 4 })).progress!.segments[0]).toEqual({
       length: 200,
-      tone: "accent",
+      tone: "rest",
     });
     expect(spec(queueProps({ startPosition: null })).progress!.value).toBe(0);
   });
 
-  it("merges travelled stages into one grey segment", () => {
-    expect(
-      trackSegments(
-        [
-          { length: 200, tone: "accent" },
-          { length: 100, tone: "go" },
-        ],
-        300,
-      ),
-    ).toEqual([{ length: 300, tone: "travelled" }]);
+  it("fills each stage in its colour up to the value, the rest grey", () => {
+    const stages = [
+      { length: 200, tone: "accent" as const },
+      { length: 100, tone: "go" as const },
+    ];
+    expect(trackSegments(stages, 300)).toEqual([
+      { length: 200, tone: "accent" },
+      { length: 100, tone: "go" },
+    ]);
+    expect(trackSegments(stages, 250)).toEqual([
+      { length: 200, tone: "accent" },
+      { length: 50, tone: "go" },
+      { length: 50, tone: "rest" },
+    ]);
   });
 
   it("computes the waiting fraction from the high-water mark", () => {
@@ -395,8 +399,8 @@ describe("toLiveUpdateSpec (Android, #966)", () => {
     expect(result.progress).toMatchObject({
       value: served,
       segments: [
-        { length: served, tone: "travelled" },
-        { length: 100 - served, tone: "accent" },
+        { length: served, tone: "accent" },
+        { length: 100 - served, tone: "rest" },
       ],
       tracker: "meal",
     });

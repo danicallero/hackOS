@@ -338,28 +338,22 @@ export function queueWaitingFraction(props: QueueLiveProps): number {
 }
 
 /**
- * Maps-style track: everything before `value` merges into one grey travelled
- * segment; each stage keeps its colour for the part still ahead, so the
- * stages stay separated by the segment gaps.
+ * Track like the iOS ProgressView: each stage fills with its colour up to
+ * `value` and the rest of it stays grey, so a stage boundary is a segment
+ * gap and the tracker rides the edge between filled and grey (#966).
  */
 export function trackSegments(
   stages: { length: number; tone: LiveUpdateTone }[],
   value: number,
 ): LiveUpdateProgress["segments"] {
   const segments: LiveUpdateProgress["segments"] = [];
-  let travelled = 0;
   let start = 0;
   for (const stage of stages) {
-    const behind = Math.min(Math.max(value - start, 0), stage.length);
-    travelled += behind;
-    if (stage.length - behind > 0) {
-      if (travelled > 0) segments.push({ length: travelled, tone: "travelled" });
-      travelled = 0;
-      segments.push({ length: stage.length - behind, tone: stage.tone });
-    }
+    const filled = Math.min(Math.max(value - start, 0), stage.length);
+    if (filled > 0) segments.push({ length: filled, tone: stage.tone });
+    if (stage.length - filled > 0) segments.push({ length: stage.length - filled, tone: "rest" });
     start += stage.length;
   }
-  if (travelled > 0) segments.push({ length: travelled, tone: "travelled" });
   return segments;
 }
 

@@ -7,8 +7,7 @@
   <color name="hackos_lu_neutral">#FF98989D</color>
   <color name="hackos_lu_warning">#FFFF9F0A</color>
   <color name="hackos_lu_alert">#FFFF453A</color>
-  <!-- The travelled part of a track (Maps style: grey behind, colour ahead). -->
-  <color name="hackos_lu_travelled">#FF636366</color>
-  <color name="hackos_lu_track">#FF3A3A3C</color>
+  <!-- The unfilled rest of a track (filled part in the stage colour). -->
+  <color name="hackos_lu_rest">#FF636366</color>
   <color name="hackos_lu_on_accent">#FFFFFFFF</color>
 </resources>

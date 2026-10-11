@@ -29,7 +29,7 @@ object LiveUpdateArt {
     "neutral" -> R.color.hackos_lu_neutral
     "warning" -> R.color.hackos_lu_warning
     "alert" -> R.color.hackos_lu_alert
-    "travelled" -> R.color.hackos_lu_travelled
+    "rest" -> R.color.hackos_lu_rest
     else -> R.color.hackos_lu_accent
   }
 
@@ -76,7 +76,7 @@ object LiveUpdateArt {
     return bitmap
   }
 
-  /** The track's tracker, like Maps: a glyph in the tone colour on a white disc with a hairline. */
+  /** The track's tracker: a glyph in the tone colour on a white disc with a hairline. */
   fun tracker(context: Context, glyph: String?, tone: String?, sizeDp: Float): Bitmap {
     val size = dp(context, sizeDp).roundToInt()
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -86,7 +86,7 @@ object LiveUpdateArt {
 
   private fun drawTracker(context: Context, canvas: Canvas, glyph: String?, tone: String?, cx: Float, cy: Float, radius: Float) {
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    paint.color = color(context, R.color.hackos_lu_travelled)
+    paint.color = color(context, R.color.hackos_lu_rest)
     canvas.drawCircle(cx, cy, radius, paint)
     paint.color = Color.WHITE
     canvas.drawCircle(cx, cy, radius - dp(context, 1f), paint)
@@ -114,8 +114,8 @@ object LiveUpdateArt {
 
   /**
    * The card's track (H38 queue stages, H24 served share), drawn like the
-   * promoted ProgressStyle: grey travelled part, the remaining stages in
-   * their colours with gaps between segments, a round tracker at `value`,
+   * promoted ProgressStyle: each stage filled in its colour, the rest grey,
+   * gaps between segments, a round tracker at `value`,
    * and labels under `stops` (first left, last right, others centred).
    */
   fun track(context: Context, width: Int, progress: LiveUpdateProgress, labels: List<String>, currentStop: Int?): Bitmap {
