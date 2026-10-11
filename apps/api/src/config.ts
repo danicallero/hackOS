@@ -257,7 +257,7 @@ const envSchema = z.object({
     (v) => (v === "" ? undefined : v),
     z.coerce.number().int().min(1).max(240).default(15),
   ),
-  /** Minutes before submissions close (`hacking_ends_at`) that participants get the deadline Live Activity (H19, #966). */
+  /** Minutes before submissions close (`hacking_ends_at`) that participants get the deadline Live Activity when `hacking_starts_at` is unset; otherwise it runs for the whole hacking period (H19, #966). */
   LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES: z.preprocess(
     (v) => (v === "" ? undefined : v),
     z.coerce.number().int().min(15).max(1440).default(180),

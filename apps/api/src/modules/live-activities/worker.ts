@@ -44,8 +44,11 @@ import { liveStateHash } from "./state.js";
  *   (iOS push-to-start token, Android Expo token) → start;
  * - desired, open session, visible state changed → update (counter updates
  *   of staff/attendee activities, the deadline and the accreditation desk
- *   are throttled to one per 30 s per session; queue changes and phase
- *   changes go out immediately);
+ *   are throttled to one per 30 s per session; queue changes, phase changes
+ *   and rescheduling go out immediately);
+ * - desired, open iOS session near ActivityKit's 8-hour limit → end it at
+ *   once and push-start a fresh one, so a long window (the hacking period)
+ *   stays on screen;
  * - open session no longer desired (window closed, team finished, activity
  *   over, kind disabled or not allowed, outranked by a higher-priority kind,
  *   device disabled) → end; a dismissed one no longer relevant → finished, so
@@ -78,6 +81,12 @@ const OPEN_ENDED_REFRESH_MS = OPEN_ENDED_STALE_MS / 2;
  * per-activity token) is gone from the device by then.
  */
 const IOS_ACTIVITY_LIFETIME_MS = 12 * 60 * 60 * 1000;
+/**
+ * An iOS activity still desired this close to ActivityKit's 8-hour limit is
+ * replaced (ended at once, push-started again) before the system ends it:
+ * the deadline runs for the whole hacking period (H19), which can be longer.
+ */
+const IOS_ACTIVITY_ROTATE_MS = (8 * 60 - 15) * 60 * 1000;
 
 /** Kinds whose every change goes out immediately (no counter throttle). */
 const URGENT_KINDS = new Set<LiveActivityKind>(["queue"]);
@@ -191,6 +200,18 @@ export function alertFor(props: LiveActivityProps, timezone: string): ApnsAlert 
       return { title: props.challengeTitle, body: room ? `${prefix} ${room}` : prefix };
     }
   }
+}
+
+/**
+ * The item itself moved or was renamed (a schedule or event-timing edit, H25,
+ * H59, H19): the countdown must follow now, so it is not throttled like a
+ * counter.
+ */
+function rescheduled(previous: LiveActivityProps | null, next: LiveActivityProps): boolean {
+  if (!previous || previous.kind !== next.kind) return false;
+  const before = previous as unknown as Record<string, unknown>;
+  const after = next as unknown as Record<string, unknown>;
+  return ["startsAt", "endsAt", "name", "location"].some((field) => before[field] !== after[field]);
 }
 
 /** The one update that alerts, if this transition is it. */
@@ -344,7 +365,11 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
         if (!session || session.end_reason === "finished") {
           await startSession(sendCtx, device, want, session);
         } else if (session.ended_at === null) {
-          await updateSession(sendCtx, device, session, want);
+          if (dueForRotation(sendCtx, device, session)) {
+            await rotateSession(sendCtx, device, session, want);
+          } else {
+            await updateSession(sendCtx, device, session, want);
+          }
         } else if (session.dismissed_phase === null) {
           // Dismissed before the server knew its phase: remember the phase
           // the user dismissed, so only a later change brings it back.
@@ -403,6 +428,8 @@ async function send(
     token: string | null;
     alert?: ApnsAlert;
     priority: 5 | 10;
+    /** End only: remove it from the Lock Screen at once (a rotation). */
+    dismissNow?: boolean;
   },
 ): Promise<SendResult> {
   try {
@@ -432,6 +459,7 @@ async function send(
         alert: input.alert,
         staleDate: input.event === "end" ? undefined : staleDateFor(input.props, ctx.now),
         relevanceScore: relevanceForRank(input.props.rank),
+        dismissalDate: input.dismissNow ? ctx.now : undefined,
       }),
     });
     if (response.status === 200) return "ok";
@@ -566,7 +594,8 @@ async function updateSession(
 
   const previousPhase = session.props?.phase ?? null;
   const phaseChanged = previousPhase !== want.props.phase;
-  const urgent = URGENT_KINDS.has(want.kind) || phaseChanged;
+  const moved = rescheduled(session.props, want.props);
+  const urgent = URGENT_KINDS.has(want.kind) || phaseChanged || moved;
   const { rows } = await pool.query<{ id: number }>(
     `UPDATE live_activity_sessions
         SET state_hash = $2, props = $3, last_sent_at = now()
@@ -598,7 +627,7 @@ async function updateSession(
     props: want.props,
     token,
     alert: alerting ? alertFor(want.props, ctx.timezone) : undefined,
-    priority: alerting || phaseChanged ? 10 : 5,
+    priority: alerting || phaseChanged || moved ? 10 : 5,
   });
   if (result === "ok") {
     ctx.summary.updated += 1;
@@ -651,11 +680,51 @@ async function markGone(device: DeviceRow, session: SessionRow): Promise<void> {
   );
 }
 
-async function endSession(ctx: SendContext, device: DeviceRow, session: SessionRow): Promise<void> {
+function dueForRotation(ctx: SendContext, device: DeviceRow, session: SessionRow): boolean {
+  return (
+    device.platform === "ios" &&
+    ctx.apns !== null &&
+    session.activity_push_token !== null &&
+    device.push_to_start_token !== null &&
+    // The app in the foreground starts its own; leave the swap to a later tick.
+    !ctx.foreground.has(device.id) &&
+    ctx.now.getTime() - new Date(session.started_at).getTime() >= IOS_ACTIVITY_ROTATE_MS
+  );
+}
+
+/**
+ * Replaces an iOS activity about to hit ActivityKit's 8-hour limit: ends it
+ * with an immediate dismissal, then push-starts the same subject. If the end
+ * fails the session stays open and the next tick retries; if the user had
+ * already removed it (dead token) it is not started again.
+ */
+async function rotateSession(
+  ctx: SendContext,
+  device: DeviceRow,
+  session: SessionRow,
+  want: Desired,
+): Promise<void> {
+  if (!(await endSession(ctx, device, session, { dismissNow: true }))) return;
+  await startSession(ctx, device, want, {
+    ...session,
+    activity_push_token: null,
+    ended_at: ctx.now,
+    end_reason: "finished",
+    dismissed_phase: null,
+  });
+}
+
+/** True when the device was told to end it. */
+async function endSession(
+  ctx: SendContext,
+  device: DeviceRow,
+  session: SessionRow,
+  options: { dismissNow?: boolean } = {},
+): Promise<boolean> {
   if (device.platform === "ios") {
     // Without APNs nothing can reach this activity: keep it open rather than
     // record an end that never happened, so a configured APNs still ends it.
-    if (!ctx.apns && session.activity_push_token) return;
+    if (!ctx.apns && session.activity_push_token) return false;
     // No per-activity token yet (a push-to-start the app has not reported,
     // or a local start whose token is pending): the activity is still on
     // the device and only that token can end it. Keep the session open, so
@@ -666,7 +735,7 @@ async function endSession(ctx: SendContext, device: DeviceRow, session: SessionR
       !session.activity_push_token &&
       ctx.now.getTime() - new Date(session.started_at).getTime() < IOS_ACTIVITY_LIFETIME_MS
     ) {
-      return;
+      return false;
     }
   }
   const { rows } = await pool.query<{ id: number }>(
@@ -675,7 +744,7 @@ async function endSession(ctx: SendContext, device: DeviceRow, session: SessionR
       RETURNING id`,
     [session.id],
   );
-  if (rows.length === 0) return;
+  if (rows.length === 0) return false;
   const token = device.platform === "ios" ? session.activity_push_token : device.expo_push_token;
   const finalProps = session.props
     ? ({ ...session.props, updatedAt: ctx.now.toISOString() } as LiveActivityProps)
@@ -687,15 +756,16 @@ async function endSession(ctx: SendContext, device: DeviceRow, session: SessionR
     props: finalProps,
     token,
     priority: 10,
+    dismissNow: options.dismissNow,
   });
   if (result === "ok" || result === "skipped") {
     ctx.summary.ended += 1;
-    return;
+    return true;
   }
   if (result === "gone") {
     await markGone(device, session);
     ctx.summary.ended += 1;
-    return;
+    return false;
   }
   ctx.summary.failed += 1;
   await pool.query(
@@ -703,6 +773,7 @@ async function endSession(ctx: SendContext, device: DeviceRow, session: SessionR
       WHERE id = $1 AND end_reason = 'finished'`,
     [session.id],
   );
+  return false;
 }
 
 registerWorker(LIVE_ACTIVITIES_QUEUE, async (job) => {
