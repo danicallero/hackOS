@@ -730,3 +730,39 @@ and confirm a reader can tell the primary path without reading helper copy.
 
 ### Exceptions
 Two equal-weight choices may share a chooser instead.
+
+## [R023] Act on a reported defect instead of confirming it
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-10-11
+
+### Trigger
+When the user reports that something is wrong (a screenshot, "esto está mal",
+"fatal", a crash), especially while background agents are working on it.
+
+### Mistake
+The agent answered several defect reports by agreeing ("tienes razón, está
+mal"), explaining the likely cause and relaying the report to a running
+agent, without taking any corrective action itself. The user had to repeat
+the report and pay for replies that changed nothing.
+
+### Lesson
+A defect report is an instruction to fix it. Agreement and explanation are
+not progress.
+
+### Action
+In the same turn: take the immediate corrective step available (e.g. restore
+a setting, revert a bad state, rerun a broken step), then launch or redirect
+an agent with a concrete fix brief and acceptance criteria. Report only what
+was fixed or is now being fixed, with the evidence that will prove it; skip
+"you're right" preambles and cause narration unless the user asks.
+
+### Validation
+Each reply to a defect report names an action already taken (command run,
+agent launched or redirected, commit pushed), not just an assessment.
+
+### Exceptions
+A genuine product decision the user must make (e.g. a platform trade-off)
+may be asked, but only alongside the fixes that don't depend on it.
