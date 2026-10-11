@@ -141,9 +141,15 @@ object LiveUpdatePoster {
   private fun action(context: Context, content: LiveUpdateContent): NotificationCompat.Action? {
     val label = content.actionLabel ?: return null
     val url = content.actionUrl ?: return null
+    // Promoted notifications cannot be colorized: SystemUI draws actions as
+    // text buttons, strips colour/background spans and hides action icons
+    // (verified on Android 16). Bold survives, so the label is bold.
+    val title = SpannableString(label).apply {
+      setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
     return NotificationCompat.Action.Builder(
       IconCompat.createWithResource(context, R.drawable.hackos_live_update_scan),
-      label,
+      title,
       viewIntent(context, url, requestCode(content.id, 1)),
     ).build()
   }

@@ -4,6 +4,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.os.Build
 import android.os.SystemClock
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
@@ -54,7 +58,7 @@ object LiveUpdateCardViews {
           return@forEachIndexed
         }
         text(views, caption, stat.caption)
-        text(views, value, stat.value)
+        views.setTextViewText(value, ratio(context, stat.value.orEmpty()))
         (stat.tone ?: content.tone.takeIf { stat.hero })?.let { textColor(context, views, value, LiveUpdateArt.toneRes(it)) }
       }
     } else {
@@ -122,11 +126,30 @@ object LiveUpdateCardViews {
       }
     } else {
       text(views, valueId, metric?.value)
+      metric?.value?.takeIf { it.contains('/') }?.let { views.setTextViewText(valueId, ratio(context, it)) }
       tone?.let { textColor(context, views, valueId, LiveUpdateArt.toneRes(it)) }
       // A placeholder is not a number: about 60% of the metric size, as on iOS.
       if (metric?.quiet == true && quietSizeSp != null) {
         views.setTextViewTextSize(valueId, TypedValue.COMPLEX_UNIT_SP, quietSizeSp)
       }
+    }
+  }
+
+  /**
+   * "412/600": the denominator smaller and secondary, as on iOS, so a ratio
+   * fits a third of the card at the stat size (H22).
+   */
+  private fun ratio(context: Context, value: String): CharSequence {
+    val slash = value.indexOf('/')
+    if (slash <= 0) return value
+    return SpannableString(value).apply {
+      setSpan(RelativeSizeSpan(0.55f), slash, value.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+      setSpan(
+        ForegroundColorSpan(LiveUpdateArt.color(context, R.color.hackos_lu_secondary)),
+        slash,
+        value.length,
+        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+      )
     }
   }
 

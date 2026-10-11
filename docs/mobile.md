@@ -1748,6 +1748,29 @@ custom views, so the poster picks one of two renderings per post
 | Android 16+ with promotion revoked (user/OEM) or a build the system would not promote; Android 8–15 (API 26–35) | **Custom card**: `DecoratedCustomViewStyle` with collapsed and expanded layouts (`res/layout/hackos_live_update_card_*.xml`): header, 34 sp metrics (one in the phase colour), meal stats row, the same track drawn as a bitmap with stage labels, a capsule Scan button inside the card, chronometers for countdowns/count-ups |
 | < 8 (API 24–25) | `isSupported()` is false; `show` posts nothing |
 
+**Lock screen (verified on the Android 16 emulator).** A promoted Live Update
+always shows as a full card on the lock screen (title, text, track, action),
+even after the person has seen it in the shade. A non-promoted notification
+is shown with its collapsed layout (`hackos_live_update_card_small`: header,
+hero value, trailing value; the chevron expands it). With Android 16's
+compact lock-screen notifications (`lock_screen_notification_minimalism`, on
+by default when unset), a non-promoted notification the person has already
+seen (opened the shade, or its heads-up such as "called") moves into the
+icon shelf under the clock. An app cannot override that user setting, which
+is one more reason the promoted path is the default and the card only the
+fallback.
+
+**Actions.** Card path: Scan is only the filled accent pill inside the
+expanded layout, trailing the bar on one row; no system action is added, so
+no text-button row duplicates it (the collapsed card has no button). Promoted
+path: SystemUI draws the single action as a text button under the content.
+Promoted notifications cannot be colorized, and Android 16 strips
+colour/background spans from action titles and does not draw action icons
+(tested), so a filled pill beside the track is impossible there; the label
+is bold, the only styling that survives. The same kind and phase therefore
+always looks the same within a path; the two looks differ only between the
+promoted and the card path.
+
 The card is never chosen on a device that can promote; each post logs
 `path`, `canPostPromoted`, `promotable` and the read-back
 `FLAG_PROMOTED_ONGOING` under the `LiveUpdates` tag (the read-back can lag on
