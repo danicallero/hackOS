@@ -83,6 +83,14 @@ x-wallet-env: &wallet-env
   WALLET_GOOGLE_CLASS_OPTIONS_JSON: "${WALLET_GOOGLE_CLASS_OPTIONS_JSON:-{}}"
   WALLET_GOOGLE_OBJECT_OPTIONS_JSON: "${WALLET_GOOGLE_OBJECT_OPTIONS_JSON:-{}}"
 
+# Live Activities / Live Updates (#966): APNs token auth for ActivityKit
+# pushes. Team id and APNs gateway come from the Wallet block above.
+x-live-activity-env: &live-activity-env
+  APNS_KEY_ID: "${APNS_KEY_ID:-}"
+  APNS_AUTH_KEY_P8: "${APNS_AUTH_KEY_P8:-}"
+  APNS_BUNDLE_ID: "${APNS_BUNDLE_ID:-com.hackudc.os}"
+  LIVE_ACTIVITY_LEAD_MINUTES: "${LIVE_ACTIVITY_LEAD_MINUTES:-15}"
+
 x-mail-env: &mail-env
   MAIL_PROVIDER: "${MAIL_PROVIDER:-smtp}"
   MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS}"
@@ -96,7 +104,7 @@ x-mail-env: &mail-env
   SMTP_REQUIRE_TLS: "${SMTP_REQUIRE_TLS:-true}"
 
 x-api-env: &api-env
-  <<: [*database-env, *valkey-env, *auth-env, *storage-env, *wallet-env]
+  <<: [*database-env, *valkey-env, *auth-env, *storage-env, *wallet-env, *live-activity-env]
   NODE_ENV: production
   WORKERS_INLINE: "false"
   CORS_ORIGINS: "${CORS_ORIGINS}"
@@ -128,7 +136,7 @@ x-api-env: &api-env
   REVIEW_FIXTURE_DELETION_PIN: "${REVIEW_FIXTURE_DELETION_PIN:-}"
 
 x-worker-env: &worker-env
-  <<: [*database-env, *valkey-env, *auth-env, *storage-env, *wallet-env, *mail-env]
+  <<: [*database-env, *valkey-env, *auth-env, *storage-env, *wallet-env, *live-activity-env, *mail-env]
   NODE_ENV: production
   WORKERS_INLINE: "false"
   LOG_LEVEL: "${LOG_LEVEL:-info}"

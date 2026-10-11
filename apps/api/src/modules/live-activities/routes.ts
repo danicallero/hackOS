@@ -1,0 +1,251 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
+import type { Language } from "@hackos/shared/locale";
+import type { FastifyInstance } from "fastify";
+import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import type { PoolClient } from "pg";
+import { pool, withTransaction } from "../../db/pool.js";
+import {
+  getRequestAuthorizationContext,
+  requireAuth,
+  userHasCapability,
+} from "../../lib/capabilities.js";
+import { NotFoundError } from "../../lib/errors.js";
+import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
+import { normalizeLanguage } from "../notifications/templates.js";
+import {
+  deviceResponseSchema,
+  endSessionBodySchema,
+  myLiveActivitiesQuerySchema,
+  myLiveActivitiesResponseSchema,
+  statusResponseSchema,
+  upsertDeviceBodySchema,
+  upsertSessionBodySchema,
+} from "./schemas.js";
+import { myLiveActivities } from "./state.js";
+
+/**
+ * Live Activity device/session registry and read model (#966; H38, H25,
+ * H26). Same access posture as `POST /api/me/push-tokens`: any signed-in,
+ * active account manages its own devices, with no capability and no audit
+ * row — this is delivery plumbing, not a domain decision. Every write is an
+ * idempotent upsert, so client retries are safe without an idempotency key.
+ */
+
+async function lockActiveUser(client: PoolClient, userId: number): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT id FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR UPDATE`,
+    [userId],
+  );
+  if (!rows[0]) throw new NotFoundError("User not found");
+}
+
+/** The caller's own device row, locked; a device registered by another account is not found. */
+async function ownDeviceId(client: PoolClient, userId: number, deviceId: string): Promise<number> {
+  const { rows } = await client.query<{ id: number }>(
+    `SELECT id FROM live_activity_devices WHERE device_id = $1 AND user_id = $2 FOR UPDATE`,
+    [deviceId, userId],
+  );
+  const id = rows[0]?.id;
+  if (id === undefined) throw new NotFoundError("Live Activity device not registered");
+  return id;
+}
+
+export function registerLiveActivityRoutes(app: FastifyInstance): void {
+  const api = app.withTypeProvider<ZodTypeProvider>();
+
+  api.put(
+    "/api/me/live-activities/device",
+    {
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "Register a device for Live Activities",
+        description:
+          "Upserts this app install (`deviceId`) for Live Activities / Live Updates: the iOS " +
+          "push-to-start token, the Expo push token used for Android data pushes, the label " +
+          "language and the per-device opt-out (`enabled`). Omitted fields keep their stored " +
+          "value; `null` clears a token or the language override. A device id registered by " +
+          "another account is reassigned to the caller and its previous sessions are dropped.",
+        body: upsertDeviceBodySchema,
+        response: { 200: deviceResponseSchema },
+      },
+    },
+    async (req) => {
+      const userId = req.userId as number;
+      const body = req.body;
+      return withTransaction(async (client) => {
+        await lockActiveUser(client, userId);
+        const { rows: existing } = await client.query<{ id: number; user_id: number }>(
+          `SELECT id, user_id FROM live_activity_devices WHERE device_id = $1 FOR UPDATE`,
+          [body.deviceId],
+        );
+        if (existing[0] && existing[0].user_id !== userId) {
+          // The previous account's activities must not keep updating on a
+          // phone that now belongs to someone else.
+          await client.query(`DELETE FROM live_activity_sessions WHERE device_id = $1`, [
+            existing[0].id,
+          ]);
+        }
+        const { rows } = await client.query<{
+          device_id: string;
+          platform: "ios" | "android";
+          enabled: boolean;
+          language: string | null;
+        }>(
+          `INSERT INTO live_activity_devices
+             (user_id, device_id, platform, push_to_start_token, expo_push_token, language, enabled)
+           VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, true))
+           ON CONFLICT (device_id) DO UPDATE SET
+             user_id = EXCLUDED.user_id,
+             platform = EXCLUDED.platform,
+             push_to_start_token = CASE WHEN $8 THEN EXCLUDED.push_to_start_token
+                                        ELSE live_activity_devices.push_to_start_token END,
+             expo_push_token = CASE WHEN $9 THEN EXCLUDED.expo_push_token
+                                    ELSE live_activity_devices.expo_push_token END,
+             language = CASE WHEN $10 THEN EXCLUDED.language
+                             ELSE live_activity_devices.language END,
+             enabled = COALESCE($7, live_activity_devices.enabled)
+           RETURNING device_id, platform, enabled, language`,
+          [
+            userId,
+            body.deviceId,
+            body.platform,
+            body.pushToStartToken ?? null,
+            body.expoPushToken ?? null,
+            body.language ?? null,
+            body.enabled ?? null,
+            body.pushToStartToken !== undefined,
+            body.expoPushToken !== undefined,
+            body.language !== undefined,
+          ],
+        );
+        const row = rows[0]!;
+        return {
+          deviceId: row.device_id,
+          platform: row.platform,
+          enabled: row.enabled,
+          language: row.language,
+        };
+      });
+    },
+  );
+
+  api.put(
+    "/api/me/live-activities/sessions",
+    {
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "Register a running Live Activity",
+        description:
+          "Records that the caller's device is showing the Live Activity `kind`/`subject` " +
+          "(`judging` for the queue, `activity:<id>` for a staff activity) and stores or " +
+          "rotates its iOS per-activity push token so the server can update and end it. Call " +
+          "it after a local start, after a remote push-to-start start, and whenever iOS " +
+          "rotates the token. Re-registering a dismissed activity reopens it.",
+        body: upsertSessionBodySchema,
+        response: { 200: statusResponseSchema },
+      },
+    },
+    async (req) => {
+      const userId = req.userId as number;
+      const { deviceId, kind, subject, activityPushToken } = req.body;
+      await withTransaction(async (client) => {
+        await lockActiveUser(client, userId);
+        const id = await ownDeviceId(client, userId, deviceId);
+        await client.query(
+          `INSERT INTO live_activity_sessions (device_id, kind, subject, activity_push_token)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (device_id, kind, subject) DO UPDATE SET
+             activity_push_token = COALESCE(EXCLUDED.activity_push_token,
+                                            live_activity_sessions.activity_push_token),
+             -- A reopened activity starts from an unknown rendered state, so
+             -- the worker resends the current one.
+             state_hash = CASE WHEN live_activity_sessions.ended_at IS NULL
+                               THEN live_activity_sessions.state_hash END,
+             started_at = CASE WHEN live_activity_sessions.ended_at IS NULL
+                               THEN live_activity_sessions.started_at ELSE now() END,
+             ended_at = NULL,
+             end_reason = NULL`,
+          [id, kind, subject, activityPushToken ?? null],
+        );
+      });
+      return { status: true as const };
+    },
+  );
+
+  api.delete(
+    "/api/me/live-activities/sessions",
+    {
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "Dismiss a Live Activity",
+        description:
+          "Marks the Live Activity `kind`/`subject` on the caller's device as dismissed (the " +
+          "user removed it, or the app ended it locally). The server stops updating it and " +
+          "never starts it remotely again; a later local start re-registers it.",
+        body: endSessionBodySchema,
+        response: { 200: statusResponseSchema },
+      },
+    },
+    async (req) => {
+      const userId = req.userId as number;
+      const { deviceId, kind, subject } = req.body;
+      await withTransaction(async (client) => {
+        await lockActiveUser(client, userId);
+        const id = await ownDeviceId(client, userId, deviceId);
+        await client.query(
+          `INSERT INTO live_activity_sessions (device_id, kind, subject, ended_at, end_reason)
+           VALUES ($1, $2, $3, now(), 'dismissed')
+           ON CONFLICT (device_id, kind, subject) DO UPDATE SET
+             activity_push_token = NULL,
+             ended_at = COALESCE(live_activity_sessions.ended_at, now()),
+             end_reason = 'dismissed'`,
+          [id, kind, subject],
+        );
+      });
+      return { status: true as const };
+    },
+  );
+
+  api.get(
+    "/api/me/live-activities",
+    {
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "My Live Activities",
+        description:
+          "The Live Activity states the caller should be showing right now, built by the same " +
+          "code the push worker uses. `queue` is the participant's nearest queue during the " +
+          "judging window only (null outside it or with no live entry); the room appears only " +
+          "once the team is called. `activities` lists the scannable activities starting " +
+          "within the lead time or in progress, for holders of the activity-scan permission " +
+          "only. Labels are localized to `language`, else the account language.",
+        querystring: myLiveActivitiesQuerySchema,
+        response: { 200: myLiveActivitiesResponseSchema },
+      },
+    },
+    async (req) => {
+      const userId = req.userId as number;
+      let language: Language;
+      if (req.query.language) {
+        language = req.query.language as Language;
+      } else {
+        const { rows } = await pool.query<{ language: string | null }>(
+          `SELECT language FROM users WHERE id = $1`,
+          [userId],
+        );
+        language = normalizeLanguage(rows[0]?.language);
+      }
+      const canScan = await userHasCapability(
+        getRequestAuthorizationContext(req),
+        CAPABILITIES.ACTIVITY_SCAN,
+      );
+      return myLiveActivities(userId, language, canScan);
+    },
+  );
+}

@@ -51,6 +51,7 @@ registerModules(app)
 ├─ event          (WS-G  · H45, H47)
 ├─ exports        (WS-F  · H54, H56)
 ├─ identity       (WS-A1 · H1-H10)
+├─ live-activities (#966 · H38, H25, H26)
 ├─ logistics      (WS-C  · H22-H27)
 ├─ notifications  (WS-F  · H50-H53)
 ├─ projects       (WS-B1 · H16-H17)
@@ -264,6 +265,17 @@ abandoned leases after inactivity. The review save transaction verifies the
 lease owner before changing a text field, so the browser's read-only state is
 not the concurrency boundary. Numeric and choice answers retain the existing
 field-level merge behavior.
+
+### live-activities (#966 · H38, H25, H26)
+The device/session registry (`PUT /api/me/live-activities/device`,
+`PUT`/`DELETE /api/me/live-activities/sessions`), the read model
+`GET /api/me/live-activities`, and the `live-activities` worker that pushes
+iOS ActivityKit updates over APNs (token auth) and Android Live Updates as
+data-only Expo pushes. `state.ts` is the single state builder for both the
+read endpoint and the pushes; the queue state reuses `myQueueStatus`. Routes
+are the caller's own delivery plumbing, so they follow the push-token posture
+(authenticated, no capability, no audit row). See
+[Live Activities](./live-activities.md).
 
 ### logistics (H22–H27, H59)
 Accreditation (badge issuance, rotation, revocation), presence (door in/out

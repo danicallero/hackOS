@@ -23,7 +23,7 @@ async function targets(req: FastifyRequest): Promise<number[]> {
   };
   if (
     /^\/api\/me(?:$|\/)/.test(path) &&
-    !/\/(push-tokens|notifications|ui-prefs)(?:$|\/)/.test(path)
+    !/\/(push-tokens|live-activities|notifications|ui-prefs)(?:$|\/)/.test(path)
   )
     add(req.userId);
   const profile =

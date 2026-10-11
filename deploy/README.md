@@ -174,6 +174,14 @@ requiere autenticación. Las
 claves de firma de Apple/Google son opcionales, pero cada bloque configurado
 debe estar completo. `check-env.sh` no imprime valores secretos.
 
+Las Live Activities (#966) son opcionales: `APNS_KEY_ID` y `APNS_AUTH_KEY_P8`
+(base64 del fichero `.p8`, secreto; en staging va en `hackos.secrets`) se
+configuran juntas y requieren `APPLE_TEAM_IDENTIFIER`. `APNS_BUNDLE_ID`
+(por defecto `com.hackudc.os`) y `LIVE_ACTIVITY_LEAD_MINUTES` (por defecto
+`15`) son configuración no secreta. Sin clave, el worker sigue enviando las
+Live Updates de Android y omite iOS con un aviso. Alta de la clave y
+credenciales EAS: [docs/live-activities.md](../docs/live-activities.md).
+
 Los backups opcionales de Cloudflare R2 usan `R2_ENDPOINT`, `R2_BUCKET` y
 `R2_PREFIX`, y `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` en el fichero
 combinado. El helper exige
@@ -238,8 +246,8 @@ contenedor.
 | `minio` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BROWSER=off` |
 | `minio-init` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` |
 | `migrate` | `NODE_ENV`, `DATABASE_URL`, `BETTER_AUTH_SECRET` |
-| `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, traducción, SSE, rate limits y fixtures API-only |
-| `worker` | base de datos, Valkey, `SSE_NAMESPACE`, auth/URLs necesarias para enlaces, almacenamiento, correo, Wallet y tuning del worker |
+| `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, Live Activities (APNs), traducción, SSE, rate limits y fixtures API-only |
+| `worker` | base de datos, Valkey, `SSE_NAMESPACE`, auth/URLs necesarias para enlaces, almacenamiento, correo, Wallet, Live Activities (APNs) y tuning del worker |
 | `web` | sólo `API_DOMAIN`, `WEB_DOMAIN` y la configuración pública `ANDROID_APP_CERT_SHA256` |
 
 En particular, `web` nunca recibe secretos; `api` no recibe credenciales de

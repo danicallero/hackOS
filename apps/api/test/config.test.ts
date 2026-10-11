@@ -5,6 +5,11 @@ import { describe, expect, it } from "vitest";
 process.env.REVIEW_FIXTURE_PASSWORD = "";
 delete process.env.LOG_EXPO_PUSH_TICKETS;
 delete process.env.LOG_EXPO_PUSH_UNSAFE_DEBUG;
+// #966: Compose passes the optional APNs Live Activity settings as "" too.
+process.env.APNS_KEY_ID = "";
+process.env.APNS_AUTH_KEY_P8 = "";
+process.env.APNS_BUNDLE_ID = "";
+process.env.LIVE_ACTIVITY_LEAD_MINUTES = "";
 const { config } = await import("../src/config.js");
 
 describe("environment config", () => {
@@ -22,5 +27,12 @@ describe("environment config", () => {
 
   it("keeps unsafe Expo push debugging disabled by default", () => {
     expect(config.logExpoPushUnsafeDebug).toBe(false);
+  });
+
+  it("treats empty Live Activity settings as unset and applies defaults (#966)", () => {
+    expect(config.APNS_KEY_ID).toBeUndefined();
+    expect(config.liveActivityApnsConfigured).toBe(false);
+    expect(config.APNS_BUNDLE_ID).toBe("com.hackudc.os");
+    expect(config.LIVE_ACTIVITY_LEAD_MINUTES).toBe(15);
   });
 });

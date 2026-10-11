@@ -124,8 +124,8 @@ variables agrupadas se detallan en las secciones siguientes.
 | `minio` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BROWSER=off` |
 | `minio-init` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` |
 | `migrate` | `NODE_ENV=production`, `DATABASE_URL`, `BETTER_AUTH_SECRET` |
-| `api` | `NODE_ENV`, `WORKERS_INLINE`, `DATABASE_URL`, `VALKEY_URL`, auth, URLs públicas, almacenamiento, Wallet, traducción, observabilidad, límites operativos y fixtures API-only |
-| `worker` | `NODE_ENV`, `WORKERS_INLINE`, `DATABASE_URL`, `VALKEY_URL`, auth/URLs para enlaces, almacenamiento, Wallet, correo y tuning del worker |
+| `api` | `NODE_ENV`, `WORKERS_INLINE`, `DATABASE_URL`, `VALKEY_URL`, auth, URLs públicas, almacenamiento, Wallet, Live Activities, traducción, observabilidad, límites operativos y fixtures API-only |
+| `worker` | `NODE_ENV`, `WORKERS_INLINE`, `DATABASE_URL`, `VALKEY_URL`, auth/URLs para enlaces, almacenamiento, Wallet, Live Activities, correo y tuning del worker |
 | `web` | `API_DOMAIN`, `WEB_DOMAIN`, `ANDROID_APP_CERT_SHA256` |
 
 `DATABASE_URL` y `VALKEY_URL` se ensamblan dentro de Compose a partir de las
@@ -204,6 +204,7 @@ Además de las variables de las dependencias anteriores, `api` recibe:
 | Push | `LOG_EXPO_PUSH_TICKETS`, `LOG_EXPO_PUSH_TOKENS`, `LOG_EXPO_PUSH_UNSAFE_DEBUG` |
 | Traducción | `TRANSLATE_PROVIDER`, `GOOGLE_TRANSLATE_API_KEY`, `LIBRETRANSLATE_URL`, `LIBRETRANSLATE_API_KEY` |
 | Wallet | `APPLE_PASS_TYPE_IDENTIFIER`, `APPLE_TEAM_IDENTIFIER`, `APPLE_PASS_ORGANIZATION`, `APPLE_PASS_CERTIFICATE_PEM`, `APPLE_PASS_KEY_PEM`, `APPLE_PASS_KEY_PASSPHRASE`, `APPLE_WWDR_CERTIFICATE_PEM`, `APPLE_APNS_ENVIRONMENT`, `APPLE_PASS_APP_STORE_ID`, `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_EVENT_TICKET_CLASS_ID`, `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY_PEM`, `GOOGLE_WALLET_LOGO_URL`, `GOOGLE_WALLET_HERO_IMAGE_URL`, `GOOGLE_WALLET_WIDE_LOGO_URL`, `GOOGLE_WALLET_BACKGROUND_COLOR`, `WALLET_FOREGROUND_COLOR`, `WALLET_LABEL_COLOR`, `WALLET_WEBSITE_URL`, `WALLET_SHOW_DIRECTIONS`, `WALLET_SHOW_SCHEDULE`, `WALLET_SCHEDULE_URL`, `WALLET_ANDROID_PACKAGE_NAME`, `WALLET_ANDROID_STORE_URL`, `WALLET_APPLE_OPTIONS_JSON`, `WALLET_GOOGLE_CLASS_OPTIONS_JSON`, `WALLET_GOOGLE_OBJECT_OPTIONS_JSON` |
+| Live Activities | `APNS_KEY_ID`, `APNS_AUTH_KEY_P8`, `APNS_BUNDLE_ID` (por defecto `com.hackudc.os`), `LIVE_ACTIVITY_LEAD_MINUTES` (por defecto `15`). Opcionales; `APNS_KEY_ID` y `APNS_AUTH_KEY_P8` (base64 del `.p8`, secreto) van juntos y requieren `APPLE_TEAM_IDENTIFIER`; el gateway es `APPLE_APNS_ENVIRONMENT`. Ver [Live Activities](./live-activities.md). |
 | Fixtures | `REVIEW_FIXTURE_PASSWORD`, `REVIEW_FIXTURE_DELETION_PIN` |
 
 El API no recibe variables de correo ni la cuenta root de MinIO.
@@ -218,6 +219,7 @@ El API no recibe variables de correo ni la cuenta root de MinIO.
 | Pool y outbox | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECTION_TIMEOUT_MS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `NOTIFICATION_OUTBOX_BATCH_SIZE` |
 | Correo | `MAIL_PROVIDER`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `SMTP_HOST`, `SMTP_TLS_SERVERNAME`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `SMTP_REQUIRE_TLS` |
 | Wallet | El mismo bloque de Wallet que usa API, porque el worker empuja sincronizaciones de pases. |
+| Live Activities | El mismo bloque que API: el worker `live-activities` envía los pushes de APNs y Android. |
 
 El worker recibe `SSE_NAMESPACE` para publicar en el mismo entorno que el API.
 El worker no recibe `CORS_ORIGINS`, límites SSE, rate limits de scanner,

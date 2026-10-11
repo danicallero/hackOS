@@ -235,4 +235,11 @@ for key in "${google_keys[@]}"; do
 done
 (( google_set == 0 || google_missing == 0 )) || die 'Google Wallet signing values must be complete or entirely unset'
 
+apns_key_id="$(value APNS_KEY_ID)"
+apns_key="$(value APNS_AUTH_KEY_P8)"
+if [[ -n "$apns_key_id" || -n "$apns_key" ]]; then
+  [[ -n "$apns_key_id" && -n "$apns_key" ]] || die 'APNS_KEY_ID and APNS_AUTH_KEY_P8 must be set together'
+  [[ -n "$(value APPLE_TEAM_IDENTIFIER)" ]] || die 'APNS_KEY_ID requires APPLE_TEAM_IDENTIFIER'
+fi
+
 printf 'check-env: configuration and secrets are valid for %s (%s)\n' "$api_domain" "$image_tag"
