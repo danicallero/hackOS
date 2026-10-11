@@ -109,12 +109,12 @@ async function registerSessionToken(kind: LiveActivityKind, subject: string, tok
   sessionTokens.set(key, token);
 }
 
-async function unregisterSession(kind: LiveActivityKind, subject: string) {
+async function unregisterSession(kind: LiveActivityKind, subject: string, phase?: string) {
   sessionTokens.delete(liveActivityKey(kind, subject));
   await apiFetch("/api/me/live-activities/sessions", {
     method: "DELETE",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ deviceId: await liveActivityDeviceId(), kind, subject }),
+    body: JSON.stringify({ deviceId: await liveActivityDeviceId(), kind, subject, phase }),
   });
 }
 
@@ -126,7 +126,8 @@ async function apply(desired: DesiredActivity[]): Promise<DesiredActivity[]> {
     const item = desired.find(
       (candidate) => liveActivityKey(candidate.kind, candidate.subject) === key,
     );
-    if (item) void unregisterSession(item.kind, item.subject).catch(() => undefined);
+    if (item)
+      void unregisterSession(item.kind, item.subject, item.props.phase).catch(() => undefined);
   }
   // Every running activity — including ones APNs started — reports its
   // per-activity token so the server can update it.
