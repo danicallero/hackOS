@@ -1,6 +1,13 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { act, fireEvent, screen, userEvent, waitFor } from "@testing-library/react-native";
 import { Alert, ScrollView } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+
+const testMetrics = {
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+  insets: { top: 47, left: 0, right: 0, bottom: 34 },
+};
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -403,7 +410,7 @@ describe("account removal UI flow", () => {
     // The jest ScrollView has no native view behind it; observe its ref method.
     jest.useFakeTimers();
     const scrollTo = jest.spyOn(ScrollView.prototype, "scrollTo").mockImplementation(() => {});
-    mockSearchParams = { highlight: "notifications" };
+    mockSearchParams = { highlight: "notifications", highlightAt: "1" };
     await renderMobile(<AccountScreen />);
     const scroll = screen.getByTestId("account-scroll");
 
@@ -415,18 +422,22 @@ describe("account removal UI flow", () => {
     });
 
     expect(mockSetParams).toHaveBeenCalledTimes(1);
-    expect(mockSetParams).toHaveBeenCalledWith({ highlight: undefined });
-    // Account shows at the top first; no scroll before the transition settles.
-    expect(scrollTo).not.toHaveBeenCalled();
+    expect(mockSetParams).toHaveBeenCalledWith({
+      highlight: undefined,
+      highlightAt: undefined,
+    });
+    // Account jumps to the top first; no animated scroll before the transition settles.
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: false, y: 0 });
     await act(async () => {
       jest.advanceTimersByTime(300);
     });
-    expect(scrollTo).not.toHaveBeenCalled();
+    expect(scrollTo).toHaveBeenCalledTimes(1);
     await act(async () => {
       jest.advanceTimersByTime(200);
     });
-    expect(scrollTo).toHaveBeenCalledTimes(1);
-    expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: 700 });
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: true, y: 700 });
     expect(screen.getByTestId("account-notifications-highlight")).toBeTruthy();
 
     // Later layout passes before the router drops the param must not replay it.
@@ -440,7 +451,51 @@ describe("account removal UI flow", () => {
     await act(async () => {
       jest.advanceTimersByTime(2000);
     });
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    scrollTo.mockRestore();
+    jest.useRealTimers();
+  });
+
+  it("replays the scroll from the top on every gear tap (new nonce)", async () => {
+    jest.useFakeTimers();
+    const scrollTo = jest.spyOn(ScrollView.prototype, "scrollTo").mockImplementation(() => {});
+    mockSearchParams = { highlight: "notifications", highlightAt: "1" };
+    const view = await renderMobile(<AccountScreen />);
+    await act(async () => {
+      fireEvent(screen.getByTestId("account-scroll"), "layout", {
+        nativeEvent: { layout: { height: 600 } },
+      });
+      fireEvent(screen.getByTestId("account-notifications"), "layout", {
+        nativeEvent: { layout: { y: 900 } },
+      });
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(500);
+    });
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+
+    // The router cleared the params; a later tap arrives with a fresh nonce.
+    const rerender = () =>
+      view.rerender(
+        <GestureHandlerRootView>
+          <SafeAreaProvider initialMetrics={testMetrics}>
+            <AccountScreen />
+          </SafeAreaProvider>
+        </GestureHandlerRootView>,
+      );
+    mockSearchParams = {};
+    await act(async () => rerender());
+    mockSearchParams = { highlight: "notifications", highlightAt: "2" };
+    scrollTo.mockClear();
+    await act(async () => rerender());
     expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: false, y: 0 });
+    await act(async () => {
+      jest.advanceTimersByTime(500);
+    });
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: true, y: 700 });
+    expect(mockSetParams).toHaveBeenCalledTimes(2);
     scrollTo.mockRestore();
     jest.useRealTimers();
   });

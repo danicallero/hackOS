@@ -255,7 +255,7 @@ describe("alerts sheet header (H51)", () => {
     expect(mockRouter.dismiss).toHaveBeenCalledTimes(1);
     expect(mockRouter.navigate).toHaveBeenCalledWith({
       pathname: "/(tabs)/others/account",
-      params: { highlight: "notifications" },
+      params: { highlight: "notifications", highlightAt: expect.any(String) },
     });
     expect(mockRouter.dismiss.mock.invocationCallOrder[0]).toBeLessThan(
       mockRouter.navigate.mock.invocationCallOrder[0],

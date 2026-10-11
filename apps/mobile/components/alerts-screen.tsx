@@ -107,10 +107,14 @@ function NotificationScrollGestureBoundary({
  * Where the alerts gear lands: Account, with the Notifications row
  * highlighted once so people learn where preferences live (H51).
  */
-export const ALERTS_PREFERENCES_HREF = {
-  pathname: "/(tabs)/others/account",
-  params: { highlight: "notifications" },
-} as const;
+export function alertsPreferencesHref() {
+  // A fresh `highlightAt` per tap lets Account replay the scroll even when it
+  // is already mounted (or focused) and the highlight value is unchanged.
+  return {
+    pathname: "/(tabs)/others/account",
+    params: { highlight: "notifications", highlightAt: String(Date.now()) },
+  } as const;
+}
 
 /**
  * H51: the inbox viewer, presented as a sheet from the Schedule bell. Read,
@@ -134,7 +138,7 @@ export default function AlertsScreen() {
   // Dismiss first so the Schedule stack does not keep the sheet on top.
   const openPreferences = useCallback(() => {
     router.dismiss();
-    router.navigate(ALERTS_PREFERENCES_HREF);
+    router.navigate(alertsPreferencesHref());
   }, [router]);
 
   // Liquid Glass owns the toolbar grouping below; other platforms get the

@@ -624,12 +624,16 @@ export default function AccountScreen() {
  */
 function useNotificationsHighlight(scrollRef: RefObject<ScrollView | null>) {
   const router = useRouter();
-  const { highlight } = useLocalSearchParams<{ highlight?: string }>();
+  const { highlight, highlightAt } = useLocalSearchParams<{
+    highlight?: string;
+    highlightAt?: string;
+  }>();
   const reduceMotion = useReducedMotion();
   const opacity = useSharedValue(0);
   const [rowY, setRowY] = useState<number | null>(null);
   const [viewportHeight, setViewportHeight] = useState(0);
   const handled = useRef(false);
+  const lastNonce = useRef<string | undefined>(undefined);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef({ rowY, viewportHeight, reduceMotion });
   latest.current = { rowY, viewportHeight, reduceMotion };
@@ -647,12 +651,18 @@ function useNotificationsHighlight(scrollRef: RefObject<ScrollView | null>) {
       handled.current = false;
       return;
     }
+    // A new nonce (another gear tap) re-arms the handler.
+    if (handled.current && lastNonce.current !== highlightAt) handled.current = false;
+    lastNonce.current = highlightAt;
     // Wait for both layouts; children can report before the scroll view.
     if (handled.current || rowY === null || viewportHeight === 0) return;
     handled.current = true;
-    router.setParams({ highlight: undefined });
-    // Show Account at the top first: scroll only once the sheet dismissal and
+    router.setParams({ highlight: undefined, highlightAt: undefined });
+    // Always start from the top, then scroll only once the sheet dismissal and
     // navigation transition have finished, so the user sees the page move.
+    if (timer.current) clearTimeout(timer.current);
+    opacity.value = 0;
+    scrollRef.current?.scrollTo({ animated: false, y: 0 });
     timer.current = setTimeout(
       () => {
         const { rowY: y, viewportHeight: height, reduceMotion: reduced } = latest.current;
@@ -674,7 +684,7 @@ function useNotificationsHighlight(scrollRef: RefObject<ScrollView | null>) {
       },
       reduceMotion ? 0 : TRANSITION_SETTLE_MS,
     );
-  }, [opacity, reduceMotion, requested, router, rowY, scrollRef, viewportHeight]);
+  }, [opacity, reduceMotion, requested, highlightAt, router, rowY, scrollRef, viewportHeight]);
 
   const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return {
