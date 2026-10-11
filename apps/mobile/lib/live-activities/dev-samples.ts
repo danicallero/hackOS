@@ -1,7 +1,14 @@
 import {
+  ACCREDITATION_LIVE_ACTIVITY_SUBJECT,
   type ActivityLiveProps,
+  accreditationLiveLabels,
   activityLiveActivitySubject,
   activityLiveLabels,
+  attendeeActivityLiveActivitySubject,
+  attendeeActivityLiveLabels,
+  DEADLINE_LIVE_ACTIVITY_SUBJECT,
+  type DeadlineLiveProps,
+  deadlineLiveLabels,
   QUEUE_LIVE_ACTIVITY_SUBJECT,
   type QueueLiveProps,
   queueLiveLabels,
@@ -16,7 +23,9 @@ import type { DesiredActivity } from "./model";
  * `__DEV__`, so production bundles drop this module entirely.
  *
  * Samples: queue-waiting, queue-estimating, queue-called, queue-in-room,
- * staff-upcoming, staff-live (a meal), staff-live-other, all; `end` removes them.
+ * staff-upcoming, staff-live (a meal), staff-live-other, all, plus the
+ * attendee, deadline and accreditation ones in `KIND_SAMPLES`;
+ * `end` removes them.
  */
 const MINUTE = 60_000;
 
@@ -121,7 +130,91 @@ export function handleDevLiveActivityLink(path: string): string | null {
     void endAllActivities();
     return "/";
   }
-  const sample = SAMPLES[name];
+  const sample = SAMPLES[name] ?? KIND_SAMPLES[name];
   if (sample) void applyDesiredActivities(sample()).catch(() => undefined);
   return "/";
 }
+
+// ── Attendee, deadline and accreditation kinds (H59, H19, H22) ──
+
+function attendee(phase: "upcoming" | "live"): DesiredActivity {
+  const now = Date.now();
+  const startsAt = phase === "upcoming" ? now + 12 * MINUTE : now - 20 * MINUTE;
+  return {
+    kind: "attendee_activity",
+    subject: attendeeActivityLiveActivitySubject(21),
+    props: {
+      v: 1,
+      kind: "attendee_activity",
+      phase,
+      scheduleId: 21,
+      name: "Intro to Rust workshop",
+      category: "workshop",
+      location: "Room A2",
+      startsAt: new Date(startsAt).toISOString(),
+      endsAt: new Date(startsAt + 60 * MINUTE).toISOString(),
+      url: "hackos://schedule/21",
+      labels: attendeeActivityLiveLabels("en"),
+      rank: 0,
+      updatedAt: new Date(now).toISOString(),
+    },
+  };
+}
+
+function deadline(
+  phase: DeadlineLiveProps["phase"],
+  submission: DeadlineLiveProps["submission"],
+): DesiredActivity {
+  const now = Date.now();
+  const endsAt = now + (phase === "closing" ? 11 * MINUTE : 2 * 60 * MINUTE + 41 * MINUTE);
+  return {
+    kind: "deadline",
+    subject: DEADLINE_LIVE_ACTIVITY_SUBJECT,
+    props: {
+      v: 1,
+      kind: "deadline",
+      phase,
+      startsAt: new Date(endsAt - 36 * 60 * MINUTE).toISOString(),
+      endsAt: new Date(endsAt).toISOString(),
+      submission,
+      projectName: submission ? "Tidewatch" : null,
+      url: "hackos://project",
+      labels: deadlineLiveLabels("en"),
+      rank: 1,
+      updatedAt: new Date(now).toISOString(),
+    },
+  };
+}
+
+function accreditation(): DesiredActivity {
+  const now = Date.now();
+  return {
+    kind: "accreditation",
+    subject: ACCREDITATION_LIVE_ACTIVITY_SUBJECT,
+    props: {
+      v: 1,
+      kind: "accreditation",
+      phase: "live",
+      accredited: 412,
+      eligible: 600,
+      inside: 380,
+      recentArrivals: 23,
+      endsAt: new Date(now + 47 * MINUTE).toISOString(),
+      scanUrl: "hackos://scan",
+      url: "hackos://scan",
+      labels: accreditationLiveLabels("en"),
+      rank: 0,
+      updatedAt: new Date(now).toISOString(),
+    },
+  };
+}
+
+const KIND_SAMPLES: Record<string, () => DesiredActivity[]> = {
+  "attendee-upcoming": () => [attendee("upcoming")],
+  "attendee-live": () => [attendee("live")],
+  "deadline-open": () => [deadline("open", "draft")],
+  "deadline-open-unknown": () => [deadline("open", null)],
+  "deadline-closing": () => [deadline("closing", "draft")],
+  "deadline-submitted": () => [deadline("submitted", "submitted")],
+  accreditation: () => [accreditation()],
+};

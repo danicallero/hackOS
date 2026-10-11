@@ -1,7 +1,10 @@
 import {
+  ACCREDITATION_LIVE_ACTIVITY_SUBJECT,
   type ActivityLiveProps,
   type AndroidLiveUpdateMessage,
   activityLiveActivitySubject,
+  attendeeActivityLiveActivitySubject,
+  DEADLINE_LIVE_ACTIVITY_SUBJECT,
   LIVE_ACTIVITY_KINDS,
   LIVE_ACTIVITY_PROPS_VERSION,
   type LiveActivityKind,
@@ -54,7 +57,8 @@ function isProps(value: unknown): value is LiveActivityProps {
   if (!value || typeof value !== "object") return false;
   const props = value as Partial<LiveActivityProps>;
   return (
-    props.v === LIVE_ACTIVITY_PROPS_VERSION && (props.kind === "queue" || props.kind === "activity")
+    props.v === LIVE_ACTIVITY_PROPS_VERSION &&
+    (Object.values(LIVE_ACTIVITY_KINDS) as unknown[]).includes(props.kind)
   );
 }
 
@@ -80,7 +84,51 @@ export function desiredActivities(response: MyLiveActivities): DesiredActivity[]
       props: activity,
     });
   }
-  return desired;
+  // H59, H19, H22 kinds: optional fields, absent on older servers.
+  for (const item of response.attendeeActivities ?? []) {
+    if (!isProps(item)) continue;
+    desired.push({
+      kind: LIVE_ACTIVITY_KINDS.ATTENDEE_ACTIVITY,
+      subject: attendeeActivityLiveActivitySubject(item.scheduleId),
+      props: item,
+    });
+  }
+  if (response.deadline && isProps(response.deadline)) {
+    desired.push({
+      kind: LIVE_ACTIVITY_KINDS.DEADLINE,
+      subject: DEADLINE_LIVE_ACTIVITY_SUBJECT,
+      props: response.deadline,
+    });
+  }
+  if (response.accreditation && isProps(response.accreditation)) {
+    desired.push({
+      kind: LIVE_ACTIVITY_KINDS.ACCREDITATION,
+      subject: ACCREDITATION_LIVE_ACTIVITY_SUBJECT,
+      props: response.accreditation,
+    });
+  }
+  return rankedWithinLimit(desired, response.maxConcurrent);
+}
+
+/**
+ * The server already ranks the set and cuts it to the device's
+ * `maxConcurrent` when sent `deviceId`; this keeps the device within the
+ * limit even so, the most important first (`rank` 0; unranked last, in
+ * response order).
+ */
+function rankedWithinLimit(
+  desired: DesiredActivity[],
+  maxConcurrent: number | undefined,
+): DesiredActivity[] {
+  const rankOf = (item: DesiredActivity) =>
+    typeof item.props.rank === "number" ? item.props.rank : Number.POSITIVE_INFINITY;
+  const ranked = desired
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => rankOf(a.item) - rankOf(b.item) || a.index - b.index)
+    .map(({ item }) => item);
+  return typeof maxConcurrent === "number" && Number.isFinite(maxConcurrent) && maxConcurrent >= 1
+    ? ranked.slice(0, Math.floor(maxConcurrent))
+    : ranked;
 }
 
 /** Content identity, ignoring the server's computation timestamp. */
@@ -184,14 +232,21 @@ export function withScannedIncrement(props: ActivityLiveProps, by = 1): Activity
 }
 
 /**
- * Next instant the staff surfaces change phase on their own (a start or an
- * end), so the foreground app can refresh exactly then instead of polling.
+ * Next instant a surface changes phase or ends on its own (an activity or
+ * schedule item starting or ending, the deadline, the accreditation window),
+ * so the foreground app can refresh exactly then instead of polling.
  */
 export function nextPhaseBoundary(desired: DesiredActivity[], now: number): number | null {
   let next: number | null = null;
   for (const item of desired) {
-    if (item.props.kind !== "activity") continue;
-    for (const iso of [item.props.startsAt, item.props.endsAt]) {
+    const props = item.props;
+    const instants =
+      props.kind === "activity" || props.kind === "attendee_activity"
+        ? [props.startsAt, props.endsAt]
+        : props.kind === "deadline" || props.kind === "accreditation"
+          ? [props.endsAt]
+          : [];
+    for (const iso of instants) {
       const at = Date.parse(iso);
       if (Number.isFinite(at) && at > now && (next === null || at < next)) next = at;
     }
@@ -233,7 +288,7 @@ function clock(iso: string): string {
  * sound) only on the transition into "called"; every other post is silent.
  */
 export function toLiveUpdateSpec(
-  props: LiveActivityProps,
+  props: QueueLiveProps | ActivityLiveProps,
   previousPhase: string | null,
 ): LiveUpdateSpec {
   if (props.kind === "queue") {

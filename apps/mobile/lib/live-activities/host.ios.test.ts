@@ -44,6 +44,15 @@ jest.mock("@/widgets/queue-activity", () => ({
 jest.mock("@/widgets/staff-activity", () => ({
   StaffActivity: { start: jest.fn(), getInstances: () => [] },
 }));
+jest.mock("@/widgets/attendee-activity", () => ({
+  AttendeeActivity: { start: jest.fn(), getInstances: () => [] },
+}));
+jest.mock("@/widgets/deadline-activity", () => ({
+  DeadlineActivity: { start: jest.fn(), getInstances: () => [] },
+}));
+jest.mock("@/widgets/accreditation-activity", () => ({
+  AccreditationActivity: { start: jest.fn(), getInstances: () => [] },
+}));
 jest.mock("./store", () => ({
   readLiveActivityState: async () => ({ iosStaffSubjects: {} }),
   updateLiveActivityState: async () => undefined,

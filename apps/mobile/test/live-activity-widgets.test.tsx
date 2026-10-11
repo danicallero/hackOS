@@ -7,12 +7,21 @@
 import * as SwiftUI from "@expo/ui/swift-ui";
 import * as SwiftUIModifiers from "@expo/ui/swift-ui/modifiers";
 import {
+  type AccreditationLiveProps,
   type ActivityLiveProps,
+  type AttendeeActivityLiveProps,
+  accreditationLiveLabels,
   activityLiveLabels,
+  attendeeActivityLiveLabels,
+  type DeadlineLiveProps,
+  deadlineLiveLabels,
   type QueueLiveProps,
   queueLiveLabels,
 } from "@hackos/shared/live-activities";
 import type { LiveActivityEnvironment } from "expo-widgets";
+import * as AccreditationWidget from "@/widgets/accreditation-activity";
+import * as AttendeeWidget from "@/widgets/attendee-activity";
+import * as DeadlineWidget from "@/widgets/deadline-activity";
 import * as QueueWidget from "@/widgets/queue-activity";
 import * as StaffWidget from "@/widgets/staff-activity";
 
@@ -53,6 +62,15 @@ function evaluateLayout<P>(source: unknown): Layout<P> {
 
 const QueueActivityLayout = evaluateLayout<QueueLiveProps>(QueueWidget.QueueActivityLayout);
 const StaffActivityLayout = evaluateLayout<ActivityLiveProps>(StaffWidget.StaffActivityLayout);
+const AttendeeActivityLayout = evaluateLayout<AttendeeActivityLiveProps>(
+  AttendeeWidget.AttendeeActivityLayout,
+);
+const DeadlineActivityLayout = evaluateLayout<DeadlineLiveProps>(
+  DeadlineWidget.DeadlineActivityLayout,
+);
+const AccreditationActivityLayout = evaluateLayout<AccreditationLiveProps>(
+  AccreditationWidget.AccreditationActivityLayout,
+);
 
 const environment = {
   colorScheme: "dark",
@@ -310,5 +328,259 @@ describe("Live Activity layouts (#966)", () => {
     const futureStaff = { v: 2, kind: "activity", name: "Lunch" } as unknown as ActivityLiveProps;
     const staffLayout = StaffActivityLayout(futureStaff, environment);
     expect(texts(staffLayout.banner)).toEqual(["Lunch"]);
+  });
+});
+
+// ── Attendee, deadline and accreditation kinds (H59, H19, H22) ──
+
+const NOW = Date.parse("2026-02-20T12:00:00.000Z");
+
+function attendee(overrides: Partial<AttendeeActivityLiveProps> = {}): AttendeeActivityLiveProps {
+  return {
+    v: 1,
+    kind: "attendee_activity",
+    phase: "upcoming",
+    scheduleId: 21,
+    name: "Rust workshop",
+    category: "workshop",
+    location: "Room A2",
+    startsAt: "2026-02-20T12:10:00.000Z",
+    endsAt: "2026-02-20T13:10:00.000Z",
+    url: "hackos://schedule/21",
+    labels: attendeeActivityLiveLabels("en"),
+    updatedAt: "2026-02-20T12:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function deadline(overrides: Partial<DeadlineLiveProps> = {}): DeadlineLiveProps {
+  return {
+    v: 1,
+    kind: "deadline",
+    phase: "open",
+    startsAt: "2026-02-19T00:00:00.000Z",
+    endsAt: "2026-02-20T14:00:00.000Z",
+    submission: "draft",
+    projectName: "Tidewatch",
+    url: "hackos://project",
+    labels: deadlineLiveLabels("en"),
+    updatedAt: "2026-02-20T12:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function accreditation(overrides: Partial<AccreditationLiveProps> = {}): AccreditationLiveProps {
+  return {
+    v: 1,
+    kind: "accreditation",
+    phase: "live",
+    accredited: 412,
+    eligible: 600,
+    inside: 380,
+    recentArrivals: 23,
+    endsAt: "2026-02-20T13:00:00.000Z",
+    scanUrl: "hackos://scan",
+    url: "hackos://scan",
+    labels: accreditationLiveLabels("en"),
+    updatedAt: "2026-02-20T12:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function allTexts(layout: Record<string, unknown>): string[] {
+  return SLOTS.flatMap((slot) => texts(layout[slot]));
+}
+
+/** Every `foregroundStyle` colour applied within a presentation. */
+function colors(node: unknown): string[] {
+  if (node === null || node === undefined || typeof node !== "object") return [];
+  if (Array.isArray(node)) return node.flatMap(colors);
+  const current = node as Node;
+  const own = ((current.props?.modifiers as { modifier: string; args: unknown[] }[]) ?? [])
+    .filter((modifier) => modifier?.modifier === "foregroundStyle")
+    .map((modifier) => {
+      const [color] = modifier.args;
+      return typeof color === "string" ? color : JSON.stringify(color);
+    });
+  const image = typeof current.props?.color === "string" ? [current.props.color as string] : [];
+  return [...own, ...image, ...colors(current.props?.children)];
+}
+
+describe("New Live Activity kinds (#966)", () => {
+  beforeEach(() => {
+    jest.useFakeTimers({ now: NOW });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it.each([
+    ["attendee", AttendeeActivityLayout, attendee()],
+    [
+      "attendee live",
+      AttendeeActivityLayout,
+      attendee({ phase: "live", startsAt: "2026-02-20T11:40:00.000Z" }),
+    ],
+    ["attendee no place", AttendeeActivityLayout, attendee({ location: null, updatedAt: "bad" })],
+    ["attendee bad dates", AttendeeActivityLayout, attendee({ phase: "live", endsAt: "bad" })],
+    ["deadline open", DeadlineActivityLayout, deadline()],
+    ["deadline unknown", DeadlineActivityLayout, deadline({ submission: null, projectName: null })],
+    ["deadline no start", DeadlineActivityLayout, deadline({ startsAt: null })],
+    ["deadline closing", DeadlineActivityLayout, deadline({ phase: "closing" })],
+    [
+      "deadline submitted",
+      DeadlineActivityLayout,
+      deadline({ phase: "submitted", submission: "submitted" }),
+    ],
+    ["accreditation", AccreditationActivityLayout, accreditation()],
+    [
+      "accreditation no estimate",
+      AccreditationActivityLayout,
+      accreditation({ inside: null, eligible: 0 }),
+    ],
+  ] as [
+    string,
+    Layout<never>,
+    unknown,
+  ][])("builds every presentation: %s", (_name, layout, props) => {
+    const built = layout(props as never, environment);
+    expect(Object.keys(built).sort()).toEqual([...SLOTS].sort());
+  });
+
+  describe("attendee activity (H59)", () => {
+    it("counts down to the start, then shows Now with an elapsed-time bar", () => {
+      const upcoming = AttendeeActivityLayout(attendee(), environment);
+      expect(texts(upcoming.banner)).toEqual(
+        expect.arrayContaining(["Starts in", "Rust workshop"]),
+      );
+      expect(nodes(upcoming.banner, "ProgressView")).toHaveLength(0);
+      const [countdown] = nodes(upcoming.compactTrailing, "Text");
+      expect((countdown?.props?.timerInterval as { upper: Date }).upper).toEqual(
+        new Date("2026-02-20T12:10:00.000Z"),
+      );
+
+      const live = AttendeeActivityLayout(
+        attendee({ phase: "live", startsAt: "2026-02-20T11:40:00.000Z" }),
+        environment,
+      );
+      expect(texts(live.banner)).toEqual(expect.arrayContaining(["Now", "Ends in"]));
+      expect(nodes(live.banner, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
+      expect(nodes(live.minimal, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
+    });
+
+    it("has no buttons on any presentation", () => {
+      const live = AttendeeActivityLayout(attendee({ phase: "live" }), environment);
+      expect(SLOTS.flatMap((slot) => nodes(live[slot], "Link"))).toHaveLength(0);
+    });
+
+    it("omits the labels a payload lacks instead of inventing copy", () => {
+      const live = AttendeeActivityLayout(
+        attendee({
+          phase: "live",
+          labels: { startsIn: "", now: "", endsIn: "" } as AttendeeActivityLiveProps["labels"],
+        }),
+        environment,
+      );
+      expect(allTexts(live).join(" ")).not.toMatch(/Now|Ends in|Starts in/);
+      expect(allTexts(live)).toContain("Rust workshop");
+    });
+  });
+
+  describe("submission deadline (H19)", () => {
+    it("shows a known draft as not submitted and an unknown status not at all", () => {
+      const draft = DeadlineActivityLayout(deadline(), environment);
+      expect(texts(draft.banner)).toEqual(
+        expect.arrayContaining(["Submissions close", "Closes in", "Tidewatch", "Not submitted"]),
+      );
+      // The window's elapsed share is a real timer bar.
+      expect(nodes(draft.banner, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
+
+      const unknown = DeadlineActivityLayout(
+        deadline({ submission: null, projectName: null }),
+        environment,
+      );
+      expect(allTexts(unknown).join(" ")).not.toMatch(/Not submitted|Submitted/);
+    });
+
+    it("turns red while closing and calm green once submitted", () => {
+      const closing = DeadlineActivityLayout(deadline({ phase: "closing" }), environment);
+      expect(colors(closing.compactLeading)).toContain("#FF453A");
+      expect(texts(closing.bannerSmall)).toContain("Not submitted");
+
+      const submitted = DeadlineActivityLayout(
+        deadline({ phase: "submitted", submission: "submitted" }),
+        environment,
+      );
+      expect(colors(submitted.compactLeading)).toContain("#30D158");
+      expect(texts(submitted.banner)).toEqual(expect.arrayContaining(["Submitted", "Closes in"]));
+      expect(texts(submitted.bannerSmall)).toContain("Submitted");
+      // Calm: no urgency bar, the time left stays small.
+      expect(nodes(submitted.banner, "ProgressView")).toHaveLength(0);
+    });
+
+    it("works without a window start (no bar, plain minimal symbol)", () => {
+      const layout = DeadlineActivityLayout(deadline({ startsAt: null }), environment);
+      expect(nodes(layout.banner, "ProgressView")).toHaveLength(0);
+      expect(nodes(layout.minimal, "Image")).toHaveLength(1);
+    });
+  });
+
+  describe("accreditation desk (H22)", () => {
+    it("leads with accredited of eligible, a bar of that share and recent arrivals", () => {
+      const layout = AccreditationActivityLayout(accreditation(), environment);
+      expect(texts(layout.banner)).toEqual(
+        expect.arrayContaining([
+          "Accredited",
+          "412",
+          "/600",
+          "Last 10 min",
+          "+23",
+          "Inside",
+          "380",
+        ]),
+      );
+      expect(nodes(layout.banner, "ProgressView")[0]?.props?.value).toBeCloseTo(412 / 600, 5);
+      expect(nodes(layout.minimal, "Gauge")[0]?.props?.value).toBeCloseTo(412 / 600, 5);
+      expect(texts(layout.compactTrailing)).toEqual(["412"]);
+    });
+
+    it("offers the single Scan action, never on the watch", () => {
+      const layout = AccreditationActivityLayout(accreditation(), environment);
+      expect(nodes(layout.banner, "Link")).toHaveLength(1);
+      expect(nodes(layout.expandedBottom, "Link")).toHaveLength(1);
+      expect(nodes(layout.bannerSmall, "Link")).toHaveLength(0);
+      expect(nodes(layout.banner, "Link")[0]?.props?.destination).toBe("hackos://scan");
+    });
+
+    it("drops the inside estimate and the ring when they are unknown", () => {
+      const layout = AccreditationActivityLayout(
+        accreditation({ inside: null, eligible: 0 }),
+        environment,
+      );
+      expect(texts(layout.banner)).not.toContain("Inside");
+      expect(nodes(layout.minimal, "Gauge")).toHaveLength(0);
+      expect(nodes(layout.banner, "ProgressView")).toHaveLength(0);
+    });
+  });
+
+  it("drops accent colours on the Always-On Lock Screen", () => {
+    const reduced = { colorScheme: "dark", isLuminanceReduced: true } as LiveActivityEnvironment;
+    const layout = DeadlineActivityLayout(deadline({ phase: "closing" }), reduced);
+    expect(colors(layout.banner).filter((color) => color.includes("dynamic"))).toEqual([]);
+  });
+
+  it("degrades a future props version to its title", () => {
+    const future = (kind: string, extra: object) => ({ v: 2, kind, ...extra }) as never;
+    expect(
+      texts(
+        AttendeeActivityLayout(future("attendee_activity", { name: "Talk" }), environment).banner,
+      ),
+    ).toEqual(["Talk"]);
+    expect(Object.keys(DeadlineActivityLayout(future("deadline", {}), environment)).sort()).toEqual(
+      [...SLOTS].sort(),
+    );
+    expect(
+      Object.keys(AccreditationActivityLayout(future("accreditation", {}), environment)).sort(),
+    ).toEqual([...SLOTS].sort());
   });
 });

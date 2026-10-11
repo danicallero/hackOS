@@ -124,7 +124,8 @@ function callsTo(apiFetch: jest.Mock, path: string, method = "GET") {
 }
 
 const DEVICE = "/api/me/live-activities/device";
-const READ = "/api/me/live-activities";
+// `deviceId` lets the server apply this device's maxConcurrent cut.
+const READ = "/api/me/live-activities?deviceId=device-1";
 
 describe("Live Activity sync (#966)", () => {
   it("switches device delivery off with the old session before sign-out revokes it", async () => {

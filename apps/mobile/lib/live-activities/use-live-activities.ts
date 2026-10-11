@@ -9,7 +9,7 @@ import { reconcileLiveActivities, registerLiveActivityDevice, signOutLiveActivit
 
 /** Coalesces bursts of queue events into one read. */
 const EVENT_DEBOUNCE_MS = 1_000;
-/** A live staff counter refreshes this often while the app is open; APNs covers the rest. */
+/** A live staff or desk counter refreshes this often while the app is open; APNs covers the rest. */
 const LIVE_COUNTER_REFRESH_MS = 60_000;
 
 /**
@@ -54,8 +54,11 @@ export function useLiveActivities({
         const delay = Math.min(next - Date.now() + 1_000, 2_147_000_000);
         boundaryTimer.current = setTimeout(() => void run(), delay);
       }
+      // Staff counters and the accreditation desk (H22) change with every scan.
       const hasLiveCounter = desired.some(
-        (item) => item.props.kind === "activity" && item.props.phase === "live",
+        (item) =>
+          (item.props.kind === "activity" && item.props.phase === "live") ||
+          item.props.kind === "accreditation",
       );
       if (hasLiveCounter && !counterInterval) {
         counterInterval = setInterval(() => {

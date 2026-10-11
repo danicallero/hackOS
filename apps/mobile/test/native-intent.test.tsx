@@ -14,7 +14,14 @@ describe("redirectSystemPath (#966)", () => {
     );
   });
 
+  it("lands the deadline's project link on My queue, the team's project list (H19)", () => {
+    expect(redirect("hackos://project")).toBe("/queue");
+    expect(redirect("hackos://project/")).toBe("/queue");
+  });
+
   it.each([
+    "hackos://schedule/21",
+    "hackos://projects",
     "hackos://s/AbC123",
     "https://os.hackudc.com/s/AbC123",
     "https://os.hackudc.com/s/AbC123?utm=nfc",

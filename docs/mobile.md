@@ -79,7 +79,7 @@ documented in full in its own section below.
 | H24 | Presence (door in/out) scanner, manual back-dated entries | [Scanner](#scanner) |
 | H25 | Meals scanner, repeat-serving confirmation | [Scanner](#scanner) |
 | H26 | Registrable-activity scanner | [Scanner](#scanner), [Activities](#activities) |
-| H38, H25/H26 | Queue and staff-activity Live Activities / Live Updates (#966) | [Live Activities](#live-activities-and-live-updates-966) |
+| H38, H25/H26, H59, H19, H22 | Queue, staff-activity, attendee-activity, submission-deadline and accreditation-desk Live Activities / Live Updates (#966) | [Live Activities](#live-activities-and-live-updates-966) |
 
 ## Backend changes
 
@@ -1486,15 +1486,20 @@ physical iOS/Android and EAS verification remains a release-gate task in
 
 ## Live Activities and Live Updates (#966)
 
-System surfaces for two time-bound moments: the participant's nearest judging
-queue (H38) and, for `activity:scan` holders, an upcoming or live meal /
-scannable activity (H25/H26). The API computes every state, sends background
+System surfaces for time-bound moments: the participant's nearest judging
+queue (H38); for `activity:scan` holders, an upcoming or live meal /
+scannable activity (H25/H26); a schedule item organizers opted in for its
+audience (H59); the submission deadline (H19/H20); and the accreditation desk
+during the arrival rush (H22/H24). The API computes every state, sends background
 updates (APNs ActivityKit pushes on iOS, data-only Expo pushes on Android) and
 documents the contract in [`live-activities.md`](./live-activities.md); the
 app renders the pre-localized props of `@hackos/shared/live-activities`.
 
 **Surfaces (iOS, `expo-widgets`).** `widgets/queue-activity.tsx`
-(`QueueActivity`) and `widgets/staff-activity.tsx` (`StaffActivity`) are
+(`QueueActivity`), `widgets/staff-activity.tsx` (`StaffActivity`),
+`widgets/attendee-activity.tsx` (`AttendeeActivity`),
+`widgets/deadline-activity.tsx` (`DeadlineActivity`) and
+`widgets/accreditation-activity.tsx` (`AccreditationActivity`) are
 `'widget'` layouts serialized into the `ExpoWidgetsTarget` extension, so they
 use only `@expo/ui/swift-ui` and declare every helper and colour inside the
 function. The names must equal `LIVE_ACTIVITY_WIDGET_NAMES`. Each state
@@ -1513,6 +1518,20 @@ Apple's HIG:
 | Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: stage track, location · called count-up, challenge · +N more queues | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live meal: served / still to eat, served-share bar, inside, ends-in, **Scan**; live other: symbol / scanned, elapsed-time bar, name, ends-in, **Scan** |
 | Lock Screen | challenge … +N more queues; hero ETA (34 pt, accent) and position; called: "Go to" room (green) + location and the count-up since the call; stage track with labels | upcoming: symbol, name, time · location … starts-in countdown; live: symbol, name … ends-in; stats (served · **still to eat** · inside for meals, else scanned); bar with **Scan** in the bottom trailing corner |
 | Watch Smart Stack / CarPlay (`bannerSmall`) | challenge + `#4 · ~12 min` or the room | name + countdown or hero count, no buttons |
+
+| Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
+| --- | --- | --- | --- |
+| Compact leading / trailing | category symbol / countdown to the start (blue); live: countdown to the end | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (grey once submitted) | `person.badge.key` / accredited count |
+| Minimal | countdown; live: elapsed-time ring around the symbol | ring of the hacking window's elapsed time around the symbol (none without `startsAt`); submitted: the check | ring of accredited / eligible |
+| Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: live elapsed-time bar, "Now" + name, `hh:mm–hh:mm · place` | symbol / "Closes in" countdown (24 pt, hours long; small and grey once submitted); bottom: window bar, title, project, status | Accredited `412 /600` / Last 10 min `+23`; bottom: share bar, Inside 380, closing time, **Scan** |
+| Lock Screen | symbol, ("Now"), name, time · place … countdown hero; live adds the elapsed-time bar | symbol + title; hero "Closes in" countdown (34 pt) with project and status opposite; window bar. Closing: red. Submitted: green "Submitted" hero, the time left small, no bar | symbol + title … closing time; Accredited (hero) · Last 10 min · Inside; share bar with **Scan** in the bottom trailing corner |
+| Watch / CarPlay | name + countdown, or "Now" + time left | title + countdown ("Not submitted" while closing) or "Submitted" | title + `412 /600` |
+
+The attendee activity has no buttons (the whole surface opens the schedule
+item). The deadline shows a status only when it is known: `submitted` is a
+green check, a `draft` reads `labels.notSubmitted` (amber, red while closing)
+and `null` (not in hackOS yet) shows nothing. The desk's end time is a clock
+symbol and the time, because the contract has no label for it.
 
 **Queue stage track.** Three nodes (In line → Called → In room) and two
 segments; completed parts take the phase colour and the current node is
@@ -1545,11 +1564,13 @@ push-to-start. APNs props reach the layouts directly, so a props version
 other than `1` renders only the title. Room and activity names truncate;
 only numbers keep their full width. `test/live-activity-widgets.test.tsx`
 evaluates the serialized layouts with nothing but `@expo/ui/swift-ui` in
-scope and covers the track fill, the meal breakdown and the old-server
-(v1 labels) fallbacks.
+scope and covers the track fill, the meal breakdown, the old-server
+(v1 labels) fallbacks and, for the newer kinds, every phase, missing labels,
+the deadline's unknown status and the desk's missing estimate.
 
-**Surfaces (Android).** `lib/live-activities/model.ts` `toLiveUpdateSpec`
-maps the same props to `modules/live-updates` promoted ongoing notifications:
+**Surfaces (Android).** The attendee, deadline and accreditation kinds have
+no Android rendering yet: `host.android.ts` skips them. `lib/live-activities/model.ts` `toLiveUpdateSpec`
+maps the queue and staff props to `modules/live-updates` promoted ongoing notifications:
 queue chip `~12m`/`#4`/room, text "Position #4 · Wait ~12 min" or "Go to Room
 B · location", heads-up only on the transition into called; activity chip
 chronometer countdown to `startsAt`, then the count, plus the Scan action.
@@ -1564,24 +1585,31 @@ then a no-op.
   change and when iOS rotates the push-to-start token (iOS 17.2+); on Android
   it sends the Expo push token instead (permission is still prompted by
   `lib/push.ts`). `reconcileLiveActivities` reads `GET /api/me/live-activities`
-  and applies it; every running iOS activity, including ones APNs started,
+  (with `?deviceId=`, so the server applies this device's `maxConcurrent`
+  cut and rank hysteresis) and applies it; every running iOS activity, including ones APNs started,
   reports its per-activity token through `PUT …/sessions`. A failed device
   registration (offline sign-in, opt-out) is retried before the next
   reconcile. A read that was in flight across sign-out/sign-in, or that a
   newer read overtook, is discarded instead of applied. A 404 (an API without
   the module) silences the orchestration until the next sign-in or language
   change.
-- `model.ts` `planReconcile` — one surface per (kind, subject): start missing
+- `model.ts` `desiredActivities` — reads every kind (the newer fields are
+  optional for older servers), orders by `rank` (0 first, unranked last) and
+  never keeps more than `maxConcurrent` even if the server sent more.
+  `planReconcile` — one surface per (kind, subject): start missing
   ones (the queue only while `judgingWindowOpen`), update changed props
   (ignoring `updatedAt`), end duplicates and dropped subjects (iOS keeps the
   final state 15 minutes). A surface that vanished while the server still
   lists it was swiped away: it is not restarted until its phase changes
   (called, live) and `DELETE …/sessions` stops remote restarts. iOS cannot
-  read a push-started activity's props, so an unidentified `StaffActivity`
-  is adopted by an unmatched subject and immediately updated.
+  read a push-started activity's props, so an unidentified `StaffActivity` or
+  `AttendeeActivity` is adopted by an unmatched subject of its kind and
+  immediately updated (`host.ios.ts` remembers id → subject; the queue,
+  deadline and desk have a single subject each).
 - `use-live-activities.ts` (mounted in `app/_layout.tsx`) reconciles on sign-in,
-  foreground, the personal queue events, a staff start/end boundary and every
-  minute while a counter is live. Sign-out ends every surface and sends
+  foreground, the personal queue events, the next start/end boundary (staff
+  and attendee activities, the deadline, the desk window) and every minute
+  while a staff counter or the accreditation desk is live. Sign-out ends every surface and sends
   `enabled: false` with the session that registered the device; `signOut()`
   revokes that session only after this cleanup settles (or after 4 s), since
   `notifySignOut()` returns a promise for asynchronous listeners. Sign-out
@@ -1600,17 +1628,24 @@ then a no-op.
 `hackos://scan?activity=<id>` (activity tap and Scan) is rewritten by
 `app/+native-intent.tsx` to `/activities/<id>`, the activity scanner bound to
 that activity, so the camera starts without a chooser (R008).
+`hackos://schedule/<id>` (attendee activity) opens `app/schedule/[id].tsx`
+and `hackos://scan` (accreditation tap and Scan) the scanner tab, both
+unchanged. The app has no project screen, so `hackos://project` (deadline) is
+mapped to `/queue`, the participant's My queue tab, which lists the team's
+projects; the deadline goes to `queue:status` holders, who always have it.
 
 **Opt-out.** Notifications settings has a Live Activities (iOS) / Live
 updates (Android) switch: off ends every surface immediately and registers the
 device with `enabled: false`.
 
 **Development samples.** Debug builds only: opening
-`hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|all|end>`
+`hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-submitted|accreditation|all|end>`
 (for example `xcrun simctl openurl booted …`) renders sample states without a
 backend: waiting #4 of a start of 9 with a 12 min ETA, the same with an
 unknown ETA, called 2 minutes ago, in room, an upcoming meal, a live meal
-(142 served, 310 inside, 168 still to eat) and a live non-meal activity. The handler is required behind `__DEV__` in `+native-intent.tsx`, so
+(142 served, 310 inside, 168 still to eat), a live non-meal activity, an
+upcoming and a running workshop, the deadline open with a draft or an
+unknown status, closing and submitted, and the desk at 412 of 600. The handler is required behind `__DEV__` in `+native-intent.tsx`, so
 release bundles drop it.
 
 ## Realtime & notifications infrastructure

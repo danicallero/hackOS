@@ -14,7 +14,8 @@ import { liveActivityDeviceId, readLiveActivityState, updateLiveActivityState } 
 
 /**
  * Foreground Live Activity orchestration (#966; H38 queue, H25/H26 staff
- * activities). The API computes every state (see docs/live-activities.md);
+ * activities, H59 attendee activities, H19 deadline, H22 accreditation
+ * desk). The API computes every state (see docs/live-activities.md);
  * this module registers the device and its tokens, then mirrors
  * `GET /api/me/live-activities` onto the system surfaces through the platform
  * host. Everything is best effort: a failure never blocks the app.
@@ -191,7 +192,10 @@ export async function reconcileLiveActivities(): Promise<DesiredActivity[]> {
   const seq = ++reconcileSeq;
   let response: MyLiveActivities;
   try {
-    response = await apiFetch<MyLiveActivities>("/api/me/live-activities");
+    // `deviceId` makes the server apply this device's `maxConcurrent` cut
+    // with the sessions it already shows (hysteresis, displacement by rank).
+    const deviceId = encodeURIComponent(await liveActivityDeviceId());
+    response = await apiFetch<MyLiveActivities>(`/api/me/live-activities?deviceId=${deviceId}`);
   } catch (error) {
     if (isMissingEndpoint(error)) apiMissing = true;
     throw error;
