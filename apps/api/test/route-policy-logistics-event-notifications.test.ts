@@ -36,10 +36,16 @@ describe("logistics, event and notifications route policy ledger", () => {
 
     // +2 (#933): GET /api/logistics/meal-plans (logistics:stats) and its
     // per-meal catering CSV (meal-plans:export).
-    // Fastify synthesizes a matching HEAD route for each GET; the 94 explicit
+    // +1 (H50/H51): POST /api/me/notifications/:id/unread (authenticated).
+    // Fastify synthesizes a matching HEAD route for each GET; the 95 explicit
     // declarations below are the reviewable API policy delta.
     const declared = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(declared).toHaveLength(94);
+    expect(declared).toHaveLength(95);
+    expect(declared).toContainEqual({
+      method: "POST",
+      url: "/api/me/notifications/:id/unread",
+      policy: { kind: "authenticated", emailVerification: "none" },
+    });
     expect(declared).toContainEqual({
       method: "GET",
       url: "/api/announcements/targeting-options",
