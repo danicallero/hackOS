@@ -56,6 +56,8 @@ function status(overrides: Partial<Status>): Status {
     status: "waiting",
     position: 3,
     etaMinutes: 24,
+    queueTotal: 5,
+    calledAhead: null,
     calledAt: null,
     room: null,
     rooms: [],
@@ -69,7 +71,7 @@ describe("selectQueueLiveProps (H38)", () => {
     const props = selectQueueLiveProps(
       [
         status({ entryId: 1, challengeTitle: "Far", position: 6, etaMinutes: 48 }),
-        status({ entryId: 2, challengeTitle: "Near", position: 2, etaMinutes: 16 }),
+        status({ entryId: 2, challengeTitle: "Near", position: 2, etaMinutes: 16, queueTotal: 7 }),
         status({ entryId: 3, challengeTitle: "Done", status: "completed", etaMinutes: null }),
         status({ entryId: 4, challengeTitle: "On stage", status: "presenting", etaMinutes: null }),
       ],
@@ -83,6 +85,8 @@ describe("selectQueueLiveProps (H38)", () => {
       challengeTitle: "Near",
       position: 2,
       etaMinutes: 16,
+      queueTotal: 7,
+      calledAhead: null,
       roomName: null,
       roomLocation: null,
       otherQueues: 1,
@@ -104,6 +108,8 @@ describe("selectQueueLiveProps (H38)", () => {
           position: null,
           etaMinutes: null,
           calledAt: "2026-10-11T09:59:00Z",
+          queueTotal: 9,
+          calledAhead: 2,
           room: { id: 7, name: "Room B", location: "Floor 2" },
         }),
       ],
@@ -118,6 +124,8 @@ describe("selectQueueLiveProps (H38)", () => {
       roomName: "Room B",
       roomLocation: "Floor 2",
       calledAt: "2026-10-11T09:59:00.000Z",
+      queueTotal: null,
+      calledAhead: 2,
       otherQueues: 1,
     });
     expect(props?.labels.goTo).toBe("Ve a");
@@ -196,8 +204,8 @@ describe("myLiveActivities", () => {
     });
     expect(waiting.queue?.etaMinutes).toBeGreaterThan(0);
     expect(waiting.queue?.calledAt).toBeNull();
-    // First sighting: the progress track starts at the current position.
-    expect(waiting.queue?.startPosition).toBe(3);
+    // Three teams in the queue: the progress track is partly full at first sight.
+    expect(waiting.queue).toMatchObject({ queueTotal: 3, calledAhead: null });
 
     await callEntry(entryId, roomId);
     const called = await myLiveActivities(userId, "en");
@@ -207,30 +215,81 @@ describe("myLiveActivities", () => {
       etaMinutes: null,
       roomName: "Room B",
       roomLocation: "Floor 2",
+      queueTotal: null,
+      calledAhead: 0,
     });
   });
 
-  it("keeps the highest waiting position as the progress start while the team moves up", async () => {
+  it("counts every team in the queue, judged ones included, as the progress total", async () => {
     const myLiveActivities = mine;
     const { pool } = await import("../../src/db/pool.js");
     await openJudgingWindow();
     const { userId, entryId, challengeId } = await participantInQueue({ position: 4 });
-
     expect((await myLiveActivities(userId, "en")).queue).toMatchObject({
       position: 4,
-      startPosition: 4,
+      queueTotal: 4,
     });
-    // Two teams ahead leave the queue: position drops, the start stays.
+
+    // Two teams ahead are judged: the position drops, the total stays.
     await pool.query(
-      `DELETE FROM queue_entries
+      `UPDATE queue_entries SET status = 'completed'
         WHERE id IN (SELECT id FROM queue_entries
                       WHERE challenge_id = $1 AND id <> $2 ORDER BY id LIMIT 2)`,
       [challengeId, entryId],
     );
     expect((await myLiveActivities(userId, "en")).queue).toMatchObject({
       position: 2,
-      startPosition: 4,
+      queueTotal: 4,
     });
+
+    // A cancelled team and a synthetic (H54) team are not part of the queue.
+    const { rows } = await pool.query<{ id: number; repo_id: number }>(
+      `SELECT id, repo_id FROM queue_entries
+        WHERE challenge_id = $1 AND status = 'completed' ORDER BY id`,
+      [challengeId],
+    );
+    await pool.query(`UPDATE queue_entries SET status = 'cancelled' WHERE id = $1`, [rows[0]!.id]);
+    await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [rows[1]!.repo_id]);
+    expect((await myLiveActivities(userId, "en")).queue).toMatchObject({ queueTotal: 2 });
+  });
+
+  it("counts teams called earlier to the same room and not yet in it", async () => {
+    const myLiveActivities = mine;
+    const { pool } = await import("../../src/db/pool.js");
+    await openJudgingWindow();
+    const { userId, entryId, challengeId, roomId } = await participantInQueue({ position: 4 });
+    const { rows } = await pool.query<{ id: number; repo_id: number }>(
+      `SELECT id, repo_id FROM queue_entries WHERE challenge_id = $1 AND id <> $2 ORDER BY id`,
+      [challengeId, entryId],
+    );
+    const [first, second, third] = rows as [
+      { id: number; repo_id: number },
+      { id: number; repo_id: number },
+      { id: number; repo_id: number },
+    ];
+    // Two called earlier and still outside, one already in the room.
+    await pool.query(
+      `UPDATE queue_entries
+          SET status = (CASE WHEN id = $3 THEN 'in_room' ELSE 'called' END)::queue_status,
+              assigned_room_id = $1,
+              called_at = now() - make_interval(mins => 10 - (id - $2))
+        WHERE id = ANY($4::int[])`,
+      [roomId, first.id, third.id, [first.id, second.id, third.id]],
+    );
+    await callEntry(entryId, roomId);
+    expect((await myLiveActivities(userId, "en")).queue).toMatchObject({
+      phase: "called",
+      calledAhead: 2,
+    });
+
+    // A synthetic (H54) team never counts for a real one.
+    await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [first.repo_id]);
+    expect((await myLiveActivities(userId, "en")).queue).toMatchObject({ calledAhead: 1 });
+
+    // The room frees up and the last team ahead enters it.
+    await pool.query(`UPDATE queue_entries SET status = 'completed' WHERE id = $1`, [third.id]);
+    await pool.query(`UPDATE queue_entries SET status = 'in_room' WHERE id = $1`, [second.id]);
+    expect((await myLiveActivities(userId, "en")).queue).toMatchObject({ calledAhead: 0 });
   });
 
   it("counts live activities out of accredited people, split by the fixture marker", async () => {
