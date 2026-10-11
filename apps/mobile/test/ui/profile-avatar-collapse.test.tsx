@@ -1,5 +1,6 @@
 import { act, renderHook, screen } from "@testing-library/react-native";
 import { Text } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import {
   ProfileAvatarCollapse,
   ProfileAvatarCollapseAnchor,
@@ -14,6 +15,8 @@ import {
   profileAvatarCoverOpacity,
   profileAvatarMaskFrame,
   profileAvatarMorphPath,
+  profileAvatarRestingOffsetBound,
+  profileAvatarSnapOffset,
   profileAvatarSnapTarget,
   resolveProfileCameraTarget,
 } from "@/lib/profile-avatar-collapse";
@@ -198,6 +201,26 @@ describe("profile avatar snap (#935)", () => {
     // A worklet's default-parameter expression is not captured on the UI thread.
     expect(profileAvatarSnapTarget.length).toBe(3);
     expect(profileAvatarSnapTarget.toString()).not.toContain("PROFILE_AVATAR_COLLAPSE_DISTANCE");
+  });
+
+  it("measures snap targets from the true top under an automatic inset", () => {
+    const resting = -59;
+    // y 0 is 59 pt past the true top: inside the morph, so it is not a rest.
+    expect(profileAvatarSnapOffset(0, resting, 0, distance)).toBe(resting);
+    expect(profileAvatarSnapOffset(10, resting, 0, distance)).toBe(resting + distance);
+    expect(profileAvatarSnapOffset(-20, resting, 0, distance)).toBe(resting);
+    expect(profileAvatarSnapOffset(-20, resting, 0.6, distance)).toBe(resting + distance);
+    expect(profileAvatarSnapOffset(40, resting, -0.6, distance)).toBe(resting);
+    // Exactly two rests: the true top and the collapsed offset.
+    expect(profileAvatarSnapOffset(resting, resting, 0, distance)).toBeNull();
+    expect(profileAvatarSnapOffset(resting + distance, resting, 0, distance)).toBeNull();
+    expect(profileAvatarSnapOffset(-80, resting, 0, distance)).toBeNull();
+  });
+
+  it("bounds the iOS true top by the status-bar overlap of the scroll host", () => {
+    expect(profileAvatarRestingOffsetBound(59, 0)).toBe(-59);
+    expect(profileAvatarRestingOffsetBound(59, 20)).toBe(-39);
+    expect(profileAvatarRestingOffsetBound(59, 120)).toBe(-0);
   });
 
   it("honours a custom collapse distance", () => {
@@ -407,7 +430,18 @@ describe("profile avatar anchor measurement (#935)", () => {
 
   it("drops a measurement taken while the scroll moves and remeasures once it holds still", async () => {
     jest.useFakeTimers();
-    const { result } = await renderHook(() => useProfileAvatarCollapse());
+    const { result } = await renderHook(() => useProfileAvatarCollapse(), {
+      wrapper: ({ children }) => (
+        <SafeAreaProvider
+          initialMetrics={{
+            frame: { x: 0, y: 0, width: 393, height: 852 },
+            insets: { top: 59, left: 0, right: 0, bottom: 34 },
+          }}
+        >
+          {children}
+        </SafeAreaProvider>
+      ),
+    });
     const controller = result.current;
     // Window position of the avatar for the scroll offset the shadow tree saw.
     let anchorY = 300;

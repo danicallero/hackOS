@@ -55,6 +55,32 @@ const MAX_HOLE_PUNCH_SIZE = 72;
 const MAX_HOLE_PUNCH_TOP = 96;
 
 /**
+ * Absolute content offset a released scroll should settle at, or null (#935).
+ * `restingOffset` is the content offset of the true top: negative under iOS's
+ * automatic inset, where y 0 sits that far past the top, inside the morph.
+ */
+export function profileAvatarSnapOffset(
+  contentOffset: number,
+  restingOffset: number,
+  velocity: number,
+  distance: number,
+): number | null {
+  "worklet";
+  const target = profileAvatarSnapTarget(contentOffset - restingOffset, velocity, distance);
+  return target === null ? null : restingOffset + target;
+}
+
+/**
+ * Upper bound for the true top's content offset on iOS (#935): the automatic
+ * inset always covers the part of the scroll view under the status bar, so
+ * the top rests at least that far above y 0. A native header can add more,
+ * which the scroll events observed before the first drag then capture.
+ */
+export function profileAvatarRestingOffsetBound(safeAreaTop: number, hostTop: number): number {
+  return -Math.max(0, safeAreaTop - hostTop);
+}
+
+/**
  * Pick the narrow, top-edge cutout among the rects reported by Android's
  * DisplayCutout (window coordinates, dp). Wide notches and side cutouts are
  * rejected so they get the plain collapse instead of a misleading morph.
