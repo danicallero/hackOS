@@ -4,16 +4,12 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import type { PoolClient } from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
-import {
-  getRequestAuthorizationContext,
-  requireAuth,
-  requireCapability,
-  userHasCapability,
-} from "../../lib/capabilities.js";
+import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
 import { normalizeLanguage } from "../notifications/templates.js";
+import { myLiveActivities } from "./candidates.js";
 import {
   deviceResponseSchema,
   endSessionBodySchema,
@@ -26,7 +22,6 @@ import {
   upsertSessionBodySchema,
 } from "./schemas.js";
 import { readLiveActivitySettings, saveLiveActivitySettings } from "./settings.js";
-import { myLiveActivities } from "./state.js";
 
 /**
  * Live Activity device/session registry and read model (#966; H38, H25,
@@ -168,7 +163,8 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
         summary: "Register a running Live Activity",
         description:
           "Records that the caller's device is showing the Live Activity `kind`/`subject` " +
-          "(`judging` for the queue, `activity:<id>` for a staff activity) and stores or " +
+          "(queue `judging`, activity `activity:<id>`, attendee_activity `schedule:<id>`, " +
+          "deadline `deadline`, judging `room:<id>`, accreditation `accreditation`) and stores or " +
           "rotates its iOS per-activity push token so the server can update and end it. Call " +
           "it after a local start, after a remote push-to-start start, and whenever iOS " +
           "rotates the token. Re-registering a dismissed activity reopens it.",
@@ -255,11 +251,18 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
         summary: "My Live Activities",
         description:
           "The Live Activity states the caller should be showing right now, built by the same " +
-          "code the push worker uses. `queue` is the participant's nearest queue during the " +
-          "judging window only (null outside it or with no live entry); the room appears only " +
-          "once the team is called. `activities` lists the scannable activities starting " +
-          "within the lead time or in progress, for holders of the activity-scan permission " +
-          "only. Labels are localized to `language`, else the account language.",
+          "code the push worker uses. A kind appears only when organizers enabled it, the " +
+          "caller holds one of its configured roles and its own gate holds: `queue` is the " +
+          "participant's nearest queue during the judging window (the room only once called); " +
+          "`activities` are scannable meals/activities in the lead time or running " +
+          "(activity:scan); `attendeeActivities` are opted-in schedule items for the caller's " +
+          "audience; `deadline` counts down to submissions closing (queue:status with event " +
+          "access); `judging` follows the rooms the caller judges in during the judging window; " +
+          "`accreditation` is the check-in desk during its window (accredit:scan). The set is " +
+          "ranked by kind priority and cut to `maxConcurrent`; each item's `rank` orders it " +
+          "(0 = most important). Pass `deviceId` (the caller's own install) so the cut also " +
+          "keeps that device's running activities and dismissals, as the worker does. Labels " +
+          "are localized to `language`, else the account language.",
         querystring: myLiveActivitiesQuerySchema,
         response: { 200: myLiveActivitiesResponseSchema },
       },
@@ -276,11 +279,7 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
         );
         language = normalizeLanguage(rows[0]?.language);
       }
-      const canScan = await userHasCapability(
-        getRequestAuthorizationContext(req),
-        CAPABILITIES.ACTIVITY_SCAN,
-      );
-      return myLiveActivities(userId, language, canScan);
+      return myLiveActivities(userId, language, { deviceId: req.query.deviceId });
     },
   );
 

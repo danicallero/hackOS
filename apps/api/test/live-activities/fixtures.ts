@@ -157,3 +157,57 @@ export async function sessionsOf(deviceRowId: number) {
   );
   return rows;
 }
+
+const DEFAULT_KIND_ORDER = [
+  "activity",
+  "attendee_activity",
+  "queue",
+  "judging",
+  "accreditation",
+  "deadline",
+] as const;
+
+/**
+ * truncateAll wipes 0605's seeded configuration and roles. Recreate it the
+ * permissive way for tests about a kind's own gates: every kind enabled in
+ * the default order, one role (without event access, so it changes no other
+ * fact) allowed for every kind and held by every user existing now.
+ */
+export async function allowLiveActivities(
+  options: Partial<{ maxConcurrent: number; kinds: readonly string[] }> = {},
+): Promise<number> {
+  await pool.query(
+    `INSERT INTO live_activity_settings (id, max_concurrent) VALUES (1, $1)
+     ON CONFLICT (id) DO UPDATE SET max_concurrent = EXCLUDED.max_concurrent`,
+    [options.maxConcurrent ?? 5],
+  );
+  const order = options.kinds ?? DEFAULT_KIND_ORDER;
+  await pool.query(`DELETE FROM live_activity_kind_settings`);
+  for (const [priority, kind] of order.entries()) {
+    await pool.query(
+      `INSERT INTO live_activity_kind_settings (kind, enabled, priority) VALUES ($1, true, $2)`,
+      [kind, priority],
+    );
+  }
+  const { rows } = await pool.query<{ id: number }>(
+    `SELECT id FROM roles WHERE name = 'live-activity-test-audience'`,
+  );
+  let roleId = rows[0]?.id;
+  if (roleId === undefined) {
+    const inserted = await pool.query<{ id: number }>(
+      `INSERT INTO roles (name, position, is_visible, event_access)
+       VALUES ('live-activity-test-audience', 999999999, false, false) RETURNING id`,
+    );
+    roleId = inserted.rows[0]!.id;
+  }
+  await pool.query(
+    `INSERT INTO live_activity_kind_roles (kind, role_id) SELECT kind, $1 FROM live_activity_kind_settings
+     ON CONFLICT DO NOTHING`,
+    [roleId],
+  );
+  await pool.query(
+    `INSERT INTO user_roles (user_id, role_id) SELECT id, $1 FROM users ON CONFLICT DO NOTHING`,
+    [roleId],
+  );
+  return roleId;
+}

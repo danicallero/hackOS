@@ -10,6 +10,9 @@ process.env.APNS_KEY_ID = "";
 process.env.APNS_AUTH_KEY_P8 = "";
 process.env.APNS_BUNDLE_ID = "";
 process.env.LIVE_ACTIVITY_LEAD_MINUTES = "";
+process.env.LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES = "";
+process.env.LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES = "";
+process.env.LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES = "";
 const { config } = await import("../src/config.js");
 
 describe("environment config", () => {
@@ -34,5 +37,8 @@ describe("environment config", () => {
     expect(config.liveActivityApnsConfigured).toBe(false);
     expect(config.APNS_BUNDLE_ID).toBe("com.hackudc.os");
     expect(config.LIVE_ACTIVITY_LEAD_MINUTES).toBe(15);
+    expect(config.LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES).toBe(180);
+    expect(config.LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES).toBe(60);
+    expect(config.LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES).toBe(60);
   });
 });

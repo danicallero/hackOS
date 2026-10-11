@@ -3,6 +3,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createUser, createUserWithCapabilities, truncateAll } from "../helpers.js";
 import {
+  allowLiveActivities,
   callEntry,
   closeJudgingWindow,
   createScannableActivity,
@@ -28,6 +29,13 @@ afterAll(async () => {
   await closeValkey();
   await pool.end();
 });
+
+/** The read model with the permissive test configuration (fixtures.ts). */
+async function mine(userId: number, language: "es" | "gl" | "en") {
+  await allowLiveActivities();
+  const { myLiveActivities } = await import("../../src/modules/live-activities/candidates.js");
+  return myLiveActivities(userId, language);
+}
 
 type Status = Parameters<
   typeof import("../../src/modules/live-activities/state.js").selectQueueLiveProps
@@ -149,24 +157,29 @@ describe("selectQueueLiveProps (H38)", () => {
 
 describe("myLiveActivities", () => {
   it("has no queue activity outside the judging window, even with a waiting entry", async () => {
-    const { myLiveActivities } = await import("../../src/modules/live-activities/state.js");
+    const myLiveActivities = mine;
     const { userId } = await participantInQueue();
 
-    expect(await myLiveActivities(userId, "en", false)).toEqual({
+    expect(await myLiveActivities(userId, "en")).toEqual({
       judgingWindowOpen: false,
       queue: null,
       activities: [],
+      attendeeActivities: [],
+      deadline: null,
+      judging: [],
+      accreditation: null,
+      maxConcurrent: 5,
     });
     await closeJudgingWindow();
-    expect((await myLiveActivities(userId, "en", false)).queue).toBeNull();
+    expect((await myLiveActivities(userId, "en")).queue).toBeNull();
   });
 
   it("builds the queue state from myQueueStatus inside the window; room only once called", async () => {
-    const { myLiveActivities } = await import("../../src/modules/live-activities/state.js");
+    const myLiveActivities = mine;
     await openJudgingWindow();
     const { userId, entryId, roomId } = await participantInQueue({ position: 3 });
 
-    const waiting = await myLiveActivities(userId, "en", false);
+    const waiting = await myLiveActivities(userId, "en");
     expect(waiting.judgingWindowOpen).toBe(true);
     expect(waiting.queue).toMatchObject({
       phase: "waiting",
@@ -183,7 +196,7 @@ describe("myLiveActivities", () => {
     expect(waiting.queue?.startPosition).toBe(3);
 
     await callEntry(entryId, roomId);
-    const called = await myLiveActivities(userId, "en", false);
+    const called = await myLiveActivities(userId, "en");
     expect(called.queue).toMatchObject({
       phase: "called",
       position: null,
@@ -194,12 +207,12 @@ describe("myLiveActivities", () => {
   });
 
   it("keeps the highest waiting position as the progress start while the team moves up", async () => {
-    const { myLiveActivities } = await import("../../src/modules/live-activities/state.js");
+    const myLiveActivities = mine;
     const { pool } = await import("../../src/db/pool.js");
     await openJudgingWindow();
     const { userId, entryId, challengeId } = await participantInQueue({ position: 4 });
 
-    expect((await myLiveActivities(userId, "en", false)).queue).toMatchObject({
+    expect((await myLiveActivities(userId, "en")).queue).toMatchObject({
       position: 4,
       startPosition: 4,
     });
@@ -210,14 +223,14 @@ describe("myLiveActivities", () => {
                       WHERE challenge_id = $1 AND id <> $2 ORDER BY id LIMIT 2)`,
       [challengeId, entryId],
     );
-    expect((await myLiveActivities(userId, "en", false)).queue).toMatchObject({
+    expect((await myLiveActivities(userId, "en")).queue).toMatchObject({
       position: 2,
       startPosition: 4,
     });
   });
 
   it("breaks a live meal down into inside and still-to-eat; other activities get none", async () => {
-    const { myLiveActivities } = await import("../../src/modules/live-activities/state.js");
+    const myLiveActivities = mine;
     const { pool } = await import("../../src/db/pool.js");
     const staffId = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
     const lunch = await createScannableActivity({ name: "Lunch", startsInMinutes: -10 });
@@ -248,7 +261,7 @@ describe("myLiveActivities", () => {
     await logScan(lunch, a);
     await logScan(workshop, b);
 
-    const result = await myLiveActivities(staffId, "en", true);
+    const result = await myLiveActivities(staffId, "en");
     const byId = new Map(result.activities.map((x) => [x.activityId, x]));
     // `gone` checked out: 3 inside (a, b, c), a already ate, b and c still to eat.
     expect(byId.get(lunch)).toMatchObject({ scanned: 1, inside: 3, remaining: 2 });
@@ -258,7 +271,7 @@ describe("myLiveActivities", () => {
 
     // A synthetic operator never sees the real-venue breakdown.
     await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [staffId]);
-    const synthetic = await myLiveActivities(staffId, "en", true);
+    const synthetic = await myLiveActivities(staffId, "en");
     expect(synthetic.activities.find((x) => x.activityId === lunch)).toMatchObject({
       inside: null,
       remaining: null,
@@ -266,7 +279,7 @@ describe("myLiveActivities", () => {
   });
 
   it("lists scannable activities in the lead window or in progress, with phase and distinct count", async () => {
-    const { myLiveActivities } = await import("../../src/modules/live-activities/state.js");
+    const myLiveActivities = mine;
     const staffId = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
     const upcoming = await createScannableActivity({
       name: "Dinner",
@@ -299,7 +312,7 @@ describe("myLiveActivities", () => {
     await logScan(live, other);
     await logScan(live, fixture);
 
-    const result = await myLiveActivities(staffId, "es", true);
+    const result = await myLiveActivities(staffId, "es");
     expect(result.activities.map((a) => a.activityId)).toEqual([live, upcoming]);
     expect(result.activities[0]).toMatchObject({
       phase: "live",
@@ -320,19 +333,7 @@ describe("myLiveActivities", () => {
 
     // A synthetic (review fixture) operator only counts synthetic subjects.
     await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [staffId]);
-    const synthetic = await myLiveActivities(staffId, "es", true);
+    const synthetic = await myLiveActivities(staffId, "es");
     expect(synthetic.activities[0]?.scanned).toBe(1);
-
-    expect((await myLiveActivities(staffId, "es", false)).activities).toEqual([]);
-  });
-
-  it("resolves ACTIVITY_SCAN holders in one query, including the wildcard", async () => {
-    const { usersWithActivityScan } = await import("../../src/modules/live-activities/state.js");
-    const scanner = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
-    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
-    const plain = await createUser();
-    expect([...(await usersWithActivityScan([scanner, admin, plain]))].sort()).toEqual(
-      [scanner, admin].sort(),
-    );
   });
 });

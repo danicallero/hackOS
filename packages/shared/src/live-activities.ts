@@ -144,6 +144,8 @@ export interface QueueLiveProps {
   /** Deep link opened on tap. */
   url: string;
   labels: QueueLiveLabels;
+  /** Device rank among the Live Activities it shows (0 = most important). Optional (post-v1). */
+  rank?: number;
   /** ISO timestamp the server computed this state. */
   updatedAt: string;
 }
@@ -192,17 +194,256 @@ export interface ActivityLiveProps {
   /** Deep link opened on tap. */
   url: string;
   labels: ActivityLiveLabels;
+  /** Device rank among the Live Activities it shows (0 = most important). Optional (post-v1). */
+  rank?: number;
   updatedAt: string;
 }
 
-export type LiveActivityProps = QueueLiveProps | ActivityLiveProps;
+// ── Attendee activity (H59, #966) ─────────────────────────────────────────
 
-/** Response of `GET /api/me/live-activities`. */
+/** Subject of the attendee Live Activity for a schedule item. */
+export function attendeeActivityLiveActivitySubject(scheduleId: number): string {
+  return `schedule:${scheduleId}`;
+}
+
+export type AttendeeActivityLivePhase = "upcoming" | "live";
+
+export interface AttendeeActivityLiveLabels {
+  /** "Starts in" — labels the countdown while upcoming. */
+  startsIn: string;
+  /** "Now" — marks the item as running. */
+  now: string;
+  /** "Ends in" — labels the countdown to the end while live. */
+  endsIn: string;
+}
+
+/**
+ * A schedule item organizers opted into Live Activities
+ * (`schedule.live_activity_audience`), for the people it is shown to. No
+ * buttons: the whole surface opens the item.
+ */
+export interface AttendeeActivityLiveProps {
+  v: typeof LIVE_ACTIVITY_PROPS_VERSION;
+  kind: "attendee_activity";
+  /** `upcoming` before `startsAt` (countdown), `live` until `endsAt` ("Now · ends in"). */
+  phase: AttendeeActivityLivePhase;
+  scheduleId: number;
+  /** Localized title (requested language, English, then the authored title). */
+  name: string;
+  /** Schedule category (`meal`, `talk`, …) — picks the SF Symbol / Android icon. */
+  category: string;
+  location: string | null;
+  /** ISO instants; devices tick both countdowns locally. */
+  startsAt: string;
+  endsAt: string;
+  /** Deep link: `hackos://schedule/<scheduleId>`. */
+  url: string;
+  labels: AttendeeActivityLiveLabels;
+  /** Device rank among the Live Activities it shows (0 = most important). */
+  rank?: number;
+  updatedAt: string;
+}
+
+// ── Submission deadline (H19, H20, #966) ──────────────────────────────────
+
+export const DEADLINE_LIVE_ACTIVITY_SUBJECT = "deadline";
+
+/**
+ * `open`: counting down. `closing`: the final minutes while the team's
+ * hackOS project is known to be unsubmitted (the one alerting update).
+ * `submitted`: every project the participant belongs to is submitted.
+ */
+export type DeadlineLivePhase = "open" | "closing" | "submitted";
+
+export interface DeadlineLiveLabels {
+  /** "Submissions close" — the title. */
+  title: string;
+  /** "Closes in" — labels the countdown. */
+  closesIn: string;
+  /** "Submitted" — the done state. */
+  submitted: string;
+  /** "Not submitted" — shown in `closing`. */
+  notSubmitted: string;
+}
+
+export interface DeadlineLiveProps {
+  v: typeof LIVE_ACTIVITY_PROPS_VERSION;
+  kind: "deadline";
+  phase: DeadlineLivePhase;
+  /** ISO start of the hacking window (progress bar start), or null when unset. */
+  startsAt: string | null;
+  /** ISO submission deadline (`event_config.hacking_ends_at`); devices tick the countdown. */
+  endsAt: string;
+  /**
+   * The participant's hackOS project status: `submitted` when every project
+   * or work group they belong to is submitted, `draft` when one is not, null
+   * when they have none in hackOS (e.g. a Devpost-only team, not imported
+   * yet) — render no status then, never "not submitted".
+   */
+  submission: "submitted" | "draft" | null;
+  /** Name of the project the status refers to (the unsubmitted one first), or null. */
+  projectName: string | null;
+  /** Deep link: `hackos://project`. */
+  url: string;
+  labels: DeadlineLiveLabels;
+  rank?: number;
+  updatedAt: string;
+}
+
+// ── Judging room (H29, H31-H36, #966) ─────────────────────────────────────
+
+export function judgingLiveActivitySubject(roomId: number): string {
+  return `room:${roomId}`;
+}
+
+/**
+ * What the room is doing: `presenting` (pitch timer running or paused),
+ * `in_room` (team inside, setting up), `called` (nobody inside, a team on its
+ * way), `idle` (room open, nobody called yet). A paused room (H35) with
+ * nobody inside or called has no Live Activity at all; a paused room still
+ * finishing a team keeps its phase with `roomPaused: true`.
+ */
+export type JudgingLivePhase = "presenting" | "in_room" | "called" | "idle";
+
+export interface JudgingLiveLabels {
+  /** "Presenting" */
+  presenting: string;
+  /** "In room" */
+  inRoom: string;
+  /** "Next" — prefixes the next team. */
+  next: string;
+  /** "On the way" — the next team has been called. */
+  onTheWay: string;
+  /** "Waiting" — labels `waitingCount`. */
+  waiting: string;
+  /** "Paused" — the room is paused (H35). */
+  paused: string;
+  /** "No team called" — idle placeholder, never an empty value. */
+  noTeam: string;
+  /** "Time over" — the pitch ran past `presentationSeconds`. */
+  overtime: string;
+}
+
+export interface JudgingLiveTeam {
+  /** Queue entry id. */
+  entryId: number;
+  /** Project (team) name. */
+  name: string;
+}
+
+export interface JudgingLiveCurrent extends JudgingLiveTeam {
+  status: "in_room" | "presenting";
+  /** ISO instant the team entered the room (setup timer), or null. */
+  enteredAt: string | null;
+  /** ISO instant the pitch timer started; null while setting up. */
+  presentationStartedAt: string | null;
+  /**
+   * ISO instant the pitch timer was paused (#926), or null while running.
+   * Elapsed = (pausedAt ?? now) − presentationStartedAt − pausedSeconds.
+   */
+  presentationPausedAt: string | null;
+  /** Seconds already spent paused before `presentationPausedAt`. */
+  presentationPausedSeconds: number;
+  /** Pitch length: the entry's frozen goal, else the challenge's `max_presentation_seconds`. */
+  presentationSeconds: number | null;
+}
+
+export interface JudgingLiveNext extends JudgingLiveTeam {
+  /** ISO instant the team was called (count-up "on the way" timer). */
+  calledAt: string | null;
+}
+
+export interface JudgingLiveProps {
+  v: typeof LIVE_ACTIVITY_PROPS_VERSION;
+  kind: "judging";
+  phase: JudgingLivePhase;
+  roomId: number;
+  roomName: string;
+  roomLocation: string | null;
+  /** The queue the room serves (challenge or merged group title), or null. */
+  queueTitle: string | null;
+  /** H35: the room is paused (no new calls). */
+  roomPaused: boolean;
+  /** The team in the room or presenting, or null. */
+  current: JudgingLiveCurrent | null;
+  /** The earliest-called team waiting at the door, or null. */
+  next: JudgingLiveNext | null;
+  /** Teams called to this room, including `next`. */
+  calledCount: number;
+  /** Teams still waiting in the room's queue. */
+  waitingCount: number;
+  /** Deep link: `hackos://judging?room=<roomId>`. */
+  url: string;
+  labels: JudgingLiveLabels;
+  rank?: number;
+  updatedAt: string;
+}
+
+// ── Accreditation desk (H22, H24, H27, #966) ──────────────────────────────
+
+export const ACCREDITATION_LIVE_ACTIVITY_SUBJECT = "accreditation";
+
+export interface AccreditationLiveLabels {
+  /** "Accreditation" — the title. */
+  title: string;
+  /** "Accredited" — labels `accredited` / `eligible`. */
+  accredited: string;
+  /** "Inside" — labels the presence estimate. */
+  inside: string;
+  /** "Last 10 min" — labels `recentArrivals`. */
+  lastTenMinutes: string;
+  /** "Scan" — the single action. */
+  scan: string;
+}
+
+export interface AccreditationLiveProps {
+  v: typeof LIVE_ACTIVITY_PROPS_VERSION;
+  kind: "accreditation";
+  /** Single phase: the desk window is open. */
+  phase: "live";
+  /** People with a badge assigned (H22). */
+  accredited: number;
+  /** People with event access — the denominator of the progress ring. */
+  eligible: number;
+  /** H24 presence estimate; null for a review-fixture operator. */
+  inside: number | null;
+  /** Badges assigned in the last 10 minutes (desk pace). */
+  recentArrivals: number;
+  /** ISO end of the accreditation window (the activity ends then). */
+  endsAt: string;
+  /** Deep link that opens the accreditation scanner: `hackos://scan`. */
+  scanUrl: string;
+  url: string;
+  labels: AccreditationLiveLabels;
+  rank?: number;
+  updatedAt: string;
+}
+
+export type LiveActivityProps =
+  | QueueLiveProps
+  | ActivityLiveProps
+  | AttendeeActivityLiveProps
+  | DeadlineLiveProps
+  | JudgingLiveProps
+  | AccreditationLiveProps;
+
+/**
+ * Response of `GET /api/me/live-activities`: what this device should show
+ * now, after kind configuration, role gating and the per-device
+ * `maxConcurrent` cut. Every field added after v1 is optional for older
+ * readers; `rank` orders the whole set.
+ */
 export interface MyLiveActivities {
   /** False outside the judging window — the queue activity must not exist. */
   judgingWindowOpen: boolean;
   queue: QueueLiveProps | null;
   activities: ActivityLiveProps[];
+  attendeeActivities?: AttendeeActivityLiveProps[];
+  deadline?: DeadlineLiveProps | null;
+  judging?: JudgingLiveProps[];
+  accreditation?: AccreditationLiveProps | null;
+  /** The configured per-device limit the response already applies. */
+  maxConcurrent?: number;
 }
 
 /**
@@ -216,6 +457,8 @@ export interface AndroidLiveUpdateMessage {
     subject: string;
     /** Absent on `end`. */
     props?: LiveActivityProps;
+    /** Device rank (0 = most important), for the notification sort key; absent on `end`. */
+    rank?: number;
   };
 }
 
@@ -304,4 +547,104 @@ export function queueLiveLabels(lang: Language, otherQueues: number): QueueLiveL
 
 export function activityLiveLabels(lang: Language): ActivityLiveLabels {
   return ACTIVITY_LABELS[lang];
+}
+
+const ATTENDEE_ACTIVITY_LABELS: Record<Language, AttendeeActivityLiveLabels> = {
+  en: { startsIn: "Starts in", now: "Now", endsIn: "Ends in" },
+  es: { startsIn: "Empieza en", now: "Ahora", endsIn: "Acaba en" },
+  gl: { startsIn: "Comeza en", now: "Agora", endsIn: "Remata en" },
+};
+
+const DEADLINE_LABELS: Record<Language, DeadlineLiveLabels> = {
+  en: {
+    title: "Submissions close",
+    closesIn: "Closes in",
+    submitted: "Submitted",
+    notSubmitted: "Not submitted",
+  },
+  es: {
+    title: "Cierre de entregas",
+    closesIn: "Cierra en",
+    submitted: "Entregado",
+    notSubmitted: "Sin entregar",
+  },
+  gl: {
+    title: "Peche de entregas",
+    closesIn: "Pecha en",
+    submitted: "Entregado",
+    notSubmitted: "Sen entregar",
+  },
+};
+
+const JUDGING_LABELS: Record<Language, JudgingLiveLabels> = {
+  en: {
+    presenting: "Presenting",
+    inRoom: "In room",
+    next: "Next",
+    onTheWay: "On the way",
+    waiting: "Waiting",
+    paused: "Paused",
+    noTeam: "No team called",
+    overtime: "Time over",
+  },
+  es: {
+    presenting: "Presentando",
+    inRoom: "En sala",
+    next: "Siguiente",
+    onTheWay: "De camino",
+    waiting: "En cola",
+    paused: "En pausa",
+    noTeam: "Ningún equipo llamado",
+    overtime: "Tiempo agotado",
+  },
+  gl: {
+    presenting: "Presentando",
+    inRoom: "Na sala",
+    next: "Seguinte",
+    onTheWay: "De camiño",
+    waiting: "Na cola",
+    paused: "En pausa",
+    noTeam: "Ningún equipo chamado",
+    overtime: "Tempo esgotado",
+  },
+};
+
+const ACCREDITATION_LABELS: Record<Language, AccreditationLiveLabels> = {
+  en: {
+    title: "Accreditation",
+    accredited: "Accredited",
+    inside: "Inside",
+    lastTenMinutes: "Last 10 min",
+    scan: "Scan",
+  },
+  es: {
+    title: "Acreditación",
+    accredited: "Acreditados",
+    inside: "Dentro",
+    lastTenMinutes: "Últimos 10 min",
+    scan: "Escanear",
+  },
+  gl: {
+    title: "Acreditación",
+    accredited: "Acreditados",
+    inside: "Dentro",
+    lastTenMinutes: "Últimos 10 min",
+    scan: "Escanear",
+  },
+};
+
+export function attendeeActivityLiveLabels(lang: Language): AttendeeActivityLiveLabels {
+  return ATTENDEE_ACTIVITY_LABELS[lang];
+}
+
+export function deadlineLiveLabels(lang: Language): DeadlineLiveLabels {
+  return DEADLINE_LABELS[lang];
+}
+
+export function judgingLiveLabels(lang: Language): JudgingLiveLabels {
+  return JUDGING_LABELS[lang];
+}
+
+export function accreditationLiveLabels(lang: Language): AccreditationLiveLabels {
+  return ACCREDITATION_LABELS[lang];
 }
