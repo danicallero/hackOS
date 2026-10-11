@@ -867,6 +867,13 @@ Each row shows the logo, the name, the NFC and QR counts (with "Not
 scannable" for a company attendees cannot collect yet), a round NFC button
 that links a tag directly and a chevron.
 
+Both Company tags screens keep the `ScrollView` (with
+`contentInsetAdjustmentBehavior="automatic"`) as the screen's root element so
+the native large title collapses into the inline title as it scrolls; a
+wrapping `View` hides the scroll view from the native header and the first
+card draws under the title. The NFC modal lives inside the scroll view, and
+only the legacy header (no Liquid Glass) wraps it.
+
 **Company detail.** Tapping a row pushes `app/(tabs)/others/stand/[id].tsx`
 (`components/stand-detail-screen.tsx`, titled with the company name). It
 reads the same staff list and shows:

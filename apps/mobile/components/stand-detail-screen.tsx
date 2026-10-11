@@ -174,100 +174,100 @@ export function StandDetailScreen() {
   const qrTags = stand?.tags.filter((tag) => tag.kind === "qr") ?? [];
 
   return (
-    <View style={{ backgroundColor: colors.background, flex: 1 }}>
+    // The ScrollView is the screen's root so the native large title can track
+    // it and collapse; a wrapping View would draw content under the header.
+    <ScrollView
+      style={{ backgroundColor: colors.background, flex: 1 }}
+      contentInsetAdjustmentBehavior="automatic"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={async () => {
+            setRefreshing(true);
+            await load();
+            setRefreshing(false);
+          }}
+        />
+      }
+      contentContainerStyle={{
+        gap: 24,
+        padding: 16,
+        paddingBottom: Math.max(32, tabBarBottomInset + 16),
+      }}
+    >
       <StandNfcModal stand={active} onCancel={cancel} />
-      <ScrollView
-        style={{ flex: 1 }}
-        contentInsetAdjustmentBehavior="automatic"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={async () => {
-              setRefreshing(true);
-              await load();
-              setRefreshing(false);
-            }}
-          />
-        }
-        contentContainerStyle={{
-          gap: 24,
-          padding: 16,
-          paddingBottom: Math.max(32, tabBarBottomInset + 16),
-        }}
-      >
-        {error && !stand ? (
-          <RequestFeedback error={error} onRetry={() => void load()} />
-        ) : missing ? (
-          <EmptyState icon="building.2" title={t("requestUnavailable")} />
-        ) : stand === null ? (
-          <RequestFeedback loading />
-        ) : (
-          <>
-            <Section footer={stand.scannable ? undefined : t("standsNotScannableNotice")}>
-              <View
-                style={{
-                  alignItems: "center",
-                  flexDirection: "row",
-                  gap: 12,
-                  minHeight: 64,
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                }}
-              >
-                <StandLogo stand={stand} size={40} />
-                <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>
-                  {t("standsScannable")}
-                </Text>
-                <Switch
-                  accessibilityLabel={t("standsScannableFor", { name: stand.name })}
-                  disabled={scanBusy}
-                  onValueChange={(value) => void setScannable(value)}
-                  value={stand.scannable}
-                />
-              </View>
-            </Section>
-
-            <View style={{ gap: 12 }}>
-              <ActionButton
-                variant="filled"
-                icon="wave.3.right"
-                label={t("standsLinkNfc")}
-                busy={active !== null}
-                disabled={nfcStatus !== "supported"}
-                onPress={() => void link(stand)}
+      {error && !stand ? (
+        <RequestFeedback error={error} onRetry={() => void load()} />
+      ) : missing ? (
+        <EmptyState icon="building.2" title={t("requestUnavailable")} />
+      ) : stand === null ? (
+        <RequestFeedback loading />
+      ) : (
+        <>
+          <Section footer={stand.scannable ? undefined : t("standsNotScannableNotice")}>
+            <View
+              style={{
+                alignItems: "center",
+                flexDirection: "row",
+                gap: 12,
+                minHeight: 64,
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+              }}
+            >
+              <StandLogo stand={stand} size={40} />
+              <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>
+                {t("standsScannable")}
+              </Text>
+              <Switch
+                accessibilityLabel={t("standsScannableFor", { name: stand.name })}
+                disabled={scanBusy}
+                onValueChange={(value) => void setScannable(value)}
+                value={stand.scannable}
               />
-              {nfcStatus === "unsupported" ? (
-                <Text
-                  selectable
-                  style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 20 }}
-                >
-                  {t("standsNfcUnavailable")}
-                </Text>
-              ) : null}
-              {outcome ? <StandLinkResult outcome={outcome} /> : null}
             </View>
+          </Section>
 
-            {stand.tags.length === 0 ? <EmptyState icon="tag" title={t("standsNoTags")} /> : null}
-            {nfcTags.length > 0 ? (
-              <TagSection
-                title={t("standsNfcTags")}
-                tags={nfcTags}
-                removing={removing}
-                onRemove={confirmRemove}
-              />
+          <View style={{ gap: 12 }}>
+            <ActionButton
+              variant="filled"
+              icon="wave.3.right"
+              label={t("standsLinkNfc")}
+              busy={active !== null}
+              disabled={nfcStatus !== "supported"}
+              onPress={() => void link(stand)}
+            />
+            {nfcStatus === "unsupported" ? (
+              <Text
+                selectable
+                style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 20 }}
+              >
+                {t("standsNfcUnavailable")}
+              </Text>
             ) : null}
-            {qrTags.length > 0 ? (
-              <TagSection
-                title={t("standsQrCodes")}
-                tags={qrTags}
-                removing={removing}
-                onRemove={confirmRemove}
-              />
-            ) : null}
-          </>
-        )}
-      </ScrollView>
-    </View>
+            {outcome ? <StandLinkResult outcome={outcome} /> : null}
+          </View>
+
+          {stand.tags.length === 0 ? <EmptyState icon="tag" title={t("standsNoTags")} /> : null}
+          {nfcTags.length > 0 ? (
+            <TagSection
+              title={t("standsNfcTags")}
+              tags={nfcTags}
+              removing={removing}
+              onRemove={confirmRemove}
+            />
+          ) : null}
+          {qrTags.length > 0 ? (
+            <TagSection
+              title={t("standsQrCodes")}
+              tags={qrTags}
+              removing={removing}
+              onRemove={confirmRemove}
+            />
+          ) : null}
+        </>
+      )}
+    </ScrollView>
   );
 }
 

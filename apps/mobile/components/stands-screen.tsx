@@ -135,111 +135,116 @@ export function StandsScreen() {
       params: { id: String(stand.enterpriseId), name: stand.name },
     });
 
+  const list = (
+    <ScrollView
+      ref={scrollRef}
+      style={{ backgroundColor: colors.background, flex: 1 }}
+      contentInsetAdjustmentBehavior="automatic"
+      keyboardDismissMode="on-drag"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={async () => {
+            setRefreshing(true);
+            await load();
+            setRefreshing(false);
+          }}
+        />
+      }
+      contentContainerStyle={{
+        gap: 16,
+        padding: 16,
+        paddingBottom: Math.max(32, tabBarBottomInset + 16),
+      }}
+    >
+      <StandNfcModal stand={active} onCancel={cancel} />
+      {nfcStatus === "unsupported" ? (
+        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 20 }}>
+          {t("standsNfcUnavailable")}
+        </Text>
+      ) : null}
+
+      {outcome ? (
+        <StandLinkResult
+          outcome={outcome}
+          action={
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("standsLinkNfcFor", { name: outcome.stand.name })}
+              disabled={!nfcSupported || active !== null}
+              onPress={() => void link(outcome.stand)}
+              style={({ pressed }) => ({
+                alignItems: "center",
+                alignSelf: "flex-start",
+                flexDirection: "row",
+                gap: 6,
+                marginLeft: 30,
+                minHeight: 36,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
+                {t("standsLinkAnother")}
+              </Text>
+            </Pressable>
+          }
+        />
+      ) : null}
+
+      {error && !stands ? (
+        <RequestFeedback error={error} onRetry={() => void load()} />
+      ) : stands === null ? (
+        <RequestFeedback loading />
+      ) : visible.length === 0 ? (
+        <EmptyState icon="building.2" title={t("standsEmpty")} />
+      ) : (
+        <Section>
+          {visible.map((stand, index) => (
+            <View key={stand.enterpriseId}>
+              {index > 0 ? <Separator inset={16 + LOGO_SIZE + 12} /> : null}
+              <StandRow
+                stand={stand}
+                busy={active?.enterpriseId === stand.enterpriseId}
+                disabled={!nfcSupported || active !== null}
+                onOpen={() => openStand(stand)}
+                onLink={() => void link(stand)}
+              />
+            </View>
+          ))}
+        </Section>
+      )}
+    </ScrollView>
+  );
+
+  // Native large-title header: the ScrollView must be the screen's root so the
+  // header collapses with it. Only the legacy custom header needs a wrapper.
+  if (glassAvailable) return list;
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
-      <StandNfcModal stand={active} onCancel={cancel} />
-      {glassAvailable ? null : (
-        <LegacyScreenHeader
-          actions={null}
-          cancelLabel={t("cancel")}
-          leading={
-            <LegacyHeaderIconButton
-              icon="chevron.left"
-              accessibilityLabel={t("back")}
-              onPress={() => safeBack(router, "/(tabs)/others/account")}
-            />
-          }
-          onCloseSearch={() => {
-            setSearchOpen(false);
-            setQuery("");
-          }}
-          onOpenSearch={() => setSearchOpen(true)}
-          onSearchQueryChange={setQuery}
-          searchLabel={t("scheduleSearch")}
-          searchOpen={searchOpen}
-          searchPlaceholder={t("standsSearchPlaceholder")}
-          searchQuery={query}
-          title={t("standsTitle")}
-          topInset={legacyTopInset}
-        />
-      )}
-      <ScrollView
-        ref={scrollRef}
-        style={{ flex: 1 }}
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardDismissMode="on-drag"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={async () => {
-              setRefreshing(true);
-              await load();
-              setRefreshing(false);
-            }}
+      <LegacyScreenHeader
+        actions={null}
+        cancelLabel={t("cancel")}
+        leading={
+          <LegacyHeaderIconButton
+            icon="chevron.left"
+            accessibilityLabel={t("back")}
+            onPress={() => safeBack(router, "/(tabs)/others/account")}
           />
         }
-        contentContainerStyle={{
-          gap: 16,
-          padding: 16,
-          paddingBottom: Math.max(32, tabBarBottomInset + 16),
+        onCloseSearch={() => {
+          setSearchOpen(false);
+          setQuery("");
         }}
-      >
-        {nfcStatus === "unsupported" ? (
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 20 }}>
-            {t("standsNfcUnavailable")}
-          </Text>
-        ) : null}
-
-        {outcome ? (
-          <StandLinkResult
-            outcome={outcome}
-            action={
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t("standsLinkNfcFor", { name: outcome.stand.name })}
-                disabled={!nfcSupported || active !== null}
-                onPress={() => void link(outcome.stand)}
-                style={({ pressed }) => ({
-                  alignItems: "center",
-                  alignSelf: "flex-start",
-                  flexDirection: "row",
-                  gap: 6,
-                  marginLeft: 30,
-                  minHeight: 36,
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
-                  {t("standsLinkAnother")}
-                </Text>
-              </Pressable>
-            }
-          />
-        ) : null}
-
-        {error && !stands ? (
-          <RequestFeedback error={error} onRetry={() => void load()} />
-        ) : stands === null ? (
-          <RequestFeedback loading />
-        ) : visible.length === 0 ? (
-          <EmptyState icon="building.2" title={t("standsEmpty")} />
-        ) : (
-          <Section>
-            {visible.map((stand, index) => (
-              <View key={stand.enterpriseId}>
-                {index > 0 ? <Separator inset={16 + LOGO_SIZE + 12} /> : null}
-                <StandRow
-                  stand={stand}
-                  busy={active?.enterpriseId === stand.enterpriseId}
-                  disabled={!nfcSupported || active !== null}
-                  onOpen={() => openStand(stand)}
-                  onLink={() => void link(stand)}
-                />
-              </View>
-            ))}
-          </Section>
-        )}
-      </ScrollView>
+        onOpenSearch={() => setSearchOpen(true)}
+        onSearchQueryChange={setQuery}
+        searchLabel={t("scheduleSearch")}
+        searchOpen={searchOpen}
+        searchPlaceholder={t("standsSearchPlaceholder")}
+        searchQuery={query}
+        title={t("standsTitle")}
+        topInset={legacyTopInset}
+      />
+      {list}
       <AndroidStatusBarScrim />
     </View>
   );
