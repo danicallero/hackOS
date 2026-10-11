@@ -53,6 +53,7 @@ the hardware-free native screen suite.
   - [Scanner](#scanner)
   - [Activities](#activities)
 - [Scanner cache encryption & isolation](#scanner-cache-encryption--isolation)
+- [Live Activities and Live Updates (#966)](#live-activities-and-live-updates-966)
 - [Realtime & notifications infrastructure](#realtime--notifications-infrastructure)
 - [Other infrastructure](#other-infrastructure)
 - [UI testing](#ui-testing)
@@ -78,6 +79,7 @@ documented in full in its own section below.
 | H24 | Presence (door in/out) scanner, manual back-dated entries | [Scanner](#scanner) |
 | H25 | Meals scanner, repeat-serving confirmation | [Scanner](#scanner) |
 | H26 | Registrable-activity scanner | [Scanner](#scanner), [Activities](#activities) |
+| H38, H25/H26 | Queue and staff-activity Live Activities / Live Updates (#966) | [Live Activities](#live-activities-and-live-updates-966) |
 
 ## Backend changes
 
@@ -1481,6 +1483,87 @@ physical iOS/Android and EAS verification remains a release-gate task in
   that remain offline can still retain a stale identity until reconnect/expiry
   or a device wipe; central tombstones prevent permanently retired credentials
   from being accepted or re-uploaded.
+
+## Live Activities and Live Updates (#966)
+
+System surfaces for two time-bound moments: the participant's nearest judging
+queue (H38) and, for `activity:scan` holders, an upcoming or live meal /
+scannable activity (H25/H26). The API computes every state, sends background
+updates (APNs ActivityKit pushes on iOS, data-only Expo pushes on Android) and
+documents the contract in [`live-activities.md`](./live-activities.md); the
+app renders the pre-localized props of `@hackos/shared/live-activities`.
+
+**Surfaces (iOS, `expo-widgets`).** `widgets/queue-activity.tsx`
+(`QueueActivity`) and `widgets/staff-activity.tsx` (`StaffActivity`) are
+`'widget'` layouts serialized into the `ExpoWidgetsTarget` extension, so they
+use only `@expo/ui/swift-ui` and declare every helper and colour inside the
+function (accent = `theme/colors.ts` systemBlue, dropped in Always-On). The
+names must equal `LIVE_ACTIVITY_WIDGET_NAMES`. Following Apple's HIG:
+
+| Presentation | Queue | Staff activity |
+| --- | --- | --- |
+| Compact leading / trailing | `#4` / `~12m` (an estimate, never a ticking timer); called: door symbol / room | category symbol (`fork.knife`, `mic.fill`, …) / countdown timer to the start, then the scanned count |
+| Minimal | ETA, or the room's initial once called | countdown or count |
+| Expanded | position and ETA in the compact positions, challenge below; called: "Go to" + room, location | symbol, countdown/counter, name, `hh:mm–hh:mm · location`, and once live the single **Scan** link |
+| Lock Screen | challenge, large position/ETA or the room, `+N more queues` | the same content as expanded, 14 pt margins, default background |
+| Watch Smart Stack / CarPlay (`bannerSmall`) | challenge + `#4 · ~12 min` or the room | name + countdown/count, no buttons |
+
+Numbers use `monospacedDigit` with numeric content transitions; countdowns
+are SwiftUI timer texts, so they tick without updates. Taps open the props'
+`url` (passed as the activity's static URL); the API must send the same
+`attributes.url` on push-to-start.
+
+**Surfaces (Android).** `lib/live-activities/model.ts` `toLiveUpdateSpec`
+maps the same props to `modules/live-updates` promoted ongoing notifications:
+queue chip `~12m`/`#4`/room, text "Position #4 · Wait ~12 min" or "Go to Room
+B · location", heads-up only on the transition into called; activity chip
+chronometer countdown to `startsAt`, then the count, plus the Scan action.
+The native module is null on clients built before it existed; every call is
+then a no-op.
+
+**Orchestration (`lib/live-activities/`).**
+
+- `store.ts` — the install id (`deviceId`, created once in SecureStore), the
+  opt-out flag and the reconcile memory, shared with Android's headless task.
+- `sync.ts` — `PUT /api/me/live-activities/device` after sign-in, on language
+  change and when iOS rotates the push-to-start token (iOS 17.2+); on Android
+  it sends the Expo push token instead (permission is still prompted by
+  `lib/push.ts`). `reconcileLiveActivities` reads `GET /api/me/live-activities`
+  and applies it; every running iOS activity, including ones APNs started,
+  reports its per-activity token through `PUT …/sessions`.
+- `model.ts` `planReconcile` — one surface per (kind, subject): start missing
+  ones (the queue only while `judgingWindowOpen`), update changed props
+  (ignoring `updatedAt`), end duplicates and dropped subjects (iOS keeps the
+  final state 15 minutes). A surface that vanished while the server still
+  lists it was swiped away: it is not restarted until its phase changes
+  (called, live) and `DELETE …/sessions` stops remote restarts. iOS cannot
+  read a push-started activity's props, so an unidentified `StaffActivity`
+  is adopted by an unmatched subject and immediately updated.
+- `use-live-activities.ts` (mounted in `app/_layout.tsx`) reconciles on sign-in,
+  foreground, the personal queue events, a staff start/end boundary and every
+  minute while a counter is live. Sign-out ends every surface and sends
+  `enabled: false` with the session that registered the device.
+- `background-task.ts` — Android data pushes (`AndroidLiveUpdateMessage`) go
+  through an `expo-task-manager` notification task defined in the entry file
+  `index.ts` (before `expo-router/entry`), and through the foreground received
+  listener; both render through the same `applyAndroidLiveUpdate`.
+- The activity scanner bumps the live counter right after a first-time scan.
+- Web is a no-op (`host.ts`).
+
+**Deep links.** `hackos://queue` resolves to the participant queue tab.
+`hackos://scan?activity=<id>` (activity tap and Scan) is rewritten by
+`app/+native-intent.tsx` to `/activities/<id>`, the activity scanner bound to
+that activity, so the camera starts without a chooser (R008).
+
+**Opt-out.** Notifications settings has a Live Activities (iOS) / Live
+updates (Android) switch: off ends every surface immediately and registers the
+device with `enabled: false`.
+
+**Development samples.** Debug builds only: opening
+`hackos://dev/live-activity?sample=<queue-waiting|queue-called|staff-upcoming|staff-live|all|end>`
+(for example `xcrun simctl openurl booted …`) renders sample states without a
+backend. The handler is required behind `__DEV__` in `+native-intent.tsx`, so
+release bundles drop it.
 
 ## Realtime & notifications infrastructure
 

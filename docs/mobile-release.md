@@ -8,7 +8,10 @@ documentation is in [`mobile.md`](./mobile.md).
   environments, build profiles, prebuild, compiling and running locally, and
   EAS preview/production builds. Read this day-to-day.
 - [Signing, push, and Wallet credentials](./mobile-credentials.md) —
-  certificates and keys, obtained once per environment, not per build.
+  certificates and keys, obtained once per environment, not per build,
+  including the Live Activities widget extension target
+  (`com.hackudc.os.ExpoWidgetsTarget`), its App Group
+  `group.com.hackudc.os` and the APNs key for Live Activity pushes (#966).
 - [Store release](./mobile-store-release.md) — icons and store artwork,
   privacy/permission declarations, store records, submission, and the
   release checklist. Read this only when shipping a build.
