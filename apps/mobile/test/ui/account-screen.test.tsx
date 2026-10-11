@@ -1,5 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { act, fireEvent, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, screen, userEvent, waitFor, within } from "@testing-library/react-native";
 import { Alert, BackHandler, ScrollView } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -425,13 +425,19 @@ describe("account removal UI flow", () => {
     // Below the 44 pt button and its 8 pt gap; iOS adds the status bar itself.
     expect(screen.getByTestId("wallet-screen")).toHaveTextContent("52");
     const close = screen.getByRole("button", { name: "Close" });
-    expect(close).toBe(screen.getByTestId("account-wallet-button"));
+    expect(close).toBe(screen.getByTestId("account-wallet-close"));
     expect(close.props.accessibilityState).toEqual({ expanded: true });
     expect(mockPush).not.toHaveBeenCalled();
 
     await user.press(close);
     await waitFor(() => expect(screen.queryByTestId("wallet-screen")).toBeNull());
     expect(screen.getByRole("button", { name: "Wallet" })).toBeTruthy();
+  });
+
+  it("keeps the wallet button in the scrolling content, not pinned (H28)", async () => {
+    await renderMobile(<AccountScreen />);
+    const scroll = screen.getByTestId("account-scroll");
+    expect(within(scroll).getByTestId("account-wallet-button")).toBeTruthy();
   });
 
   it("closes the wallet on Android system back before leaving Account (H28)", async () => {

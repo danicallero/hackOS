@@ -20,7 +20,11 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
-import { AccountWallet } from "@/components/account-wallet";
+import {
+  AccountWalletButton,
+  AccountWalletOverlay,
+  useAccountWallet,
+} from "@/components/account-wallet";
 import {
   ActionButton,
   AndroidStatusBarScrim,
@@ -76,6 +80,7 @@ export default function AccountScreen() {
   const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
+  const wallet = useAccountWallet();
   const avatarCollapse = useProfileAvatarCollapse(scrollRef);
   useScrollToTop(avatarCollapse.scrollToTopRef);
   useFocusEffect(avatarCollapse.settleAtRest);
@@ -289,6 +294,8 @@ export default function AccountScreen() {
           <RefreshControl refreshing={refreshingAccount} onRefresh={() => void refreshAccount()} />
         }
       >
+        {/* H28: scrolls away with the content instead of staying pinned. */}
+        <AccountWalletButton wallet={wallet} />
         {languageError ? (
           <RequestFeedback
             error={languageError}
@@ -609,8 +616,7 @@ export default function AccountScreen() {
         size={96}
         variant="account"
       />
-      {/* H28: Wallet lives in Account, behind the header's top-left button. */}
-      <AccountWallet />
+      <AccountWalletOverlay wallet={wallet} />
     </View>
   );
 }

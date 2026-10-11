@@ -227,11 +227,13 @@ distributed to other Expo Router apps without importing hackOS code.
   Scanner, Activities (for `ACTIVITY_SCAN`) — and Queue,
   Diary, Account, and any secondary operations join them directly while five
   fit, moving to Others only beyond that. Wallet is not a tab: a
-  back-button-sized glass circle in Account's top-left corner opens it as an
-  overlay of Account (`components/account-wallet.tsx`, H28) and morphs into
-  that overlay's close button; Android's system back also closes it. The
-  overlay keeps the one button in place, which a pushed or modal route would
-  slide or cover. The wallet has no title: the Ticket/Badge control leads it.
+  back-button-sized glass circle at the top-left of Account's scrolling content
+  (it scrolls away with the content, on both platforms) opens it as an
+  overlay of Account (`components/account-wallet.tsx`, H28); the overlay
+  carries its own close button in the same corner, so from the rest position
+  the glyph morphs in place. Android's system back also closes it. The
+  overlay avoids a pushed or modal route, which would slide or cover the corner.
+  The wallet has no title: the Ticket/Badge control leads it.
   `app/(tabs)/others/wallet.tsx` remains for deep links, with a title-less
   back header. Queue-only
   operators instead get Queue operations in the primary bar; scanner

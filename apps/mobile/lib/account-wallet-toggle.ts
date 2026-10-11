@@ -23,12 +23,20 @@ export function walletToggleIconFrames(progress: number): {
   };
 }
 
-/** Top of the wallet button and the scroll inset that keeps content below it. */
+/**
+ * Where the wallet buttons sit. `scrollButtonTop` is inside the Account scroll
+ * content (its origin is already below the status bar on iOS through the
+ * automatic inset; on Android the content's top padding holds the inset
+ * instead, so the button adds it), `buttonTop` is the same spot in screen
+ * coordinates for the overlay's close button. `walletContentTop` is the inset
+ * that keeps wallet content below it.
+ */
 export function accountWalletChrome(safeAreaTop: number, platform: string) {
   const buttonTop = safeAreaTop + ACCOUNT_WALLET_BUTTON_GAP;
   const below = ACCOUNT_WALLET_BUTTON_GAP + ACCOUNT_WALLET_BUTTON_SIZE;
   return {
     buttonTop,
+    scrollButtonTop: platform === "ios" ? ACCOUNT_WALLET_BUTTON_GAP : buttonTop,
     // iOS's automatic content inset already clears the status bar; Android
     // has no native bar here, so the wallet scroll adds the inset itself.
     walletContentTop: platform === "ios" ? below : safeAreaTop + below,

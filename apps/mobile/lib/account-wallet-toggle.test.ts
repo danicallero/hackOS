@@ -27,8 +27,16 @@ describe("walletToggleIconFrames (H28)", () => {
 
 describe("accountWalletChrome (H28)", () => {
   it("puts the button below the status bar and the wallet content below the button", () => {
-    expect(accountWalletChrome(59, "ios")).toEqual({ buttonTop: 67, walletContentTop: 52 });
+    expect(accountWalletChrome(59, "ios")).toEqual({
+      buttonTop: 67,
+      scrollButtonTop: 8,
+      walletContentTop: 52,
+    });
     // Android has no automatic inset, so the wallet scroll adds the status bar.
-    expect(accountWalletChrome(24, "android")).toEqual({ buttonTop: 32, walletContentTop: 76 });
+    expect(accountWalletChrome(24, "android")).toEqual({
+      buttonTop: 32,
+      scrollButtonTop: 32,
+      walletContentTop: 76,
+    });
   });
 });

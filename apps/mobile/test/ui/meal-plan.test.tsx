@@ -158,7 +158,11 @@ jest.mock("@/components/RequestFeedback", () => {
         : null,
   };
 });
-jest.mock("@/components/account-wallet", () => ({ AccountWallet: () => null }));
+jest.mock("@/components/account-wallet", () => ({
+  AccountWalletButton: () => null,
+  AccountWalletOverlay: () => null,
+  useAccountWallet: () => ({}),
+}));
 jest.mock("@/components/stale-data-banner", () => ({ StaleDataBanner: () => null }));
 jest.mock("@/lib/api", () => ({ apiFetch: (...args: unknown[]) => mockApiFetch(...args) }));
 jest.mock("@/lib/api-mode", () => ({
