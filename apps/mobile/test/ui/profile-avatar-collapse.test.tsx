@@ -578,14 +578,23 @@ describe("profile avatar snap on release (#935)", () => {
     const collapsed = PROFILE_AVATAR_COLLAPSE_DISTANCE;
     drag(collapsed + 40, collapsed + 10, collapsed);
     mockHaptic.mockClear();
-    // Sub-point jitter at the rest is not a pull.
-    handlers.onScroll(event(collapsed - 0.5));
+    // Jitter at the rest is not a pull.
+    handlers.onScroll(event(collapsed - 1.5));
     handlers.onScroll(event(collapsed));
     expect(mockHaptic).not.toHaveBeenCalled();
-    handlers.onScroll(event(collapsed - 3));
+    handlers.onScroll(event(collapsed - 5));
     handlers.onScroll(event(collapsed - 20));
     expect(mockHaptic).toHaveBeenCalledTimes(1);
     expect(mockHaptic).toHaveBeenCalledWith("medium");
+  });
+
+  it("still taps when the snap settled a fraction short of the collapsed rest", async () => {
+    const { handlers, drag } = await setup();
+    const collapsed = PROFILE_AVATAR_COLLAPSE_DISTANCE;
+    drag(collapsed - 30, collapsed - 0.4);
+    mockHaptic.mockClear();
+    handlers.onScroll(event(collapsed - 6));
+    expect(mockHaptic).toHaveBeenCalledTimes(1);
   });
 
   it("expands a downward release 90% into the range", async () => {

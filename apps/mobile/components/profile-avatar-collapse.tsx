@@ -72,6 +72,8 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
   const snapArmed = useSharedValue(false);
   // Last non-zero scroll delta: the direction of the drag or momentum (#935).
   const lastDelta = useSharedValue(0);
+  // Set at the collapsed rest; the next pull out of it taps once (#935).
+  const stretchArmed = useSharedValue(false);
   // Content height minus the viewport: an offset the page surely reaches.
   const maxOffset = useSharedValue(Number.POSITIVE_INFINITY);
   const contentHeight = useRef(0);
@@ -98,8 +100,8 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
   const collapseDistance = PROFILE_AVATAR_COLLAPSE_DISTANCE;
   const restVelocity = PROFILE_AVATAR_SNAP_REST_VELOCITY;
   const mergeOffset = PROFILE_AVATAR_COLLAPSE_DISTANCE * PROFILE_AVATAR_MERGE_PROGRESS;
-  // Ignore sub-point jitter at the collapsed rest before calling it a pull.
-  const stretchSlop = 1;
+  // Tolerance around the collapsed rest before a pull counts (points).
+  const stretchSlop = 2;
   const platform = Platform.OS;
 
   const settle = (offset: number, velocity: number) => {
@@ -142,8 +144,13 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
         // as soon as a collapsed avatar starts stretching out on the way down.
         const current = scrollOffset.value;
         if (previous < mergeOffset && current >= mergeOffset) runOnJS(mergeHaptic)();
-        else if (previous >= collapseDistance && current < collapseDistance - stretchSlop)
+        // A snap can settle a fraction of a point short of the collapsed rest,
+        // so arm near it and fire once the pull clearly leaves it.
+        if (current >= collapseDistance - stretchSlop) stretchArmed.value = true;
+        else if (stretchArmed.value && current < collapseDistance - 2 * stretchSlop) {
+          stretchArmed.value = false;
           runOnJS(mergeHaptic)();
+        }
       },
       onEndDrag: (event) => {
         const velocity = event.velocity?.y ?? 0;
