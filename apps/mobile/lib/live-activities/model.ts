@@ -246,9 +246,14 @@ export function toLiveUpdateSpec(
         title: props.challengeTitle,
         text:
           props.phase === "called"
-            ? `${props.labels.goTo} ${room}${where}`
-            : `${props.labels.inRoom} · ${room}`,
-        shortCriticalText: chip(room),
+            ? room
+              ? `${props.labels.goTo} ${room}${where}`
+              : props.roomLocation
+            : room
+              ? `${props.labels.inRoom} · ${room}`
+              : props.labels.inRoom,
+        // No room yet: an empty chip would render as a blank status-bar pill.
+        shortCriticalText: room ? chip(room) : null,
         subText: props.labels.moreQueues,
         url: props.url,
         accentColor: LIVE_ACCENT_HEX,

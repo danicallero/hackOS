@@ -231,6 +231,30 @@ describe("toLiveUpdateSpec (Android)", () => {
     expect(toLiveUpdateSpec(called, "called").alert).toBe(false);
   });
 
+  it("never posts an empty chip or a dangling 'Go to' when the room is unknown", () => {
+    const called = queueProps({
+      phase: "called",
+      position: null,
+      etaMinutes: null,
+      roomName: null,
+      roomLocation: "Floor 1",
+    });
+    expect(toLiveUpdateSpec(called, "waiting")).toMatchObject({
+      text: "Floor 1",
+      shortCriticalText: null,
+    });
+    const inRoom = queueProps({
+      phase: "in_room",
+      position: null,
+      etaMinutes: null,
+      roomName: null,
+    });
+    expect(toLiveUpdateSpec(inRoom, "called")).toMatchObject({
+      text: "In room",
+      shortCriticalText: null,
+    });
+  });
+
   it("counts down to an upcoming activity without an action", () => {
     const spec = toLiveUpdateSpec(activityProps(), null);
     expect(spec.countdownTo).toBe(Date.parse("2026-02-20T12:00:00.000Z"));
