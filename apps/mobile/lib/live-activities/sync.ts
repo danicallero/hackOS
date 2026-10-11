@@ -29,7 +29,15 @@ let registeredCookie: string | null = null;
 let lastDesired: DesiredActivity[] = [];
 /** Key → per-activity APNs token the API already has. */
 const sessionTokens = new Map<string, string>();
-let unsubscribePushToStart: (() => void) | null = null;
+
+// Subscribed at import (app launch): iOS may deliver the push-to-start token
+// before anyone signs in, and the event is not replayed for late listeners.
+subscribePushToStartToken((token) => {
+  if (token === pushToStartToken) return;
+  pushToStartToken = token;
+  if (!registeredCookie) return;
+  void readLiveActivityState().then((state) => putDevice(state.enabled).catch(() => undefined));
+});
 
 function platform(): "ios" | "android" | null {
   return liveActivityHost.platform;
@@ -80,11 +88,6 @@ async function putDevice(enabled: boolean, sessionCookie?: string): Promise<void
 export async function registerLiveActivityDevice(nextLanguage: string | null): Promise<void> {
   if (!platform() || !liveActivityHost.supported()) return;
   language = nextLanguage;
-  unsubscribePushToStart ??= subscribePushToStartToken((token) => {
-    if (token === pushToStartToken) return;
-    pushToStartToken = token;
-    void readLiveActivityState().then((state) => putDevice(state.enabled).catch(() => undefined));
-  });
   const state = await readLiveActivityState();
   registeredCookie = getCurrentSessionCookie() || null;
   await putDevice(state.enabled);
