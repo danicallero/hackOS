@@ -41,6 +41,7 @@ import {
   ROUTER_TAB_BAR_HEIGHT as TAB_BAR_HEIGHT,
   useRouterTabBarInsets,
 } from "@/lib/router-tabs-inset";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
 
 export type { RouterTabBarInsets } from "@/lib/router-tabs-inset";
 export {
@@ -507,6 +508,9 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
     >
       {isFocused ? (selectedIcon ?? icon) : icon}
       <Text
+        adjustsFontSizeToFit
+        maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+        minimumFontScale={CHROME_MIN_FONT_SCALE}
         numberOfLines={1}
         style={{
           alignSelf: "stretch",

@@ -10,6 +10,7 @@ import {
   TextInput,
   type TextStyle,
   useColorScheme,
+  useWindowDimensions,
   View,
   type ViewStyle,
 } from "react-native";
@@ -29,6 +30,7 @@ import { type HapticIntent, haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 export function Section({
   title,
@@ -220,6 +222,10 @@ export function InfoRow({
   accessoryLabel?: string;
   valueStyle?: TextStyle;
 }) {
+  // At accessibility text sizes the value moves under its label, as in
+  // UIKit's value cells: side by side, a fixed-width label squeezed the value
+  // to a letter per line.
+  const stacked = isAccessibilityTextSize(useWindowDimensions().fontScale);
   return (
     <View
       style={{
@@ -234,19 +240,31 @@ export function InfoRow({
       {icon ? (
         <SymbolView name={icon} tintColor={colors.accent} size={20} accessible={false} />
       ) : null}
-      {/* The label keeps its width; long values (emails, badge ids) wrap instead. */}
-      <Text selectable style={{ color: colors.label, flexShrink: 0, fontSize: 16 }}>
-        {label}
-      </Text>
-      <Text
-        selectable
-        style={[
-          { color: colors.secondaryLabel, flex: 1, fontSize: 16, textAlign: "right" },
-          valueStyle,
-        ]}
+      <View
+        style={
+          stacked
+            ? { flex: 1, gap: 2 }
+            : { alignItems: "center", flex: 1, flexDirection: "row", gap: 12 }
+        }
       >
-        {value}
-      </Text>
+        {/* The label keeps its width; long values (emails, badge ids) wrap instead. */}
+        <Text selectable style={{ color: colors.label, flexShrink: 0, fontSize: 16 }}>
+          {label}
+        </Text>
+        {stacked && !value ? null : (
+          <Text
+            selectable
+            style={[
+              stacked
+                ? { color: colors.secondaryLabel, fontSize: 16 }
+                : { color: colors.secondaryLabel, flex: 1, fontSize: 16, textAlign: "right" },
+              valueStyle,
+            ]}
+          >
+            {value}
+          </Text>
+        )}
+      </View>
       {accessoryIcon ? (
         <SymbolView
           name={accessoryIcon}

@@ -86,6 +86,9 @@
   },
   "jest": {
     "preset": "jest-expo",
+    "moduleNameMapper": {
+      "^react-native($|/.*)": "<rootDir>/node_modules/react-native$1"
+    },
     "setupFiles": [
       "./jest.setup.js"
     ],
