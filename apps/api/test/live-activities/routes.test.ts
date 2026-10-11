@@ -107,7 +107,7 @@ describe("PUT /api/me/live-activities/device", () => {
     expect(badLanguage.statusCode).toBe(400);
   });
 
-  it("reassigns a device to the new account and drops the old account's sessions", async () => {
+  it("reassigns a device: drops the old account's ended sessions, keeps open ones to reconcile", async () => {
     const first = await createUser();
     const second = await createUser();
     await putDevice(first, { deviceId: "shared", platform: "android", expoPushToken: "tok" });
@@ -118,13 +118,40 @@ describe("PUT /api/me/live-activities/device", () => {
       payload: { deviceId: "shared", kind: "queue", subject: "judging" },
     });
     expect(session.statusCode).toBe(200);
+    const dismissed = await app.inject({
+      method: "DELETE",
+      url: "/api/me/live-activities/sessions",
+      headers: asUser(first),
+      payload: { deviceId: "shared", kind: "activity", subject: "activity:7", phase: "live" },
+    });
+    expect(dismissed.statusCode).toBe(200);
     const row = await deviceRow("shared");
-    expect(await sessionsOf(row.id)).toHaveLength(1);
+    expect(await sessionsOf(row.id)).toHaveLength(2);
 
     const moved = await putDevice(second, { deviceId: "shared", platform: "android" });
     expect(moved.statusCode).toBe(200);
     expect(await deviceRow("shared")).toMatchObject({ user_id: second, expo_push_token: "tok" });
-    expect(await sessionsOf(row.id)).toHaveLength(0);
+    // The open queue activity is still on the phone: the worker updates or ends it.
+    // The old account's dismissal no longer gates anything.
+    const remaining = await sessionsOf(row.id);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]).toMatchObject({ kind: "queue", ended_at: null });
+  });
+
+  it("keeps each token on one device row only", async () => {
+    const first = await createUser();
+    const second = await createUser();
+    await putDevice(first, { deviceId: "old-install", platform: "android", expoPushToken: "tok" });
+    await putDevice(first, { deviceId: "old-iphone", platform: "ios", pushToStartToken: "pts" });
+
+    // A reinstall (new deviceId) under another account reports the same tokens.
+    await putDevice(second, { deviceId: "new-install", platform: "android", expoPushToken: "tok" });
+    await putDevice(second, { deviceId: "new-iphone", platform: "ios", pushToStartToken: "pts" });
+
+    expect(await deviceRow("old-install")).toMatchObject({ expo_push_token: null });
+    expect(await deviceRow("old-iphone")).toMatchObject({ push_to_start_token: null });
+    expect(await deviceRow("new-install")).toMatchObject({ expo_push_token: "tok" });
+    expect(await deviceRow("new-iphone")).toMatchObject({ push_to_start_token: "pts" });
   });
 });
 

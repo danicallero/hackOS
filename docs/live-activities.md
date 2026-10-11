@@ -98,7 +98,7 @@ dismissed activity stays away until its phase changes (see the state machine).
 
 | Route | Purpose |
 | --- | --- |
-| `PUT /api/me/live-activities/device` | Upsert this install: `deviceId`, `platform`, `pushToStartToken` (iOS 17.2+), `expoPushToken` (Android), `language`, `enabled`. Omitted fields keep their value; `null` clears it. A `deviceId` registered by another account moves to the caller and its old sessions are dropped. |
+| `PUT /api/me/live-activities/device` | Upsert this install: `deviceId`, `platform`, `pushToStartToken` (iOS 17.2+), `expoPushToken` (Android), `language`, `enabled`. Omitted fields keep their value; `null` clears it. A token belongs to one device: registering it clears it from any other row (a reinstall). A `deviceId` registered by another account moves to the caller; its ended sessions are dropped, and the open ones stay so the worker updates them for the caller or ends them. |
 | `PUT /api/me/live-activities/sessions` | `{deviceId, kind, subject, activityPushToken}`. Registers or rotates the iOS per-activity token after a local start, a remote start, or a token rotation. Re-registering a dismissed activity reopens it. |
 | `DELETE /api/me/live-activities/sessions` | `{deviceId, kind, subject, phase?}`. The user swiped it away, or the app ended it locally. `phase` is the phase it showed; without it the server uses the last phase it sent, or records the next one it computes. |
 | `GET /api/me/live-activities[?language=]` | `MyLiveActivities` for the caller. |

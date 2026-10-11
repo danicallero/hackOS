@@ -66,8 +66,10 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
           "Upserts this app install (`deviceId`) for Live Activities / Live Updates: the iOS " +
           "push-to-start token, the Expo push token used for Android data pushes, the label " +
           "language and the per-device opt-out (`enabled`). Omitted fields keep their stored " +
-          "value; `null` clears a token or the language override. A device id registered by " +
-          "another account is reassigned to the caller and its previous sessions are dropped.",
+          "value; `null` clears a token or the language override. A token is held by one device " +
+          "only: registering it here clears it from any other device. A device id registered " +
+          "by another account is reassigned to the caller; its ended sessions are dropped and " +
+          "the activities still open on it are updated for the caller or ended.",
         body: upsertDeviceBodySchema,
         response: { 200: deviceResponseSchema },
       },
@@ -82,11 +84,31 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
           [body.deviceId],
         );
         if (existing[0] && existing[0].user_id !== userId) {
-          // The previous account's activities must not keep updating on a
-          // phone that now belongs to someone else.
-          await client.query(`DELETE FROM live_activity_sessions WHERE device_id = $1`, [
-            existing[0].id,
-          ]);
+          // The previous account's dismissals and finished runs must not
+          // gate the new account. Open sessions stay: they are activities
+          // still on this phone, and the worker either updates them with the
+          // new account's state or ends them; dropping them would orphan them.
+          await client.query(
+            `DELETE FROM live_activity_sessions WHERE device_id = $1 AND ended_at IS NOT NULL`,
+            [existing[0].id],
+          );
+        }
+        // A token addresses one physical install: if another device row
+        // (a reinstall with a new deviceId, possibly another account) still
+        // holds it, that row would push its own account's activities here.
+        if (body.pushToStartToken) {
+          await client.query(
+            `UPDATE live_activity_devices SET push_to_start_token = NULL
+              WHERE push_to_start_token = $1 AND device_id <> $2`,
+            [body.pushToStartToken, body.deviceId],
+          );
+        }
+        if (body.expoPushToken) {
+          await client.query(
+            `UPDATE live_activity_devices SET expo_push_token = NULL
+              WHERE expo_push_token = $1 AND device_id <> $2`,
+            [body.expoPushToken, body.deviceId],
+          );
         }
         const { rows } = await client.query<{
           device_id: string;
