@@ -14,7 +14,8 @@ import { readLiveActivityState, updateLiveActivityState } from "./store";
 type AnyInstance = LiveActivity<QueueLiveProps> | LiveActivity<ActivityLiveProps>;
 
 const instances = new Map<string, AnyInstance>();
-const tokenListeners = new Set<string>();
+/** One token subscription per activity, removed once the activity is gone. */
+const tokenListeners = new Map<string, { remove(): void }>();
 /** ActivityKit id → staff subject; push-started activities are unknown until adopted. */
 let staffSubjects: Record<string, string> = {};
 void readLiveActivityState().then((state) => {
@@ -35,6 +36,12 @@ function safeInstances<T extends object>(factory: {
   }
 }
 
+function forget(id: string) {
+  instances.delete(id);
+  tokenListeners.get(id)?.remove();
+  tokenListeners.delete(id);
+}
+
 function rememberStaffSubject(id: string, subject: string | null) {
   if (subject) staffSubjects[id] = subject;
   else delete staffSubjects[id];
@@ -47,8 +54,10 @@ export const liveActivityHost: LiveActivityHost = {
   supported: () => true,
   running(): RunningActivity[] {
     const running: RunningActivity[] = [];
+    const seen = new Set<string>();
     for (const instance of safeInstances(QueueActivity)) {
       const id = instance.getId();
+      seen.add(id);
       instances.set(id, instance);
       running.push({ id, kind: "queue", subject: null });
     }
@@ -56,12 +65,15 @@ export const liveActivityHost: LiveActivityHost = {
     for (const instance of safeInstances(StaffActivity)) {
       const id = instance.getId();
       staffIds.add(id);
+      seen.add(id);
       instances.set(id, instance);
       running.push({ id, kind: "activity", subject: staffSubjects[id] ?? null });
     }
     for (const id of Object.keys(staffSubjects)) {
       if (!staffIds.has(id)) rememberStaffSubject(id, null);
     }
+    // Ended or swiped away outside the app: drop their token subscriptions.
+    for (const id of [...instances.keys()]) if (!seen.has(id)) forget(id);
     return running;
   },
   async start(item) {
@@ -89,8 +101,7 @@ export const liveActivityHost: LiveActivityHost = {
   async end(surface, mode) {
     const instance = instances.get(surface.id);
     if (!instance) return;
-    instances.delete(surface.id);
-    tokenListeners.delete(surface.id);
+    forget(surface.id);
     if (surface.kind === "activity") rememberStaffSubject(surface.id, null);
     await instance.end(
       mode === "immediate" ? "immediate" : after(new Date(Date.now() + FINISHED_DISMISSAL_MS)),
@@ -106,8 +117,10 @@ export const liveActivityHost: LiveActivityHost = {
   onPushToken(id, listener) {
     const instance = instances.get(id);
     if (!instance || tokenListeners.has(id)) return;
-    tokenListeners.add(id);
-    instance.addPushTokenListener((event) => listener(event.pushToken));
+    tokenListeners.set(
+      id,
+      instance.addPushTokenListener((event) => listener(event.pushToken)),
+    );
   },
 };
 
