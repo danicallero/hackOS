@@ -226,9 +226,14 @@ distributed to other Expo Router apps without importing hackOS code.
   admin `*` wildcard) holders, the daily tools take the bar — Schedule,
   Scanner, Activities (for `ACTIVITY_SCAN`) — and Queue,
   Diary, Account, and any secondary operations join them directly while five
-  fit, moving to Others only beyond that. Wallet is not a tab: Account →
-  Wallet → View tickets pushes `app/(tabs)/others/wallet.tsx` (H28), with a
-  compact inline title beside the back button instead of a large title. Queue-only
+  fit, moving to Others only beyond that. Wallet is not a tab: a
+  back-button-sized glass circle in Account's top-left corner opens it as an
+  overlay of Account (`components/account-wallet.tsx`, H28) and morphs into
+  that overlay's close button; Android's system back also closes it. The
+  overlay keeps the one button in place, which a pushed or modal route would
+  slide or cover. The wallet has no title: the Ticket/Badge control leads it.
+  `app/(tabs)/others/wallet.tsx` remains for deep links, with a title-less
+  back header. Queue-only
   operators instead get Queue operations in the primary bar; scanner
   operators with queue access find it in Others, preserving Scanner's direct
   placement.
@@ -372,8 +377,8 @@ distributed to other Expo Router apps without importing hackOS code.
 ## Participant screens
 
 - `app/(tabs)/schedule.tsx`, `queue.tsx`, `schedule/alerts.tsx` (inbox sheet),
-  `others/account.tsx`, and `components/wallet-screen.tsx` (pushed from
-  Account at `others/wallet`) — the five participant screens. API-backed screens expose
+  `others/account.tsx`, and `components/wallet-screen.tsx` (an overlay of
+  Account, or `others/wallet` for deep links) — the five participant screens. API-backed screens expose
   loading, retryable error, and empty states without leaking rejected promises.
   The account screen displays the shared `/api/me` profile and keeps the
   participant-facing overview short. Pulling down refreshes `/api/me` and the

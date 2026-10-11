@@ -20,6 +20,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
+import { AccountWallet } from "@/components/account-wallet";
 import {
   ActionButton,
   AndroidStatusBarScrim,
@@ -446,15 +447,6 @@ export default function AccountScreen() {
           ) : null}
         </Section>
 
-        {/* H28: Wallet lives in Account rather than in the tab bar. */}
-        <Section title={t("tabWallet")}>
-          <AccountSubpageRow
-            label={t("accountViewTickets")}
-            icon="wallet.pass"
-            onPress={() => router.push("/(tabs)/others/wallet")}
-          />
-        </Section>
-
         {/* H51: every notification setting lives here; the Schedule bell only shows the inbox. */}
         <View testID="account-notifications" onLayout={highlight.onRowLayout}>
           <Section title={t("alertsNotifications")}>
@@ -617,6 +609,8 @@ export default function AccountScreen() {
         size={96}
         variant="account"
       />
+      {/* H28: Wallet lives in Account, behind the header's top-left button. */}
+      <AccountWallet />
     </View>
   );
 }

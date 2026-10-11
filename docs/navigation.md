@@ -175,8 +175,9 @@ hidden destinations stay routable:
   directly). **My queue** is visible to participants even before their first
   queue entry so they can see the empty state and tutorial; mentors, sponsors,
   and other accounts only see it once they have an actual queue entry. Wallet
-  is not a tab: every account reaches it from Account → Wallet → View tickets
-  (H28). Alerts are not a tab either: the Schedule header bell (with an unread
+  is not a tab: every account opens it from the wallet button in Account's
+  top-left corner, as an overlay whose close button is that same button (H28);
+  `others/wallet` stays routable for deep links. Alerts are not a tab either: the Schedule header bell (with an unread
   badge) presents the inbox as a sheet, and every notification setting lives in
   Account → Notifications (H51, H59); the sheet's gear dismisses it and
   navigates to `/(tabs)/others/account?highlight=notifications`, so the tab bar
