@@ -1619,7 +1619,14 @@ desk the accredited share `accredited / eligible`, all as of the post.
   `lib/push.ts`). `reconcileLiveActivities` reads `GET /api/me/live-activities`
   (with `?deviceId=`, so the server applies this device's `maxConcurrent`
   cut and rank hysteresis) and applies it; every running iOS activity, including ones APNs started,
-  reports its per-activity token through `PUT …/sessions`. A failed device
+  is registered through `PUT …/sessions` right away and again with its per-activity token
+  once iOS has one. The early registration keeps the worker from push-starting a duplicate
+  of an activity the app just started. Local iOS starts and updates carry the server's
+  `stale-date` (queue: 30 min ahead; others: the item's end), so an activity the app can no
+  longer refresh shows as outdated. On launch and on every foreground (not on events or
+  timers), the reconcile first calls `POST …/dismissals/reopen` and then applies the read
+  without keeping, inferring or reporting dismissals: whatever the person swiped away comes
+  back while it is still relevant. If the API call fails, dismissals are kept. A failed device
   registration (offline sign-in, opt-out) is retried before the next
   reconcile. A read that was in flight across sign-out/sign-in, or that a
   newer read overtook, is discarded instead of applied. A 404 (an API without
@@ -1648,8 +1655,8 @@ desk the accredited share `accredited / eligible`, all as of the post.
   `AttendeeActivity` is adopted by an unmatched subject of its kind and
   immediately updated (`host.ios.ts` remembers id → subject; the queue,
   deadline and desk have a single subject each).
-- `use-live-activities.ts` (mounted in `app/_layout.tsx`) reconciles on sign-in,
-  foreground, the personal queue events, the next start/end boundary (staff
+- `use-live-activities.ts` (mounted in `app/_layout.tsx`) reconciles on sign-in and
+  foreground (both bring dismissed activities back), the personal queue events, the next start/end boundary (staff
   and attendee activities, the deadline, the desk window) and every minute
   while a staff counter or the accreditation desk is live. Sign-out ends every surface and sends
   `enabled: false` with the session that registered the device; `signOut()`

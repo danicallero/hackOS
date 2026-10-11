@@ -24,6 +24,12 @@ import {
   relevanceForRank,
   selectForDevice,
 } from "./candidates.js";
+import { foregroundDevices } from "./foreground.js";
+import {
+  LIVE_ACTIVITIES_KICK_JOB,
+  LIVE_ACTIVITIES_QUEUE,
+  requestLiveActivitySync,
+} from "./kick.js";
 import { liveStateHash } from "./state.js";
 
 /**
@@ -52,7 +58,6 @@ import { liveStateHash } from "./state.js";
  * send reverts its claim so the next tick retries it.
  */
 
-export const LIVE_ACTIVITIES_QUEUE = "live-activities";
 const TICK_EVERY_MS = 20_000;
 const ACTIVITY_UPDATE_THROTTLE_SECONDS = 30;
 /** Arbitrary constant for pg_try_advisory_lock; unique among this codebase's advisory keys. */
@@ -67,6 +72,13 @@ const OPEN_ENDED_STALE_MS = 30 * 60 * 1000;
  * without any visible change is not greyed out.
  */
 const OPEN_ENDED_REFRESH_MS = OPEN_ENDED_STALE_MS / 2;
+/**
+ * ActivityKit ends an activity after 8 h and removes it from the Lock Screen
+ * at most 4 h later. An iOS session the server could never address (no
+ * per-activity token) is gone from the device by then.
+ */
+const IOS_ACTIVITY_LIFETIME_MS = 12 * 60 * 60 * 1000;
+
 /** Kinds whose every change goes out immediately (no counter throttle). */
 const URGENT_KINDS = new Set<LiveActivityKind>(["queue"]);
 const OPEN_ENDED_KINDS = new Set<LiveActivityKind>(["queue"]);
@@ -91,6 +103,7 @@ interface SessionRow {
   state_hash: string | null;
   props: LiveActivityProps | null;
   last_sent_at: Date | null;
+  started_at: Date;
   ended_at: Date | null;
   end_reason: "finished" | "dismissed" | null;
   dismissed_phase: string | null;
@@ -225,7 +238,7 @@ async function loadSessions(deviceIds: number[]): Promise<Map<string, SessionRow
   if (deviceIds.length === 0) return sessions;
   const { rows } = await pool.query<SessionRow>(
     `SELECT id, device_id, kind, subject, activity_push_token, state_hash, props, last_sent_at,
-            ended_at, end_reason, dismissed_phase
+            started_at, ended_at, end_reason, dismissed_phase
        FROM live_activity_sessions WHERE device_id = ANY($1::int[])`,
     [deviceIds],
   );
@@ -294,7 +307,10 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
     console.warn("live-activities: APNs is not configured; skipping iOS Live Activity pushes");
   }
   const android = deps.android ?? expoAndroidTransport;
-  const sendCtx: SendContext = { apns, android, now, timezone, summary };
+  const foreground = await foregroundDevices(
+    actionable.filter((d) => d.platform === "ios").map((d) => d.id),
+  );
+  const sendCtx: SendContext = { apns, android, now, timezone, summary, foreground };
 
   try {
     const actionableIds = new Set(actionable.map((d) => d.id));
@@ -372,6 +388,8 @@ interface SendContext {
   now: Date;
   timezone: string;
   summary: LiveActivityTickSummary;
+  /** iOS devices whose app is starting its own activities right now (foreground.ts). */
+  foreground: Set<number>;
 }
 
 async function send(
@@ -460,6 +478,8 @@ async function startSession(
 ): Promise<void> {
   const token = device.platform === "ios" ? device.push_to_start_token : device.expo_push_token;
   if (!token || (device.platform === "ios" && !ctx.apns)) return;
+  // The app in the foreground starts it itself; a push now would duplicate it.
+  if (ctx.foreground.has(device.id)) return;
   const hash = liveStateHash(want.props);
   // Idempotent claim: only the tick whose INSERT (or restart of a session
   // the server finished, or one dismissed in another phase) succeeds may
@@ -632,9 +652,23 @@ async function markGone(device: DeviceRow, session: SessionRow): Promise<void> {
 }
 
 async function endSession(ctx: SendContext, device: DeviceRow, session: SessionRow): Promise<void> {
-  // Without APNs nothing can reach this activity: keep it open rather than
-  // record an end that never happened, so a configured APNs still ends it.
-  if (device.platform === "ios" && !ctx.apns && session.activity_push_token) return;
+  if (device.platform === "ios") {
+    // Without APNs nothing can reach this activity: keep it open rather than
+    // record an end that never happened, so a configured APNs still ends it.
+    if (!ctx.apns && session.activity_push_token) return;
+    // No per-activity token yet (a push-to-start the app has not reported,
+    // or a local start whose token is pending): the activity is still on
+    // the device and only that token can end it. Keep the session open, so
+    // the tick after the app reports the token ends it, and a returning
+    // subject is updated instead of push-started a second time. Past
+    // ActivityKit's lifetime the activity is gone and the row is closed.
+    if (
+      !session.activity_push_token &&
+      ctx.now.getTime() - new Date(session.started_at).getTime() < IOS_ACTIVITY_LIFETIME_MS
+    ) {
+      return;
+    }
+  }
   const { rows } = await pool.query<{ id: number }>(
     `UPDATE live_activity_sessions SET ended_at = now(), end_reason = 'finished'
       WHERE id = $1 AND ended_at IS NULL
@@ -671,8 +705,11 @@ async function endSession(ctx: SendContext, device: DeviceRow, session: SessionR
   );
 }
 
-registerWorker(LIVE_ACTIVITIES_QUEUE, async () => {
-  await runLiveActivitiesTick();
+registerWorker(LIVE_ACTIVITIES_QUEUE, async (job) => {
+  const summary = await runLiveActivitiesTick();
+  // Another replica's tick held the lock and may have read the state before
+  // the change this kick is for: try again shortly rather than wait 20 s.
+  if (summary.skipped && job.name === LIVE_ACTIVITIES_KICK_JOB) await requestLiveActivitySync();
 });
 
 export async function scheduleLiveActivitiesWorker(): Promise<void> {
@@ -687,30 +724,4 @@ export async function scheduleLiveActivitiesWorker(): Promise<void> {
       removeOnFail: true,
     },
   );
-}
-
-/**
- * Best-effort early tick after a queue call (H29/H38) so the "go to room"
- * update doesn't wait for the next 20 s repetition. Delayed so the caller's
- * transaction has committed; deduplicated while one is pending. A failure is
- * logged, never surfaced: the repeatable tick delivers the same state anyway.
- */
-export async function requestLiveActivitySync(): Promise<void> {
-  if (config.isTest) return;
-  try {
-    await getQueue(LIVE_ACTIVITIES_QUEUE).add(
-      LIVE_ACTIVITIES_QUEUE,
-      {},
-      {
-        delay: 2_000,
-        jobId: `${LIVE_ACTIVITIES_QUEUE}-nudge`,
-        removeOnComplete: true,
-        removeOnFail: true,
-      },
-    );
-  } catch (err) {
-    console.warn("live-activities: could not schedule an early sync", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
 }

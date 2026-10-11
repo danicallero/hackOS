@@ -23,7 +23,7 @@ import { readLiveActivityState, updateLiveActivityState } from "./store";
 type AnyInstance = LiveActivity<LiveActivityProps>;
 
 interface Factory {
-  start(props: LiveActivityProps, url?: string): AnyInstance;
+  start(props: LiveActivityProps, url?: string, staleDate?: Date): AnyInstance;
   getInstances(): AnyInstance[];
 }
 
@@ -68,6 +68,19 @@ void readLiveActivityState().then((state) => {
 
 /** After an activity ends, how long its final state may stay on the Lock Screen (HIG). */
 const FINISHED_DISMISSAL_MS = 15 * 60 * 1000;
+/** The queue has no end instant; the server refreshes it well within this. */
+const OPEN_ENDED_STALE_MS = 30 * 60 * 1000;
+
+/**
+ * Same `stale-date` the API sends (docs/live-activities.md): the item's own
+ * end, or 30 min ahead for the queue. A local activity the app can no longer
+ * refresh or end (the server never got its token) is then shown as outdated
+ * instead of current.
+ */
+export function staleDateFor(props: LiveActivityProps, now = Date.now()): Date {
+  if (props.kind === "queue") return new Date(now + OPEN_ENDED_STALE_MS);
+  return new Date(props.endsAt);
+}
 
 function safeInstances(factory: Factory): AnyInstance[] {
   try {
@@ -119,7 +132,7 @@ export const liveActivityHost: LiveActivityHost = {
     try {
       const factory = FACTORIES[item.props.kind];
       if (!factory) return null;
-      const instance = factory.start(item.props, item.props.url);
+      const instance = factory.start(item.props, item.props.url, staleDateFor(item.props));
       const id = instance.getId();
       if (!id) return null;
       instances.set(id, instance);
@@ -134,7 +147,7 @@ export const liveActivityHost: LiveActivityHost = {
     const instance = instances.get(id);
     if (!instance) return;
     if (!(item.kind in FIXED_SUBJECTS)) rememberSubject(id, item.subject);
-    await instance.update(item.props);
+    await instance.update(item.props, staleDateFor(item.props));
   },
   async end(surface, mode) {
     const instance = instances.get(surface.id);

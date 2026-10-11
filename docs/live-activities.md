@@ -49,6 +49,8 @@ GET /api/me/live-activities      worker.ts (every 20 s)
 | `apns.ts` | ES256 provider token, the `aps` payload, and the HTTP/2 transport. |
 | `android.ts` | Data-only Expo push through `postExpoPushMessages` (shared with the notification push channel). |
 | `worker.ts` | The `live-activities` repeatable job: desired state against known sessions, then start, update or end. |
+| `kick.ts` | `requestLiveActivitySync`: the debounced early tick that domain modules request ([Latency](#latency)). |
+| `foreground.ts` | The short window in which an iOS app starts its own activities, so the worker does not push-start duplicates. |
 
 The props contract lives in `packages/shared/src/live-activities.ts`. Labels
 arrive pre-localized in the props, because the iOS widget extension runs
@@ -186,7 +188,9 @@ Organizers decide which kinds exist and for which roles
 and the Live Activity mirrors the queue screen rather than adding a new
 notification category. The opt-out is therefore the device's `enabled` flag
 (`PUT /api/me/live-activities/device`) rather than an H51 preference row. A
-dismissed activity stays away until its phase changes (see the state machine).
+dismissed activity stays away until its phase changes (see the state machine)
+or the person opens the app, which brings back everything still relevant
+(`POST …/dismissals/reopen`).
 
 ## Configuration
 
@@ -253,7 +257,8 @@ device keeps at most `maxConcurrent` of them:
   running lower one. The displaced one is ended (`finished`) and starts again
   when a slot frees.
 - A candidate the user dismissed in its current phase takes no slot. It
-  stays desired, so its dismissal is kept.
+  stays desired, so its dismissal is kept until the phase changes or the app
+  is opened.
 - `rank` (0 = most important) goes into every props object and the Android
   message (`hackosLiveUpdate.rank`, for the notification sort key). iOS gets
   `relevance-score = 100 − 10 × rank`, so the Dynamic Island shows the top
@@ -271,9 +276,10 @@ Organizers can rank `queue` higher.
 | Route | Purpose |
 | --- | --- |
 | `PUT /api/me/live-activities/device` | Upsert this install: `deviceId`, `platform`, `pushToStartToken` (iOS 17.2+), `expoPushToken` (Android), `language`, `enabled`. Omitted fields keep their value; `null` clears it. A token belongs to one device: registering it clears it from any other row (a reinstall). A `deviceId` registered by another account moves to the caller; its ended sessions are dropped, and the open ones stay so the worker updates them for the caller or ends them. |
-| `PUT /api/me/live-activities/sessions` | `{deviceId, kind, subject, activityPushToken}`. Registers or rotates the iOS per-activity token after a local start, a remote start, or a token rotation. Re-registering a dismissed activity reopens it. |
+| `PUT /api/me/live-activities/sessions` | `{deviceId, kind, subject, activityPushToken}`. Registers a running activity right after a local start (token omitted until iOS has one) and the iOS per-activity token after a local start, a remote start, or a token rotation. Re-registering a dismissed activity reopens it. |
 | `DELETE /api/me/live-activities/sessions` | `{deviceId, kind, subject, phase?}`. The user swiped it away, or the app ended it locally. `phase` is the phase it showed; without it the server uses the last phase it sent, or records the next one it computes. |
-| `GET /api/me/live-activities[?language=]` | `MyLiveActivities` for the caller. |
+| `POST /api/me/live-activities/dismissals/reopen` | `{deviceId}`, sent by the app on launch and foreground. Every `dismissed` session of the device becomes `finished` (startable); returns `{status, reopened}`. Idempotent. Background pushes never do this. |
+| `GET /api/me/live-activities[?language=][&deviceId=]` | `MyLiveActivities` for the caller. With `deviceId`, also opens the device's 30 s foreground window (below). |
 
 The access posture matches `POST /api/me/push-tokens`: any signed-in, active
 account may manage its own devices, with no capability and no audit row,
@@ -317,9 +323,8 @@ date), never tokens.
 
 ## Worker state machine
 
-`live-activities` runs every 20 s. A call (H29) also schedules a deduplicated
-early run 2 s later, so the alerting "go to room" update does not wait for the
-next repetition. Each tick does the following:
+`live-activities` runs every 20 s, plus debounced early runs ([Latency](#latency)).
+Each tick does the following:
 
 1. Loads enabled devices of active users, plus any device that still has an
    open session (to end it). Only *actionable* devices (with a start path or
@@ -330,7 +335,7 @@ next repetition. Each tick does the following:
 
 | Known session | Action |
 | --- | --- |
-| none, or `finished` | **start**, if a start path exists: iOS `push_to_start_token` (and APNs configured) or Android `expo_push_token` |
+| none, or `finished` | **start**, if a start path exists: iOS `push_to_start_token` (and APNs configured) or Android `expo_push_token`. Not on an iOS device inside its foreground window: the app starts it and registers it. |
 | open, state hash changed | **update**. Same-phase changes of staff and attendee activities, the deadline and the accreditation desk are throttled to one per 30 s per session; queue changes and every phase change go out immediately. iOS waits until the app reports the activity's own token. |
 | open, hash unchanged | nothing |
 | `dismissed`, same phase as `dismissed_phase` | nothing (the user removed it) |
@@ -344,10 +349,42 @@ next repetition. Each tick does the following:
 3. Every open session that is no longer desired is **ended**. This happens
    when the window closes, the team is done, the activity ends, the
    capability or role is revoked, the kind is disabled, a higher-priority
-   kind outranks it, or the device is disabled. A `dismissed` session
+   kind outranks it, or the device is disabled. An iOS session without a
+   per-activity token is the exception: only that token can end the
+   activity, so the session stays open until the app reports it (the next
+   tick then ends it) or ActivityKit's 12-hour lifetime has passed. Keeping
+   it open also means a returning subject is updated rather than
+   push-started a second time. A `dismissed` session
    that is no longer desired on a device that can still receive starts is
    turned into `finished`: the dismissal covered that run, so a later one
    (for example the next queue the team waits in) starts again.
+
+### Latency
+
+How long a change takes to reach a device:
+
+| Step | Delay |
+| --- | --- |
+| Domain change → tick | ≤ 2 s after a queue change (transition, call, deletion, topology: `notifyChallengeQueueChanged`), a judging-window edit (`PATCH /api/queue/settings`), a schedule edit (`emitScheduleChanged`) or a configuration save. Anything else (scan counters, event dates) waits for the 20 s repetition. |
+| Throttle | Same-phase counter updates of staff and attendee activities, the deadline and the desk: one per 30 s per session. Queue changes and phase changes are not throttled. |
+| Push | APNs priority 10 for start, end, the call and phase changes; 5 for routine updates, which iOS may delay. Expo data pushes are `high`. |
+| iOS update or end | Needs the activity's own token, which only the app can report. A push-started activity's token reaches the server when the app next runs its reconcile (launch or foreground); until then the server cannot update or end it. |
+| App | Reconciles on launch, foreground, the personal queue events and phase boundaries, so an open app shows the change within about a second of its SSE event. |
+
+`requestLiveActivitySync` (`kick.ts`) adds one `kick` job delayed 2 s with a
+BullMQ deduplication window of the same length: requests inside the window
+join the pending tick, a later one schedules the next, so a change made while
+a tick runs is not lost. A kick that finds another replica's tick holding the
+lock schedules itself again. Kicks are global (every device is recomputed),
+which is why per-scan counters do not kick: they are throttled to 30 s anyway.
+
+**Foreground window.** `GET /api/me/live-activities?deviceId=` marks the iOS
+device in Valkey for 30 s (`live-activities:foreground:<id>`). The app starts
+what that read returns and registers it at once (`PUT …/sessions` without a
+token), so during the window the worker sends no push-to-start to that
+device. Without it, a push-to-start racing the app's local start leaves two
+activities of one subject, and the one whose token the server never learns
+stays on the device.
 
 **Concurrency and idempotency:**
 
@@ -573,10 +610,16 @@ and `deploy/README.md`.
   call alert, throttle, end and restart, dismissal kept until the phase
   changes,
   concurrent ticks giving one start, and token cleanup. It uses stubbed
-  APNs/Expo transports.
+  APNs/Expo transports. Also: deleted queue entries end the queue activity
+  on both platforms, a token-less iOS session stays open until its token
+  arrives (and closes after ActivityKit's lifetime), and no push-to-start
+  during the foreground window.
+- `kick.test.ts`: a burst of early-tick requests becomes one delayed job, and
+  queue changes, schedule edits and configuration saves request it.
 - `apns.test.ts`: payload shape and JWT signing with a generated P-256 key.
 - `routes.test.ts`: auth, upsert/reassign, validation, ownership,
-  dismissal, the full GET shape and the per-device cut with `deviceId`.
+  dismissal, reopening dismissals, the full GET shape and the per-device cut
+  with `deviceId`.
 - `kinds.test.ts`: configuration gates (disabled kind, missing role, deleted
   role, capability still required), priority and `maxConcurrent`, and each
   new kind's state, gates and H54 isolation.

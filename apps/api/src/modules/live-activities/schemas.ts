@@ -96,6 +96,14 @@ export const endSessionBodySchema = z
 
 export const statusResponseSchema = z.object({ status: z.literal(true) });
 
+export const reopenDismissedBodySchema = z.object({ deviceId: deviceIdSchema });
+
+export const reopenDismissedResponseSchema = z.object({
+  status: z.literal(true),
+  /** Dismissed sessions released on this device. */
+  reopened: z.number().int(),
+});
+
 export const myLiveActivitiesQuerySchema = z.object({
   /** Label language; defaults to the account language. */
   language: languageSchema.optional(),

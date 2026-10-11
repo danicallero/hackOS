@@ -370,6 +370,84 @@ describe("queue Live Activity (H38)", () => {
     expect(apns.events()).toEqual(["start", "end"]);
   });
 
+  it("ends the queue activity when its queue entries are deleted", async () => {
+    await openJudgingWindow();
+    const { userId, entryId } = await participantInQueue();
+    const ios = await registerDevice(userId);
+    const droid = await registerDevice(userId, { platform: "android" });
+    await tick();
+    await setActivityToken(ios.id, "activity-token");
+
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`DELETE FROM queue_entries WHERE id = $1`, [entryId]);
+    expect(await tick()).toMatchObject({ ended: 2, failed: 0 });
+    expect(apns.events()).toEqual(["start", "end"]);
+    expect(apns.sent.at(-1)!.token).toBe("activity-token");
+    expect(android.sent.map((s) => s.message.hackosLiveUpdate.event)).toEqual(["start", "end"]);
+    for (const device of [ios, droid]) {
+      expect((await sessionsOf(device.id))[0]).toMatchObject({ end_reason: "finished" });
+    }
+  });
+
+  it("keeps an iOS session without its activity token open until the app reports it, then ends it", async () => {
+    await openJudgingWindow();
+    const { userId, entryId, roomId } = await participantInQueue();
+    const device = await registerDevice(userId);
+    await tick();
+
+    // Push-started; the app has not reported the activity's token: an end
+    // could not reach it, so the session is not marked ended.
+    await closeJudgingWindow();
+    expect(await tick()).toMatchObject({ ended: 0 });
+    expect((await sessionsOf(device.id))[0]).toMatchObject({ ended_at: null });
+
+    // The subject returns: still one activity, so no second push-to-start.
+    await openJudgingWindow();
+    await callEntry(entryId, roomId);
+    expect(await tick()).toMatchObject({ started: 0 });
+    await closeJudgingWindow();
+    await tick();
+
+    // The app reports the token (PUT …/sessions): the next tick ends it.
+    await setActivityToken(device.id, "activity-token");
+    expect(await tick()).toMatchObject({ ended: 1 });
+    expect(apns.events()).toEqual(["start", "end"]);
+    expect(apns.sent.at(-1)!.token).toBe("activity-token");
+  });
+
+  it("closes a token-less iOS session once ActivityKit has removed the activity", async () => {
+    await openJudgingWindow();
+    const { userId } = await participantInQueue();
+    const device = await registerDevice(userId);
+    await tick();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE live_activity_sessions SET started_at = now() - interval '13 hours'
+        WHERE device_id = $1`,
+      [device.id],
+    );
+    await closeJudgingWindow();
+    await tick();
+    expect((await sessionsOf(device.id))[0]).toMatchObject({ end_reason: "finished" });
+    expect(apns.events()).toEqual(["start"]);
+  });
+
+  it("leaves starts to the app while it is reading its state in the foreground", async () => {
+    await openJudgingWindow();
+    const { userId } = await participantInQueue();
+    const device = await registerDevice(userId);
+    const { markDeviceForeground } = await import(
+      "../../src/modules/live-activities/foreground.js"
+    );
+    await markDeviceForeground(device.id);
+    expect(await tick()).toMatchObject({ started: 0 });
+    expect(apns.sent).toHaveLength(0);
+
+    const { valkey } = await import("../../src/lib/valkey.js");
+    await valkey.del(`live-activities:foreground:${device.id}`);
+    expect(await tick()).toMatchObject({ started: 1 });
+  });
+
   it("ends open sessions of a device the user disabled", async () => {
     await openJudgingWindow();
     const { userId } = await participantInQueue();

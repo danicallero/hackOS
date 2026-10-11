@@ -10,6 +10,8 @@ import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
 import { normalizeLanguage } from "../notifications/templates.js";
 import { myLiveActivities } from "./candidates.js";
+import { markDeviceForeground } from "./foreground.js";
+import { requestLiveActivitySync } from "./kick.js";
 import {
   deviceResponseSchema,
   endSessionBodySchema,
@@ -17,6 +19,8 @@ import {
   myLiveActivitiesQuerySchema,
   myLiveActivitiesResponseSchema,
   putLiveActivitySettingsBodySchema,
+  reopenDismissedBodySchema,
+  reopenDismissedResponseSchema,
   statusResponseSchema,
   upsertDeviceBodySchema,
   upsertSessionBodySchema,
@@ -166,8 +170,9 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
           "(queue `judging`, activity `activity:<id>`, attendee_activity `schedule:<id>`, " +
           "deadline `deadline`, accreditation `accreditation`) and stores or " +
           "rotates its iOS per-activity push token so the server can update and end it. Call " +
-          "it after a local start, after a remote push-to-start start, and whenever iOS " +
-          "rotates the token. Re-registering a dismissed activity reopens it.",
+          "it right after a local start (without `activityPushToken` until iOS has one, so " +
+          "the server does not push-start a duplicate), after a remote push-to-start start, " +
+          "and whenever iOS rotates the token. Re-registering a dismissed activity reopens it.",
         body: upsertSessionBodySchema,
         response: { 200: statusResponseSchema },
       },
@@ -242,6 +247,43 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
     },
   );
 
+  api.post(
+    "/api/me/live-activities/dismissals/reopen",
+    {
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "Bring back dismissed Live Activities",
+        description:
+          "The app was opened: releases every Live Activity the user dismissed on this device " +
+          "(`deviceId`), so the ones still relevant are shown again — the app starts them " +
+          "locally from `GET /api/me/live-activities?deviceId=`, which no longer leaves them " +
+          "out. Only an explicit app open does this; background pushes keep honoring a " +
+          "dismissal until its phase changes. Idempotent: a repeat finds nothing left to " +
+          "release. `reopened` counts the dismissals released.",
+        body: reopenDismissedBodySchema,
+        response: { 200: reopenDismissedResponseSchema },
+      },
+    },
+    async (req) => {
+      const userId = req.userId as number;
+      const reopened = await withTransaction(async (client) => {
+        await lockActiveUser(client, userId);
+        const id = await ownDeviceId(client, userId, req.body.deviceId);
+        // `finished` is the state the worker and the per-device cut treat as
+        // startable, exactly like a run the server ended itself.
+        const { rowCount } = await client.query(
+          `UPDATE live_activity_sessions
+              SET end_reason = 'finished', dismissed_phase = NULL
+            WHERE device_id = $1 AND end_reason = 'dismissed'`,
+          [id],
+        );
+        return rowCount ?? 0;
+      });
+      return { status: true as const, reopened };
+    },
+  );
+
   api.get(
     "/api/me/live-activities",
     {
@@ -261,7 +303,9 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
           "ranked by kind priority and cut to `maxConcurrent`; each item's `rank` orders it " +
           "(0 = most important). Pass `deviceId` (the caller's own install) so the cut also " +
           "keeps that device's running activities and dismissals, as the worker does. Labels " +
-          "are localized to `language`, else the account language.",
+          "are localized to `language`, else the account language. With `deviceId`, the worker " +
+          "leaves starts on that iOS device to the app for the next 30 s, since the app starts " +
+          "what this returns itself and a push-to-start would duplicate it.",
         querystring: myLiveActivitiesQuerySchema,
         response: { 200: myLiveActivitiesResponseSchema },
       },
@@ -277,6 +321,13 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
           [userId],
         );
         language = normalizeLanguage(rows[0]?.language);
+      }
+      if (req.query.deviceId) {
+        const { rows } = await pool.query<{ id: number }>(
+          `SELECT id FROM live_activity_devices WHERE device_id = $1 AND user_id = $2`,
+          [req.query.deviceId, userId],
+        );
+        if (rows[0]) await markDeviceForeground(rows[0].id);
       }
       return myLiveActivities(userId, language, { deviceId: req.query.deviceId });
     },
@@ -323,13 +374,17 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
           "array order is the priority (first = highest). `roleIds` replaces the kind's role " +
           "list (unknown or deleted roles are a 400); an empty list means nobody receives it. " +
           "Roles created later are not added to any kind automatically. `maxConcurrent` is " +
-          "1–5. Audited; returns the saved configuration. Running Live Activities follow on the " +
-          "worker's next tick (ended when no longer allowed, or outranked when a higher-priority " +
-          "one starts).",
+          "1–5. Audited; returns the saved configuration. Running Live Activities follow within " +
+          "seconds: the save schedules an early worker tick (ended when no longer allowed, or " +
+          "outranked when a higher-priority one starts).",
         body: putLiveActivitySettingsBodySchema,
         response: { 200: liveActivitySettingsSchema },
       },
     },
-    async (req) => saveLiveActivitySettings(req.userId as number, req.body),
+    async (req) => {
+      const saved = await saveLiveActivitySettings(req.userId as number, req.body);
+      await requestLiveActivitySync();
+      return saved;
+    },
   );
 }

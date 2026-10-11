@@ -225,4 +225,87 @@ describe("Live Activity sync (#966)", () => {
     await sync.reconcileLiveActivities();
     expect(callsTo(apiFetch, READ)).toHaveLength(1);
   });
+
+  describe("lifecycle (#966)", () => {
+    const REOPEN = "/api/me/live-activities/dismissals/reopen";
+    const SESSIONS = "/api/me/live-activities/sessions";
+
+    async function signedIn(read: () => MyLiveActivities) {
+      const loaded = load();
+      loaded.apiFetch.mockImplementation(async (path: string) =>
+        path === READ ? read() : undefined,
+      );
+      await loaded.sync.registerLiveActivityDevice("en");
+      return loaded;
+    }
+
+    it("brings back a swiped-away activity when the app is opened, not on other syncs", async () => {
+      const { sync, apiFetch, surfaces } = await signedIn(() => response(queueProps()));
+      await sync.reconcileLiveActivities();
+      expect(surfaces).toHaveLength(1);
+
+      // Swiped away: an event-driven sync keeps it away and reports it.
+      surfaces.splice(0, 1);
+      await sync.reconcileLiveActivities();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(surfaces).toHaveLength(0);
+      expect(callsTo(apiFetch, SESSIONS, "DELETE")).toHaveLength(1);
+      await sync.reconcileLiveActivities();
+      expect(surfaces).toHaveLength(0);
+
+      // App opened: the API releases the dismissal before the read, and it comes back.
+      await sync.reconcileLiveActivities({ reopenDismissed: true });
+      const order = apiFetch.mock.calls.map(([path]) => path);
+      expect(order.lastIndexOf(REOPEN)).toBeLessThan(order.lastIndexOf(READ));
+      expect(JSON.parse(callsTo(apiFetch, REOPEN, "POST")[0]![1].body)).toEqual({
+        deviceId: "device-1",
+      });
+      expect(surfaces).toHaveLength(1);
+      expect(callsTo(apiFetch, SESSIONS, "DELETE")).toHaveLength(1);
+    });
+
+    it("keeps dismissals when the API could not release them", async () => {
+      const { sync, apiFetch, surfaces } = await signedIn(() => response(queueProps()));
+      await sync.reconcileLiveActivities();
+      surfaces.splice(0, 1);
+      await sync.reconcileLiveActivities();
+
+      apiFetch.mockImplementation(async (path: string) => {
+        if (path === REOPEN) throw new Error("offline");
+        return path === READ ? response(queueProps()) : undefined;
+      });
+      await sync.reconcileLiveActivities({ reopenDismissed: true });
+      expect(surfaces).toHaveLength(0);
+    });
+
+    it("ends local activities the read model no longer lists", async () => {
+      let queue: QueueLiveProps | null = queueProps();
+      const { sync, surfaces } = await signedIn(() => response(queue));
+      await sync.reconcileLiveActivities();
+      expect(surfaces).toHaveLength(1);
+
+      // The queue was deleted: the server lists nothing.
+      queue = null;
+      await expect(sync.reconcileLiveActivities()).resolves.toEqual([]);
+      expect(surfaces).toHaveLength(0);
+    });
+
+    it("registers a local start at once, before iOS has its token", async () => {
+      const { sync, apiFetch } = await signedIn(() => response(queueProps()));
+      await sync.reconcileLiveActivities();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const puts = callsTo(apiFetch, SESSIONS, "PUT");
+      expect(puts).toHaveLength(1);
+      expect(JSON.parse(puts[0]![1].body)).toEqual({
+        deviceId: "device-1",
+        kind: "queue",
+        subject: "judging",
+      });
+
+      // Once is enough until the token arrives.
+      await sync.reconcileLiveActivities();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(callsTo(apiFetch, SESSIONS, "PUT")).toHaveLength(1);
+    });
+  });
 });

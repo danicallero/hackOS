@@ -11,6 +11,7 @@ import {
 } from "../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { requestLiveActivitySync } from "../live-activities/kick.js";
 import {
   assertFixtureQueueScope,
   assertFixtureRoomEnterpriseScope,
@@ -744,6 +745,8 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
           req.body.calledTooLongThresholdMinutes ?? existing.called_too_long_threshold_minutes,
         ],
       );
+      // #966 (H38): the judging window gates the queue Live Activity.
+      await requestLiveActivitySync();
       return rows[0];
     },
   );
