@@ -479,7 +479,7 @@ describe("New Live Activity kinds (#966)", () => {
       );
       expect(texts(live.banner)).toEqual(expect.arrayContaining(["Now", "Ends in"]));
       expect(nodes(live.banner, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
-      expect(nodes(live.minimal, "Text")[0]?.props?.countdownMaxUnits).toBe(1);
+      expect(nodes(live.minimal, "Text")[0]?.props?.timerInterval).toBeTruthy();
     });
 
     it("has no buttons on any presentation", () => {
@@ -535,7 +535,7 @@ describe("New Live Activity kinds (#966)", () => {
     it("works without a window start (no bar, the time left still minimal)", () => {
       const layout = DeadlineActivityLayout(deadline({ startsAt: null }), environment);
       expect(nodes(layout.banner, "ProgressView")).toHaveLength(0);
-      expect(nodes(layout.minimal, "Text")[0]?.props?.countdownMaxUnits).toBe(1);
+      expect(nodes(layout.minimal, "Text")[0]?.props?.timerInterval).toBeTruthy();
 
       const submitted = DeadlineActivityLayout(
         deadline({ phase: "submitted", submission: "submitted" }),
@@ -584,55 +584,28 @@ describe("New Live Activity kinds (#966)", () => {
     });
   });
 
-  describe("compact countdowns, never H:MM:SS", () => {
-    // `units` false: the labels of a server older than the compact countdown.
-    const without = <L extends { units?: unknown }>({ units: _, ...rest }: L) => rest as L;
-    const staffLabels = (units: boolean) => ({
-      labels: units ? activityLiveLabels("en") : without(activityLiveLabels("en")),
-    });
-    const attendeeLabels = (units: boolean) => ({
-      labels: units ? attendeeActivityLiveLabels("en") : without(attendeeActivityLiveLabels("en")),
-    });
-    const deadlineLabels = (units: boolean) => ({
-      labels: units ? deadlineLiveLabels("en") : without(deadlineLiveLabels("en")),
-    });
-    const states: [string, (units: boolean) => Record<string, unknown>][] = [
-      ["staff upcoming", (units) => StaffActivityLayout(activity(staffLabels(units)), environment)],
+  describe("countdowns that fit the Dynamic Island", () => {
+    const states: [string, Record<string, unknown>][] = [
+      ["staff upcoming", StaffActivityLayout(activity(), environment)],
       [
         "staff live",
-        (units) =>
-          StaffActivityLayout(
-            activity({ phase: "live", accredited: 180, ...staffLabels(units) }),
-            environment,
-          ),
+        StaffActivityLayout(activity({ phase: "live", accredited: 180 }), environment),
       ],
-      [
-        "attendee upcoming",
-        (units) => AttendeeActivityLayout(attendee(attendeeLabels(units)), environment),
-      ],
+      ["attendee upcoming", AttendeeActivityLayout(attendee(), environment)],
       [
         "attendee live",
-        (units) =>
-          AttendeeActivityLayout(
-            attendee({
-              phase: "live",
-              startsAt: "2026-02-20T11:40:00.000Z",
-              ...attendeeLabels(units),
-            }),
-            environment,
-          ),
+        AttendeeActivityLayout(
+          attendee({ phase: "live", startsAt: "2026-02-20T11:40:00.000Z" }),
+          environment,
+        ),
       ],
-      [
-        "deadline open",
-        (units) => DeadlineActivityLayout(deadline(deadlineLabels(units)), environment),
-      ],
+      ["deadline open", DeadlineActivityLayout(deadline(), environment)],
       [
         "deadline submitted",
-        (units) =>
-          DeadlineActivityLayout(
-            deadline({ phase: "submitted", submission: "submitted", ...deadlineLabels(units) }),
-            environment,
-          ),
+        DeadlineActivityLayout(
+          deadline({ phase: "submitted", submission: "submitted" }),
+          environment,
+        ),
       ],
     ];
 
@@ -645,32 +618,98 @@ describe("New Live Activity kinds (#966)", () => {
       );
     }
 
-    it.each(
-      states,
-    )("%s: one line in the server's units, scaled rather than cut", (_name, build) => {
-      const found = countdowns(build(true));
+    it.each(states)("%s: one line that scales rather than truncating", (_name, layout) => {
+      const found = countdowns(layout);
       expect(found.length).toBeGreaterThan(0);
       for (const [slot, text] of found) {
-        expect(text.props?.countdownUnits).toEqual({ hour: "h", minute: "m", second: "s" });
-        const modifiers = (text.props?.modifiers as { modifier: string }[]).map((m) => m.modifier);
-        expect(modifiers).toEqual(expect.arrayContaining(["lineLimit", "minimumScaleFactor"]));
-        // The minimal view keeps the leading unit only.
-        if (slot === "minimal") expect(text.props?.countdownMaxUnits).toBe(1);
+        const modifiers = text.props?.modifiers as { modifier: string; args: unknown[] }[];
+        expect(modifiers.map((m) => m.modifier)).toEqual(
+          expect.arrayContaining(["lineLimit", "minimumScaleFactor"]),
+        );
+        // A timer takes every point it is offered: the compact views give it
+        // the exact width of its value, within the slot's cap.
+        if (slot === "compactTrailing" || slot === "minimal") {
+          const frame = modifiers.find((m) => m.modifier === "frame")?.args[0] as {
+            width: number;
+          };
+          expect(frame.width).toBeLessThanOrEqual(slot === "minimal" ? 36 : 56);
+        }
       }
     });
 
-    it.each(states)("%s: an older server's props keep the system timer", (_name, build) => {
-      for (const [, text] of countdowns(build(false))) {
-        expect(text.props?.countdownUnits).toBeUndefined();
-      }
+    it("sizes the compact timer to its value: wider from an hour, never past the cap", () => {
+      const width = (startsAt: string) => {
+        const layout = AttendeeActivityLayout(attendee({ startsAt }), environment);
+        const [, text] = countdowns(layout).find(([slot]) => slot === "compactTrailing")!;
+        const modifiers = text.props?.modifiers as { modifier: string; args: unknown[] }[];
+        return (modifiers.find((m) => m.modifier === "frame")?.args[0] as { width: number }).width;
+      };
+      // NOW is 12:00. `9:59`, `40:21`, `2:41:20`, `12:59:59` at 12 pt.
+      expect(width("2026-02-20T12:09:59.000Z")).toBe(29);
+      expect(width("2026-02-20T12:40:21.000Z")).toBe(37);
+      expect(width("2026-02-20T14:41:20.000Z")).toBe(49);
+      expect(width("2026-02-21T00:59:59.000Z")).toBe(56);
+      expect(width("2026-02-25T00:00:00.000Z")).toBe(56);
     });
 
     it("puts the countdown in the compact trailing and minimal views", () => {
-      const layout = DeadlineActivityLayout(deadline(), environment);
-      const slots = countdowns(layout).map(([slot]) => slot);
+      const slots = countdowns(DeadlineActivityLayout(deadline(), environment)).map(([s]) => s);
       expect(slots).toEqual(
         expect.arrayContaining(["compactTrailing", "minimal", "expandedTrailing", "banner"]),
       );
+    });
+
+    it.each([
+      ["queue", QueueActivityLayout(queue(), environment)],
+      [
+        "queue called",
+        QueueActivityLayout(
+          queue({
+            phase: "called",
+            position: null,
+            etaMinutes: null,
+            roomName: "A very long room name that must not widen the island",
+          }),
+          environment,
+        ),
+      ],
+      ...states,
+      ["accreditation", AccreditationActivityLayout(accreditation(), environment)],
+      [
+        "future props version",
+        DeadlineActivityLayout({ v: 2, kind: "deadline" } as never, environment),
+      ],
+    ] as [
+      string,
+      Record<string, unknown>,
+    ][])("%s: hard island caps, whatever the value", (_name, layout) => {
+      const caps = { compactLeading: 24, compactTrailing: 56, minimal: 36 } as const;
+      for (const [slot, width] of Object.entries(caps)) {
+        const root = layout[slot] as Node;
+        const modifiers = root.props?.modifiers as { modifier: string; args: unknown[] }[];
+        const frame = modifiers.find((m) => m.modifier === "frame");
+        expect((frame?.args[0] as { maxWidth: number }).maxWidth).toBe(width);
+        expect(modifiers.map((m) => m.modifier)).toEqual(
+          expect.arrayContaining(["minimumScaleFactor", "dynamicTypeSize"]),
+        );
+      }
+    });
+
+    it("keeps the count-up since the call a plain timer", () => {
+      const called = QueueActivityLayout(
+        queue({
+          phase: "called",
+          position: null,
+          etaMinutes: null,
+          calledAt: "2026-02-20T09:58:00.000Z",
+        }),
+        environment,
+      );
+      const timers = SLOTS.flatMap((slot) => nodes(called[slot], "Text")).filter(
+        (text) => text.props?.timerInterval,
+      );
+      expect(timers.length).toBeGreaterThan(0);
+      for (const text of timers) expect(text.props?.compactCountdown).toBeUndefined();
     });
   });
 

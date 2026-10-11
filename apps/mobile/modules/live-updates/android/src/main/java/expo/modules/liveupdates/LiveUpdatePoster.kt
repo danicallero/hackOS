@@ -106,8 +106,7 @@ object LiveUpdatePoster {
     content.text?.let { builder.setContentText(it) }
     content.subText?.let { builder.setSubText(it) }
     // The chip shows this text in preference to the `when` time; without it
-    // the chip falls back to the `when` time (time left, or the count-up since
-    // the call) or the small icon.
+    // the chip falls back to the chronometer or the small icon.
     content.shortCriticalText?.let { builder.setShortCriticalText(it) }
     applyWhen(builder, content)
 
@@ -165,41 +164,28 @@ object LiveUpdatePoster {
     }
   }
 
-  /** How the promoted notification shows its `when` instant (chip and header). */
-  enum class WhenStyle {
-    /**
-     * A countdown as the system's own short time delta (`5min`, `1hr`), never
-     * the chronometer's H:MM:SS, which would not fit beside the icon (#966).
-     */
-    TIME_LEFT,
-    /** The time since the call, a ticking chronometer. */
-    COUNT_UP,
-    /** No `when`, so a live count is never displaced from the chip. */
-    NONE,
-  }
-
-  fun whenStyle(countdownTo: Long?, countUpFrom: Long?, now: Long): WhenStyle = when {
-    countdownTo != null && countdownTo > now -> WhenStyle.TIME_LEFT
-    countUpFrom != null -> WhenStyle.COUNT_UP
-    else -> WhenStyle.NONE
-  }
-
   /**
    * Countdown (upcoming start) or count-up (time since the call). Everything
-   * else hides `when`.
+   * else hides `when`, so a live count is never displaced from the chip.
    */
   private fun applyWhen(builder: NotificationCompat.Builder, content: LiveUpdateContent) {
     val now = System.currentTimeMillis()
-    when (whenStyle(content.countdownTo, content.countUpFrom, now)) {
-      WhenStyle.TIME_LEFT ->
-        builder.setWhen(content.countdownTo!!).setShowWhen(true).setUsesChronometer(false)
-      WhenStyle.COUNT_UP ->
+    val countdownTo = content.countdownTo
+    val countUpFrom = content.countUpFrom
+    when {
+      countdownTo != null && countdownTo > now ->
         builder
-          .setWhen(minOf(content.countUpFrom!!, now))
+          .setWhen(countdownTo)
+          .setShowWhen(true)
+          .setUsesChronometer(true)
+          .setChronometerCountDown(true)
+      countUpFrom != null ->
+        builder
+          .setWhen(minOf(countUpFrom, now))
           .setShowWhen(true)
           .setUsesChronometer(true)
           .setChronometerCountDown(false)
-      WhenStyle.NONE -> builder.setShowWhen(false).setUsesChronometer(false)
+      else -> builder.setShowWhen(false).setUsesChronometer(false)
     }
   }
 

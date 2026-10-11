@@ -1,5 +1,6 @@
 import { HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
+  dynamicTypeSize,
   fixedSize,
   font,
   foregroundStyle,
@@ -33,6 +34,38 @@ export const DeadlineActivityLayout = (
   environment: LiveActivityEnvironment,
 ) => {
   "widget";
+
+  // Hard caps for the Dynamic Island (HIG: narrow, balanced, snug against
+  // the camera): whatever the value, locale or text size, the island never
+  // grows past them. Each slot is as wide as its content up to the cap; text
+  // scales down rather than truncating, and the type size stays fixed.
+  const islandSlot = (
+    view: Parameters<typeof HStack>[0]["children"],
+    width: number,
+    alignment: "leading" | "center" | "trailing",
+  ) => (
+    <HStack
+      spacing={0}
+      modifiers={[
+        frame({ maxWidth: width, alignment }),
+        fixedSize({ horizontal: true }),
+        minimumScaleFactor(0.6),
+        dynamicTypeSize("large"),
+      ]}
+    >
+      {view}
+    </HStack>
+  );
+  const capped = <
+    L extends { compactLeading: unknown; compactTrailing: unknown; minimal: unknown },
+  >(
+    layout: L,
+  ) => ({
+    ...layout,
+    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing"),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading"),
+    minimal: islandSlot(layout.minimal as never, 36, "center"),
+  });
   // A newer, incompatible props shape degrades to the title.
   if (props.v !== 1 || !props.labels) {
     const title = (
@@ -41,7 +74,7 @@ export const DeadlineActivityLayout = (
       </Text>
     );
     const symbol = <Image systemName="hourglass" color="#0A84FF" size={15} />;
-    return {
+    return capped({
       banner: (
         <VStack
           alignment="leading"
@@ -57,7 +90,7 @@ export const DeadlineActivityLayout = (
       expandedLeading: symbol,
       expandedTrailing: <Text> </Text>,
       expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
-    };
+    });
   }
   const labels = props.labels;
   const closing = props.phase === "closing";
@@ -104,30 +137,43 @@ export const DeadlineActivityLayout = (
     ),
   );
 
-  // `1h 20m`, `10m`, `59s` (`labels.units`; an older server's props keep the
-  // greedy H:MM:SS timer, which `width` caps), on one line that scales down
-  // rather than truncating.
+  // A timer takes every point it is offered, so the compact views get the
+  // exact width of its current value: `2:41:20` from an hour, `40:21` below
+  // it (12 pt semibold monospaced digits: ⅔ em a digit, ⅓ em a colon). The
+  // value only gets shorter, so the width never needs to grow.
+  const timerWidth = (target: number, size: number, max: number) => {
+    const left = Math.max(0, target - Date.now()) / 1000;
+    const hours = Math.floor(left / 3600);
+    const digits = hours > 0 ? String(hours).length + 4 : Math.floor(left / 60) >= 10 ? 4 : 3;
+    const colons = hours > 0 ? 2 : 1;
+    return Math.min(max, Math.ceil((size * (digits * 2 + colons)) / 3) + 1);
+  };
+
+  // The live timer (`2:41:20`, `40:21`), on one line that scales down rather
+  // than truncating. `fit` sizes it to its value (compact views).
   const countdown = (
     size: number,
     color: string | null,
     width: number | null,
     weight = "bold",
     align: "leading" | "trailing" = "trailing",
-    maxUnits = 2,
+    fit = false,
   ) =>
     validEnd ? (
       <Text
         timerInterval={{ lower, upper: endsAt }}
         countsDown
-        countdownUnits={labels.units}
-        countdownMaxUnits={maxUnits}
         modifiers={[
           font({ size, weight: weight as "bold" | "semibold" }),
           monospacedDigit(),
           lineLimit(1),
           minimumScaleFactor(0.6),
-          multilineTextAlignment(align),
-          ...(width ? [frame({ maxWidth: width, alignment: align })] : []),
+          multilineTextAlignment(fit ? "leading" : align),
+          ...(fit && width
+            ? [frame({ width: timerWidth(endsAt.getTime(), size, width), alignment: "leading" })]
+            : width
+              ? [frame({ maxWidth: width, alignment: align })]
+              : []),
           ...colorMods(color),
         ]}
       />
@@ -211,16 +257,22 @@ export const DeadlineActivityLayout = (
     <Image systemName={symbol} color={color ?? neutral} size={size} />
   );
 
+  // Compact: the symbol a little larger than the text so both sides weigh
+  // about the same; the countdown is as wide as its value, snug to the camera.
   const compactLeading = glyph(islandColor, 15);
-  const compactTrailing = countdown(15, submitted ? neutral : islandColor, 64, "semibold") ?? (
-    <Text> </Text>
-  );
+  const compactTrailing = countdown(
+    12,
+    submitted ? neutral : islandColor,
+    56,
+    "semibold",
+    "leading",
+    true,
+  ) ?? <Text> </Text>;
 
-  // Minimal: the time left in its leading unit (`2h`, `45m`); done: the
-  // check alone.
+  // Minimal: the time left; done: the check alone.
   const minimal = submitted
     ? glyph(islandColor, 14)
-    : (countdown(11, islandColor, 34, "semibold", "trailing", 1) ?? glyph(islandColor, 14));
+    : (countdown(10, islandColor, 36, "semibold", "leading", true) ?? glyph(islandColor, 14));
 
   const expandedLeading = (
     <VStack modifiers={[padding({ leading: 8, top: 6 })]}>{glyph(islandColor, 24)}</VStack>
@@ -232,7 +284,7 @@ export const DeadlineActivityLayout = (
       {caption(labels.closesIn, "trailing")}
       {submitted
         ? countdown(17, neutral, 120, "semibold")
-        : // Hours long: a little smaller than the other kinds' 28 pt.
+        : // Hours long (h:mm:ss): a little smaller than the other kinds' 28 pt.
           (countdown(24, islandColor, 120) ?? <Text> </Text>)}
     </VStack>
   );
@@ -357,7 +409,7 @@ export const DeadlineActivityLayout = (
     </VStack>
   );
 
-  return {
+  return capped({
     banner,
     bannerSmall,
     compactLeading,
@@ -366,7 +418,7 @@ export const DeadlineActivityLayout = (
     expandedLeading,
     expandedTrailing,
     expandedBottom,
-  };
+  });
 };
 
 export const DeadlineActivity = createLiveActivity<DeadlineLiveProps>(

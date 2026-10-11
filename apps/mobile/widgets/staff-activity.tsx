@@ -3,6 +3,7 @@ import {
   allowsTightening,
   background,
   contentTransition,
+  dynamicTypeSize,
   fixedSize,
   font,
   foregroundStyle,
@@ -31,8 +32,7 @@ import { createLiveActivity, type LiveActivityEnvironment } from "expo-widgets";
  *
  * See `queue-activity.tsx` for the `'widget'` runtime constraints: everything
  * the layout needs is declared inside the function or arrives in props.
- * Countdowns (`1h 20m`, never H:MM:SS) and time bars are SwiftUI timers, so
- * they tick without updates.
+ * Countdowns and time bars are SwiftUI timers, so they tick without updates.
  * Fields and labels added after v1 are optional: an absent one hides its
  * element, never falls back to hardcoded copy.
  */
@@ -41,6 +41,38 @@ export const StaffActivityLayout = (
   environment: LiveActivityEnvironment,
 ) => {
   "widget";
+
+  // Hard caps for the Dynamic Island (HIG: narrow, balanced, snug against
+  // the camera): whatever the value, locale or text size, the island never
+  // grows past them. Each slot is as wide as its content up to the cap; text
+  // scales down rather than truncating, and the type size stays fixed.
+  const islandSlot = (
+    view: Parameters<typeof HStack>[0]["children"],
+    width: number,
+    alignment: "leading" | "center" | "trailing",
+  ) => (
+    <HStack
+      spacing={0}
+      modifiers={[
+        frame({ maxWidth: width, alignment }),
+        fixedSize({ horizontal: true }),
+        minimumScaleFactor(0.6),
+        dynamicTypeSize("large"),
+      ]}
+    >
+      {view}
+    </HStack>
+  );
+  const capped = <
+    L extends { compactLeading: unknown; compactTrailing: unknown; minimal: unknown },
+  >(
+    layout: L,
+  ) => ({
+    ...layout,
+    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing"),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading"),
+    minimal: islandSlot(layout.minimal as never, 36, "center"),
+  });
   // APNs delivers props straight to this layout, so a newer, incompatible
   // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the name
   // instead of rendering half-understood fields (or an invalid timer range).
@@ -51,7 +83,7 @@ export const StaffActivityLayout = (
       </Text>
     );
     const symbol = <Image systemName="person.3.fill" color="#0A84FF" size={15} />;
-    return {
+    return capped({
       banner: (
         <VStack
           alignment="leading"
@@ -67,7 +99,7 @@ export const StaffActivityLayout = (
       expandedLeading: symbol,
       expandedTrailing: <Text> </Text>,
       expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
-    };
+    });
   }
   const labels = props.labels;
   // Dynamic Island is always dark; the Lock Screen follows the system scheme,
@@ -114,21 +146,35 @@ export const StaffActivityLayout = (
   const share = accredited ? Math.min(1, scannedCount / accredited) : null;
   const scanned = String(scannedCount);
 
-  // `1h 20m`, `10m`, `59s` (`labels.units`; an older server's props keep the
-  // H:MM:SS timer), on one line that scales down rather than truncating.
-  const countdown = (size: number, color: string | null, width: number | null, maxUnits = 2) => (
+  // A timer takes every point it is offered, so the compact views get the
+  // exact width of its current value: `2:41:20` from an hour, `40:21` below
+  // it (12 pt semibold monospaced digits: ⅔ em a digit, ⅓ em a colon). The
+  // value only gets shorter, so the width never needs to grow.
+  const timerWidth = (target: number, size: number, max: number) => {
+    const left = Math.max(0, target - Date.now()) / 1000;
+    const hours = Math.floor(left / 3600);
+    const digits = hours > 0 ? String(hours).length + 4 : Math.floor(left / 60) >= 10 ? 4 : 3;
+    const colons = hours > 0 ? 2 : 1;
+    return Math.min(max, Math.ceil((size * (digits * 2 + colons)) / 3) + 1);
+  };
+
+  // The live timer to the start (`2:41:20`, `40:21`), on one line that scales
+  // down rather than truncating. `fit` sizes it to its value (compact views).
+  const countdown = (size: number, color: string | null, width: number | null, fit = false) => (
     <Text
       timerInterval={{ lower, upper: startsAt }}
       countsDown
-      countdownUnits={labels.units}
-      countdownMaxUnits={maxUnits}
       modifiers={[
         font({ size, weight: "semibold" }),
         monospacedDigit(),
         lineLimit(1),
         minimumScaleFactor(0.6),
-        multilineTextAlignment("trailing"),
-        ...(width ? [frame({ maxWidth: width, alignment: "trailing" })] : []),
+        multilineTextAlignment(fit ? "leading" : "trailing"),
+        ...(fit && width
+          ? [frame({ width: timerWidth(startsAt.getTime(), size, width), alignment: "leading" })]
+          : width
+            ? [frame({ maxWidth: width, alignment: "trailing" })]
+            : []),
         ...colorMods(color),
       ]}
     />
@@ -146,7 +192,6 @@ export const StaffActivityLayout = (
         <Text
           timerInterval={{ lower: startsAt, upper: endsAt }}
           countsDown
-          countdownUnits={labels.units}
           modifiers={[
             font({ size, weight: "semibold" }),
             monospacedDigit(),
@@ -262,8 +307,12 @@ export const StaffActivityLayout = (
       </Link>
     ) : null;
 
+  // Compact: the symbol a little larger than the text so both sides weigh
+  // about the same; the countdown is as wide as its value, snug to the camera.
   const compactLeading = <Image systemName={symbol} color={islandAccent} size={15} />;
-  const compactTrailing = live ? ratio(15, 11, null, "semibold") : countdown(15, islandAccent, 64);
+  const compactTrailing = live
+    ? ratio(15, 11, null, "semibold")
+    : countdown(12, islandAccent, 56, true);
 
   // Minimal: the scanned share as a ring, else the count or the countdown.
   const minimal =
@@ -280,7 +329,7 @@ export const StaffActivityLayout = (
     ) : live ? (
       counter(scanned, 13, islandAccent, "semibold")
     ) : (
-      countdown(11, islandAccent, 34, 1)
+      countdown(10, islandAccent, 36, true)
     );
 
   const expandedLeading = (
@@ -406,7 +455,7 @@ export const StaffActivityLayout = (
     </VStack>
   );
 
-  return {
+  return capped({
     banner,
     bannerSmall,
     compactLeading,
@@ -415,7 +464,7 @@ export const StaffActivityLayout = (
     expandedLeading,
     expandedTrailing,
     expandedBottom,
-  };
+  });
 };
 
 export const StaffActivity = createLiveActivity<ActivityLiveProps>(

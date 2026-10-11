@@ -163,49 +163,6 @@ export interface QueueLiveProps {
 
 export type ActivityLivePhase = "upcoming" | "live";
 
-/**
- * Unit suffixes of a compact countdown ("1h 20m"), pre-localized like every
- * label. Optional in each kind's labels (post-v1): without them the widget
- * keeps the system `H:MM:SS` timer.
- */
-export interface LiveDurationUnits {
-  hour: string;
-  minute: string;
-  second: string;
-}
-
-/**
- * The compact countdown rule shared by every surface (#966): the clock
- * truncated to its two leading units, never `H:MM:SS`, so it fits the
- * Dynamic Island's compact and minimal views.
- *
- * - 1 h or more: hours and minutes, `1h 20m` (`1h` on the hour, `26h 5m`
- *   past a day: there is no day unit).
- * - Under 1 h: minutes, `10m`.
- * - Under 1 min: seconds, `59s`, so the last minute still ticks.
- *
- * Values truncate like a running clock (59m59s reads `59m`, never `1h`);
- * a past instant reads `0s`. `maxUnits` 1 keeps the leading unit only
- * (`1h`), for the minimal view. The iOS widget renders the same rule natively
- * (`CompactCountdownFormatStyle` in `patches/@expo__ui.patch`) so it ticks
- * without updates; keep the two in sync.
- */
-export function formatLiveCountdown(
-  remainingMs: number,
-  units: LiveDurationUnits,
-  maxUnits: 1 | 2 = 2,
-): string {
-  const seconds = Number.isFinite(remainingMs) ? Math.max(0, Math.floor(remainingMs / 1000)) : 0;
-  if (seconds < 60) return `${seconds}${units.second}`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}${units.minute}`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest === 0 || maxUnits === 1
-    ? `${hours}${units.hour}`
-    : `${hours}${units.hour} ${rest}${units.minute}`;
-}
-
 export interface ActivityLiveLabels {
   /** "Starts in" */
   startsIn: string;
@@ -215,8 +172,6 @@ export interface ActivityLiveLabels {
   scan: string;
   /** "Ends in" — labels the live countdown to the end. Optional: added after v1 shipped. */
   endsIn?: string;
-  /** Countdown unit suffixes. Optional (post-v1). */
-  units?: LiveDurationUnits;
 }
 
 export interface ActivityLiveProps {
@@ -265,8 +220,6 @@ export interface AttendeeActivityLiveLabels {
   now: string;
   /** "Ends in" — labels the countdown to the end while live. */
   endsIn: string;
-  /** Countdown unit suffixes. Optional (post-v1). */
-  units?: LiveDurationUnits;
 }
 
 /**
@@ -316,8 +269,6 @@ export interface DeadlineLiveLabels {
   submitted: string;
   /** "Not submitted" — shown in `closing`. */
   notSubmitted: string;
-  /** Countdown unit suffixes. Optional (post-v1). */
-  units?: LiveDurationUnits;
 }
 
 export interface DeadlineLiveProps {
@@ -491,34 +442,24 @@ const QUEUE_LABELS: Record<
   },
 };
 
-// Spanish and Galician write minutes as "min" ("m" is the metre).
-const DURATION_UNITS: Record<Language, LiveDurationUnits> = {
-  en: { hour: "h", minute: "m", second: "s" },
-  es: { hour: "h", minute: "min", second: "s" },
-  gl: { hour: "h", minute: "min", second: "s" },
-};
-
 const ACTIVITY_LABELS: Record<Language, Required<ActivityLiveLabels>> = {
   en: {
     startsIn: "Starts in",
     scanned: "Scanned",
     scan: "Scan",
     endsIn: "Ends in",
-    units: DURATION_UNITS.en,
   },
   es: {
     startsIn: "Empieza en",
     scanned: "Escaneados",
     scan: "Escanear",
     endsIn: "Acaba en",
-    units: DURATION_UNITS.es,
   },
   gl: {
     startsIn: "Comeza en",
     scanned: "Escaneados",
     scan: "Escanear",
     endsIn: "Remata en",
-    units: DURATION_UNITS.gl,
   },
 };
 
@@ -535,9 +476,9 @@ export function activityLiveLabels(lang: Language): ActivityLiveLabels {
 }
 
 const ATTENDEE_ACTIVITY_LABELS: Record<Language, AttendeeActivityLiveLabels> = {
-  en: { startsIn: "Starts in", now: "Now", endsIn: "Ends in", units: DURATION_UNITS.en },
-  es: { startsIn: "Empieza en", now: "Ahora", endsIn: "Acaba en", units: DURATION_UNITS.es },
-  gl: { startsIn: "Comeza en", now: "Agora", endsIn: "Remata en", units: DURATION_UNITS.gl },
+  en: { startsIn: "Starts in", now: "Now", endsIn: "Ends in" },
+  es: { startsIn: "Empieza en", now: "Ahora", endsIn: "Acaba en" },
+  gl: { startsIn: "Comeza en", now: "Agora", endsIn: "Remata en" },
 };
 
 const DEADLINE_LABELS: Record<Language, DeadlineLiveLabels> = {
@@ -546,21 +487,18 @@ const DEADLINE_LABELS: Record<Language, DeadlineLiveLabels> = {
     closesIn: "Closes in",
     submitted: "Submitted",
     notSubmitted: "Not submitted",
-    units: DURATION_UNITS.en,
   },
   es: {
     title: "Cierre de entregas",
     closesIn: "Cierra en",
     submitted: "Entregado",
     notSubmitted: "Sin entregar",
-    units: DURATION_UNITS.es,
   },
   gl: {
     title: "Peche de entregas",
     closesIn: "Pecha en",
     submitted: "Entregado",
     notSubmitted: "Sen entregar",
-    units: DURATION_UNITS.gl,
   },
 };
 

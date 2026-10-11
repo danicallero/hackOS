@@ -1522,8 +1522,8 @@ Apple's HIG:
 
 | Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
 | --- | --- | --- | --- |
-| Compact leading / trailing | category symbol / countdown to the start (blue); live: countdown to the end | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (grey once submitted) | `person.badge.key` / accredited count |
-| Minimal | time left in its leading unit (`2h`, `45m`), upcoming and live | time left in its leading unit; submitted: the check | ring of accredited / eligible |
+| Compact leading / trailing | category symbol / countdown to the start; live: to the end (both blue) | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (grey once submitted) | `person.badge.key` / accredited count |
+| Minimal | countdown (to the start; live: to the end) | countdown; submitted: the check | ring of accredited / eligible |
 | Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: live elapsed-time bar, "Now" + name, `hh:mm–hh:mm · place` | symbol / "Closes in" countdown (24 pt, hours long; small and grey once submitted); bottom: window bar, title, project, status | Accredited `412 /600` / Last 10 min `+23`; bottom: share bar, Inside 380, closing time, **Scan** |
 | Lock Screen | symbol, ("Now"), name, time · place … countdown hero; live adds the elapsed-time bar | symbol + title; hero "Closes in" countdown (34 pt) with project and status opposite; window bar. Closing: red. Submitted: green "Submitted" hero, the time left small, no bar | symbol + title … closing time; Accredited (hero) · Last 10 min · Inside; share bar with **Scan** in the bottom trailing corner |
 | Watch / CarPlay | name + countdown, or "Now" + time left | title + countdown ("Not submitted" while closing) or "Submitted" | title + `412 /600` |
@@ -1564,22 +1564,23 @@ Numbers use `monospacedDigit` with numeric content transitions; countdowns,
 the count-up since the call and the elapsed-time bar are SwiftUI timers, so
 they tick without updates.
 
-**Countdowns read `1h 20m`, never `H:MM:SS`.** The rule
-(`formatLiveCountdown`, `@hackos/shared/live-activities`): hours and minutes
-from one hour (`1h 20m`, `1h`, `26h 5m`: no day unit), minutes below it
-(`10m`), seconds in the last minute (`59s`), truncated like a clock
-(59m59s reads `59m`). The minimal view keeps the leading unit only (`2h`,
-`45m`). The unit suffixes arrive pre-localized in `labels.units` (`h`/`m`/`s`;
-Spanish and Galician `min`). The widget renders the rule natively so it keeps
-ticking without the app or pushes: `Text`'s `countdownUnits` and
-`countdownMaxUnits` (a `patches/@expo__ui@57.0.22.patch` addition) draw
-`Text(.durationOffset(to:), format: CompactCountdownFormatStyle)`, a
-`DiscreteFormatStyle` that tells the system each next change (every minute,
-every second in the last one). Before iOS 18, or with props from a server
-that sends no `units`, the same text falls back to the system `H:MM:SS`
-timer. Every countdown is one line with `minimumScaleFactor(0.6)` inside a
-width cap (compact trailing 64 pt, minimal 34 pt), so a long value shrinks
-instead of being cut. Taps open the props' `url` (passed as the
+**Fitting the Dynamic Island (#966).** Every widget wraps its compact
+leading, compact trailing and minimal views in hard width caps of 24, 56 and
+36 pt with a fixed Dynamic Type size (`dynamicTypeSize("large")`), so no
+value, locale or text size can widen the island; text scales down
+(`minimumScaleFactor(0.6)`) instead of truncating. Countdowns are
+`Text(timerInterval:)`: `2:41:20` from an hour, `40:21` below it, ticking
+on the device. A timer takes every point it is offered, so the compact and
+minimal ones get the exact width of their value at render time (12 pt and
+10 pt; ⅔ em a digit, ⅓ em a colon: `12:59:59` is the 56 pt cap); the value
+only gets shorter until the next update. Every other countdown keeps one
+line that scales down within its cap (expanded and Lock Screen 120 pt).
+**Decision:** no unit format (`2h 41m`, `40m 21s`). Checked on the iOS 26
+simulator: a unit-based system format (`Date.ComponentsFormatStyle` over a
+`TimeDataSource`) renders once and then stays frozen in a Live Activity, a
+custom format style is redacted, and Apple's `SystemFormatStyle.Timer`
+spells out hours (`2 hours, 40…`). Only timer text keeps ticking without
+pushes. Taps open the props' `url` (passed as the
 activity's static URL); the API must send the same `attributes.url` on
 push-to-start. APNs props reach the layouts directly, so a props version
 other than `1` renders only the title. Room and activity names truncate;
@@ -1618,13 +1619,13 @@ rank change alone changes the props signature, so it re-applies the score.
 | Queue waiting | `#4·12m`; `#4` when the ETA is unknown or both overflow | **~12 min** · #4 (unknown: **Estimating…**) / +N more queues · challenge | Wait ~12 min (blue) · Position #4; stage track |
 | Queue called | room (truncated) | Go to **Room B** / location · "Called" + count-up from `calledAt`; heads-up only on the transition | Go to Room B (green) · Called + count-up; location; stage track |
 | Queue in room | room | In room · **Room B** / location · challenge | In room · Room B (grey); stage track at the end |
-| Staff upcoming | time left to `startsAt` (`when`) | name / `hh:mm–hh:mm · location` · "Starts in" + countdown | Starts in + countdown (blue); time · location |
+| Staff upcoming | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown | Starts in + countdown (blue); time · location |
 | Staff live (H24/H25) | `142/180`; `scanned` when that overflows or without `accredited` | **142**/180 scanned / name · location | Scanned `142/180` (blue); location; scanned-share track (elapsed time without `accredited`) + **Scan**; "Ends in" countdown |
-| Attendee upcoming (H59) | time left to `startsAt` (`when`) | name / `hh:mm–hh:mm · location` · "Starts in" + countdown; category glyph | Starts in + countdown (blue); time · location |
-| Attendee live | time left to `endsAt` (`when`) | **Now** · name / time · location · "Ends in" + countdown; elapsed-time track | Now · name; Ends in + countdown (blue); time · location; elapsed-time track |
-| Deadline open (H19) | time left to `endsAt` (`when`) | project (else the title) / status · "Closes in" + countdown; hourglass, blue; hacking-window track (none without `startsAt`) | Closes in + countdown (blue) · project over its status (amber "Not submitted", green "Submitted", none when unknown); window track |
-| Deadline closing | time left | the same in red (`exclamationmark` glyph); heads-up only on the transition into `closing` | the same in red |
-| Deadline submitted | time left | Submitted / project · "Closes in" + countdown; check, green; no track | Submitted (green) under the project · Closes in + a small countdown |
+| Attendee upcoming (H59) | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown; category glyph | Starts in + countdown (blue); time · location |
+| Attendee live | countdown to `endsAt` | **Now** · name / time · location · "Ends in" + countdown; elapsed-time track | Now · name; Ends in + countdown (blue); time · location; elapsed-time track |
+| Deadline open (H19) | countdown to `endsAt` | project (else the title) / status · "Closes in" + countdown; hourglass, blue; hacking-window track (none without `startsAt`) | Closes in + countdown (blue) · project over its status (amber "Not submitted", green "Submitted", none when unknown); window track |
+| Deadline closing | countdown | the same in red (`exclamationmark` glyph); heads-up only on the transition into `closing` | the same in red |
+| Deadline submitted | countdown (time left) | Submitted / project · "Closes in" + countdown; check, green; no track | Submitted (green) under the project · Closes in + a small countdown |
 | Accreditation (H22) | accredited count | **412**/600 accredited / +23 last 10 min · 380 inside · title; accredited-share track; **Scan** | Accredited `412/600` (blue) · Last 10 min · Inside; share track + **Scan** |
 
 **Tracks.** Like the iOS bars: each stage fills in its colour up to the
@@ -1859,14 +1860,9 @@ an id's first post).
   status bar.
 - Chip and `when`: the chip shows `shortCriticalText` whenever it is set,
   even with a running chronometer, so the called state counts up in the
-  header while the chip keeps the room. `countdownTo` (future) is shown as
-  the system's own short time delta (`5min`; `LiveUpdatePoster.whenStyle`),
-  not a chronometer: a countdown never reaches the chip as `H:MM:SS`. The
-  system shows it from 2 minutes ahead and the icon alone in the last two.
-  `countUpFrom` counts up as a chronometer, anything else hides `when` (live
-  staff updates), so a count is never displaced. The custom card (the
-  fallback path) keeps its chronometers: its 34 sp hero row has room for
-  them. Tapping the chip opens the notification as a
+  header while the chip keeps the room. `countdownTo` (future) counts down,
+  `countUpFrom` counts up, anything else hides `when` (live staff updates),
+  so a count is never displaced. Tapping the chip opens the notification as a
   popup and the popup opens the deep link (`hackos://queue`, the scan link).
   The chip is hidden while hackOS is in the foreground, and it shows the
   icon alone while its own heads-up or popup is on screen and for a moment

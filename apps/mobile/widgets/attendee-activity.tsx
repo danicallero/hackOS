@@ -1,5 +1,6 @@
 import { HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
+  dynamicTypeSize,
   fixedSize,
   font,
   foregroundStyle,
@@ -25,14 +26,46 @@ import { createLiveActivity, type LiveActivityEnvironment } from "expo-widgets";
  *
  * See `queue-activity.tsx` for the `'widget'` runtime constraints: everything
  * the layout needs is declared inside the function or arrives in props.
- * Countdowns (`1h 20m`, never H:MM:SS) and the time bar are SwiftUI
- * timers, so they tick without updates. A missing label hides its element, never falls back to copy.
+ * Countdowns and the time bar are SwiftUI timers, so they tick without
+ * updates. A missing label hides its element, never falls back to copy.
  */
 export const AttendeeActivityLayout = (
   props: AttendeeActivityLiveProps,
   environment: LiveActivityEnvironment,
 ) => {
   "widget";
+
+  // Hard caps for the Dynamic Island (HIG: narrow, balanced, snug against
+  // the camera): whatever the value, locale or text size, the island never
+  // grows past them. Each slot is as wide as its content up to the cap; text
+  // scales down rather than truncating, and the type size stays fixed.
+  const islandSlot = (
+    view: Parameters<typeof HStack>[0]["children"],
+    width: number,
+    alignment: "leading" | "center" | "trailing",
+  ) => (
+    <HStack
+      spacing={0}
+      modifiers={[
+        frame({ maxWidth: width, alignment }),
+        fixedSize({ horizontal: true }),
+        minimumScaleFactor(0.6),
+        dynamicTypeSize("large"),
+      ]}
+    >
+      {view}
+    </HStack>
+  );
+  const capped = <
+    L extends { compactLeading: unknown; compactTrailing: unknown; minimal: unknown },
+  >(
+    layout: L,
+  ) => ({
+    ...layout,
+    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing"),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading"),
+    minimal: islandSlot(layout.minimal as never, 36, "center"),
+  });
   // APNs delivers props straight to this layout, so a newer, incompatible
   // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the name
   // instead of rendering half-understood fields (or an invalid timer range).
@@ -43,7 +76,7 @@ export const AttendeeActivityLayout = (
       </Text>
     );
     const symbol = <Image systemName="calendar" color="#0A84FF" size={15} />;
-    return {
+    return capped({
       banner: (
         <VStack
           alignment="leading"
@@ -59,7 +92,7 @@ export const AttendeeActivityLayout = (
       expandedLeading: symbol,
       expandedTrailing: <Text> </Text>,
       expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
-    };
+    });
   }
   const labels = props.labels;
   // Same colour logic as the staff activity: the island is always dark, the
@@ -99,29 +132,48 @@ export const AttendeeActivityLayout = (
       : startsAt.getTime() - 3_600_000,
   );
 
-  // Upcoming counts down to the start, live to the end: `1h 20m`, `10m`,
-  // `59s` (`labels.units`; an older server's props keep the H:MM:SS timer).
-  // One line that scales down rather than truncating in every presentation.
+  // A timer takes every point it is offered, so the compact views get the
+  // exact width of its current value: `2:41:20` from an hour, `40:21` below
+  // it (12 pt semibold monospaced digits: ⅔ em a digit, ⅓ em a colon). The
+  // value only gets shorter, so the width never needs to grow.
+  const timerWidth = (target: number, size: number, max: number) => {
+    const left = Math.max(0, target - Date.now()) / 1000;
+    const hours = Math.floor(left / 3600);
+    const digits = hours > 0 ? String(hours).length + 4 : Math.floor(left / 60) >= 10 ? 4 : 3;
+    const colons = hours > 0 ? 2 : 1;
+    return Math.min(max, Math.ceil((size * (digits * 2 + colons)) / 3) + 1);
+  };
+
+  // Upcoming counts down to the start, live to the end (`2:41:20`, `40:21`),
+  // on one line that scales down rather than truncating. `fit` sizes it to
+  // its value (compact views).
   const timer = (
     size: number,
     color: string | null,
     width: number | null,
     weight = "semibold",
-    maxUnits = 2,
+    fit = false,
   ) =>
     (live ? validEnd : validStart) ? (
       <Text
         timerInterval={live ? { lower: startsAt, upper: endsAt } : { lower, upper: startsAt }}
         countsDown
-        countdownUnits={labels.units}
-        countdownMaxUnits={maxUnits}
         modifiers={[
           font({ size, weight: weight as "semibold" | "bold" }),
           monospacedDigit(),
           lineLimit(1),
           minimumScaleFactor(0.6),
-          multilineTextAlignment("trailing"),
-          ...(width ? [frame({ maxWidth: width, alignment: "trailing" })] : []),
+          multilineTextAlignment(fit ? "leading" : "trailing"),
+          ...(fit && width
+            ? [
+                frame({
+                  width: timerWidth((live ? endsAt : startsAt).getTime(), size, width),
+                  alignment: "leading",
+                }),
+              ]
+            : width
+              ? [frame({ maxWidth: width, alignment: "trailing" })]
+              : []),
           ...colorMods(color),
         ]}
       />
@@ -201,12 +253,15 @@ export const AttendeeActivityLayout = (
     </VStack>
   );
 
+  // Compact: the symbol a little larger than the text so both sides weigh
+  // about the same; the countdown is as wide as its value, snug to the camera.
   const compactLeading = glyph(islandAccent, 15);
-  // Upcoming: the accent countdown to the start; live: the plain one to the end.
-  const compactTrailing = timer(15, live ? null : islandAccent, 64) ?? <Text> </Text>;
+  // The accent countdown to the start, or to the end while live (one colour
+  // with the symbol, so both sides read as one piece of information).
+  const compactTrailing = timer(12, islandAccent, 56, "semibold", true) ?? <Text> </Text>;
 
-  // Minimal: the time left in its leading unit (`2h`, `45m`).
-  const minimal = timer(11, islandAccent, 34, "semibold", 1) ?? glyph(islandAccent, 14);
+  // Minimal: the time left.
+  const minimal = timer(10, islandAccent, 36, "semibold", true) ?? glyph(islandAccent, 14);
 
   const expandedLeading = (
     <VStack modifiers={[padding({ leading: 8, top: 6 })]}>{glyph(islandAccent, 24)}</VStack>
@@ -309,7 +364,7 @@ export const AttendeeActivityLayout = (
     </VStack>
   );
 
-  return {
+  return capped({
     banner,
     bannerSmall,
     compactLeading,
@@ -318,7 +373,7 @@ export const AttendeeActivityLayout = (
     expandedLeading,
     expandedTrailing,
     expandedBottom,
-  };
+  });
 };
 
 export const AttendeeActivity = createLiveActivity<AttendeeActivityLiveProps>(
