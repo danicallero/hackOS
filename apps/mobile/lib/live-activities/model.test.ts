@@ -270,6 +270,19 @@ describe("toLiveUpdateSpec (Android, #966)", () => {
     expect(spec(queueProps({ startPosition: null })).progress!.value).toBe(0);
   });
 
+  it("fills the queue track in the phase colour", () => {
+    const called = queueProps({ phase: "called", position: null, etaMinutes: null });
+    expect(spec(called).progress!.segments).toEqual([
+      { length: 200, tone: "go" },
+      { length: 100, tone: "rest" },
+    ]);
+    const inRoom = queueProps({ phase: "in_room", position: null, etaMinutes: null });
+    expect(spec(inRoom).progress!.segments).toEqual([
+      { length: 200, tone: "neutral" },
+      { length: 100, tone: "neutral" },
+    ]);
+  });
+
   it("fills each stage in its colour up to the value, the rest grey", () => {
     const stages = [
       { length: 200, tone: "accent" as const },

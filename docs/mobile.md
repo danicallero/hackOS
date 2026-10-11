@@ -1598,8 +1598,8 @@ device within `maxConcurrent` on both platforms.
 current value and the rest of it stays grey, stages separated by the segment
 gaps, with a round tracker (white disc, glyph in the phase colour) at the
 current value (`trackSegments`). The queue has two stages,
-In line (blue) and Called (green), the first two thirds of the width as on
-iOS; the tracker sits at `(startPosition − position) / startPosition` of the
+In line and Called, the first two thirds of the width as on iOS, filled in
+the phase colour (blue waiting, green called, grey in the room); the tracker sits at `(startPosition − position) / startPosition` of the
 first stage while waiting (#1 of 4 → 0.75; at the start on the first
 sighting or without `startPosition`), at the boundary once called and at the
 end in the room, with the door as the end icon. Meals track the served share

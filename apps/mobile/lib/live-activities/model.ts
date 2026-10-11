@@ -366,10 +366,11 @@ function queueProgress(props: QueueLiveProps): LiveUpdateProgress {
         : IN_LINE_LENGTH + CALLED_LENGTH;
   return {
     value,
+    // The filled part takes the phase colour, as on iOS (green once called).
     segments: trackSegments(
       [
-        { length: IN_LINE_LENGTH, tone: "accent" },
-        { length: CALLED_LENGTH, tone: "go" },
+        { length: IN_LINE_LENGTH, tone: QUEUE_TONE[props.phase] },
+        { length: CALLED_LENGTH, tone: QUEUE_TONE[props.phase] },
       ],
       value,
     ),
