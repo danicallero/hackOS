@@ -2,7 +2,7 @@ import type { LiveActivityKind, MyLiveActivities } from "@hackos/shared/live-act
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { ApiError, apiFetch, getCurrentSessionCookie } from "@/lib/api";
-import { applyDesiredActivities, endAllActivities } from "./apply";
+import { applyDesiredActivities, endAllActivities, markDismissalReported } from "./apply";
 import { liveActivityHost, subscribePushToStartToken } from "./host";
 import {
   type DesiredActivity,
@@ -39,6 +39,8 @@ let appliedSeq = 0;
 let deviceSynced = false;
 /** The API answered 404: it predates the module. Stay quiet until the next sign-in. */
 let apiMissing = false;
+/** `key@phase` dismissal reports in flight, so overlapping reconciles send one. */
+const reportingDismissals = new Set<string>();
 /** Key → per-activity APNs token the API already has. */
 const sessionTokens = new Map<string, string>();
 
@@ -156,13 +158,20 @@ async function unregisterSession(kind: LiveActivityKind, subject: string, phase?
 async function apply(desired: DesiredActivity[]): Promise<DesiredActivity[]> {
   lastDesired = desired;
   const result = await applyDesiredActivities(desired);
-  // A swiped-away activity: tell the server not to push-start it again.
-  for (const key of result.dismissed) {
+  // A swiped-away activity: tell the server not to start it again in the
+  // phase it was dismissed in. Kept until the API accepts it (a dismissal
+  // recorded while offline or headless is reported on a later sync).
+  for (const [key, phase] of Object.entries(result.dismissed)) {
     const item = desired.find(
       (candidate) => liveActivityKey(candidate.kind, candidate.subject) === key,
     );
-    if (item)
-      void unregisterSession(item.kind, item.subject, item.props.phase).catch(() => undefined);
+    const report = `${key}@${phase}`;
+    if (!item || reportingDismissals.has(report)) continue;
+    reportingDismissals.add(report);
+    void unregisterSession(item.kind, item.subject, phase)
+      .then(() => markDismissalReported(key, phase))
+      .catch(() => undefined)
+      .finally(() => reportingDismissals.delete(report));
   }
   // Every running activity — including ones APNs started — reports its
   // per-activity token so the server can update it.

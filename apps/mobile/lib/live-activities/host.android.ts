@@ -1,6 +1,11 @@
 import LiveUpdates from "@/modules/live-updates";
 import type { LiveActivityHost } from "./host-types";
-import { parseAndroidLiveUpdateId, type RunningActivity, toLiveUpdateSpec } from "./model";
+import {
+  liveActivityKey,
+  parseAndroidLiveUpdateId,
+  type RunningActivity,
+  toLiveUpdateSpec,
+} from "./model";
 
 /**
  * Android renderer (#966): promoted ongoing notifications through the local
@@ -45,6 +50,15 @@ export const liveActivityHost: LiveActivityHost = {
   async update(_id, item, previousPhase) {
     if (!available()) return;
     show(item, previousPhase);
+  },
+  consumeDismissals() {
+    if (!available()) return {};
+    const dismissals: Record<string, string> = {};
+    for (const [id, phase] of Object.entries(LiveUpdates?.consumeDismissals() ?? {})) {
+      const parsed = parseAndroidLiveUpdateId(id);
+      if (parsed && phase) dismissals[liveActivityKey(parsed.kind, parsed.subject)] = phase;
+    }
+    return dismissals;
   },
   async end(surface) {
     if (!available()) return;

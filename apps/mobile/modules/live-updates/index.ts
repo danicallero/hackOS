@@ -9,6 +9,22 @@ import { NativeModule, requireOptionalNativeModule } from "expo";
  */
 export type LiveUpdateIcon = "queue" | "meal" | "activity";
 
+/** ProgressStyle tracker: a person on a disc in the queue phase's colour. */
+export type LiveUpdateTracker = "tracker-waiting" | "tracker-called" | "tracker-in-room";
+
+/**
+ * Android 16 `ProgressStyle` track (ignored below API 36, where the text
+ * renders as BigText). Segment lengths add up to the track's max; `value` is
+ * the filled position on that scale.
+ */
+export interface LiveUpdateProgress {
+  value: number;
+  segments: { length: number; color?: string | null }[];
+  points?: { position: number; color?: string | null }[];
+  /** Icon riding the track at `value`. */
+  tracker?: LiveUpdateTracker | null;
+}
+
 export interface LiveUpdateSpec {
   /** Stable notification identity, e.g. `queue:judging` or `activity:12`. */
   id: string;
@@ -19,6 +35,11 @@ export interface LiveUpdateSpec {
   subText?: string | null;
   /** Epoch ms; renders a chronometer counting down to it (no updates needed). */
   countdownTo?: number | null;
+  /** Epoch ms; renders a chronometer counting up from it (e.g. since the call). */
+  countUpFrom?: number | null;
+  progress?: LiveUpdateProgress | null;
+  /** Phase the delete intent records if the person dismisses this post. */
+  phase?: string | null;
   /** Deep link opened when the notification is tapped. */
   url: string;
   /** The single action button, opened as a deep link. */
@@ -42,6 +63,12 @@ declare class LiveUpdatesModule extends NativeModule<Record<string, never>> {
   dismiss(id: string): void;
   /** Ids of the Live Updates currently posted by this app. */
   activeIds(): string[];
+  /**
+   * Notifications the person swiped away since the last call (id → phase at
+   * the time), recorded natively from the delete intent even while no JS
+   * runs; then forgotten. App cancels, force-stop and reboot never appear.
+   */
+  consumeDismissals(): Record<string, string>;
 }
 
 export default requireOptionalNativeModule<LiveUpdatesModule>("LiveUpdates");

@@ -14,6 +14,12 @@ export interface LiveActivityState {
   enabled: boolean;
   /** Key → phase the person dismissed; not restarted until that phase changes. */
   dismissed: Record<string, string>;
+  /**
+   * Key → dismissed phase the API has not been told about yet (DELETE
+   * sessions). Android records dismissals headlessly; the foreground sync
+   * reports them and clears the entry once the API accepted it.
+   */
+  unreportedDismissals: Record<string, string>;
   /** Key → props signature last rendered. */
   signatures: Record<string, string>;
   /** Key → phase last rendered (Android alerts only on becoming called). */
@@ -33,6 +39,7 @@ const EMPTY: LiveActivityState = {
   deviceId: null,
   enabled: true,
   dismissed: {},
+  unreportedDismissals: {},
   signatures: {},
   phases: {},
   running: [],

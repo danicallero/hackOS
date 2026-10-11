@@ -9,6 +9,9 @@ import {
   androidLiveUpdateId,
   type DesiredActivity,
   desiredActivities,
+  LIVE_ACCENT_HEX,
+  LIVE_CALLED_HEX,
+  LIVE_NEUTRAL_HEX,
   liveActivityRedirectPath,
   nextPhaseBoundary,
   parseAndroidLiveUpdateId,
@@ -16,6 +19,7 @@ import {
   planReconcile,
   propsSignature,
   pruneDismissed,
+  queueWaitingFraction,
   toLiveUpdateSpec,
   withScannedIncrement,
 } from "./model";
@@ -202,33 +206,98 @@ describe("staff counter and boundaries", () => {
   });
 });
 
-describe("toLiveUpdateSpec (Android)", () => {
-  it("maps a waiting queue entry to position and ETA with the ETA chip", () => {
-    const spec = toLiveUpdateSpec(queueProps(), null);
+describe("toLiveUpdateSpec (Android, #966)", () => {
+  const waiting = () => queueProps({ position: 4, startPosition: 9, etaMinutes: 12 });
+
+  it("leads a waiting entry with the ETA and puts position and ETA in the chip", () => {
+    const spec = toLiveUpdateSpec(waiting(), null);
     expect(spec).toMatchObject({
       id: "queue:judging",
-      title: "Open data",
-      text: "Position #4 · Wait ~12 min",
-      shortCriticalText: "~12m",
+      title: "~12 min · #4",
+      text: "Open data",
+      shortCriticalText: "#4·12m",
       icon: "queue",
+      phase: "waiting",
       alert: false,
     });
+    expect(spec.countdownTo ?? null).toBeNull();
+    expect(spec.countUpFrom ?? null).toBeNull();
   });
 
-  it("alerts only on the transition into called", () => {
+  it("shows the estimating placeholder, never an empty ETA, and keeps #N in the chip", () => {
+    const spec = toLiveUpdateSpec(queueProps({ etaMinutes: null }), null);
+    expect(spec.title).toBe("Estimating… · #4");
+    expect(spec.shortCriticalText).toBe("#4");
+  });
+
+  it("omits a missing label instead of falling back to English (older server)", () => {
+    const { estimating: _estimating, ...labels } = queueLiveLabels("en", 0);
+    const spec = toLiveUpdateSpec(queueProps({ etaMinutes: null, labels }), null);
+    expect(spec.title).toBe("#4");
+  });
+
+  it("falls back to the position when position and ETA overflow the 7-character chip", () => {
+    const spec = toLiveUpdateSpec(queueProps({ position: 123, etaMinutes: 150 }), null);
+    expect(spec.shortCriticalText).toBe("#123");
+  });
+
+  it("weights the queue track 2:1 and places the tracker by stage and waiting fraction", () => {
+    const track = toLiveUpdateSpec(waiting(), null).progress!;
+    expect(track.segments.map((segment) => segment.length)).toEqual([200, 100]);
+    expect(track.points).toEqual([{ position: 200, color: LIVE_CALLED_HEX }]);
+    // (9 - 4) / 9 of the line behind the team.
+    expect(track.value).toBe(Math.round((5 / 9) * 200));
+    expect(track.tracker).toBe("tracker-waiting");
+    // First sighting: nothing behind yet; unknown start: no fake progress.
+    expect(toLiveUpdateSpec(queueProps({ startPosition: 4 }), null).progress!.value).toBe(0);
+    expect(toLiveUpdateSpec(queueProps({ startPosition: null }), null).progress!.value).toBe(0);
+  });
+
+  it("computes the waiting fraction from the high-water mark", () => {
+    expect(queueWaitingFraction(queueProps({ position: 1, startPosition: 4 }))).toBe(0.75);
+    expect(queueWaitingFraction(queueProps({ position: 6, startPosition: 4 }))).toBe(0);
+  });
+
+  it("shows the room as hero and chip once called, counting up from the call", () => {
+    const calledAt = "2026-02-20T10:02:00.000Z";
     const called = queueProps({
       phase: "called",
       position: null,
       etaMinutes: null,
       roomName: "Room B",
       roomLocation: "Floor 1",
+      calledAt,
     });
-    expect(toLiveUpdateSpec(called, "waiting")).toMatchObject({
-      text: "Go to Room B · Floor 1",
+    const spec = toLiveUpdateSpec(called, "waiting");
+    expect(spec).toMatchObject({
+      title: "Go to Room B",
+      text: "Floor 1 · Open data",
+      subText: "Called",
       shortCriticalText: "Room B",
+      countUpFrom: Date.parse(calledAt),
+      accentColor: LIVE_CALLED_HEX,
       alert: true,
     });
+    expect(spec.countdownTo ?? null).toBeNull();
+    expect(spec.progress).toMatchObject({ value: 200, tracker: "tracker-called" });
     expect(toLiveUpdateSpec(called, "called").alert).toBe(false);
+  });
+
+  it("truncates a long room to the chip and moves the tracker to the end in the room", () => {
+    const inRoom = queueProps({
+      phase: "in_room",
+      position: null,
+      etaMinutes: null,
+      roomName: "Auditorium",
+    });
+    const spec = toLiveUpdateSpec(inRoom, "called");
+    expect(spec).toMatchObject({
+      title: "In room · Auditorium",
+      shortCriticalText: "Audito…",
+      accentColor: LIVE_NEUTRAL_HEX,
+      alert: false,
+    });
+    expect(spec.progress).toMatchObject({ value: 300, tracker: "tracker-in-room" });
   });
 
   it("never posts an empty chip or a dangling 'Go to' when the room is unknown", () => {
@@ -240,8 +309,9 @@ describe("toLiveUpdateSpec (Android)", () => {
       roomLocation: "Floor 1",
     });
     expect(toLiveUpdateSpec(called, "waiting")).toMatchObject({
-      text: "Floor 1",
+      title: "Floor 1",
       shortCriticalText: null,
+      countUpFrom: null,
     });
     const inRoom = queueProps({
       phase: "in_room",
@@ -250,25 +320,68 @@ describe("toLiveUpdateSpec (Android)", () => {
       roomName: null,
     });
     expect(toLiveUpdateSpec(inRoom, "called")).toMatchObject({
-      text: "In room",
+      title: "In room",
       shortCriticalText: null,
     });
   });
 
-  it("counts down to an upcoming activity without an action", () => {
+  it("counts down to an upcoming activity, with no chip text, track or action", () => {
     const spec = toLiveUpdateSpec(activityProps(), null);
-    expect(spec.countdownTo).toBe(Date.parse("2026-02-20T12:00:00.000Z"));
-    expect(spec.action).toBeNull();
-    expect(spec.icon).toBe("meal");
-    expect(spec.id).toBe("activity:12");
+    expect(spec).toMatchObject({
+      id: "activity:12",
+      title: "Lunch",
+      text: expect.stringContaining("Cafeteria"),
+      subText: "Starts in",
+      countdownTo: Date.parse("2026-02-20T12:00:00.000Z"),
+      icon: "meal",
+      phase: "upcoming",
+    });
+    expect(spec.shortCriticalText ?? null).toBeNull();
+    expect(spec.progress ?? null).toBeNull();
+    expect(spec.action ?? null).toBeNull();
   });
 
-  it("shows the live count and the single Scan action", () => {
-    const spec = toLiveUpdateSpec(activityProps({ phase: "live", scanned: 37 }), "upcoming");
+  it("leads a live meal with who still has to eat and fills the served share", () => {
+    const meal = activityProps({ phase: "live", scanned: 142, inside: 310, remaining: 168 });
+    const spec = toLiveUpdateSpec(meal, "upcoming");
     expect(spec).toMatchObject({
-      shortCriticalText: "37",
-      countdownTo: null,
+      title: "168 still to eat",
+      text: "142 served · 310 inside · Cafeteria",
+      shortCriticalText: "168",
       action: { label: "Scan", url: "hackos://scan?activity=12" },
+    });
+    // No `when` on live staff updates: the chip keeps the count.
+    expect(spec.countdownTo ?? null).toBeNull();
+    expect(spec.countUpFrom ?? null).toBeNull();
+    expect(spec.progress).toEqual({
+      value: Math.round(((310 - 168) / 310) * 100),
+      segments: [{ length: 100, color: LIVE_ACCENT_HEX }],
+    });
+  });
+
+  it("localizes the meal counts and skips the bar when nobody is inside", () => {
+    const meal = activityProps({
+      phase: "live",
+      scanned: 0,
+      inside: 0,
+      remaining: 0,
+      labels: activityLiveLabels("es"),
+    });
+    const spec = toLiveUpdateSpec(meal, null);
+    expect(spec.title).toBe("0 por comer");
+    expect(spec.progress).toBeNull();
+  });
+
+  it("shows the scanned count and elapsed time for a live non-meal activity", () => {
+    const talk = activityProps({ phase: "live", category: "talk", scanned: 37, inside: null });
+    // 45 of 90 minutes elapsed.
+    const spec = toLiveUpdateSpec(talk, null, Date.parse("2026-02-20T12:45:00.000Z"));
+    expect(spec).toMatchObject({
+      title: "37 scanned",
+      text: "Lunch · Cafeteria",
+      shortCriticalText: "37",
+      icon: "activity",
+      progress: { value: 50 },
     });
   });
 

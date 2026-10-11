@@ -19,6 +19,35 @@ class LiveUpdateActionRecord : Record {
   @Field @Required val url: String = ""
 }
 
+class LiveUpdateSegmentRecord : Record {
+  @Field @Required val length: Double = 0.0
+
+  @Field val color: String? = null
+}
+
+class LiveUpdatePointRecord : Record {
+  @Field @Required val position: Double = 0.0
+
+  @Field val color: String? = null
+}
+
+class LiveUpdateProgressRecord : Record {
+  @Field @Required val value: Double = 0.0
+
+  @Field @Required val segments: List<LiveUpdateSegmentRecord> = emptyList()
+
+  @Field val points: List<LiveUpdatePointRecord>? = null
+
+  @Field val tracker: String? = null
+
+  fun toProgress() = LiveUpdateProgress(
+    value = value.toInt(),
+    segments = segments.map { LiveUpdateSegment(it.length.toInt(), it.color) },
+    points = points.orEmpty().map { LiveUpdatePoint(it.position.toInt(), it.color) },
+    tracker = tracker,
+  )
+}
+
 class LiveUpdateSpecRecord : Record {
   @Field @Required val id: String = ""
 
@@ -31,6 +60,12 @@ class LiveUpdateSpecRecord : Record {
   @Field val subText: String? = null
 
   @Field val countdownTo: Double? = null
+
+  @Field val countUpFrom: Double? = null
+
+  @Field val progress: LiveUpdateProgressRecord? = null
+
+  @Field val phase: String? = null
 
   @Field @Required val url: String = ""
 
@@ -49,12 +84,15 @@ class LiveUpdateSpecRecord : Record {
     shortCriticalText = shortCriticalText,
     subText = subText,
     countdownTo = countdownTo?.toLong(),
+    countUpFrom = countUpFrom?.toLong(),
+    progress = progress?.toProgress(),
     url = url,
     actionLabel = action?.label,
     actionUrl = action?.url,
     accentColor = accentColor,
     icon = icon,
     alert = alert,
+    phase = phase,
   )
 }
 
@@ -105,5 +143,8 @@ class LiveUpdatesModule : Module() {
     Function("activeIds") {
       if (!LiveUpdatePoster.isSupported()) emptyList() else LiveUpdatePoster.activeIds(context)
     }
+
+    // Real user dismissals since the last call (id → phase), then forgotten.
+    Function("consumeDismissals") { LiveUpdateDismissals.consume(context) }
   }
 }

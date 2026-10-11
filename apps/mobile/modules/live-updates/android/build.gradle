@@ -13,3 +13,9 @@ android {
     versionName "0.1.0"
   }
 }
+
+dependencies {
+  // NotificationCompat.ProgressStyle, setShortCriticalText and
+  // setRequestPromotedOngoing (#966) need core 1.17+; matches expo-notifications.
+  implementation 'androidx.core:core:1.17.0'
+}

@@ -1517,12 +1517,24 @@ truncate; only numbers keep their full width. `test/live-activity-widgets.test.t
 evaluates the serialized layouts with nothing but `@expo/ui/swift-ui` in scope.
 
 **Surfaces (Android).** `lib/live-activities/model.ts` `toLiveUpdateSpec`
-maps the same props to `modules/live-updates` promoted ongoing notifications:
-queue chip `~12m`/`#4`/room, text "Position #4 · Wait ~12 min" or "Go to Room
-B · location", heads-up only on the transition into called; activity chip
-chronometer countdown to `startsAt`, then the count, plus the Scan action.
-The native module is null on clients built before it existed; every call is
-then a no-op.
+maps the same props to `modules/live-updates` promoted ongoing notifications.
+Each state has one hero in the title; a label missing from an older server's
+props is omitted, never replaced with English.
+
+| State | Chip (`shortCriticalText`, ≤ 7 chars) | Title / text | Track (Android 16 `ProgressStyle`) |
+| --- | --- | --- | --- |
+| Queue waiting | `#4·12m`; `#4` when the ETA is unknown or both overflow | `~12 min · #4` (unknown ETA: `labels.estimating`, "Estimating…") / challenge; header `+N more queues` | In line (2, accent) ─ Called (1, green), a point at the call; tracker at `(startPosition − position) / startPosition` of the first segment |
+| Queue called | room (truncated) | "Go to Room B" / location · challenge; header "Called" + count-up chronometer from `calledAt` | tracker at the call point; heads-up only on the transition into called |
+| Queue in room | room | "In room · Room B" / challenge | tracker at the end (neutral) |
+| Staff upcoming | chronometer countdown to `startsAt` | name / `hh:mm–hh:mm · location`; header `labels.startsIn` | none |
+| Staff live meal (`inside` set) | `remaining`, else `scanned` | "168 still to eat" / "142 served · 310 inside · location"; header name · times | served share `(inside − remaining) / inside` (none when nobody is inside) |
+| Staff live, other | `scanned` | "37 scanned" / name · location; header times | time elapsed between start and end as of the post |
+
+Live staff updates post no `when` time (`setShowWhen(false)`), so the chip
+always carries the count. The queue track is weighted 2:1 because the wait
+in line is the long part of the journey (same decision as the iOS stepper).
+Live staff updates carry the single Scan action. The native module is null on
+clients built before it existed; every call is then a no-op.
 
 **Orchestration (`lib/live-activities/`).**
 
@@ -1542,9 +1554,15 @@ then a no-op.
 - `model.ts` `planReconcile` — one surface per (kind, subject): start missing
   ones (the queue only while `judgingWindowOpen`), update changed props
   (ignoring `updatedAt`), end duplicates and dropped subjects (iOS keeps the
-  final state 15 minutes). A surface that vanished while the server still
-  lists it was swiped away: it is not restarted until its phase changes
-  (called, live) and `DELETE …/sessions` stops remote restarts. iOS cannot
+  final state 15 minutes). A dismissed surface is not restarted until its
+  phase changes (called, live), and `DELETE …/sessions` with the dismissed
+  phase stops remote restarts. On iOS, a surface that vanished while the
+  server still lists it counts as dismissed. On Android only the
+  notification's delete intent counts (see Android Live Updates below): one
+  that vanished for another reason (force-stop, reboot) is simply posted
+  again. Unreported dismissals stay in `store.ts` (`unreportedDismissals`)
+  until the API accepts the `DELETE`, so one recorded headlessly or offline
+  is reported on a later foreground sync. iOS cannot
   read a push-started activity's props, so an unidentified `StaffActivity`
   is adopted by an unmatched subject and immediately updated.
 - `use-live-activities.ts` (mounted in `app/_layout.tsx`) reconciles on sign-in,
@@ -1574,9 +1592,11 @@ updates (Android) switch: off ends every surface immediately and registers the
 device with `enabled: false`.
 
 **Development samples.** Debug builds only: opening
-`hackos://dev/live-activity?sample=<queue-waiting|queue-called|staff-upcoming|staff-live|all|end>`
+`hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|all|end>`
 (for example `xcrun simctl openurl booted …`) renders sample states without a
-backend. The handler is required behind `__DEV__` in `+native-intent.tsx`, so
+backend: waiting #4 of a start of 9 with a 12 min ETA, the same with an
+unknown ETA, called 2 minutes ago, in room, an upcoming meal, a live meal
+(142 served, 310 inside, 168 still to eat) and a live non-meal activity. The handler is required behind `__DEV__` in `+native-intent.tsx`, so
 release bundles drop it.
 
 ## Realtime & notifications infrastructure
@@ -1626,30 +1646,54 @@ one ongoing notification per `spec.id`, tagged `hackos.live-update:<id>`.
 
 | Android | Result |
 |---|---|
-| 16+ (API 36), promotion allowed | Live Update: status-bar chip (`shortCriticalText`, else the chronometer countdown), lock screen, top of the shade |
+| 16+ (API 36), promotion allowed | Live Update: status-bar chip (`shortCriticalText`, else the chronometer), lock screen, top of the shade, `ProgressStyle` track when the spec has `progress` |
 | 16+, user revoked promotion | Same notification, not promoted; `canPostPromotedNotifications()` is false and `openPromotionSettings()` opens the per-app toggle |
-| 8–15 (API 26–35) | Plain ongoing notification with the same content, countdown and action |
+| 8–15 (API 26–35) | Plain ongoing `BigTextStyle` notification with the same text, chronometer and action (no track) |
 | < 8 (API 24–25) | `isSupported()` is false; `show` posts nothing |
 
-- Promotion requirements met by the poster: `POST_PROMOTED_NOTIFICATIONS`
-  (module manifest), `android.requestPromotedOngoing`, ongoing, a title,
-  `BigTextStyle` or standard style, no custom views, not colorized, and a
+- Built with `NotificationCompat` (androidx.core 1.17, which has
+  `ProgressStyle`, `setShortCriticalText` and `setRequestPromotedOngoing`).
+  Promotion requirements met by the poster: `POST_PROMOTED_NOTIFICATIONS`
+  (module manifest), `setRequestPromotedOngoing`, ongoing, a title,
+  `ProgressStyle`/`BigTextStyle`, no custom views, not colorized, and a
   channel above `IMPORTANCE_MIN`.
+- `progress`: segments (relative lengths and colours), points, the filled
+  `value` and a tracker icon (`tracker-waiting|called|in-room`: a person on a
+  disc in the phase colour, drawn untinted so it stays visible on the track).
+- Chip and `when`: the chip shows `shortCriticalText` whenever it is set, even
+  with a running chronometer, so the called state counts up in the header
+  while the chip keeps the room. `countdownTo` (future) counts down,
+  `countUpFrom` counts up, anything else hides `when`. A `countdownTo` in the
+  past is ignored instead of showing a negative timer. The chip is hidden
+  while hackOS itself is in the foreground, and right after the app leaves
+  the foreground it shows the icon alone for a moment before the text
+  expands (system animation, verified on the Android 16 emulator).
 - Channels: `hackos_live_updates` (default importance, no sound/vibration)
   for routine updates; `hackos_live_updates_alert` (high importance) only
   when `spec.alert` is true, such as the team being called. Names are
   localized es/gl/en in the module's string resources.
-- `countdownTo` in the past is ignored instead of showing a negative timer.
 - Taps and the single action fire `ACTION_VIEW` deep links pinned to this
   package (`FLAG_IMMUTABLE`).
 - Without notification permission (`expo-notifications` asks for it), `show`
-  is a no-op. A user can dismiss an ongoing notification on Android 14+;
-  callers compare `activeIds()` with what they posted and do not repost it.
+  is a no-op.
+- Dismissals: every post carries a delete intent to the module's
+  non-exported `LiveUpdateDismissReceiver` with the spec's `phase`. The system
+  sends it only when the person swipes the notification away (Android 14+
+  allows that for ongoing ones), never for app cancels, force-stop or
+  reboot. The receiver stores `id → phase` in SharedPreferences
+  (`hackos.live-updates`), so a dismissal while no JS runs is kept;
+  `consumeDismissals()` returns and clears them, and `host.android.ts`
+  exposes them to the orchestration as `consumeDismissals()`.
 - Debug builds only: `LiveUpdatesDebugReceiver` (module `src/debug`) posts
-  samples without the API, e.g.
-  `adb shell am broadcast -f 32 -p com.hackudc.os -a expo.modules.liveupdates.DEBUG_SHOW --es id queue:judging --es title Queue --es chip '#4' --es icon queue`
-  (extras: `text`, `subText`, `countdownSeconds` int, `actionLabel`,
-  `actionUrl`, `color`, `url`, `alert` bool; `DEBUG_DISMISS` with `id`).
+  samples without JS, e.g.
+  `adb shell am broadcast -f 32 -p com.hackudc.os.debug -a expo.modules.liveupdates.DEBUG_SHOW --es id queue:judging --es title Queue --es chip '#4' --es icon queue`
+  (extras: `text`, `subText`, `countdownSeconds`/`countUpSeconds` int,
+  `progress`/`progressMax` int for a one-segment track, `tracker`,
+  `actionLabel`, `actionUrl`, `color`, `url`, `phase`, `alert` bool;
+  `DEBUG_DISMISS` with `id`). The full states come from the JS samples
+  (`hackos://dev/live-activity?sample=…`, below), which run the real mapping;
+  on Android, open them with `adb shell am start -a android.intent.action.VIEW -d '<link>' com.hackudc.os.debug`
+  while the app runs. Samples respect the in-app opt-out.
 
 ## Other infrastructure
 

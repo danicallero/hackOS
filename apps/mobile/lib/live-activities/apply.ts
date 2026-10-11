@@ -1,5 +1,6 @@
 import type { AndroidLiveUpdateMessage } from "@hackos/shared/live-activities";
 import { liveActivityHost } from "./host";
+import type { LiveActivityHost } from "./host-types";
 import {
   type DesiredActivity,
   liveActivityKey,
@@ -17,8 +18,11 @@ import { readLiveActivityState, updateLiveActivityState } from "./store";
 export interface ApplyResult {
   /** Running surfaces by key after applying. */
   running: Map<string, RunningActivity>;
-  /** Keys the person just dismissed while the server still lists them. */
-  dismissed: string[];
+  /**
+   * Dismissals the API still has to hear about (key → phase at dismissal),
+   * including earlier ones recorded while no foreground sync ran.
+   */
+  dismissed: Record<string, string>;
 }
 
 let chain: Promise<unknown> = Promise.resolve();
@@ -30,6 +34,16 @@ function serialized<T>(task: () => Promise<T>): Promise<T> {
   return next;
 }
 
+/** Android's delete-intent record; null where the host infers dismissals instead. */
+function consumeDismissals(host: LiveActivityHost): Record<string, string> | null {
+  if (!host.consumeDismissals) return null;
+  try {
+    return host.consumeDismissals();
+  } catch {
+    return {};
+  }
+}
+
 function keyOf(surface: RunningActivity): string | null {
   if (surface.subject) return liveActivityKey(surface.kind, surface.subject);
   return surface.kind === "queue" ? liveActivityKey("queue", "judging") : null;
@@ -39,13 +53,16 @@ export function applyDesiredActivities(desired: DesiredActivity[]): Promise<Appl
   return serialized(async () => {
     const host = liveActivityHost;
     const state = await readLiveActivityState();
-    if (!host.supported()) return { running: new Map(), dismissed: [] };
+    if (!host.supported()) return { running: new Map(), dismissed: {} };
     const effective = state.enabled ? desired : [];
-    const dismissed = pruneDismissed(state.dismissed, effective);
+    const recorded = consumeDismissals(host);
+    const dismissed = pruneDismissed({ ...state.dismissed, ...recorded }, effective);
     const plan = planReconcile(effective, host.running(), {
       signatures: new Map(Object.entries(state.signatures)),
       dismissed: new Map(Object.entries(dismissed)),
-      previouslyRunning: new Set(state.running),
+      // Android knows its real dismissals: a notification missing for any
+      // other reason (force-stop, reboot) is simply posted again.
+      previouslyRunning: recorded ? new Set() : new Set(state.running),
     });
 
     const signatures: Record<string, string> = {};
@@ -62,6 +79,12 @@ export function applyDesiredActivities(desired: DesiredActivity[]): Promise<Appl
       await host.start(item, phases[key] ?? null);
     }
     for (const entry of plan.dismissed) dismissed[entry.key] = entry.phase;
+    const fresh = Object.fromEntries(plan.dismissed.map((entry) => [entry.key, entry.phase]));
+    // Only dismissals the server still lists in that phase are worth reporting.
+    const unreported = pruneDismissed(
+      { ...state.unreportedDismissals, ...recorded, ...fresh },
+      effective,
+    );
 
     const running = new Map<string, RunningActivity>();
     for (const surface of host.running()) {
@@ -79,11 +102,12 @@ export function applyDesiredActivities(desired: DesiredActivity[]): Promise<Appl
     await updateLiveActivityState((current) => ({
       ...current,
       dismissed,
+      unreportedDismissals: unreported,
       signatures,
       phases,
       running: [...running.keys()],
     }));
-    return { running, dismissed: plan.dismissed.map((entry) => entry.key) };
+    return { running, dismissed: unreported };
   });
 }
 
@@ -95,6 +119,8 @@ export function endAllActivities(): Promise<void> {
       for (const surface of host.running()) {
         await host.end(surface, "immediate").catch(() => undefined);
       }
+      // Dismissals of the ending account's surfaces no longer matter.
+      consumeDismissals(host);
       // An earlier account's final state (e.g. "Go to Room B") must not stay
       // on the Lock Screen after sign-out or opt-out.
       await host.dismissEnded().catch(() => undefined);
@@ -102,10 +128,20 @@ export function endAllActivities(): Promise<void> {
     await updateLiveActivityState((current) => ({
       ...current,
       dismissed: {},
+      unreportedDismissals: {},
       signatures: {},
       phases: {},
       running: [],
     }));
+  });
+}
+
+/** After the API accepted a dismissal report: stop resending it. */
+export function markDismissalReported(key: string, phase: string): Promise<unknown> {
+  return updateLiveActivityState((current) => {
+    if (current.unreportedDismissals[key] !== phase) return current;
+    const { [key]: _reported, ...unreportedDismissals } = current.unreportedDismissals;
+    return { ...current, unreportedDismissals };
   });
 }
 
@@ -122,6 +158,15 @@ export function applyAndroidLiveUpdate(
     const state = await readLiveActivityState();
     if (!host.supported()) return;
     const key = liveActivityKey(message.kind, message.subject);
+    const recorded = consumeDismissals(host) ?? {};
+    if (Object.keys(recorded).length > 0) {
+      // Kept for the next foreground sync, which reports them to the API.
+      await updateLiveActivityState((current) => ({
+        ...current,
+        dismissed: { ...current.dismissed, ...recorded },
+        unreportedDismissals: { ...current.unreportedDismissals, ...recorded },
+      }));
+    }
     const surface = host.running().find((candidate) => keyOf(candidate) === key);
 
     if (message.event === "end" || !message.props || !state.enabled) {
@@ -130,11 +175,13 @@ export function applyAndroidLiveUpdate(
         const { [key]: _signature, ...signatures } = current.signatures;
         const { [key]: _phase, ...phases } = current.phases;
         const { [key]: _dismissed, ...dismissed } = current.dismissed;
+        const { [key]: _unreported, ...unreportedDismissals } = current.unreportedDismissals;
         return {
           ...current,
           signatures,
           phases,
           dismissed,
+          unreportedDismissals,
           running: current.running.filter((candidate) => candidate !== key),
         };
       });
@@ -147,14 +194,11 @@ export function applyAndroidLiveUpdate(
       props: message.props,
     };
     const phase = message.props.phase;
-    let dismissedPhase = state.dismissed[key];
-    if (!surface && dismissedPhase === undefined && state.running.includes(key)) {
-      dismissedPhase = state.phases[key] ?? phase;
-    }
-    if (!surface && dismissedPhase === phase) {
+    // Only a real dismissal (delete intent) holds it back, until the phase
+    // changes; a notification missing for any other reason is posted again.
+    if (!surface && (recorded[key] ?? state.dismissed[key]) === phase) {
       await updateLiveActivityState((current) => ({
         ...current,
-        dismissed: { ...current.dismissed, [key]: phase },
         running: current.running.filter((candidate) => candidate !== key),
       }));
       return;
@@ -165,9 +209,11 @@ export function applyAndroidLiveUpdate(
     else await host.start(item, previousPhase);
     await updateLiveActivityState((current) => {
       const { [key]: _dismissed, ...dismissed } = current.dismissed;
+      const { [key]: _unreported, ...unreportedDismissals } = current.unreportedDismissals;
       return {
         ...current,
         dismissed,
+        unreportedDismissals,
         signatures: { ...current.signatures, [key]: propsSignature(item.props) },
         phases: { ...current.phases, [key]: phase },
         running: [...new Set([...current.running, key])],
