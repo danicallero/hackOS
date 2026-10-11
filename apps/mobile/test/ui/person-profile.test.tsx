@@ -131,8 +131,8 @@ it("shows the whole profile with the saved note", async () => {
   expect(open).toHaveBeenCalledWith("https://github.com/ana");
 });
 
-it("keeps a short profile scrollable past the collapsed avatar (#935)", async () => {
-  await renderMobile(<PersonProfileScreen />);
+async function layoutProfile(insets?: { top: number }) {
+  await renderMobile(<PersonProfileScreen />, { insets });
   await screen.findByText("Ana Souto");
   const scroll = screen.getByTestId("person-profile");
   let host = scroll.parent;
@@ -140,9 +140,18 @@ it("keeps a short profile scrollable past the collapsed avatar (#935)", async ()
   await fireEvent(host as NonNullable<typeof host>, "layout", {
     nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 852 } },
   });
-  const { minHeight } = screen.getByTestId("person-profile").props.contentContainerStyle;
+  return screen.getByTestId("person-profile").props.contentContainerStyle.minHeight;
+}
+
+it("keeps a short profile scrollable past the collapsed avatar (#935)", async () => {
+  // A Dynamic Island iPhone, where the avatar morphs into the island.
+  const minHeight = await layoutProfile({ top: 59 });
   // The viewport plus enough scroll for the 120 pt morph past the true top.
   expect(minHeight).toBeGreaterThanOrEqual(852 + 120 - 59);
+});
+
+it("does not pad a short profile without a camera cutout to collapse into (#935)", async () => {
+  expect(await layoutProfile()).toBeUndefined();
 });
 
 it("lists every project and work group the person is in (#935)", async () => {

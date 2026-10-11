@@ -837,12 +837,19 @@ The morph only runs where a real camera cutout exists:
   function and Android uses the plain collapse. With a hole punch, Android does
   not use the island mask above (its keyframes squeeze a small round target
   into a thin vertical needle); it uses the native gooey view described below.
-- **No cutout, unknown, API < 28, iPhone notch / no Dynamic Island, landscape**:
-  no morph. The avatar shrinks into a compact circle below the safe area with no
-  black backing or cover (`hasCutout: false`).
+- **No cutout, unknown, API < 28, iPhone notch / no Dynamic Island, landscape**
+  (`hasCutout: false`): no morph and no overlay (`simple`). The avatar stays in
+  the scroll content: it holds still and shrinks to 0.75 until the view right
+  below it (the name block, wired with `onNameLayout`) reaches its shrunken
+  bottom, then scrolls up and off screen with the page, so it never parks at
+  the top or covers the name. The release offset is the measured layout gap
+  plus half the shrink (`profileAvatarSimpleReleaseOffset`); the transform is
+  `profileAvatarSimpleTransform`. No snap, no haptics and no
+  `contentMinHeight` floor apply, since nothing is ever half-morphed.
 
-`cameraCutoutFrame` still overrides the target for OEM placements. Reduced Motion
-keeps the circular mask and uses the simpler position/scale transition.
+`cameraCutoutFrame` (a `useProfileAvatarCollapse` option) still overrides the
+target for OEM placements. Reduced Motion uses the same in-content path without
+the hold or shrink: the avatar simply scrolls with the page.
 
 #### Android hole-punch gooey morph
 

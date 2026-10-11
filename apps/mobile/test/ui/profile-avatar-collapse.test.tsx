@@ -1,5 +1,5 @@
 import { act, renderHook, screen } from "@testing-library/react-native";
-import { Platform, Text } from "react-native";
+import { Platform, StyleSheet, Text } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import {
   ProfileAvatarCollapse,
@@ -10,6 +10,7 @@ import {
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
   PROFILE_AVATAR_MERGE_PROGRESS,
+  PROFILE_AVATAR_SIMPLE_MIN_SCALE,
   PROFILE_GOOEY_SHRINK_END,
   pickHolePunchCutout,
   profileAvatarBlobBounds,
@@ -19,6 +20,8 @@ import {
   profileAvatarMinContentHeight,
   profileAvatarMorphPath,
   profileAvatarRestingOffsetBound,
+  profileAvatarSimpleReleaseOffset,
+  profileAvatarSimpleTransform,
   profileAvatarSnapDirection,
   profileAvatarSnapOffset,
   profileAvatarSnapTarget,
@@ -501,7 +504,9 @@ describe("profile avatar placeholder", () => {
       anchorFrame: { left: 100, top: 220, width: 96, height: 96 },
       hostOrigin: { x: 0, y: 0 },
       scrollOffset: { value: 0 },
-    } as ProfileAvatarCollapseController;
+      simple: false,
+      target: island,
+    } as unknown as ProfileAvatarCollapseController;
 
     await renderMobile(
       <ProfileAvatarCollapse
@@ -584,12 +589,13 @@ describe("profile avatar snap on release (#935)", () => {
   });
 
   async function setup() {
+    // A Dynamic Island iPhone: the morph (and so the snap) runs.
     const { result } = await renderHook(() => useProfileAvatarCollapse(), {
       wrapper: ({ children }) => (
         <SafeAreaProvider
           initialMetrics={{
             frame: { x: 0, y: 0, width: 393, height: 852 },
-            insets: { top: 0, left: 0, right: 0, bottom: 0 },
+            insets: { top: 59, left: 0, right: 0, bottom: 34 },
           }}
         >
           {children}
@@ -847,22 +853,54 @@ describe("android hole-punch gooey geometry", () => {
   });
 });
 
+/** The real hook on a device, measured with the avatar at `anchor` (host = window). */
+async function renderController(
+  insets: { top: number; bottom: number },
+  anchor = { left: 152, top: 180, width: 96, height: 96 },
+) {
+  jest.useFakeTimers();
+  const hook = await renderHook(() => useProfileAvatarCollapse(), {
+    wrapper: ({ children }) => (
+      <SafeAreaProvider
+        initialMetrics={{
+          frame: { x: 0, y: 0, width: 400, height: 852 },
+          insets: { ...insets, left: 0, right: 0 },
+        }}
+      >
+        {children}
+      </SafeAreaProvider>
+    ),
+  });
+  Object.assign(hook.result.current.hostRef, {
+    current: { measureInWindow: (cb: (x: number, y: number) => void) => cb(0, 0) },
+  });
+  Object.assign(hook.result.current.anchorRef, {
+    current: {
+      measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) =>
+        cb(anchor.left, anchor.top, anchor.width, anchor.height),
+    },
+  });
+  await act(async () => {
+    hook.result.current.onScrollBeginDrag();
+    jest.advanceTimersByTime(100);
+  });
+  jest.useRealTimers();
+  return hook;
+}
+
 describe("android hole-punch gooey overlay", () => {
-  const controller = {
-    anchorFrame: { left: 152, top: 180, width: 96, height: 96 },
-    hostOrigin: { x: 0, y: 0 },
-    scrollOffset: { value: 0 },
-  } as ProfileAvatarCollapseController;
-  const render = () =>
-    renderMobile(
+  const render = async (insets = { top: 47, bottom: 34 }) => {
+    const { result } = await renderController(insets);
+    return renderMobile(
       <ProfileAvatarCollapse
-        controller={controller}
+        controller={result.current}
         image={null}
         name="Admin HackOS"
         size={96}
         variant="account"
       />,
     );
+  };
 
   afterEach(() => {
     mockCutoutRects = [];
@@ -882,23 +920,178 @@ describe("android hole-punch gooey overlay", () => {
     expect(screen.getByText("AH", { includeHiddenElements: true })).toBeTruthy();
   });
 
-  it("keeps the plain collapse on Android without a hole punch", async () => {
+  it("draws no overlay on Android without a hole punch, leaving the avatar in the content", async () => {
     jest.replaceProperty(Platform, "OS", "android");
     await render();
     expect(
-      screen.queryByTestId("profile-avatar-gooey", { includeHiddenElements: true }),
+      screen.queryByTestId("profile-avatar-collapse-mask", { includeHiddenElements: true }),
     ).toBeNull();
   });
 
   it("keeps the Dynamic Island mask on iOS", async () => {
     jest.replaceProperty(Platform, "OS", "ios");
     mockCutoutRects = [{ left: 182, top: 7, width: 36, height: 36 }];
-    await render();
+    await render({ top: 59, bottom: 34 });
     expect(
       screen.queryByTestId("profile-avatar-gooey", { includeHiddenElements: true }),
     ).toBeNull();
     expect(
       screen.getByTestId("profile-avatar-collapse-mask", { includeHiddenElements: true }),
     ).toBeTruthy();
+  });
+
+  it("draws no overlay on an iPhone without a Dynamic Island", async () => {
+    jest.replaceProperty(Platform, "OS", "ios");
+    await render({ top: 47, bottom: 34 });
+    expect(
+      screen.queryByTestId("profile-avatar-collapse-mask", { includeHiddenElements: true }),
+    ).toBeNull();
+  });
+});
+
+describe("plain avatar collapse geometry (#935)", () => {
+  const minScale = PROFILE_AVATAR_SIMPLE_MIN_SCALE;
+
+  it("releases the avatar once the name closes the gap to its shrunken bottom", () => {
+    // 96 pt avatar, name 12 pt below: 12 + 96 * (1 - 0.75) / 2.
+    expect(profileAvatarSimpleReleaseOffset(96, 12, minScale)).toBe(24);
+    expect(profileAvatarSimpleReleaseOffset(112, 14, minScale)).toBe(28);
+    // An unmeasured or overlapping name only waits for the shrink itself.
+    expect(profileAvatarSimpleReleaseOffset(96, -5, minScale)).toBe(12);
+  });
+
+  it("holds still while shrinking, then moves with the content at its smallest", () => {
+    expect(profileAvatarSimpleTransform(0, 96, 12, minScale, false)).toEqual({
+      translateY: 0,
+      scale: 1,
+    });
+    expect(profileAvatarSimpleTransform(12, 96, 12, minScale, false)).toEqual({
+      translateY: 12,
+      scale: 0.875,
+    });
+    // From the release on, the hold stays constant: the avatar scrolls away.
+    for (const offset of [24, 60, 400]) {
+      expect(profileAvatarSimpleTransform(offset, 96, 12, minScale, false)).toEqual({
+        translateY: 24,
+        scale: minScale,
+      });
+    }
+    // Pull-to-refresh overscroll leaves it untouched.
+    expect(profileAvatarSimpleTransform(-30, 96, 12, minScale, false)).toEqual({
+      translateY: 0,
+      scale: 1,
+    });
+  });
+
+  it("never lets the avatar's bottom pass the name's top, and retraces it on the way back", () => {
+    for (const [size, gap] of [
+      [96, 12],
+      [112, 14],
+      [96, 0],
+      [112, 80],
+    ]) {
+      const avatarTop = 200;
+      const nameTop = avatarTop + size + gap;
+      const at = (offset: number) => {
+        const { translateY, scale } = profileAvatarSimpleTransform(
+          offset,
+          size,
+          gap,
+          minScale,
+          false,
+        );
+        // Screen positions: content moves up by `offset`, the transform is about the centre.
+        const centre = avatarTop + size / 2 - offset + translateY;
+        return { bottom: centre + (size * scale) / 2, scale };
+      };
+      let previous = at(0);
+      for (let offset = 0; offset <= 600; offset += 0.5) {
+        const frame = at(offset);
+        expect(frame.bottom).toBeLessThanOrEqual(nameTop - offset + 1e-9);
+        // Monotonic in the offset, so scrolling back retraces the same frames.
+        expect(frame.bottom).toBeLessThanOrEqual(previous.bottom + 1e-9);
+        expect(frame.scale).toBeLessThanOrEqual(previous.scale + 1e-9);
+        previous = frame;
+      }
+      // Far enough down the page, it has left the top of the screen.
+      expect(at(600).bottom).toBeLessThan(0);
+      expect(at(17)).toEqual(at(17));
+    }
+  });
+
+  it("just scrolls with the content under Reduce Motion", () => {
+    for (const offset of [0, 12, 300]) {
+      expect(profileAvatarSimpleTransform(offset, 96, 12, minScale, true)).toEqual({
+        translateY: 0,
+        scale: 1,
+      });
+    }
+  });
+});
+
+describe("plain avatar collapse (#935)", () => {
+  const event = (y: number) => ({ contentOffset: { x: 0, y }, velocity: { x: 0, y: 0 } });
+
+  afterEach(() => {
+    mockCutoutRects = [];
+    jest.restoreAllMocks();
+    mockHaptic.mockClear();
+  });
+
+  it("measures the gap to the view below and never snaps, taps or pads the page", async () => {
+    jest.replaceProperty(Platform, "OS", "android");
+    mockHaptic.mockClear();
+    const { result } = await renderController({ top: 24, bottom: 0 });
+    expect(result.current.simple).toBe(true);
+    await act(async () => {
+      result.current.onAnchorLayout({
+        nativeEvent: { layout: { x: 0, y: 10, width: 96, height: 96 } },
+      } as never);
+      result.current.onNameLayout({
+        nativeEvent: { layout: { x: 0, y: 118, width: 200, height: 80 } },
+      } as never);
+    });
+    expect(result.current.simpleGap).toBe(12);
+    await act(async () => {
+      result.current.onHostLayout({
+        nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 852 } },
+      } as never);
+    });
+    expect(result.current.contentMinHeight).toBeUndefined();
+
+    const scrollTo = jest.fn();
+    Object.assign(result.current.scrollRef, { current: { scrollTo } });
+    const handlers = result.current.onScroll as unknown as ScrollHandlers;
+    handlers.onBeginDrag(event(0));
+    for (const y of [10, 30, 60, 125, 60, 0]) handlers.onScroll(event(y));
+    handlers.onEndDrag(event(12));
+    handlers.onMomentumEnd(event(12));
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(mockHaptic).not.toHaveBeenCalled();
+  });
+
+  it("keeps the in-content avatar visible while scrolled", async () => {
+    jest.replaceProperty(Platform, "OS", "android");
+    const { result } = await renderController({ top: 24, bottom: 0 });
+    result.current.scrollOffset.value = 40;
+    // The layout gap is 0 here: the hold is only the 12 pt shrink.
+    await renderMobile(
+      <ProfileAvatarCollapseAnchor controller={result.current} size={96}>
+        <Text>AH</Text>
+      </ProfileAvatarCollapseAnchor>,
+    );
+    const anchor = screen.getByText("AH", { includeHiddenElements: true }).parent;
+    expect(StyleSheet.flatten(anchor?.props.style)).toMatchObject({
+      opacity: 1,
+      transform: [{ translateY: 12 }, { scale: PROFILE_AVATAR_SIMPLE_MIN_SCALE }],
+    });
+  });
+
+  it("keeps the morph and its snap on a hole-punch device", async () => {
+    jest.replaceProperty(Platform, "OS", "android");
+    mockCutoutRects = [{ left: 182, top: 7, width: 36, height: 36 }];
+    const { result } = await renderController({ top: 48, bottom: 0 });
+    expect(result.current.simple).toBe(false);
+    expect(result.current.target.hasCutout).toBe(true);
   });
 });

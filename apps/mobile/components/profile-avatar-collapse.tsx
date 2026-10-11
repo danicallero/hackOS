@@ -35,6 +35,7 @@ import { haptic } from "@/lib/haptics";
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
   PROFILE_AVATAR_MERGE_PROGRESS,
+  PROFILE_AVATAR_SIMPLE_MIN_SCALE,
   PROFILE_AVATAR_SNAP_REST_VELOCITY,
   PROFILE_GOOEY_MARGIN,
   type ProfileCameraCutoutFrame,
@@ -45,6 +46,7 @@ import {
   profileAvatarMinContentHeight,
   profileAvatarMorphPath,
   profileAvatarRestingOffsetBound,
+  profileAvatarSimpleTransform,
   profileAvatarSnapDirection,
   profileAvatarSnapOffset,
   profileGooeyFrame,
@@ -71,10 +73,22 @@ export type ProfileAvatarCollapseController = ReturnType<typeof useProfileAvatar
  * A screen under a shown native header passes its `headerHeight`, which the
  * automatic inset adds to the true top. Spread `contentMinHeight` onto the
  * content container so a short page still reaches the collapsed rest.
+ *
+ * Without a camera cutout to morph into, or under Reduce Motion, the avatar
+ * instead stays in the content (`simple`): no overlay, snap or haptics. Pass
+ * `onNameLayout` to the view right below the anchor, in the same parent, so
+ * the avatar leaves with the content before that view reaches it.
  */
 export function useProfileAvatarCollapse(
   screenScrollRef?: RefObject<ScrollView | null>,
-  { headerHeight = 0 }: { headerHeight?: number } = {},
+  {
+    headerHeight = 0,
+    cameraCutoutFrame,
+  }: {
+    headerHeight?: number;
+    /** Window coordinates of an OEM camera cutout, overriding detection. */
+    cameraCutoutFrame?: ProfileCameraCutoutFrame | null;
+  } = {},
 ) {
   const scrollOffset = useSharedValue(0);
   const contentOffset = useSharedValue(0);
@@ -95,6 +109,16 @@ export function useProfileAvatarCollapse(
   const scrollRef = screenScrollRef ?? ownScrollRef;
   const reduceMotion = useReducedMotion();
   const safeAreaTop = useSafeAreaInsets().top;
+  const target = useProfileCameraTarget(cameraCutoutFrame, safeAreaTop);
+  const simple = reduceMotion || !target.hasCutout;
+  // Layout gap between the anchor's bottom and the view below it (`simple`).
+  const anchorBottom = useRef<number | null>(null);
+  const nameTop = useRef<number | null>(null);
+  const [simpleGap, setSimpleGap] = useState(0);
+  const updateSimpleGap = useCallback(() => {
+    if (anchorBottom.current === null || nameTop.current === null) return;
+    setSimpleGap(Math.max(0, nameTop.current - anchorBottom.current));
+  }, []);
   const hostRef = useRef<View>(null);
   const anchorRef = useRef<View>(null);
   const [hostOrigin, setHostOrigin] = useState({ x: 0, y: 0 });
@@ -120,6 +144,8 @@ export function useProfileAvatarCollapse(
   const settle = (offset: number, velocity: number) => {
     "worklet";
     snapArmed.value = false;
+    // The plain collapse has no half-morphed state to leave.
+    if (simple) return;
     const direction = profileAvatarSnapDirection(lastDelta.value, velocity, platform);
     const target = profileAvatarSnapOffset(
       offset,
@@ -153,6 +179,8 @@ export function useProfileAvatarCollapse(
         contentOffset.value = event.contentOffset.y;
         const previous = scrollOffset.value;
         scrollOffset.value = Math.max(0, event.contentOffset.y - restingOffset.value);
+        // The plain collapse never meets a camera cutout.
+        if (simple) return;
         // Tap once each time the photo reaches the island on the way up, and
         // as soon as a collapsed avatar starts stretching out on the way down.
         const current = scrollOffset.value;
@@ -176,7 +204,7 @@ export function useProfileAvatarCollapse(
         if (snapArmed.value) settle(event.contentOffset.y, 0);
       },
     },
-    [scrollToOffset, mergeHaptic],
+    [scrollToOffset, mergeHaptic, simple],
   );
 
   const measureFrame = useRef<number | null>(null);
@@ -264,7 +292,7 @@ export function useProfileAvatarCollapse(
   // The snap compares the collapsed rest with `contentHeight - viewport`, so
   // the floor uses the status-bar bound alone: a header only lowers the rest.
   const contentMinHeight =
-    viewport > 0
+    viewport > 0 && !simple
       ? profileAvatarMinContentHeight(
           viewport,
           Platform.OS === "ios" ? profileAvatarRestingOffsetBound(safeAreaTop, hostOrigin.y) : 0,
@@ -285,6 +313,7 @@ export function useProfileAvatarCollapse(
 
   /** Move a scroll left inside the morph by a non-drag (remount, focus) to the nearer rest. */
   const settleAtRest = useCallback(() => {
+    if (simple) return;
     requestAnimationFrame(() => {
       const target = profileAvatarSnapOffset(
         contentOffset.value,
@@ -295,7 +324,7 @@ export function useProfileAvatarCollapse(
       );
       if (target !== null) scrollRef.current?.scrollTo({ animated: false, y: target });
     });
-  }, [contentOffset, maxOffset, restingOffset, scrollRef]);
+  }, [contentOffset, maxOffset, restingOffset, scrollRef, simple]);
 
   return {
     anchorFrame,
@@ -303,7 +332,18 @@ export function useProfileAvatarCollapse(
     hostOrigin,
     contentMinHeight,
     hostRef,
-    onAnchorLayout: measureAfterLayout,
+    onAnchorLayout: (event?: LayoutChangeEvent) => {
+      const layout = event?.nativeEvent?.layout;
+      if (layout) {
+        anchorBottom.current = layout.y + layout.height;
+        updateSimpleGap();
+      }
+      measureAfterLayout();
+    },
+    onNameLayout: ({ nativeEvent }: LayoutChangeEvent) => {
+      nameTop.current = nativeEvent.layout.y;
+      updateSimpleGap();
+    },
     onHostLayout: ({ nativeEvent }: LayoutChangeEvent) => {
       viewportHeight.current = nativeEvent.layout.height;
       setViewport(nativeEvent.layout.height);
@@ -323,10 +363,49 @@ export function useProfileAvatarCollapse(
     scrollRef,
     scrollToTopRef,
     settleAtRest,
+    simple,
+    simpleGap,
+    target,
   };
 }
 
-/** The original circle remains visible until scrolling transfers it to the mask. */
+/**
+ * The camera-area morph target in window coordinates. Android reads the real
+ * cutout rects, re-read when the window size changes (rotation, resize).
+ */
+function useProfileCameraTarget(
+  cameraCutoutFrame: ProfileCameraCutoutFrame | null | undefined,
+  safeAreaTop: number,
+) {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: window size changes when the cutout moves.
+  const displayCutoutRects = useMemo(() => {
+    if (Platform.OS !== "android") return null;
+    try {
+      return CameraCapabilities?.getDisplayCutoutRects?.() ?? null;
+    } catch {
+      return null;
+    }
+  }, [screenHeight, screenWidth]);
+  return useMemo(
+    () =>
+      resolveProfileCameraTarget({
+        cameraCutoutFrame,
+        displayCutoutRects,
+        height: screenHeight,
+        platform: Platform.OS,
+        safeAreaTop,
+        screenWidth,
+      }),
+    [cameraCutoutFrame, displayCutoutRects, safeAreaTop, screenHeight, screenWidth],
+  );
+}
+
+/**
+ * The original circle remains visible until scrolling transfers it to the
+ * mask. In the plain collapse it stays the only avatar: it holds still and
+ * shrinks until the view below reaches it, then scrolls away with the page.
+ */
 export function ProfileAvatarCollapseAnchor({
   controller,
   children,
@@ -336,13 +415,24 @@ export function ProfileAvatarCollapseAnchor({
   children?: ReactNode;
   size: number;
 }) {
-  const { scrollOffset, anchorFrame } = controller;
-  const style = useAnimatedStyle(
-    () => ({
-      opacity: anchorFrame && scrollOffset.value > 0 ? 0 : 1,
-    }),
-    [anchorFrame, scrollOffset],
-  );
+  const { scrollOffset, anchorFrame, simple, simpleGap } = controller;
+  const reduceMotion = useReducedMotion();
+  const minScale = PROFILE_AVATAR_SIMPLE_MIN_SCALE;
+  const style = useAnimatedStyle(() => {
+    if (!simple)
+      return {
+        opacity: anchorFrame && scrollOffset.value > 0 ? 0 : 1,
+        transform: [{ translateY: 0 }, { scale: 1 }],
+      };
+    const { translateY, scale } = profileAvatarSimpleTransform(
+      scrollOffset.value,
+      size,
+      simpleGap,
+      minScale,
+      reduceMotion,
+    );
+    return { opacity: 1, transform: [{ translateY }, { scale }] };
+  }, [anchorFrame, scrollOffset, simple, simpleGap, size, reduceMotion]);
   return (
     <Animated.View
       ref={controller.anchorRef}
@@ -370,7 +460,6 @@ export function ProfileAvatarCollapse({
   name,
   size,
   variant,
-  cameraCutoutFrame,
   collapseDistance = PROFILE_AVATAR_COLLAPSE_DISTANCE,
   children,
 }: {
@@ -379,40 +468,15 @@ export function ProfileAvatarCollapse({
   name: string;
   size: number;
   variant: AvatarVariant;
-  /** Window coordinates. Null selects a compact header circle instead. */
-  cameraCutoutFrame?: ProfileCameraCutoutFrame | null;
   collapseDistance?: number;
   /** Optional live avatar content (video, rings or overlays), inside the same mask. */
   children?: ReactNode;
 }) {
-  const insets = useSafeAreaInsets();
-  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const reduceMotion = useReducedMotion();
-  // Android only: real cutout rects (dp, window coords). Re-read on rotation/resize.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: window size changes when the cutout moves.
-  const displayCutoutRects = useMemo(() => {
-    if (Platform.OS !== "android") return null;
-    try {
-      return CameraCapabilities?.getDisplayCutoutRects?.() ?? null;
-    } catch {
-      return null;
-    }
-  }, [screenHeight, screenWidth]);
-  const target = useMemo(
-    () =>
-      resolveProfileCameraTarget({
-        cameraCutoutFrame,
-        displayCutoutRects,
-        height: screenHeight,
-        platform: Platform.OS,
-        safeAreaTop: insets.top,
-        screenWidth,
-      }),
-    [cameraCutoutFrame, displayCutoutRects, insets.top, screenHeight, screenWidth],
-  );
   const source = useApiImage(image);
   const gradientId = `profile-avatar-cover-${useId().replaceAll(":", "-")}`;
-  const { anchorFrame, hostOrigin, scrollOffset } = controller;
+  // Only a camera cutout gets the overlay; the plain collapse (`simple`)
+  // keeps the anchor in the scroll content (#935).
+  const { anchorFrame, hostOrigin, scrollOffset, simple, target } = controller;
   const start = anchorFrame ?? { left: 0, top: 0, width: size, height: size };
   const destination = {
     left: target.left - hostOrigin.x,
@@ -430,13 +494,8 @@ export function ProfileAvatarCollapse({
   const distance = Math.max(1, collapseDistance);
   // Android with a hole punch: the native gooey view replaces the Dynamic
   // Island mask, whose keyframes stretch a small round lens target into a
-  // needle. iOS, reduced motion and devices without a hole punch (or without
-  // the native module) keep the paths below unchanged.
-  const gooey =
-    AnimatedProfileGooeyView !== null &&
-    Platform.OS === "android" &&
-    target.hasCutout &&
-    !reduceMotion;
+  // needle. iOS and Android without the native module keep the mask below.
+  const gooey = AnimatedProfileGooeyView !== null && Platform.OS === "android" && !simple;
   const gooeyBox = {
     left: bounds.left - PROFILE_GOOEY_MARGIN,
     top: bounds.top - PROFILE_GOOEY_MARGIN,
@@ -457,15 +516,9 @@ export function ProfileAvatarCollapse({
   const maskProps = useAnimatedProps(() => {
     const progress = Math.max(0, Math.min(1, scrollOffset.value / distance));
     return {
-      d: profileAvatarMorphPath(
-        size,
-        localStart,
-        localTarget,
-        progress,
-        reduceMotion || !target.hasCutout,
-      ),
+      d: profileAvatarMorphPath(size, localStart, localTarget, progress),
     };
-  }, [size, localStart, localTarget, distance, reduceMotion, target.hasCutout]);
+  }, [size, localStart, localTarget, distance]);
   const overlayStyle = useAnimatedStyle(
     () => ({
       opacity: anchorFrame && scrollOffset.value > 0 ? 1 : 0,
@@ -474,20 +527,13 @@ export function ProfileAvatarCollapse({
   );
   const contentStyle = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
-    return profileAvatarContentFrame(
-      size,
-      localStart,
-      localTarget,
-      p,
-      reduceMotion || !target.hasCutout,
-    );
-  }, [size, localStart, localTarget, distance, reduceMotion, target.hasCutout]);
+    return profileAvatarContentFrame(size, localStart, localTarget, p);
+  }, [size, localStart, localTarget, distance]);
   const initialsStyle = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
-    const simple = reduceMotion || !target.hasCutout;
-    const frame = profileAvatarMaskFrame(size, localStart, localTarget, p, simple);
+    const frame = profileAvatarMaskFrame(size, localStart, localTarget, p);
     // Centred where the photo would be, on the clip's blob (#935).
-    const content = profileAvatarContentFrame(size, localStart, localTarget, p, simple);
+    const content = profileAvatarContentFrame(size, localStart, localTarget, p);
     return {
       left: content.left + content.width / 2 - frame.width / 2,
       top:
@@ -499,31 +545,31 @@ export function ProfileAvatarCollapse({
       height: frame.height,
       transform: [{ scale: 1 - p * 0.5 }],
     };
-  }, [size, localStart, localTarget, distance, reduceMotion, target.hasCutout]);
+  }, [size, localStart, localTarget, distance]);
   const coverStyle = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
-    return { opacity: target.hasCutout ? profileAvatarCoverOpacity(p, reduceMotion) : 0 };
-  }, [distance, reduceMotion, target.hasCutout]);
+    return { opacity: profileAvatarCoverOpacity(p) };
+  }, [distance]);
   const gradientStyle = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
-    return { opacity: target.hasCutout && p > 0.03 ? 1 : 0 };
-  }, [distance, target.hasCutout]);
+    return { opacity: p > 0.03 ? 1 : 0 };
+  }, [distance]);
   const blackStyle = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
-    return { opacity: target.hasCutout ? p : 0 };
-  }, [distance, target.hasCutout]);
+    return { opacity: p };
+  }, [distance]);
   // Telegram-style progressive blur: blurred copies of the photo fade in as
   // the avatar heads into the camera cutout (#935). Two radii keep the ramp
   // smooth without animating a native blur on every frame.
   const softBlurStyle = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
-    return { opacity: reduceMotion ? 0 : Math.min(1, Math.max(0, (p - 0.05) / 0.4)) };
-  }, [distance, reduceMotion]);
+    return { opacity: Math.min(1, Math.max(0, (p - 0.05) / 0.4)) };
+  }, [distance]);
   const strongBlurStyle = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
-    return { opacity: reduceMotion ? 0 : Math.min(1, Math.max(0, (p - 0.35) / 0.45)) };
-  }, [distance, reduceMotion]);
-  if (!anchorFrame) return null;
+    return { opacity: Math.min(1, Math.max(0, (p - 0.35) / 0.45)) };
+  }, [distance]);
+  if (!anchorFrame || simple) return null;
   const fallbackColor = variant === "account" ? colors.accent : colors.accentSurface;
   const initialsColor = variant === "account" ? colors.accentText : colors.onAccentSurface;
   const initials = variant === "account" ? avatarInitials(name) : diaryInitials(name);

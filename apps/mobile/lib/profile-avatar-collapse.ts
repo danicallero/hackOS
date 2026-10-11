@@ -53,6 +53,52 @@ export function profileAvatarSnapTarget(
   return offset >= distance / 2 ? distance : 0;
 }
 
+/*
+ * Plain collapse, without a camera cutout to morph into (no Dynamic Island,
+ * no Android hole punch) or under Reduce Motion (#935): the avatar stays in
+ * the scroll content. It holds still and shrinks while the name below closes
+ * the gap, then rides up and off screen with the content, so it never parks
+ * at the top or covers the text.
+ */
+
+/** Scale the plain-collapse avatar ends its shrink at. */
+export const PROFILE_AVATAR_SIMPLE_MIN_SCALE = 0.75;
+
+/**
+ * Scroll offset at which the plain-collapse avatar stops holding still and
+ * starts moving with the content: the moment the name's top (`gap` below the
+ * avatar's laid-out bottom) reaches the shrunken avatar's bottom.
+ */
+export function profileAvatarSimpleReleaseOffset(
+  size: number,
+  gap: number,
+  minScale: number,
+): number {
+  "worklet";
+  return Math.max(0, gap) + (Math.max(0, size) * (1 - minScale)) / 2;
+}
+
+/**
+ * Transform for the in-content avatar at `offset` past the true top: a
+ * `translateY` that cancels the scroll while it holds still, and a scale
+ * about its centre that reaches `minScale` exactly at the release offset.
+ * Reduce Motion skips the shrink and hold, so it just scrolls with the page.
+ */
+export function profileAvatarSimpleTransform(
+  offset: number,
+  size: number,
+  gap: number,
+  minScale: number,
+  reduceMotion: boolean,
+): { translateY: number; scale: number } {
+  "worklet";
+  if (reduceMotion) return { translateY: 0, scale: 1 };
+  const release = profileAvatarSimpleReleaseOffset(size, gap, minScale);
+  if (!(release > 0)) return { translateY: 0, scale: 1 };
+  const hold = Math.min(Math.max(0, offset), release);
+  return { translateY: hold, scale: 1 - ((1 - minScale) * hold) / release };
+}
+
 export type ProfileCameraCutoutFrame = {
   left: number;
   top: number;
