@@ -825,6 +825,20 @@ describe("android hole-punch gooey geometry", () => {
     expect(end.drip).toBeCloseTo(0);
   });
 
+  it("darkens and blurs while it shrinks, before any neck forms", () => {
+    const fadeStart = PROFILE_GOOEY_FADE_START * PROFILE_GOOEY_SHRINK_END;
+    expect(profileGooeyFrame(avatar, lens, fadeStart, 120)).toMatchObject({
+      darkness: 0,
+      blurRadius: 0,
+      bridgeReach: 0,
+    });
+    const midway = profileGooeyFrame(avatar, lens, 0.4, 120);
+    expect(midway.darkness).toBeGreaterThan(0);
+    expect(midway.darkness).toBeLessThan(1);
+    expect(midway.blurRadius).toBeGreaterThan(0);
+    expect(midway.bridgeReach).toBe(0);
+  });
+
   it("shrinks to the lens size under it, nearly black, and is black before any neck forms", () => {
     const staged = profileGooeyFrame(avatar, lens, PROFILE_GOOEY_SHRINK_END, 120);
     expect(staged.avatarDiameter).toBeCloseTo(24);

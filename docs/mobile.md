@@ -871,11 +871,12 @@ and the native view exists; every other case keeps the paths above unchanged
 
 - **Children**: one React child, the avatar circle (photo, initials or live
   content), laid out once by Yoga at the expanded frame. The native view draws
-  it with its own canvas transform (a uniform scale) clipped to the animated
-  circle, so photo and initials alike shrink as one picture and layout never
-  changes during the morph. `ExpoView` is a `LinearLayout`, so the view
-  overrides `onMeasure`/`onLayout` to never lay the child out itself (an
-  Android layout pass would otherwise stack and stretch it).
+  its recorded display list scaled uniformly onto the animated circle and
+  clipped to that circle, so photo and initials alike behave as one raster and
+  are never re-laid out. `ExpoView` is a `LinearLayout`, so the view overrides
+  `onMeasure`/`onLayout`: otherwise an Android layout pass re-measures the child
+  at wrap-content (the whole canvas) and the avatar is drawn as a tall rounded
+  rectangle.
 - **Static props** (dp, view-local): `holeX`, `holeY`, `holeDiameter`.
 - **Animated props** from `useAnimatedProps` on the UI thread, no per-frame JS:
   `avatarX`, `avatarY`, `avatarDiameter`, `darkness`, `blurRadius`,
