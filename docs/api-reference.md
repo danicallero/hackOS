@@ -51,6 +51,7 @@ registerModules(app)
 ├─ event          (WS-G  · H45, H47)
 ├─ exports        (WS-F  · H54, H56)
 ├─ identity       (WS-A1 · H1-H10)
+├─ live-activities (#966 · H38, H25, H26, H59, H19, H22)
 ├─ logistics      (WS-C  · H22-H27)
 ├─ notifications  (WS-F  · H50-H53)
 ├─ projects       (WS-B1 · H16-H17)
@@ -265,6 +266,20 @@ lease owner before changing a text field, so the browser's read-only state is
 not the concurrency boundary. Numeric and choice answers retain the existing
 field-level merge behavior.
 
+### live-activities (#966 · H38, H25, H26, H59, H19, H22)
+The device/session registry (`PUT /api/me/live-activities/device`,
+`PUT`/`DELETE /api/me/live-activities/sessions`), the read model
+`GET /api/me/live-activities`, the organizer configuration
+(`GET`/`PUT /api/live-activities/settings`, `event:manage`, audited), and the
+`live-activities` worker that pushes iOS ActivityKit updates over APNs (token
+auth) and Android Live Updates as data-only Expo pushes. `candidates.ts`
+gates and ranks the kinds (queue, staff activity, attendee activity,
+deadline, accreditation desk) for both the read endpoint and
+the pushes; the queue state reuses `myQueueStatus`. The registry routes are
+the caller's own delivery plumbing, so they follow the push-token posture
+(authenticated, no capability, no audit row). See
+[Live Activities](./live-activities.md).
+
 ### logistics (H22–H27, H59)
 Accreditation (badge issuance, rotation, revocation), presence (door in/out
 with certainty-window derivation and conflict detection), meal/activity
@@ -294,7 +309,8 @@ any staff-only item in their batch rather than fail it. A DB constraint,
 is served exactly the `participant` slice. Items also carry an optional
 staff-only `notes`
 free-text field (the run-of-show's "observations" column), an optional
-`contactNote`, and responsible-person assignment via `schedule_owners`
+`contactNote`, the `liveActivityAudience` opt-in (#966: the item's audience
+gets an attendee Live Activity), and responsible-person assignment via `schedule_owners`
 (`GET/POST /api/schedule/:id/owners`, `DELETE /api/schedule/:id/owners/:ownerId`,
 `SCHEDULE_MANAGE`-gated, modeled on the `sponsors` enterprise-member join
 table). Each owner row is either a real hackOS account (`userId`) or a

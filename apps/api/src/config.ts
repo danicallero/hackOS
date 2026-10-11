@@ -238,6 +238,42 @@ const envSchema = z.object({
   ),
 
   /**
+   * Live Activities over APNs token auth (#966; H38, H25, H26). Optional:
+   * when the key is unset the worker still drives Android Live Updates and
+   * the read endpoint, and skips iOS pushes with one warning. The team id is
+   * APPLE_TEAM_IDENTIFIER and the gateway APPLE_APNS_ENVIRONMENT, shared with
+   * Wallet. `APNS_AUTH_KEY_P8` is the base64 of the `.p8` file, like the
+   * other PEM secrets above.
+   */
+  APNS_KEY_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  APNS_AUTH_KEY_P8: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  /** App bundle id; the APNs topic is `<bundle>.push-type.liveactivity`. */
+  APNS_BUNDLE_ID: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().default("com.hackudc.os"),
+  ),
+  /** Minutes before a scannable activity starts that staff get its Live Activity (H25, H26). */
+  LIVE_ACTIVITY_LEAD_MINUTES: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().int().min(1).max(240).default(15),
+  ),
+  /** Minutes before submissions close (`hacking_ends_at`) that participants get the deadline Live Activity (H19, #966). */
+  LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().int().min(15).max(1440).default(180),
+  ),
+  /** Minutes before the event starts that the accreditation desk Live Activity opens (H22, #966). */
+  LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().int().min(0).max(1440).default(60),
+  ),
+  /** Minutes after hacking starts that the accreditation desk Live Activity stays open (H22, #966). */
+  LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().int().min(0).max(1440).default(60),
+  ),
+
+  /**
    * Google Wallet (H28). Same "optional but never silently broken" posture
    * as Apple above — see APPLE_PASS_CERTIFICATE_PEM comment.
    */
@@ -334,6 +370,18 @@ const parsed = envSchema
           "GOOGLE_WALLET_ISSUER_ID, GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL and GOOGLE_WALLET_PRIVATE_KEY_PEM must be set together (H28)",
       });
     }
+    if (Boolean(v.APNS_KEY_ID) !== Boolean(v.APNS_AUTH_KEY_P8)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "APNS_KEY_ID and APNS_AUTH_KEY_P8 must be set together (#966)",
+      });
+    }
+    if (v.APNS_KEY_ID && !v.APPLE_TEAM_IDENTIFIER) {
+      ctx.addIssue({
+        code: "custom",
+        message: "APNS_KEY_ID requires APPLE_TEAM_IDENTIFIER (#966)",
+      });
+    }
   })
   .parse(process.env);
 
@@ -359,6 +407,9 @@ export const config = {
     parsed.APPLE_PASS_CERTIFICATE_PEM &&
       parsed.APPLE_PASS_KEY_PEM &&
       parsed.APPLE_WWDR_CERTIFICATE_PEM,
+  ),
+  liveActivityApnsConfigured: Boolean(
+    parsed.APNS_KEY_ID && parsed.APNS_AUTH_KEY_P8 && parsed.APPLE_TEAM_IDENTIFIER,
   ),
   googleWalletConfigured: Boolean(
     parsed.GOOGLE_WALLET_ISSUER_ID &&

@@ -773,6 +773,9 @@ async function prepareAccountRemoval(
         await client.query(`DELETE FROM sessions WHERE user_id = $1`, [options.targetId]);
         await client.query(`DELETE FROM accounts WHERE user_id = $1`, [options.targetId]);
         await client.query(`DELETE FROM push_tokens WHERE user_id = $1`, [options.targetId]);
+        await client.query(`DELETE FROM live_activity_devices WHERE user_id = $1`, [
+          options.targetId,
+        ]);
         await client.query(
           `UPDATE users
               SET food_intolerances = ARRAY[]::integer[],
@@ -1733,6 +1736,7 @@ async function scrubRelationships(
   await client.query(`DELETE FROM sessions WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM accounts WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM push_tokens WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM live_activity_devices WHERE user_id = $1`, [userId]);
 }
 
 /**

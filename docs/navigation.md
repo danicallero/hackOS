@@ -350,7 +350,7 @@ despite a working API.
   `sponsors:manage` and only their own enterprises' for a sponsor rep.
 
 Event settings (`/settings/event`) is a list of the sections the caller's
-capabilities allow, never a second sidebar (#932): `?tab=event|venue|wallet|presence|invites|judging|danger`
+capabilities allow, never a second sidebar (#932): `?tab=event|venue|wallet|presence|invites|judging|liveActivities|danger`
 opens one section with a back link (page header context slot) to the list. A
 lone visible section opens directly only when no `?tab=` is requested; a
 `?tab=` the caller cannot manage shows the list. The URL is the only state, so

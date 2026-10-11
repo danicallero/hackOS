@@ -78,6 +78,8 @@ export function mutationDomainForPath(url: string): string | null {
   // mobile profile refresh register the same token again and forms a request
   // loop (#732). Keep the generic audit broadcast, but never wake clients.
   if (matches("/api/me/push-tokens")) return null;
+  // Same for the Live Activity device/session registry (#966).
+  if (matches("/api/me/live-activities")) return null;
 
   // Identity mutations affect users, invitations, and the capability graph
   // (H7-H10). Application-specific /api/me paths were handled above.
