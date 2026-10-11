@@ -844,14 +844,35 @@ serial number, and printed QR codes. Staff with `sponsors:manage`
 page) open Account → Staff → Company tags (`components/stands-screen.tsx`,
 routed as `app/(tabs)/others/stands.tsx`). The screen lists
 `GET /api/enterprises/stands` alphabetically with a name search (accent- and
-case-insensitive), each row showing the logo, the NFC and QR counts and a
-native switch that turns the company's scanning on or off (`PUT
-/api/enterprises/:id/stand-scannable` `{ scannable }`, the web Company tags
-call, with a fresh `Idempotency-Key`). The switch flips at once and rolls
-back with an alert if the request fails.
+case-insensitive). Search is the native header search
+(`headerSearchBarOptions`, `integratedButton`) on iOS 26 Liquid Glass and the
+shared `LegacyScreenHeader` search on older iOS and Android, as on People.
+Each row shows the logo, the name, the NFC and QR counts (with "Not
+scannable" for a company attendees cannot collect yet), a round NFC button
+that links a tag directly and a chevron.
 
-**Provisioning a tag.** Each row's "Link tag" starts reading at once (R008).
-It is the same tap as accrediting a badge, in the same order:
+**Company detail.** Tapping a row pushes `app/(tabs)/others/stand/[id].tsx`
+(`components/stand-detail-screen.tsx`, titled with the company name). It
+reads the same staff list and shows:
+
+- a "Scannable" switch that turns the company's scanning on or off (`PUT
+  /api/enterprises/:id/stand-scannable` `{ scannable }`, the web Company tags
+  call, with a fresh `Idempotency-Key`); it flips at once and rolls back with
+  an alert if the request fails, and while off the section footer says
+  attendees can't collect the company;
+- a filled "Link tag" button, the same read as the list's NFC button;
+- the linked tags in "NFC tags" and "QR codes" sections (label above the
+  serial or token, monospaced). Swiping a row reveals Remove (also a
+  VoiceOver/TalkBack action); after a native destructive confirmation (a QR
+  warns that printed copies stop working) it calls `DELETE
+  /api/enterprises/:id/stand-tags/:tagId` with a fresh `Idempotency-Key`. A
+  failure keeps the row and shows the server's reason. The list reloads on
+  return, so its counts follow.
+
+**Provisioning a tag.** The row's NFC button and the detail's "Link tag"
+start reading at once (R008), through one shared hook
+(`useStandTagLink` in `components/stand-tag-link.tsx`, with the Android read
+sheet). It is the same tap as accrediting a badge, in the same order:
 
 1. `startNfcRead` with `claimBadge` (`lib/nfc-reader.ts`, serialized with the
    other scanners) reads the UID (`lib/nfc-uid.ts`, the encoding every scanner
@@ -870,11 +891,12 @@ It is the same tap as accrediting a badge, in the same order:
    write still links the serial and says so (`claimFailed()`).
 
 A company must also be scannable before its tags award the medal: a new
-company is not (its row switch is off), and scanning answers
-`stand_unavailable` until staff turn it on (the row switch, or web Company
+company is not (its row says "Not scannable"), and scanning answers
+`stand_unavailable` until staff turn it on (the detail switch, or web Company
 tags).
-The result line offers "Link another" for the same company, so several tags or wristbands are linked in a
-row without leaving the screen. On hardware without NFC the actions stay
+On the list, the result line offers "Link another" for the same company, so
+several tags or wristbands are linked in a row without leaving the screen; on
+the detail the new tag appears in "NFC tags" and the button stays in place. On hardware without NFC the actions stay
 disabled and one line points to serial-number entry on the web. QR codes are
 generated and printed from the web.
 
@@ -900,7 +922,8 @@ signed out, it keeps the code (`lib/company-tag-link.ts`, in memory) and
 These native changes need a new build. The flow is covered by
 `lib/nfc-reader.test.ts` (claim writes, with `react-native-nfc-manager`
 mocked),
-`test/ui/stands-screen.test.tsx`, `test/ui/company-tag-link.test.tsx`,
+`test/ui/stands-screen.test.tsx`, `test/ui/stand-detail-screen.test.tsx`,
+`test/ui/company-tag-link.test.tsx`,
 `lib/company-tag-link.test.ts`, `test/company-tag-links-plugin.test.tsx`, the
 Diary `collect` test and `lib/tabs.test.ts`. It has not been tested on NFC
 hardware, and the universal/app links have not been opened on a device or

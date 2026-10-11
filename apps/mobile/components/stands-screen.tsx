@@ -1,66 +1,68 @@
-import { useFocusEffect, useScrollToTop } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect, useNavigation, useRouter, useScrollToTop } from "expo-router";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
-  AppState,
-  Image,
-  Modal,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
-  Switch,
   Text,
-  TextInput,
   useColorScheme,
   View,
 } from "react-native";
-import { AndroidStatusBarScrim, EmptyState, Section, Separator } from "@/components/native-ui";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
+import {
+  AndroidStatusBarScrim,
+  EmptyState,
+  LegacyHeaderIconButton,
+  LegacyScreenHeader,
+  Section,
+  Separator,
+} from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import {
+  StandLinkResult,
+  StandLogo,
+  StandNfcModal,
+  useStandTagLink,
+} from "@/components/stand-tag-link";
 import { SymbolView } from "@/components/symbol";
-import { ApiError, apiFetch } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
-import { type MessageKey, useLocale } from "@/lib/i18n";
-import { createIdempotencyKey } from "@/lib/idempotency-key";
+import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
-import { startNfcRead } from "@/lib/nfc-reader";
+import { safeBack } from "@/lib/navigation";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
-import { filterStands, type StandSummary, type StandTag, standLinkErrorKey } from "@/lib/stands";
+import { filterStands, type StandSummary } from "@/lib/stands";
 import { canManageStands } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { colors } from "@/theme/colors";
 
-/** The result line after a tap; "Link another" restarts for the same company. */
-interface Outcome {
-  stand: StandSummary;
-  tone: "success" | "warning";
-  text: string;
-}
-
-type NfcRead = ReturnType<typeof startNfcRead>;
-
-const NFC_ERRORS = new Set(["scannerNfcUnavailable", "scannerNfcDisabled", "scannerNfcInvalidTag"]);
+const LOGO_SIZE = 40;
 
 /**
- * #935 staff flow: pick a company and tap an NFC tag or wristband to link it
- * by its serial number, the same read-and-claim tap as accrediting a badge
- * (`startNfcRead` with `claimBadge`; the Diary then collects the company by
- * that serial). `sponsors:manage` only, like the web
- * Company tags page. R008: "Link tag" starts reading immediately, and after a
- * tag the result offers "Link another" for the same company, so several tags
- * are linked in a row without leaving the screen. QR codes are printed from
- * the web.
+ * #935 staff flow: every company with its tag counts. A row opens the
+ * company's tags (`stand/[id]`, where scanning is turned on or off and tags
+ * are removed); its NFC button starts reading at once (R008) and the result
+ * offers "Link another" for the same company, so several tags are linked in a
+ * row. Search is the native header search on iOS 26 and `LegacyScreenHeader`
+ * elsewhere, as on People. `sponsors:manage` only, like the web Company tags
+ * page. QR codes are printed from the web.
  */
 export function StandsScreen() {
   useColorScheme();
   const { t } = useLocale();
+  const router = useRouter();
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { me } = useMeContext();
   const allowed = canManageStands(me?.capabilities ?? []);
   const nfcStatus = useNfcSupportStatus();
   const nfcSupported = nfcStatus === "supported";
+  const glassAvailable = isRealLiquidGlassAvailable();
   const androidTopInset = useAndroidTopInset();
+  const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
@@ -68,10 +70,16 @@ export function StandsScreen() {
   const [error, setError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState("");
-  const [active, setActive] = useState<{ stand: StandSummary; prompt: string } | null>(null);
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [scanBusy, setScanBusy] = useState<Set<number>>(() => new Set());
-  const session = useRef<NfcRead | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const { active, outcome, link, cancel } = useStandTagLink((stand, tag) =>
+    setStands((current) =>
+      (current ?? []).map((item) =>
+        item.enterpriseId === stand.enterpriseId
+          ? { ...item, nfcCount: item.nfcCount + 1, tags: [...item.tags, tag] }
+          : item,
+      ),
+    ),
+  );
 
   const load = useCallback(async () => {
     if (!allowed) return;
@@ -84,176 +92,77 @@ export function StandsScreen() {
     }
   }, [allowed]);
 
+  // Reloads on return from a company, where tags may have been removed.
   useFocusEffect(
     useCallback(() => {
       void load();
-      return () => session.current?.cancel();
-    }, [load]),
+      return cancel;
+    }, [load, cancel]),
   );
 
-  useEffect(() => () => session.current?.cancel(), []);
-
-  useEffect(() => {
-    // Only a real background ends the read: presenting the Core NFC sheet
-    // itself makes the app `inactive`, and cancelling then closed it at once.
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "background") session.current?.cancel();
+  useLayoutEffect(() => {
+    if (!glassAvailable) {
+      navigation.setOptions({ headerShown: false });
+      return;
+    }
+    navigation.setOptions({
+      title: t("standsTitle"),
+      headerShown: true,
+      headerLargeTitle: process.env.EXPO_OS === "ios",
+      headerTransparent: true,
+      headerShadowVisible: false,
+      headerSearchBarOptions: {
+        placeholder: t("standsSearchPlaceholder"),
+        autoCapitalize: "none",
+        hideWhenScrolling: true,
+        allowToolbarIntegration: false,
+        placement: "integratedButton",
+        onChangeText: (event: { nativeEvent: { text: string } }) =>
+          setQuery(event.nativeEvent.text),
+        onCancelButtonPress: () => setQuery(""),
+      },
     });
-    return () => subscription.remove();
-  }, []);
-
-  function addTag(stand: StandSummary, tag: StandTag) {
-    setStands((current) =>
-      (current ?? []).map((item) =>
-        item.enterpriseId === stand.enterpriseId
-          ? { ...item, nfcCount: item.nfcCount + 1, tags: [...item.tags, tag] }
-          : item,
-      ),
-    );
-  }
-
-  /** Optimistic: flips the row at once and rolls back with an alert on failure. */
-  async function setScannable(stand: StandSummary, scannable: boolean) {
-    if (scanBusy.has(stand.enterpriseId)) return;
-    const patch = (value: boolean) =>
-      setStands((current) =>
-        (current ?? []).map((item) =>
-          item.enterpriseId === stand.enterpriseId ? { ...item, scannable: value } : item,
-        ),
-      );
-    setScanBusy((current) => new Set(current).add(stand.enterpriseId));
-    patch(scannable);
-    try {
-      await apiFetch(`/api/enterprises/${stand.enterpriseId}/stand-scannable`, {
-        method: "PUT",
-        headers: {
-          "content-type": "application/json",
-          "Idempotency-Key": createIdempotencyKey(),
-        },
-        body: JSON.stringify({ scannable }),
-      });
-      void haptic("light");
-    } catch (err) {
-      patch(stand.scannable);
-      void haptic("error");
-      Alert.alert(
-        t("standsTitle"),
-        err instanceof ApiError ? err.message : t("standsScannableFailed"),
-      );
-    } finally {
-      setScanBusy((current) => {
-        const next = new Set(current);
-        next.delete(stand.enterpriseId);
-        return next;
-      });
-    }
-  }
-
-  async function run(stand: StandSummary) {
-    if (session.current) return;
-    setOutcome(null);
-    setActive({ stand, prompt: t("standsNfcPrompt") });
-    // #935: exactly like badge accreditation, the tag is read and given the
-    // app claim inside the NFC session, and the serial is linked afterwards.
-    // Waiting on the network while holding the tag lost it on real hardware.
-    // The claim is the same record every badge carries, so writing it to a
-    // tag the API then refuses (someone's badge) changes nothing.
-    const current = startNfcRead(t("standsNfcPrompt"), { claimBadge: true });
-    session.current = current;
-    try {
-      const uid = await current.result;
-      if (!uid) return;
-      const tag = await apiFetch<StandTag>(`/api/enterprises/${stand.enterpriseId}/stand-tags`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "Idempotency-Key": createIdempotencyKey(),
-        },
-        body: JSON.stringify({ kind: "nfc", uid }),
-      });
-      addTag(stand, tag);
-      const prepared = !current.claimFailed();
-      void haptic(prepared ? "success" : "warning");
-      setOutcome({
-        stand,
-        tone: prepared ? "success" : "warning",
-        text: t(prepared ? "standsLinked" : "standsLinkedWriteFailed", { name: stand.name }),
-      });
-    } catch (err) {
-      void haptic("error");
-      const key = err instanceof Error && NFC_ERRORS.has(err.message) ? err.message : null;
-      const message = t(key ? (key as MessageKey) : standLinkErrorKey(err));
-      // Unmapped API errors keep the server's explicit reason visible.
-      const reason =
-        !key && err instanceof ApiError && standLinkErrorKey(err) === "standsLinkFailed"
-          ? err.message
-          : null;
-      Alert.alert(t("standsLinkNfc"), reason ? `${message}\n\n${reason}` : message);
-    } finally {
-      if (session.current === current) session.current = null;
-      setActive(null);
-    }
-  }
+  }, [glassAvailable, navigation, t]);
 
   if (!allowed) {
     return <EmptyState icon="lock.fill" title={t("requestUnavailable")} />;
   }
 
   const visible = stands ? filterStands(stands, query) : [];
+  const openStand = (stand: StandSummary) =>
+    router.push({
+      pathname: "/others/stand/[id]",
+      params: { id: String(stand.enterpriseId), name: stand.name },
+    });
 
   return (
-    <View style={{ flex: 1 }}>
-      <Modal
-        transparent
-        animationType="fade"
-        visible={active !== null && Platform.OS === "android"}
-        onRequestClose={() => session.current?.cancel()}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "center",
-            padding: 24,
-          }}
-        >
-          <View
-            accessibilityViewIsModal
-            style={{
-              backgroundColor: colors.background,
-              borderRadius: 28,
-              padding: 24,
-              gap: 24,
-              alignItems: "center",
-            }}
-          >
-            <SymbolView
-              accessible={false}
-              name="wave.3.right"
-              size={48}
-              tintColor={colors.accent}
+    <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      <StandNfcModal stand={active} onCancel={cancel} />
+      {glassAvailable ? null : (
+        <LegacyScreenHeader
+          actions={null}
+          cancelLabel={t("cancel")}
+          leading={
+            <LegacyHeaderIconButton
+              icon="chevron.left"
+              accessibilityLabel={t("back")}
+              onPress={() => safeBack(router, "/(tabs)/others/account")}
             />
-            <Text
-              accessibilityRole="header"
-              style={{ color: colors.label, fontSize: 22, fontWeight: "700", textAlign: "center" }}
-            >
-              {active?.stand.name}
-            </Text>
-            <Text style={{ color: colors.secondaryLabel, fontSize: 17, textAlign: "center" }}>
-              {active?.prompt}
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => session.current?.cancel()}
-              style={{ minHeight: 48, justifyContent: "center", alignSelf: "stretch" }}
-            >
-              <Text style={{ color: colors.accent, fontSize: 17, textAlign: "center" }}>
-                {t("cancel")}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+          }
+          onCloseSearch={() => {
+            setSearchOpen(false);
+            setQuery("");
+          }}
+          onOpenSearch={() => setSearchOpen(true)}
+          onSearchQueryChange={setQuery}
+          searchLabel={t("scheduleSearch")}
+          searchOpen={searchOpen}
+          searchPlaceholder={t("standsSearchPlaceholder")}
+          searchQuery={query}
+          title={t("standsTitle")}
+          topInset={legacyTopInset}
+        />
+      )}
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
@@ -273,40 +182,8 @@ export function StandsScreen() {
           gap: 16,
           padding: 16,
           paddingBottom: Math.max(32, tabBarBottomInset + 16),
-          paddingTop: 16 + androidTopInset,
         }}
       >
-        <View
-          style={{
-            alignItems: "center",
-            backgroundColor: colors.surface,
-            borderCurve: "continuous",
-            borderRadius: 12,
-            flexDirection: "row",
-            gap: 8,
-            height: 44,
-            paddingHorizontal: 12,
-          }}
-        >
-          <SymbolView
-            accessible={false}
-            name="magnifyingglass"
-            size={17}
-            tintColor={colors.secondaryLabel}
-          />
-          <TextInput
-            accessibilityLabel={t("standsSearchPlaceholder")}
-            autoCapitalize="none"
-            autoCorrect={false}
-            onChangeText={setQuery}
-            placeholder={t("standsSearchPlaceholder")}
-            placeholderTextColor={colors.tertiaryLabel}
-            returnKeyType="search"
-            style={{ color: colors.label, flex: 1, fontSize: 17, paddingVertical: 0 }}
-            value={query}
-          />
-        </View>
-
         {nfcStatus === "unsupported" ? (
           <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 20 }}>
             {t("standsNfcUnavailable")}
@@ -314,67 +191,30 @@ export function StandsScreen() {
         ) : null}
 
         {outcome ? (
-          <View
-            accessibilityLiveRegion="polite"
-            accessibilityRole="alert"
-            style={{
-              backgroundColor:
-                outcome.tone === "success" ? colors.successSurface : colors.warningSurface,
-              borderCurve: "continuous",
-              borderRadius: 12,
-              gap: 12,
-              padding: 14,
-            }}
-          >
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <SymbolView
-                accessible={false}
-                name={
-                  outcome.tone === "success"
-                    ? "checkmark.circle.fill"
-                    : "exclamationmark.triangle.fill"
-                }
-                size={20}
-                tintColor={outcome.tone === "success" ? colors.success : colors.warning}
-              />
-              <Text
-                selectable
-                style={{
-                  color:
-                    outcome.tone === "success" ? colors.onSuccessSurface : colors.onWarningSurface,
-                  flex: 1,
-                  fontSize: 15,
-                  lineHeight: 20,
-                }}
+          <StandLinkResult
+            outcome={outcome}
+            action={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("standsLinkNfcFor", { name: outcome.stand.name })}
+                disabled={!nfcSupported || active !== null}
+                onPress={() => void link(outcome.stand)}
+                style={({ pressed }) => ({
+                  alignItems: "center",
+                  alignSelf: "flex-start",
+                  flexDirection: "row",
+                  gap: 6,
+                  marginLeft: 30,
+                  minHeight: 36,
+                  opacity: pressed ? 0.7 : 1,
+                })}
               >
-                {outcome.text}
-              </Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("standsLinkNfcFor", { name: outcome.stand.name })}
-              disabled={!nfcSupported || active !== null}
-              onPress={() => void run(outcome.stand)}
-              style={({ pressed }) => ({
-                alignItems: "center",
-                alignSelf: "flex-start",
-                flexDirection: "row",
-                gap: 6,
-                minHeight: 36,
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              <SymbolView
-                accessible={false}
-                name="wave.3.right"
-                size={15}
-                tintColor={colors.accent}
-              />
-              <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
-                {t("standsLinkAnother")}
-              </Text>
-            </Pressable>
-          </View>
+                <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
+                  {t("standsLinkAnother")}
+                </Text>
+              </Pressable>
+            }
+          />
         ) : null}
 
         {error && !stands ? (
@@ -387,14 +227,13 @@ export function StandsScreen() {
           <Section>
             {visible.map((stand, index) => (
               <View key={stand.enterpriseId}>
-                {index > 0 ? <Separator inset={64} /> : null}
+                {index > 0 ? <Separator inset={16 + LOGO_SIZE + 12} /> : null}
                 <StandRow
                   stand={stand}
-                  busy={active?.stand.enterpriseId === stand.enterpriseId}
+                  busy={active?.enterpriseId === stand.enterpriseId}
                   disabled={!nfcSupported || active !== null}
-                  scanBusy={scanBusy.has(stand.enterpriseId)}
-                  onLink={() => void run(stand)}
-                  onScannable={(value) => void setScannable(stand, value)}
+                  onOpen={() => openStand(stand)}
+                  onLink={() => void link(stand)}
                 />
               </View>
             ))}
@@ -410,103 +249,121 @@ function StandRow({
   stand,
   busy,
   disabled,
-  scanBusy,
+  onOpen,
   onLink,
-  onScannable,
 }: {
   stand: StandSummary;
   busy: boolean;
   disabled: boolean;
-  scanBusy: boolean;
+  onOpen: () => void;
   onLink: () => void;
-  onScannable: (scannable: boolean) => void;
 }) {
   const { t } = useLocale();
-  const detail = t("standsCounts", { nfc: String(stand.nfcCount), qr: String(stand.qrCount) });
+  // The name and the chevron are two targets around the NFC button; both open
+  // the company, so the whole row highlights while either is held.
+  const [pressed, setPressed] = useState(false);
+  const press = {
+    onPress: onOpen,
+    onPressIn: () => setPressed(true),
+    onPressOut: () => setPressed(false),
+  };
+  const counts = t("standsCounts", { nfc: String(stand.nfcCount), qr: String(stand.qrCount) });
   return (
     <View
       style={{
         alignItems: "center",
+        backgroundColor: pressed ? colors.elevatedSurface : "transparent",
         flexDirection: "row",
-        gap: 12,
         minHeight: 64,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
       }}
     >
-      <View
+      <Pressable
+        {...press}
+        accessibilityRole="button"
+        accessibilityLabel={stand.name}
+        accessibilityHint={stand.scannable ? counts : `${counts}, ${t("standsNotScannable")}`}
         style={{
           alignItems: "center",
-          backgroundColor: "#ffffff",
-          borderColor: colors.separator,
-          borderRadius: 18,
-          borderWidth: 1,
-          height: 36,
-          justifyContent: "center",
-          overflow: "hidden",
-          width: 36,
+          alignSelf: "stretch",
+          flex: 1,
+          flexDirection: "row",
+          gap: 12,
+          paddingLeft: 16,
+          paddingRight: 8,
+          paddingVertical: 12,
         }}
       >
-        {stand.logoUrl ? (
-          <Image
-            accessible={false}
-            source={{ uri: stand.logoUrl }}
-            resizeMode="contain"
-            style={{ height: 24, width: 24 }}
-          />
-        ) : (
-          <Text style={{ color: "#3c3c43", fontSize: 13, fontWeight: "700" }}>
-            {stand.name.slice(0, 1).toUpperCase()}
+        <StandLogo stand={stand} size={LOGO_SIZE} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text numberOfLines={1} style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+            {stand.name}
           </Text>
-        )}
-      </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text numberOfLines={1} style={{ color: colors.label, fontSize: 16, fontWeight: "600" }}>
-          {stand.name}
-        </Text>
-        <Text numberOfLines={1} style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-          {detail}
-        </Text>
-      </View>
+          <Text numberOfLines={1} style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+            {counts}
+            {stand.scannable ? null : ` · ${t("standsNotScannable")}`}
+          </Text>
+        </View>
+      </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t("standsLinkNfcFor", { name: stand.name })}
         accessibilityState={{ disabled: disabled || busy, busy }}
         disabled={disabled || busy}
-        hitSlop={6}
         onPress={() => {
           void haptic("light");
           onLink();
         }}
         style={({ pressed }) => ({
           alignItems: "center",
-          backgroundColor: colors.surface,
-          borderColor: colors.separator,
-          borderCurve: "continuous",
-          borderRadius: 16,
-          borderWidth: 1,
-          flexDirection: "row",
-          gap: 6,
-          minHeight: 34,
-          opacity: disabled && !busy ? 0.45 : pressed ? 0.7 : 1,
-          paddingHorizontal: 12,
+          height: 44,
+          justifyContent: "center",
+          opacity: disabled && !busy ? 0.35 : pressed ? 0.6 : 1,
+          width: 44,
         })}
       >
-        {busy ? (
-          <ActivityIndicator color={colors.accent} size="small" />
-        ) : (
-          <SymbolView accessible={false} name="wave.3.right" size={15} tintColor={colors.accent} />
-        )}
-        <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
-          {t("standsLinkNfc")}
-        </Text>
+        <View
+          style={{
+            alignItems: "center",
+            backgroundColor: colors.accentSurface,
+            borderRadius: 16,
+            height: 32,
+            justifyContent: "center",
+            width: 32,
+          }}
+        >
+          {busy ? (
+            <ActivityIndicator color={colors.onAccentSurface} size="small" />
+          ) : (
+            <SymbolView
+              accessible={false}
+              name="wave.3.right"
+              size={15}
+              weight="semibold"
+              tintColor={colors.onAccentSurface}
+            />
+          )}
+        </View>
       </Pressable>
-      <Switch
-        accessibilityLabel={t("standsScannableFor", { name: stand.name })}
-        disabled={scanBusy}
-        onValueChange={onScannable}
-        value={stand.scannable}
-      />
+      <Pressable
+        {...press}
+        accessible={false}
+        importantForAccessibility="no"
+        style={{
+          alignItems: "center",
+          alignSelf: "stretch",
+          justifyContent: "center",
+          paddingLeft: 4,
+          paddingRight: 16,
+        }}
+      >
+        <SymbolView
+          accessible={false}
+          name="chevron.right"
+          size={13}
+          weight="semibold"
+          tintColor={colors.tertiaryLabel}
+        />
+      </Pressable>
     </View>
   );
 }

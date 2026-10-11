@@ -38,6 +38,10 @@ export default function OthersLayout() {
         options={{ headerShown: true, headerLargeTitle: true, title: t("standsTitle") }}
       />
       <Stack.Screen
+        name="stand/[id]"
+        options={{ headerShown: true, headerLargeTitle: true, title: "" }}
+      />
+      <Stack.Screen
         name="sync-queue"
         options={{ headerShown: true, headerLargeTitle: true, title: t("scannerSyncQueueTitle") }}
       />

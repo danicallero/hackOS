@@ -836,5 +836,16 @@
   "standsLinked": "Vinculada a {name}.",
   "standsLinkedWriteFailed": "Vinculada a {name}, pero no se pudo preparar la etiqueta para hackOS. Escanearla desde la Agenda sigue funcionando.",
   "standsLinkAnother": "Vincular otra",
+  "standsNotScannable": "No escaneable",
+  "standsScannable": "Escaneable",
+  "standsNotScannableNotice": "Los asistentes no pueden coleccionar esta empresa hasta que se active el escaneo.",
+  "standsNfcTags": "Etiquetas NFC",
+  "standsQrCodes": "Códigos QR",
+  "standsNoTags": "Aún no hay etiquetas",
+  "standsRemoveTag": "Quitar etiqueta",
+  "standsRemoveTagFor": "Quitar {code}",
+  "standsRemoveTagConfirm": "¿Quitar esta etiqueta?",
+  "standsRemoveQrDetail": "Las copias impresas de este código dejarán de funcionar.",
+  "standsRemoveTagFailed": "No se ha podido quitar la etiqueta.",
   "companyTagCollecting": "Coleccionando…"
 }
