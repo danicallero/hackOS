@@ -111,6 +111,8 @@ describe("domain mutation routing", () => {
 
   it("does not turn device-token registration into an identity invalidation loop", () => {
     expect(mutationDomainForPath("/api/me/push-tokens")).toBeNull();
+    expect(mutationDomainForPath("/api/me/live-activities/device")).toBeNull();
+    expect(mutationDomainForPath("/api/me/live-activities/sessions")).toBeNull();
   });
 
   it("keeps public-content mirrors narrower than the authenticated sponsor domain", () => {

@@ -84,6 +84,10 @@ Architecture & modules:
   screen-window distinction, audience/recipient targeting and per-announcement
   channel candidates, and the generic notify/outbox/dispatch pipeline (H50,
   H51, H52, H53) every other module plugs into.
+- [Live Activities / Live Updates (#966)](./live-activities.md) — the
+  participant queue (H38) and staff activity (H25, H26) Live Activities: state
+  builders, device/session registry, the push worker's state machine, APNs and
+  Android push formats, gating rules, HIG rationale, and APNs/EAS setup.
 - [Schedule categories (activity kinds)](./schedule-categories.md) — the one
   registry every schedule/activity category comes from, how to add or retire
   one, and the four guardrails (typed label keys, the web icon map, the mobile

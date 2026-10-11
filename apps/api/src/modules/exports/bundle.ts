@@ -168,6 +168,14 @@ export async function buildExportBundle(
       [subjectUserId],
     )
   ).rows;
+  // #966: Live Activity devices, metadata only for the same reason.
+  const liveActivityDevices = (
+    await db.query(
+      `SELECT platform, language, enabled, created_at FROM live_activity_devices
+        WHERE user_id = $1 ORDER BY created_at`,
+      [subjectUserId],
+    )
+  ).rows;
   const announcementReads = (
     await db.query(
       `SELECT an.announcement_id, a.title, an.read_at
@@ -225,6 +233,7 @@ export async function buildExportBundle(
       preferences: notificationPreferences,
       outbox: notificationOutbox,
       pushTokens,
+      liveActivityDevices,
       announcementReads,
     },
     audit: auditLog,

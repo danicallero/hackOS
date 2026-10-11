@@ -305,6 +305,8 @@ export interface PublicScheduleItem {
   remindedAt?: string | null;
   /** Audience tags projected for this caller; non-staff feeds omit inaccessible tags. */
   audiences?: ScheduleAudience[];
+  /** #966: whether this activity shows a countdown Live Activity to its audience. */
+  liveActivityAudience?: boolean;
   contactNote?: string | null;
   /** Staff-only free-form notes — the run-of-show's "observations" column. */
   notes?: string | null;
@@ -342,6 +344,8 @@ export interface ScheduleInput {
   visibility: "shown" | "hidden";
   publishAt?: string | null;
   audiences?: ScheduleAudience[];
+  /** #966: whether this activity shows a countdown Live Activity to its audience. */
+  liveActivityAudience?: boolean;
   contactNote?: string | null;
   notes?: string | null;
 }

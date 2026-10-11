@@ -568,6 +568,60 @@ Table judging_session {
   submitted_at "timestamp with time zone"
 }
 
+Table live_activity_devices {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  device_id text [unique, not null]
+  enabled boolean [not null, default: `true`]
+  expo_push_token text
+  id integer [pk, increment, not null]
+  language text
+  platform text [not null]
+  push_to_start_token text
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  user_id integer [not null]
+}
+
+Table live_activity_kind_roles {
+  kind text [not null]
+  role_id integer [not null]
+
+  indexes {
+  (kind, role_id) [pk]
+  }
+}
+
+Table live_activity_kind_settings {
+  enabled boolean [not null, default: `true`]
+  kind text [pk, not null]
+  priority integer [unique, not null]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table live_activity_sessions {
+  activity_push_token text
+  device_id integer [not null]
+  dismissed_phase text
+  end_reason text
+  ended_at "timestamp with time zone"
+  id integer [pk, increment, not null]
+  kind text [not null]
+  last_sent_at "timestamp with time zone"
+  props jsonb
+  started_at "timestamp with time zone" [not null, default: `now()`]
+  state_hash text
+  subject text [not null]
+
+  indexes {
+  (device_id, kind, subject) [unique]
+  }
+}
+
+Table live_activity_settings {
+  id integer [pk, not null, default: `1`]
+  max_concurrent integer [not null, default: `2`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
 Table meal_attendance_plans {
   activity_id integer [not null]
   attending boolean [not null]
@@ -992,6 +1046,7 @@ Table schedule {
   description_i18n jsonb
   ends_at "timestamp with time zone" [not null]
   id integer [pk, increment, not null]
+  live_activity_audience boolean [not null, default: `false`]
   location text
   notes text
   primary_language text [not null, default: `'es'::text`]
@@ -1408,6 +1463,10 @@ Ref: judging_field_leases.queue_entry_id > queue_entries.id
 Ref: judging_session.judge_id > users.id
 Ref: judging_session.queue_entry_id > queue_entries.id
 Ref: judging_session.room_id > rooms.id
+Ref: live_activity_devices.user_id > users.id
+Ref: live_activity_kind_roles.kind > live_activity_kind_settings.kind
+Ref: live_activity_kind_roles.role_id > roles.id
+Ref: live_activity_sessions.device_id > live_activity_devices.id
 Ref: meal_attendance_plans.activity_id > activities.id
 Ref: meal_attendance_plans.user_id > users.id
 Ref: meal_scan_batch_items.activity_id > activities.id

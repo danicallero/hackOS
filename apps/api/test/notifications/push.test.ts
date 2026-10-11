@@ -72,6 +72,28 @@ describe("push channel", () => {
     expect(info).not.toHaveBeenCalled();
   });
 
+  it("bounds the Expo request with a timeout so a hung provider cannot stall the caller", async () => {
+    const { postExpoPushMessages } = await import(
+      "../../src/modules/notifications/channels/push.js"
+    );
+    // Honors the signal like real fetch: never answers, rejects once aborted.
+    const fetchMock = vi.fn(
+      (_url: string, init: { signal?: AbortSignal }) =>
+        new Promise<Response>((_resolve, reject) => {
+          if (init.signal?.aborted) reject(init.signal.reason);
+          init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => AbortSignal.abort());
+
+    await expect(postExpoPushMessages([{ to: "ExponentPushToken[x]", data: {} }])).rejects.toThrow(
+      "Expo push request failed",
+    );
+    expect(timeout).toHaveBeenCalledWith(15_000);
+    timeout.mockRestore();
+  });
+
   it("puts the enter-now action and room in the notification header", async () => {
     const userId = await createUser();
     await addPushToken(userId, "ExponentPushToken[enter]");
