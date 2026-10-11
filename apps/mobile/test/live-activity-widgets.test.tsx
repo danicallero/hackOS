@@ -259,7 +259,8 @@ describe("Live Activity layouts (#966)", () => {
     activity(),
     activity({ phase: "live", scanned: 37, location: "Cafeteria" }),
     activity({ updatedAt: "not a date" }),
-    activity({ phase: "live", scanned: 142, inside: 310, remaining: 168, location: "Cafeteria" }),
+    activity({ phase: "live", scanned: 142, accredited: 180, location: "Cafeteria" }),
+    activity({ phase: "live", scanned: 3, accredited: 0 }),
     activity({ phase: "live", scanned: 5, endsAt: "not a date" }),
     activity({
       phase: "live",
@@ -271,39 +272,43 @@ describe("Live Activity layouts (#966)", () => {
     expect(Object.keys(layout).sort()).toEqual([...SLOTS].sort());
   });
 
-  it("breaks a live meal down into served, still to eat and inside", () => {
+  it("shows scanned out of accredited, with the share as the ring and the bar", () => {
     const layout = StaffActivityLayout(
-      activity({ phase: "live", scanned: 142, inside: 310, remaining: 168 }),
+      activity({ phase: "live", scanned: 42, accredited: 180 }),
       environment,
     );
-    const banner = texts(layout.banner);
-    expect(banner).toEqual(
-      expect.arrayContaining(["Served", "142", "Still to eat", "168", "Inside", "310"]),
+    // Compact: a short "42/180" whose denominator is the secondary part.
+    expect(texts(layout.compactTrailing)).toEqual(["42", "/180"]);
+    expect(nodes(layout.minimal, "Gauge")[0]?.props?.value).toBeCloseTo(42 / 180, 5);
+    expect(texts(layout.expandedTrailing)).toEqual(["Scanned", "42", "/180"]);
+    expect(texts(layout.banner)).toEqual(expect.arrayContaining(["Scanned", "42", "/180"]));
+    expect(nodes(layout.banner, "ProgressView")[0]?.props?.value).toBeCloseTo(42 / 180, 5);
+    expect(texts(layout.bannerSmall)).toEqual(expect.arrayContaining(["42", "/180"]));
+
+    // More scans than accredited people (a badge removed later) fills the ring.
+    const over = StaffActivityLayout(
+      activity({ phase: "live", scanned: 200, accredited: 180 }),
+      environment,
     );
-    const [bar] = nodes(layout.banner, "ProgressView");
-    expect(bar?.props?.value).toBeCloseTo((310 - 168) / 310, 5);
-    expect(nodes(layout.minimal, "Gauge")[0]?.props?.value).toBeCloseTo((310 - 168) / 310, 5);
-    // The question a meal answers: how many still to eat.
-    expect(texts(layout.compactTrailing)).toEqual(["168"]);
+    expect(nodes(over.minimal, "Gauge")[0]?.props?.value).toBe(1);
   });
 
-  it("keeps the scanned count when a meal's breakdown is missing or empty", () => {
-    const missing = StaffActivityLayout(
-      activity({ phase: "live", scanned: 37, inside: 310, remaining: null }),
-      environment,
-    );
-    expect(texts(missing.compactTrailing)).toEqual(["37"]);
-    expect(nodes(missing.minimal, "Gauge")).toHaveLength(0);
+  it("keeps the bare scanned count without a denominator", () => {
+    for (const accredited of [undefined, null, 0]) {
+      const layout = StaffActivityLayout(
+        activity({ phase: "live", scanned: 37, accredited }),
+        environment,
+      );
+      expect(texts(layout.compactTrailing)).toEqual(["37"]);
+      expect(texts(layout.minimal)).toEqual(["37"]);
+      expect(nodes(layout.minimal, "Gauge")).toHaveLength(0);
+    }
+  });
 
-    const empty = StaffActivityLayout(
-      activity({ phase: "live", scanned: 0, inside: 0, remaining: 0 }),
-      environment,
-    );
-    // Nobody inside: no served-share bar, no ring.
-    expect(
-      nodes(empty.banner, "ProgressView").filter((bar) => "value" in (bar.props ?? {})),
-    ).toHaveLength(0);
-    expect(nodes(empty.minimal, "Gauge")).toHaveLength(0);
+  it("keeps the countdown while upcoming, whatever the counts", () => {
+    const layout = StaffActivityLayout(activity({ scanned: 0, accredited: 180 }), environment);
+    expect(nodes(layout.compactTrailing, "Text")[0]?.props?.timerInterval).toBeTruthy();
+    expect(nodes(layout.minimal, "Gauge")).toHaveLength(0);
   });
 
   it("offers the single Scan action only while live", () => {
@@ -312,7 +317,7 @@ describe("Live Activity layouts (#966)", () => {
     const live = StaffActivityLayout(activity({ phase: "live", scanned: 3 }), environment);
     expect(nodes(live.banner, "Link")).toHaveLength(1);
     expect(nodes(live.bannerSmall, "Link")).toHaveLength(0);
-    // A non-meal live activity tracks elapsed time instead of a share.
+    // Without a denominator the bar tracks elapsed time instead of a share.
     expect(nodes(live.banner, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
   });
 

@@ -533,58 +533,32 @@ function activitySpec(props: ActivityLiveProps, now: number): LiveUpdateSpec {
     };
   }
 
-  // Live: a count in the chip, no `when` (see LiveUpdatePoster.applyWhen).
+  // Live (H24/H25): "42/180 scanned", the scanned share of accredited people
+  // as the track; a count in the chip, no `when` (see LiveUpdatePoster.applyWhen).
   const action = { label: labels.scan, url: props.scanUrl };
-  const inside = count(props.inside);
-  const remaining = count(props.remaining);
   const scanned = count(props.scanned) ?? 0;
+  const accredited = count(props.accredited);
+  const ratio = accredited ? `${scanned}/${accredited}` : String(scanned);
   const endsAt = Date.parse(props.endsAt);
   const footer = Number.isFinite(endsAt) ? { caption: labels.endsIn, countdownTo: endsAt } : null;
-  if (inside !== null && remaining !== null) {
-    // Meal (H24/H27): "how many still to eat?"
-    const share = inside > 0 ? clamp01((inside - remaining) / inside) : null;
-    const hero = counted(remaining, labels.remaining);
-    return {
-      ...base,
-      title: hero ?? String(remaining),
-      emphasis: String(remaining),
-      text: [counted(scanned, labels.served), counted(inside, labels.inside)]
-        .filter(Boolean)
-        .join(" · "),
-      subText: props.location ? `${props.name} · ${props.location}` : props.name,
-      shortCriticalText: chip(String(remaining)),
-      // Served share of the people inside; nothing to fill when nobody is in.
-      progress: share === null ? null : shareProgress(share, "meal"),
-      card: {
-        header: props.name,
-        lead: { caption: labels.served, value: String(scanned) },
-        trail: { caption: labels.inside, value: String(inside) },
-        stats: [
-          { caption: labels.served, value: String(scanned) },
-          { caption: labels.remaining, value: String(remaining), hero: true },
-          { caption: labels.inside, value: String(inside) },
-        ],
-        footer,
-      },
-      action,
-    };
-  }
-
+  // Without the denominator (older server): time elapsed from start to end.
   const start = Date.parse(props.startsAt);
-  const elapsed = endsAt > start ? clamp01((now - start) / (endsAt - start)) : null;
-  const hero = counted(scanned, labels.scanned);
+  const share = accredited
+    ? scanned / accredited
+    : endsAt > start
+      ? (now - start) / (endsAt - start)
+      : null;
   return {
     ...base,
-    title: hero ?? String(scanned),
+    title: counted(ratio, labels.scanned) ?? ratio,
     emphasis: String(scanned),
     text: props.name,
     subText: props.location,
-    shortCriticalText: chip(String(scanned)),
-    // Time elapsed between start and end, as of this post.
-    progress: elapsed === null ? null : shareProgress(elapsed, icon),
+    shortCriticalText: ratio.length <= CHIP_MAX ? ratio : chip(String(scanned)),
+    progress: share === null ? null : shareProgress(share, icon),
     card: {
       header: props.name,
-      lead: { caption: labels.scanned, value: String(scanned), hero: true },
+      lead: { caption: labels.scanned, value: ratio, hero: true },
       detail: props.location,
       footer,
     },
