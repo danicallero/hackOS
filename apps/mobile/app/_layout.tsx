@@ -19,7 +19,7 @@ import { collectCompanyTagHref, takePendingCompanyTag } from "@/lib/company-tag-
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
 import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
-import { transparentDetailHeaderOptions } from "@/lib/navigation";
+import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
 import { setNfcShield } from "@/lib/nfc-reader";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
 import {
@@ -408,7 +408,7 @@ function RootLayoutNav({
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack>
+      <Stack screenOptions={nativeStackScreenOptions}>
         <Stack.Protected guard={!authenticated}>
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         </Stack.Protected>

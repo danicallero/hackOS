@@ -292,6 +292,16 @@ and filter controls alongside the custom tab chrome. On compact devices those
 layouts retain their own Stack because overflow destinations are header-less
 pseudo-tabs and still need local navigation chrome.
 
+Every native Stack, including the root one that hosts `schedule/[id]` and
+`people/[id]`, spreads `nativeStackScreenOptions` from `lib/navigation.ts`
+(`headerBackButtonDisplayMode: "minimal"`). On iOS 26 a chevron-only back item
+is a circular Liquid Glass button; a back title widens it into a capsule.
+Pushed screens keep that native item. A route opened from a cold deep link has
+nothing to pop, so it hides the native item and sets `headerLeft` to
+`components/header-back-button.tsx`, which calls `safeBack`. UIKit pads a
+custom bar item horizontally: a 44 pt-wide view becomes a capsule, while the
+bare symbol with `hitSlop` becomes the same circle.
+
 ## Decision-only applications
 
 `applications:decide` is a first-class Applications workspace capability. A

@@ -1,6 +1,6 @@
 import { Stack } from "expo-router/stack";
 import { useLocale } from "@/lib/i18n";
-import { transparentDetailHeaderOptions } from "@/lib/navigation";
+import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
 import { isPadIdiom } from "@/lib/tabs";
 
 /**
@@ -16,7 +16,7 @@ export default function OthersLayout() {
   const headerShown = isPadIdiom();
 
   return (
-    <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal", headerShown: false }}>
+    <Stack screenOptions={{ ...nativeStackScreenOptions, headerShown: false }}>
       <Stack.Screen
         name="index"
         options={{ headerShown, headerLargeTitle: true, title: t("tabOthers") }}
@@ -87,7 +87,14 @@ export default function OthersLayout() {
       />
       <Stack.Screen
         name="wallet"
-        options={{ headerShown: true, headerLargeTitle: true, title: t("tabWallet") }}
+        // Compact inline title beside the back button: the QR should sit as
+        // high as possible on the screen (H28).
+        options={{
+          headerLargeTitle: false,
+          headerShadowVisible: false,
+          headerShown: true,
+          title: t("tabWallet"),
+        }}
       />
       <Stack.Screen
         name="diary"

@@ -1,11 +1,11 @@
 import { Stack } from "expo-router/stack";
-
 import { useLocale } from "@/lib/i18n";
+import { nativeStackScreenOptions } from "@/lib/navigation";
 
 export default function OperationsLayout() {
   const { t } = useLocale();
   return (
-    <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
+    <Stack screenOptions={nativeStackScreenOptions}>
       <Stack.Screen
         name="index"
         options={{

@@ -227,7 +227,8 @@ distributed to other Expo Router apps without importing hackOS code.
   Scanner, Activities (for `ACTIVITY_SCAN`) — and Queue,
   Diary, Account, and any secondary operations join them directly while five
   fit, moving to Others only beyond that. Wallet is not a tab: Account →
-  Wallet → View tickets pushes `app/(tabs)/others/wallet.tsx` (H28). Queue-only
+  Wallet → View tickets pushes `app/(tabs)/others/wallet.tsx` (H28), with a
+  compact inline title beside the back button instead of a large title. Queue-only
   operators instead get Queue operations in the primary bar; scanner
   operators with queue access find it in Others, preserving Scanner's direct
   placement.
@@ -441,12 +442,14 @@ distributed to other Expo Router apps without importing hackOS code.
   that began before cleanup are serialized behind the cleanup. `wallet-screen.tsx`
   renders ticket/badge QR codes. After an eligible session is restored, a
   best-effort startup warmup stores the `/api/me/ticket` payload under an
-  account-scoped cache key and discards a response if the session changes; the
-  screen still refreshes online and falls back to
-  that payload with a stale-data banner (`components/stale-data-banner.tsx`,
+  account-scoped cache key and discards a response if the session changes. The
+  screen reads with `useCachedApi`'s `cacheFirst` option: the stored payload
+  renders as soon as storage answers, without waiting for a slow or unreachable
+  server, while the request revalidates it; only a failed request adds the
+  stale-data banner (`components/stale-data-banner.tsx`,
   reused across schedule, queue, wallet, notifications, sponsor announcement
   management, queue operations, and the scanner's sync-queue/activities/people
-  screens for this offline pattern) when the connection fails. The banner has
+  screens for this offline pattern). The banner has
   no retry button — every screen that can show it also wires pull-to-refresh
   (`RefreshControl`) to the same reload, and `lib/format-date.ts` renders its
   "last update" timestamp as a bare time for today, "Yesterday, <time>" for

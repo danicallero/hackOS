@@ -90,6 +90,8 @@ export default function WalletScreen() {
     pollMs: 30_000,
     pollWhen: () => !isServerEventConnected(),
     backgroundRevalidationMs: 0,
+    // The QR must open instantly and survive a down or hanging server.
+    cacheFirst: true,
   });
   const [refreshing, setRefreshing] = useState(false);
 
@@ -245,7 +247,11 @@ export default function WalletScreen() {
   }
 
   if (!ticket)
-    return <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />;
+    return (
+      <View style={{ flex: 1, justifyContent: "center", padding: 16 }}>
+        <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />
+      </View>
+    );
 
   // Swipe left/right over the ticket/badge card to switch tabs, instead of
   // only the SegmentedControl above it. activeOffsetX requires a clearly
