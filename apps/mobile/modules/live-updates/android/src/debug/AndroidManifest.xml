@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Debug builds only (#966): lets `adb shell am broadcast` post sample Live
+       Updates without the API. Never merged into release builds. -->
+  <application>
+    <receiver
+      android:name="expo.modules.liveupdates.LiveUpdatesDebugReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="expo.modules.liveupdates.DEBUG_SHOW" />
+        <action android:name="expo.modules.liveupdates.DEBUG_DISMISS" />
+      </intent-filter>
+    </receiver>
+  </application>
+</manifest>

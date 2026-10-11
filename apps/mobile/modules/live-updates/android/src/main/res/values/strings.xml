@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="hackos_live_updates_channel">Live updates</string>
+  <string name="hackos_live_updates_alert_channel">Live alerts</string>
+</resources>
