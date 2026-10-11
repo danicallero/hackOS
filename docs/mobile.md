@@ -1530,7 +1530,12 @@ then a no-op.
   it sends the Expo push token instead (permission is still prompted by
   `lib/push.ts`). `reconcileLiveActivities` reads `GET /api/me/live-activities`
   and applies it; every running iOS activity, including ones APNs started,
-  reports its per-activity token through `PUT …/sessions`.
+  reports its per-activity token through `PUT …/sessions`. A failed device
+  registration (offline sign-in, opt-out) is retried before the next
+  reconcile. A read that was in flight across sign-out/sign-in, or that a
+  newer read overtook, is discarded instead of applied. A 404 (an API without
+  the module) silences the orchestration until the next sign-in or language
+  change.
 - `model.ts` `planReconcile` — one surface per (kind, subject): start missing
   ones (the queue only while `judgingWindowOpen`), update changed props
   (ignoring `updatedAt`), end duplicates and dropped subjects (iOS keeps the
@@ -1542,7 +1547,9 @@ then a no-op.
 - `use-live-activities.ts` (mounted in `app/_layout.tsx`) reconciles on sign-in,
   foreground, the personal queue events, a staff start/end boundary and every
   minute while a counter is live. Sign-out ends every surface and sends
-  `enabled: false` with the session that registered the device.
+  `enabled: false` with the session that registered the device; `signOut()`
+  revokes that session only after this cleanup settles (or after 4 s), since
+  `notifySignOut()` returns a promise for asynchronous listeners.
 - `background-task.ts` — Android data pushes (`AndroidLiveUpdateMessage`) go
   through an `expo-task-manager` notification task defined in the entry file
   `index.ts` (before `expo-router/entry`), and through the foreground received

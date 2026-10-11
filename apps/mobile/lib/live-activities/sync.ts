@@ -1,7 +1,7 @@
 import type { LiveActivityKind, MyLiveActivities } from "@hackos/shared/live-activities";
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
-import { apiFetch, getCurrentSessionCookie } from "@/lib/api";
+import { ApiError, apiFetch, getCurrentSessionCookie } from "@/lib/api";
 import { applyDesiredActivities, endAllActivities } from "./apply";
 import { liveActivityHost, subscribePushToStartToken } from "./host";
 import {
@@ -27,6 +27,18 @@ let pushToStartToken: string | null = null;
 /** Session that registered this device; sign-out has already cleared the live one. */
 let registeredCookie: string | null = null;
 let lastDesired: DesiredActivity[] = [];
+/**
+ * Bumped on sign-in and sign-out: a reconcile that started under an earlier
+ * session must not paint its (possibly another account's) state afterwards.
+ */
+let generation = 0;
+/** Reconciles overlap (foreground, events, timers); an older response never overwrites a newer one. */
+let reconcileSeq = 0;
+let appliedSeq = 0;
+/** False until the server has this device's current registration (retried on the next reconcile). */
+let deviceSynced = false;
+/** The API answered 404: it predates the module. Stay quiet until the next sign-in. */
+let apiMissing = false;
 /** Key → per-activity APNs token the API already has. */
 const sessionTokens = new Map<string, string>();
 
@@ -36,7 +48,7 @@ subscribePushToStartToken((token) => {
   if (token === pushToStartToken) return;
   pushToStartToken = token;
   if (!registeredCookie) return;
-  void readLiveActivityState().then((state) => putDevice(state.enabled).catch(() => undefined));
+  void readLiveActivityState().then((state) => syncDevice(state.enabled).catch(() => undefined));
 });
 
 function platform(): "ios" | "android" | null {
@@ -59,6 +71,10 @@ async function expoPushToken(): Promise<string | undefined> {
   }
 }
 
+function isMissingEndpoint(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
+}
+
 async function putDevice(enabled: boolean, sessionCookie?: string): Promise<void> {
   const os = platform();
   if (!os) return;
@@ -69,7 +85,8 @@ async function putDevice(enabled: boolean, sessionCookie?: string): Promise<void
   };
   if (language) body.language = language;
   if (os === "ios" && pushToStartToken) body.pushToStartToken = pushToStartToken;
-  if (os === "android") {
+  // Turning delivery off needs no token (omitted fields keep their value).
+  if (os === "android" && enabled) {
     const token = await expoPushToken();
     if (token) body.expoPushToken = token;
   }
@@ -82,15 +99,33 @@ async function putDevice(enabled: boolean, sessionCookie?: string): Promise<void
 }
 
 /**
+ * Sends this device's registration. A failure leaves `deviceSynced` false so
+ * the next reconcile (foreground, event) retries it: otherwise a sign-in made
+ * offline, or a failed opt-out, would leave the server's delivery wrong.
+ */
+async function syncDevice(enabled: boolean): Promise<void> {
+  deviceSynced = false;
+  try {
+    await putDevice(enabled);
+    deviceSynced = true;
+  } catch (error) {
+    if (isMissingEndpoint(error)) apiMissing = true;
+    throw error;
+  }
+}
+
+/**
  * Registers (or refreshes) this device after sign-in, on a language change
  * and whenever iOS rotates the push-to-start token.
  */
 export async function registerLiveActivityDevice(nextLanguage: string | null): Promise<void> {
   if (!platform() || !liveActivityHost.supported()) return;
   language = nextLanguage;
+  generation += 1;
+  apiMissing = false;
   const state = await readLiveActivityState();
   registeredCookie = getCurrentSessionCookie() || null;
-  await putDevice(state.enabled);
+  await syncDevice(state.enabled);
 }
 
 async function registerSessionToken(kind: LiveActivityKind, subject: string, token: string) {
@@ -147,8 +182,25 @@ async function apply(desired: DesiredActivity[]): Promise<DesiredActivity[]> {
 
 /** Fetches the server's state and mirrors it. Returns what should be showing. */
 export async function reconcileLiveActivities(): Promise<DesiredActivity[]> {
-  if (!platform() || !liveActivityHost.supported()) return [];
-  const response = await apiFetch<MyLiveActivities>("/api/me/live-activities");
+  if (!platform() || !liveActivityHost.supported() || apiMissing) return [];
+  const startedIn = generation;
+  if (registeredCookie && !deviceSynced) {
+    await syncDevice((await readLiveActivityState()).enabled).catch(() => undefined);
+    if (apiMissing) return [];
+  }
+  const seq = ++reconcileSeq;
+  let response: MyLiveActivities;
+  try {
+    response = await apiFetch<MyLiveActivities>("/api/me/live-activities");
+  } catch (error) {
+    if (isMissingEndpoint(error)) apiMissing = true;
+    throw error;
+  }
+  // Signed out (or into another account) meanwhile, or a newer read already
+  // applied: painting this response would resurrect stale surfaces.
+  if (startedIn !== generation) return [];
+  if (seq < appliedSeq) return lastDesired;
+  appliedSeq = seq;
   return apply(desiredActivities(response));
 }
 
@@ -178,16 +230,22 @@ export async function setLiveActivitiesEnabled(enabled: boolean): Promise<void> 
     sessionTokens.clear();
     await endAllActivities();
   }
-  await putDevice(enabled);
+  await syncDevice(enabled);
   if (enabled) await reconcileLiveActivities().catch(() => undefined);
 }
 
-/** Sign-out: end every local surface and stop server delivery to this device. */
+/**
+ * Sign-out: stop server delivery to this device and end every local surface.
+ * The PUT goes first, with the session that registered the device, because
+ * the sign-out flow revokes that session as soon as this promise settles.
+ */
 export async function signOutLiveActivities(): Promise<void> {
   const cookie = registeredCookie;
   registeredCookie = null;
+  generation += 1;
+  deviceSynced = false;
   lastDesired = [];
   sessionTokens.clear();
-  await endAllActivities().catch(() => undefined);
-  if (cookie) await putDevice(false, cookie).catch(() => undefined);
+  const disable = cookie ? putDevice(false, cookie).catch(() => undefined) : Promise.resolve();
+  await Promise.all([disable, endAllActivities().catch(() => undefined)]);
 }

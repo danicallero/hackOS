@@ -33,9 +33,9 @@ export function useLiveActivities({
 
   useEffect(
     () =>
-      registerSignOutListener(() => {
-        void signOutLiveActivities();
-      }),
+      // Returned so the sign-out flow revokes the session only after the
+      // device's delivery was switched off with it.
+      registerSignOutListener(() => signOutLiveActivities()),
     [],
   );
 
