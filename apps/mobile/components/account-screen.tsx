@@ -74,7 +74,7 @@ export default function AccountScreen() {
   const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
-  const avatarCollapse = useProfileAvatarCollapse();
+  const avatarCollapse = useProfileAvatarCollapse(scrollRef);
   useScrollToTop(scrollRef);
   const { me, loading, error, offline, staleSince, refetch } = useMeContext();
   const { mode, setMode } = useApiMode();

@@ -13,6 +13,7 @@ import {
   profileAvatarCoverOpacity,
   profileAvatarMaskFrame,
   profileAvatarMorphPath,
+  profileAvatarSnapTarget,
   resolveProfileCameraTarget,
 } from "@/lib/profile-avatar-collapse";
 import { renderMobile } from "./render";
@@ -167,6 +168,35 @@ describe("profile avatar collapse geometry", () => {
     expect(profileAvatarCoverOpacity(0)).toBe(0);
     expect(profileAvatarCoverOpacity(0.5)).toBeCloseTo(0.525);
     expect(profileAvatarCoverOpacity(1)).toBe(1);
+  });
+});
+
+describe("profile avatar snap (#935)", () => {
+  const distance = PROFILE_AVATAR_COLLAPSE_DISTANCE;
+
+  it("leaves offsets outside the collapse range alone", () => {
+    expect(profileAvatarSnapTarget(0, 0)).toBeNull();
+    expect(profileAvatarSnapTarget(-40, -1)).toBeNull();
+    expect(profileAvatarSnapTarget(distance, 0)).toBeNull();
+    expect(profileAvatarSnapTarget(distance + 300, 2)).toBeNull();
+  });
+
+  it("settles a slow release at the nearer end of the range", () => {
+    expect(profileAvatarSnapTarget(10, 0)).toBe(0);
+    expect(profileAvatarSnapTarget(distance / 2 - 1, 0.1)).toBe(0);
+    expect(profileAvatarSnapTarget(distance / 2, 0)).toBe(distance);
+    expect(profileAvatarSnapTarget(distance - 10, -0.1)).toBe(distance);
+  });
+
+  it("follows the flick direction over the halfway threshold", () => {
+    expect(profileAvatarSnapTarget(10, 0.6)).toBe(distance);
+    expect(profileAvatarSnapTarget(distance - 10, -0.6)).toBe(0);
+  });
+
+  it("honours a custom collapse distance", () => {
+    expect(profileAvatarSnapTarget(60, 0, 80)).toBe(80);
+    expect(profileAvatarSnapTarget(30, 0, 80)).toBe(0);
+    expect(profileAvatarSnapTarget(90, 0, 80)).toBeNull();
   });
 });
 

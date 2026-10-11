@@ -213,6 +213,7 @@ export function PersonProfileScreen() {
         }}
       />
       <Animated.ScrollView
+        ref={avatarCollapse.scrollRef}
         testID="person-profile"
         onScroll={avatarCollapse.onScroll}
         onTouchStart={avatarCollapse.onScrollBeginDrag}
