@@ -22,6 +22,11 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import {
+  AccountWalletButton,
+  AccountWalletOverlay,
+  useAccountWallet,
+} from "@/components/account-wallet";
+import {
   ActionButton,
   AndroidStatusBarScrim,
   InfoRow,
@@ -76,6 +81,7 @@ export default function AccountScreen() {
   const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
+  const wallet = useAccountWallet();
   const avatarCollapse = useProfileAvatarCollapse(scrollRef);
   useScrollToTop(avatarCollapse.scrollToTopRef);
   useFocusEffect(avatarCollapse.settleAtRest);
@@ -286,6 +292,8 @@ export default function AccountScreen() {
           <RefreshControl refreshing={refreshingAccount} onRefresh={() => void refreshAccount()} />
         }
       >
+        {/* H28: scrolls away with the content instead of staying pinned. */}
+        <AccountWalletButton wallet={wallet} />
         {languageError ? (
           <RequestFeedback
             error={languageError}
@@ -419,15 +427,6 @@ export default function AccountScreen() {
               </View>
             </>
           ) : null}
-        </Section>
-
-        {/* H28: Wallet lives in Account rather than in the tab bar. */}
-        <Section title={t("tabWallet")}>
-          <AccountSubpageRow
-            label={t("accountViewTickets")}
-            icon="wallet.pass"
-            onPress={() => router.push("/(tabs)/others/wallet")}
-          />
         </Section>
 
         {/* H51: every notification setting lives here; the Schedule bell only shows the inbox. */}
@@ -592,6 +591,7 @@ export default function AccountScreen() {
         size={96}
         variant="account"
       />
+      <AccountWalletOverlay wallet={wallet} />
     </View>
   );
 }

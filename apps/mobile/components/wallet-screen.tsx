@@ -57,8 +57,12 @@ import { colors } from "@/theme/colors";
 // the space the real card would occupy.
 const WALLET_CARD_MIN_HEIGHT = 400;
 
-/** H28: ticket and badge read model shared with web, with native Wallet handoff. Opened from Account. */
-export default function WalletScreen() {
+/**
+ * H28: ticket and badge read model shared with web, with native Wallet handoff.
+ * Opened as an overlay of Account, which passes `contentTopInset` to clear its
+ * floating close button; the title-less `others/wallet` route serves deep links.
+ */
+export default function WalletScreen({ contentTopInset = 0 }: { contentTopInset?: number }) {
   useColorScheme();
   const { language, t } = useLocale();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
@@ -296,6 +300,7 @@ export default function WalletScreen() {
           gap: 20,
           padding: 16,
           paddingBottom: Math.max(32, tabBarBottomInset + 16),
+          paddingTop: 16 + contentTopInset,
         }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />

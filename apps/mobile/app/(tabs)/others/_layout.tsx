@@ -87,13 +87,13 @@ export default function OthersLayout() {
       />
       <Stack.Screen
         name="wallet"
-        // Compact inline title beside the back button: the QR should sit as
-        // high as possible on the screen (H28).
+        // Deep links only; Account opens the wallet as an overlay. Back button
+        // without a title, so the Ticket/Badge control leads the page (H28).
         options={{
           headerLargeTitle: false,
           headerShadowVisible: false,
           headerShown: true,
-          title: t("tabWallet"),
+          title: "",
         }}
       />
       <Stack.Screen
