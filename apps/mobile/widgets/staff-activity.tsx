@@ -139,7 +139,7 @@ const StaffActivityLayout = (props: ActivityLiveProps, environment: LiveActivity
     </VStack>
   );
   const expandedBottom = (
-    <VStack alignment="leading" spacing={6}>
+    <VStack alignment="leading" spacing={6} modifiers={[padding({ horizontal: 8 })]}>
       <VStack
         alignment="leading"
         spacing={1}

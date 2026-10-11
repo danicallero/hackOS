@@ -2,6 +2,7 @@ import { HStack, Image, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
   allowsTightening,
   contentTransition,
+  fixedSize,
   font,
   foregroundStyle,
   frame,
@@ -128,6 +129,7 @@ const QueueActivityLayout = (props: QueueLiveProps, environment: LiveActivityEnv
           contentTransition("numericText", { countsDown: true }),
           lineLimit(1),
           allowsTightening(true),
+          fixedSize({ horizontal: true }),
           ...accentMods(color),
         ]}
       >
@@ -163,7 +165,7 @@ const QueueActivityLayout = (props: QueueLiveProps, environment: LiveActivityEnv
     <VStack
       alignment="leading"
       spacing={2}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}
+      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ horizontal: 8 })]}
     >
       {(called || inRoom) && props.roomLocation ? (
         <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
@@ -185,7 +187,11 @@ const QueueActivityLayout = (props: QueueLiveProps, environment: LiveActivityEnv
   // Lock Screen: its own layout (not a notification clone), 14 pt margins,
   // default background, the key number large and in the accent colour.
   const banner = (
-    <VStack alignment="leading" spacing={6} modifiers={[padding({ all: 14 })]}>
+    <VStack
+      alignment="leading"
+      spacing={6}
+      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
+    >
       <Text
         modifiers={[
           font({ size: 15, weight: "semibold" }),
