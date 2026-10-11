@@ -5,7 +5,7 @@ jest.mock("@/lib/use-nfc-supported", () => ({
 }));
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { Alert, AppState } from "react-native";
 import { StandsScreen } from "@/components/stands-screen";
 import { ApiError, apiFetch } from "@/lib/api";
@@ -35,9 +35,18 @@ jest.mock("@/lib/nfc-reader", () => ({
     };
   },
 }));
+const mockSetOptions = jest.fn();
+const mockPush = jest.fn();
 jest.mock("expo-router", () => ({
   useScrollToTop: () => {},
   useFocusEffect: (effect: () => void) => require("react").useEffect(effect, [effect]),
+  useNavigation: () => ({ setOptions: mockSetOptions }),
+  useRouter: () => ({ push: mockPush, back: jest.fn() }),
+}));
+let mockGlass = false;
+jest.mock("@/components/glass-view", () => ({
+  GlassView: ({ children }: { children: unknown }) => children,
+  isRealLiquidGlassAvailable: () => mockGlass,
 }));
 let mockCapabilities: string[] = [];
 jest.mock("@/lib/me-context", () => ({
@@ -110,6 +119,9 @@ beforeEach(() => {
   mockTap = { uid: "04A1B2C3D4E5F6", claimFailed: false };
   mockReads.length = 0;
   mockNfcStatus = "supported";
+  mockGlass = false;
+  mockSetOptions.mockReset();
+  mockPush.mockReset();
   mockCapabilities = [CAPABILITIES.SPONSORS_MANAGE];
   stands = [
     stand({ enterpriseId: 2, name: "Zeta", scannable: false, qrCount: 0 }),
@@ -134,38 +146,53 @@ async function tapLink(name: string) {
 }
 
 describe("StandsScreen (#935)", () => {
-  it("lists companies alphabetically with their codes and scannable state", async () => {
+  it("lists companies alphabetically with their counts and which are not scannable", async () => {
     await renderMobile(<StandsScreen />);
     await screen.findByText("Acme");
     const names = screen.getAllByText(/^(Acme|Zeta)$/).map((node) => node.props.children);
     expect(names).toEqual(["Acme", "Zeta"]);
     expect(screen.getByText("standsCounts:0/1")).toBeTruthy();
-    expect(screen.getByLabelText("standsScannableFor:Zeta").props.value).toBe(false);
-    expect(screen.getByLabelText("standsScannableFor:Acme").props.value).toBe(true);
-  });
-
-  it("turns scanning on for a company and keeps the new state", async () => {
-    await renderMobile(<StandsScreen />);
-    await fireEvent(await screen.findByLabelText("standsScannableFor:Zeta"), "valueChange", true);
-    expect(screen.getByLabelText("standsScannableFor:Zeta").props.value).toBe(true);
-    await waitFor(() => {
-      const call = fetchMock.mock.calls.find(
-        ([path]) => path === "/api/enterprises/2/stand-scannable",
-      );
-      expect(call?.[1]).toMatchObject({ method: "PUT", body: JSON.stringify({ scannable: true }) });
-      expect((call?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
-    });
-    expect(Alert.alert).not.toHaveBeenCalled();
-  });
-
-  it("rolls the switch back and alerts when the change fails", async () => {
-    linkResult = () => Promise.reject(new Error("boom"));
-    await renderMobile(<StandsScreen />);
-    await fireEvent(await screen.findByLabelText("standsScannableFor:Acme"), "valueChange", false);
-    await waitFor(() =>
-      expect(Alert.alert).toHaveBeenCalledWith("standsTitle", "standsScannableFailed"),
+    expect(screen.getByLabelText("Zeta").props.accessibilityHint).toBe(
+      "standsCounts:0/0, standsNotScannable",
     );
-    expect(screen.getByLabelText("standsScannableFor:Acme").props.value).toBe(true);
+    expect(screen.getByLabelText("Acme").props.accessibilityHint).toBe("standsCounts:0/1");
+  });
+
+  it("opens a company's tags from its row", async () => {
+    await renderMobile(<StandsScreen />);
+    await fireEvent.press(await screen.findByLabelText("Zeta"));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/others/stand/[id]",
+      params: { id: "2", name: "Zeta" },
+    });
+  });
+
+  it("searches companies from the native header search on iOS 26", async () => {
+    mockGlass = true;
+    await renderMobile(<StandsScreen />);
+    await screen.findByText("Acme");
+    const options = mockSetOptions.mock.calls.at(-1)?.[0];
+    expect(options).toMatchObject({
+      headerShown: true,
+      headerSearchBarOptions: {
+        placeholder: "standsSearchPlaceholder",
+        placement: "integratedButton",
+      },
+    });
+    await act(() => options.headerSearchBarOptions.onChangeText({ nativeEvent: { text: "zet" } }));
+    expect(screen.queryByText("Acme")).toBeNull();
+    expect(screen.getByText("Zeta")).toBeTruthy();
+    expect(screen.queryByLabelText("scheduleSearch")).toBeNull();
+  });
+
+  it("searches companies from the fallback header elsewhere", async () => {
+    await renderMobile(<StandsScreen />);
+    await screen.findByText("Acme");
+    expect(mockSetOptions).toHaveBeenLastCalledWith({ headerShown: false });
+    await fireEvent.press(screen.getByLabelText("scheduleSearch"));
+    await fireEvent.changeText(screen.getByLabelText("scheduleSearch"), "ACM");
+    expect(screen.getByText("Acme")).toBeTruthy();
+    expect(screen.queryByText("Zeta")).toBeNull();
   });
 
   it("links a tag by its serial on tap, as the badge flow claims it", async () => {

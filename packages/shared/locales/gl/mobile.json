@@ -837,5 +837,16 @@
   "standsLinked": "Vinculada a {name}.",
   "standsLinkedWriteFailed": "Vinculada a {name}, pero non se puido preparar a etiqueta para hackOS. Escanela desde a Axenda segue funcionando.",
   "standsLinkAnother": "Vincular outra",
+  "standsNotScannable": "Non escaneable",
+  "standsScannable": "Escaneable",
+  "standsNotScannableNotice": "As persoas asistentes non poden coleccionar esta empresa ata que se active o escaneo.",
+  "standsNfcTags": "Etiquetas NFC",
+  "standsQrCodes": "Códigos QR",
+  "standsNoTags": "Aínda non hai etiquetas",
+  "standsRemoveTag": "Quitar etiqueta",
+  "standsRemoveTagFor": "Quitar {code}",
+  "standsRemoveTagConfirm": "Quitar esta etiqueta?",
+  "standsRemoveQrDetail": "As copias impresas deste código deixarán de funcionar.",
+  "standsRemoveTagFailed": "Non se puido quitar a etiqueta.",
   "companyTagCollecting": "Coleccionando…"
 }
