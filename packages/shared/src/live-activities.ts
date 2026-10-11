@@ -158,10 +158,6 @@ export interface ActivityLiveLabels {
   scan: string;
   /** "Ends in" — labels the live countdown to the end. Optional: added after v1 shipped. */
   endsIn?: string;
-  /** Meal breakdown: "Served", "Still to eat", "Inside". Optional. */
-  served?: string;
-  remaining?: string;
-  inside?: string;
 }
 
 export interface ActivityLiveProps {
@@ -179,13 +175,11 @@ export interface ActivityLiveProps {
   /** Distinct people registered so far (first-time scans). */
   scanned: number;
   /**
-   * Live meals only (H24/H27): people estimated in the venue right now — the
-   * logistics panel's served-vs-present denominator. Null for other
-   * activities, before the start, or when unknown. Optional (post-v1).
+   * Live only (H24/H25): accredited people (active accounts with a badge, the
+   * desk's `accredited`), the denominator shown as `scanned/accredited`. Null
+   * before the start or when unknown. Optional (post-v1).
    */
-  inside?: number | null;
-  /** Live meals only: of `inside`, people with no scan for this meal yet. */
-  remaining?: number | null;
+  accredited?: number | null;
   /** Deep link that opens the scanner bound to this activity. */
   scanUrl: string;
   /** Deep link opened on tap. */
@@ -419,27 +413,18 @@ const ACTIVITY_LABELS: Record<Language, Required<ActivityLiveLabels>> = {
     scanned: "Scanned",
     scan: "Scan",
     endsIn: "Ends in",
-    served: "Served",
-    remaining: "Still to eat",
-    inside: "Inside",
   },
   es: {
     startsIn: "Empieza en",
     scanned: "Escaneados",
     scan: "Escanear",
     endsIn: "Acaba en",
-    served: "Servidos",
-    remaining: "Por comer",
-    inside: "Dentro",
   },
   gl: {
     startsIn: "Comeza en",
     scanned: "Escaneados",
     scan: "Escanear",
     endsIn: "Remata en",
-    served: "Servidos",
-    remaining: "Por comer",
-    inside: "Dentro",
   },
 };
 

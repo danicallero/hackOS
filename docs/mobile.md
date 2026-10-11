@@ -1514,11 +1514,11 @@ Apple's HIG:
 
 | Presentation | Queue | Staff activity |
 | --- | --- | --- |
-| Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: the count (still to eat for meals, else scanned) |
-| Minimal | ring of the climb to the front with the position inside; called/in room: the phase symbol | meals: ring of the served share; else the count or countdown |
-| Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: stage track, location · called count-up, challenge · +N more queues | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live meal: served / still to eat, served-share bar, inside, ends-in, **Scan**; live other: symbol / scanned, elapsed-time bar, name, ends-in, **Scan** |
-| Lock Screen | challenge … +N more queues; hero ETA (34 pt, accent) and position; called: "Go to" room (green) + location and the count-up since the call; stage track with labels | upcoming: symbol, name, time · location … starts-in countdown; live: symbol, name … ends-in; stats (served · **still to eat** · inside for meals, else scanned); bar with **Scan** in the bottom trailing corner |
-| Watch Smart Stack / CarPlay (`bannerSmall`) | challenge + `#4 · ~12 min` or the room | name + countdown or hero count, no buttons |
+| Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: `42/180` (scanned / accredited, the denominator smaller and secondary; the bare count without one) |
+| Minimal | ring of the climb to the front with the position inside; called/in room: the phase symbol | live: ring of the scanned share of accredited people (the count without a denominator); upcoming: countdown |
+| Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: stage track, location · called count-up, challenge · +N more queues | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live: symbol / Scanned `42/180`, scanned-share bar (elapsed time without a denominator), name, ends-in, **Scan** |
+| Lock Screen | challenge … +N more queues; hero ETA (34 pt, accent) and position; called: "Go to" room (green) + location and the count-up since the call; stage track with labels | upcoming: symbol, name, time · location … starts-in countdown; live: symbol, name … ends-in; Scanned `42/180`; bar with **Scan** in the bottom trailing corner |
+| Watch Smart Stack / CarPlay (`bannerSmall`) | challenge + `#4 · ~12 min` or the room | name + countdown or `42/180`, no buttons |
 
 | Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
 | --- | --- | --- | --- |
@@ -1553,7 +1553,7 @@ that reason). The only filled control, **Scan**, sits in the bottom trailing
 corner with a `containerRelativeShape` background, so it is concentric with
 the Live Activity's (or the island's) corner. There are no tiles or cards
 behind symbols. Fields and labels added after v1 (`calledAt`,
-`startPosition`, `inside`, `remaining`, `labels.estimating` …) are optional:
+`startPosition`, `accredited`, `labels.estimating` …) are optional:
 an absent one hides its element; the widget never falls back to hardcoded
 copy.
 
@@ -1565,7 +1565,7 @@ push-to-start. APNs props reach the layouts directly, so a props version
 other than `1` renders only the title. Room and activity names truncate;
 only numbers keep their full width. `test/live-activity-widgets.test.tsx`
 evaluates the serialized layouts with nothing but `@expo/ui/swift-ui` in
-scope and covers the track fill, the meal breakdown, the old-server
+scope and covers the track fill, the staff `scanned/accredited` ratio, the old-server
 (v1 labels) fallbacks and, for the newer kinds, every phase, missing labels,
 the deadline's unknown status and the desk's missing estimate.
 
@@ -1586,8 +1586,7 @@ device within `maxConcurrent` on both platforms.
 | Queue called | room (truncated) | Go to **Room B** / location · "Called" + count-up from `calledAt`; heads-up only on the transition | Go to Room B (green) · Called + count-up; location; stage track |
 | Queue in room | room | In room · **Room B** / location · challenge | In room · Room B (grey); stage track at the end |
 | Staff upcoming | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown | Starts in + countdown (blue); time · location |
-| Staff live meal (`inside`, `remaining`) | `remaining` | **168** still to eat / 142 served · 310 inside · name · location | Served · **Still to eat** (blue) · Inside; track + **Scan**; "Ends in" countdown |
-| Staff live, other | `scanned` | **142** scanned / name · location | Scanned (blue); location; elapsed-time track + **Scan**; "Ends in" countdown |
+| Staff live (H24/H25) | `142/180`; `scanned` when that overflows or without `accredited` | **142**/180 scanned / name · location | Scanned `142/180` (blue); location; scanned-share track (elapsed time without `accredited`) + **Scan**; "Ends in" countdown |
 | Attendee upcoming (H59) | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown; category glyph | Starts in + countdown (blue); time · location |
 | Attendee live | countdown to `endsAt` | **Now** · name / time · location · "Ends in" + countdown; elapsed-time track | Now · name; Ends in + countdown (blue); time · location; elapsed-time track |
 | Deadline open (H19) | countdown to `endsAt` | project (else the title) / status · "Closes in" + countdown; hourglass, blue; hacking-window track (none without `startsAt`) | Closes in + countdown (blue) · project over its status (amber "Not submitted", green "Submitted", none when unknown); window track |
@@ -1603,9 +1602,9 @@ In line and Called, the first two thirds of the width as on iOS, filled in
 the phase colour (blue waiting, green called, grey in the room); the tracker sits at `(startPosition − position) / startPosition` of the
 first stage while waiting (#1 of 4 → 0.75; at the start on the first
 sighting or without `startPosition`), at the boundary once called and at the
-end in the room, with the door as the end icon. Meals track the served share
-`(inside − remaining) / inside` (none when nobody is inside); other live
-activities and live attendee items the time elapsed between start and end,
+end in the room, with the door as the end icon. Live staff activities track
+the scanned share `scanned / accredited` (the elapsed time when an older
+server sends no `accredited`); live attendee items the time elapsed between start and end,
 the deadline the hacking window's elapsed time (in its phase colour), and the
 desk the accredited share `accredited / eligible`, all as of the post.
 
@@ -1685,7 +1684,7 @@ device with `enabled: false`.
 (for example `xcrun simctl openurl booted …`) renders sample states without a
 backend: waiting #4 of a start of 9 with a 12 min ETA, the same with an
 unknown ETA, called 2 minutes ago, in room, an upcoming meal, a live meal
-(142 served, 310 inside, 168 still to eat), a live non-meal activity, an
+(142 of 180 accredited scanned), a live non-meal activity, an
 upcoming and a running workshop, the deadline open with a draft or an
 unknown status, closing and submitted, and the desk at 412 of 600. The handler is required behind `__DEV__` in `+native-intent.tsx`, so
 release bundles drop it.

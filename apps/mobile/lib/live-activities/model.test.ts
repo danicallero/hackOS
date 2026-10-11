@@ -394,55 +394,52 @@ describe("toLiveUpdateSpec (Android, #966)", () => {
     expect(result.card?.lead).toMatchObject({ caption: "Starts in", timer: "countDown" });
   });
 
-  it("leads a live meal with who still has to eat and tracks the served share", () => {
-    const meal = activityProps({ phase: "live", scanned: 142, inside: 310, remaining: 168 });
+  it("leads a live activity with scanned out of accredited and tracks that share", () => {
+    const meal = activityProps({ phase: "live", scanned: 142, accredited: 180 });
     const result = spec(meal, "upcoming");
     expect(result).toMatchObject({
-      title: "168 still to eat",
-      emphasis: "168",
-      text: "142 served · 310 inside",
-      subText: "Lunch · Cafeteria",
-      shortCriticalText: "168",
+      title: "142/180 scanned",
+      emphasis: "142",
+      text: "Lunch",
+      subText: "Cafeteria",
+      shortCriticalText: "142/180",
       action: { label: "Scan", url: "hackos://scan?activity=12" },
     });
     // No `when` on live staff updates: the chip keeps the count.
     expect(result.countdownTo ?? null).toBeNull();
     expect(result.countUpFrom ?? null).toBeNull();
-    const served = Math.round(((310 - 168) / 310) * 100);
+    const share = Math.round((142 / 180) * 100);
     expect(result.progress).toMatchObject({
-      value: served,
+      value: share,
       segments: [
-        { length: served, tone: "accent" },
-        { length: 100 - served, tone: "rest" },
+        { length: share, tone: "accent" },
+        { length: 100 - share, tone: "rest" },
       ],
       tracker: "meal",
     });
-    expect(result.card?.stats).toEqual([
-      { caption: "Served", value: "142" },
-      { caption: "Still to eat", value: "168", hero: true },
-      { caption: "Inside", value: "310" },
-    ]);
+    expect(result.card?.lead).toEqual({ caption: "Scanned", value: "142/180", hero: true });
     expect(result.card?.footer).toEqual({
       caption: "Ends in",
       countdownTo: Date.parse("2026-02-20T13:30:00.000Z"),
     });
   });
 
-  it("localizes the meal counts and skips the track when nobody is inside", () => {
-    const meal = activityProps({
-      phase: "live",
-      scanned: 0,
-      inside: 0,
-      remaining: 0,
-      labels: activityLiveLabels("es"),
-    });
-    const result = spec(meal);
-    expect(result.title).toBe("0 por comer");
-    expect(result.progress).toBeNull();
+  it("localizes the ratio and falls back to the count when it overflows the chip", () => {
+    const result = spec(
+      activityProps({
+        phase: "live",
+        scanned: 1042,
+        accredited: 1800,
+        labels: activityLiveLabels("es"),
+      }),
+    );
+    expect(result.title).toBe("1042/1800 escaneados");
+    expect(result.shortCriticalText).toBe("1042");
   });
 
-  it("shows the scanned count and elapsed time for a live non-meal activity", () => {
-    const talk = activityProps({ phase: "live", category: "talk", scanned: 37, inside: null });
+  it("shows the scanned count and elapsed time without a denominator", () => {
+    // An older server sends no denominator.
+    const talk = activityProps({ phase: "live", category: "talk", scanned: 37 });
     // 45 of 90 minutes elapsed.
     expect(spec(talk)).toMatchObject({
       title: "37 scanned",

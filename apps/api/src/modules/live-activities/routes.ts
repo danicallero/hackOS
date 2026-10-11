@@ -255,7 +255,7 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
           "caller holds one of its configured roles and its own gate holds: `queue` is the " +
           "participant's nearest queue during the judging window (the room only once called); " +
           "`activities` are scannable meals/activities in the lead time or running " +
-          "(activity:scan); `attendeeActivities` are opted-in schedule items for the caller's " +
+          "(activity:scan), live ones with `scanned` out of `accredited`; `attendeeActivities` are opted-in schedule items for the caller's " +
           "audience; `deadline` counts down to submissions closing (queue:status with event " +
           "access); `accreditation` is the check-in desk during its window (accredit:scan). The set is " +
           "ranked by kind priority and cut to `maxConcurrent`; each item's `rank` orders it " +
