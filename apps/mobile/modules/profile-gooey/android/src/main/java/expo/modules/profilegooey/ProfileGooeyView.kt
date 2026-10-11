@@ -26,11 +26,15 @@ import kotlin.math.sin
 
 /**
  * Android hole-punch profile avatar morph. The single React child (the avatar
- * photo or initials, laid out by Yoga at the expanded frame) is drawn here
- * scaled uniformly to the animated circle, so layout never changes. Under it a
- * black "ink" silhouette (lens + avatar + a metaball neck + a short drip) fuses
- * the shrunken avatar into the camera lens.
- * Android 12+ softens the ink with a blur + alpha threshold. Every frame value comes from `profileGooeyFrame` (lib/profile-avatar-collapse.ts).
+ * photo or initials, laid out by Yoga once at the expanded frame) is drawn
+ * here from its recorded display list, scaled uniformly onto the animated
+ * circle and clipped to it, so neither the photo nor the initials are ever
+ * re-laid out. A black underlay shows through as the avatar fades, so it
+ * darkens into a black disc; only then does the black "ink" (lens + avatar +
+ * a metaball neck + a short drip), painted on top, fuse it into the camera
+ * lens. Android 12+ softens the ink with a blur + alpha threshold and blurs
+ * the photo inside its circle. Every frame value comes from
+ * `profileGooeyFrame` (lib/profile-avatar-collapse.ts).
  */
 class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
   // dp, view-local
@@ -49,31 +53,48 @@ class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(cont
   private val inkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK }
   private val bridge = Path()
   private val dripPath = Path()
+  private val avatarClip = Path()
   private val effects: Effects? =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Effects() else null
+
+  // ExpoView is a LinearLayout: an Android layout pass would re-measure the
+  // React child at wrap-content (the whole canvas) and stack it at the origin,
+  // so the drawn avatar became a tall rounded rect. Yoga owns the child frame.
+  override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    setMeasuredDimension(
+      MeasureSpec.getSize(widthMeasureSpec),
+      MeasureSpec.getSize(heightMeasureSpec),
+    )
+  }
+
+  override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) = Unit
 
   override fun dispatchDraw(canvas: Canvas) {
     val child = if (childCount > 0) getChildAt(0) else null
     if (child == null || child.width == 0 || avatarDiameter <= 0f) return
-    // Ink only shows once the photo fades or the neck forms; before that it
-    // would only darken the photo's anti-aliased rim.
-    if (bridgeReach > 0f || imageAlpha < 1f) {
-      val fx = effects
-      if (fx != null && canvas.isHardwareAccelerated) fx.drawInk(canvas) else drawInk(canvas)
-    }
-    if (imageAlpha <= 0f) return
     val fx = effects
-    if (fx != null && canvas.isHardwareAccelerated) {
-      fx.drawContent(canvas, child)
-    } else {
-      val r = avatarDiameter * density / 2f
-      val cx = avatarX * density
-      val cy = avatarY * density
-      val layer = imageAlpha < 1f
-      if (layer) canvas.saveLayerAlpha(cx - r, cy - r, cx + r, cy + r, (imageAlpha * 255).roundToInt())
-      drawAvatar(canvas, child)
-      if (layer) canvas.restore()
+    val accelerated = fx != null && canvas.isHardwareAccelerated
+    val cx = avatarX * density
+    val cy = avatarY * density
+    val r = avatarDiameter * density / 2f
+    if (imageAlpha > 0f) {
+      // Once the photo fades or blurs, its circle darkens towards black.
+      if (imageAlpha < 1f || blurRadius > 0f) canvas.drawCircle(cx, cy, r, inkPaint)
+      avatarClip.rewind()
+      avatarClip.addCircle(cx, cy, r, Path.Direction.CW)
+      canvas.save()
+      canvas.clipPath(avatarClip)
+      if (accelerated) {
+        fx!!.drawContent(canvas, child)
+      } else {
+        val layer = imageAlpha < 1f
+        if (layer) canvas.saveLayerAlpha(cx - r, cy - r, cx + r, cy + r, (imageAlpha * 255).roundToInt())
+        drawAvatar(canvas, child)
+        if (layer) canvas.restore()
+      }
+      canvas.restore()
     }
+    if (accelerated) fx!!.drawInk(canvas) else drawInk(canvas)
   }
 
   override fun onDetachedFromWindow() {
@@ -81,7 +102,7 @@ class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(cont
     super.onDetachedFromWindow()
   }
 
-  /** The child scaled about its centre onto the animated circle. */
+  /** The child's display list scaled about its centre onto the animated circle. */
   private fun drawAvatar(canvas: Canvas, child: View) {
     val scale = avatarDiameter * density / child.width
     canvas.save()
@@ -92,7 +113,10 @@ class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(cont
     canvas.restore()
   }
 
-  /** Each shape is painted separately, so overlaps union instead of cancelling. */
+  /**
+   * Each shape is painted separately, so overlaps union instead of cancelling.
+   * Until the avatar has faded to black only the lens is drawn.
+   */
   private fun drawInk(canvas: Canvas) {
     val hx = holeX * density
     val hy = holeY * density
@@ -101,6 +125,8 @@ class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(cont
     val ay = avatarY * density
     val ar = avatarDiameter * density / 2f
     if (hr > 0f) canvas.drawCircle(hx, hy, hr, inkPaint)
+    // The ink sits above the avatar: it may only cover it once it is black.
+    if (imageAlpha > 0f) return
     canvas.drawCircle(ax, ay, ar, inkPaint)
     if (hr > 0f && buildBridge(ax, ay, ar, hx, hy, hr, bridgeReach * density)) {
       canvas.drawPath(bridge, inkPaint)

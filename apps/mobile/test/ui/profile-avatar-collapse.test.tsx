@@ -11,6 +11,7 @@ import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
   PROFILE_AVATAR_MERGE_PROGRESS,
   PROFILE_AVATAR_SIMPLE_MIN_SCALE,
+  PROFILE_GOOEY_FADE_START,
   PROFILE_GOOEY_SHRINK_END,
   pickHolePunchCutout,
   profileAvatarBlobBounds,
@@ -824,15 +825,31 @@ describe("android hole-punch gooey geometry", () => {
     expect(end.drip).toBeCloseTo(0);
   });
 
+  it("darkens and blurs while it shrinks, before any neck forms", () => {
+    expect(profileGooeyFrame(avatar, lens, PROFILE_GOOEY_FADE_START)).toMatchObject({
+      imageAlpha: 1,
+      blurRadius: 0,
+    });
+    const midway = profileGooeyFrame(avatar, lens, 0.4);
+    expect(midway.imageAlpha).toBeGreaterThan(0);
+    expect(midway.imageAlpha).toBeLessThan(1);
+    expect(midway.blurRadius).toBeGreaterThan(0);
+  });
+
   it("shrinks to the lens size under it before any neck forms", () => {
     const staged = profileGooeyFrame(avatar, lens, PROFILE_GOOEY_SHRINK_END);
     expect(staged.avatarDiameter).toBeCloseTo(24);
     expect(staged.avatarX).toBe(200);
-    // Below the lens with a clear gap, photo still opaque, no neck yet.
+    // Below the lens with a clear gap, already a black disc, no neck yet.
     expect(staged.avatarY - staged.avatarDiameter / 2).toBeGreaterThan(38 + 20);
-    expect(staged).toMatchObject({ imageAlpha: 1, bridgeReach: 0 });
+    expect(staged).toMatchObject({ imageAlpha: 0, blurRadius: 6, bridgeReach: 0 });
     for (let p = 0; p <= PROFILE_GOOEY_SHRINK_END; p += 0.05) {
       expect(profileGooeyFrame(avatar, lens, p).bridgeReach).toBe(0);
+    }
+    // The black neck only ever meets a black avatar (no coloured second blob).
+    for (let i = 0; i <= 100; i++) {
+      const frame = profileGooeyFrame(avatar, lens, i / 100);
+      if (frame.bridgeReach > 0 || frame.drip > 0) expect(frame.imageAlpha).toBe(0);
     }
     const rising = profileGooeyFrame(avatar, lens, 0.8);
     expect(rising.bridgeReach).toBeGreaterThan(0);

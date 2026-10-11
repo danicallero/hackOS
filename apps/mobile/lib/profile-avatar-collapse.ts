@@ -525,6 +525,11 @@ export type ProfileGooeyCircle = { x: number; y: number; diameter: number };
  * towards the lens.
  */
 export const PROFILE_GOOEY_SHRINK_END = 0.65;
+/**
+ * Progress at which the shrinking photo starts to blur and darken. It is a
+ * black disc by `PROFILE_GOOEY_SHRINK_END`, before the black neck touches it.
+ */
+export const PROFILE_GOOEY_FADE_START = 0.15;
 /** Edge-to-edge gap (in lens diameters) between the shrunken photo and the lens. */
 const PROFILE_GOOEY_STAGING_GAP = 0.9;
 /** The end circle sits this far (dp) inside the lens edge so it never pokes out. */
@@ -572,10 +577,12 @@ export function profileGooeyProgress(scrollOffset: number, distance: number): nu
  * Everything the native gooey view draws at `progress`, in its local dp:
  * - Until `PROFILE_GOOEY_SHRINK_END` the photo shrinks uniformly to the end
  *   diameter while gliding (ease-out) to a point centred under the lens.
- * - Afterwards it rises into the lens; the neck may form (`bridgeReach` is
- *   how far apart the two circles' edges can be and still join), a short drip
- *   hangs from the lens, and the photo fades to its black silhouette so the
- *   last frames are a droplet sinking into the camera.
+ *   From `PROFILE_GOOEY_FADE_START` it also blurs and darkens, reaching a
+ *   black disc exactly as it gets there.
+ * - Afterwards the black disc rises into the lens; the neck may form
+ *   (`bridgeReach` is how far apart the two circles' edges can be and still
+ *   join) and a short drip hangs from the lens, so the last frames are a
+ *   droplet sinking into the camera.
  */
 export function profileGooeyFrame(
   start: ProfileCameraCutoutFrame,
@@ -596,12 +603,13 @@ export function profileGooeyFrame(
   const glide = 1 - (1 - shrink) * (1 - shrink);
   const rise = clamp01((t - PROFILE_GOOEY_SHRINK_END) / (1 - PROFILE_GOOEY_SHRINK_END));
   const neck = clamp01((t - PROFILE_GOOEY_SHRINK_END) / 0.08);
+  const fadeSpan = PROFILE_GOOEY_SHRINK_END - PROFILE_GOOEY_FADE_START;
   return {
     avatarX: startX + (holeX - startX) * glide,
     avatarY: startY + (stagingY - startY) * glide + (holeY - stagingY) * rise,
     avatarDiameter: start.width + (endDiameter - start.width) * glide,
-    imageAlpha: 1 - clamp01((t - 0.7) / 0.25),
-    blurRadius: PROFILE_GOOEY_MAX_BLUR * clamp01((t - 0.3) / 0.5),
+    imageAlpha: 1 - clamp01((t - PROFILE_GOOEY_FADE_START) / fadeSpan),
+    blurRadius: PROFILE_GOOEY_MAX_BLUR * clamp01((t - PROFILE_GOOEY_FADE_START) / fadeSpan),
     bridgeReach: gap * 1.2 * neck,
     drip: holeDiameter * 0.25 * Math.sin(Math.PI * rise),
   };

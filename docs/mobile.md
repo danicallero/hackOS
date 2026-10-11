@@ -869,7 +869,12 @@ and the native view exists; every other case keeps the paths above unchanged
 
 - **Children**: one React child, the avatar circle (photo, initials or live
   content), laid out once by Yoga at the expanded frame. The native view draws
-  it with its own canvas transform, so layout never changes during the morph.
+  its recorded display list scaled uniformly onto the animated circle and
+  clipped to that circle, so photo and initials alike behave as one raster and
+  are never re-laid out. `ExpoView` is a `LinearLayout`, so the view overrides
+  `onMeasure`/`onLayout`: otherwise an Android layout pass re-measures the child
+  at wrap-content (the whole canvas) and the avatar is drawn as a tall rounded
+  rectangle.
 - **Static props** (dp, view-local): `holeX`, `holeY`, `holeDiameter`.
 - **Animated props** from `useAnimatedProps` on the UI thread, no per-frame JS:
   `avatarX`, `avatarY`, `avatarDiameter`, `imageAlpha`, `blurRadius`,
@@ -882,14 +887,18 @@ and the native view exists; every other case keeps the paths above unchanged
   rises to the lens centre (`profileGooeyEndOffset` is the full travel); a black
   metaball neck (two-circle tangent construction, spread growing from 0 so it
   emerges from a point) joins it to the lens, a short drip bulges from the lens
-  and retracts, and the photo fades (0.7 → 0.95) to its black silhouette. The
-  photo blurs progressively from 0.3 to 0.8 (up to 6 dp). Everything is a pure
-  function of progress, so scrolling back retraces it exactly.
-- **Rendering**: Android 12+ (API 31) records the black ink (lens, avatar, neck,
-  drip) into a reused `RenderNode`, blurs it with `RenderEffect` and composites it
-  through an alpha-threshold color matrix (liquid edges); the photo goes through
-  a second reused node with the progressive blur. Android 9–11 draws the same
-  shapes directly, anti-aliased, without blur. No bitmaps are allocated; both
+  and retracts. While shrinking, from 0.15 (`PROFILE_GOOEY_FADE_START`) to 0.65,
+  the photo blurs (up to 6 dp) and darkens into a black disc, so the black neck
+  only ever meets a black avatar. Everything is a pure function of progress, so
+  scrolling back retraces it exactly.
+- **Rendering** (bottom to top): a black disc under the fading avatar; the
+  avatar, clipped to its circle (its blur never leaves the circle, so no halo);
+  then the black ink. Until the avatar is fully black the ink is only the lens;
+  afterwards it adds the avatar circle, neck and drip. Android 12+ (API 31)
+  records the ink into a reused `RenderNode`, blurs it with `RenderEffect` and
+  composites it through an alpha-threshold color matrix (liquid edges); the
+  photo goes through a second reused node with the progressive blur. Android
+  9–11 draws the same shapes directly, anti-aliased, without blur. No bitmaps are allocated; both
   nodes drop their display lists and effects on detach. The canvas is the
   avatar/lens bounds plus a 24 dp margin (`PROFILE_GOOEY_MARGIN`).
 
@@ -907,9 +916,10 @@ black status-bar target.
 **Testing on a Pixel (9a or any hole-punch device)**: build a development
 client (`pnpm --filter @hackos/mobile android`, or an EAS development build;
 a JS-only reload is not enough the first time), sign in, open Others ›
-Account and scroll up slowly: the photo should stay round, shrink until it
-matches the lens just below it, then rise with a liquid neck and disappear
-into the lens. Scroll back down slowly to watch the droplet come out and
+Account and scroll up slowly: the photo should stay a perfect circle, shrink while it
+blurs and darkens into a black disc the size of the lens just below it, then
+rise with a liquid neck and disappear into the lens, with no coloured second
+blob or halo. Repeat with an initials avatar. Scroll back down slowly to watch the droplet come out and
 regrow; release mid-way to check it snaps to a rest; repeat quickly with a
 fling. Repeat on a person profile (Diary › a person). Check dark mode, with
 Developer options › Display cutout set to "Punch hole" on an emulator or a
