@@ -1,7 +1,8 @@
-import type {
-  AndroidLiveUpdateMessage,
-  LiveActivityKind,
-  LiveActivityProps,
+import {
+  type AndroidLiveUpdateMessage,
+  type LiveActivityKind,
+  type LiveActivityProps,
+  relevanceForRank,
 } from "@hackos/shared/live-activities";
 import type { Language } from "@hackos/shared/locale";
 import { config } from "../../config.js";
@@ -21,7 +22,6 @@ import {
   candidatesFor,
   type KnownSession,
   loadLiveActivityContext,
-  relevanceForRank,
   selectForDevice,
 } from "./candidates.js";
 import { liveStateHash } from "./state.js";
