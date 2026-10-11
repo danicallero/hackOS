@@ -16,7 +16,6 @@ export const LIVE_ACTIVITY_KINDS = {
   ACTIVITY: "activity",
   ATTENDEE_ACTIVITY: "attendee_activity",
   DEADLINE: "deadline",
-  JUDGING: "judging",
   ACCREDITATION: "accreditation",
 } as const;
 
@@ -31,7 +30,6 @@ export const LIVE_ACTIVITY_WIDGET_NAMES: Record<LiveActivityKind, string> = {
   activity: "StaffActivity",
   attendee_activity: "AttendeeActivity",
   deadline: "DeadlineActivity",
-  judging: "JudgingActivity",
   accreditation: "AccreditationActivity",
 };
 
@@ -43,9 +41,8 @@ export const LIVE_ACTIVITY_CONFIG_KINDS = [
   "activity",
   "attendee_activity",
   "queue",
-  "deadline",
-  "judging",
   "accreditation",
+  "deadline",
 ] as const;
 
 export type LiveActivityConfigKind = (typeof LIVE_ACTIVITY_CONFIG_KINDS)[number];
@@ -290,95 +287,6 @@ export interface DeadlineLiveProps {
   updatedAt: string;
 }
 
-// ── Judging room (H29, H31-H36, #966) ─────────────────────────────────────
-
-export function judgingLiveActivitySubject(roomId: number): string {
-  return `room:${roomId}`;
-}
-
-/**
- * What the room is doing: `presenting` (pitch timer running or paused),
- * `in_room` (team inside, setting up), `called` (nobody inside, a team on its
- * way), `idle` (room open, nobody called yet). A paused room (H35) with
- * nobody inside or called has no Live Activity at all; a paused room still
- * finishing a team keeps its phase with `roomPaused: true`.
- */
-export type JudgingLivePhase = "presenting" | "in_room" | "called" | "idle";
-
-export interface JudgingLiveLabels {
-  /** "Presenting" */
-  presenting: string;
-  /** "In room" */
-  inRoom: string;
-  /** "Next" — prefixes the next team. */
-  next: string;
-  /** "On the way" — the next team has been called. */
-  onTheWay: string;
-  /** "Waiting" — labels `waitingCount`. */
-  waiting: string;
-  /** "Paused" — the room is paused (H35). */
-  paused: string;
-  /** "No team called" — idle placeholder, never an empty value. */
-  noTeam: string;
-  /** "Time over" — the pitch ran past `presentationSeconds`. */
-  overtime: string;
-}
-
-export interface JudgingLiveTeam {
-  /** Queue entry id. */
-  entryId: number;
-  /** Project (team) name. */
-  name: string;
-}
-
-export interface JudgingLiveCurrent extends JudgingLiveTeam {
-  status: "in_room" | "presenting";
-  /** ISO instant the team entered the room (setup timer), or null. */
-  enteredAt: string | null;
-  /** ISO instant the pitch timer started; null while setting up. */
-  presentationStartedAt: string | null;
-  /**
-   * ISO instant the pitch timer was paused (#926), or null while running.
-   * Elapsed = (pausedAt ?? now) − presentationStartedAt − pausedSeconds.
-   */
-  presentationPausedAt: string | null;
-  /** Seconds already spent paused before `presentationPausedAt`. */
-  presentationPausedSeconds: number;
-  /** Pitch length: the entry's frozen goal, else the challenge's `max_presentation_seconds`. */
-  presentationSeconds: number | null;
-}
-
-export interface JudgingLiveNext extends JudgingLiveTeam {
-  /** ISO instant the team was called (count-up "on the way" timer). */
-  calledAt: string | null;
-}
-
-export interface JudgingLiveProps {
-  v: typeof LIVE_ACTIVITY_PROPS_VERSION;
-  kind: "judging";
-  phase: JudgingLivePhase;
-  roomId: number;
-  roomName: string;
-  roomLocation: string | null;
-  /** The queue the room serves (challenge or merged group title), or null. */
-  queueTitle: string | null;
-  /** H35: the room is paused (no new calls). */
-  roomPaused: boolean;
-  /** The team in the room or presenting, or null. */
-  current: JudgingLiveCurrent | null;
-  /** The earliest-called team waiting at the door, or null. */
-  next: JudgingLiveNext | null;
-  /** Teams called to this room, including `next`. */
-  calledCount: number;
-  /** Teams still waiting in the room's queue. */
-  waitingCount: number;
-  /** Deep link: `hackos://judging?room=<roomId>`. */
-  url: string;
-  labels: JudgingLiveLabels;
-  rank?: number;
-  updatedAt: string;
-}
-
 // ── Accreditation desk (H22, H24, H27, #966) ──────────────────────────────
 
 export const ACCREDITATION_LIVE_ACTIVITY_SUBJECT = "accreditation";
@@ -424,7 +332,6 @@ export type LiveActivityProps =
   | ActivityLiveProps
   | AttendeeActivityLiveProps
   | DeadlineLiveProps
-  | JudgingLiveProps
   | AccreditationLiveProps;
 
 /**
@@ -440,7 +347,6 @@ export interface MyLiveActivities {
   activities: ActivityLiveProps[];
   attendeeActivities?: AttendeeActivityLiveProps[];
   deadline?: DeadlineLiveProps | null;
-  judging?: JudgingLiveProps[];
   accreditation?: AccreditationLiveProps | null;
   /** The configured per-device limit the response already applies. */
   maxConcurrent?: number;
@@ -576,39 +482,6 @@ const DEADLINE_LABELS: Record<Language, DeadlineLiveLabels> = {
   },
 };
 
-const JUDGING_LABELS: Record<Language, JudgingLiveLabels> = {
-  en: {
-    presenting: "Presenting",
-    inRoom: "In room",
-    next: "Next",
-    onTheWay: "On the way",
-    waiting: "Waiting",
-    paused: "Paused",
-    noTeam: "No team called",
-    overtime: "Time over",
-  },
-  es: {
-    presenting: "Presentando",
-    inRoom: "En sala",
-    next: "Siguiente",
-    onTheWay: "De camino",
-    waiting: "En cola",
-    paused: "En pausa",
-    noTeam: "Ningún equipo llamado",
-    overtime: "Tiempo agotado",
-  },
-  gl: {
-    presenting: "Presentando",
-    inRoom: "Na sala",
-    next: "Seguinte",
-    onTheWay: "De camiño",
-    waiting: "Na cola",
-    paused: "En pausa",
-    noTeam: "Ningún equipo chamado",
-    overtime: "Tempo esgotado",
-  },
-};
-
 const ACCREDITATION_LABELS: Record<Language, AccreditationLiveLabels> = {
   en: {
     title: "Accreditation",
@@ -639,10 +512,6 @@ export function attendeeActivityLiveLabels(lang: Language): AttendeeActivityLive
 
 export function deadlineLiveLabels(lang: Language): DeadlineLiveLabels {
   return DEADLINE_LABELS[lang];
-}
-
-export function judgingLiveLabels(lang: Language): JudgingLiveLabels {
-  return JUDGING_LABELS[lang];
 }
 
 export function accreditationLiveLabels(lang: Language): AccreditationLiveLabels {

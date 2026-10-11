@@ -89,14 +89,7 @@ describe("Live Activity settings routes", () => {
     const admin = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     const staff = await createRole([CAPABILITIES.ACTIVITY_SCAN]);
     const attendees = await createRole([]);
-    const order = [
-      "deadline",
-      "activity",
-      "queue",
-      "attendee_activity",
-      "accreditation",
-      "judging",
-    ] as const;
+    const order = ["deadline", "activity", "queue", "attendee_activity", "accreditation"] as const;
     const first = await put(admin, body(order, [staff, attendees], 3));
     expect(first.statusCode).toBe(200);
     const saved = first.json();

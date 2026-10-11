@@ -8,11 +8,9 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import { addChallengeJudge, createRepoWithTeam, enqueueRepo } from "../queue/fixtures.js";
+import { createRepoWithTeam } from "../queue/fixtures.js";
 import {
   allowLiveActivities,
-  callEntry,
-  closeJudgingWindow,
   createScannableActivity,
   openJudgingWindow,
   participantInQueue,
@@ -21,9 +19,8 @@ import {
 
 /**
  * #966 read model for the configurable kinds: gating (configuration, roles,
- * intrinsic capability/data), the attendee (H59), deadline (H19/H20),
- * judging (H29-H36) and accreditation (H22/H24) states, H54 isolation and
- * the per-device cut.
+ * intrinsic capability/data), the attendee (H59), deadline (H19/H20) and
+ * accreditation (H22/H24) states, H54 isolation and the per-device cut.
  */
 
 beforeEach(async () => {
@@ -145,7 +142,7 @@ describe("configuration gates", () => {
 
     await allowLiveActivities({
       maxConcurrent: 2,
-      kinds: ["queue", "attendee_activity", "activity", "judging", "accreditation", "deadline"],
+      kinds: ["queue", "attendee_activity", "activity", "accreditation", "deadline"],
     });
     result = await mine(userId);
     expect(result.queue?.rank).toBe(0);
@@ -260,82 +257,6 @@ describe("submission deadline (H19, H20)", () => {
     expect((await mine(drafter)).deadline?.phase).toBe("closing");
     // Unknown status (Devpost-only, not imported) never claims "not submitted".
     expect((await mine(devpostOnly)).deadline).toMatchObject({ phase: "open", submission: null });
-  });
-});
-
-describe("judging room (H29-H36)", () => {
-  it("shows the judge's room with the pitch timer, the next team and the waiting count", async () => {
-    const pool = await db();
-    await openJudgingWindow();
-    const { entryId, challengeId, roomId } = await participantInQueue({ position: 1 });
-    const judge = await createUser();
-    await addChallengeJudge(challengeId, judge);
-    const outsider = await createUserWithCapabilities([CAPABILITIES.JUDGE_PANEL]);
-    const { repoId: nextRepo } = await createRepoWithTeam(undefined, "Next team");
-    const nextEntry = await enqueueRepo(challengeId, nextRepo, 2);
-    const { repoId: waitingRepo } = await createRepoWithTeam();
-    await enqueueRepo(challengeId, waitingRepo, 3);
-    await pool.query(`UPDATE challenges SET max_presentation_seconds = 300 WHERE id = $1`, [
-      challengeId,
-    ]);
-    await allowLiveActivities();
-
-    // Room open, nobody called yet.
-    expect((await mine(judge)).judging).toMatchObject([
-      { phase: "idle", roomId, current: null, next: null, waitingCount: 3 },
-    ]);
-
-    await pool.query(
-      `UPDATE queue_entries SET status = 'presenting', assigned_room_id = $2,
-              called_at = now() - interval '10 minutes', room_entered_at = now() - interval '6 minutes',
-              presentation_started_at = now() - interval '4 minutes',
-              presentation_paused_at = now() - interval '1 minute', presentation_paused_seconds = 20
-        WHERE id = $1`,
-      [entryId, roomId],
-    );
-    await callEntry(nextEntry, roomId);
-    const [room] = (await mine(judge, "es")).judging;
-    expect(room).toMatchObject({
-      kind: "judging",
-      phase: "presenting",
-      roomName: "Room B",
-      roomLocation: "Floor 2",
-      roomPaused: false,
-      current: {
-        entryId,
-        status: "presenting",
-        presentationPausedSeconds: 20,
-        presentationSeconds: 300,
-      },
-      next: { entryId: nextEntry, name: "Next team" },
-      calledCount: 1,
-      waitingCount: 1,
-      url: `hackos://judging?room=${roomId}`,
-      labels: { presenting: "Presentando", next: "Siguiente" },
-    });
-    expect(room?.current?.presentationStartedAt).not.toBeNull();
-    expect(room?.current?.presentationPausedAt).not.toBeNull();
-
-    // judge:panel without a room association has no room of their own.
-    expect((await mine(outsider)).judging).toEqual([]);
-    // A synthetic judge never sees a real room (H54).
-    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [judge]);
-    expect((await mine(judge)).judging).toEqual([]);
-    await pool.query(`UPDATE users SET is_test_account = false WHERE id = $1`, [judge]);
-
-    await closeJudgingWindow();
-    expect((await mine(judge)).judging).toEqual([]);
-  });
-
-  it("drops a paused room with nobody inside or called (H35)", async () => {
-    const pool = await db();
-    await openJudgingWindow();
-    const { challengeId, roomId } = await participantInQueue();
-    const judge = await createUser();
-    await addChallengeJudge(challengeId, judge);
-    await pool.query(`UPDATE room_queue_state SET is_paused = true WHERE room_id = $1`, [roomId]);
-    await allowLiveActivities();
-    expect((await mine(judge)).judging).toEqual([]);
   });
 });
 

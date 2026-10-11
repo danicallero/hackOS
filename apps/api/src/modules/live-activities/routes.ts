@@ -164,7 +164,7 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
         description:
           "Records that the caller's device is showing the Live Activity `kind`/`subject` " +
           "(queue `judging`, activity `activity:<id>`, attendee_activity `schedule:<id>`, " +
-          "deadline `deadline`, judging `room:<id>`, accreditation `accreditation`) and stores or " +
+          "deadline `deadline`, accreditation `accreditation`) and stores or " +
           "rotates its iOS per-activity push token so the server can update and end it. Call " +
           "it after a local start, after a remote push-to-start start, and whenever iOS " +
           "rotates the token. Re-registering a dismissed activity reopens it.",
@@ -257,8 +257,7 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
           "`activities` are scannable meals/activities in the lead time or running " +
           "(activity:scan); `attendeeActivities` are opted-in schedule items for the caller's " +
           "audience; `deadline` counts down to submissions closing (queue:status with event " +
-          "access); `judging` follows the rooms the caller judges in during the judging window; " +
-          "`accreditation` is the check-in desk during its window (accredit:scan). The set is " +
+          "access); `accreditation` is the check-in desk during its window (accredit:scan). The set is " +
           "ranked by kind priority and cut to `maxConcurrent`; each item's `rank` orders it " +
           "(0 = most important). Pass `deviceId` (the caller's own install) so the cut also " +
           "keeps that device's running activities and dismissals, as the worker does. Labels " +
@@ -298,11 +297,11 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
         summary: "Live Activity configuration",
         description:
           "Organizer configuration of Live Activity kinds (`activity` staff meals/activities, " +
-          "`attendee_activity`, `queue`, `deadline`, `judging`, `accreditation`): whether each " +
+          "`attendee_activity`, `queue`, `accreditation`, `deadline`): whether each " +
           "is on, its priority (`kinds` is sorted by it, 0 = highest), the role ids allowed to " +
           "receive it, and the capability it still requires on top of the role " +
-          "(`requiredCapability`, null when only data gates it, e.g. a queue entry or a judging " +
-          "room). `maxConcurrent` is the most Live Activities one device shows at once; lower " +
+          "(`requiredCapability`, null when only data gates it, e.g. a queue entry). " +
+          "`maxConcurrent` is the most Live Activities one device shows at once; lower " +
           "priority candidates beyond it are not started. `roles` lists every assignable " +
           "(non-deleted) role, highest position first, with the same raw name `GET /api/roles` " +
           "returns, so the editor needs no roles-manager permission.",

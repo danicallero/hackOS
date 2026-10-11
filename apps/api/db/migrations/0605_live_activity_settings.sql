@@ -2,9 +2,9 @@
 --
 -- plan/schema-boceto.dbml has no Live Activity model (see 0604). This adds:
 --
--- * Four more session kinds: `attendee_activity` (an opted-in schedule item
---   for its audience), `deadline` (submission countdown), `judging` (a
---   judge's room) and `accreditation` (the check-in desk).
+-- * Three more session kinds: `attendee_activity` (an opted-in schedule item
+--   for its audience), `deadline` (submission countdown) and `accreditation`
+--   (the check-in desk).
 -- * schedule.live_activity_audience: per-item opt-in for the attendee Live
 --   Activity. It lives on `schedule`, next to `audiences`, because the
 --   schedule row is what staff edit and what decides who sees the item; the
@@ -13,12 +13,12 @@
 --   shows at once.
 -- * live_activity_kind_settings / live_activity_kind_roles: per-kind on/off,
 --   priority (0 = highest) and the roles allowed to receive it. A kind's
---   intrinsic gate (capability or data, e.g. activity:scan or a judging
---   room) still applies on top of the role list. Roles created later are not
+--   intrinsic gate (capability or data, e.g. activity:scan or a queue
+--   entry) still applies on top of the role list. Roles created later are not
 --   added automatically.
 ALTER TABLE live_activity_sessions DROP CONSTRAINT live_activity_sessions_kind_check;
 ALTER TABLE live_activity_sessions ADD CONSTRAINT live_activity_sessions_kind_check
-  CHECK (kind IN ('queue', 'activity', 'attendee_activity', 'deadline', 'judging', 'accreditation'));
+  CHECK (kind IN ('queue', 'activity', 'attendee_activity', 'deadline', 'accreditation'));
 
 ALTER TABLE schedule ADD COLUMN live_activity_audience boolean NOT NULL DEFAULT false;
 
@@ -33,7 +33,7 @@ INSERT INTO live_activity_settings (id, max_concurrent) VALUES (1, 2);
 
 CREATE TABLE live_activity_kind_settings (
   kind text PRIMARY KEY
-    CHECK (kind IN ('activity', 'attendee_activity', 'queue', 'deadline', 'judging', 'accreditation')),
+    CHECK (kind IN ('activity', 'attendee_activity', 'queue', 'deadline', 'accreditation')),
   enabled boolean NOT NULL DEFAULT true,
   priority integer NOT NULL CHECK (priority >= 0),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -56,9 +56,8 @@ INSERT INTO live_activity_kind_settings (kind, enabled, priority) VALUES
   ('activity', true, 0),
   ('attendee_activity', true, 1),
   ('queue', true, 2),
-  ('judging', true, 3),
-  ('accreditation', true, 4),
-  ('deadline', true, 5);
+  ('accreditation', true, 3),
+  ('deadline', true, 4);
 
 -- Capability-gated kinds: every live role that explicitly allows the kind's
 -- intrinsic capability.
@@ -71,15 +70,7 @@ SELECT k.kind, r.id
   JOIN roles r ON r.id = rc.role_id AND r.deleted_at IS NULL;
 
 -- Data-gated, attendee-facing kinds: every live role with event access.
--- Judging also includes staff judging roles (judge:panel) whatever their
--- event access; the room association still decides who actually gets it.
 INSERT INTO live_activity_kind_roles (kind, role_id)
 SELECT k.kind, r.id
-  FROM (VALUES ('attendee_activity'), ('queue'), ('judging')) AS k(kind)
+  FROM (VALUES ('attendee_activity'), ('queue')) AS k(kind)
   JOIN roles r ON r.deleted_at IS NULL AND r.event_access = true;
-INSERT INTO live_activity_kind_roles (kind, role_id)
-SELECT 'judging', r.id
-  FROM role_capabilities rc
-  JOIN roles r ON r.id = rc.role_id AND r.deleted_at IS NULL
- WHERE rc.capability = 'judge:panel' AND rc.state = 'allow'
-ON CONFLICT DO NOTHING;

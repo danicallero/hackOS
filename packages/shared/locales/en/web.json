@@ -3701,8 +3701,6 @@
   "liveActivityKindQueueDesc": "Position, estimated wait and room for teams waiting to be judged.",
   "liveActivityKindDeadline": "Submission deadline",
   "liveActivityKindDeadlineDesc": "Countdown to the project submission deadline for participants.",
-  "liveActivityKindJudging": "Judging room",
-  "liveActivityKindJudgingDesc": "Pitch timer and next team for judges in a room.",
   "liveActivityKindAccreditation": "Accreditation desk",
   "liveActivityKindAccreditationDesc": "Check-in counters for staff at the accreditation desk.",
   "liveActivityAudienceLabel": "Show Live Activity to audience",

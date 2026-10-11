@@ -18,9 +18,6 @@ receive them ([Configuration](#configuration)):
 - **Submission deadline (H19, H20)**: for participants, from
   `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` before submissions close, a countdown
   with the team's hackOS submission status.
-- **Judging room (H29–H36)**: for judges, during the judging window, their
-  room: the team inside with its pitch timer, the next team on its way and
-  how many are waiting.
 - **Accreditation desk (H22, H24)**: for `accredit:scan` holders, around the
   arrival rush, accredited/eligible, people inside and arrivals in the last
   10 minutes, with one **Scan** action.
@@ -45,7 +42,7 @@ GET /api/me/live-activities      worker.ts (every 20 s)
 | File (`apps/api/src/modules/live-activities/`) | Role |
 | --- | --- |
 | `state.ts` | Builds `QueueLiveProps` and `ActivityLiveProps` (`@hackos/shared/live-activities`), the judging window and the state hash. |
-| `kinds.ts` | Loaders and builders for `AttendeeActivityLiveProps`, `DeadlineLiveProps`, `JudgingLiveProps` and `AccreditationLiveProps`. Each loader reads its data set once for every candidate user. |
+| `kinds.ts` | Loaders and builders for `AttendeeActivityLiveProps`, `DeadlineLiveProps` and `AccreditationLiveProps`. Each loader reads its data set once for every candidate user. |
 | `candidates.ts` | `loadLiveActivityContext` (every data set once per tick or request), `candidatesFor` (kind configuration, roles and intrinsic gates, in priority order), `selectForDevice` (the `maxConcurrent` cut) and the read model. Both the read endpoint and the worker call it, so a local refresh and a remote push never disagree. |
 | `settings.ts` | Organizer configuration: read, save (audited) and each kind's required capability. |
 | `routes.ts`, `schemas.ts` | Device/session registry, the read model and the configuration routes. |
@@ -162,32 +159,6 @@ the account language.
   `closing`. A `null` status never alerts.
 - `url`: `hackos://project` (proposed; the app has no project screen yet).
 
-### Judging room (H29–H36)
-
-- Only while the judging window is open.
-- Rooms: those whose queue group belongs to an enterprise the user judges for
-  (enterprise roster or sponsor rep), the association the room view grants
-  (`judgesRoomEnterprise`). Subject `room:<id>`, one per room.
-  **Decision:** a `judge:panel` holder with no such association has no room
-  of their own, so gets no judging activity.
-- **Decision:** a paused room (H35) with nobody inside or called has no
-  activity, so a room that has not opened yet adds nothing. A paused room
-  still finishing a team keeps its phase with `roomPaused: true`.
-- `phase`: `presenting`, `in_room`, `called` (someone on the way) or `idle`.
-- `current`: the team in the room, with `enteredAt` and the pitch timer as
-  instants: `presentationStartedAt`, `presentationPausedAt`,
-  `presentationPausedSeconds` (#926) and `presentationSeconds` (the entry's
-  frozen goal, else the challenge's `max_presentation_seconds`). Devices tick
-  locally: elapsed = (pausedAt ?? now) − startedAt − pausedSeconds.
-- `next`: the earliest-called team, with `calledAt`; `calledCount` and
-  `waitingCount` (the room's queue group).
-- H54: entries count only when repo and challenge are on the same side of
-  the fixture boundary, and a viewer only gets rooms whose queue is on their
-  side.
-- **Alert policy:** none. The judge panel is the working surface, and a
-  pitch timer must not buzz the room.
-- `url`: `hackos://judging?room=<id>` (proposed).
-
 ### Accreditation desk (H22, H24, H27)
 
 - **Decision:** `event_config` has no check-in window, so the desk's window
@@ -235,9 +206,8 @@ role list (`requiredCapability` in the response):
 | `activity` | staff at a meal or scannable activity | `activity:scan` |
 | `attendee_activity` | the audience of an opted-in schedule item | schedule audience (data) |
 | `queue` | participants in a judging queue | a live queue entry (data) |
-| `deadline` | participants before submissions close | `queue:status` + event access |
-| `judging` | judges of a room | a room their enterprise judges (data) |
 | `accreditation` | the check-in desk | `accredit:scan` |
+| `deadline` | participants before submissions close | `queue:status` + event access |
 
 A user receives a kind only when it is **enabled**, they hold **at least one
 of its roles** (a non-deleted role from `live_activity_kind_roles`), and the
@@ -251,11 +221,11 @@ Storage (migration `0605_live_activity_settings.sql`): the singleton
 unique priority, and `live_activity_kind_roles (kind, role_id)` (cascade on a
 hard role delete; a soft-deleted role is ignored when reading). The migration
 seeds every kind enabled in the order `activity`, `attendee_activity`,
-`queue`, `judging`, `accreditation`, `deadline` (the product owner ranks
+`queue`, `accreditation`, `deadline` (the product owner ranks
 meals and activities above the submission countdown). Role lists are seeded
 from the roles that explicitly allow the kind's capability (`activity`,
 `accreditation`, `deadline`), or from every role with event access for the
-data-gated kinds (`judging` also adds the `judge:panel` roles). **Roles created
+data-gated kinds. **Roles created
 later are not added to any kind automatically**; organizers tick them in the
 editor. A missing kind row reads as disabled with no roles (fail closed).
 
@@ -274,7 +244,7 @@ an audience) sets `liveActivityAudience`.
 ### Ranking and the per-device limit
 
 A user's candidates are ranked by kind priority, then by each kind's own
-order: earliest activity or schedule item first, and rooms by id. Each
+order: earliest activity or schedule item first. Each
 device keeps at most `maxConcurrent` of them:
 
 - **Hysteresis:** within a kind, a subject already open on the device
@@ -312,8 +282,8 @@ because this is delivery plumbing. Every write is an idempotent upsert. The
 and session invalidation, as push tokens are, to avoid refresh loops.
 
 Subjects: `judging` for the queue (one per participant), `activity:<id>`
-for staff activities, `schedule:<id>` for attendee activities, `deadline`,
-`room:<id>` for judging and `accreditation`. The session routes reject a
+for staff activities, `schedule:<id>` for attendee activities, `deadline`
+and `accreditation`. The session routes reject a
 subject that does not match its kind.
 
 Deep links (the app maps them; the ones marked *proposed* need a screen or a
@@ -325,7 +295,6 @@ route mapping in `apps/mobile`):
 | `activity` | `hackos://scan?activity=<id>` | Scan: same URL |
 | `attendee_activity` | `hackos://schedule/<scheduleId>` (`app/schedule/[id].tsx`) | — |
 | `deadline` | `hackos://project` (*proposed*) | — |
-| `judging` | `hackos://judging?room=<roomId>` (*proposed*) | — |
 | `accreditation` | `hackos://scan` | Scan: same URL |
 
 ### Schema (migrations `0604_live_activities.sql`, `0605_live_activity_settings.sql`)
@@ -334,7 +303,7 @@ route mapping in `apps/mobile`):
   `user_id` (cascade), `platform`, `push_to_start_token`, `expo_push_token`,
   `language` and `enabled`.
 - `live_activity_sessions`: one row per `(device, kind, subject)` (kind one
-  of `queue`, `activity`, `attendee_activity`, `deadline`, `judging`,
+  of `queue`, `activity`, `attendee_activity`, `deadline`,
   `accreditation`), with
   `activity_push_token`, `state_hash`/`props` for the last state sent,
   `last_sent_at`, `started_at`, `ended_at`, `end_reason` and
@@ -350,9 +319,7 @@ date), never tokens.
 
 `live-activities` runs every 20 s. A call (H29) also schedules a deduplicated
 early run 2 s later, so the alerting "go to room" update does not wait for the
-next repetition. Other room changes (a team entering, the pitch
-timer starting) reach judges within one repetition; the timer instants are
-exact, so only the start of the ticking is delayed. Each tick does the following:
+next repetition. Each tick does the following:
 
 1. Loads enabled devices of active users, plus any device that still has an
    open session (to end it). Only *actionable* devices (with a start path or
@@ -364,16 +331,15 @@ exact, so only the start of the ticking is delayed. Each tick does the following
 | Known session | Action |
 | --- | --- |
 | none, or `finished` | **start**, if a start path exists: iOS `push_to_start_token` (and APNs configured) or Android `expo_push_token` |
-| open, state hash changed | **update**. Same-phase changes of staff and attendee activities, the deadline and the accreditation desk are throttled to one per 30 s per session; queue and judging changes and every phase change go out immediately. iOS waits until the app reports the activity's own token. |
+| open, state hash changed | **update**. Same-phase changes of staff and attendee activities, the deadline and the accreditation desk are throttled to one per 30 s per session; queue changes and every phase change go out immediately. iOS waits until the app reports the activity's own token. |
 | open, hash unchanged | nothing |
 | `dismissed`, same phase as `dismissed_phase` | nothing (the user removed it) |
 | `dismissed`, phase changed (e.g. waiting → called, upcoming → live) | **start** again: new, essential information |
 | `dismissed`, no `dismissed_phase` yet | record the current phase, send nothing |
 
-   An open queue or judging session whose state has not changed for 15
-   minutes gets a routine (priority 5) refresh, so its 30-minute
-   `stale-date` never greys out a team that is still waiting or a long
-   pitch.
+   An open queue session whose state has not changed for 15 minutes gets
+   a routine (priority 5) refresh, so its 30-minute `stale-date` never
+   greys out a team that is still waiting.
 
 3. Every open session that is no longer desired is **ended**. This happens
    when the window closes, the team is done, the activity ends, the
@@ -444,7 +410,7 @@ exact, so only the start of the ticking is delayed. Each tick does the following
 - `content-state` must match `expo-widgets`'
   `LiveActivityAttributes.ContentState { name: String, props: String? }`
   exactly. `name` is `LIVE_ACTIVITY_WIDGET_NAMES[kind]` (`QueueActivity`,
-  `StaffActivity`, `AttendeeActivity`, `DeadlineActivity`, `JudgingActivity`,
+  `StaffActivity`, `AttendeeActivity`, `DeadlineActivity`,
   `AccreditationActivity`), and `props` is the props JSON *string*.
 - `attributes-type` and `attributes` are sent on `start` only.
   `LiveActivityAttributes` is the struct name in
@@ -454,8 +420,7 @@ exact, so only the start of the ticking is delayed. Each tick does the following
   it is sent only when the team is called (queue) or a known draft enters the
   last 15 minutes (deadline). It carries no `sound`, because the
   non-optional `queue.called` push notification already rings.
-- `stale-date`: now + 30 min for the queue and judging, which have no end
-  instant. Otherwise the item's own end: the activity or schedule item end,
+- `stale-date`: now + 30 min for the queue, which has no end instant. Otherwise the item's own end: the activity or schedule item end,
   the deadline, or the accreditation window end.
 - `relevance-score`: `100 − 10 × rank` (see
   [Ranking](#ranking-and-the-per-device-limit)).
@@ -539,17 +504,6 @@ Submission deadline:
 | Lock Screen | as expanded, with a progress bar from `startsAt` to `endsAt` | as expanded | as expanded |
 | Watch | countdown | countdown + "Not submitted" | "Submitted" |
 
-Judging room:
-
-| Presentation | Presenting | In room | Called / idle |
-|---|---|---|---|
-| Compact leading | room name | room name | room name |
-| Compact trailing | pitch timer (counts up, tinted past `presentationSeconds`, frozen while paused) | setup timer from `enteredAt` | "Next" + team / waiting count |
-| Minimal | pitch timer | setup timer | waiting count |
-| Expanded | team, pitch timer with a progress bar against `presentationSeconds`, next team + "on the way" timer, waiting count | team, setup timer, next team | next team + "on the way" timer, or "No team called"; waiting count; "Paused" when `roomPaused` |
-| Lock Screen | as expanded | as expanded | as expanded |
-| Watch | team + pitch timer | team | next team |
-
 Accreditation desk:
 
 | Presentation | Content |
@@ -629,7 +583,7 @@ and `deploy/README.md`.
 - `settings.test.ts`: configuration routes (access, validation, priorities,
   audit, idempotent replay).
 - `worker.test.ts` also covers start, update and end per new kind, the
-  deadline alert, unthrottled judging updates, throttled desk counters,
+  deadline alert, throttled desk counters,
   displacement by a higher-priority kind without flapping, and ending a
   disabled kind.
 

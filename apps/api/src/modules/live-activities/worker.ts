@@ -27,7 +27,7 @@ import {
 import { liveStateHash } from "./state.js";
 
 /**
- * Live Activity push worker (#966; H38, H25, H26, H59, H19, H29-H36, H22).
+ * Live Activity push worker (#966; H38, H25, H26, H59, H19, H22).
  * Every tick compares the desired Live Activities of each enabled device —
  * the user's candidates (candidates.ts: kind configuration, role and
  * intrinsic gates) cut to the device's `maxConcurrent` — with the sessions
@@ -38,8 +38,8 @@ import { liveStateHash } from "./state.js";
  *   (iOS push-to-start token, Android Expo token) → start;
  * - desired, open session, visible state changed → update (counter updates
  *   of staff/attendee activities, the deadline and the accreditation desk
- *   are throttled to one per 30 s per session; queue and judging changes and
- *   phase changes go out immediately);
+ *   are throttled to one per 30 s per session; queue changes and phase
+ *   changes go out immediately);
  * - open session no longer desired (window closed, team finished, activity
  *   over, kind disabled or not allowed, outranked by a higher-priority kind,
  *   device disabled) → end; a dismissed one no longer relevant → finished, so
@@ -58,18 +58,18 @@ const ACTIVITY_UPDATE_THROTTLE_SECONDS = 30;
 /** Arbitrary constant for pg_try_advisory_lock; unique among this codebase's advisory keys. */
 const TICK_LOCK_KEY = 966_001;
 /**
- * Without an update for this long, iOS greys a queue or judging activity
- * out as stale (both have no natural end instant).
+ * Without an update for this long, iOS greys a queue activity out as
+ * stale (it has no natural end instant).
  */
 const OPEN_ENDED_STALE_MS = 30 * 60 * 1000;
 /**
- * An unchanged queue or judging state is re-sent after this long, so a team
- * waiting (or a long pitch) without any visible change is not greyed out.
+ * An unchanged queue state is re-sent after this long, so a team waiting
+ * without any visible change is not greyed out.
  */
 const OPEN_ENDED_REFRESH_MS = OPEN_ENDED_STALE_MS / 2;
 /** Kinds whose every change goes out immediately (no counter throttle). */
-const URGENT_KINDS = new Set<LiveActivityKind>(["queue", "judging"]);
-const OPEN_ENDED_KINDS = new Set<LiveActivityKind>(["queue", "judging"]);
+const URGENT_KINDS = new Set<LiveActivityKind>(["queue"]);
+const OPEN_ENDED_KINDS = new Set<LiveActivityKind>(["queue"]);
 
 interface DeviceRow {
   id: number;
@@ -160,15 +160,6 @@ export function alertFor(props: LiveActivityProps, timezone: string): ApnsAlert 
         title: props.labels.title,
         body: [status, props.projectName, closes].filter(Boolean).join(" · "),
       };
-    }
-    case "judging": {
-      const { labels } = props;
-      const body = props.current
-        ? `${props.phase === "presenting" ? labels.presenting : labels.inRoom}: ${props.current.name}`
-        : props.next
-          ? `${labels.next}: ${props.next.name}`
-          : labels.noTeam;
-      return { title: props.roomName, body };
     }
     case "accreditation":
       return {

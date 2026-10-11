@@ -22,7 +22,6 @@ export const LIVE_ACTIVITY_REQUIRED_CAPABILITY: Record<LiveActivityConfigKind, s
   attendee_activity: null,
   queue: null,
   deadline: CAPABILITIES.QUEUE_STATUS,
-  judging: null,
   accreditation: CAPABILITIES.ACCREDIT_SCAN,
 };
 

@@ -3701,8 +3701,6 @@
   "liveActivityKindQueueDesc": "Posición, espera estimada e sala para os equipos que agardan a súa avaliación.",
   "liveActivityKindDeadline": "Peche de entregas",
   "liveActivityKindDeadlineDesc": "Conta atrás ata o peche de entrega de proxectos para participantes.",
-  "liveActivityKindJudging": "Sala de avaliación",
-  "liveActivityKindJudgingDesc": "Temporizador da presentación e seguinte equipo para os xuíces dunha sala.",
   "liveActivityKindAccreditation": "Mesa de acreditación",
   "liveActivityKindAccreditationDesc": "Contadores de acreditacións para o staff da mesa.",
   "liveActivityAudienceLabel": "Amosar actividade en directo ao seu público",

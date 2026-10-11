@@ -274,7 +274,6 @@ describe("GET /api/me/live-activities", () => {
       activities: [],
       attendeeActivities: [],
       deadline: null,
-      judging: [],
       accreditation: null,
       maxConcurrent: 5,
     });

@@ -162,7 +162,6 @@ const DEFAULT_KIND_ORDER = [
   "activity",
   "attendee_activity",
   "queue",
-  "judging",
   "accreditation",
   "deadline",
 ] as const;

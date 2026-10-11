@@ -11,7 +11,7 @@ import {
 import { LANGS } from "@hackos/shared/locale";
 import { z } from "zod";
 
-/** Live Activity registry, read and configuration schemas (#966; H38, H25, H26, H59, H19, H29-H36, H22). */
+/** Live Activity registry, read and configuration schemas (#966; H38, H25, H26, H59, H19, H22). */
 
 const languageSchema = z.enum(LANGS as [string, ...string[]]);
 const kindSchema = z.enum(Object.values(LIVE_ACTIVITY_KINDS) as [string, ...string[]]);
@@ -51,7 +51,6 @@ const SUBJECT_PATTERNS: Record<string, RegExp> = {
   [LIVE_ACTIVITY_KINDS.ACTIVITY]: /^activity:[1-9]\d{0,9}$/,
   [LIVE_ACTIVITY_KINDS.ATTENDEE_ACTIVITY]: /^schedule:[1-9]\d{0,9}$/,
   [LIVE_ACTIVITY_KINDS.DEADLINE]: new RegExp(`^${DEADLINE_LIVE_ACTIVITY_SUBJECT}$`),
-  [LIVE_ACTIVITY_KINDS.JUDGING]: /^room:[1-9]\d{0,9}$/,
   [LIVE_ACTIVITY_KINDS.ACCREDITATION]: new RegExp(`^${ACCREDITATION_LIVE_ACTIVITY_SUBJECT}$`),
 };
 
@@ -62,7 +61,7 @@ function subjectMatchesKind(v: { kind: string; subject: string }): boolean {
 const subjectRule = {
   message:
     'subject must match its kind: queue "judging", activity "activity:<id>", attendee_activity ' +
-    '"schedule:<id>", deadline "deadline", judging "room:<id>", accreditation "accreditation"',
+    '"schedule:<id>", deadline "deadline", accreditation "accreditation"',
   path: ["subject"],
 };
 
@@ -201,46 +200,6 @@ const deadlineLivePropsSchema = z.object({
   updatedAt: isoString,
 });
 
-const judgingTeamSchema = { entryId: z.number().int(), name: z.string() };
-
-const judgingLivePropsSchema = z.object({
-  v: z.literal(LIVE_ACTIVITY_PROPS_VERSION),
-  kind: z.literal("judging"),
-  phase: z.enum(["presenting", "in_room", "called", "idle"]),
-  roomId: z.number().int(),
-  roomName: z.string(),
-  roomLocation: z.string().nullable(),
-  queueTitle: z.string().nullable(),
-  roomPaused: z.boolean(),
-  current: z
-    .object({
-      ...judgingTeamSchema,
-      status: z.enum(["in_room", "presenting"]),
-      enteredAt: isoString.nullable(),
-      presentationStartedAt: isoString.nullable(),
-      presentationPausedAt: isoString.nullable(),
-      presentationPausedSeconds: z.number().int(),
-      presentationSeconds: z.number().int().nullable(),
-    })
-    .nullable(),
-  next: z.object({ ...judgingTeamSchema, calledAt: isoString.nullable() }).nullable(),
-  calledCount: z.number().int(),
-  waitingCount: z.number().int(),
-  url: z.string(),
-  labels: z.object({
-    presenting: z.string(),
-    inRoom: z.string(),
-    next: z.string(),
-    onTheWay: z.string(),
-    waiting: z.string(),
-    paused: z.string(),
-    noTeam: z.string(),
-    overtime: z.string(),
-  }),
-  rank,
-  updatedAt: isoString,
-});
-
 const accreditationLivePropsSchema = z.object({
   v: z.literal(LIVE_ACTIVITY_PROPS_VERSION),
   kind: z.literal("accreditation"),
@@ -269,7 +228,6 @@ export const myLiveActivitiesResponseSchema = z.object({
   activities: z.array(activityLivePropsSchema),
   attendeeActivities: z.array(attendeeActivityLivePropsSchema),
   deadline: deadlineLivePropsSchema.nullable(),
-  judging: z.array(judgingLivePropsSchema),
   accreditation: accreditationLivePropsSchema.nullable(),
   maxConcurrent: z.number().int(),
 });

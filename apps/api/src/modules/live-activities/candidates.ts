@@ -8,8 +8,6 @@ import {
   attendeeActivityLiveActivitySubject,
   DEADLINE_LIVE_ACTIVITY_SUBJECT,
   type DeadlineLiveProps,
-  type JudgingLiveProps,
-  judgingLiveActivitySubject,
   LIVE_ACTIVITY_CONFIG_KINDS,
   type LiveActivityConfigKind,
   type LiveActivityKind,
@@ -27,13 +25,9 @@ import {
   buildAccreditationLiveProps,
   buildAttendeeActivityLiveProps,
   buildDeadlineLiveProps,
-  buildJudgingLiveProps,
   type DeadlineWindow,
   type LiveAttendeeItem,
-  type LiveJudgingRoom,
   loadAccreditationCounts,
-  loadJudgeRooms,
-  loadJudgingRooms,
   loadLiveAttendeeItems,
   loadSubmissionFacts,
   readAccreditationWindow,
@@ -99,8 +93,6 @@ export interface LiveActivityContext {
   audiences: Map<number, Set<string>>;
   deadline: DeadlineWindow | null;
   submissions: Map<number, SubmissionFact>;
-  judgeRooms: Map<number, number[]>;
-  rooms: Map<number, LiveJudgingRoom>;
   accreditation: { endsAt: Date } | null;
   accreditationCounts: Map<boolean, AccreditationCounts>;
   inside: number | null;
@@ -191,8 +183,6 @@ export async function loadLiveActivityContext(
     audiences: new Map(),
     deadline: null,
     submissions: new Map(),
-    judgeRooms: new Map(),
-    rooms: new Map(),
     accreditation: null,
     accreditationCounts: new Map(),
     inside: null,
@@ -205,20 +195,14 @@ export async function loadLiveActivityContext(
     return occupancy;
   };
 
-  // Queue (H38) and judging rooms share the judging window.
+  // Queue (H38): only inside the judging window.
   const queueUsers = usersAllowed(users, "queue");
-  const judgeUsers = usersAllowed(users, "judging");
   ctx.judgingWindow = await readJudgingWindow(db);
   if (ctx.judgingWindow.open) {
     // Bounded: only these users, and myQueueStatus only for those with
     // queue entries (participantQueueStatuses pre-checks).
     for (const userId of queueUsers) {
       ctx.queueStatuses.set(userId, await participantQueueStatuses(userId));
-    }
-    if (judgeUsers.length > 0) {
-      ctx.judgeRooms = await loadJudgeRooms(judgeUsers, db);
-      const roomIds = [...new Set([...ctx.judgeRooms.values()].flat())];
-      ctx.rooms = await loadJudgingRooms(roomIds, db);
     }
   }
 
@@ -277,7 +261,7 @@ export async function loadLiveActivityContext(
 /**
  * Every Live Activity `userId` may have now, in priority order: kinds by
  * their configured priority, then each kind's own order (earliest activity
- * first, rooms by id). Props carry no `rank` yet.
+ * first). Props carry no `rank` yet.
  */
 export async function candidatesFor(
   userId: number,
@@ -326,15 +310,6 @@ export async function candidatesFor(
       ? await withStartPosition(selectQueueLiveProps(statuses, language, now))
       : null;
     if (queue) add("queue", QUEUE_LIVE_ACTIVITY_SUBJECT, queue);
-  }
-
-  if (user.kinds.has("judging")) {
-    for (const roomId of ctx.judgeRooms.get(userId) ?? []) {
-      const room = ctx.rooms.get(roomId);
-      if (!room || room.fixture !== user.isTestAccount) continue;
-      const props = buildJudgingLiveProps(room, language, now);
-      if (props) add("judging", judgingLiveActivitySubject(roomId), props);
-    }
   }
 
   if (
@@ -483,7 +458,6 @@ export async function myLiveActivities(
     activities: of<ActivityLiveProps>("activity"),
     attendeeActivities: of<AttendeeActivityLiveProps>("attendee_activity"),
     deadline: of<DeadlineLiveProps>("deadline")[0] ?? null,
-    judging: of<JudgingLiveProps>("judging"),
     accreditation: of<AccreditationLiveProps>("accreditation")[0] ?? null,
     maxConcurrent: ctx.maxConcurrent,
   };

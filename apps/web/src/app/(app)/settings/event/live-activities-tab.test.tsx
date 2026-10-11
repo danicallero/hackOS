@@ -34,7 +34,7 @@ class StubResizeObserver {
 (globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver =
   StubResizeObserver as unknown as typeof ResizeObserver;
 
-const KINDS = ["activity", "attendee_activity", "queue", "deadline", "judging", "accreditation"];
+const KINDS = ["activity", "attendee_activity", "queue", "accreditation", "deadline"];
 
 function settings() {
   return {
@@ -123,9 +123,8 @@ describe("LiveActivitiesTab", () => {
       "liveActivityKindActivity",
       "liveActivityKindAttendeeActivity",
       "liveActivityKindQueue",
-      "liveActivityKindDeadline",
-      "liveActivityKindJudging",
       "liveActivityKindAccreditation",
+      "liveActivityKindDeadline",
     ]);
     expect(container.textContent).toContain("Staff");
     expect(container.textContent).toContain("liveActivityNoRoles");
@@ -154,9 +153,8 @@ describe("LiveActivitiesTab", () => {
       "attendee_activity",
       "activity",
       "queue",
-      "deadline",
-      "judging",
       "accreditation",
+      "deadline",
     ]);
     expect(body.kinds[1]).toEqual({ kind: "activity", enabled: true, roleIds: [1] });
     expect(button("saveChanges").disabled).toBe(true);
@@ -171,7 +169,7 @@ describe("LiveActivitiesTab", () => {
     await act(async () => user.click(button("saveChanges")));
     const body = lastPutBody();
     expect(body.kinds.find((k) => k.kind === "queue")?.enabled).toBe(false);
-    expect(body.kinds.filter((k) => k.enabled)).toHaveLength(5);
+    expect(body.kinds.filter((k) => k.enabled)).toHaveLength(KINDS.length - 1);
   });
 
   it("selects roles in a kind's editor and sends every kind exactly once", async () => {

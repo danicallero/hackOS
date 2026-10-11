@@ -535,48 +535,6 @@ describe("configurable kinds in the worker (#966)", () => {
     expect(apsOf(2).event).toBe("end");
   });
 
-  it("judging: room changes go out immediately and the window closing ends it", async () => {
-    const db = await pool();
-    await openJudgingWindow();
-    const { entryId, challengeId, roomId } = await participantInQueue();
-    const judge = await createUser();
-    const { addChallengeJudge } = await import("../queue/fixtures.js");
-    await addChallengeJudge(challengeId, judge);
-    const device = await registerDevice(judge, { platform: "android", language: "en" });
-
-    await tick();
-    const starts = android.sent.filter((s) => s.token === `ExponentPushToken[${device.deviceId}]`);
-    expect(starts[0]!.message.hackosLiveUpdate).toMatchObject({
-      event: "start",
-      kind: "judging",
-      subject: `room:${roomId}`,
-      rank: 0,
-      props: { phase: "idle", rank: 0 },
-    });
-
-    await callEntry(entryId, roomId);
-    expect(await tick()).toMatchObject({ updated: 1 });
-    await db.query(
-      `UPDATE queue_entries SET status = 'in_room', room_entered_at = now() WHERE id = $1`,
-      [entryId],
-    );
-    // A second change within 30 s is not throttled for judging.
-    expect(await tick()).toMatchObject({ updated: 1 });
-    const mine = android.sent.filter((s) => s.token === `ExponentPushToken[${device.deviceId}]`);
-    expect(mine.map((s) => s.message.hackosLiveUpdate.props?.phase)).toEqual([
-      "idle",
-      "called",
-      "in_room",
-    ]);
-
-    await closeJudgingWindow();
-    await tick();
-    expect(
-      android.sent.filter((s) => s.token === `ExponentPushToken[${device.deviceId}]`).at(-1)!
-        .message.hackosLiveUpdate.event,
-    ).toBe("end");
-  });
-
   it("accreditation: Scan opens the scanner; counters are throttled", async () => {
     const db = await pool();
     const desk = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);

@@ -74,7 +74,6 @@ const KIND_COPY: Record<LiveActivityConfigKind, { name: MessageKey; description:
   },
   queue: { name: "liveActivityKindQueue", description: "liveActivityKindQueueDesc" },
   deadline: { name: "liveActivityKindDeadline", description: "liveActivityKindDeadlineDesc" },
-  judging: { name: "liveActivityKindJudging", description: "liveActivityKindJudgingDesc" },
   accreditation: {
     name: "liveActivityKindAccreditation",
     description: "liveActivityKindAccreditationDesc",

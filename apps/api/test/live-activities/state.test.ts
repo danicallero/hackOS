@@ -166,7 +166,6 @@ describe("myLiveActivities", () => {
       activities: [],
       attendeeActivities: [],
       deadline: null,
-      judging: [],
       accreditation: null,
       maxConcurrent: 5,
     });
