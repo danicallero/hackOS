@@ -31,6 +31,7 @@ import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
 
 /** How often the "Now"/"Next" marker re-evaluates which row it belongs to. */
 const MARKER_TICK_MS = 60_000;
@@ -253,6 +254,7 @@ export function ActivitiesScreen() {
             <Stack.Toolbar.View hidesSharedBackground>
               <Text
                 accessibilityRole="header"
+                maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
                 style={{
                   // A fixed colour, not the dynamic label: iOS 26 flips a bar
                   // item's light/dark appearance with what scrolls behind it,

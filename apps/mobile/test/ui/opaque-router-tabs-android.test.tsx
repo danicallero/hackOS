@@ -385,3 +385,21 @@ describe("OpaqueRouterTabs — Account is the bottom-most Others entry (H55)", (
     expect([...mockMenuActions.current].reverse()).toEqual(overflow.slice(1));
   });
 });
+
+describe("OpaqueRouterTabs — Dynamic Type", () => {
+  beforeEach(() => {
+    mockUsePathname.mockReturnValue("/(tabs)/schedule");
+  });
+
+  it("caps tab labels and shrinks them to fit instead of clipping the fixed bar", async () => {
+    const { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } =
+      require("@/theme/dynamic-type") as typeof import("@/theme/dynamic-type");
+    await renderTabs();
+
+    const label = screen.getByText("Schedule");
+    expect(label.props.maxFontSizeMultiplier).toBe(CHROME_MAX_FONT_SIZE_MULTIPLIER);
+    expect(label.props.adjustsFontSizeToFit).toBe(true);
+    expect(label.props.minimumFontScale).toBe(CHROME_MIN_FONT_SCALE);
+    expect(label.props.numberOfLines).toBe(1);
+  });
+});

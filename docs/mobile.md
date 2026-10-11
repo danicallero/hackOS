@@ -541,7 +541,8 @@ distributed to other Expo Router apps without importing hackOS code.
   `others/notification-settings/`) lists each notification type with its state;
   a type opens its channel switches. Activity reminders
   (`components/reminders-view.tsx`) continues with a bulk switch per activity
-  type (the label side opens that type's activities) and then "Coming up":
+  type (the label side, marked by a chevron, opens that type's activities)
+  and then "Coming up":
   the next three reminders, "See all" when there are more (the same
   `others/reminders/[kind]` route with `kind=all&subscribed=1`, where a row
   switched off stays until the person leaves), and an "Add an activity"
@@ -766,15 +767,24 @@ header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
 no bar covers the centred avatar; Android floats its own glass back button.
 That public photo uses the same `ProfileAvatarCollapse` overlay as the signed-in
 account: Reanimated maps 120 pt of upward scroll to the shared mask and dark
-cover progress. A released drag never rests half-morphed: inside that range direction
-decides, from the last non-zero scroll delta (the release velocity only
+cover progress. An avatar that starts farther from the camera than the pose
+where Telegram's mask begins (its centre 234/300 of its size below the cutout's
+lower edge) first rides up with the content, unchanged and at the text's own
+speed, for that extra distance (`profileAvatarCarryDistance`); the in-content
+avatar stays visible through that carry and the mask takes over only as the
+morph starts, so a lower avatar (Account below the Wallet button, the person
+profile under its header) never shoots up ahead of the text. The 120 pt range
+then begins after the carry. The Android gooey view below already rises with
+the content, so it has no carry. A released drag never rests half-morphed: inside
+that range direction decides, from the last non-zero scroll delta (the release velocity only
 without one). Moving up, with the merge started, auto-collapses; moving down,
 with the droplet coming out, auto-expands; only a release with no movement
-takes the nearer rest. A moving release decides when its momentum ends, by the
+takes the nearer rest. The expanded rest is where the morph starts, and a
+release during the carry is plain scrolling and stays put. A moving release decides when its momentum ends, by the
 momentum's own direction (instant under Reduce Motion); programmatic scrolls
 are never snapped. One medium haptic marks the photo touching the camera
-cutout on the way up (morph progress 0.2, where the mask's lip joins the
-island) and the first pull out of the collapsed rest on the way down; a
+cutout on the way up (morph progress 0.2 after the carry, where the mask's
+lip joins the island) and the first pull out of the collapsed rest on the way down; a
 release never taps. Both rests are measured from the true
 top, which on iOS sits at a negative content offset under the automatic inset
 (at least the status-bar overlap, or the full native header height on a
@@ -784,7 +794,7 @@ first drag), never from y 0, which is inside the morph. Both scroll views set `s
 programmatic scroll to the raw `contentInset` (0), so a snap or jump to the
 true top landed at y 0, mid-morph. A page too short to reach the collapsed
 rest snaps expanded instead, so the person profile floors its content at the
-viewport plus the collapse distance past the true top (`contentMinHeight`):
+viewport plus the carry and collapse distance past the true top (`contentMinHeight`):
 otherwise a short profile could only ever expand. Account's tab re-press and gear scroll go to that true top,
 and on focus it moves a scroll left inside the morph (such as a remount
 restoring y 0) to the nearer rest. A native `MaskedView` clips the original cubic keyframes from
@@ -818,7 +828,12 @@ matching the Telegram path canvas, so the image, mask and backing stay on one
 centre line and end on the island centre. The Telegram blob rises and narrows
 faster than that linear frame, so while it exists the image is a square
 centred on the blob's real bounds (`profileAvatarContentFrame`), plus the neck
-above it, never exposing the backing at its top. The image never follows the
+above it, never exposing the backing at its top. The image also carries its
+own clip (`profileAvatarContentRadii`): until the neck forms (morph progress
+0.15) the mask is exactly the circle inscribed in that square, so the image is
+cut to the same circle (radius half its side, starting at the expanded size)
+and no frame shows it square while the native mask catches up; the top corners
+then straighten as the neck fills the top of the frame. The image never follows the
 linear frame: the mask reaches the island at a fixed progress whatever the
 start's distance, so on a lower avatar (the person profile under its header)
 the linear frame trails below the clip and would pull the photo off centre.
@@ -1743,16 +1758,26 @@ projects; the deadline goes to `queue:status` holders, who always have it.
 updates (Android) switch: off ends every surface immediately and registers the
 device with `enabled: false`.
 
-**Per-kind choice.** Under that switch, one switch per kind the account
-receives (`GET /api/me/live-activities/preferences`, in priority order; kinds
-the account is not entitled to are not listed), labelled with the
-`liveActivityKind*` mobile copy keys
-(`lib/live-activities/use-live-activity-kinds.ts`). A toggle is optimistic,
-sends only that kind (`PUT`), then runs `reconcileLiveActivities()` so a kind
-turned off ends on this device at once; a failed save flips the switch back.
-The choice is per account, so the worker applies it on every device.
-**Decision:** the per-kind rows are hidden while the device switch is off,
-because nothing shows on this device then and the rows would be inert.
+**Per-kind choice and order.** The switch row's label side (detail
+"n of m on", chevron) opens Notifications → Live Activities
+(`app/(tabs)/others/notification-settings/live-activities.tsx`,
+`components/live-activity-kinds-screen.tsx`): one row per kind the account
+receives (`GET /api/me/live-activities/preferences`, in the person's order;
+kinds the account is not entitled to are not listed), labelled with the
+`liveActivityKind*` mobile copy keys, each with its switch and a drag handle.
+Dragging a handle (gesture-handler `Pan` + Reanimated, fixed-height slots,
+scroll disabled while dragging) sets the person's priority: the top kinds
+take the device's few slots first when several apply. VoiceOver users get
+Move up / Move down custom actions on the handle, whose value is the
+position ("2 of 3"). "Reset to default order" appears only for a customized
+order (`customOrder`) and sends `order: null`. Toggles and reorders are
+optimistic (`lib/live-activities/use-live-activity-kinds.ts`), send only the
+change (`PUT` with `kinds` or `order`), then run `reconcileLiveActivities()`
+so this device follows at once; a failed save restores the previous state.
+Both are per account, so the worker applies them on every device.
+**Decision:** the device switch stays the only master; the detail screen is
+reachable only while it is on, because nothing shows on this device then and
+the rows would be inert.
 
 **Development samples.** Debug builds only: opening
 `hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-submitted|accreditation|all|end>`
@@ -1932,6 +1957,18 @@ an id's first post).
   aligns its popup to the anchor's start edge, so a full-width trigger opened the
   menu at the screen's left; the row is a `Pressable` calling `MenuView`'s
   `ref.show()` and the menu is anchored to a 1dp strip at the row's trailing edge.
+- Dynamic Type. `patches/react-native@0.86.3.patch` makes every root `Text`
+  remount once when the system text size changes. Without it, Fabric
+  re-measured text only on its native branch: the next React commit (a tab
+  switch, returning from Settings) restored frames measured at the old size
+  while glyphs rendered at the new one, clipping every label. Fixed chrome
+  (tab labels, scanner counters, the Activities/Diary toolbar titles) uses
+  `CHROME_MAX_FONT_SIZE_MULTIPLIER` from `theme/dynamic-type.ts` and shrinks to
+  fit; all other text is uncapped. `test/dynamic-type.test.tsx` fails if the
+  patch is lost in a React Native upgrade. To check a screen, change the size
+  while the app runs (`xcrun simctl ui booted content_size
+  accessibility-extra-extra-extra-large`), then switch tabs: a cold start at
+  the large size does not exercise the re-measure path.
 - `lib/haptics.ts` — best-effort Expo Haptics feedback for custom controls and
   meaningful outcomes. Selection/light feedback is used for custom toggles,
   segmented choices, scanner capture and retry actions; success/warning/error

@@ -199,7 +199,8 @@ describe("submission deadline (H19, H20)", () => {
     );
   }
 
-  it("counts down for participants with event access only, within the lead time", async () => {
+  it("counts down for participants with event access only, for the whole hacking period", async () => {
+    const pool = await db();
     const userId = await participant();
     const withoutAccess = await createUser();
     await assignRole(
@@ -208,8 +209,27 @@ describe("submission deadline (H19, H20)", () => {
     );
     await allowLiveActivities();
 
-    await deadlineIn(400);
+    // Hacking has not started: no countdown yet, however close the deadline.
+    await pool.query(
+      `UPDATE event_config SET hacking_starts_at = now() + interval '1 minute',
+              hacking_ends_at = now() + interval '2 hours' WHERE id = 1`,
+    );
     expect((await mine(userId)).deadline).toBeNull();
+
+    // Hacking started: shown long before the old 3-hour lead (here 30 h out).
+    await deadlineIn(30 * 60);
+    expect((await mine(userId)).deadline).toMatchObject({ kind: "deadline", phase: "open" });
+
+    // Without a start, only within LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES (180).
+    await pool.query(
+      `UPDATE event_config SET hacking_starts_at = NULL,
+              hacking_ends_at = now() + interval '400 minutes' WHERE id = 1`,
+    );
+    expect((await mine(userId)).deadline).toBeNull();
+    await pool.query(
+      `UPDATE event_config SET hacking_ends_at = now() + interval '120 minutes' WHERE id = 1`,
+    );
+    expect((await mine(userId)).deadline).toMatchObject({ kind: "deadline", startsAt: null });
 
     await deadlineIn(120);
     const result = await mine(userId, "gl");

@@ -987,6 +987,13 @@ product bug, not a styling choice.**
 - Announcements: critical form errors and sync failures are announced; busy
   states are programmatically exposed and prevent accidental repeat submits.
 - Never rely on colour alone for queue, decision, connection, or scan state.
+- Mobile text follows Dynamic Type at every size, including AX1–AX5: content
+  text wraps and its container grows (no fixed heights or truncation around
+  it). Only fixed chrome — the tab bar, React Native titles inside native
+  navigation-bar items, overlays on the live camera — uses the shared cap in
+  `apps/mobile/theme/dynamic-type.ts`, and capped single-line labels shrink to
+  fit rather than truncate. Side-by-side label/value rows (`InfoRow`) stack
+  the value under its label at accessibility sizes.
 - Charts expose exact values outside hover-only tooltips (table or text
   alternative for every chart).
 

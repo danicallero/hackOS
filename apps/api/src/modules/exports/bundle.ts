@@ -184,6 +184,13 @@ export async function buildExportBundle(
       [subjectUserId],
     )
   ).rows;
+  // #966: the user's own Live Activity kind order, when they set one.
+  const liveActivityKindOrder =
+    (
+      await db.query(`SELECT kinds, updated_at FROM live_activity_kind_orders WHERE user_id = $1`, [
+        subjectUserId,
+      ])
+    ).rows[0] ?? null;
   const announcementReads = (
     await db.query(
       `SELECT an.announcement_id, a.title, an.read_at
@@ -243,6 +250,7 @@ export async function buildExportBundle(
       pushTokens,
       liveActivityDevices,
       liveActivityKindOptOuts,
+      liveActivityKindOrder,
       announcementReads,
     },
     audit: auditLog,

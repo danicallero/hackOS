@@ -118,8 +118,10 @@ export interface DeadlineWindow {
 /**
  * Submissions close at `event_config.hacking_ends_at` — the same instant
  * `projects/lifecycle.ts` enforces ("The submission deadline has passed")
- * and Devpost imports lock at. The activity exists from
- * `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` before it until it passes.
+ * and Devpost imports lock at. Decision (H19): the activity runs for the
+ * whole hacking period, from `hacking_starts_at` until the deadline passes;
+ * only without a start does it fall back to
+ * `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` before the deadline.
  */
 export async function readDeadlineWindow(
   db: Queryable = pool,
@@ -130,7 +132,7 @@ export async function readDeadlineWindow(
        FROM event_config
       WHERE id = 1 AND hacking_ends_at IS NOT NULL
         AND now() < hacking_ends_at
-        AND hacking_ends_at <= now() + make_interval(mins => $1)`,
+        AND COALESCE(hacking_starts_at, hacking_ends_at - make_interval(mins => $1)) <= now()`,
     [leadMinutes],
   );
   const row = rows[0];

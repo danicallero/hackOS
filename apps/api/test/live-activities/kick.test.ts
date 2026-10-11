@@ -72,6 +72,27 @@ describe("early Live Activity tick", () => {
     expect(await kickJobs()).toHaveLength(1);
   });
 
+  it("is requested by an event timing edit only (H19, H22)", async () => {
+    const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
+    const save = (payload: Record<string, unknown>) =>
+      app.inject({
+        method: "PUT",
+        url: "/api/event",
+        headers: { ...asUser(manager), "idempotency-key": crypto.randomUUID() },
+        payload,
+      });
+    const { getQueue } = await import("../../src/lib/queues.js");
+    const { LIVE_ACTIVITIES_QUEUE } = await import("../../src/modules/live-activities/kick.js");
+    const hackingEndsAt = new Date(Date.now() + 26 * 3_600_000).toISOString();
+    expect((await save({ hackingEndsAt })).statusCode).toBe(200);
+    expect(await kickJobs()).toHaveLength(1);
+
+    await getQueue(LIVE_ACTIVITIES_QUEUE).obliterate({ force: true });
+    await (await import("../../src/lib/valkey.js")).valkey.flushdb();
+    expect((await save({ name: "hackOS", hackingEndsAt })).statusCode).toBe(200);
+    expect(await kickJobs()).toHaveLength(0);
+  });
+
   it("is requested by a configuration save", async () => {
     const organizer = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     await allowLiveActivities();

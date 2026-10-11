@@ -9,6 +9,48 @@ export const PROFILE_AVATAR_COLLAPSE_DISTANCE = 120;
  */
 export const PROFILE_AVATAR_MERGE_PROGRESS = 108 / 540;
 
+/**
+ * The Telegram mask starts its morph with the avatar's centre this far below
+ * the camera cutout's lower edge (mask units; 300 units span the avatar).
+ */
+const MORPH_START_DEPTH = 234;
+
+/**
+ * Scroll distance the avatar rides up with the content, unchanged, before the
+ * morph starts: from its expanded centre (`start`, scroll offset 0) to the
+ * pose where the Telegram mask begins, `MORPH_START_DEPTH` below the target's
+ * lower edge. An avatar far below the camera would otherwise cover that gap
+ * within the morph's first frames and shoot up much faster than the text. 0
+ * when it already starts at or above that pose.
+ */
+export function profileAvatarCarryDistance(
+  size: number,
+  start: ProfileCameraCutoutFrame,
+  target: ProfileCameraCutoutFrame,
+): number {
+  const startCenterY = start.top + start.height / 2;
+  const morphCenterY = target.top + target.height + (MORPH_START_DEPTH * size) / 300;
+  return Math.max(0, startCenterY - morphCenterY);
+}
+
+/**
+ * Where the scroll `offset` (from the true top) leaves the overlay: `shift` is
+ * how far the expanded avatar has ridden up with the content, `progress` the
+ * morph's own 0..1 over `distance` once that carry is done.
+ */
+export function profileAvatarCarry(
+  offset: number,
+  carry: number,
+  distance: number,
+): { shift: number; progress: number } {
+  "worklet";
+  const value = Math.max(0, offset);
+  return {
+    shift: Math.min(value, carry),
+    progress: distance > 0 ? Math.max(0, Math.min(1, (value - carry) / distance)) : 0,
+  };
+}
+
 /** Below this release speed the scroll view does not decelerate, so no momentum end follows. */
 export const PROFILE_AVATAR_SNAP_REST_VELOCITY = 0.05;
 
@@ -33,10 +75,11 @@ export function profileAvatarSnapDirection(
 
 /**
  * Where a released scroll should settle so the avatar never rests half-morphed
- * (#935): null outside the open collapse range, otherwise fully expanded (0) or
- * fully collapsed (`distance`). Direction decides: moving up (merge started)
- * collapses, moving down (droplet coming out) expands; with no movement at
- * all, the nearer rest wins.
+ * (#935): null outside the open morph range, otherwise fully expanded (`carry`,
+ * where the morph starts) or fully collapsed (`carry + distance`). Direction
+ * decides: moving up (merge started) collapses, moving down (droplet coming
+ * out) expands; with no movement at all, the nearer rest wins. The carry
+ * before the morph is plain scrolling, so a release there stays put.
  *
  * `distance` is required: a worklet's default-parameter expression is not
  * captured into its UI-thread closure, so a module constant there is undefined.
@@ -45,12 +88,14 @@ export function profileAvatarSnapTarget(
   offset: number,
   direction: number,
   distance: number,
+  carry = 0,
 ): number | null {
   "worklet";
-  if (!(offset > 0 && offset < distance)) return null;
-  if (direction > 0) return distance;
-  if (direction < 0) return 0;
-  return offset >= distance / 2 ? distance : 0;
+  const morph = offset - carry;
+  if (!(morph > 0 && morph < distance)) return null;
+  if (direction > 0) return carry + distance;
+  if (direction < 0) return carry;
+  return morph >= distance / 2 ? carry + distance : carry;
 }
 
 /*
@@ -129,7 +174,8 @@ const MAX_HOLE_PUNCH_TOP = 96;
  * Absolute content offset a released scroll should settle at, or null (#935).
  * `restingOffset` is the content offset of the true top: negative under iOS's
  * automatic inset, where y 0 sits that far past the top, inside the morph.
- * `maxOffset` is the furthest offset the content surely reaches.
+ * `maxOffset` is the furthest offset the content surely reaches; `carry` the
+ * plain scroll before the morph starts (`profileAvatarCarryDistance`).
  */
 export function profileAvatarSnapOffset(
   contentOffset: number,
@@ -137,13 +183,16 @@ export function profileAvatarSnapOffset(
   direction: number,
   distance: number,
   maxOffset: number,
+  carry = 0,
 ): number | null {
   "worklet";
-  const target = profileAvatarSnapTarget(contentOffset - restingOffset, direction, distance);
+  const target = profileAvatarSnapTarget(contentOffset - restingOffset, direction, distance, carry);
   if (target === null) return null;
   // A page too short to reach the collapsed rest expands instead of leaving
   // the scroll past its end.
-  return target > 0 && restingOffset + target > maxOffset ? restingOffset : restingOffset + target;
+  return target > carry && restingOffset + target > maxOffset
+    ? restingOffset + carry
+    : restingOffset + target;
 }
 
 /**
@@ -355,7 +404,7 @@ function maskCanvas(
   const startCenterX = start.left + size / 2;
   const targetCenterX = target.left + target.width / 2;
   const canvasX = startCenterX + (targetCenterX - startCenterX) * p - 256 * scale;
-  const initialTop = start.top + size / 2 - 234 * scale;
+  const initialTop = start.top + size / 2 - MORPH_START_DEPTH * scale;
   // Swift anchors the 171 pt mask canvas at the island's lower edge (47.5 pt).
   const alignment = Math.min(1, p / 0.14);
   const canvasY = initialTop + (target.top + target.height - initialTop) * alignment;
@@ -432,6 +481,12 @@ export function profileAvatarBlobBounds(
   return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
 }
 
+/** How far the neck above the blob has stretched towards the camera, 0..1. */
+function profileAvatarNeck(progress: number) {
+  "worklet";
+  return Math.max(0, Math.min(1, (progress - 0.15) / 0.35));
+}
+
 /**
  * Where the avatar image sits at `progress` (#935): a square centred on the
  * mask's blob and covering it, joined with the neck that stretches up to the
@@ -472,7 +527,7 @@ export function profileAvatarContentFrame(
     cx += (target.left + target.width / 2 - cx) * travel;
     cy += (target.top + target.height / 2 - cy) * travel;
   }
-  const neck = Math.max(0, Math.min(1, (p - 0.15) / 0.35));
+  const neck = profileAvatarNeck(p);
   const top = Math.min(cy - half, cy - half + (target.top - (cy - half)) * neck);
   const neckHalf = Math.max(half, (target.width * neck) / 2);
   return {
@@ -480,6 +535,26 @@ export function profileAvatarContentFrame(
     top,
     width: 2 * neckHalf,
     height: cy + half - top,
+  };
+}
+
+/**
+ * Corner radii of the image's own clip at `progress`, for its content `frame`.
+ * Until the neck starts, the mask is exactly the circle inscribed in that
+ * square frame, so the image is cut to the same circle: it never shows a
+ * square corner, even on a frame where the native mask has not caught up
+ * with the scroll yet. The top corners then straighten as the neck fills the
+ * top of the frame; the bottom stays the blob's round end.
+ */
+export function profileAvatarContentRadii(frame: ProfileAvatarFrame, progress: number) {
+  "worklet";
+  const bottom = Math.min(frame.width, frame.height) / 2;
+  const top = bottom * (1 - profileAvatarNeck(Math.max(0, Math.min(1, progress))));
+  return {
+    borderTopLeftRadius: top,
+    borderTopRightRadius: top,
+    borderBottomLeftRadius: bottom,
+    borderBottomRightRadius: bottom,
   };
 }
 

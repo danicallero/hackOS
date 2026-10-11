@@ -15,9 +15,9 @@ receive them ([Configuration](#configuration)):
   (`liveActivityAudience`), its audience gets a countdown from
   `LIVE_ACTIVITY_LEAD_MINUTES` before the start, then "Now · ends in". No
   buttons.
-- **Submission deadline (H19, H20)**: for participants, from
-  `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` before submissions close, a countdown
-  with the team's hackOS submission status.
+- **Submission deadline (H19, H20)**: for participants, throughout the
+  hacking period, a countdown to submissions closing with the team's hackOS
+  submission status.
 - **Accreditation desk (H22, H24)**: for `accredit:scan` holders, around the
   arrival rush, accredited/eligible, people inside and arrivals in the last
   10 minutes, with one **Scan** action.
@@ -161,11 +161,20 @@ the account language.
   the instant `projects/lifecycle.ts` enforces ("The submission deadline has
   passed"), Devpost imports lock at and the reconciliation overview calls
   `deadline`. The participant self-service window only bounds editing.
-- Window: from `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` (default 180) before the
-  deadline until it passes. `startsAt` is `hacking_starts_at` (for a
-  progress bar), or null.
+- Window: the hacking period, from `hacking_starts_at` until the deadline
+  passes. **Decision:** participants expect the countdown whenever they are
+  hacking, so it is not limited to the last hours; it replaced a 3-hour lead,
+  which left a running hackathon without it. Only when `hacking_starts_at` is
+  unset does it fall back to `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` (default
+  180) before the deadline. `startsAt` is `hacking_starts_at` (for a progress
+  bar), or null. A hacking period longer than ActivityKit's 8 hours is
+  covered by replacing the iOS activity (see the state machine).
 - Who: holders of `queue:status` (the participant capability; `*` passes)
-  with event access (`user_event_access`).
+  with event access (`user_event_access`), in a role ticked for the kind. The
+  seed ticks only roles that explicitly allow `queue:status` (Participant,
+  Event Director), so Organizer, Day Staff or a role holding only `*` get no
+  countdown unless organizers tick them in the editor (and, without `*`,
+  grant `queue:status`).
 - `submission`: every project or work group the user is an active member of
   (the three membership sources of `isActiveProjectMember`, H54 boundary
   included). `submitted` only when all are submitted, `draft` when one is
@@ -215,6 +224,22 @@ Organizers decide which kinds exist and for which roles
   the moment arrives. `candidates.ts` drops opted-out kinds, so the worker
   ends a running session of a kind turned off (`finished`) and never starts
   it; turning it back on lets it start again on the next tick.
+- **Kind order (per account):** the same `PUT` takes `order`, the caller's
+  kinds highest first. It replaces the organizer priority for that user only:
+  their first kind wins the device's `maxConcurrent` slots, so a participant
+  can keep the queue showing while a schedule item also applies. Organizer
+  settings still decide which kinds exist. Kinds the caller does not receive
+  are dropped, unlisted kinds follow in the organizer order, and
+  `order: null` resets. The GET lists the kinds in the caller's order with
+  `customOrder`.
+
+**Decision:** only a customized order is stored (R018). An order that ranks
+the caller's kinds exactly as organizers do is saved as no order, so a later
+organizer reorder still reaches everyone who never customized theirs.
+
+**Decision:** the master switch stays the per-device `enabled` flag; there
+is no account-level master. Live Activities are a per-device surface, and the
+app's single Live Activities switch already ends every surface on that device.
 
 **Decision:** the per-kind choice is stored per user, not per device. The
 candidates are computed per user, the choice follows the account to every
@@ -286,8 +311,10 @@ an audience) sets `liveActivityAudience`.
 
 ### Ranking and the per-device limit
 
-A user's candidates are ranked by kind priority, then by each kind's own
-order: earliest activity or schedule item first. Each
+A user's candidates are ranked by kind priority (the user's own kind order
+when they set one, see [Preferences](#preferences); else the organizer
+priority), then by each kind's own order: earliest activity or schedule item
+first. Each
 device keeps at most `maxConcurrent` of them:
 
 - **Hysteresis:** within a kind, a subject already open on the device
@@ -335,8 +362,8 @@ Organizers can rank `queue` higher.
 | `DELETE /api/me/live-activities/sessions` | `{deviceId, kind, subject, phase?}`. The user swiped it away, or the app ended it locally. `phase` is the phase it showed; without it the server uses the last phase it sent, or records the next one it computes. |
 | `POST /api/me/live-activities/dismissals/reopen` | `{deviceId}`, sent by the app on launch and foreground. Every `dismissed` session of the device becomes `finished` (startable); returns `{status, reopened}`. Idempotent. Background pushes never do this. |
 | `GET /api/me/live-activities[?language=][&deviceId=]` | `MyLiveActivities` for the caller. With `deviceId`, also opens the device's 30 s foreground window (below). |
-| `GET /api/me/live-activities/preferences` | `MyLiveActivityPreferences`: `{ kinds: [{ kind, enabled }] }`, the kinds the caller may receive in priority order (see [Preferences](#preferences)). |
-| `PUT /api/me/live-activities/preferences` | `{ kinds: [{ kind, enabled }] }`, 1–5 entries, each kind at most once; unlisted kinds keep their choice. An unknown kind is a 400. A kind the caller does not receive may be set and applies if they receive it later. Returns the GET shape. |
+| `GET /api/me/live-activities/preferences` | `MyLiveActivityPreferences`: `{ kinds: [{ kind, enabled }], customOrder }`, the kinds the caller may receive in their priority order (see [Preferences](#preferences)). |
+| `PUT /api/me/live-activities/preferences` | `{ kinds?: [{ kind, enabled }], order?: kind[] \| null }`, at least one of them. `kinds`: 1–5 entries, each kind at most once; unlisted kinds keep their choice. A kind the caller does not receive may be set and applies if they receive it later. `order`: 1–5 distinct kinds, highest priority first; `null` resets to the organizer order. An unknown kind is a 400. Saves serialize on the user row; idempotent. Returns the GET shape. |
 
 The access posture matches `POST /api/me/push-tokens`: any signed-in, active
 account may manage its own devices, with no capability and no audit row,
@@ -376,11 +403,16 @@ route mapping in `apps/mobile`):
 - `live_activity_kind_opt_outs` (migration
   `0605_live_activity_kind_opt_outs.sql`): `(user_id, kind)` primary key
   (user cascade) and `created_at`. A row means the user turned that kind off.
+- `live_activity_kind_orders` (migration
+  `0606_live_activity_kind_orders.sql`): `user_id` primary key (cascade),
+  `kinds text[]` (1–5 kinds, highest first), `created_at`, `updated_at`. No
+  row means the organizer order.
 
-Account removal deletes the devices and the kind opt-outs together with
-`push_tokens`. The H54 export lists only device metadata (platform,
-language, opt-out, creation date), never tokens, plus the kind opt-outs
-(`notifications.liveActivityKindOptOuts`).
+Account removal deletes the devices, the kind opt-outs and the kind order
+together with `push_tokens`. The H54 export lists only device metadata
+(platform, language, opt-out, creation date), never tokens, plus the kind
+opt-outs (`notifications.liveActivityKindOptOuts`) and order
+(`notifications.liveActivityKindOrder`, `null` when not customized).
 
 ## Worker state machine
 
@@ -397,7 +429,8 @@ Each tick does the following:
 | Known session | Action |
 | --- | --- |
 | none, or `finished` | **start**, if a start path exists: iOS `push_to_start_token` (and APNs configured) or Android `expo_push_token`. Not on an iOS device inside its foreground window: the app starts it and registers it. |
-| open, state hash changed | **update**. Same-phase changes of staff and attendee activities, the deadline and the accreditation desk are throttled to one per 30 s per session; queue changes and every phase change go out immediately. iOS waits until the app reports the activity's own token. |
+| open, state hash changed | **update**. Same-phase changes of staff and attendee activities, the deadline and the accreditation desk are throttled to one per 30 s per session; queue changes, every phase change and a rescheduled or renamed item (`startsAt`, `endsAt`, `name` or `location` changed) go out immediately with APNs priority 10. iOS waits until the app reports the activity's own token. |
+| open on iOS for 7 h 45 min, still desired | **replace**: an `end` with an immediate `dismissal-date`, then a push-to-start of the same subject, before ActivityKit ends it at 8 hours. Needs the per-activity and push-to-start tokens; not while the app is in its foreground window. A dead token on the end means the user removed it, so it does not start again. |
 | open, hash unchanged | nothing |
 | `dismissed`, same phase as `dismissed_phase` | nothing (the user removed it) |
 | `dismissed`, phase changed (e.g. waiting → called, upcoming → live) | **start** again: new, essential information |
@@ -427,8 +460,8 @@ How long a change takes to reach a device:
 
 | Step | Delay |
 | --- | --- |
-| Domain change → tick | ≤ 2 s after a queue change (transition, call, deletion, topology: `notifyChallengeQueueChanged`), a judging-window edit (`PATCH /api/queue/settings`), a schedule edit (`emitScheduleChanged`) or a configuration save. Anything else (scan counters, event dates) waits for the 20 s repetition. |
-| Throttle | Same-phase counter updates of staff and attendee activities, the deadline and the desk: one per 30 s per session. Queue changes and phase changes are not throttled. |
+| Domain change → tick | ≤ 2 s after a queue change (transition, call, deletion, topology: `notifyChallengeQueueChanged`), a judging-window edit (`PATCH /api/queue/settings`), a schedule edit (`emitScheduleChanged`: create, edit including times, delete, visibility, publication; the linked `activities` row is written in the same paths), an event timing edit (`PUT /api/event` changing `eventStartsAt`, `hackingStartsAt`, `hackingEndsAt` or `timezone`) or a configuration save. Anything else (scan counters, submission status) waits for the 20 s repetition. |
+| Throttle | Same-phase counter updates of staff and attendee activities, the deadline and the desk: one per 30 s per session. Queue changes, phase changes and rescheduling are not throttled. |
 | Push | APNs priority 10 for start, end, the call and phase changes; 5 for routine updates, which iOS may delay. Expo data pushes are `high`. |
 | iOS update or end | Needs the activity's own token, which only the app can report. A push-started activity's token reaches the server when the app next runs its reconcile (launch or foreground); until then the server cannot update or end it. |
 | App | Reconciles on launch, foreground, the personal queue events and phase boundaries, so an open app shows the change within about a second of its SSE event. |
@@ -526,7 +559,10 @@ stays on the device.
 - `attributes` is expo-widgets' `LiveActivityAttributes { url: String? }`,
   the props `url` (see the deep link table). It is the tap target, so it must
   be present on every remote start.
-- `dismissal-date` (on `end` only): 15 minutes after the end.
+- `dismissal-date` (on `end` only): 15 minutes after the end; immediately
+  when the activity is being replaced before ActivityKit's 8-hour limit.
+- A rescheduled item's update carries the new `startsAt`/`endsAt` in
+  `content-state` (the widget's countdowns read them) and a new `stale-date`.
 
 ### Android (Expo data push)
 
@@ -658,7 +694,7 @@ Accreditation desk:
 | `APPLE_APNS_ENVIRONMENT` | `production` | Shared with Wallet. TestFlight and App Store builds use `production`; `sandbox` is only for development-signed builds and must not be set on a host that also pushes Wallet passes. |
 | `APNS_BUNDLE_ID` | `com.hackudc.os` | Development builds use `com.hackudc.os.debug`. |
 | `LIVE_ACTIVITY_LEAD_MINUTES` | `15` | Minutes before a scannable activity (staff) or an opted-in schedule item (attendees) starts that its Live Activity appears (1–240). |
-| `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` | `180` | Minutes before submissions close (`hacking_ends_at`) that participants get the deadline countdown (15–1440). |
+| `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` | `180` | Only when `hacking_starts_at` is unset: minutes before submissions close (`hacking_ends_at`) that participants get the deadline countdown (15–1440). With a start, it runs for the whole hacking period. |
 | `LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES` | `60` | Minutes before the event start that the accreditation desk activity opens (0–1440). |
 | `LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES` | `60` | Minutes after hacking starts that the accreditation desk activity stays open (0–1440). |
 
@@ -709,25 +745,33 @@ and `deploy/README.md`.
   arrives (and closes after ActivityKit's lifetime), and no push-to-start
   during the foreground window.
 - `kick.test.ts`: a burst of early-tick requests becomes one delayed job, and
-  queue changes, schedule edits and configuration saves request it.
+  queue changes, schedule edits, event timing edits (not other event
+  settings) and configuration saves request it.
 - `apns.test.ts`: payload shape and JWT signing with a generated P-256 key.
 - `routes.test.ts`: auth, upsert/reassign, validation, ownership,
   dismissal, reopening dismissals, the full GET shape and the per-device cut
   with `deviceId`.
 - `kinds.test.ts`: configuration gates (disabled kind, missing role, deleted
   role, capability still required), priority and `maxConcurrent`, and each
-  new kind's state, gates and H54 isolation.
+  new kind's state, gates and H54 isolation, including the deadline shown
+  for the whole hacking period (not before it starts, lead fallback without
+  a start).
 - `settings.test.ts`: configuration routes (access, validation, priorities,
   audit, idempotent replay).
 - `preferences.test.ts`: per-kind preferences (entitlement, partial and
   idempotent writes, validation, the export bundle) and the worker ending an
-  opted-out kind and starting it again once back on.
+  opted-out kind and starting it again once back on; the per-user kind
+  order (organizer default, a custom order changing the cut in the read model
+  and the worker, reset, the organizer order stored as none, unreceived kinds
+  dropped, concurrent saves, export).
 - `test/notifications/push.test.ts`: queue and schedule pushes are
   `content-available`; others are not.
 - `worker.test.ts` also covers start, update and end per new kind, the
   deadline alert, throttled desk counters,
   displacement by a higher-priority kind without flapping, and ending a
-  disabled kind.
+  disabled kind; a rescheduled item pushed at once on iOS and Android (new
+  dates, priority 10, past the counter throttle); and the iOS replacement
+  before the 8-hour limit.
 
 Tests run with `allowLiveActivities()` (fixtures.ts), because `truncateAll`
 wipes 0604's seeded configuration and roles.

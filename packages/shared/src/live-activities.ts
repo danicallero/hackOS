@@ -73,11 +73,13 @@ export interface LiveActivitySettings {
 
 /**
  * `GET/PUT /api/me/live-activities/preferences`: the kinds the caller may
- * receive (enabled, role-allowed, capability held), in priority order, with
- * their own on/off choice.
+ * receive (enabled, role-allowed, capability held), in the caller's priority
+ * order, with their own on/off choice.
  */
 export interface MyLiveActivityPreferences {
   kinds: { kind: LiveActivityConfigKind; enabled: boolean }[];
+  /** True when the caller reordered the kinds; false = the organizer order. */
+  customOrder: boolean;
 }
 
 /** Bounds of `LiveActivitySettings.maxConcurrent`. */
