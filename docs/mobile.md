@@ -511,7 +511,8 @@ distributed to other Expo Router apps without importing hackOS code.
   to the gear on the right (`Stack.Toolbar` on Liquid Glass,
   `headerLeft`/`headerRight` elsewhere). Settings are not in the sheet: the
   gear dismisses it and opens `others/account?highlight=notifications`, which
-  Account consumes once (scrolls the Notifications row into view, flashes it
+  Account consumes once (shows the page at the top, then after the
+  transition settles animates the scroll to the Notifications row and flashes it
   for about a second — no animation under Reduce Motion — then clears the
   param). Account →
   Notifications (`components/notification-settings-screen.tsx`,

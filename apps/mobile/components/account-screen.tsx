@@ -61,6 +61,10 @@ import { useFoodIntolerances } from "@/lib/use-food-intolerances";
 import { colors } from "@/theme/colors";
 
 const LANGUAGES: Lang[] = ["en", "es", "gl"];
+/** H51: wait for the sheet dismissal + push transition before the visible scroll. */
+const TRANSITION_SETTLE_MS = 450;
+/** H51: time the animated scroll takes before the Preferences row flashes. */
+const SCROLL_SETTLE_MS = 450;
 
 /** Account overview with the same participant-owned profile fields exposed on web. */
 export default function AccountScreen() {
@@ -626,7 +630,17 @@ function useNotificationsHighlight(scrollRef: RefObject<ScrollView | null>) {
   const [rowY, setRowY] = useState<number | null>(null);
   const [viewportHeight, setViewportHeight] = useState(0);
   const handled = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef({ rowY, viewportHeight, reduceMotion });
+  latest.current = { rowY, viewportHeight, reduceMotion };
   const requested = highlight === "notifications";
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!requested) {
@@ -637,20 +651,29 @@ function useNotificationsHighlight(scrollRef: RefObject<ScrollView | null>) {
     if (handled.current || rowY === null || viewportHeight === 0) return;
     handled.current = true;
     router.setParams({ highlight: undefined });
-    // Leave the row a third of the way down so the section header shows too.
-    scrollRef.current?.scrollTo({
-      animated: !reduceMotion,
-      y: Math.max(0, rowY - viewportHeight / 3),
-    });
-    opacity.value = reduceMotion
-      ? withSequence(
-          withTiming(0.18, { duration: 0 }),
-          withDelay(1000, withTiming(0, { duration: 0 })),
-        )
-      : withSequence(
-          withDelay(250, withTiming(0.18, { duration: 200 })),
-          withDelay(400, withTiming(0, { duration: 450 })),
-        );
+    // Show Account at the top first: scroll only once the sheet dismissal and
+    // navigation transition have finished, so the user sees the page move.
+    timer.current = setTimeout(
+      () => {
+        const { rowY: y, viewportHeight: height, reduceMotion: reduced } = latest.current;
+        // Leave the row a third of the way down so the section header shows too.
+        scrollRef.current?.scrollTo({
+          animated: !reduced,
+          y: Math.max(0, (y ?? 0) - height / 3),
+        });
+        // Flash after the scroll animation has settled.
+        opacity.value = reduced
+          ? withSequence(
+              withTiming(0.18, { duration: 0 }),
+              withDelay(1000, withTiming(0, { duration: 0 })),
+            )
+          : withSequence(
+              withDelay(SCROLL_SETTLE_MS, withTiming(0.18, { duration: 200 })),
+              withDelay(400, withTiming(0, { duration: 450 })),
+            );
+      },
+      reduceMotion ? 0 : TRANSITION_SETTLE_MS,
+    );
   }, [opacity, reduceMotion, requested, router, rowY, scrollRef, viewportHeight]);
 
   const style = useAnimatedStyle(() => ({ opacity: opacity.value }));

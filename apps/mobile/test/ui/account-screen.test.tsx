@@ -401,6 +401,7 @@ describe("account removal UI flow", () => {
 
   it("consumes the alerts highlight param once: scroll to Notifications, flash, clear", async () => {
     // The jest ScrollView has no native view behind it; observe its ref method.
+    jest.useFakeTimers();
     const scrollTo = jest.spyOn(ScrollView.prototype, "scrollTo").mockImplementation(() => {});
     mockSearchParams = { highlight: "notifications" };
     await renderMobile(<AccountScreen />);
@@ -415,7 +416,17 @@ describe("account removal UI flow", () => {
 
     expect(mockSetParams).toHaveBeenCalledTimes(1);
     expect(mockSetParams).toHaveBeenCalledWith({ highlight: undefined });
-    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ y: 700 }));
+    // Account shows at the top first; no scroll before the transition settles.
+    expect(scrollTo).not.toHaveBeenCalled();
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(scrollTo).not.toHaveBeenCalled();
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+    });
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: 700 });
     expect(screen.getByTestId("account-notifications-highlight")).toBeTruthy();
 
     // Later layout passes before the router drops the param must not replay it.
@@ -426,8 +437,12 @@ describe("account removal UI flow", () => {
       });
     });
     expect(mockSetParams).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+    });
     expect(scrollTo).toHaveBeenCalledTimes(1);
     scrollTo.mockRestore();
+    jest.useRealTimers();
   });
 
   it("leaves scroll position alone without a highlight param", async () => {
