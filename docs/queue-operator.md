@@ -47,7 +47,8 @@ through the same shared-member relation as the H30 guard, so a member shared
 with another team counts, and it clears as soon as that entry leaves
 `called`/`in_room`/`presenting`. Reordering (`move-top`, `move-to`, `skip`,
 `requeue`) never calls a team, so project eligibility does not block it; an
-ineligible project is still never called: the row says “Not eligible for
+ineligible project is still never called (a Devpost import is ineligible only
+by explicit organizer override, H21): the row says “Not eligible for
 judging”, Manual add is not offered, and a manual call answers “Project is
 not eligible for judging” instead of reporting it busy. Eligibility is a
 separate call-time check (`isRepoIneligibleForJudging`) that call-next, the

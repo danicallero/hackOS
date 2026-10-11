@@ -765,6 +765,7 @@ Table project_reconciliation_state {
   demo_url text
   description text
   devpost_canonical_url text
+  devpost_import_url text
   devpost_url text
   eligibility_override boolean
   eligible boolean
@@ -784,6 +785,7 @@ Table project_reconciliation_state {
   name text
   participant_count integer
   presentation_timing_preference text
+  reconciled_into_repo_id integer
   reconciliation_code text
   source text
   submission_status text

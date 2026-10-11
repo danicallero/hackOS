@@ -443,7 +443,8 @@ other participants' email addresses redacted. Locked members use
 `POST /api/me/projects/:id/edit-requests`. Organizers decide via
 `POST /api/projects/:id/unlock`, with `approve`, `deny` or direct `unlock` and a
 required reason. Reopening retains submission snapshots/timestamps and makes
-judging ineligible until resubmission. This is a per-project editing exception,
+judging ineligible until resubmission (a Devpost import stays eligible, see
+below). This is a per-project editing exception,
 including after the ordinary editing/submission deadline. Completed or active
 judging must be reset/finished before reopening. Participants cannot delete a
 previously submitted project to erase its history.
@@ -469,8 +470,14 @@ Planning and external participant sets stay separate. Linking no longer unions
 them. `project_reconciliation_state` computes distinct resolved people,
 unresolved addresses, roster differences, size violations and eligibility.
 Native-only membership is internal; imported-only membership is external;
-meaningful hybrid differences block judging until an organizer selects a source
-or grants an explicit override. The event maximum is configured by
+meaningful hybrid differences block judging of a non-imported project until an
+organizer selects a source or grants an explicit override. A project carrying a
+Devpost import identity (`devpost_import_url`) is always eligible (H21, H38):
+unresolved addresses, roster differences, size violations and a reopened draft
+stay visible as organizer review items but never exclude it from queues. Only
+an explicit organizer `eligibility_override=false` does; a reconciled-away
+source loses its import identity and keeps that override, so it stays
+ineligible while the target that received the import becomes eligible. The event maximum is configured by
 `PATCH /api/projects/submission-rules` with `maxTeamSize` (positive integer or
 null for no limit). Ordinary rule changes record actor/time and before/after
 values without a required reason. `POST /api/projects/:id/resolve` audits source

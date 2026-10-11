@@ -198,7 +198,7 @@ export function registerProjectLifecycleRoutes(app: FastifyInstance) {
           ),
         summary: "Resolve project exception",
         description:
-          "Explicitly chooses submitted participants, grants/revokes a team-size exception, or overrides/resets judging eligibility. All decisions require an audited reason (H21/H53).",
+          "Explicitly chooses submitted participants, grants/revokes a team-size exception, or overrides/resets judging eligibility. A Devpost import is eligible unless overridden to false; participant and team-size issues never exclude it. All decisions require an audited reason (H21/H53).",
       },
     },
     async (q) => {
