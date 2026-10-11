@@ -14,6 +14,7 @@ import {
   type LayoutChangeEvent,
   Platform,
   type ScrollView,
+  Text,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -35,6 +36,7 @@ import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
   PROFILE_AVATAR_MERGE_PROGRESS,
   PROFILE_AVATAR_SNAP_REST_VELOCITY,
+  PROFILE_GOOEY_MARGIN,
   type ProfileCameraCutoutFrame,
   profileAvatarCollapseBounds,
   profileAvatarContentFrame,
@@ -45,9 +47,12 @@ import {
   profileAvatarRestingOffsetBound,
   profileAvatarSnapDirection,
   profileAvatarSnapOffset,
+  profileGooeyFrame,
+  profileGooeyProgress,
   resolveProfileCameraTarget,
 } from "@/lib/profile-avatar-collapse";
 import CameraCapabilities from "@/modules/camera-capabilities";
+import { ProfileGooeyView } from "@/modules/profile-gooey";
 import { colors } from "@/theme/colors";
 
 type ProfileAvatarFrame = ProfileCameraCutoutFrame;
@@ -354,6 +359,10 @@ export function ProfileAvatarCollapseAnchor({
 }
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
+// Android hole-punch morph, driven from the UI thread through animated props.
+const AnimatedProfileGooeyView = ProfileGooeyView
+  ? Animated.createAnimatedComponent(ProfileGooeyView)
+  : null;
 
 export function ProfileAvatarCollapse({
   controller,
@@ -419,6 +428,32 @@ export function ProfileAvatarCollapse({
     top: destination.top - bounds.top,
   };
   const distance = Math.max(1, collapseDistance);
+  // Android with a hole punch: the native gooey view replaces the Dynamic
+  // Island mask, whose keyframes stretch a small round lens target into a
+  // needle. iOS, reduced motion and devices without a hole punch (or without
+  // the native module) keep the paths below unchanged.
+  const gooey =
+    AnimatedProfileGooeyView !== null &&
+    Platform.OS === "android" &&
+    target.hasCutout &&
+    !reduceMotion;
+  const gooeyBox = {
+    left: bounds.left - PROFILE_GOOEY_MARGIN,
+    top: bounds.top - PROFILE_GOOEY_MARGIN,
+    width: bounds.width + 2 * PROFILE_GOOEY_MARGIN,
+    height: bounds.height + 2 * PROFILE_GOOEY_MARGIN,
+  };
+  const gooeyStart = { ...start, left: start.left - gooeyBox.left, top: start.top - gooeyBox.top };
+  const gooeyHole = {
+    ...destination,
+    left: destination.left - gooeyBox.left,
+    top: destination.top - gooeyBox.top,
+  };
+  const gooeyProps = useAnimatedProps(
+    () =>
+      profileGooeyFrame(gooeyStart, gooeyHole, profileGooeyProgress(scrollOffset.value, distance)),
+    [gooeyStart, gooeyHole, distance],
+  );
   const maskProps = useAnimatedProps(() => {
     const progress = Math.max(0, Math.min(1, scrollOffset.value / distance));
     return {
@@ -492,6 +527,60 @@ export function ProfileAvatarCollapse({
   const fallbackColor = variant === "account" ? colors.accent : colors.accentSurface;
   const initialsColor = variant === "account" ? colors.accentText : colors.onAccentSurface;
   const initials = variant === "account" ? avatarInitials(name) : diaryInitials(name);
+  if (gooey && AnimatedProfileGooeyView) {
+    return (
+      <Animated.View
+        testID="profile-avatar-collapse-mask"
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+        pointerEvents="none"
+        style={[{ position: "absolute", ...gooeyBox, zIndex: 21 }, overlayStyle]}
+      >
+        <AnimatedProfileGooeyView
+          testID="profile-avatar-gooey"
+          animatedProps={gooeyProps}
+          holeX={gooeyHole.left + gooeyHole.width / 2}
+          holeY={gooeyHole.top + gooeyHole.height / 2}
+          holeDiameter={Math.min(gooeyHole.width, gooeyHole.height)}
+          style={absoluteFill}
+        >
+          {/* Laid out once at the expanded frame; the native view scales it. */}
+          <View
+            collapsable={false}
+            style={{
+              position: "absolute",
+              left: gooeyStart.left,
+              top: gooeyStart.top,
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              overflow: "hidden",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: source || children ? colors.elevatedSurface : fallbackColor,
+            }}
+          >
+            {children ??
+              (source ? (
+                <Image
+                  accessible={false}
+                  source={{ uri: source }}
+                  resizeMode="cover"
+                  style={{ height: size, width: size, borderRadius: size / 2 }}
+                />
+              ) : (
+                <Text
+                  accessible={false}
+                  style={{ color: initialsColor, fontSize: size * 0.36, fontWeight: "700" }}
+                >
+                  {initials}
+                </Text>
+              ))}
+          </View>
+        </AnimatedProfileGooeyView>
+      </Animated.View>
+    );
+  }
   return (
     <Animated.View
       testID="profile-avatar-collapse-mask"

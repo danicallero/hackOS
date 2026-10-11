@@ -834,13 +834,73 @@ The morph only runs where a real camera cutout exists:
   and off-center punches (and small waterdrops) work; the topmost one wins. Wide
   notches and side cutouts are ignored. **This needs a new native Android build**
   (development client and store build); on an older build the module lacks the
-  function and Android uses the plain collapse.
+  function and Android uses the plain collapse. With a hole punch, Android does
+  not use the island mask above (its keyframes squeeze a small round target
+  into a thin vertical needle); it uses the native gooey view described below.
 - **No cutout, unknown, API < 28, iPhone notch / no Dynamic Island, landscape**:
   no morph. The avatar shrinks into a compact circle below the safe area with no
   black backing or cover (`hasCutout: false`).
 
 `cameraCutoutFrame` still overrides the target for OEM placements. Reduced Motion
 keeps the circular mask and uses the simpler position/scale transition.
+
+#### Android hole-punch gooey morph
+
+`modules/profile-gooey` is a local Android-only Expo module exporting
+`ProfileGooeyView` (Kotlin `ExpoView`; `null` on iOS, web and on a binary
+built before the module existed). `ProfileAvatarCollapse` renders it only when
+`Platform.OS === "android"`, the target has a hole punch, Reduce Motion is off
+and the native view exists; every other case keeps the paths above unchanged
+(iOS never reaches it).
+
+- **Children**: one React child, the avatar circle (photo, initials or live
+  content), laid out once by Yoga at the expanded frame. The native view draws
+  it with its own canvas transform, so layout never changes during the morph.
+- **Static props** (dp, view-local): `holeX`, `holeY`, `holeDiameter`.
+- **Animated props** from `useAnimatedProps` on the UI thread, no per-frame JS:
+  `avatarX`, `avatarY`, `avatarDiameter`, `imageAlpha`, `blurRadius`,
+  `bridgeReach`, `drip`, all computed by `profileGooeyFrame` in
+  `lib/profile-avatar-collapse.ts` from `profileGooeyProgress(scrollOffset, 120)`.
+- **Timeline**: until progress 0.65 (`PROFILE_GOOEY_SHRINK_END`) the photo
+  stays a circle, shrinks uniformly to the lens diameter minus 1 dp per side
+  (`profileGooeyEndDiameter` / `profileGooeyEndScale`) and glides (ease-out) to a
+  point centred under the lens, a gap of 0.9 lens diameters below it. Then it
+  rises to the lens centre (`profileGooeyEndOffset` is the full travel); a black
+  metaball neck (two-circle tangent construction, spread growing from 0 so it
+  emerges from a point) joins it to the lens, a short drip bulges from the lens
+  and retracts, and the photo fades (0.7 → 0.95) to its black silhouette. The
+  photo blurs progressively from 0.3 to 0.8 (up to 6 dp). Everything is a pure
+  function of progress, so scrolling back retraces it exactly.
+- **Rendering**: Android 12+ (API 31) records the black ink (lens, avatar, neck,
+  drip) into a reused `RenderNode`, blurs it with `RenderEffect` and composites it
+  through an alpha-threshold color matrix (liquid edges); the photo goes through
+  a second reused node with the progressive blur. Android 9–11 draws the same
+  shapes directly, anti-aliased, without blur. No bitmaps are allocated; both
+  nodes drop their display lists and effects on detach. The canvas is the
+  avatar/lens bounds plus a 24 dp margin (`PROFILE_GOOEY_MARGIN`).
+
+Differences from Telegram Android's profile header: Telegram reads the cutout
+from the private `config_mainBuiltInDisplayCutout` resource and drops
+non-centred cutouts, we use the public `DisplayCutout` API (off-centre punches
+work); Telegram ends the avatar at half the lens width and moves it in one
+straight line, we end at the lens size and stage it under the lens first so a
+large photo never stretches toward the camera; Telegram's goo is a
+blur-threshold of the whole avatar on every API level (a CPU stack blur below
+Android 12), ours is a geometric neck, only softened by a GPU blur on 12+;
+devices without a hole punch keep our plain collapse instead of Telegram's
+black status-bar target.
+
+**Testing on a Pixel (9a or any hole-punch device)**: build a development
+client (`pnpm --filter @hackos/mobile android`, or an EAS development build;
+a JS-only reload is not enough the first time), sign in, open Others ›
+Account and scroll up slowly: the photo should stay round, shrink until it
+matches the lens just below it, then rise with a liquid neck and disappear
+into the lens. Scroll back down slowly to watch the droplet come out and
+regrow; release mid-way to check it snaps to a rest; repeat quickly with a
+fling. Repeat on a person profile (Diary › a person). Check dark mode, with
+Developer options › Display cutout set to "Punch hole" on an emulator or a
+device without one, and with Remove animations on (plain circle collapse, no
+neck). On a device without a cutout the plain collapse must be unchanged.
 The CV route needs the session, so it is
 downloaded with the session cookie (`expo-file-system`) into the cache and shown
 in the in-app viewer (`components/cv-viewer.tsx`): a page-sheet modal titled
