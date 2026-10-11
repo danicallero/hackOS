@@ -6,6 +6,7 @@ import { normalizeLanguage, renderPushTemplate } from "../templates.js";
 import { assertOkResponse } from "./http.js";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+const EXPO_REQUEST_TIMEOUT_MS = 15_000;
 const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
 const EXPO_RECEIPT_POLL_DELAYS_MS = [0, 1_000, 3_000] as const;
 
@@ -84,6 +85,9 @@ export async function postExpoPushMessages(
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify(messages),
+    // A hung request must fail, not stall its caller: the Live Activity tick
+    // (#966) holds its single-runner lock until every send returns.
+    signal: AbortSignal.timeout(EXPO_REQUEST_TIMEOUT_MS),
   }).catch((err: unknown) => {
     if (config.logExpoPushUnsafeDebug) {
       console.error(
