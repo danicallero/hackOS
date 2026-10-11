@@ -83,7 +83,14 @@ export default function OthersLayout() {
       />
       <Stack.Screen
         name="wallet"
-        options={{ headerShown: true, headerLargeTitle: true, title: t("tabWallet") }}
+        // Compact inline title beside the back button: the QR should sit as
+        // high as possible on the screen (H28).
+        options={{
+          headerLargeTitle: false,
+          headerShadowVisible: false,
+          headerShown: true,
+          title: t("tabWallet"),
+        }}
       />
       <Stack.Screen
         name="diary"

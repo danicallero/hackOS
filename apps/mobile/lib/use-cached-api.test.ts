@@ -9,9 +9,10 @@ jest.mock("./use-retry-on-reconnect", () => ({
   useRetryOnReconnect: jest.fn(),
 }));
 
-import { writeCachedValue } from "./offline-cache";
+import { readCachedValue, writeCachedValue } from "./offline-cache";
 import { useCachedApi } from "./use-cached-api";
 
+const mockReadCachedValue = readCachedValue as jest.Mock;
 const mockWriteCachedValue = writeCachedValue as jest.Mock;
 
 const listeners = new Set<(state: string) => void>();
@@ -136,5 +137,70 @@ describe("useCachedApi background recovery (H38, H51, H55)", () => {
       expect.anything(),
       expect.anything(),
     );
+  });
+});
+
+describe("useCachedApi cache-first reads (H28)", () => {
+  afterEach(() => {
+    mockReadCachedValue.mockReset();
+    mockReadCachedValue.mockResolvedValue(null);
+  });
+
+  it("renders the persisted payload while the request is still pending", async () => {
+    mockReadCachedValue.mockResolvedValue({
+      data: { version: 1 },
+      updatedAt: "2026-10-10T10:00:00.000Z",
+    });
+    const pending = deferred<{ version: number }>();
+    const fetcher = jest.fn(() => pending.promise);
+    const { result } = await renderHook(() =>
+      useCachedApi("user:1:wallet", fetcher, { cacheFirst: true }),
+    );
+
+    await act(async () => {
+      void result.current.load();
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(mockReadCachedValue).toHaveBeenCalledWith("user:1:wallet");
+    expect(result.current.data).toEqual({ version: 1 });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.staleSince).toBeNull();
+
+    await act(async () => pending.resolve({ version: 2 }));
+    expect(result.current.data).toEqual({ version: 2 });
+  });
+
+  it("never lets a late cache read replace a fresher response", async () => {
+    const cached = deferred<{ data: { version: number }; updatedAt: string } | null>();
+    mockReadCachedValue.mockReturnValue(cached.promise);
+    const fetcher = jest.fn().mockResolvedValue({ version: 2 });
+    const { result } = await renderHook(() =>
+      useCachedApi("user:1:wallet", fetcher, { cacheFirst: true }),
+    );
+
+    await act(async () => result.current.load());
+    await act(async () =>
+      cached.resolve({ data: { version: 1 }, updatedAt: "2026-10-10T10:00:00.000Z" }),
+    );
+
+    expect(result.current.data).toEqual({ version: 2 });
+  });
+
+  it("keeps the network-first default for other reads", async () => {
+    mockReadCachedValue.mockResolvedValue({
+      data: { version: 1 },
+      updatedAt: "2026-10-10T10:00:00.000Z",
+    });
+    const fetcher = jest.fn(() => deferred<{ version: number }>().promise);
+    const { result } = await renderHook(() => useCachedApi("read-model", fetcher));
+
+    await act(async () => {
+      void result.current.load();
+    });
+
+    expect(mockReadCachedValue).not.toHaveBeenCalled();
+    expect(result.current.data).toBeNull();
+    expect(result.current.loading).toBe(true);
   });
 });
