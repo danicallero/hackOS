@@ -1,6 +1,7 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { handleLiveUpdatePayload } from "./live-activities/background-task";
+import { notifyLiveActivityPush } from "./live-activities/push-refresh";
 import { emitCategory } from "./notification-events";
 
 /**
@@ -57,11 +58,14 @@ export function setupNotificationListeners(navigateToQueue: () => void): () => v
     if (Platform.OS === "android") {
       void handleLiveUpdatePayload(event.request.content.data).catch(() => undefined);
     }
+    // #966: a queue or schedule push refreshes the Live Activities too.
+    notifyLiveActivityPush(event.request.content.data);
     emitCategory(categoryOf(event.request.content.data));
   });
 
   const handleResponse = (data: Record<string, unknown> | undefined) => {
     const category = categoryOf(data);
+    notifyLiveActivityPush(data);
     emitCategory(category);
     if (category?.startsWith("queue")) navigateToQueue();
   };

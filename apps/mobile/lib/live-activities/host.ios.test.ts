@@ -2,18 +2,21 @@
  * #966 (H38, H25/H26): the iOS ActivityKit host. An activity ended as
  * `finished` keeps its final state on the Lock Screen but disappears from
  * `getInstances()`; sign-out and opt-out must still be able to remove it.
+ * Every local start and update carries the rank's relevance score.
  */
 
 type FakeInstance = {
   id: string;
   getId: () => string;
   end: jest.Mock;
+  update: jest.Mock;
   getPushToken: () => Promise<null>;
   addPushTokenListener: () => { remove(): void };
 };
 
 const mockActive: FakeInstance[] = [];
 const mockCreated = new Map<string, FakeInstance>();
+const mockStart = jest.fn();
 
 function mockInstance(id: string): FakeInstance {
   const instance: FakeInstance = {
@@ -24,6 +27,7 @@ function mockInstance(id: string): FakeInstance {
       const index = mockActive.indexOf(instance);
       if (index >= 0) mockActive.splice(index, 1);
     }),
+    update: jest.fn(async () => undefined),
     getPushToken: async () => null,
     addPushTokenListener: () => ({ remove() {} }),
   };
@@ -32,7 +36,8 @@ function mockInstance(id: string): FakeInstance {
 
 jest.mock("@/widgets/queue-activity", () => ({
   QueueActivity: {
-    start: () => {
+    start: (...args: unknown[]) => {
+      mockStart(...args);
       const instance = mockInstance(`q${mockCreated.size + 1}`);
       mockActive.push(instance);
       mockCreated.set(instance.id, instance);
@@ -95,6 +100,34 @@ describe("iOS Live Activity host (#966)", () => {
     ended?.end.mockClear();
     await liveActivityHost.dismissEnded();
     expect(ended?.end).not.toHaveBeenCalled();
+  });
+
+  it("starts and updates with the relevance of the device rank", async () => {
+    mockStart.mockClear();
+    const id = await liveActivityHost.start(
+      { kind: "queue", subject: "judging", props: { ...props, rank: 1 } },
+      null,
+    );
+    expect(mockStart).toHaveBeenCalledWith(
+      expect.objectContaining({ rank: 1 }),
+      "hackos://queue",
+      undefined,
+      90,
+    );
+
+    // Promoted to the top: the update must raise the score, or ActivityKit
+    // resets it to 0 and orders the Dynamic Island by start time.
+    await liveActivityHost.update(
+      id!,
+      { kind: "queue", subject: "judging", props: { ...props, rank: 0 } },
+      "called",
+    );
+    expect(mockCreated.get(id!)?.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ rank: 0 }),
+      undefined,
+      100,
+    );
+    await liveActivityHost.end(liveActivityHost.running()[0]!, "immediate");
   });
 
   it("does not keep an activity ended immediately", async () => {
