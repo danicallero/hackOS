@@ -32,7 +32,8 @@ import {
   profileAvatarCoverOpacity,
   profileAvatarMaskFrame,
   profileAvatarMorphPath,
-  profileAvatarSnapTarget,
+  profileAvatarRestingOffsetBound,
+  profileAvatarSnapOffset,
   resolveProfileCameraTarget,
 } from "@/lib/profile-avatar-collapse";
 import CameraCapabilities from "@/modules/camera-capabilities";
@@ -54,6 +55,7 @@ export type ProfileAvatarCollapseController = ReturnType<typeof useProfileAvatar
  */
 export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView | null>) {
   const scrollOffset = useSharedValue(0);
+  const contentOffset = useSharedValue(0);
   const restingOffset = useSharedValue(0);
   const hasDragged = useSharedValue(false);
   // Only a user drag arms the snap, so programmatic scrolls are left alone.
@@ -62,6 +64,7 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
   const ownScrollRef = useRef<ScrollView>(null);
   const scrollRef = screenScrollRef ?? ownScrollRef;
   const reduceMotion = useReducedMotion();
+  const safeAreaTop = useSafeAreaInsets().top;
   const hostRef = useRef<View>(null);
   const anchorRef = useRef<View>(null);
   const [hostOrigin, setHostOrigin] = useState({ x: 0, y: 0 });
@@ -76,20 +79,20 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
   const collapseDistance = PROFILE_AVATAR_COLLAPSE_DISTANCE;
   const restVelocity = PROFILE_AVATAR_SNAP_REST_VELOCITY;
 
-  const settle = (contentOffset: number, velocity: number) => {
+  const settle = (offset: number, velocity: number) => {
     "worklet";
     snapArmed.value = false;
-    const target = profileAvatarSnapTarget(
-      contentOffset - restingOffset.value,
-      velocity,
-      collapseDistance,
-    );
-    if (target !== null) runOnJS(scrollToOffset)(restingOffset.value + target);
+    const target = profileAvatarSnapOffset(offset, restingOffset.value, velocity, collapseDistance);
+    if (target !== null) runOnJS(scrollToOffset)(target);
   };
 
   const onScroll = useAnimatedScrollHandler(
     {
-      onBeginDrag: () => {
+      onBeginDrag: (event) => {
+        // The first drag usually starts at the top, even when the inset's
+        // own scroll event arrived before this handler was attached.
+        if (!hasDragged.value)
+          restingOffset.value = Math.min(restingOffset.value, event.contentOffset.y);
         hasDragged.value = true;
         snapArmed.value = true;
       },
@@ -98,6 +101,7 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
         // A later pull-to-refresh bounce must not redefine the resting offset.
         if (!hasDragged.value)
           restingOffset.value = Math.min(restingOffset.value, event.contentOffset.y);
+        contentOffset.value = event.contentOffset.y;
         scrollOffset.value = Math.max(0, event.contentOffset.y - restingOffset.value);
       },
       onEndDrag: (event) => {
@@ -177,6 +181,36 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     timers.current = [450, 900].map((delay) => setTimeout(measureAnchor, delay));
   }, [measureAnchor]);
 
+  // iOS: seed the true top from the status-bar overlap once the host is
+  // measured, so it holds even when no scroll event preceded a programmatic
+  // scroll or a remount restored the offset at y 0 (#935).
+  useEffect(() => {
+    if (Platform.OS !== "ios" || !anchorFrame) return;
+    const bound = profileAvatarRestingOffsetBound(safeAreaTop, hostOrigin.y);
+    if (bound >= restingOffset.value) return;
+    restingOffset.value = bound;
+    scrollOffset.value = Math.max(0, contentOffset.value - bound);
+  }, [anchorFrame, contentOffset, hostOrigin.y, restingOffset, safeAreaTop, scrollOffset]);
+
+  /** Scroll to the true top, for tab re-press (`useScrollToTop`). */
+  const scrollToTopRef = useMemo(
+    () => ({ current: { scrollToTop: () => scrollToOffset(restingOffset.value) } }),
+    [restingOffset, scrollToOffset],
+  );
+
+  /** Move a scroll left inside the morph by a non-drag (remount, focus) to the nearer rest. */
+  const settleAtRest = useCallback(() => {
+    requestAnimationFrame(() => {
+      const target = profileAvatarSnapOffset(
+        contentOffset.value,
+        restingOffset.value,
+        0,
+        PROFILE_AVATAR_COLLAPSE_DISTANCE,
+      );
+      if (target !== null) scrollRef.current?.scrollTo({ animated: false, y: target });
+    });
+  }, [contentOffset, restingOffset, scrollRef]);
+
   return {
     anchorFrame,
     anchorRef,
@@ -191,6 +225,8 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     restingOffset,
     scrollOffset,
     scrollRef,
+    scrollToTopRef,
+    settleAtRest,
   };
 }
 

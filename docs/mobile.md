@@ -748,7 +748,13 @@ account: Reanimated maps 120 pt of upward scroll to the shared mask and dark
 cover progress. A released drag never rests half-morphed: inside that range it
 auto-scrolls to fully expanded or collapsed by release direction on a flick,
 otherwise by the nearer half (after momentum, instantly under Reduce Motion);
-programmatic scrolls are never snapped. A native `MaskedView` clips the original cubic keyframes from
+programmatic scrolls are never snapped. Both rests are measured from the true
+top, which on iOS sits at a negative content offset under the automatic inset
+(at least the status-bar overlap, seeded once the host is measured, then
+lowered by scroll events before the first drag), never from y 0, which is
+inside the morph. Account's tab re-press and gear scroll go to that true top,
+and on focus it moves a scroll left inside the morph (such as a remount
+restoring y 0) to the nearer rest. A native `MaskedView` clips the original cubic keyframes from
 Telegram's `UserAvatarMask` (`lib/telegram-avatar-mask.json`), evaluated on the
 UI thread rather than approximating the connection with a circle/capsule union.
 The source asset is TelegramMessenger/Telegram-iOS's UserAvatarMask animation;

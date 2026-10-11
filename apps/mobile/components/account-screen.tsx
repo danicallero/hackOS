@@ -76,7 +76,8 @@ export default function AccountScreen() {
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
   const avatarCollapse = useProfileAvatarCollapse(scrollRef);
-  useScrollToTop(scrollRef);
+  useScrollToTop(avatarCollapse.scrollToTopRef);
+  useFocusEffect(avatarCollapse.settleAtRest);
   const { me, loading, error, offline, staleSince, refetch } = useMeContext();
   const { mode, setMode } = useApiMode();
   const { intolerances, reload: loadSupportingData } = useFoodIntolerances(Boolean(me));
@@ -664,8 +665,8 @@ function useNotificationsHighlight(
     router.setParams({ highlight: undefined, highlightAt: undefined });
     // Always start from the top, then scroll only once the sheet dismissal and
     // navigation transition have finished, so the user sees the page move.
-    // Under the automatic (large title) inset the true top is negative; y 0
-    // would start with the avatar already collapsed into the island.
+    // Under the automatic inset the true top is negative; y 0 would start
+    // with the avatar already part-way into the island.
     if (timer.current) clearTimeout(timer.current);
     opacity.value = 0;
     scrollRef.current?.scrollTo({ animated: false, y: topOffset.value });
