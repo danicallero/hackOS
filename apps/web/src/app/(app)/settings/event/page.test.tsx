@@ -36,6 +36,7 @@ vi.mock("./venue-tab", () => ({
 vi.mock("./wallet-tab", () => ({ WalletTab: () => <div data-testid="wallet-form" /> }));
 vi.mock("./presence-tab", () => ({ PresenceTab: () => null }));
 vi.mock("./invites-tab", () => ({ InvitesTab: () => null }));
+vi.mock("./live-activities-tab", () => ({ LiveActivitiesTab: () => null }));
 vi.mock("./reset-judging-data-tab", () => ({ ResetJudgingDataTab: () => null }));
 vi.mock("../../queue/rooms/judging-window-tab", () => ({ JudgingWindowTab: () => null }));
 
@@ -76,7 +77,11 @@ afterEach(() => {
 describe("EventSettingsPage", () => {
   it("lists only the sections the caller may manage, as deep links", async () => {
     await render();
-    expect(links()).toEqual(["/settings/event?tab=event", "/settings/event?tab=wallet"]);
+    expect(links()).toEqual([
+      "/settings/event?tab=event",
+      "/settings/event?tab=wallet",
+      "/settings/event?tab=liveActivities",
+    ]);
     expect(container.querySelector("[data-testid]")).toBeNull();
   });
 
@@ -91,7 +96,7 @@ describe("EventSettingsPage", () => {
     search = "tab=venue";
     await render();
     expect(container.querySelector("[data-testid=venue-form]")).toBeNull();
-    expect(links()).toHaveLength(2);
+    expect(links()).toHaveLength(3);
     expect(replace).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
