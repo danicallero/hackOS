@@ -30,6 +30,7 @@ import type { ScannerPerson } from "@/lib/scanner-types";
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
 
 interface ScannerRoleStat {
   role: ScannerPerson["role"];
@@ -553,6 +554,9 @@ function ScannerGroupStatistics({
             <SymbolView accessible={false} name={item.icon} tintColor="white" size={14} />
             <Text
               selectable
+              adjustsFontSizeToFit
+              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+              minimumFontScale={CHROME_MIN_FONT_SCALE}
               numberOfLines={1}
               style={{ color: "rgba(255,255,255,0.72)", flex: 1, fontSize: 11, fontWeight: "600" }}
             >
@@ -561,6 +565,7 @@ function ScannerGroupStatistics({
           </View>
           <Text
             selectable
+            maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
             style={{
               color: "white",
               fontSize: 24,

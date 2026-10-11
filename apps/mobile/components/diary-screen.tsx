@@ -40,6 +40,7 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
 
 const SCAN_LABELS: ScanActionLabels = {
   nfc: "diaryScanNfc",
@@ -599,6 +600,7 @@ export function DiaryScreen() {
           <Stack.Toolbar.View hidesSharedBackground>
             <Text
               accessibilityRole="header"
+              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
               style={{
                 // A fixed colour, not the dynamic label: iOS 26 flips a bar
                 // item's light/dark appearance with what scrolls behind it,

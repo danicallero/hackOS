@@ -1902,6 +1902,18 @@ an id's first post).
   aligns its popup to the anchor's start edge, so a full-width trigger opened the
   menu at the screen's left; the row is a `Pressable` calling `MenuView`'s
   `ref.show()` and the menu is anchored to a 1dp strip at the row's trailing edge.
+- Dynamic Type. `patches/react-native@0.86.3.patch` makes every root `Text`
+  remount once when the system text size changes. Without it, Fabric
+  re-measured text only on its native branch: the next React commit (a tab
+  switch, returning from Settings) restored frames measured at the old size
+  while glyphs rendered at the new one, clipping every label. Fixed chrome
+  (tab labels, scanner counters, the Activities/Diary toolbar titles) uses
+  `CHROME_MAX_FONT_SIZE_MULTIPLIER` from `theme/dynamic-type.ts` and shrinks to
+  fit; all other text is uncapped. `test/dynamic-type.test.tsx` fails if the
+  patch is lost in a React Native upgrade. To check a screen, change the size
+  while the app runs (`xcrun simctl ui booted content_size
+  accessibility-extra-extra-extra-large`), then switch tabs: a cold start at
+  the large size does not exercise the re-measure path.
 - `lib/haptics.ts` — best-effort Expo Haptics feedback for custom controls and
   meaningful outcomes. Selection/light feedback is used for custom toggles,
   segmented choices, scanner capture and retry actions; success/warning/error
