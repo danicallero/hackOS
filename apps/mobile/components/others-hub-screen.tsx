@@ -1,4 +1,4 @@
-import { useRouter, useScrollToTop } from "expo-router";
+import { useRouter } from "expo-router";
 import { useRef } from "react";
 import { Pressable, ScrollView, useColorScheme, View } from "react-native";
 import { AndroidStatusBarScrim, InfoRow, Section, Separator } from "@/components/native-ui";
@@ -8,6 +8,7 @@ import { OVERFLOW_TAB_ICON, OVERFLOW_TAB_LABEL_KEY, OVERFLOW_TAB_ROUTE } from "@
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { overflowTabs } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 
 /**
  * Fallback screen for a direct `/others` link. Normal selections use the
@@ -24,12 +25,13 @@ export function OthersHubScreen() {
   const { me } = useMeContext();
   const ids = overflowTabs(me?.capabilities ?? []);
 
-  useScrollToTop(scrollRef);
+  const trueTop = useTrueTopScroll(scrollRef);
 
   return (
     <View style={{ flex: 1 }}>
       <ScrollView
         ref={scrollRef}
+        {...trueTop.scrollProps}
         style={{ flex: 1 }}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{

@@ -4,7 +4,6 @@ import {
   useNavigation,
   usePathname,
   useRouter,
-  useScrollToTop,
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
@@ -17,6 +16,7 @@ import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchScanLog, type ScanLogEntry } from "@/lib/scan-log";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
 const PAGE_SIZE = 30;
@@ -58,7 +58,7 @@ export function ScanLogScreen() {
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
 
-  useScrollToTop(scrollRef);
+  const trueTop = useTrueTopScroll(scrollRef);
 
   const origin = Array.isArray(from) ? from[0] : from;
   const fallbackRoute: Href =
@@ -201,6 +201,7 @@ export function ScanLogScreen() {
   return (
     <ScrollView
       ref={scrollRef}
+      {...trueTop.scrollProps}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         gap: 20,

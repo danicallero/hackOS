@@ -1,4 +1,4 @@
-import { useFocusEffect, useScrollToTop } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -37,6 +37,7 @@ import {
 } from "@/lib/self-service";
 import { clearAccountData } from "@/lib/storage-usage";
 import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
 type AccountRemovalAction = AccountRemovalEligibility["action"];
@@ -77,7 +78,7 @@ export default function DeleteAccountScreen() {
   const { t } = useLocale();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
-  useScrollToTop(scrollRef);
+  const trueTop = useTrueTopScroll(scrollRef);
   const { me, loading, error, offline, staleSince, refetch } = useMeContext();
   const [screen, setScreen] = useState<RemovalScreen>("intro");
   const [retainedDataExpanded, setRetainedDataExpanded] = useState(false);
@@ -550,6 +551,7 @@ export default function DeleteAccountScreen() {
         {screen === "intro" ? (
           <ScrollView
             ref={scrollRef}
+            {...trueTop.scrollProps}
             automaticallyAdjustKeyboardInsets
             contentInsetAdjustmentBehavior="automatic"
             contentContainerStyle={{

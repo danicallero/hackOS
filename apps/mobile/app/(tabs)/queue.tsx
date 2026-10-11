@@ -1,5 +1,5 @@
 import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
-import { useFocusEffect, useScrollToTop } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
@@ -34,6 +34,7 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { isServerEventConnected, subscribeToServerEvent } from "@/lib/server-events";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
 interface QueueRoom {
@@ -98,7 +99,7 @@ export default function QueueScreen() {
   const entries = data ?? [];
 
   const listRef = useRef<FlatList<QueueEntry>>(null);
-  useScrollToTop(listRef);
+  const trueTop = useTrueTopScroll(listRef);
 
   useEffect(() => {
     void load();
@@ -171,6 +172,7 @@ export default function QueueScreen() {
     <>
       <FlatList
         ref={listRef}
+        {...trueTop.scrollProps}
         data={orderedEntries}
         keyExtractor={(item) => String(item.entryId)}
         contentInsetAdjustmentBehavior="automatic"

@@ -5,7 +5,6 @@ import {
   useNavigation,
   usePathname,
   useRouter,
-  useScrollToTop,
 } from "expo-router";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
@@ -36,6 +35,7 @@ import type { ScannerPerson } from "@/lib/scanner-types";
 import { isPadIdiom } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
 export function PeopleDirectoryScreen() {
@@ -73,7 +73,7 @@ export function PeopleDirectoryScreen() {
   // that snapshot even if the local roster could not be opened or written.
   const directory = sync.serverSnapshot?.people ?? people;
 
-  useScrollToTop(listRef);
+  const trueTop = useTrueTopScroll(listRef);
 
   const roleFilters = useMemo(() => {
     const options = roleFilterOptionsFromRoster(directory, (role) => roleDisplayName(role, t));
@@ -316,6 +316,7 @@ export function PeopleDirectoryScreen() {
   const list = (
     <FlatList
       ref={listRef}
+      {...trueTop.scrollProps}
       contentInsetAdjustmentBehavior="automatic"
       style={{ backgroundColor: colors.background, flex: 1 }}
       contentContainerStyle={{
