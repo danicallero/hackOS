@@ -3,7 +3,11 @@ import { Children, type ReactElement } from "react";
 import { Platform } from "react-native";
 
 // Header actions are captured to press them like the native header would.
-type HeaderButton = ReactElement<{ accessibilityLabel: string; onPress: () => void }>;
+type HeaderButton = ReactElement<{
+  accessibilityLabel: string;
+  icon?: string;
+  onPress: () => void;
+}>;
 const mockNavOptions: { headerLeft?: () => ReactElement; headerRight?: () => ReactElement } = {};
 const mockRouter = { dismiss: jest.fn(), navigate: jest.fn(), push: jest.fn() };
 function headerButtons(side: "headerLeft" | "headerRight"): HeaderButton[] {
@@ -201,7 +205,7 @@ describe("unread-only grace period (H489)", () => {
 
     // Press the header's Unread only action, as the native header would.
     await act(async () => {
-      headerButton("headerLeft", "Unread only").props.onPress();
+      headerButton("headerRight", "Unread only").props.onPress();
     });
 
     const row = await inbox.findByRole("button", { name: /Kickoff moved/ });
@@ -229,12 +233,16 @@ describe("unread-only grace period (H489)", () => {
 });
 
 describe("alerts sheet header (H51)", () => {
-  it("groups close with the filter and sends the gear to Account → Notifications", async () => {
+  it("puts the eye filter beside the gear and sends the gear to Account → Notifications", async () => {
     await renderMobile(<NotificationsScreen />);
     expect(headerButtons("headerLeft").map((button) => button.props.accessibilityLabel)).toEqual([
       "Close",
-      "Unread only",
     ]);
+    expect(headerButtons("headerRight").map((button) => button.props.accessibilityLabel)).toEqual([
+      "Unread only",
+      "Preferences",
+    ]);
+    expect(headerButton("headerRight", "Unread only").props.icon).toBe("eye");
 
     headerButton("headerLeft", "Close").props.onPress();
     expect(mockRouter.dismiss).toHaveBeenCalledTimes(1);

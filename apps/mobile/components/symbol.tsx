@@ -67,6 +67,7 @@ const ANDROID_SYMBOL_NAMES = {
   "envelope.badge.fill": "mark_email_unread",
   ellipsis: "more_horiz",
   eye: "visibility",
+  "eye.fill": "visibility",
   "eye.slash": "visibility_off",
   "exclamationmark.arrow.circlepath": "sync_problem",
   "exclamationmark.circle.fill": "error",

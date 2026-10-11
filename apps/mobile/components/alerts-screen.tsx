@@ -124,9 +124,7 @@ export default function AlertsScreen() {
   const router = useRouter();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const glassAvailable = isRealLiquidGlassAvailable();
-  const filterIcon = unreadOnly
-    ? "line.3.horizontal.decrease.circle.fill"
-    : "line.3.horizontal.decrease";
+  const filterIcon = unreadOnly ? "eye.fill" : "eye";
 
   const toggleUnread = useCallback(() => {
     void haptic("selection");
@@ -145,8 +143,10 @@ export default function AlertsScreen() {
     if (glassAvailable) return;
     navigation.setOptions({
       headerLeft: () => (
+        <LegacyHeaderIconButton icon="xmark" accessibilityLabel={t("close")} onPress={close} />
+      ),
+      headerRight: () => (
         <View style={{ flexDirection: "row" }}>
-          <LegacyHeaderIconButton icon="xmark" accessibilityLabel={t("close")} onPress={close} />
           <LegacyHeaderIconButton
             icon={filterIcon}
             accessibilityLabel={t("notificationsUnreadOnly")}
@@ -154,14 +154,12 @@ export default function AlertsScreen() {
             tintColor={unreadOnly ? colors.accent : colors.label}
             onPress={toggleUnread}
           />
+          <LegacyHeaderIconButton
+            icon="gearshape"
+            accessibilityLabel={t("notificationsPreferences")}
+            onPress={openPreferences}
+          />
         </View>
-      ),
-      headerRight: () => (
-        <LegacyHeaderIconButton
-          icon="gearshape"
-          accessibilityLabel={t("notificationsPreferences")}
-          onPress={openPreferences}
-        />
       ),
     });
   }, [close, filterIcon, glassAvailable, navigation, openPreferences, t, toggleUnread, unreadOnly]);
@@ -172,6 +170,8 @@ export default function AlertsScreen() {
         <>
           <Stack.Toolbar placement="left">
             <Stack.Toolbar.Button icon="xmark" accessibilityLabel={t("close")} onPress={close} />
+          </Stack.Toolbar>
+          <Stack.Toolbar placement="right">
             <Stack.Toolbar.Button
               icon={filterIcon}
               accessibilityLabel={t("notificationsUnreadOnly")}
@@ -179,8 +179,6 @@ export default function AlertsScreen() {
               tintColor={unreadOnly ? colors.accent : undefined}
               onPress={toggleUnread}
             />
-          </Stack.Toolbar>
-          <Stack.Toolbar placement="right">
             <Stack.Toolbar.Button
               icon="gearshape"
               accessibilityLabel={t("notificationsPreferences")}
