@@ -1,6 +1,6 @@
 "use client";
 
-// Event configuration navigation (H19, H24, H28, H42, H45, H47-H50, #932):
+// Event configuration navigation (H19, H24, H28, H42, H45, H47-H50, #932, #966):
 // `/settings/event` is a plain list of the sections the caller may manage;
 // `?tab=<section>` opens one section with a back control. The app sidebar is
 // the only vertical navigation, and a section's own views stay horizontal.
@@ -11,6 +11,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
+import { DeviceMobileIcon } from "@phosphor-icons/react/dist/csr/DeviceMobile";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
@@ -31,6 +32,7 @@ import { JudgingWindowTab } from "../../queue/rooms/judging-window-tab";
 import { EventConfigProvider } from "./event-config-context";
 import { EventTab } from "./event-tab";
 import { InvitesTab } from "./invites-tab";
+import { LiveActivitiesTab } from "./live-activities-tab";
 import { PresenceTab } from "./presence-tab";
 import { ResetJudgingDataTab } from "./reset-judging-data-tab";
 import { VenueTab } from "./venue-tab";
@@ -43,6 +45,7 @@ const CATEGORIES = [
   "presence",
   "invites",
   "judging",
+  "liveActivities",
   "danger",
 ] as const;
 type Category = (typeof CATEGORIES)[number];
@@ -54,6 +57,7 @@ const CATEGORY_ICONS = {
   presence: UserCheckIcon,
   invites: EnvelopeSimpleIcon,
   judging: ClockIcon,
+  liveActivities: DeviceMobileIcon,
   danger: WarningIcon,
 } as const;
 
@@ -65,6 +69,7 @@ const SECTIONS: Record<Category, (onDirtyChange: (dirty: boolean) => void) => Re
   presence: (onDirtyChange) => <PresenceTab onDirtyChange={onDirtyChange} />,
   invites: (onDirtyChange) => <InvitesTab onDirtyChange={onDirtyChange} />,
   judging: (onDirtyChange) => <JudgingWindowTab onDirtyChange={onDirtyChange} />,
+  liveActivities: (onDirtyChange) => <LiveActivitiesTab onDirtyChange={onDirtyChange} />,
   danger: () => <ResetJudgingDataTab icon={WarningIcon} />,
 };
 
@@ -87,6 +92,7 @@ export default function EventSettingsPage() {
     presence: canPresence,
     invites: canInvites,
     judging: canJudging,
+    liveActivities: canEvent,
     danger: canDanger,
   };
   const visibleCategories = CATEGORIES.filter((c) => canByCategory[c]);
@@ -97,6 +103,7 @@ export default function EventSettingsPage() {
     presence: t("presencePolicyTitle"),
     invites: t("invitesSectionTitle"),
     judging: t("judgingWindowTitle"),
+    liveActivities: t("liveActivitiesTitle"),
     danger: t("dangerZone"),
   };
 
