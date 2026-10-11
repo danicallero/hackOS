@@ -150,9 +150,16 @@ next repetition. Each tick does the following:
 | `dismissed`, phase changed (e.g. waiting → called, upcoming → live) | **start** again: new, essential information |
 | `dismissed`, no `dismissed_phase` yet | record the current phase, send nothing |
 
+   An open queue session whose state has not changed for 15 minutes gets a
+   routine (priority 5) refresh, so its 30-minute `stale-date` never greys
+   out a participant who is still waiting.
+
 3. Every open session that is no longer desired is **ended**. This happens
    when the window closes, the team is done, the activity ends, the
-   capability is revoked, or the device is disabled.
+   capability is revoked, or the device is disabled. A `dismissed` session
+   that is no longer desired on a device that can still receive starts is
+   turned into `finished`: the dismissal covered that run, so a later one
+   (for example the next queue the team waits in) starts again.
 
 **Concurrency and idempotency:**
 
@@ -167,7 +174,12 @@ next repetition. Each tick does the following:
 
 **Failures:**
 
-- A transient failure reverts its claim, so the next tick retries.
+- A transient failure reverts its claim, so the next tick retries. A failed
+  restart of a `finished` or `dismissed` session restores that row,
+  including its `dismissed_phase`, instead of deleting it.
+- Without APNs configured, iOS sessions that have a per-activity token stay
+  open rather than being marked ended without a push; once APNs is set, the
+  worker ends or updates them.
 - A dead token clears that token: APNs 410, `BadDeviceToken`, `ExpiredToken`
   or `Unregistered`, or Expo `DeviceNotRegistered`. A dead iOS
   *per-activity* token means the activity is gone from the device, so its

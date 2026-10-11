@@ -174,6 +174,84 @@ describe("queue Live Activity (H38)", () => {
     expect(session.props.phase).toBe("called");
   });
 
+  it("keeps the dismissal when a phase-change restart fails, and retries it", async () => {
+    await openJudgingWindow();
+    const { userId, entryId, roomId } = await participantInQueue();
+    const device = await registerDevice(userId);
+    await tick();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE live_activity_sessions
+          SET ended_at = now(), end_reason = 'dismissed', dismissed_phase = 'waiting'
+        WHERE device_id = $1`,
+      [device.id],
+    );
+    await callEntry(entryId, roomId);
+
+    apns.respond = () => ({ status: 503, reason: "ServiceUnavailable" });
+    expect(await tick()).toMatchObject({ started: 0, failed: 1 });
+    const [kept] = await sessionsOf(device.id);
+    expect(kept).toMatchObject({ end_reason: "dismissed", dismissed_phase: "waiting" });
+    expect(kept.props.phase).toBe("waiting");
+
+    apns.respond = () => ({ status: 200 });
+    expect(await tick()).toMatchObject({ started: 1 });
+    const [restarted] = await sessionsOf(device.id);
+    expect(restarted).toMatchObject({ ended_at: null, end_reason: null });
+    expect(restarted.props.phase).toBe("called");
+  });
+
+  it("forgets a dismissal once the subject is over, so the next queue starts again", async () => {
+    await openJudgingWindow();
+    const { userId, entryId } = await participantInQueue();
+    const device = await registerDevice(userId);
+    await tick();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE live_activity_sessions
+          SET ended_at = now() - interval '1 second', end_reason = 'dismissed',
+              dismissed_phase = 'waiting'
+        WHERE device_id = $1`,
+      [device.id],
+    );
+    // The team is done with that queue: nothing is live any more.
+    await pool.query(`UPDATE queue_entries SET status = 'completed' WHERE id = $1`, [entryId]);
+    await tick();
+    expect((await sessionsOf(device.id))[0]).toMatchObject({
+      end_reason: "finished",
+      dismissed_phase: null,
+    });
+
+    // Waiting again, in another queue: a new run, so it starts.
+    await participantInQueue({ userId, title: "Fintech", roomName: "Room C" });
+    expect(await tick()).toMatchObject({ started: 1 });
+    expect(apns.events()).toEqual(["start", "start"]);
+  });
+
+  it("re-sends an unchanged queue state before iOS marks it stale", async () => {
+    await openJudgingWindow();
+    const { userId } = await participantInQueue();
+    const device = await registerDevice(userId);
+    await tick();
+    await setActivityToken(device.id, "activity-token");
+    expect(await tick()).toMatchObject({ updated: 0 });
+
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE live_activity_sessions SET last_sent_at = now() - interval '16 minutes'
+        WHERE device_id = $1`,
+      [device.id],
+    );
+    expect(await tick()).toMatchObject({ updated: 1 });
+    const refresh = apns.sent.at(-1)!;
+    expect(refresh.priority).toBe(5);
+    const aps = refresh.payload.aps as Record<string, unknown>;
+    expect(aps.event).toBe("update");
+    expect(aps.alert).toBeUndefined();
+    expect(Number(aps["stale-date"])).toBeGreaterThan(Number(aps.timestamp));
+    expect(await tick()).toMatchObject({ updated: 0 });
+  });
+
   it("records the dismissed phase on the next tick when the client sent none", async () => {
     await openJudgingWindow();
     const { userId } = await participantInQueue();
@@ -231,6 +309,22 @@ describe("queue Live Activity (H38)", () => {
     const { runLiveActivitiesTick } = await import("../../src/modules/live-activities/worker.js");
     expect(await runLiveActivitiesTick({ apns: null, android })).toMatchObject({ started: 0 });
     expect(await sessionsOf(device.id)).toHaveLength(0);
+  });
+
+  it("keeps an iOS session open while APNs is not configured, instead of faking its end", async () => {
+    await openJudgingWindow();
+    const { userId } = await participantInQueue();
+    const device = await registerDevice(userId);
+    await tick();
+    await setActivityToken(device.id, "activity-token");
+    await closeJudgingWindow();
+    const { runLiveActivitiesTick } = await import("../../src/modules/live-activities/worker.js");
+    expect(await runLiveActivitiesTick({ apns: null, android })).toMatchObject({ ended: 0 });
+    expect((await sessionsOf(device.id))[0]).toMatchObject({ ended_at: null });
+
+    // Once APNs is available, the end is actually delivered.
+    expect(await tick()).toMatchObject({ ended: 1 });
+    expect(apns.events()).toEqual(["start", "end"]);
   });
 
   it("ends open sessions of a device the user disabled", async () => {

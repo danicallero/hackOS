@@ -46,7 +46,8 @@ import {
  *   updates throttled to one per 30 s per session; queue changes and phase
  *   changes go out immediately);
  * - open session no longer desired (window closed, team finished, activity
- *   over, device disabled) → end.
+ *   over, device disabled) → end; a dismissed one no longer desired → finished,
+ *   so the subject's next run starts again.
  *
  * Concurrency: a session-level advisory lock admits one tick at a time
  * across worker replicas, and every send is preceded by an atomic row claim
@@ -62,6 +63,11 @@ const ACTIVITY_UPDATE_THROTTLE_SECONDS = 30;
 const TICK_LOCK_KEY = 966_001;
 /** Without an update for this long, iOS greys the queue activity out as stale. */
 const QUEUE_STALE_MS = 30 * 60 * 1000;
+/**
+ * An unchanged queue state is re-sent after this long, so a participant who
+ * waits without any visible change is not greyed out by the stale date.
+ */
+const QUEUE_REFRESH_MS = QUEUE_STALE_MS / 2;
 
 interface DeviceRow {
   id: number;
@@ -82,6 +88,7 @@ interface SessionRow {
   activity_push_token: string | null;
   state_hash: string | null;
   props: LiveActivityProps | null;
+  last_sent_at: Date | null;
   ended_at: Date | null;
   end_reason: "finished" | "dismissed" | null;
   dismissed_phase: string | null;
@@ -181,8 +188,8 @@ async function loadSessions(deviceIds: number[]): Promise<Map<string, SessionRow
   const sessions = new Map<string, SessionRow>();
   if (deviceIds.length === 0) return sessions;
   const { rows } = await pool.query<SessionRow>(
-    `SELECT id, device_id, kind, subject, activity_push_token, state_hash, props, ended_at,
-            end_reason, dismissed_phase
+    `SELECT id, device_id, kind, subject, activity_push_token, state_hash, props, last_sent_at,
+            ended_at, end_reason, dismissed_phase
        FROM live_activity_sessions WHERE device_id = ANY($1::int[])`,
     [deviceIds],
   );
@@ -300,7 +307,7 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
         desiredKeys.add(key);
         const session = sessions.get(key);
         if (!session || session.end_reason === "finished") {
-          await startSession(ctx, device, want);
+          await startSession(ctx, device, want, session);
         } else if (session.ended_at === null) {
           await updateSession(ctx, device, session, want);
         } else if (session.dismissed_phase === null) {
@@ -314,14 +321,25 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
         } else if (session.dismissed_phase !== want.props.phase) {
           // The user swiped it away, but its phase changed since (e.g.
           // waiting → called): that is new, essential information.
-          await startSession(ctx, device, want);
+          await startSession(ctx, device, want, session);
         }
       }
 
       for (const session of sessions.values()) {
-        if (session.device_id !== device.id || session.ended_at !== null) continue;
+        if (session.device_id !== device.id) continue;
         if (desiredKeys.has(sessionKey(device.id, session.kind, session.subject))) continue;
-        await endSession(ctx, device, session);
+        if (session.ended_at === null) {
+          await endSession(ctx, device, session);
+        } else if (session.end_reason === "dismissed" && actionableIds.has(device.id)) {
+          // A dismissal covers the run of the subject the user swiped away.
+          // Once it is no longer relevant at all (team done, window closed),
+          // a later run (e.g. the next queue the team waits in) is new.
+          await pool.query(
+            `UPDATE live_activity_sessions SET end_reason = 'finished', dismissed_phase = NULL
+              WHERE id = $1 AND end_reason = 'dismissed' AND ended_at < $2`,
+            [session.id, now],
+          );
+        }
       }
     }
   } finally {
@@ -413,14 +431,19 @@ async function forgetDeviceToken(device: DeviceRow): Promise<void> {
   }
 }
 
-async function startSession(ctx: SendContext, device: DeviceRow, want: Desired): Promise<void> {
+async function startSession(
+  ctx: SendContext,
+  device: DeviceRow,
+  want: Desired,
+  previous: SessionRow | undefined,
+): Promise<void> {
   const token = device.platform === "ios" ? device.push_to_start_token : device.expo_push_token;
   if (!token || (device.platform === "ios" && !ctx.apns)) return;
   const hash = liveStateHash(want.props);
   // Idempotent claim: only the tick whose INSERT (or restart of a session
   // the server finished, or one dismissed in another phase) succeeds may
   // send the start.
-  const { rows } = await pool.query<{ id: number }>(
+  const { rows } = await pool.query<{ id: number; inserted: boolean }>(
     `INSERT INTO live_activity_sessions
        (device_id, kind, subject, state_hash, props, last_sent_at, started_at)
      VALUES ($1, $2, $3, $4, $5, now(), now())
@@ -433,11 +456,12 @@ async function startSession(ctx: SendContext, device: DeviceRow, want: Desired):
           OR (live_activity_sessions.end_reason = 'dismissed'
               AND live_activity_sessions.dismissed_phase IS NOT NULL
               AND live_activity_sessions.dismissed_phase <> $6)
-     RETURNING id`,
+     RETURNING id, (xmax = 0) AS inserted`,
     [device.id, want.kind, want.subject, hash, JSON.stringify(want.props), want.props.phase],
   );
   const sessionId = rows[0]?.id;
   if (sessionId === undefined) return;
+  const inserted = rows[0]?.inserted === true;
 
   const result = await send(ctx, device, {
     event: "start",
@@ -453,12 +477,32 @@ async function startSession(ctx: SendContext, device: DeviceRow, want: Desired):
     return;
   }
   // Release the claim so a later tick can retry — unless the app already
-  // registered the activity it started itself in the meantime.
-  await pool.query(
-    `DELETE FROM live_activity_sessions
-      WHERE id = $1 AND state_hash = $2 AND activity_push_token IS NULL AND ended_at IS NULL`,
-    [sessionId, hash],
-  );
+  // registered the activity it started itself in the meantime. A restart
+  // goes back to the ended row it claimed, so a dismissal keeps its phase.
+  if (inserted || !previous) {
+    await pool.query(
+      `DELETE FROM live_activity_sessions
+        WHERE id = $1 AND state_hash = $2 AND activity_push_token IS NULL AND ended_at IS NULL`,
+      [sessionId, hash],
+    );
+  } else {
+    await pool.query(
+      `UPDATE live_activity_sessions
+          SET ended_at = COALESCE($3::timestamptz, now()), end_reason = $4, dismissed_phase = $5,
+              state_hash = $6, props = $7, last_sent_at = $8
+        WHERE id = $1 AND state_hash = $2 AND activity_push_token IS NULL AND ended_at IS NULL`,
+      [
+        sessionId,
+        hash,
+        previous.ended_at,
+        previous.end_reason ?? "finished",
+        previous.dismissed_phase,
+        previous.state_hash,
+        previous.props ? JSON.stringify(previous.props) : null,
+        previous.last_sent_at,
+      ],
+    );
+  }
   if (result === "gone") await forgetDeviceToken(device);
   else ctx.summary.failed += 1;
 }
@@ -470,7 +514,11 @@ async function updateSession(
   want: Desired,
 ): Promise<void> {
   const hash = liveStateHash(want.props);
-  if (session.state_hash === hash) return;
+  const refreshDue =
+    want.kind === "queue" &&
+    session.last_sent_at !== null &&
+    ctx.now.getTime() - new Date(session.last_sent_at).getTime() >= QUEUE_REFRESH_MS;
+  if (session.state_hash === hash && !refreshDue) return;
   const token = device.platform === "ios" ? session.activity_push_token : device.expo_push_token;
   // iOS can't be updated until the app reports the activity's own token.
   if (!token || (device.platform === "ios" && !ctx.apns)) return;
@@ -485,6 +533,8 @@ async function updateSession(
         AND state_hash IS NOT DISTINCT FROM $4
         AND ($5::boolean OR last_sent_at IS NULL
              OR last_sent_at <= now() - make_interval(secs => $6))
+        -- A same-state refresh is claimed only while it is still due.
+        AND (NOT $7::boolean OR last_sent_at <= now() - make_interval(secs => $8))
       RETURNING id`,
     [
       session.id,
@@ -493,6 +543,8 @@ async function updateSession(
       session.state_hash,
       urgent,
       ACTIVITY_UPDATE_THROTTLE_SECONDS,
+      session.state_hash === hash,
+      QUEUE_REFRESH_MS / 1000,
     ],
   );
   if (rows.length === 0) return;
@@ -518,9 +570,15 @@ async function updateSession(
   }
   if (result === "error") ctx.summary.failed += 1;
   await pool.query(
-    `UPDATE live_activity_sessions SET state_hash = $3, props = $4
+    `UPDATE live_activity_sessions SET state_hash = $3, props = $4, last_sent_at = $5
       WHERE id = $1 AND state_hash = $2`,
-    [session.id, hash, session.state_hash, session.props ? JSON.stringify(session.props) : null],
+    [
+      session.id,
+      hash,
+      session.state_hash,
+      session.props ? JSON.stringify(session.props) : null,
+      session.last_sent_at,
+    ],
   );
 }
 
@@ -543,6 +601,9 @@ async function markGone(device: DeviceRow, session: SessionRow): Promise<void> {
 }
 
 async function endSession(ctx: SendContext, device: DeviceRow, session: SessionRow): Promise<void> {
+  // Without APNs nothing can reach this activity: keep it open rather than
+  // record an end that never happened, so a configured APNs still ends it.
+  if (device.platform === "ios" && !ctx.apns && session.activity_push_token) return;
   const { rows } = await pool.query<{ id: number }>(
     `UPDATE live_activity_sessions SET ended_at = now(), end_reason = 'finished'
       WHERE id = $1 AND ended_at IS NULL
