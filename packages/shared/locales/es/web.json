@@ -3706,5 +3706,6 @@
   "liveActivityKindJudgingDesc": "Temporizador de la presentación y siguiente equipo para los jueces de una sala.",
   "liveActivityKindAccreditation": "Mesa de acreditación",
   "liveActivityKindAccreditationDesc": "Contadores de acreditaciones para el staff de la mesa.",
-  "liveActivityAudienceLabel": "Mostrar actividad en directo a su público"
+  "liveActivityAudienceLabel": "Mostrar actividad en directo a su público",
+  "liveActivityNoRolesHint": "Nadie la recibe hasta que selecciones un rol."
 }

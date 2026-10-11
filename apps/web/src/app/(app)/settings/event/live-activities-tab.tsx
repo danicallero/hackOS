@@ -515,6 +515,9 @@ function KindEditor({
 
       <fieldset className="space-y-3">
         <legend className="type-label text-muted-foreground mb-3">{t("rolesTitle")}</legend>
+        {setting.enabled && setting.roleIds.length === 0 && (
+          <p className="text-muted-foreground text-sm">{t("liveActivityNoRolesHint")}</p>
+        )}
         {rolesError ? (
           <ContextualError message={rolesError} onRetry={onRetryRoles} />
         ) : roles === null ? null : (

@@ -3706,5 +3706,6 @@
   "liveActivityKindJudgingDesc": "Pitch timer and next team for judges in a room.",
   "liveActivityKindAccreditation": "Accreditation desk",
   "liveActivityKindAccreditationDesc": "Check-in counters for staff at the accreditation desk.",
-  "liveActivityAudienceLabel": "Show Live Activity to audience"
+  "liveActivityAudienceLabel": "Show Live Activity to audience",
+  "liveActivityNoRolesHint": "Nobody receives it until a role is selected."
 }
