@@ -187,6 +187,8 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     onScrollBeginDrag: measureAnchor,
     onContentSizeChange: measureAfterLayout,
     onScroll,
+    /** Content offset of the true top (negative under an automatic inset). */
+    restingOffset,
     scrollOffset,
     scrollRef,
   };

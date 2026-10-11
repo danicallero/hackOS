@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import Animated, {
+  type SharedValue,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -105,7 +106,7 @@ export default function AccountScreen() {
   const [signOutError, setSignOutError] = useState<Error | null>(null);
   const developerTapCount = useRef(0);
   const developerTapTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const highlight = useNotificationsHighlight(scrollRef);
+  const highlight = useNotificationsHighlight(scrollRef, avatarCollapse.restingOffset);
 
   function returnToSignIn() {
     forceLocalSignOut();
@@ -622,7 +623,10 @@ export default function AccountScreen() {
  * the Preferences row, then clear the param so a re-render or refocus does
  * not replay it.
  */
-function useNotificationsHighlight(scrollRef: RefObject<ScrollView | null>) {
+function useNotificationsHighlight(
+  scrollRef: RefObject<ScrollView | null>,
+  topOffset: SharedValue<number>,
+) {
   const router = useRouter();
   const { highlight, highlightAt } = useLocalSearchParams<{
     highlight?: string;
@@ -660,9 +664,11 @@ function useNotificationsHighlight(scrollRef: RefObject<ScrollView | null>) {
     router.setParams({ highlight: undefined, highlightAt: undefined });
     // Always start from the top, then scroll only once the sheet dismissal and
     // navigation transition have finished, so the user sees the page move.
+    // Under the automatic (large title) inset the true top is negative; y 0
+    // would start with the avatar already collapsed into the island.
     if (timer.current) clearTimeout(timer.current);
     opacity.value = 0;
-    scrollRef.current?.scrollTo({ animated: false, y: 0 });
+    scrollRef.current?.scrollTo({ animated: false, y: topOffset.value });
     timer.current = setTimeout(
       () => {
         const { rowY: y, viewportHeight: height, reduceMotion: reduced } = latest.current;
@@ -684,7 +690,17 @@ function useNotificationsHighlight(scrollRef: RefObject<ScrollView | null>) {
       },
       reduceMotion ? 0 : TRANSITION_SETTLE_MS,
     );
-  }, [opacity, reduceMotion, requested, highlightAt, router, rowY, scrollRef, viewportHeight]);
+  }, [
+    opacity,
+    reduceMotion,
+    requested,
+    highlightAt,
+    router,
+    rowY,
+    scrollRef,
+    topOffset,
+    viewportHeight,
+  ]);
 
   const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return {

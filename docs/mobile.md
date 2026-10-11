@@ -511,7 +511,8 @@ distributed to other Expo Router apps without importing hackOS code.
   to the gear on the right (`Stack.Toolbar` on Liquid Glass,
   `headerLeft`/`headerRight` elsewhere). Settings are not in the sheet: the
   gear dismisses it and opens `others/account?highlight=notifications&highlightAt=<nonce>` (fresh per tap, so every tap replays from the top), which
-  Account consumes once (shows the page at the top, then after the
+  Account consumes once (shows the page at its true top — the resting offset
+  under the large-title inset, so the avatar starts expanded — then after the
   transition settles animates the scroll to the Notifications row and flashes it
   for about a second — no animation under Reduce Motion — then clears the
   param). Account →

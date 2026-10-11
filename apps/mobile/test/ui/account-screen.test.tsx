@@ -456,6 +456,37 @@ describe("account removal UI flow", () => {
     jest.useRealTimers();
   });
 
+  it("starts the highlight scroll from the true top under an automatic inset", async () => {
+    jest.useFakeTimers();
+    const scrollTo = jest.spyOn(ScrollView.prototype, "scrollTo").mockImplementation(() => {});
+    // iOS reports the large-title inset as a negative resting offset; the
+    // jest ScrollView emits no UI-thread scroll events to capture it from.
+    const collapse = require("@/components/profile-avatar-collapse");
+    const realHook = collapse.useProfileAvatarCollapse;
+    const hook = jest
+      .spyOn(collapse, "useProfileAvatarCollapse")
+      .mockImplementation((...args: unknown[]) => {
+        const controller = realHook(...args);
+        controller.restingOffset.value = -150;
+        return controller;
+      });
+    mockSearchParams = { highlight: "notifications", highlightAt: "1" };
+    await renderMobile(<AccountScreen />);
+    const scroll = screen.getByTestId("account-scroll");
+
+    await act(async () => {
+      fireEvent(scroll, "layout", { nativeEvent: { layout: { height: 600 } } });
+      fireEvent(screen.getByTestId("account-notifications"), "layout", {
+        nativeEvent: { layout: { y: 900 } },
+      });
+    });
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: false, y: -150 });
+    hook.mockRestore();
+    scrollTo.mockRestore();
+    jest.useRealTimers();
+  });
+
   it("replays the scroll from the top on every gear tap (new nonce)", async () => {
     jest.useFakeTimers();
     const scrollTo = jest.spyOn(ScrollView.prototype, "scrollTo").mockImplementation(() => {});
