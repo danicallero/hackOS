@@ -32,6 +32,7 @@ import {
   resolveOperationsNavigationAction,
 } from "@/lib/operations-navigation";
 import {
+  nativeMenuOrder,
   OVERFLOW_TAB_ICON,
   OVERFLOW_TAB_LABEL_KEY,
   OVERFLOW_TAB_ROUTE,
@@ -410,7 +411,7 @@ function NativeOverflowMenu({
   const focusedSection = operationsSectionFromPathname(pathname);
   const activeOverflowId =
     focusedSection !== "external" && overflowIds.includes(focusedSection) ? focusedSection : null;
-  const items: OpaqueOperationsMenuItem[] = overflowIds.map((id) => ({
+  const items: OpaqueOperationsMenuItem[] = nativeMenuOrder(overflowIds).map((id) => ({
     id,
     image: OVERFLOW_TAB_ICON[id],
     label: t(OVERFLOW_TAB_LABEL_KEY[id]),

@@ -32,3 +32,13 @@ export const OVERFLOW_TAB_LABEL_KEY: Record<
   account: "tabAccount",
   operations: "tabQueueOperations",
 };
+
+/**
+ * H55: Account is the last overflow destination and must sit nearest the
+ * bottom edge. SwiftUI `Menu` opened from the bottom bar lists its first
+ * action closest to the trigger (the bottom), so iOS takes the reverse of the
+ * visual top-to-bottom order; Android renders the array top-to-bottom as is.
+ */
+export function nativeMenuOrder<T>(ids: readonly T[]): T[] {
+  return [...ids].reverse();
+}

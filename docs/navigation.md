@@ -199,6 +199,12 @@ hidden destinations stay routable:
   the person also has a scanner capability, Queue operations joins Others so
   Scanner stays directly reachable.
 
+Account is always the last overflow destination (`overflowTabs()` order:
+Queue, Diary, Queue operations, Account) and therefore the entry nearest the
+thumb. SwiftUI's bottom-anchored `Menu` lists its first action closest to the
+trigger, so iOS passes `nativeMenuOrder(overflowIds)` (reversed); Android's
+card menu renders the array top-to-bottom as is (H55).
+
 The "Others" slot is a **dropdown selector**, not a screen. It is a
 direct custom button in its own perfect circle; it does not need fake
 `role="search"` semantics or a full-width layer over another tab. iOS uses

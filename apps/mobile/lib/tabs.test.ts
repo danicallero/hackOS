@@ -117,8 +117,21 @@ describe("overflowTabs / shouldUseOverflowMenu", () => {
   it("puts Queue operations in Others when scanner tools already fill the bar", () => {
     const capabilities = [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.QUEUE_OPERATE];
     expect(primaryTabs(capabilities)).toEqual(["schedule", "scan"]);
-    expect(overflowTabs(capabilities)).toEqual(["diary", "account", "operations"]);
+    expect(overflowTabs(capabilities)).toEqual(["diary", "operations", "account"]);
     expect(queueOperationsInPrimaryBar(capabilities)).toBe(false);
+  });
+});
+
+describe("Account is the last overflow destination (H55)", () => {
+  const personal = { hasQueueItems: true };
+  it.each([
+    ["operator", [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.QUEUE_OPERATE]],
+    ["queue operator", [CAPABILITIES.QUEUE_OPERATE]],
+    ["participant with queue", [CAPABILITIES.QUEUE_STATUS]],
+  ])("%s", (_name, caps) => {
+    const tabs = overflowTabs(caps, personal);
+    expect(tabs.at(-1)).toBe("account");
+    expect(visibleTabs(caps, personal).at(-1)).toBe("account");
   });
 });
 

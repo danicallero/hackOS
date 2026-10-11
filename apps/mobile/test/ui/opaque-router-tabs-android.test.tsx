@@ -118,12 +118,15 @@ jest.mock("react-native-safe-area-context", () => ({
   SafeAreaProvider: ({ children }: { children: unknown }) => children,
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
 }));
+const mockMenuActions: { current: string[] } = { current: [] };
 jest.mock("@expo/ui/community/menu", () => {
   const ReactLib = require("react");
   const Native = jest.requireActual("react-native");
   return {
-    MenuView: ({ children }: { children: unknown }) =>
-      ReactLib.createElement(Native.View, null, children),
+    MenuView: ({ children, actions }: { children: unknown; actions?: { id: string }[] }) => {
+      mockMenuActions.current = (actions ?? []).map(({ id }) => id);
+      return ReactLib.createElement(Native.View, null, children);
+    },
   };
 });
 jest.mock("expo-symbols", () => ({
@@ -145,6 +148,7 @@ jest.mock("@/lib/i18n", () => ({
     t: (key: string) =>
       ({
         tabAccount: "Account",
+        tabDiary: "Diary",
         tabActivities: "Activities",
         tabNotifications: "Notifications",
         tabOthers: "Others",
@@ -189,7 +193,8 @@ jest.mock("@/theme/colors", () => ({
   },
 }));
 
-import { act, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import * as Native from "react-native";
 import { OpaqueRouterTabs } from "@/components/opaque-router-tabs";
 
 const DEFAULT_PROPS = {
@@ -333,5 +338,50 @@ describe("OpaqueRouterTabs — direct Account tab selection", () => {
     expect(screen.getByTestId("opaque-tab-account").props.accessibilityState.selected).toBe(
       selected,
     );
+  });
+});
+
+describe("OpaqueRouterTabs — Account is the bottom-most Others entry (H55)", () => {
+  const SETS: [string, string[]][] = [
+    ["operator", ["diary", "operations", "account"]],
+    ["queue operator", ["queue", "diary", "account"]],
+    ["participant with queue", ["queue", "diary", "account"]],
+  ];
+  beforeEach(() => {
+    mockPrimaryTabs.mockReturnValue(["schedule", "scan", "activities"]);
+    mockUsePathname.mockReturnValue("/(tabs)/schedule");
+    // The trigger's anchor comes from measureInWindow, absent in the host mock.
+    (Native.View.prototype as unknown as Record<string, unknown>).measureInWindow = (
+      cb: (x: number, y: number, w: number) => void,
+    ) => cb(300, 700, 64);
+  });
+  afterEach(() => {
+    delete (Native.View.prototype as unknown as Record<string, unknown>).measureInWindow;
+    mockPrimaryTabs.mockReturnValue(["schedule", "queue", "diary", "account"]);
+    mockOverflowTabs.mockReturnValue([]);
+  });
+
+  it.each(SETS)("Android lists Account last for %s", async (_n, overflow) => {
+    Object.defineProperty(Platform, "OS", { configurable: true, value: "android" });
+    mockOverflowTabs.mockReturnValue(overflow);
+    await renderTabs();
+    await fireEvent.press(screen.getByTestId("opaque-others-menu"));
+    const names = ["Queue", "Diary", "Operations", "Account"];
+    const texts = screen
+      .getAllByText(/^(Queue|Diary|Operations|Account)$/, { includeHiddenElements: true })
+      .map((n) => n.props.children as string)
+      .filter((t) => names.includes(t));
+    expect(texts.at(-1)).toBe("Account");
+  });
+
+  it.each(
+    SETS,
+  )("iOS passes Account first (rendered at the bottom) for %s", async (_n, overflow) => {
+    Object.defineProperty(Platform, "OS", { configurable: true, value: "ios" });
+    mockOverflowTabs.mockReturnValue(overflow);
+    await renderTabs();
+    expect(mockMenuActions.current[0]).toBe("account");
+    // The first overflow destination takes the fourth direct cell.
+    expect([...mockMenuActions.current].reverse()).toEqual(overflow.slice(1));
   });
 });

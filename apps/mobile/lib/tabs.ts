@@ -107,10 +107,11 @@ export function overflowTabs(
   return [
     ...(canSeeMyQueue(capabilities, context) ? (["queue"] as const) : []),
     "diary",
-    "account",
     ...(isOperator(capabilities) && canOperateQueues(capabilities)
       ? (["operations"] as const)
       : []),
+    // H55: Account is always the last destination, nearest the thumb.
+    "account",
   ];
 }
 
