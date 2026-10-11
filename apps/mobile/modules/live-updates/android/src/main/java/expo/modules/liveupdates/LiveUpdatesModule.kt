@@ -22,13 +22,7 @@ class LiveUpdateActionRecord : Record {
 class LiveUpdateSegmentRecord : Record {
   @Field @Required val length: Double = 0.0
 
-  @Field val color: String? = null
-}
-
-class LiveUpdatePointRecord : Record {
-  @Field @Required val position: Double = 0.0
-
-  @Field val color: String? = null
+  @Field val tone: String = "accent"
 }
 
 class LiveUpdateProgressRecord : Record {
@@ -36,15 +30,74 @@ class LiveUpdateProgressRecord : Record {
 
   @Field @Required val segments: List<LiveUpdateSegmentRecord> = emptyList()
 
-  @Field val points: List<LiveUpdatePointRecord>? = null
-
   @Field val tracker: String? = null
+
+  @Field val trackerTone: String? = null
+
+  @Field val endGlyph: String? = null
+
+  @Field val stops: List<Double>? = null
 
   fun toProgress() = LiveUpdateProgress(
     value = value.toInt(),
-    segments = segments.map { LiveUpdateSegment(it.length.toInt(), it.color) },
-    points = points.orEmpty().map { LiveUpdatePoint(it.position.toInt(), it.color) },
+    segments = segments.map { LiveUpdateSegment(it.length.toInt(), it.tone) },
     tracker = tracker,
+    trackerTone = trackerTone,
+    endGlyph = endGlyph,
+    stops = stops.orEmpty().map { it.toInt() },
+  )
+}
+
+class LiveUpdateMetricRecord : Record {
+  @Field val caption: String? = null
+
+  @Field val value: String? = null
+
+  @Field val timer: String? = null
+
+  @Field val hero: Boolean = false
+
+  @Field val quiet: Boolean = false
+
+  fun toMetric() = LiveUpdateMetric(caption, value, timer, hero, quiet)
+}
+
+class LiveUpdateFooterRecord : Record {
+  @Field val caption: String? = null
+
+  @Field @Required val countdownTo: Double = 0.0
+}
+
+class LiveUpdateCardRecord : Record {
+  @Field @Required val header: String = ""
+
+  @Field val headerTrailing: String? = null
+
+  @Field @Required val lead: LiveUpdateMetricRecord = LiveUpdateMetricRecord()
+
+  @Field val trail: LiveUpdateMetricRecord? = null
+
+  @Field val detail: String? = null
+
+  @Field val stats: List<LiveUpdateMetricRecord>? = null
+
+  @Field val trackLabels: List<String>? = null
+
+  @Field val currentStop: Double? = null
+
+  @Field val footer: LiveUpdateFooterRecord? = null
+
+  fun toCard() = LiveUpdateCard(
+    header = header,
+    headerTrailing = headerTrailing,
+    lead = lead.toMetric(),
+    trail = trail?.toMetric(),
+    detail = detail,
+    stats = stats.orEmpty().map { it.toMetric() },
+    trackLabels = trackLabels.orEmpty(),
+    currentStop = currentStop?.toInt(),
+    footerCaption = footer?.caption,
+    footerCountdownTo = footer?.countdownTo?.toLong(),
   )
 }
 
@@ -55,9 +108,11 @@ class LiveUpdateSpecRecord : Record {
 
   @Field val text: String? = null
 
-  @Field val shortCriticalText: String? = null
-
   @Field val subText: String? = null
+
+  @Field val emphasis: String? = null
+
+  @Field val shortCriticalText: String? = null
 
   @Field val countdownTo: Double? = null
 
@@ -65,15 +120,17 @@ class LiveUpdateSpecRecord : Record {
 
   @Field val progress: LiveUpdateProgressRecord? = null
 
+  @Field val card: LiveUpdateCardRecord? = null
+
   @Field val phase: String? = null
 
   @Field @Required val url: String = ""
 
   @Field val action: LiveUpdateActionRecord? = null
 
-  @Field val accentColor: String? = null
+  @Field val tone: String = "accent"
 
-  @Field val icon: String = "activity"
+  @Field val icon: String = "people"
 
   @Field val alert: Boolean = false
 
@@ -81,18 +138,20 @@ class LiveUpdateSpecRecord : Record {
     id = id,
     title = title,
     text = text,
-    shortCriticalText = shortCriticalText,
     subText = subText,
+    emphasis = emphasis,
+    shortCriticalText = shortCriticalText,
     countdownTo = countdownTo?.toLong(),
     countUpFrom = countUpFrom?.toLong(),
     progress = progress?.toProgress(),
+    card = card?.toCard(),
+    phase = phase,
     url = url,
     actionLabel = action?.label,
     actionUrl = action?.url,
-    accentColor = accentColor,
+    tone = tone,
     icon = icon,
     alert = alert,
-    phase = phase,
   )
 }
 

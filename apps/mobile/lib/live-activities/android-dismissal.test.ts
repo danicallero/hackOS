@@ -37,10 +37,12 @@ jest.mock("expo-crypto", () => ({ randomUUID: () => "device-1" }));
 jest.mock("./host", () => {
   const posted = new Map<string, string>();
   const recorded: Record<string, string> = {};
+  const render = { mode: "promoted" };
   const keyOf = (item: { kind: string; subject: string }) => `${item.kind}:${item.subject}`;
   return {
     posted,
     recorded,
+    render,
     liveActivityHost: {
       platform: "android",
       supported: () => true,
@@ -62,6 +64,7 @@ jest.mock("./host", () => {
       end: jest.fn(async (surface: { id: string }) => {
         posted.delete(surface.id);
       }),
+      renderMode: () => render.mode,
       consumeDismissals: jest.fn(() => {
         const copy = { ...recorded };
         for (const key of Object.keys(recorded)) delete recorded[key];
@@ -108,7 +111,12 @@ function load() {
   let sync!: typeof import("./sync");
   let apply!: typeof import("./apply");
   let api!: { apiFetch: jest.Mock };
-  let host!: { posted: Map<string, string>; recorded: Record<string, string> };
+  let host!: {
+    posted: Map<string, string>;
+    recorded: Record<string, string>;
+    render: { mode: string };
+    liveActivityHost: { update: jest.Mock };
+  };
   jest.isolateModules(() => {
     sync = require("./sync");
     apply = require("./apply");
@@ -126,6 +134,8 @@ function load() {
     apiFetch: api.apiFetch,
     posted: host.posted,
     recorded: host.recorded,
+    render: host.render,
+    update: host.liveActivityHost.update,
     serve(next: MyLiveActivities) {
       current = next;
     },
@@ -231,5 +241,18 @@ describe("Android Live Update dismissals (#966)", () => {
     posted.clear();
     await apply.applyAndroidLiveUpdate({ ...message, props: queueProps({ position: 3 }) });
     expect(posted.has("queue:judging")).toBe(true);
+  });
+
+  it("reposts unchanged surfaces when the rendering changes (Live updates re-enabled)", async () => {
+    const { sync, render, update } = load();
+    await sync.registerLiveActivityDevice("en");
+    render.mode = "card";
+    await sync.reconcileLiveActivities();
+    await sync.reconcileLiveActivities();
+    const before = update.mock.calls.length;
+
+    render.mode = "promoted";
+    await sync.reconcileLiveActivities();
+    expect(update.mock.calls.length).toBe(before + 1);
   });
 });

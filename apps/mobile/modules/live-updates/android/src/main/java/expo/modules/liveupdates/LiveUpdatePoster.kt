@@ -5,57 +5,33 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
+import android.text.SpannableString
+import android.util.Log
+import android.text.Spanned
+import android.text.style.StyleSpan
 import androidx.core.app.NotificationCompat
 import androidx.core.graphics.drawable.IconCompat
 
-/** One coloured stretch of a ProgressStyle track; lengths add up to the track's max. */
-data class LiveUpdateSegment(val length: Int, val color: String?)
-
-/** A marker on the track, e.g. a stage boundary. */
-data class LiveUpdatePoint(val position: Int, val color: String?)
-
-data class LiveUpdateProgress(
-  val value: Int,
-  val segments: List<LiveUpdateSegment>,
-  val points: List<LiveUpdatePoint>,
-  /** Icon riding the track at `value` (e.g. `tracker-waiting`), or null for none. */
-  val tracker: String?,
-)
-
-/** Platform-neutral copy of the JS `LiveUpdateSpec` (#966). */
-data class LiveUpdateContent(
-  val id: String,
-  val title: String,
-  val text: String?,
-  val shortCriticalText: String?,
-  val subText: String?,
-  val countdownTo: Long?,
-  val countUpFrom: Long? = null,
-  val progress: LiveUpdateProgress? = null,
-  val url: String,
-  val actionLabel: String?,
-  val actionUrl: String?,
-  val accentColor: String?,
-  val icon: String,
-  val alert: Boolean,
-  /** Recorded by the delete intent when the person dismisses this post. */
-  val phase: String? = null,
-)
-
 /**
- * Posts Android Live Updates (#966, H38, H25, H26): promoted ongoing
- * notifications. Android 16+ shows them as a status-bar chip and on the lock
- * screen with a ProgressStyle track; older versions, or users who revoked
- * promotion, get the same content as a plain ongoing BigText notification.
+ * Posts Android Live Updates (#966, H38, H25, H26). Hybrid, because promotion
+ * forbids custom views and colorized notifications:
+ *
+ * - Promoted (Android 16+ and `canPostPromotedNotifications()`): a real Live
+ *   Update — status-bar chip, lock screen, top of the shade — with the hero
+ *   datum as title, a round badge as large icon and a ProgressStyle track.
+ * - Custom card (everything else): an ongoing notification with
+ *   DecoratedCustomViewStyle and the iOS-like card of [LiveUpdateCardViews].
+ *   Also used when the promoted build fails the system's promotable checks.
  */
 object LiveUpdatePoster {
   const val TAG_PREFIX = "hackos.live-update:"
   private const val ROUTINE_CHANNEL = "hackos_live_updates"
   private const val ALERT_CHANNEL = "hackos_live_updates_alert"
   private const val BAKLAVA = 36
+  private const val LOG_TAG = "LiveUpdates"
 
   fun isSupported(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
 
@@ -72,52 +48,111 @@ object LiveUpdatePoster {
     if (!manager.areNotificationsEnabled()) return false
     ensureChannels(context, manager)
 
+    val canPromote = canPostPromoted(context)
+    val candidate = if (canPromote) promoted(context, content).build() else null
+    val promotable = candidate != null && Build.VERSION.SDK_INT >= BAKLAVA && candidate.hasPromotableCharacteristics()
+    val path = choosePath(Build.VERSION.SDK_INT, canPromote, promotable)
+    val notification = if (path == Path.PROMOTED) candidate!! else card(context, content).build()
+
+    val tag = TAG_PREFIX + content.id
+    manager.notify(tag, notificationId(content.id), notification)
+    if (Build.VERSION.SDK_INT >= BAKLAVA) {
+      // The system sets FLAG_PROMOTED_ONGOING on the posted record.
+      val posted = manager.activeNotifications.firstOrNull { it.tag == tag }?.notification
+      val flagged = posted != null && posted.flags and android.app.Notification.FLAG_PROMOTED_ONGOING != 0
+      Log.d(LOG_TAG, "post id=${content.id} path=$path canPostPromoted=$canPromote promotable=$promotable promotedFlag=$flagged")
+    }
+    return true
+  }
+
+  enum class Path { PROMOTED, CARD }
+
+  /**
+   * The custom card only when promotion is truly unavailable: below Android
+   * 16, promotion revoked (user/OEM), or a promoted build the system would
+   * not promote. Never by accident on a device that can promote.
+   */
+  fun choosePath(sdk: Int, canPostPromoted: Boolean, promotable: Boolean): Path =
+    if (sdk >= BAKLAVA && canPostPromoted && promotable) Path.PROMOTED else Path.CARD
+
+  private fun base(context: Context, content: LiveUpdateContent): NotificationCompat.Builder {
     val channel = if (content.alert) ALERT_CHANNEL else ROUTINE_CHANNEL
-    val builder = NotificationCompat.Builder(context, channel)
-      .setSmallIcon(iconRes(content.icon))
+    return NotificationCompat.Builder(context, channel)
+      // The kind's monochrome glyph, never the app logo.
+      .setSmallIcon(LiveUpdateArt.glyphRes(content.icon))
+      .setColor(LiveUpdateArt.tone(context, content.tone))
       .setContentTitle(content.title)
       .setOngoing(true)
-      .setRequestPromotedOngoing(true)
       .setOnlyAlertOnce(!content.alert)
       .setCategory(NotificationCompat.CATEGORY_STATUS)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
       .setContentIntent(viewIntent(context, content.url, requestCode(content.id, 0)))
       .setDeleteIntent(LiveUpdateDismissals.deleteIntent(context, content.id, content.phase, requestCode(content.id, 2)))
+  }
 
+  private fun promoted(context: Context, content: LiveUpdateContent): NotificationCompat.Builder {
+    val builder = base(context, content)
+      .setRequestPromotedOngoing(true)
+      .setContentTitle(emphasized(content.title, content.emphasis))
+      .setLargeIcon(LiveUpdateArt.badge(context, content.icon, content.tone, 48f))
     content.text?.let { builder.setContentText(it) }
     content.subText?.let { builder.setSubText(it) }
-    parseColor(content.accentColor)?.let { builder.setColor(it) }
-    // No-op below Android 16. The chip shows this text in preference to the
-    // `when` time; without it the chip falls back to the countdown or icon.
+    // The chip shows this text in preference to the `when` time; without it
+    // the chip falls back to the chronometer or the small icon.
     content.shortCriticalText?.let { builder.setShortCriticalText(it) }
-
     applyWhen(builder, content)
 
     val progress = content.progress
-    if (progress != null && Build.VERSION.SDK_INT >= BAKLAVA) {
+    if (progress != null) {
       builder.setStyle(progressStyle(context, progress))
     } else if (content.text != null) {
       builder.setStyle(NotificationCompat.BigTextStyle().bigText(content.text))
     }
+    action(context, content)?.let { builder.addAction(it) }
+    return builder
+  }
 
-    if (content.actionLabel != null && content.actionUrl != null) {
-      builder.addAction(
-        NotificationCompat.Action.Builder(
-          IconCompat.createWithResource(context, iconRes(content.icon)),
-          content.actionLabel,
-          viewIntent(context, content.actionUrl, requestCode(content.id, 1)),
-        ).build(),
-      )
+  private fun card(context: Context, content: LiveUpdateContent): NotificationCompat.Builder {
+    val builder = base(context, content).setRequestPromotedOngoing(false)
+    content.text?.let { builder.setContentText(it) }
+    val card = content.card
+    if (card == null) {
+      applyWhen(builder, content)
+      action(context, content)?.let { builder.addAction(it) }
+      return builder
     }
+    // The card carries its own timers and the Scan button.
+    builder.setShowWhen(false)
+    val actionIntent = content.actionUrl?.let { viewIntent(context, it, requestCode(content.id, 1)) }
+    return builder
+      .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+      .setCustomContentView(LiveUpdateCardViews.small(context, content, card))
+      .setCustomBigContentView(LiveUpdateCardViews.big(context, content, card, actionIntent))
+  }
 
-    manager.notify(TAG_PREFIX + content.id, notificationId(content.id), builder.build())
-    return true
+  private fun action(context: Context, content: LiveUpdateContent): NotificationCompat.Action? {
+    val label = content.actionLabel ?: return null
+    val url = content.actionUrl ?: return null
+    return NotificationCompat.Action.Builder(
+      IconCompat.createWithResource(context, R.drawable.hackos_live_update_scan),
+      label,
+      viewIntent(context, url, requestCode(content.id, 1)),
+    ).build()
+  }
+
+  /** The hero number in bold, e.g. "**~12 min** · #4"; plain when it does not lead the title. */
+  private fun emphasized(title: String, emphasis: String?): CharSequence {
+    if (emphasis.isNullOrEmpty()) return title
+    val start = title.indexOf(emphasis)
+    if (start < 0) return title
+    return SpannableString(title).apply {
+      setSpan(StyleSpan(Typeface.BOLD), start, start + emphasis.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
   }
 
   /**
    * Countdown (upcoming start) or count-up (time since the call). Everything
-   * else hides `when`: a visible past `when` time made the Android 16 chip
-   * prefer the time slot and render the icon alone, dropping the count.
+   * else hides `when`, so a live count is never displaced from the chip.
    */
   private fun applyWhen(builder: NotificationCompat.Builder, content: LiveUpdateContent) {
     val now = System.currentTimeMillis()
@@ -140,25 +175,24 @@ object LiveUpdatePoster {
     }
   }
 
+  /**
+   * Maps-style track: the JS mapping already split the segments into a grey
+   * travelled part and the coloured stages ahead (the platform draws the gaps
+   * between segments), so the colours are used as given, not faded by progress.
+   */
   private fun progressStyle(context: Context, progress: LiveUpdateProgress): NotificationCompat.ProgressStyle {
     val style = NotificationCompat.ProgressStyle()
-      .setStyledByProgress(true)
+      .setStyledByProgress(false)
       .setProgressSegments(
-        progress.segments.filter { it.length > 0 }.map { segment ->
-          NotificationCompat.ProgressStyle.Segment(segment.length).also { s ->
-            parseColor(segment.color)?.let { s.setColor(it) }
-          }
-        },
-      )
-      .setProgressPoints(
-        progress.points.map { point ->
-          NotificationCompat.ProgressStyle.Point(point.position).also { p ->
-            parseColor(point.color)?.let { p.setColor(it) }
-          }
+        progress.segments.filter { it.length > 0 }.map {
+          NotificationCompat.ProgressStyle.Segment(it.length).setColor(LiveUpdateArt.tone(context, it.tone))
         },
       )
       .setProgress(progress.value)
-    progress.tracker?.let { style.setProgressTrackerIcon(IconCompat.createWithResource(context, iconRes(it))) }
+    progress.tracker?.let {
+      style.setProgressTrackerIcon(IconCompat.createWithBitmap(LiveUpdateArt.tracker(context, it, progress.trackerTone, 24f)))
+    }
+    progress.endGlyph?.let { style.setProgressEndIcon(IconCompat.createWithBitmap(LiveUpdateArt.glyph(context, it, 20f))) }
     return style
   }
 
@@ -210,18 +244,6 @@ object LiveUpdatePoster {
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
   }
-
-  private fun iconRes(icon: String): Int = when (icon) {
-    "queue" -> R.drawable.hackos_live_update_queue
-    "meal" -> R.drawable.hackos_live_update_meal
-    "tracker-waiting" -> R.drawable.hackos_live_update_tracker_waiting
-    "tracker-called" -> R.drawable.hackos_live_update_tracker_called
-    "tracker-in-room" -> R.drawable.hackos_live_update_tracker_in_room
-    else -> R.drawable.hackos_live_update_activity
-  }
-
-  private fun parseColor(hex: String?): Int? =
-    hex?.let { runCatching { Color.parseColor(it) }.getOrNull() }
 
   private fun notificationId(id: String): Int = id.hashCode()
 

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="hackos_lu_primary">#FFF2F2F7</color>
+  <color name="hackos_lu_secondary">#FFAEAEB2</color>
+  <color name="hackos_lu_accent">#FF0A84FF</color>
+  <color name="hackos_lu_go">#FF30D158</color>
+  <color name="hackos_lu_neutral">#FF98989D</color>
+  <!-- The travelled part of a track (Maps style: grey behind, colour ahead). -->
+  <color name="hackos_lu_travelled">#FF636366</color>
+  <color name="hackos_lu_track">#FF3A3A3C</color>
+  <color name="hackos_lu_on_accent">#FFFFFFFF</color>
+</resources>

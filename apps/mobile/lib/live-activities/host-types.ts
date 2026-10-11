@@ -28,6 +28,12 @@ export interface LiveActivityHost {
    * from a surface vanishing between reconciles instead.
    */
   consumeDismissals?(): Record<string, string>;
+  /**
+   * Android only: which rendering a post gets now (`promoted` or `card`).
+   * When it changes (the person re-enabled Live updates), every surface is
+   * posted again even though its props did not change.
+   */
+  renderMode?(): string;
   /** iOS per-activity APNs token; Android updates arrive as Expo data pushes instead. */
   pushToken(id: string): Promise<string | null>;
   onPushToken(id: string, listener: (token: string) => void): void;

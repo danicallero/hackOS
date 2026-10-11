@@ -57,8 +57,11 @@ export function applyDesiredActivities(desired: DesiredActivity[]): Promise<Appl
     const effective = state.enabled ? desired : [];
     const recorded = consumeDismissals(host);
     const dismissed = pruneDismissed({ ...state.dismissed, ...recorded }, effective);
+    // A changed rendering (promotion turned back on) reposts everything.
+    const renderMode = host.renderMode?.() ?? null;
+    const knownSignatures = renderMode === state.renderMode ? state.signatures : {};
     const plan = planReconcile(effective, host.running(), {
-      signatures: new Map(Object.entries(state.signatures)),
+      signatures: new Map(Object.entries(knownSignatures)),
       dismissed: new Map(Object.entries(dismissed)),
       // Android knows its real dismissals: a notification missing for any
       // other reason (force-stop, reboot) is simply posted again.
@@ -103,6 +106,7 @@ export function applyDesiredActivities(desired: DesiredActivity[]): Promise<Appl
       ...current,
       dismissed,
       unreportedDismissals: unreported,
+      renderMode,
       signatures,
       phases,
       running: [...running.keys()],

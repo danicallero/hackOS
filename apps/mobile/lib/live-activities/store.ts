@@ -20,6 +20,8 @@ export interface LiveActivityState {
    * reports them and clears the entry once the API accepted it.
    */
   unreportedDismissals: Record<string, string>;
+  /** Android rendering the signatures were posted with (`promoted` / `card`). */
+  renderMode: string | null;
   /** Key → props signature last rendered. */
   signatures: Record<string, string>;
   /** Key → phase last rendered (Android alerts only on becoming called). */
@@ -40,6 +42,7 @@ const EMPTY: LiveActivityState = {
   enabled: true,
   dismissed: {},
   unreportedDismissals: {},
+  renderMode: null,
   signatures: {},
   phases: {},
   running: [],

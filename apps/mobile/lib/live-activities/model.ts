@@ -10,7 +10,13 @@ import {
   QUEUE_LIVE_ACTIVITY_SUBJECT,
   type QueueLiveProps,
 } from "@hackos/shared/live-activities";
-import type { LiveUpdateProgress, LiveUpdateSpec, LiveUpdateTracker } from "@/modules/live-updates";
+import type {
+  LiveUpdateCard,
+  LiveUpdateGlyph,
+  LiveUpdateProgress,
+  LiveUpdateSpec,
+  LiveUpdateTone,
+} from "@/modules/live-updates";
 
 /**
  * Pure Live Activity / Live Update logic (#966; H38 queue, H25/H26 staff
@@ -18,9 +24,6 @@ import type { LiveUpdateProgress, LiveUpdateSpec, LiveUpdateTracker } from "@/mo
  * platform renderers and which deep links they open. No native imports, so
  * it is unit tested directly (`model.test.ts`).
  */
-
-/** `theme/colors.ts` `accent` (systemBlue); native notification surfaces take a hex. */
-export const LIVE_ACCENT_HEX = "#007AFF";
 
 export interface DesiredActivity {
   kind: LiveActivityKind;
@@ -240,18 +243,22 @@ function counted(count: number, label: string | undefined): string | null {
   return `${count} ${label.charAt(0).toLocaleLowerCase()}${label.slice(1)}`;
 }
 
-/** `#RRGGBB` per queue phase: waiting = accent, called = go, in room = neutral. */
-export const LIVE_CALLED_HEX = "#34C759";
-export const LIVE_NEUTRAL_HEX = "#8E8E93";
-const QUEUE_TRACKER: Record<QueueLiveProps["phase"], LiveUpdateTracker> = {
-  waiting: "tracker-waiting",
-  called: "tracker-called",
-  in_room: "tracker-in-room",
+/** A finite, non-negative whole count, or null (mirrors the iOS widget). */
+function count(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.round(value)
+    : null;
+}
+
+const QUEUE_STAGE: Record<QueueLiveProps["phase"], number> = { waiting: 0, called: 1, in_room: 2 };
+const QUEUE_TONE: Record<QueueLiveProps["phase"], LiveUpdateTone> = {
+  waiting: "accent",
+  called: "go",
+  in_room: "neutral",
 };
 /**
- * Queue track (H38): In line ──── Called ── In room. The wait in line is
- * the long part of the journey, so its segment is weighted longer than the
- * walk from the call to the room (product decision, matches iOS).
+ * Queue track (H38): In line ──── Called ── In room. The wait in line is the
+ * long part of the journey, so its segment takes two thirds, as on iOS.
  */
 const IN_LINE_LENGTH = 200;
 const CALLED_LENGTH = 100;
@@ -266,166 +273,262 @@ export function queueWaitingFraction(props: QueueLiveProps): number {
   return clamp01((start - props.position) / start);
 }
 
-/** Position on the track: the waiting fraction of the first segment, then each stage's node. */
-function queueTrackValue(props: QueueLiveProps): number {
-  if (props.phase === "waiting") return Math.round(queueWaitingFraction(props) * IN_LINE_LENGTH);
-  return props.phase === "called" ? IN_LINE_LENGTH : IN_LINE_LENGTH + CALLED_LENGTH;
+/**
+ * Maps-style track: everything before `value` merges into one grey travelled
+ * segment; each stage keeps its colour for the part still ahead, so the
+ * stages stay separated by the segment gaps.
+ */
+export function trackSegments(
+  stages: { length: number; tone: LiveUpdateTone }[],
+  value: number,
+): LiveUpdateProgress["segments"] {
+  const segments: LiveUpdateProgress["segments"] = [];
+  let travelled = 0;
+  let start = 0;
+  for (const stage of stages) {
+    const behind = Math.min(Math.max(value - start, 0), stage.length);
+    travelled += behind;
+    if (stage.length - behind > 0) {
+      if (travelled > 0) segments.push({ length: travelled, tone: "travelled" });
+      travelled = 0;
+      segments.push({ length: stage.length - behind, tone: stage.tone });
+    }
+    start += stage.length;
+  }
+  if (travelled > 0) segments.push({ length: travelled, tone: "travelled" });
+  return segments;
 }
 
 function queueProgress(props: QueueLiveProps): LiveUpdateProgress {
+  const value =
+    props.phase === "waiting"
+      ? Math.round(queueWaitingFraction(props) * IN_LINE_LENGTH)
+      : props.phase === "called"
+        ? IN_LINE_LENGTH
+        : IN_LINE_LENGTH + CALLED_LENGTH;
   return {
-    value: queueTrackValue(props),
-    segments: [
-      { length: IN_LINE_LENGTH, color: LIVE_ACCENT_HEX },
-      { length: CALLED_LENGTH, color: LIVE_CALLED_HEX },
-    ],
-    // The "Called" node; the track's end dot is "In room".
-    points: [{ position: IN_LINE_LENGTH, color: LIVE_CALLED_HEX }],
-    tracker: QUEUE_TRACKER[props.phase],
+    value,
+    segments: trackSegments(
+      [
+        { length: IN_LINE_LENGTH, tone: "accent" },
+        { length: CALLED_LENGTH, tone: "go" },
+      ],
+      value,
+    ),
+    tracker: props.phase === "called" ? "door" : "people",
+    trackerTone: QUEUE_TONE[props.phase],
+    endGlyph: "door",
+    stops: [0, IN_LINE_LENGTH, IN_LINE_LENGTH + CALLED_LENGTH],
   };
 }
 
-/** A single accent bar filled to `fraction`. */
-function barProgress(fraction: number): LiveUpdateProgress {
+/** A single stage from 0 to 1, e.g. the served share or the elapsed time. */
+function shareProgress(fraction: number, tracker: LiveUpdateGlyph): LiveUpdateProgress {
+  const value = Math.round(clamp01(fraction) * 100);
   return {
-    value: Math.round(clamp01(fraction) * 100),
-    segments: [{ length: 100, color: LIVE_ACCENT_HEX }],
+    value,
+    segments: trackSegments([{ length: 100, tone: "accent" }], value),
+    tracker,
+    trackerTone: "accent",
+  };
+}
+
+function queueTrackLabels(
+  props: QueueLiveProps,
+): Pick<LiveUpdateCard, "trackLabels" | "currentStop"> {
+  const { stageInLine, stageCalled, stageInRoom } = props.labels;
+  // Older servers send no stage names: the track draws without labels.
+  if (!stageInLine || !stageCalled || !stageInRoom) return {};
+  return {
+    trackLabels: [stageInLine, stageCalled, stageInRoom],
+    currentStop: QUEUE_STAGE[props.phase],
   };
 }
 
 function queueSpec(props: QueueLiveProps, previousPhase: string | null): LiveUpdateSpec {
+  const tone = QUEUE_TONE[props.phase];
   const base = {
     id: androidLiveUpdateId("queue", QUEUE_LIVE_ACTIVITY_SUBJECT),
     url: props.url,
-    icon: "queue" as const,
     phase: props.phase,
+    tone,
     progress: queueProgress(props),
   };
+  const { labels } = props;
   const room = props.roomName ?? "";
 
-  if (props.phase === "called") {
-    const calledAt = props.calledAt ? Date.parse(props.calledAt) : Number.NaN;
+  if (props.phase === "called" || props.phase === "in_room") {
+    const called = props.phase === "called";
+    const calledAt = called && props.calledAt ? Date.parse(props.calledAt) : Number.NaN;
+    const since = Number.isFinite(calledAt) ? calledAt : null;
+    // Hero: where to go. No room yet: never a dangling "Go to".
+    const title = called
+      ? room
+        ? `${labels.goTo} ${room}`
+        : (props.roomLocation ?? props.challengeTitle)
+      : room
+        ? `${labels.inRoom} · ${room}`
+        : labels.inRoom;
     return {
       ...base,
-      // Hero: where to go. No room yet: never a dangling "Go to".
-      title: room ? `${props.labels.goTo} ${room}` : (props.roomLocation ?? props.challengeTitle),
-      text: [room ? props.roomLocation : null, props.challengeTitle].filter(Boolean).join(" · "),
-      // Header reads "hackOS · Called · 2:13": the count-up runs in the content.
-      subText: Number.isFinite(calledAt) ? (props.labels.called ?? null) : null,
-      countUpFrom: Number.isFinite(calledAt) ? calledAt : null,
+      title,
+      emphasis: room || null,
+      text: room ? props.roomLocation : null,
+      // Header reads "hackOS · Called · 2:13": the count-up since the call
+      // runs in the content; the challenge would truncate next to it.
+      subText: called && since !== null ? (labels.called ?? null) : props.challengeTitle,
+      countUpFrom: since,
       // The room stays in the chip; an empty chip would be a blank pill.
       shortCriticalText: room ? chip(room) : null,
-      accentColor: LIVE_CALLED_HEX,
-      alert: previousPhase !== "called",
-    };
-  }
-
-  if (props.phase === "in_room") {
-    return {
-      ...base,
-      title: room ? `${props.labels.inRoom} · ${room}` : props.labels.inRoom,
-      text: props.challengeTitle,
-      subText: props.labels.moreQueues,
-      shortCriticalText: room ? chip(room) : null,
-      accentColor: LIVE_NEUTRAL_HEX,
-      alert: false,
+      icon: called ? "door" : "people",
+      card: {
+        header: props.challengeTitle,
+        headerTrailing: labels.moreQueues,
+        lead: { caption: called ? labels.goTo : labels.inRoom, value: room || "–", hero: true },
+        trail:
+          since !== null && labels.called ? { caption: labels.called, timer: "countUp" } : null,
+        detail: props.roomLocation,
+        ...queueTrackLabels(props),
+      },
+      alert: called && previousPhase !== "called",
     };
   }
 
   // Waiting: "when am I up?" — the ETA leads, never an empty placeholder.
   const eta = etaMinutes(props);
   const position = props.position === null ? null : `#${props.position}`;
-  const wait = eta !== null ? `~${eta} ${props.labels.minutes}` : (props.labels.estimating ?? null);
+  const wait = eta !== null ? `~${eta} ${labels.minutes}` : (labels.estimating ?? null);
   const title = [wait, position].filter(Boolean).join(" · ");
   const both = position && eta !== null ? `${position}·${eta}m` : null;
   return {
     ...base,
     title: title || props.challengeTitle,
-    text: title ? props.challengeTitle : null,
-    subText: props.labels.moreQueues,
+    emphasis: wait,
+    text: labels.moreQueues,
+    subText: props.challengeTitle,
     shortCriticalText:
       both && both.length <= CHIP_MAX ? both : (position ?? (eta !== null ? `${eta}m` : null)),
-    accentColor: LIVE_ACCENT_HEX,
+    icon: "people",
+    card: {
+      header: props.challengeTitle,
+      headerTrailing: labels.moreQueues,
+      lead: { caption: labels.wait, value: wait, hero: true, quiet: eta === null },
+      trail: position ? { caption: labels.position, value: position } : null,
+      ...queueTrackLabels(props),
+    },
     alert: false,
   };
 }
 
+function activityGlyph(category: string): LiveUpdateGlyph {
+  if (category === "meal") return "meal";
+  if (category === "talk" || category === "workshop") return "mic";
+  if (category === "ceremony") return "star";
+  return "people";
+}
+
 function activitySpec(props: ActivityLiveProps, now: number): LiveUpdateSpec {
+  const { labels } = props;
+  const when = `${clock(props.startsAt)}–${clock(props.endsAt)}`;
+  const where = props.location ? `${when} · ${props.location}` : when;
+  const icon = activityGlyph(props.category);
   const base = {
     id: androidLiveUpdateId("activity", activityLiveActivitySubject(props.activityId)),
     url: props.url,
-    icon: props.category === "meal" ? ("meal" as const) : ("activity" as const),
     phase: props.phase,
-    accentColor: LIVE_ACCENT_HEX,
+    tone: "accent" as const,
+    icon,
     alert: false,
   };
-  const when = `${clock(props.startsAt)}–${clock(props.endsAt)}`;
 
   if (props.phase === "upcoming") {
     // The chip and header count down to the start on their own.
     return {
       ...base,
       title: props.name,
-      text: props.location ? `${when} · ${props.location}` : when,
-      subText: props.labels.startsIn,
+      text: where,
+      subText: labels.startsIn,
       countdownTo: Date.parse(props.startsAt),
+      card: {
+        header: props.name,
+        lead: { caption: labels.startsIn, timer: "countDown", hero: true },
+        detail: where,
+      },
     };
   }
 
   // Live: a count in the chip, no `when` (see LiveUpdatePoster.applyWhen).
-  const action = { label: props.labels.scan, url: props.scanUrl };
-  const inside = props.inside ?? null;
-  const remaining = props.remaining ?? null;
-  if (inside !== null) {
+  const action = { label: labels.scan, url: props.scanUrl };
+  const inside = count(props.inside);
+  const remaining = count(props.remaining);
+  const scanned = count(props.scanned) ?? 0;
+  const endsAt = Date.parse(props.endsAt);
+  const footer = Number.isFinite(endsAt) ? { caption: labels.endsIn, countdownTo: endsAt } : null;
+  if (inside !== null && remaining !== null) {
     // Meal (H24/H27): "how many still to eat?"
-    const served = remaining !== null ? inside - remaining : null;
-    const hero =
-      remaining !== null
-        ? counted(remaining, props.labels.remaining)
-        : counted(props.scanned, props.labels.scanned);
-    const details = [
-      remaining !== null ? counted(props.scanned, props.labels.served) : null,
-      counted(inside, props.labels.inside),
-      props.location,
-    ].filter(Boolean);
+    const share = inside > 0 ? clamp01((inside - remaining) / inside) : null;
+    const hero = counted(remaining, labels.remaining);
     return {
       ...base,
-      title: hero ?? props.name,
-      text: details.join(" · ") || null,
-      subText: hero ? `${props.name} · ${when}` : when,
-      shortCriticalText: chip(String(remaining ?? props.scanned)),
+      title: hero ?? String(remaining),
+      emphasis: String(remaining),
+      text: [counted(scanned, labels.served), counted(inside, labels.inside)]
+        .filter(Boolean)
+        .join(" · "),
+      subText: props.location ? `${props.name} · ${props.location}` : props.name,
+      shortCriticalText: chip(String(remaining)),
       // Served share of the people inside; nothing to fill when nobody is in.
-      progress: served !== null && inside > 0 ? barProgress(served / inside) : null,
+      progress: share === null ? null : shareProgress(share, "meal"),
+      card: {
+        header: props.name,
+        lead: { caption: labels.served, value: String(scanned) },
+        trail: { caption: labels.inside, value: String(inside) },
+        stats: [
+          { caption: labels.served, value: String(scanned) },
+          { caption: labels.remaining, value: String(remaining), hero: true },
+          { caption: labels.inside, value: String(inside) },
+        ],
+        footer,
+      },
       action,
     };
   }
 
   const start = Date.parse(props.startsAt);
-  const end = Date.parse(props.endsAt);
-  const hero = counted(props.scanned, props.labels.scanned);
+  const elapsed = endsAt > start ? clamp01((now - start) / (endsAt - start)) : null;
+  const hero = counted(scanned, labels.scanned);
   return {
     ...base,
-    title: hero ?? props.name,
-    text: [hero ? props.name : null, props.location].filter(Boolean).join(" · ") || null,
-    subText: when,
-    shortCriticalText: chip(String(props.scanned)),
+    title: hero ?? String(scanned),
+    emphasis: String(scanned),
+    text: props.name,
+    subText: props.location,
+    shortCriticalText: chip(String(scanned)),
     // Time elapsed between start and end, as of this post.
-    progress: end > start ? barProgress((now - start) / (end - start)) : null,
+    progress: elapsed === null ? null : shareProgress(elapsed, icon),
+    card: {
+      header: props.name,
+      lead: { caption: labels.scanned, value: String(scanned), hero: true },
+      detail: props.location,
+      footer,
+    },
     action,
   };
 }
 
 /**
- * Props → promoted ongoing notification (#966; H38 queue, H25/H26 staff).
- * The queue alerts (heads-up and sound) only on the transition into
- * "called"; every other post is silent.
+ * Props → Android Live Update (#966; H38 queue, H25/H26 staff), or null for
+ * kinds Android does not render yet. The queue alerts (heads-up and sound)
+ * only on the transition into "called"; every other post is silent.
  */
 export function toLiveUpdateSpec(
   props: LiveActivityProps,
   previousPhase: string | null,
   now = Date.now(),
-): LiveUpdateSpec {
-  return props.kind === "queue" ? queueSpec(props, previousPhase) : activitySpec(props, now);
+): LiveUpdateSpec | null {
+  if (props.kind === "queue") return queueSpec(props, previousPhase);
+  if (props.kind === "activity") return activitySpec(props, now);
+  return null;
 }
 
 /**

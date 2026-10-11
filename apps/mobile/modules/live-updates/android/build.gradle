@@ -18,4 +18,5 @@ dependencies {
   // NotificationCompat.ProgressStyle, setShortCriticalText and
   // setRequestPromotedOngoing (#966) need core 1.17+; matches expo-notifications.
   implementation 'androidx.core:core:1.17.0'
+  testImplementation 'junit:junit:4.13.2'
 }

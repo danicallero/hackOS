@@ -23,6 +23,8 @@ function available(): boolean {
 
 function show(item: Parameters<LiveActivityHost["start"]>[0], previousPhase: string | null) {
   const spec = toLiveUpdateSpec(item.props, previousPhase);
+  // Kinds without an Android rendering yet are not posted.
+  if (!spec) return null;
   LiveUpdates?.show(spec);
   return spec.id;
 }
@@ -50,6 +52,13 @@ export const liveActivityHost: LiveActivityHost = {
   async update(_id, item, previousPhase) {
     if (!available()) return;
     show(item, previousPhase);
+  },
+  renderMode() {
+    try {
+      return LiveUpdates?.canPostPromotedNotifications() ? "promoted" : "card";
+    } catch {
+      return "card";
+    }
   },
   consumeDismissals() {
     if (!available()) return {};
