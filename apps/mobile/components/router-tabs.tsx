@@ -97,6 +97,12 @@ export interface RouterTabItem {
   name: string;
   /** Optional active icon node; `icon` is reused when omitted. */
   selectedIcon?: ReactNode;
+  /**
+   * Optional active-state override for tabs whose route subtree is shared
+   * with other destinations. Receives the current pathname; the default is a
+   * prefix match on `href`.
+   */
+  isActive?: (pathname: string) => boolean;
   /** Optional stable selector for native UI tests. */
   testID?: string;
 }
@@ -371,6 +377,7 @@ function RouterTabsContent({
             {directTabs.map((tab, index) => (
               <TabTrigger key={tab.name} asChild name={tab.name}>
                 <RouterTabButton
+                  activeOverride={tab.isActive ? isTabActive(pathname, tab) : undefined}
                   icon={tab.icon}
                   label={tab.label}
                   onTabPress={() => {
@@ -413,6 +420,7 @@ function RouterTabsContent({
 }
 
 function isTabActive(pathname: string, tab: RouterTabItem): boolean {
+  if (tab.isActive) return tab.isActive(pathname);
   const activePath = normalizeRoutePath(pathname);
   const tabPath = normalizeRoutePath(typeof tab.href === "string" ? tab.href : `/${tab.name}`);
   return activePath === tabPath || activePath.startsWith(`${tabPath}/`);
@@ -442,6 +450,8 @@ function tabIndexForPosition(position: number, width: number, tabCount: number):
 }
 
 type RouterTabButtonProps = Omit<TabTriggerSlotProps, "children"> & {
+  /** Replaces the trigger's route-focus state when a tab supplies `isActive`. */
+  activeOverride?: boolean;
   icon: ReactNode;
   itemHeight: number;
   label: string;
@@ -453,10 +463,11 @@ type RouterTabButtonProps = Omit<TabTriggerSlotProps, "children"> & {
 const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTabButton(
   {
     accessibilityState,
+    activeOverride,
     href: _href,
     icon,
     itemHeight,
-    isFocused = false,
+    isFocused: triggerFocused = false,
     label,
     onLongPress,
     onPress,
@@ -467,6 +478,7 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
   },
   ref,
 ) {
+  const isFocused = activeOverride ?? triggerFocused;
   return (
     <Pressable
       ref={ref}

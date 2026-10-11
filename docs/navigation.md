@@ -238,6 +238,11 @@ account, scan log, sync queue, people and person details) is an Account
 subpage. The Others circle therefore stays on Account — and navigating
 programmatically to `/(tabs)/others/account` selects it — for as long as the
 user is anywhere inside Account.
+A direct Account tab uses the same rule through `RouterTabItem.isActive` (an
+optional per-tab predicate overriding the default href prefix match, for both
+the selection lens and the selected state), so it is not highlighted on
+queue/diary/operations pages that share the `/others` prefix. The Others circle
+shows the account photo on every Account subpage.
 
 A saved person's profile (#935) is the root-level `app/people/[id].tsx`,
 pushed above the tabs from either diary placement (direct tab or Others), the

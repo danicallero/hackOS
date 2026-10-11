@@ -155,15 +155,9 @@ jest.mock("@/lib/i18n", () => ({
       })[key] ?? key,
   }),
 }));
-const mockFocusedSection = jest.fn(() => "external");
 jest.mock("@/lib/operations-navigation", () => ({
-  operationsSectionFromPathname: () => mockFocusedSection(),
+  ...jest.requireActual("@/lib/operations-navigation"),
   resolveOperationsNavigationAction: () => "replace",
-}));
-jest.mock("@/lib/overflow-tabs", () => ({
-  OVERFLOW_TAB_ICON: { account: "person.crop.circle", diary: "person.2.crop.square.stack" },
-  OVERFLOW_TAB_LABEL_KEY: { account: "tabAccount", diary: "tabDiary" },
-  OVERFLOW_TAB_ROUTE: { account: "/(tabs)/others/account", diary: "/(tabs)/others/diary" },
 }));
 jest.mock("@/lib/router-tabs-inset", () => ({
   RouterTabBarInsetsProvider: ({ children }: { children: unknown }) => children,
@@ -281,11 +275,16 @@ describe("OpaqueRouterTabs — account photo (#934)", () => {
     afterEach(() => {
       mockPrimaryTabs.mockReturnValue(["schedule", "queue", "diary", "account"]);
       mockOverflowTabs.mockReturnValue([]);
-      mockFocusedSection.mockReturnValue("external");
     });
 
-    it("shows the account photo in the Others circle while Account is open", async () => {
-      mockFocusedSection.mockReturnValue("account");
+    it.each([
+      "/(tabs)/others/account",
+      "/(tabs)/others/wallet",
+      "/(tabs)/others/notification-settings",
+      "/(tabs)/others/notification-settings/reminders",
+      "/(tabs)/others/stands",
+    ])("shows the account photo in the Others circle on %s", async (path) => {
+      mockUsePathname.mockReturnValue(path);
       await render(
         <OpaqueRouterTabs
           {...DEFAULT_PROPS}
@@ -308,5 +307,31 @@ describe("OpaqueRouterTabs — account photo (#934)", () => {
         screen.queryByTestId("account-tab-avatar", { includeHiddenElements: true }),
       ).toBeNull();
     });
+  });
+});
+
+describe("OpaqueRouterTabs — direct Account tab selection", () => {
+  beforeEach(() => {
+    Object.defineProperty(Platform, "OS", { configurable: true, value: "android" });
+    mockPrimaryTabs.mockReturnValue(["schedule", "account"]);
+    mockOverflowTabs.mockReturnValue(["queue"]);
+  });
+  afterEach(() => {
+    mockPrimaryTabs.mockReturnValue(["schedule", "queue", "diary", "account"]);
+    mockOverflowTabs.mockReturnValue([]);
+  });
+
+  it.each([
+    ["/(tabs)/others/account", true],
+    ["/(tabs)/others/wallet", true],
+    ["/(tabs)/others/notification-settings", true],
+    ["/(tabs)/others/queue", false],
+    ["/(tabs)/schedule", false],
+  ])("on %s the Account tab selected = %s", async (path, selected) => {
+    mockUsePathname.mockReturnValue(path);
+    await renderTabs();
+    expect(screen.getByTestId("opaque-tab-account").props.accessibilityState.selected).toBe(
+      selected,
+    );
   });
 });
