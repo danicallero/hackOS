@@ -16,7 +16,9 @@ import {
   planReconcile,
   propsSignature,
   pruneDismissed,
+  queueWaitingFraction,
   toLiveUpdateSpec,
+  trackSegments,
   withScannedIncrement,
 } from "./model";
 
@@ -202,33 +204,138 @@ describe("staff counter and boundaries", () => {
   });
 });
 
-describe("toLiveUpdateSpec (Android)", () => {
-  it("maps a waiting queue entry to position and ETA with the ETA chip", () => {
-    const spec = toLiveUpdateSpec(queueProps(), null);
-    expect(spec).toMatchObject({
+describe("toLiveUpdateSpec (Android, #966)", () => {
+  const waiting = () => queueProps({ position: 4, startPosition: 9, etaMinutes: 12 });
+  const spec = (props: Parameters<typeof toLiveUpdateSpec>[0], previous: string | null = null) =>
+    toLiveUpdateSpec(props, previous, Date.parse("2026-02-20T12:45:00.000Z"))!;
+
+  it("leads a waiting entry with the ETA and puts position and ETA in the chip", () => {
+    const result = spec(waiting());
+    expect(result).toMatchObject({
       id: "queue:judging",
-      title: "Open data",
-      text: "Position #4 · Wait ~12 min",
-      shortCriticalText: "~12m",
-      icon: "queue",
+      title: "~12 min · #4",
+      emphasis: "~12 min",
+      subText: "Open data",
+      shortCriticalText: "#4·12m",
+      icon: "people",
+      tone: "accent",
+      phase: "waiting",
       alert: false,
+    });
+    expect(result.countdownTo ?? null).toBeNull();
+    expect(result.countUpFrom ?? null).toBeNull();
+    expect(result.card).toMatchObject({
+      header: "Open data",
+      lead: { caption: "Wait", value: "~12 min", hero: true, quiet: false },
+      trail: { caption: "Position", value: "#4" },
+      trackLabels: ["In line", "Called", "In room"],
+      currentStop: 0,
     });
   });
 
-  it("alerts only on the transition into called", () => {
+  it("shows the estimating placeholder, never an empty ETA, and keeps #N in the chip", () => {
+    const result = spec(queueProps({ etaMinutes: null }));
+    expect(result.title).toBe("Estimating… · #4");
+    expect(result.shortCriticalText).toBe("#4");
+    expect(result.card?.lead).toMatchObject({ value: "Estimating…", quiet: true });
+  });
+
+  it("omits a missing label instead of falling back to English (older server)", () => {
+    const { estimating: _estimating, stageInLine: _stage, ...labels } = queueLiveLabels("en", 0);
+    const result = spec(queueProps({ etaMinutes: null, labels }));
+    expect(result.title).toBe("#4");
+    expect(result.card?.trackLabels).toBeUndefined();
+  });
+
+  it("falls back to the position when position and ETA overflow the 7-character chip", () => {
+    expect(spec(queueProps({ position: 123, etaMinutes: 150 })).shortCriticalText).toBe("#123");
+  });
+
+  it("draws the queue like Maps: grey behind, the 2:1 stages ahead, the tracker at the team", () => {
+    const track = spec(waiting()).progress!;
+    // (9 - 4) / 9 of the first (two-thirds) stage is behind the team.
+    const value = Math.round((5 / 9) * 200);
+    expect(track.value).toBe(value);
+    expect(track.segments).toEqual([
+      { length: value, tone: "travelled" },
+      { length: 200 - value, tone: "accent" },
+      { length: 100, tone: "go" },
+    ]);
+    expect(track).toMatchObject({ tracker: "people", trackerTone: "accent", stops: [0, 200, 300] });
+    // First sighting, or no high-water mark: nothing travelled, no fake progress.
+    expect(spec(queueProps({ startPosition: 4 })).progress!.segments[0]).toEqual({
+      length: 200,
+      tone: "accent",
+    });
+    expect(spec(queueProps({ startPosition: null })).progress!.value).toBe(0);
+  });
+
+  it("merges travelled stages into one grey segment", () => {
+    expect(
+      trackSegments(
+        [
+          { length: 200, tone: "accent" },
+          { length: 100, tone: "go" },
+        ],
+        300,
+      ),
+    ).toEqual([{ length: 300, tone: "travelled" }]);
+  });
+
+  it("computes the waiting fraction from the high-water mark", () => {
+    expect(queueWaitingFraction(queueProps({ position: 1, startPosition: 4 }))).toBe(0.75);
+    expect(queueWaitingFraction(queueProps({ position: 6, startPosition: 4 }))).toBe(0);
+  });
+
+  it("shows the room as hero and chip once called, counting up from the call", () => {
+    const calledAt = "2026-02-20T10:02:00.000Z";
     const called = queueProps({
       phase: "called",
       position: null,
       etaMinutes: null,
       roomName: "Room B",
       roomLocation: "Floor 1",
+      calledAt,
     });
-    expect(toLiveUpdateSpec(called, "waiting")).toMatchObject({
-      text: "Go to Room B · Floor 1",
+    const result = spec(called, "waiting");
+    expect(result).toMatchObject({
+      title: "Go to Room B",
+      emphasis: "Room B",
+      text: "Floor 1",
+      subText: "Called",
       shortCriticalText: "Room B",
+      countUpFrom: Date.parse(calledAt),
+      tone: "go",
+      icon: "door",
       alert: true,
     });
-    expect(toLiveUpdateSpec(called, "called").alert).toBe(false);
+    expect(result.countdownTo ?? null).toBeNull();
+    expect(result.progress).toMatchObject({ value: 200, tracker: "door", trackerTone: "go" });
+    expect(result.card).toMatchObject({
+      lead: { caption: "Go to", value: "Room B", hero: true },
+      trail: { caption: "Called", timer: "countUp" },
+      detail: "Floor 1",
+      currentStop: 1,
+    });
+    expect(spec(called, "called").alert).toBe(false);
+  });
+
+  it("truncates a long room to the chip and moves the tracker to the end in the room", () => {
+    const inRoom = queueProps({
+      phase: "in_room",
+      position: null,
+      etaMinutes: null,
+      roomName: "Auditorium",
+    });
+    const result = spec(inRoom, "called");
+    expect(result).toMatchObject({
+      title: "In room · Auditorium",
+      shortCriticalText: "Audito…",
+      tone: "neutral",
+      alert: false,
+    });
+    expect(result.progress).toMatchObject({ value: 300, trackerTone: "neutral" });
+    expect(result.card?.currentStop).toBe(2);
   });
 
   it("never posts an empty chip or a dangling 'Go to' when the room is unknown", () => {
@@ -239,9 +346,10 @@ describe("toLiveUpdateSpec (Android)", () => {
       roomName: null,
       roomLocation: "Floor 1",
     });
-    expect(toLiveUpdateSpec(called, "waiting")).toMatchObject({
-      text: "Floor 1",
+    expect(spec(called, "waiting")).toMatchObject({
+      title: "Floor 1",
       shortCriticalText: null,
+      countUpFrom: null,
     });
     const inRoom = queueProps({
       phase: "in_room",
@@ -249,29 +357,90 @@ describe("toLiveUpdateSpec (Android)", () => {
       etaMinutes: null,
       roomName: null,
     });
-    expect(toLiveUpdateSpec(inRoom, "called")).toMatchObject({
-      text: "In room",
-      shortCriticalText: null,
+    expect(spec(inRoom, "called")).toMatchObject({ title: "In room", shortCriticalText: null });
+  });
+
+  it("counts down to an upcoming activity, with no chip text, track or action", () => {
+    const result = spec(activityProps());
+    expect(result).toMatchObject({
+      id: "activity:12",
+      title: "Lunch",
+      text: expect.stringContaining("Cafeteria"),
+      subText: "Starts in",
+      countdownTo: Date.parse("2026-02-20T12:00:00.000Z"),
+      icon: "meal",
+      phase: "upcoming",
     });
+    expect(result.shortCriticalText ?? null).toBeNull();
+    expect(result.progress ?? null).toBeNull();
+    expect(result.action ?? null).toBeNull();
+    expect(result.card?.lead).toMatchObject({ caption: "Starts in", timer: "countDown" });
   });
 
-  it("counts down to an upcoming activity without an action", () => {
-    const spec = toLiveUpdateSpec(activityProps(), null);
-    expect(spec.countdownTo).toBe(Date.parse("2026-02-20T12:00:00.000Z"));
-    expect(spec.action).toBeNull();
-    expect(spec.icon).toBe("meal");
-    expect(spec.id).toBe("activity:12");
-  });
-
-  it("shows the live count and the single Scan action", () => {
-    const spec = toLiveUpdateSpec(activityProps({ phase: "live", scanned: 37 }), "upcoming");
-    expect(spec).toMatchObject({
-      shortCriticalText: "37",
-      countdownTo: null,
+  it("leads a live meal with who still has to eat and tracks the served share", () => {
+    const meal = activityProps({ phase: "live", scanned: 142, inside: 310, remaining: 168 });
+    const result = spec(meal, "upcoming");
+    expect(result).toMatchObject({
+      title: "168 still to eat",
+      emphasis: "168",
+      text: "142 served · 310 inside",
+      subText: "Lunch · Cafeteria",
+      shortCriticalText: "168",
       action: { label: "Scan", url: "hackos://scan?activity=12" },
     });
+    // No `when` on live staff updates: the chip keeps the count.
+    expect(result.countdownTo ?? null).toBeNull();
+    expect(result.countUpFrom ?? null).toBeNull();
+    const served = Math.round(((310 - 168) / 310) * 100);
+    expect(result.progress).toMatchObject({
+      value: served,
+      segments: [
+        { length: served, tone: "travelled" },
+        { length: 100 - served, tone: "accent" },
+      ],
+      tracker: "meal",
+    });
+    expect(result.card?.stats).toEqual([
+      { caption: "Served", value: "142" },
+      { caption: "Still to eat", value: "168", hero: true },
+      { caption: "Inside", value: "310" },
+    ]);
+    expect(result.card?.footer).toEqual({
+      caption: "Ends in",
+      countdownTo: Date.parse("2026-02-20T13:30:00.000Z"),
+    });
   });
 
+  it("localizes the meal counts and skips the track when nobody is inside", () => {
+    const meal = activityProps({
+      phase: "live",
+      scanned: 0,
+      inside: 0,
+      remaining: 0,
+      labels: activityLiveLabels("es"),
+    });
+    const result = spec(meal);
+    expect(result.title).toBe("0 por comer");
+    expect(result.progress).toBeNull();
+  });
+
+  it("shows the scanned count and elapsed time for a live non-meal activity", () => {
+    const talk = activityProps({ phase: "live", category: "talk", scanned: 37, inside: null });
+    // 45 of 90 minutes elapsed.
+    expect(spec(talk)).toMatchObject({
+      title: "37 scanned",
+      text: "Lunch",
+      subText: "Cafeteria",
+      shortCriticalText: "37",
+      icon: "mic",
+      progress: { value: 50, tracker: "mic" },
+      card: { lead: { caption: "Scanned", value: "37", hero: true } },
+    });
+  });
+
+  it("does not render kinds Android has no layout for yet", () => {
+    expect(toLiveUpdateSpec({ ...activityProps(), kind: "deadline" } as never, null)).toBeNull();
+  });
   it("round-trips notification ids", () => {
     expect(parseAndroidLiveUpdateId(androidLiveUpdateId("queue", "judging"))).toEqual({
       kind: "queue",

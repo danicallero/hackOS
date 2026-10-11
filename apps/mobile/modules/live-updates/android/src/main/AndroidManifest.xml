@@ -2,4 +2,12 @@
   <!-- #966: Android 16 only promotes ongoing notifications to Live Updates
        (status-bar chip, lock screen) for apps declaring this normal permission. -->
   <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+  <application>
+    <!-- #966: the Live Update delete intent. The system sends it only when the
+         person dismisses the notification, never for app cancels, force-stop
+         or reboot, so it is the single source of "dismissed". -->
+    <receiver
+      android:name="expo.modules.liveupdates.LiveUpdateDismissReceiver"
+      android:exported="false" />
+  </application>
 </manifest>
