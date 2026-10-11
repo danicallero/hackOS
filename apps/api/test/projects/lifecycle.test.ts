@@ -9,7 +9,14 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import { createEnterpriseChallenges, enqueueRepo } from "../queue/fixtures.js";
+import {
+  assignChallengeToRoom,
+  createChallenge,
+  createEnterpriseChallenges,
+  createRoom,
+  enqueueRepo,
+  getEntry,
+} from "../queue/fixtures.js";
 import { admitParticipant, setHackingWindow } from "./fixtures.js";
 
 let app: App;
@@ -334,10 +341,11 @@ describe("safe Devpost reconciliation (H6,H16,H17,H30)", () => {
     await importCsv(
       csv("https://devpost.com/software/a", "", "alice@school.test;alice@personal.test"),
     );
+    // H21/H38: an unresolved address is an organizer issue, not a judging block.
     expect(await detail(repo)).toMatchObject({
       participantCount: 2,
       unresolvedCount: 1,
-      eligible: false,
+      eligible: true,
     });
     await pool.query(`UPDATE users SET secondary_email_verified_at=now() WHERE id=$1`, [owner]);
     const { reconcileDevpostParticipantsForUser } = await import(
@@ -379,7 +387,7 @@ describe("safe Devpost reconciliation (H6,H16,H17,H30)", () => {
     );
     await pool.query(`UPDATE event_config SET project_max_team_size=1 WHERE id=1`);
     const repo = await importCsv(csv("https://devpost.com/software/a", await groupCode(id)));
-    expect(await detail(repo)).toMatchObject({ membershipDiffers: true, eligible: false });
+    expect(await detail(repo)).toMatchObject({ membershipDiffers: true, eligible: true });
     expect(
       (await pool.query(`SELECT count(*)::int n FROM submissions WHERE repo_id=$1`, [repo])).rows[0]
         .n,
@@ -394,7 +402,7 @@ describe("safe Devpost reconciliation (H6,H16,H17,H30)", () => {
     expect(await detail(repo)).toMatchObject({
       participantCount: 2,
       teamSizeViolation: true,
-      eligible: false,
+      eligible: true,
     });
     expect(
       (
@@ -585,6 +593,20 @@ describe("safe Devpost reconciliation (H6,H16,H17,H30)", () => {
         )
       ).rows[0],
     ).toMatchObject({ reconciled_into_repo_id: native, submission_status: "not_submitted" });
+    // The merged-away source is no longer a project; the target holds the import.
+    expect(
+      (
+        await pool.query(
+          `SELECT id,eligible FROM project_reconciliation_state WHERE id=ANY($1) ORDER BY id`,
+          [[native, imported]],
+        )
+      ).rows,
+    ).toEqual(
+      [
+        { id: native, eligible: true },
+        { id: imported, eligible: false },
+      ].sort((a, b) => a.id - b.id),
+    );
     const unlinked = await app.inject({
       method: "POST",
       url: `/api/projects/${native}/unlink`,
@@ -595,6 +617,74 @@ describe("safe Devpost reconciliation (H6,H16,H17,H30)", () => {
     expect(unlinked.json().externalRepoId).toBe(imported);
     expect(await importCsv(csv("https://devpost.com/software/a"))).toBe(imported);
     expect(await detail(native)).toMatchObject({ eligible: true, devpostUrl: null });
+  });
+});
+
+describe("Devpost imports are always eligible for judging (H21, H38)", () => {
+  async function servingRoom() {
+    const challengeId = await createChallenge();
+    const roomId = await createRoom();
+    await assignChallengeToRoom(roomId, challengeId);
+    return { challengeId, roomId };
+  }
+  async function callNext(roomId: number, operator: number) {
+    return app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${roomId}/call-next`,
+      headers: asUser(operator),
+      payload: {},
+    });
+  }
+
+  it("pumps an import with unresolved addresses, a roster difference and an oversized team", async () => {
+    const bob = await createUser({ email: "bob@school.test" });
+    await admitParticipant(bob);
+    const id = await group();
+    await pool.query(
+      `INSERT INTO planned_work_group_members(group_id,user_id,status) VALUES($1,$2,'active')`,
+      [id, bob],
+    );
+    await pool.query(`UPDATE event_config SET project_max_team_size=1 WHERE id=1`);
+    const repo = await importCsv(
+      csv("https://devpost.com/software/a", await groupCode(id), "alice@school.test;x@ext.test"),
+    );
+    expect(await detail(repo)).toMatchObject({
+      membershipDiffers: true,
+      unresolvedCount: 1,
+      teamSizeViolation: true,
+      eligible: true,
+    });
+    const { challengeId } = await servingRoom();
+    const entry = await enqueueRepo(challengeId, repo, 1);
+    const { pumpTick } = await import("../../src/modules/queue/pump.js");
+    await pumpTick();
+    expect((await getEntry(entry)).status).toBe("called");
+  });
+
+  it("call-next calls an import with unresolved addresses unless an organizer excludes it", async () => {
+    const operator = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
+    const repo = await importCsv(
+      csv("https://devpost.com/software/b", "", "alice@school.test;x@ext.test"),
+    );
+    const { challengeId, roomId } = await servingRoom();
+    const entry = await enqueueRepo(challengeId, repo, 1);
+    const resolve = (eligibilityOverride: boolean | null) =>
+      app.inject({
+        method: "POST",
+        url: `/api/projects/${repo}/resolve`,
+        headers: asUser(admin),
+        payload: { eligibilityOverride, reason: "Organizer decision" },
+      });
+
+    expect((await resolve(false)).statusCode).toBe(200);
+    expect((await detail(repo)).eligible).toBe(false);
+    await callNext(roomId, operator);
+    expect(await getEntry(entry)).toMatchObject({ status: "waiting", position: 1 });
+
+    expect((await resolve(null)).statusCode).toBe(200);
+    expect((await detail(repo)).eligible).toBe(true);
+    expect((await callNext(roomId, operator)).statusCode).toBe(200);
+    expect((await getEntry(entry)).status).toBe("called");
   });
 });
 
