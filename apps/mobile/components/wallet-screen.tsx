@@ -2,7 +2,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { ButtonStyle, ButtonType, RNWalletView } from "@premieroctet/react-native-wallet";
 import * as Device from "expo-device";
 import { File, Paths } from "expo-file-system";
-import { useScrollToTop } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -40,6 +39,7 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { declineOwnSpot } from "@/lib/self-service";
 import { isServerEventConnected, subscribeToServerEvent } from "@/lib/server-events";
 import { useCachedApi } from "@/lib/use-cached-api";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { type WalletTicketPayload, walletCacheKey } from "@/lib/wallet-cache";
 import {
   ANDROID_PKPASS_MIME_TYPES,
@@ -76,7 +76,7 @@ export default function WalletScreen() {
   const declineKeys = useRef(new Map<number, string>());
   const scrollRef = useRef<ScrollView>(null);
 
-  useScrollToTop(scrollRef);
+  const trueTop = useTrueTopScroll(scrollRef);
 
   const fetchTicket = useCallback(() => apiFetch<WalletTicketPayload>("/api/me/ticket"), []);
   const {
@@ -290,6 +290,7 @@ export default function WalletScreen() {
     <GestureDetector gesture={scrollNativeGesture}>
       <ScrollView
         ref={scrollRef}
+        {...trueTop.scrollProps}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           gap: 20,

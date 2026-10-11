@@ -1,4 +1,4 @@
-import { useFocusEffect, useNavigation, useRouter, useScrollToTop } from "expo-router";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -37,6 +37,7 @@ import { filterStands, type StandSummary } from "@/lib/stands";
 import { canManageStands } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
 const LOGO_SIZE = 40;
@@ -65,7 +66,7 @@ export function StandsScreen() {
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
-  useScrollToTop(scrollRef);
+  const trueTop = useTrueTopScroll(scrollRef);
   const [stands, setStands] = useState<StandSummary[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -138,6 +139,7 @@ export function StandsScreen() {
   const list = (
     <ScrollView
       ref={scrollRef}
+      {...trueTop.scrollProps}
       style={{ backgroundColor: colors.background, flex: 1 }}
       contentInsetAdjustmentBehavior="automatic"
       keyboardDismissMode="on-drag"

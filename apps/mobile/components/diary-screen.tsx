@@ -1,18 +1,10 @@
-import {
-  useFocusEffect,
-  useLocalSearchParams,
-  useNavigation,
-  useRouter,
-  useScrollToTop,
-} from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   AppState,
   Modal,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -46,6 +38,7 @@ import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
 const SCAN_LABELS: ScanActionLabels = {
@@ -95,15 +88,13 @@ export function DiaryScreen() {
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
-  useScrollToTop(scrollRef);
   // iOS rests at a negative offset under `contentInsetAdjustmentBehavior=
   // "automatic"`, so `y: 0` would leave the first rows under the status bar.
-  // Track the resting offset and only scroll when the list has moved.
-  const restOffset = useRef(0);
-  const currentOffset = useRef(0);
+  // Only scroll when the list has moved from its true top.
+  const trueTop = useTrueTopScroll(scrollRef);
   const scrollToTop = () => {
-    if (currentOffset.current <= restOffset.current + 1) return;
-    scrollRef.current?.scrollTo?.({ y: restOffset.current, animated: true });
+    if (trueTop.state.current.offset <= trueTop.state.current.top + 1) return;
+    trueTop.scrollToTop();
   };
 
   // Deep links may open a segment directly: `/diary?view=companies`.
@@ -393,13 +384,6 @@ export function DiaryScreen() {
     );
   }
 
-  function onScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const { contentOffset } = event.nativeEvent;
-    currentOffset.current = contentOffset.y;
-    // The adjusted inset is not reported; the lowest offset seen is the rest.
-    restOffset.current = Math.min(restOffset.current, contentOffset.y);
-  }
-
   function toggleFavourites() {
     void haptic("selection");
     setFavouritesOnly((value) => !value);
@@ -480,14 +464,13 @@ export function DiaryScreen() {
   const list = (
     <ScrollView
       ref={scrollRef}
+      {...trueTop.scrollProps}
       testID="diary-scroll"
       accessibilityElementsHidden={inputOpen}
       importantForAccessibility={inputOpen ? "no-hide-descendants" : "auto"}
       contentInsetAdjustmentBehavior="automatic"
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
-      onScroll={onScroll}
-      scrollEventThrottle={200}
       style={{ backgroundColor: colors.background }}
       contentContainerStyle={{
         gap: 16,

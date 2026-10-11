@@ -281,6 +281,18 @@ distributed to other Expo Router apps without importing hackOS code.
   launches. That regresses the back stack and duplicates overflow pages —
   earlier versions broke exactly this way.
 
+- **True top on iOS (#935).** Under `contentInsetAdjustmentBehavior="automatic"`
+  a page rests at a negative offset (the status bar, plus any native header),
+  but `useScrollToTop` scrolls to y 0, and iOS clamps programmatic and restored
+  offsets to the raw `contentInset` (0). A tab re-press or a return to the app
+  (e.g. back from the browser) therefore left the page that far below its top.
+  Scroll-to-top screens use `useTrueTopScroll(ref)` (`lib/use-true-top-scroll.ts`)
+  instead of `useScrollToTop(ref)` and spread its `scrollProps`: it learns the
+  true top from the offsets seen before the first drag, scrolls there on
+  re-press, sets `scrollToOverflowEnabled`, and moves a page iOS restored to
+  y 0 back to its true top. Android rests at 0 and is unchanged. A guard test
+  fails when a screen with the automatic inset calls `useScrollToTop` directly.
+
 ## Auth flow
 
 - `lib/auth-client.ts` — Better Auth client using `expo-secure-store` for

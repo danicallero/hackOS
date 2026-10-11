@@ -5,7 +5,6 @@ import {
   useNavigation,
   usePathname,
   useRouter,
-  useScrollToTop,
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
@@ -43,6 +42,7 @@ import type { ScannerPerson, ScannerSnapshot, ScanPayload } from "@/lib/scanner-
 import { useNfcSupported } from "@/lib/use-nfc-supported";
 import { usePresenceSummary } from "@/lib/use-presence-summary";
 import { useScannerSync } from "@/lib/use-scanner";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
 interface PersonDetails extends ScannerPerson {
@@ -178,7 +178,7 @@ export function PersonOperationsScreen() {
     navigation.setOptions(transparentDetailHeaderOptions);
   }, [navigation]);
 
-  useScrollToTop(scrollRef);
+  const trueTop = useTrueTopScroll(scrollRef);
   const { me } = useMeContext();
   const ownerUserId = me?.id;
   const sync = useScannerSync();
@@ -903,6 +903,7 @@ export function PersonOperationsScreen() {
       >
         <ScrollView
           ref={scrollRef}
+          {...trueTop.scrollProps}
           contentInsetAdjustmentBehavior="automatic"
           contentContainerStyle={{
             gap: 22,
@@ -912,8 +913,8 @@ export function PersonOperationsScreen() {
           }}
           onScroll={(event) => {
             scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+            trueTop.scrollProps.onScroll(event);
           }}
-          scrollEventThrottle={16}
           style={{ backgroundColor: colors.background, flex: 1 }}
         >
           {loadState === "error" && loadError ? (
