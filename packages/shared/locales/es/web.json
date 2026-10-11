@@ -3692,7 +3692,6 @@
   "couldNotSaveLiveActivities": "No se pudieron guardar las actividades en directo.",
   "liveActivityEnableAria": "Activar {name}",
   "liveActivityNoRoles": "Sin roles",
-  "liveActivityRoleFallback": "Rol {id}",
   "liveActivityRequiredPermission": "También requiere",
   "liveActivityKindActivity": "Actividades del staff",
   "liveActivityKindActivityDesc": "Cuenta atrás, recuento de escaneos y acceso al escáner para el staff de una actividad o comida.",
@@ -3707,5 +3706,6 @@
   "liveActivityKindAccreditation": "Mesa de acreditación",
   "liveActivityKindAccreditationDesc": "Contadores de acreditaciones para el staff de la mesa.",
   "liveActivityAudienceLabel": "Mostrar actividad en directo a su público",
-  "liveActivityNoRolesHint": "Nadie la recibe hasta que selecciones un rol."
+  "liveActivityNoRolesHint": "Nadie la recibe hasta que selecciones un rol.",
+  "liveActivityAllRoles": "Todos los roles"
 }

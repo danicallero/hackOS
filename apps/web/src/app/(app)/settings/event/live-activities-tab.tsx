@@ -32,7 +32,7 @@ import {
 import { ArrowDownIcon } from "@phosphor-icons/react/dist/csr/ArrowDown";
 import { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { DragHandle, SortableItem } from "@/components/common/drag-handle";
 import { FormActions } from "@/components/common/form-actions";
@@ -156,8 +156,6 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
     void load();
   }, [load]);
 
-  const roleNames = useMemo(() => new Map(roles.map((r) => [r.id, r.name])), [roles]);
-
   function updateKind(kind: LiveActivityConfigKind, patch: Partial<DraftKind>) {
     setDraft((prev) =>
       prev
@@ -228,7 +226,7 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
   const list = (
     <KindList
       kinds={draft.kinds}
-      roleNames={roleNames}
+      roles={roles}
       selected={current?.kind ?? null}
       mobile={isMobile}
       onSelect={setSelected}
@@ -257,26 +255,28 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
         footer={<FormActions pending={pending} state={saveState} disabled={!isDirty} />}
       >
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center gap-3">
-            <Label htmlFor="live-activities-max">{t("liveActivitiesMaxConcurrent")}</Label>
-            <Select
-              value={String(draft.maxConcurrent)}
-              onValueChange={(value) =>
-                setDraft((prev) => (prev ? { ...prev, maxConcurrent: Number(value) } : prev))
-              }
-            >
-              <SelectTrigger id="live-activities-max" className="w-20">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MAX_CONCURRENT_OPTIONS.map((n) => (
-                  <SelectItem key={n} value={String(n)}>
-                    {n}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!(isMobile && current) && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Label htmlFor="live-activities-max">{t("liveActivitiesMaxConcurrent")}</Label>
+              <Select
+                value={String(draft.maxConcurrent)}
+                onValueChange={(value) =>
+                  setDraft((prev) => (prev ? { ...prev, maxConcurrent: Number(value) } : prev))
+                }
+              >
+                <SelectTrigger id="live-activities-max" className="w-20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MAX_CONCURRENT_OPTIONS.map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {isMobile ? (
             current ? (
@@ -304,7 +304,7 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
 
 function KindList({
   kinds,
-  roleNames,
+  roles,
   selected,
   mobile,
   onSelect,
@@ -312,7 +312,7 @@ function KindList({
   onMove,
 }: {
   kinds: DraftKind[];
-  roleNames: Map<number, string>;
+  roles: LiveActivityRole[];
   selected: LiveActivityConfigKind | null;
   mobile: boolean;
   onSelect: (kind: LiveActivityConfigKind) => void;
@@ -340,7 +340,7 @@ function KindList({
           <SortableContext items={kinds.map((k) => k.kind)} strategy={verticalListSortingStrategy}>
             {kinds.map((setting, index) => {
               const name = liveActivityKindName(setting.kind, t);
-              const summary = roleSummary(setting.roleIds, roleNames, t);
+              const summary = roleSummary(setting.roleIds, roles, t);
               return (
                 <SortableItem key={setting.kind} id={setting.kind}>
                   {({ attributes, listeners }) => (
@@ -401,9 +401,13 @@ function KindList({
   );
 }
 
-function roleSummary(roleIds: number[], roleNames: Map<number, string>, t: Translate): string {
-  if (roleIds.length === 0) return t("liveActivityNoRoles");
-  return roleIds.map((id) => roleNames.get(id) ?? t("liveActivityRoleFallback", { id })).join(", ");
+/** Role names in the roles manager's order (highest position first). */
+function roleSummary(roleIds: number[], roles: LiveActivityRole[], t: Translate): string {
+  const selected = new Set(roleIds);
+  const names = roles.filter((r) => selected.has(r.id)).map((r) => r.name);
+  if (names.length === 0) return t("liveActivityNoRoles");
+  if (names.length === roles.length) return t("liveActivityAllRoles");
+  return names.join(", ");
 }
 
 function KindEditor({

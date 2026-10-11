@@ -44,7 +44,7 @@ function settings() {
       kind,
       enabled: true,
       priority,
-      roleIds: kind === "activity" ? [1] : [],
+      roleIds: kind === "activity" ? [1] : kind === "accreditation" ? [2, 1] : [],
       requiredCapability: kind === "activity" ? "meals:scan" : null,
     })),
   };
@@ -129,6 +129,7 @@ describe("LiveActivitiesTab", () => {
     ]);
     expect(container.textContent).toContain("Staff");
     expect(container.textContent).toContain("liveActivityNoRoles");
+    expect(container.textContent).toContain("liveActivityAllRoles");
     // The first kind's editor opens by default, with its required permission.
     expect(container.querySelector("h2")?.textContent).toBe("liveActivityKindActivity");
     expect(container.textContent).toContain("liveActivityRequiredPermission");

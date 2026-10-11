@@ -3692,7 +3692,6 @@
   "couldNotSaveLiveActivities": "Couldn't save Live Activities.",
   "liveActivityEnableAria": "Enable {name}",
   "liveActivityNoRoles": "No roles",
-  "liveActivityRoleFallback": "Role {id}",
   "liveActivityRequiredPermission": "Also requires",
   "liveActivityKindActivity": "Staff activities",
   "liveActivityKindActivityDesc": "Countdown, scan count and scanner shortcut for staff running an activity or meal.",
@@ -3707,5 +3706,6 @@
   "liveActivityKindAccreditation": "Accreditation desk",
   "liveActivityKindAccreditationDesc": "Check-in counters for staff at the accreditation desk.",
   "liveActivityAudienceLabel": "Show Live Activity to audience",
-  "liveActivityNoRolesHint": "Nobody receives it until a role is selected."
+  "liveActivityNoRolesHint": "Nobody receives it until a role is selected.",
+  "liveActivityAllRoles": "All roles"
 }
