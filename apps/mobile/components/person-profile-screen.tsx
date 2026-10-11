@@ -255,7 +255,10 @@ export function PersonProfileScreen() {
               <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={112}>
                 <PersonAvatar size={112} name={person.displayName} uri={person.photoUrl} />
               </ProfileAvatarCollapseAnchor>
-              <View style={{ alignItems: "center", gap: 4, paddingHorizontal: 8 }}>
+              <View
+                onLayout={avatarCollapse.onNameLayout}
+                style={{ alignItems: "center", gap: 4, paddingHorizontal: 8 }}
+              >
                 <Text
                   selectable
                   accessibilityRole="header"

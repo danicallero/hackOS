@@ -53,6 +53,52 @@ export function profileAvatarSnapTarget(
   return offset >= distance / 2 ? distance : 0;
 }
 
+/*
+ * Plain collapse, without a camera cutout to morph into (no Dynamic Island,
+ * no Android hole punch) or under Reduce Motion (#935): the avatar stays in
+ * the scroll content. It holds still and shrinks while the name below closes
+ * the gap, then rides up and off screen with the content, so it never parks
+ * at the top or covers the text.
+ */
+
+/** Scale the plain-collapse avatar ends its shrink at. */
+export const PROFILE_AVATAR_SIMPLE_MIN_SCALE = 0.75;
+
+/**
+ * Scroll offset at which the plain-collapse avatar stops holding still and
+ * starts moving with the content: the moment the name's top (`gap` below the
+ * avatar's laid-out bottom) reaches the shrunken avatar's bottom.
+ */
+export function profileAvatarSimpleReleaseOffset(
+  size: number,
+  gap: number,
+  minScale: number,
+): number {
+  "worklet";
+  return Math.max(0, gap) + (Math.max(0, size) * (1 - minScale)) / 2;
+}
+
+/**
+ * Transform for the in-content avatar at `offset` past the true top: a
+ * `translateY` that cancels the scroll while it holds still, and a scale
+ * about its centre that reaches `minScale` exactly at the release offset.
+ * Reduce Motion skips the shrink and hold, so it just scrolls with the page.
+ */
+export function profileAvatarSimpleTransform(
+  offset: number,
+  size: number,
+  gap: number,
+  minScale: number,
+  reduceMotion: boolean,
+): { translateY: number; scale: number } {
+  "worklet";
+  if (reduceMotion) return { translateY: 0, scale: 1 };
+  const release = profileAvatarSimpleReleaseOffset(size, gap, minScale);
+  if (!(release > 0)) return { translateY: 0, scale: 1 };
+  const hold = Math.min(Math.max(0, offset), release);
+  return { translateY: hold, scale: 1 - ((1 - minScale) * hold) / release };
+}
+
 export type ProfileCameraCutoutFrame = {
   left: number;
   top: number;
@@ -461,4 +507,102 @@ export function profileAvatarMorphPath(
     result += "Z ";
   }
   return result;
+}
+
+/*
+ * Android hole-punch gooey morph (`modules/profile-gooey`): the avatar stays
+ * a circle, scales uniformly and travels to the lens, ending a hair smaller
+ * than it, while a black liquid neck joins the two. The native view only
+ * draws the frame computed here.
+ */
+
+/** A circle in view-local dp: centre and diameter. */
+export type ProfileGooeyCircle = { x: number; y: number; diameter: number };
+
+/**
+ * Progress at which the shrinking photo reaches the lens size, centred under
+ * it. The liquid neck only forms after this, so a large photo never stretches
+ * towards the lens.
+ */
+export const PROFILE_GOOEY_SHRINK_END = 0.65;
+/** Edge-to-edge gap (in lens diameters) between the shrunken photo and the lens. */
+const PROFILE_GOOEY_STAGING_GAP = 0.9;
+/** The end circle sits this far (dp) inside the lens edge so it never pokes out. */
+const PROFILE_GOOEY_LENS_INSET = 1;
+/** Padding (dp) around the native canvas for the neck, drip and blur. */
+export const PROFILE_GOOEY_MARGIN = 24;
+/** Strongest progressive blur on the photo (dp, Android 12+ only). */
+const PROFILE_GOOEY_MAX_BLUR = 6;
+
+function clamp01(value: number) {
+  "worklet";
+  return Math.max(0, Math.min(1, value));
+}
+
+/** Diameter the avatar ends at: the lens, inset on every side. */
+export function profileGooeyEndDiameter(hole: ProfileCameraCutoutFrame): number {
+  "worklet";
+  return Math.max(0, Math.min(hole.width, hole.height) - 2 * PROFILE_GOOEY_LENS_INSET);
+}
+
+/** Uniform scale of the avatar at the end of the morph. */
+export function profileGooeyEndScale(size: number, hole: ProfileCameraCutoutFrame): number {
+  if (!(size > 0)) return 1;
+  return Math.max(0, Math.min(1, profileGooeyEndDiameter(hole) / size));
+}
+
+/** Vector the avatar centre travels to reach the lens centre. */
+export function profileGooeyEndOffset(
+  start: ProfileCameraCutoutFrame,
+  hole: ProfileCameraCutoutFrame,
+): { dx: number; dy: number } {
+  return {
+    dx: hole.left + hole.width / 2 - (start.left + start.width / 2),
+    dy: hole.top + hole.height / 2 - (start.top + start.height / 2),
+  };
+}
+
+/** Scroll offset to morph progress: 0 expanded, 1 inside the lens. */
+export function profileGooeyProgress(scrollOffset: number, distance: number): number {
+  "worklet";
+  return distance > 0 ? clamp01(scrollOffset / distance) : 0;
+}
+
+/**
+ * Everything the native gooey view draws at `progress`, in its local dp:
+ * - Until `PROFILE_GOOEY_SHRINK_END` the photo shrinks uniformly to the end
+ *   diameter while gliding (ease-out) to a point centred under the lens.
+ * - Afterwards it rises into the lens; the neck may form (`bridgeReach` is
+ *   how far apart the two circles' edges can be and still join), a short drip
+ *   hangs from the lens, and the photo fades to its black silhouette so the
+ *   last frames are a droplet sinking into the camera.
+ */
+export function profileGooeyFrame(
+  start: ProfileCameraCutoutFrame,
+  hole: ProfileCameraCutoutFrame,
+  progress: number,
+) {
+  "worklet";
+  const t = clamp01(progress);
+  const endDiameter = profileGooeyEndDiameter(hole);
+  const holeDiameter = Math.min(hole.width, hole.height);
+  const holeX = hole.left + hole.width / 2;
+  const holeY = hole.top + hole.height / 2;
+  const gap = holeDiameter * PROFILE_GOOEY_STAGING_GAP;
+  const stagingY = holeY + holeDiameter / 2 + endDiameter / 2 + gap;
+  const startX = start.left + start.width / 2;
+  const startY = start.top + start.height / 2;
+  const shrink = clamp01(t / PROFILE_GOOEY_SHRINK_END);
+  const glide = 1 - (1 - shrink) * (1 - shrink);
+  const rise = clamp01((t - PROFILE_GOOEY_SHRINK_END) / (1 - PROFILE_GOOEY_SHRINK_END));
+  const neck = clamp01((t - PROFILE_GOOEY_SHRINK_END) / 0.08);
+  return {
+    avatarX: startX + (holeX - startX) * glide,
+    avatarY: startY + (stagingY - startY) * glide + (holeY - stagingY) * rise,
+    avatarDiameter: start.width + (endDiameter - start.width) * glide,
+    imageAlpha: 1 - clamp01((t - 0.7) / 0.25),
+    blurRadius: PROFILE_GOOEY_MAX_BLUR * clamp01((t - 0.3) / 0.5),
+    bridgeReach: gap * 1.2 * neck,
+    drip: holeDiameter * 0.25 * Math.sin(Math.PI * rise),
+  };
 }

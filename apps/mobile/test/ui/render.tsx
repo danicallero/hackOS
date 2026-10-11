@@ -9,10 +9,14 @@ const testMetrics = {
 };
 
 /** Keep native UI tests on one render entry point as providers are added. */
-export async function renderMobile(ui: ReactElement) {
+export async function renderMobile(
+  ui: ReactElement,
+  { insets }: { insets?: Partial<typeof testMetrics.insets> } = {},
+) {
+  const metrics = { ...testMetrics, insets: { ...testMetrics.insets, ...insets } };
   return render(
     <GestureHandlerRootView>
-      <SafeAreaProvider initialMetrics={testMetrics}>{ui}</SafeAreaProvider>
+      <SafeAreaProvider initialMetrics={metrics}>{ui}</SafeAreaProvider>
     </GestureHandlerRootView>,
   );
 }

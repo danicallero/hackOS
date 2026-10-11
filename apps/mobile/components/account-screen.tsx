@@ -307,7 +307,7 @@ export default function AccountScreen() {
           <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={96}>
             <UserAvatar testID="account-avatar" name={fullName} image={me.image} size={96} />
           </ProfileAvatarCollapseAnchor>
-          <View style={{ alignItems: "center", gap: 5 }}>
+          <View onLayout={avatarCollapse.onNameLayout} style={{ alignItems: "center", gap: 5 }}>
             <Text
               selectable
               style={{ color: colors.label, fontSize: 23, fontWeight: "700", textAlign: "center" }}
