@@ -1680,6 +1680,17 @@ projects; the deadline goes to `queue:status` holders, who always have it.
 updates (Android) switch: off ends every surface immediately and registers the
 device with `enabled: false`.
 
+**Per-kind choice.** Under that switch, one switch per kind the account
+receives (`GET /api/me/live-activities/preferences`, in priority order; kinds
+the account is not entitled to are not listed), labelled with the
+`liveActivityKind*` mobile copy keys
+(`lib/live-activities/use-live-activity-kinds.ts`). A toggle is optimistic,
+sends only that kind (`PUT`), then runs `reconcileLiveActivities()` so a kind
+turned off ends on this device at once; a failed save flips the switch back.
+The choice is per account, so the worker applies it on every device.
+**Decision:** the per-kind rows are hidden while the device switch is off,
+because nothing shows on this device then and the rows would be inert.
+
 **Development samples.** Debug builds only: opening
 `hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-submitted|accreditation|all|end>`
 (for example `xcrun simctl openurl booted …`) renders sample states without a

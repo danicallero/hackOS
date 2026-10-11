@@ -10,13 +10,16 @@ import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
 import { normalizeLanguage } from "../notifications/templates.js";
 import { myLiveActivities } from "./candidates.js";
+import { readLiveActivityPreferences, saveLiveActivityPreferences } from "./preferences.js";
 import {
   deviceResponseSchema,
   endSessionBodySchema,
   liveActivitySettingsSchema,
   myLiveActivitiesQuerySchema,
   myLiveActivitiesResponseSchema,
+  myLiveActivityPreferencesSchema,
   putLiveActivitySettingsBodySchema,
+  putMyLiveActivityPreferencesBodySchema,
   statusResponseSchema,
   upsertDeviceBodySchema,
   upsertSessionBodySchema,
@@ -280,6 +283,50 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
       }
       return myLiveActivities(userId, language, { deviceId: req.query.deviceId });
     },
+  );
+
+  // The caller's own per-kind choice: a self-preference with the same posture
+  // as the device switch (no capability, no audit row, idempotent writes).
+  api.get(
+    "/api/me/live-activities/preferences",
+    {
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "My Live Activity kinds",
+        description:
+          "The Live Activity kinds the caller may receive, in priority order, each with the " +
+          "caller's own on/off choice (`enabled`, default true). A kind is listed only when " +
+          "organizers enabled it, the caller holds one of its configured roles and its " +
+          "capability (`activity:scan` for `activity`, `accredit:scan` for `accreditation`, " +
+          "`queue:status` with event access for `deadline`). Data gates such as a queue entry " +
+          "or an open window are not applied. The choice belongs to the account, so it applies " +
+          "on every device; the per-device switch is `PUT /api/me/live-activities/device`.",
+        response: { 200: myLiveActivityPreferencesSchema },
+      },
+    },
+    async (req) => readLiveActivityPreferences(req.userId as number),
+  );
+
+  api.put(
+    "/api/me/live-activities/preferences",
+    {
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "Turn Live Activity kinds on or off",
+        description:
+          "Sets the listed kinds on or off for the caller's account; kinds not listed keep " +
+          "their choice. Each kind at most once; an unknown kind is a 400. A kind the caller " +
+          "does not receive may be set too and applies if they receive it later. Turning a " +
+          "kind off ends its running Live Activities on the worker's next tick and drops it " +
+          "from `GET /api/me/live-activities`; turning it back on lets it start again. " +
+          "Idempotent; returns the same shape as the GET.",
+        body: putMyLiveActivityPreferencesBodySchema,
+        response: { 200: myLiveActivityPreferencesSchema },
+      },
+    },
+    async (req) => saveLiveActivityPreferences(req.userId as number, req.body.kinds),
   );
 
   // Organizer configuration (#966; H8, H53): the event-settings capability

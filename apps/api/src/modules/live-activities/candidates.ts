@@ -150,7 +150,10 @@ export async function loadLiveActivityContext(
                  JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
                  JOIN live_activity_kind_roles kr ON kr.role_id = r.id
                  JOIN live_activity_kind_settings ks ON ks.kind = kr.kind AND ks.enabled
-                WHERE ur.user_id = u.id) AS kinds,
+                WHERE ur.user_id = u.id
+                  -- The user's own per-kind opt-out (preferences.ts).
+                  AND NOT EXISTS (SELECT 1 FROM live_activity_kind_opt_outs o
+                                   WHERE o.user_id = u.id AND o.kind = kr.kind)) AS kinds,
               (SELECT array_agg(uec.capability)
                  FROM user_effective_capabilities uec
                 WHERE uec.user_id = u.id AND uec.capability = ANY($2::text[])) AS capabilities,
