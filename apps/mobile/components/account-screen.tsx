@@ -1,9 +1,10 @@
-import { type MenuAction, MenuView } from "@expo/ui/community/menu";
+import { type MenuAction, type MenuComponentRef, MenuView } from "@expo/ui/community/menu";
 import { useFocusEffect, useLocalSearchParams, useRouter, useScrollToTop } from "expo-router";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   type LayoutChangeEvent,
+  Platform,
   Pressable,
   RefreshControl,
   type ScrollView,
@@ -99,9 +100,6 @@ export default function AccountScreen() {
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState<Error | null>(null);
   const [languageRetry, setLanguageRetry] = useState<Lang | null>(null);
-  // The iOS MenuView hosts its trigger at intrinsic size, so the row needs an
-  // explicit width to span the section and keep its value right-aligned.
-  const [languageRowWidth, setLanguageRowWidth] = useState<number>();
   const [refreshingAccount, setRefreshingAccount] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<Error | null>(null);
@@ -326,34 +324,11 @@ export default function AccountScreen() {
         <Section title={t("accountProfile")}>
           <InfoRow label={t("accountName")} value={fullName} icon="person" />
           <Separator inset={48} />
-          <View onLayout={({ nativeEvent }) => setLanguageRowWidth(nativeEvent.layout.width)}>
-            <MenuView
-              actions={LANGUAGES.map(
-                (lang): MenuAction => ({
-                  id: lang,
-                  title: languageName(lang),
-                  state: lang === me.language ? "on" : "off",
-                  attributes: savingLanguage ? { disabled: true } : undefined,
-                }),
-              )}
-              onPressAction={({ nativeEvent }) => void changeLanguage(nativeEvent.event as Lang)}
-            >
-              <View
-                accessible
-                accessibilityLabel={t("accountLanguage")}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: savingLanguage, busy: savingLanguage }}
-                style={{ width: languageRowWidth }}
-              >
-                <InfoRow
-                  label={t("accountLanguage")}
-                  value={languageName(me.language)}
-                  icon="globe"
-                  accessoryIcon="chevron.down"
-                />
-              </View>
-            </MenuView>
-          </View>
+          <LanguageRow
+            language={me.language}
+            saving={savingLanguage}
+            onChange={(next) => void changeLanguage(next)}
+          />
         </Section>
 
         <Section title={t("accountContact")}>
@@ -733,6 +708,78 @@ function AccountSubpageRow({
     >
       <InfoRow accessoryIcon="chevron.right" icon={icon} label={label} value="" />
     </Pressable>
+  );
+}
+
+function LanguageRow({
+  language,
+  saving,
+  onChange,
+}: {
+  language: string;
+  saving: boolean;
+  onChange: (language: Lang) => void;
+}) {
+  const { t } = useLocale();
+  const menuRef = useRef<MenuComponentRef>(null);
+  // The iOS MenuView hosts its trigger at intrinsic size, so the row needs an
+  // explicit width to span the section and keep its value right-aligned.
+  const [rowWidth, setRowWidth] = useState<number>();
+  const actions = LANGUAGES.map(
+    (lang): MenuAction => ({
+      id: lang,
+      title: languageName(lang),
+      state: lang === language ? "on" : "off",
+      attributes: saving ? { disabled: true } : undefined,
+    }),
+  );
+  const row = (
+    <InfoRow
+      label={t("accountLanguage")}
+      value={languageName(language)}
+      icon="globe"
+      accessoryIcon="chevron.down"
+    />
+  );
+  const accessibility = {
+    accessible: true,
+    accessibilityLabel: t("accountLanguage"),
+    accessibilityRole: "button",
+    accessibilityState: { disabled: saving, busy: saving },
+  } as const;
+
+  if (Platform.OS !== "android") {
+    return (
+      <View onLayout={({ nativeEvent }) => setRowWidth(nativeEvent.layout.width)}>
+        <MenuView
+          actions={actions}
+          onPressAction={({ nativeEvent }) => onChange(nativeEvent.event as Lang)}
+        >
+          <View {...accessibility} style={{ width: rowWidth }}>
+            {row}
+          </View>
+        </MenuView>
+      </View>
+    );
+  }
+
+  // Material's DropdownMenu aligns its popup to the start edge of the anchor, so a
+  // full-width trigger opens it at the screen's left edge. Keep the whole row
+  // tappable but anchor the menu to a 1dp strip at the row's trailing edge.
+  return (
+    <View>
+      <Pressable {...accessibility} onPress={() => menuRef.current?.show()}>
+        {row}
+      </Pressable>
+      <MenuView
+        ref={menuRef}
+        actions={actions}
+        onPressAction={({ nativeEvent }) => onChange(nativeEvent.event as Lang)}
+        style={{ position: "absolute", top: 0, bottom: 0, right: 16, width: 1 }}
+      >
+        <View style={{ width: 1, height: 1 }} />
+      </MenuView>
+    </View>
   );
 }
 
