@@ -216,7 +216,7 @@ distributed to other Expo Router apps without importing hackOS code.
   solid surfaces. Five total destinations are shown directly on compact
   layouts; tablet-width layouts can place up to six before using `Others`,
   whose bar surface and circle become 56pt instead of 64pt. With no scan
-  capability, Schedule, Wallet, Notifications, and Account are direct; Queue
+  capability, Schedule, Diary, and Account are direct; Queue
   joins them for accounts with `queue:status` even before the first queue
   entry so the empty state and tutorial are available. Other accounts see
   Queue only when they have an actual queue entry. `queue:status` is assigned
@@ -224,8 +224,11 @@ distributed to other Expo Router apps without importing hackOS code.
   name. For
   `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the
   admin `*` wildcard) holders, the daily tools take the bar — Schedule,
-  Scanner, Activities (for `ACTIVITY_SCAN`), Notifications — and Queue,
-  Wallet, Account, and any secondary operations stay in Others. Queue-only
+  Scanner, Activities (for `ACTIVITY_SCAN`) — and Queue,
+  Diary, Account, and any secondary operations join them directly while five
+  fit, moving to Others only beyond that. Wallet is not a tab: Account →
+  Wallet → View tickets pushes `app/(tabs)/others/wallet.tsx` (H28), with a
+  compact inline title beside the back button instead of a large title. Queue-only
   operators instead get Queue operations in the primary bar; scanner
   operators with queue access find it in Others, preserving Scanner's direct
   placement.
@@ -255,13 +258,13 @@ distributed to other Expo Router apps without importing hackOS code.
   flashes Schedule over the selected tab.
 
   The entries inside the native `Others` dropdown (Account for participants;
-  eligible personal Queue, Wallet, Account, and Queue operations when a scanner
+  eligible personal Queue, Diary, Account, and Queue operations when a scanner
   operator has queue access — routes under `app/(tabs)/others/`) are intentionally
   pseudo-tabs (`lib/operations-navigation.ts`):
 
   - Selecting the pseudo-tab whose section is already on screen is a no-op.
   - Changing pseudo-tabs always uses `replace()`, never `push()`, so repeated
-    selections do not stack duplicate queue/wallet/account screens.
+    selections do not stack duplicate queue/diary/account screens.
   - Deeper screens inside a section (e.g. the person drill-downs) still push
     normally on top of that section's root.
   - Route matching must normalize Expo Router route groups first, because
@@ -277,6 +280,18 @@ distributed to other Expo Router apps without importing hackOS code.
   Do not re-implement these as plain `push()` calls or stack-style route
   launches. That regresses the back stack and duplicates overflow pages —
   earlier versions broke exactly this way.
+
+- **True top on iOS (#935).** Under `contentInsetAdjustmentBehavior="automatic"`
+  a page rests at a negative offset (the status bar, plus any native header),
+  but `useScrollToTop` scrolls to y 0, and iOS clamps programmatic and restored
+  offsets to the raw `contentInset` (0). A tab re-press or a return to the app
+  (e.g. back from the browser) therefore left the page that far below its top.
+  Scroll-to-top screens use `useTrueTopScroll(ref)` (`lib/use-true-top-scroll.ts`)
+  instead of `useScrollToTop(ref)` and spread its `scrollProps`: it learns the
+  true top from the offsets seen before the first drag, scrolls there on
+  re-press, sets `scrollToOverflowEnabled`, and moves a page iOS restored to
+  y 0 back to its true top. Android rests at 0 and is unchanged. A guard test
+  fails when a screen with the automatic inset calls `useScrollToTop` directly.
 
 ## Auth flow
 
@@ -356,8 +371,9 @@ distributed to other Expo Router apps without importing hackOS code.
 
 ## Participant screens
 
-- `app/(tabs)/schedule.tsx`, `queue.tsx`, `wallet.tsx`, `notifications.tsx`,
-  `account.tsx` — the five participant screens. API-backed screens expose
+- `app/(tabs)/schedule.tsx`, `queue.tsx`, `schedule/alerts.tsx` (inbox sheet),
+  `others/account.tsx`, and `components/wallet-screen.tsx` (pushed from
+  Account at `others/wallet`) — the five participant screens. API-backed screens expose
   loading, retryable error, and empty states without leaking rejected promises.
   The account screen displays the shared `/api/me` profile and keeps the
   participant-facing overview short. Pulling down refreshes `/api/me` and the
@@ -435,15 +451,17 @@ distributed to other Expo Router apps without importing hackOS code.
   offline scan queue — the only record of not-yet-synced scans — or the auth
   session; see "Scanner cache encryption & isolation" below. Ordinary account
   caches are namespaced by user/session and are cleared on logout; late writes
-  that began before cleanup are serialized behind the cleanup. `wallet.tsx`
+  that began before cleanup are serialized behind the cleanup. `wallet-screen.tsx`
   renders ticket/badge QR codes. After an eligible session is restored, a
   best-effort startup warmup stores the `/api/me/ticket` payload under an
-  account-scoped cache key and discards a response if the session changes; the
-  screen still refreshes online and falls back to
-  that payload with a stale-data banner (`components/stale-data-banner.tsx`,
+  account-scoped cache key and discards a response if the session changes. The
+  screen reads with `useCachedApi`'s `cacheFirst` option: the stored payload
+  renders as soon as storage answers, without waiting for a slow or unreachable
+  server, while the request revalidates it; only a failed request adds the
+  stale-data banner (`components/stale-data-banner.tsx`,
   reused across schedule, queue, wallet, notifications, sponsor announcement
   management, queue operations, and the scanner's sync-queue/activities/people
-  screens for this offline pattern) when the connection fails. The banner has
+  screens for this offline pattern). The banner has
   no retry button — every screen that can show it also wires pull-to-refresh
   (`RefreshControl`) to the same reload, and `lib/format-date.ts` renders its
   "last update" timestamp as a bare time for today, "Yesterday, <time>" for
@@ -496,9 +514,36 @@ distributed to other Expo Router apps without importing hackOS code.
   stage changes use a short directional fade, reduced to an opacity-only
   crossfade when Reduce Motion is enabled. Completion is stored in
   account-scoped SecureStore and does not change the queue state machine.
-  `notifications.tsx` pages past the initial 20 inbox messages on
-  demand, allows an expanded message to be deleted after native confirmation,
-  and mirrors the web activity/kind reminder preferences. On Android its
+  The inbox (`components/alerts-screen.tsx`, presented as a modal sheet from
+  the Schedule bell at `schedule/alerts`) pages past the initial 20 messages on
+  demand. A row swipes left to delete (after native confirmation) and right to
+  mark read/unread (`POST /api/me/notifications/:id/unread`). The sheet header
+  has an inline centered title (20pt bold) on the screen background with no
+  hairline, close (X) alone on the left and the unread-only envelope-badge filter next
+  to the gear on the right (`Stack.Toolbar` on Liquid Glass,
+  `headerLeft`/`headerRight` elsewhere). Settings are not in the sheet: the
+  gear dismisses it and opens `others/account?highlight=notifications&highlightAt=<nonce>` (fresh per tap, so every tap replays from the top), which
+  Account consumes once (shows the page at its true top — the resting offset
+  under the large-title inset, so the avatar starts expanded — then after the
+  transition settles animates the scroll to the Notifications row and flashes it
+  for about a second — no animation under Reduce Motion — then clears the
+  param). Account →
+  Notifications (`components/notification-settings-screen.tsx`,
+  `others/notification-settings/`) lists each notification type with its state;
+  a type opens its channel switches. Activity reminders
+  (`components/reminders-view.tsx`) continues with a bulk switch per activity
+  type (the label side opens that type's activities) and then "Coming up":
+  the next three reminders, "See all" when there are more (the same
+  `others/reminders/[kind]` route with `kind=all&subscribed=1`, where a row
+  switched off stays until the person leaves), and an "Add an activity"
+  picker (`kind=all`). Switch rows use `ToggleRow` from
+  `components/native-ui.tsx`; any other `Switch` placed in a row needs
+  `SWITCH_IN_ROW_STYLE`, because React Native's iOS Switch defaults to
+  `alignSelf: "flex-start"` and otherwise sits at the top of the row.
+  Reminder times use a leading column sized for the locale's longest time
+  (12-hour vs 24-hour), on one line.
+  Announcement management (`others/announcements`) sits under Notifications →
+  Send for `announcements:manage` holders. On Android the
   inbox mounts the same native scroll gesture boundary as Schedule, so
   vertical scrolling takes precedence over a row's horizontal delete reveal.
   A third "Manage"
@@ -516,11 +561,9 @@ distributed to other Expo Router apps without importing hackOS code.
   (`lib/announcements-admin.ts`'s `fetchAnnouncementRecipientCandidates`),
   scoped to `ANNOUNCEMENTS_MANAGE` rather than the broader `USERS_READ`,
   mirroring `/api/schedule/owner-candidates`.
-- `app/(tabs)/wallet.tsx` — the ticket/badge toggle is a `SegmentedControl`
+- `components/wallet-screen.tsx` — the ticket/badge toggle is a `SegmentedControl`
   plus a swipe over the QR card itself as an alternative. The swipe gesture is
-  nested *inside* the page's `ScrollView` (the reverse of
-  `ScheduleNotificationsSheet`'s back-swipe, whose `GestureDetector` wraps the
-  `ScrollView`), so it declares itself simultaneous with a `Gesture.Native()`
+  nested *inside* the page's `ScrollView`, so it declares itself simultaneous with a `Gesture.Native()`
   stand-in for the `ScrollView` — without that relationship the ancestor
   ScrollView's own gesture wins outright and the swipe never activates at all.
   Switching sides (by swipe or by tapping the control) plays a directional
@@ -571,7 +614,8 @@ distributed to other Expo Router apps without importing hackOS code.
   `isRealLiquidGlassAvailable()` (`components/glass-view.tsx`): on iOS 26+ it's
   a real native header (`app/(tabs)/schedule/_layout.tsx` gives this tab its
   own Stack so `navigation.setOptions` can drive one) with a compact
-  left-aligned title, `Stack.Toolbar.Button` pair for notifications/filter —
+  left-aligned title, `Stack.Toolbar.Button` pair for the Alerts bell (unread
+  count badge, `lib/use-unread-notifications.ts`) and the filter —
   real adjacent `UIBarButtonItem`s the OS groups into one Liquid Glass capsule
   on its own, no manual divider or shadow to get wrong — and Apple's own
   integrated search button (`headerSearchBarOptions`, which owns its
@@ -713,7 +757,28 @@ header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
 no bar covers the centred avatar; Android floats its own glass back button.
 That public photo uses the same `ProfileAvatarCollapse` overlay as the signed-in
 account: Reanimated maps 120 pt of upward scroll to the shared mask and dark
-cover progress. A native `MaskedView` clips the original cubic keyframes from
+cover progress. A released drag never rests half-morphed: inside that range direction
+decides, from the last non-zero scroll delta (the release velocity only
+without one). Moving up, with the merge started, auto-collapses; moving down,
+with the droplet coming out, auto-expands; only a release with no movement
+takes the nearer rest. A moving release decides when its momentum ends, by the
+momentum's own direction (instant under Reduce Motion); programmatic scrolls
+are never snapped. One medium haptic marks the photo touching the camera
+cutout on the way up (morph progress 0.2, where the mask's lip joins the
+island) and the first pull out of the collapsed rest on the way down; a
+release never taps. Both rests are measured from the true
+top, which on iOS sits at a negative content offset under the automatic inset
+(at least the status-bar overlap, or the full native header height on a
+screen that shows one, such as the person profile's transparent header,
+seeded once the host is measured, then lowered by scroll events before the
+first drag), never from y 0, which is inside the morph. Both scroll views set `scrollToOverflowEnabled`: iOS otherwise clamps every
+programmatic scroll to the raw `contentInset` (0), so a snap or jump to the
+true top landed at y 0, mid-morph. A page too short to reach the collapsed
+rest snaps expanded instead, so the person profile floors its content at the
+viewport plus the collapse distance past the true top (`contentMinHeight`):
+otherwise a short profile could only ever expand. Account's tab re-press and gear scroll go to that true top,
+and on focus it moves a scroll left inside the morph (such as a remount
+restoring y 0) to the nearer rest. A native `MaskedView` clips the original cubic keyframes from
 Telegram's `UserAvatarMask` (`lib/telegram-avatar-mask.json`), evaluated on the
 UI thread rather than approximating the connection with a circle/capsule union.
 The source asset is TelegramMessenger/Telegram-iOS's UserAvatarMask animation;
@@ -733,13 +798,22 @@ every side (124 x 35.33 pt, horizontally centred on the window) so the shrinking
 avatar and black backing hide inside the island instead of poking out. The
 avatar and target are both measured in the same `measureInWindow` coordinate
 space, and the host is re-measured about 450 and 900 ms after layout so a screen
-that is still sliding in (stack push, modal) does not leave a stale origin. The
+that is still sliding in (stack push, modal) does not leave a stale origin. A
+measurement waits until the scroll offset has held still for a frame and is
+retried if it moved meanwhile, because Fabric measures the committed shadow tree
+(whose scroll state trails the live offset); otherwise a programmatic scroll,
+such as the alerts gear's jump to notification preferences, would leave the
+mask drawn away from the avatar. The
 mask frame centre travels linearly from the avatar centre to the target centre,
 matching the Telegram path canvas, so the image, mask and backing stay on one
 centre line and end on the island centre. The Telegram blob rises and narrows
 faster than that linear frame, so while it exists the image is a square
-covering the blob's real bounds (`profileAvatarContentFrame`), never exposing
-the backing at its top; it eases back to the neck once the blob ends. The
+centred on the blob's real bounds (`profileAvatarContentFrame`), plus the neck
+above it, never exposing the backing at its top. The image never follows the
+linear frame: the mask reaches the island at a fixed progress whatever the
+start's distance, so on a lower avatar (the person profile under its header)
+the linear frame trails below the clip and would pull the photo off centre.
+Once the blob ends its last square eases into the island. The
 lower-lip track of the path (bezier handles included) is narrowed to the
 straight run of the island's lower edge (`width - height`; a circular hole
 punch gets the chord at the lip's depth), so it never reaches into the
@@ -833,14 +907,42 @@ serial number, and printed QR codes. Staff with `sponsors:manage`
 page) open Account → Staff → Company tags (`components/stands-screen.tsx`,
 routed as `app/(tabs)/others/stands.tsx`). The screen lists
 `GET /api/enterprises/stands` alphabetically with a name search (accent- and
-case-insensitive), each row showing the logo, the NFC and QR counts and a
-native switch that turns the company's scanning on or off (`PUT
-/api/enterprises/:id/stand-scannable` `{ scannable }`, the web Company tags
-call, with a fresh `Idempotency-Key`). The switch flips at once and rolls
-back with an alert if the request fails.
+case-insensitive). Search is the native header search
+(`headerSearchBarOptions`, `integratedButton`) on iOS 26 Liquid Glass and the
+shared `LegacyScreenHeader` search on older iOS and Android, as on People.
+Each row shows the logo, the name, the NFC and QR counts (with "Not
+scannable" for a company attendees cannot collect yet), a round NFC button
+that links a tag directly and a chevron.
 
-**Provisioning a tag.** Each row's "Link tag" starts reading at once (R008).
-It is the same tap as accrediting a badge, in the same order:
+Both Company tags screens keep the `ScrollView` (with
+`contentInsetAdjustmentBehavior="automatic"`) as the screen's root element so
+the native large title collapses into the inline title as it scrolls; a
+wrapping `View` hides the scroll view from the native header and the first
+card draws under the title. The NFC modal lives inside the scroll view, and
+only the legacy header (no Liquid Glass) wraps it.
+
+**Company detail.** Tapping a row pushes `app/(tabs)/others/stand/[id].tsx`
+(`components/stand-detail-screen.tsx`, titled with the company name). It
+reads the same staff list and shows:
+
+- a "Scannable" switch that turns the company's scanning on or off (`PUT
+  /api/enterprises/:id/stand-scannable` `{ scannable }`, the web Company tags
+  call, with a fresh `Idempotency-Key`); it flips at once and rolls back with
+  an alert if the request fails, and while off the section footer says
+  attendees can't collect the company;
+- a filled "Link tag" button, the same read as the list's NFC button;
+- the linked tags in "NFC tags" and "QR codes" sections (label above the
+  serial or token, monospaced). Swiping a row reveals Remove (also a
+  VoiceOver/TalkBack action); after a native destructive confirmation (a QR
+  warns that printed copies stop working) it calls `DELETE
+  /api/enterprises/:id/stand-tags/:tagId` with a fresh `Idempotency-Key`. A
+  failure keeps the row and shows the server's reason. The list reloads on
+  return, so its counts follow.
+
+**Provisioning a tag.** The row's NFC button and the detail's "Link tag"
+start reading at once (R008), through one shared hook
+(`useStandTagLink` in `components/stand-tag-link.tsx`, with the Android read
+sheet). It is the same tap as accrediting a badge, in the same order:
 
 1. `startNfcRead` with `claimBadge` (`lib/nfc-reader.ts`, serialized with the
    other scanners) reads the UID (`lib/nfc-uid.ts`, the encoding every scanner
@@ -859,11 +961,12 @@ It is the same tap as accrediting a badge, in the same order:
    write still links the serial and says so (`claimFailed()`).
 
 A company must also be scannable before its tags award the medal: a new
-company is not (its row switch is off), and scanning answers
-`stand_unavailable` until staff turn it on (the row switch, or web Company
+company is not (its row says "Not scannable"), and scanning answers
+`stand_unavailable` until staff turn it on (the detail switch, or web Company
 tags).
-The result line offers "Link another" for the same company, so several tags or wristbands are linked in a
-row without leaving the screen. On hardware without NFC the actions stay
+On the list, the result line offers "Link another" for the same company, so
+several tags or wristbands are linked in a row without leaving the screen; on
+the detail the new tag appears in "NFC tags" and the button stays in place. On hardware without NFC the actions stay
 disabled and one line points to serial-number entry on the web. QR codes are
 generated and printed from the web.
 
@@ -889,7 +992,8 @@ signed out, it keeps the code (`lib/company-tag-link.ts`, in memory) and
 These native changes need a new build. The flow is covered by
 `lib/nfc-reader.test.ts` (claim writes, with `react-native-nfc-manager`
 mocked),
-`test/ui/stands-screen.test.tsx`, `test/ui/company-tag-link.test.tsx`,
+`test/ui/stands-screen.test.tsx`, `test/ui/stand-detail-screen.test.tsx`,
+`test/ui/company-tag-link.test.tsx`,
 `lib/company-tag-link.test.ts`, `test/company-tag-links-plugin.test.tsx`, the
 Diary `collect` test and `lib/tabs.test.ts`. It has not been tested on NFC
 hardware, and the universal/app links have not been opened on a device or
@@ -1322,8 +1426,7 @@ physical iOS/Android and EAS verification remains a release-gate task in
   Symbols on Android. For `bell.badge` and `bell.badge.fill`, where Material Symbols
   has no badge-dot equivalent (only `notifications_active` depicting ringing waves),
   it maps to `notifications_none`/`notifications` with an overlaid accent badge dot.
-  This gives Android a visible unread indicator on the bottom tab bar
-  (`OpaqueRouterTabs`) and notifications inbox filter button (`UnreadBellButton`)
+  This gives Android a visible unread indicator on the Schedule header bell
   that matches iOS SF Symbol badge behavior without altering geometry. (issue #625)
 
 ## Other infrastructure

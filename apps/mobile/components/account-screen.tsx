@@ -1,8 +1,9 @@
 import { type MenuAction, MenuView } from "@expo/ui/community/menu";
-import { useFocusEffect, useRouter, useScrollToTop } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter, useScrollToTop } from "expo-router";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
+  type LayoutChangeEvent,
   Pressable,
   RefreshControl,
   type ScrollView,
@@ -10,7 +11,15 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import Animated from "react-native-reanimated";
+import Animated, {
+  type SharedValue,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import {
   ActionButton,
   AndroidStatusBarScrim,
@@ -53,6 +62,10 @@ import { useFoodIntolerances } from "@/lib/use-food-intolerances";
 import { colors } from "@/theme/colors";
 
 const LANGUAGES: Lang[] = ["en", "es", "gl"];
+/** H51: wait for the sheet dismissal + push transition before the visible scroll. */
+const TRANSITION_SETTLE_MS = 450;
+/** H51: time the animated scroll takes before the Preferences row flashes. */
+const SCROLL_SETTLE_MS = 450;
 
 /** Account overview with the same participant-owned profile fields exposed on web. */
 export default function AccountScreen() {
@@ -62,8 +75,9 @@ export default function AccountScreen() {
   const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
-  const avatarCollapse = useProfileAvatarCollapse();
-  useScrollToTop(scrollRef);
+  const avatarCollapse = useProfileAvatarCollapse(scrollRef);
+  useScrollToTop(avatarCollapse.scrollToTopRef);
+  useFocusEffect(avatarCollapse.settleAtRest);
   const { me, loading, error, offline, staleSince, refetch } = useMeContext();
   const { mode, setMode } = useApiMode();
   const { intolerances, reload: loadSupportingData } = useFoodIntolerances(Boolean(me));
@@ -85,11 +99,15 @@ export default function AccountScreen() {
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState<Error | null>(null);
   const [languageRetry, setLanguageRetry] = useState<Lang | null>(null);
+  // The iOS MenuView hosts its trigger at intrinsic size, so the row needs an
+  // explicit width to span the section and keep its value right-aligned.
+  const [languageRowWidth, setLanguageRowWidth] = useState<number>();
   const [refreshingAccount, setRefreshingAccount] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<Error | null>(null);
   const developerTapCount = useRef(0);
   const developerTapTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlight = useNotificationsHighlight(scrollRef, avatarCollapse.restingOffset);
 
   function returnToSignIn() {
     forceLocalSignOut();
@@ -251,11 +269,15 @@ export default function AccountScreen() {
         ref={scrollRef}
         style={{ flex: 1 }}
         testID="account-scroll"
+        onLayout={highlight.onScrollLayout}
         onScroll={avatarCollapse.onScroll}
         onTouchStart={avatarCollapse.onScrollBeginDrag}
         onContentSizeChange={avatarCollapse.onContentSizeChange}
         scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="automatic"
+        // iOS clamps programmatic scrolls to the raw inset (0), not the
+        // automatic one, so the avatar's true top would land mid-morph (#935).
+        scrollToOverflowEnabled
         contentContainerStyle={{
           gap: 20,
           padding: 16,
@@ -304,31 +326,34 @@ export default function AccountScreen() {
         <Section title={t("accountProfile")}>
           <InfoRow label={t("accountName")} value={fullName} icon="person" />
           <Separator inset={48} />
-          <MenuView
-            actions={LANGUAGES.map(
-              (lang): MenuAction => ({
-                id: lang,
-                title: languageName(lang),
-                state: lang === me.language ? "on" : "off",
-                attributes: savingLanguage ? { disabled: true } : undefined,
-              }),
-            )}
-            onPressAction={({ nativeEvent }) => void changeLanguage(nativeEvent.event as Lang)}
-          >
-            <View
-              accessible
-              accessibilityLabel={t("accountLanguage")}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: savingLanguage, busy: savingLanguage }}
+          <View onLayout={({ nativeEvent }) => setLanguageRowWidth(nativeEvent.layout.width)}>
+            <MenuView
+              actions={LANGUAGES.map(
+                (lang): MenuAction => ({
+                  id: lang,
+                  title: languageName(lang),
+                  state: lang === me.language ? "on" : "off",
+                  attributes: savingLanguage ? { disabled: true } : undefined,
+                }),
+              )}
+              onPressAction={({ nativeEvent }) => void changeLanguage(nativeEvent.event as Lang)}
             >
-              <InfoRow
-                label={t("accountLanguage")}
-                value={languageName(me.language)}
-                icon="globe"
-                accessoryIcon="chevron.down"
-              />
-            </View>
-          </MenuView>
+              <View
+                accessible
+                accessibilityLabel={t("accountLanguage")}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: savingLanguage, busy: savingLanguage }}
+                style={{ width: languageRowWidth }}
+              >
+                <InfoRow
+                  label={t("accountLanguage")}
+                  value={languageName(me.language)}
+                  icon="globe"
+                  accessoryIcon="chevron.down"
+                />
+              </View>
+            </MenuView>
+          </View>
         </Section>
 
         <Section title={t("accountContact")}>
@@ -420,6 +445,43 @@ export default function AccountScreen() {
             </>
           ) : null}
         </Section>
+
+        {/* H28: Wallet lives in Account rather than in the tab bar. */}
+        <Section title={t("tabWallet")}>
+          <AccountSubpageRow
+            label={t("accountViewTickets")}
+            icon="wallet.pass"
+            onPress={() => router.push("/(tabs)/others/wallet")}
+          />
+        </Section>
+
+        {/* H51: every notification setting lives here; the Schedule bell only shows the inbox. */}
+        <View testID="account-notifications" onLayout={highlight.onRowLayout}>
+          <Section title={t("alertsNotifications")}>
+            <View>
+              <AccountSubpageRow
+                label={t("notificationsPreferences")}
+                icon="bell"
+                onPress={() => router.push("/(tabs)/others/notification-settings")}
+              />
+              <Animated.View
+                pointerEvents="none"
+                testID="account-notifications-highlight"
+                style={[
+                  {
+                    backgroundColor: colors.accent,
+                    bottom: 0,
+                    left: 0,
+                    position: "absolute",
+                    right: 0,
+                    top: 0,
+                  },
+                  highlight.style,
+                ]}
+              />
+            </View>
+          </Section>
+        </View>
 
         {isSponsorRep && mealPlan.data && mealPlan.data.meals.length > 0 ? (
           <Section title={t("mealsTitle")} footer={t("mealsLockNote")}>
@@ -557,6 +619,100 @@ export default function AccountScreen() {
       />
     </View>
   );
+}
+
+/**
+ * H51: the alerts gear opens Account with `?highlight=notifications`. The
+ * param is consumed once: scroll the Notifications section into view, flash
+ * the Preferences row, then clear the param so a re-render or refocus does
+ * not replay it.
+ */
+function useNotificationsHighlight(
+  scrollRef: RefObject<ScrollView | null>,
+  topOffset: SharedValue<number>,
+) {
+  const router = useRouter();
+  const { highlight, highlightAt } = useLocalSearchParams<{
+    highlight?: string;
+    highlightAt?: string;
+  }>();
+  const reduceMotion = useReducedMotion();
+  const opacity = useSharedValue(0);
+  const [rowY, setRowY] = useState<number | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const handled = useRef(false);
+  const lastNonce = useRef<string | undefined>(undefined);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef({ rowY, viewportHeight, reduceMotion });
+  latest.current = { rowY, viewportHeight, reduceMotion };
+  const requested = highlight === "notifications";
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!requested) {
+      handled.current = false;
+      return;
+    }
+    // A new nonce (another gear tap) re-arms the handler.
+    if (handled.current && lastNonce.current !== highlightAt) handled.current = false;
+    lastNonce.current = highlightAt;
+    // Wait for both layouts; children can report before the scroll view.
+    if (handled.current || rowY === null || viewportHeight === 0) return;
+    handled.current = true;
+    router.setParams({ highlight: undefined, highlightAt: undefined });
+    // Always start from the top, then scroll only once the sheet dismissal and
+    // navigation transition have finished, so the user sees the page move.
+    // Under the automatic inset the true top is negative; y 0 would start
+    // with the avatar already part-way into the island.
+    if (timer.current) clearTimeout(timer.current);
+    opacity.value = 0;
+    scrollRef.current?.scrollTo({ animated: false, y: topOffset.value });
+    timer.current = setTimeout(
+      () => {
+        const { rowY: y, viewportHeight: height, reduceMotion: reduced } = latest.current;
+        // Leave the row a third of the way down so the section header shows too.
+        scrollRef.current?.scrollTo({
+          animated: !reduced,
+          y: Math.max(0, (y ?? 0) - height / 3),
+        });
+        // Flash after the scroll animation has settled.
+        opacity.value = reduced
+          ? withSequence(
+              withTiming(0.18, { duration: 0 }),
+              withDelay(1000, withTiming(0, { duration: 0 })),
+            )
+          : withSequence(
+              withDelay(SCROLL_SETTLE_MS, withTiming(0.18, { duration: 200 })),
+              withDelay(400, withTiming(0, { duration: 450 })),
+            );
+      },
+      reduceMotion ? 0 : TRANSITION_SETTLE_MS,
+    );
+  }, [
+    opacity,
+    reduceMotion,
+    requested,
+    highlightAt,
+    router,
+    rowY,
+    scrollRef,
+    topOffset,
+    viewportHeight,
+  ]);
+
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return {
+    style,
+    onRowLayout: ({ nativeEvent }: LayoutChangeEvent) => setRowY(nativeEvent.layout.y),
+    onScrollLayout: ({ nativeEvent }: LayoutChangeEvent) =>
+      setViewportHeight(nativeEvent.layout.height),
+  };
 }
 
 function AccountSubpageRow({

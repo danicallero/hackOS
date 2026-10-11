@@ -1,7 +1,31 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, waitFor } from "@testing-library/react-native";
+import { Children, type ReactElement } from "react";
 import { Platform } from "react-native";
 
+// Header actions are captured to press them like the native header would.
+type HeaderButton = ReactElement<{
+  accessibilityLabel: string;
+  icon?: string;
+  onPress: () => void;
+}>;
+const mockNavOptions: { headerLeft?: () => ReactElement; headerRight?: () => ReactElement } = {};
+const mockRouter = { dismiss: jest.fn(), navigate: jest.fn(), push: jest.fn() };
+function headerButtons(side: "headerLeft" | "headerRight"): HeaderButton[] {
+  const element = mockNavOptions[side]?.() as ReactElement<{ children?: HeaderButton[] }>;
+  return element.props.children
+    ? (Children.toArray(element.props.children) as HeaderButton[])
+    : [element as HeaderButton];
+}
+function headerButton(side: "headerLeft" | "headerRight", label: string) {
+  const button = headerButtons(side).find((item) => item.props.accessibilityLabel === label);
+  if (!button) throw new Error(`No ${label} header button`);
+  return button;
+}
 jest.mock("expo-router", () => ({
+  useNavigation: () => ({
+    setOptions: (options: object) => Object.assign(mockNavOptions, options),
+  }),
+  useRouter: () => mockRouter,
   useScrollToTop: () => {},
 }));
 
@@ -41,7 +65,10 @@ jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
 }));
 jest.mock("@/components/glass-view", () => ({
   GlassView: ({ children }: { children: unknown }) => children,
+  isRealLiquidGlassAvailable: () => false,
 }));
+jest.mock("expo-router/stack", () => ({ __esModule: true, default: { Toolbar: () => null } }));
+jest.mock("@/components/reminders-view", () => ({ RemindersView: () => null }));
 jest.mock("@/components/native-ui", () => {
   const ReactLib = require("react");
   const Native = jest.requireActual("react-native");
@@ -50,6 +77,18 @@ jest.mock("@/components/native-ui", () => {
     Section: ({ children }: { children: unknown }) =>
       ReactLib.createElement(Native.View, null, children),
     Separator: () => ReactLib.createElement(Native.View),
+    LegacyHeaderIconButton: ({
+      accessibilityLabel,
+      onPress,
+    }: {
+      accessibilityLabel: string;
+      onPress: () => void;
+    }) =>
+      ReactLib.createElement(Native.Pressable, {
+        accessibilityLabel,
+        accessibilityRole: "button",
+        onPress,
+      }),
   };
 });
 jest.mock("@/components/RequestFeedback", () => ({
@@ -79,6 +118,7 @@ jest.mock("@/lib/i18n", () => ({
           notificationsNoUnread: "No unread notifications",
           notificationsPreferences: "Preferences",
           notificationsUnreadOnly: "Unread only",
+          close: "Close",
           tabNotifications: "Notifications",
         }) as Record<string, string>
       )[key] ?? key,
@@ -126,7 +166,7 @@ jest.mock("@/theme/colors", () => ({
   },
 }));
 
-import NotificationsScreen from "@/app/(tabs)/notifications";
+import NotificationsScreen from "@/components/alerts-screen";
 import { renderMobile } from "./render";
 
 const unreadItem = {
@@ -161,14 +201,14 @@ afterEach(() => {
 
 describe("unread-only grace period (H489)", () => {
   it("keeps a just-read notification visible until it is collapsed again", async () => {
-    await renderMobile(<NotificationsScreen />);
+    const inbox = await renderMobile(<NotificationsScreen />);
 
-    const unreadOnlyToggle = await screen.findByRole("switch", { name: "Unread only" });
+    // Press the header's Unread only action, as the native header would.
     await act(async () => {
-      fireEvent.press(unreadOnlyToggle);
+      headerButton("headerRight", "Unread only").props.onPress();
     });
 
-    const row = await screen.findByRole("button", { name: /Kickoff moved/ });
+    const row = await inbox.findByRole("button", { name: /Kickoff moved/ });
 
     await act(async () => {
       fireEvent.press(row);
@@ -181,13 +221,45 @@ describe("unread-only grace period (H489)", () => {
     );
 
     // Read, but still filtered in — the user hasn't closed it yet.
-    expect(screen.getByText("Kickoff moved")).toBeTruthy();
+    expect(inbox.getByText("Kickoff moved")).toBeTruthy();
 
     await act(async () => {
       fireEvent.press(row);
     });
 
-    await waitFor(() => expect(screen.queryByText("Kickoff moved")).toBeNull());
-    expect(screen.getByText("No unread notifications")).toBeTruthy();
+    await waitFor(() => expect(inbox.queryByText("Kickoff moved")).toBeNull());
+    expect(inbox.getByText("No unread notifications")).toBeTruthy();
+  });
+});
+
+describe("alerts sheet header (H51)", () => {
+  it("puts the envelope filter beside the gear and sends the gear to Account → Notifications", async () => {
+    await renderMobile(<NotificationsScreen />);
+    expect(headerButtons("headerLeft").map((button) => button.props.accessibilityLabel)).toEqual([
+      "Close",
+    ]);
+    expect(headerButtons("headerRight").map((button) => button.props.accessibilityLabel)).toEqual([
+      "Unread only",
+      "Preferences",
+    ]);
+    expect(headerButton("headerRight", "Unread only").props.icon).toBe("envelope.badge");
+
+    headerButton("headerLeft", "Close").props.onPress();
+    expect(mockRouter.dismiss).toHaveBeenCalledTimes(1);
+    expect(mockRouter.navigate).not.toHaveBeenCalled();
+
+    mockRouter.dismiss.mockClear();
+    headerButton("headerRight", "Preferences").props.onPress();
+
+    // The sheet closes first so the Schedule stack does not keep it on top.
+    expect(mockRouter.dismiss).toHaveBeenCalledTimes(1);
+    expect(mockRouter.navigate).toHaveBeenCalledWith({
+      pathname: "/(tabs)/others/account",
+      params: { highlight: "notifications", highlightAt: expect.any(String) },
+    });
+    expect(mockRouter.dismiss.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRouter.navigate.mock.invocationCallOrder[0],
+    );
+    expect(mockRouter.push).not.toHaveBeenCalled();
   });
 });

@@ -1,23 +1,39 @@
-import { screen } from "@testing-library/react-native";
+import { act, renderHook, screen } from "@testing-library/react-native";
 import { Text } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import {
   ProfileAvatarCollapse,
   ProfileAvatarCollapseAnchor,
   type ProfileAvatarCollapseController,
+  useProfileAvatarCollapse,
 } from "@/components/profile-avatar-collapse";
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
+  PROFILE_AVATAR_MERGE_PROGRESS,
   pickHolePunchCutout,
   profileAvatarBlobBounds,
   profileAvatarContentFrame,
   profileAvatarCoverOpacity,
   profileAvatarMaskFrame,
+  profileAvatarMinContentHeight,
   profileAvatarMorphPath,
+  profileAvatarRestingOffsetBound,
+  profileAvatarSnapDirection,
+  profileAvatarSnapOffset,
+  profileAvatarSnapTarget,
   resolveProfileCameraTarget,
 } from "@/lib/profile-avatar-collapse";
 import { renderMobile } from "./render";
 
 jest.mock("@/components/person-avatar", () => ({ useApiImage: () => null }));
+// Expose the scroll worklets as plain callbacks so a drag can be replayed.
+jest.mock("react-native-reanimated", () => ({
+  ...require("react-native-reanimated/mock"),
+  useReducedMotion: () => false,
+  useAnimatedScrollHandler: (handlers: unknown) => handlers,
+}));
+const mockHaptic = jest.fn();
+jest.mock("@/lib/haptics", () => ({ haptic: (intent: string) => mockHaptic(intent) }));
 jest.mock("@/modules/camera-capabilities", () => ({
   __esModule: true,
   default: { getDisplayCutoutRects: () => [] },
@@ -136,6 +152,41 @@ describe("profile avatar collapse geometry", () => {
     }
   });
 
+  it("keeps the photo centred on the blob for an avatar far below the island (#935)", () => {
+    // A person profile under a native header starts ~30 pt lower than Account,
+    // so the linear mask frame trails below the clip.
+    for (const low of [start, { ...start, top: start.top + 40 }]) {
+      for (let step = 0; step <= 28; step += 1) {
+        const progress = step / 100;
+        const blob = profileAvatarBlobBounds(112, low, island, progress);
+        const image = profileAvatarContentFrame(112, low, island, progress);
+        if (!blob) continue;
+        const half = Math.max(blob.width, blob.height) / 2;
+        // Never extended below the blob's square, so the neck alone adds height.
+        expect(image.top + image.height).toBeCloseTo(blob.top + blob.height / 2 + half, 3);
+        expect(image.left + image.width / 2).toBeCloseTo(blob.left + blob.width / 2, 3);
+        if (progress <= 0.15) {
+          expect(image.top + image.height / 2).toBeCloseTo(blob.top + blob.height / 2, 3);
+        }
+      }
+    }
+  });
+
+  it("eases the image into the island after the blob ends, without jumps", () => {
+    // Around the blob's end (progress 153/540) the square hands over smoothly.
+    let previous = profileAvatarContentFrame(112, start, island, 0.27);
+    for (let progress = 0.271; progress <= 0.3; progress += 0.001) {
+      const frame = profileAvatarContentFrame(112, start, island, progress);
+      expect(Math.abs(frame.top - previous.top)).toBeLessThan(2);
+      expect(Math.abs(frame.left - previous.left)).toBeLessThan(2);
+      expect(Math.abs(frame.width - previous.width)).toBeLessThan(2);
+      previous = frame;
+    }
+    const end = profileAvatarContentFrame(112, start, island, 1);
+    expect(end.left + end.width / 2).toBeCloseTo(island.left + island.width / 2, 3);
+    expect(end.top + end.height).toBeCloseTo(island.top + island.height, 3);
+  });
+
   it("keeps every interpolated state circular or capsule-clipped", () => {
     for (let step = 0; step <= 20; step += 1) {
       const frame = profileAvatarMaskFrame(112, start, island, step / 20);
@@ -167,6 +218,99 @@ describe("profile avatar collapse geometry", () => {
     expect(profileAvatarCoverOpacity(0)).toBe(0);
     expect(profileAvatarCoverOpacity(0.5)).toBeCloseTo(0.525);
     expect(profileAvatarCoverOpacity(1)).toBe(1);
+  });
+});
+
+describe("profile avatar snap (#935)", () => {
+  const distance = PROFILE_AVATAR_COLLAPSE_DISTANCE;
+
+  it("leaves offsets outside the collapse range alone", () => {
+    expect(profileAvatarSnapTarget(0, 0, distance)).toBeNull();
+    expect(profileAvatarSnapTarget(-40, -1, distance)).toBeNull();
+    expect(profileAvatarSnapTarget(distance, 0, distance)).toBeNull();
+    expect(profileAvatarSnapTarget(distance + 300, 2, distance)).toBeNull();
+  });
+
+  it("collapses on any upward release and expands on any downward one", () => {
+    // Up even 10% into the range collapses; down even at 90% expands.
+    expect(profileAvatarSnapTarget(distance * 0.1, 1, distance)).toBe(distance);
+    expect(profileAvatarSnapTarget(distance * 0.9, -1, distance)).toBe(0);
+    expect(profileAvatarSnapTarget(distance * 0.9, 1, distance)).toBe(distance);
+    expect(profileAvatarSnapTarget(distance * 0.1, -1, distance)).toBe(0);
+  });
+
+  it("falls back to the nearer rest only with no movement", () => {
+    expect(profileAvatarSnapTarget(10, 0, distance)).toBe(0);
+    expect(profileAvatarSnapTarget(distance / 2 - 1, 0, distance)).toBe(0);
+    expect(profileAvatarSnapTarget(distance / 2, 0, distance)).toBe(distance);
+    expect(profileAvatarSnapTarget(distance - 10, 0, distance)).toBe(distance);
+  });
+
+  it("takes the direction from the last scroll delta, then the release velocity", () => {
+    expect(profileAvatarSnapDirection(3, -2, "ios")).toBe(1);
+    expect(profileAvatarSnapDirection(-0.5, 2, "android")).toBe(-1);
+    expect(profileAvatarSnapDirection(0, 0.6, "ios")).toBe(1);
+    // Android reports the finger's velocity, opposite to the offset's.
+    expect(profileAvatarSnapDirection(0, 0.6, "android")).toBe(-1);
+    expect(profileAvatarSnapDirection(0, 0.01, "ios")).toBe(0);
+    expect(profileAvatarSnapDirection(0, 0, "android")).toBe(0);
+  });
+
+  it("takes the distance explicitly, with no worklet default parameter", () => {
+    // A worklet's default-parameter expression is not captured on the UI thread.
+    expect(profileAvatarSnapTarget.length).toBe(3);
+    expect(profileAvatarSnapTarget.toString()).not.toContain("PROFILE_AVATAR_COLLAPSE_DISTANCE");
+  });
+
+  it("measures snap targets from the true top under an automatic inset", () => {
+    const resting = -59;
+    // y 0 is 59 pt past the true top: inside the morph, so it is not a rest.
+    expect(profileAvatarSnapOffset(0, resting, 0, distance, Infinity)).toBe(resting);
+    expect(profileAvatarSnapOffset(10, resting, 0, distance, Infinity)).toBe(resting + distance);
+    expect(profileAvatarSnapOffset(-20, resting, 0, distance, Infinity)).toBe(resting);
+    expect(profileAvatarSnapOffset(-50, resting, 1, distance, Infinity)).toBe(resting + distance);
+    expect(profileAvatarSnapOffset(55, resting, -1, distance, Infinity)).toBe(resting);
+    // Exactly two rests: the true top and the collapsed offset.
+    expect(profileAvatarSnapOffset(resting, resting, 0, distance, Infinity)).toBeNull();
+    expect(profileAvatarSnapOffset(resting + distance, resting, 0, distance, Infinity)).toBeNull();
+    expect(profileAvatarSnapOffset(-80, resting, 0, distance, Infinity)).toBeNull();
+  });
+
+  it("expands instead of collapsing past the end of a short page", () => {
+    // The content only scrolls 40 pt past y 0: the collapsed rest (61) is unreachable.
+    expect(profileAvatarSnapOffset(-40, -59, 1, distance, 40)).toBe(-59);
+    expect(profileAvatarSnapOffset(-40, -59, -1, distance, 40)).toBe(-59);
+    expect(profileAvatarSnapOffset(-40, -59, 1, distance, 61)).toBe(61);
+  });
+
+  it("bounds the iOS true top by the status-bar overlap of the scroll host", () => {
+    expect(profileAvatarRestingOffsetBound(59, 0)).toBe(-59);
+    expect(profileAvatarRestingOffsetBound(59, 20)).toBe(-39);
+    expect(profileAvatarRestingOffsetBound(59, 120)).toBe(-0);
+  });
+
+  it("adds a shown native header to the iOS true top", () => {
+    // Transparent header: status bar plus navigation bar above y 0.
+    expect(profileAvatarRestingOffsetBound(59, 0, 103)).toBe(-103);
+    expect(profileAvatarRestingOffsetBound(59, 0, 0)).toBe(-59);
+  });
+
+  it("keeps a short page tall enough to reach both rests", () => {
+    // 852 pt viewport: the status-bar bound needs 61 pt of scroll past y 0.
+    const min = profileAvatarMinContentHeight(852, -59, distance);
+    expect(min).toBe(913);
+    const maxOffset = min - 852;
+    // Under a header (true top -103) the morph's first frames already collapse.
+    expect(profileAvatarSnapOffset(-98, -103, 1, distance, maxOffset)).toBe(-103 + distance);
+    expect(profileAvatarSnapOffset(-98, -103, -1, distance, maxOffset)).toBe(-103);
+    // Without the iOS inset (Android), the full distance.
+    expect(profileAvatarMinContentHeight(800, 0, distance)).toBe(920);
+  });
+
+  it("honours a custom collapse distance", () => {
+    expect(profileAvatarSnapTarget(60, 0, 80)).toBe(80);
+    expect(profileAvatarSnapTarget(30, 0, 80)).toBe(0);
+    expect(profileAvatarSnapTarget(90, 0, 80)).toBeNull();
   });
 });
 
@@ -362,5 +506,271 @@ describe("profile avatar placeholder", () => {
       screen.getByTestId("profile-avatar-collapse-mask", { includeHiddenElements: true }),
     ).toBeTruthy();
     expect(screen.getByText("AH", { includeHiddenElements: true })).toBeTruthy();
+  });
+});
+
+describe("profile avatar anchor measurement (#935)", () => {
+  afterEach(() => jest.useRealTimers());
+
+  it("drops a measurement taken while the scroll moves and remeasures once it holds still", async () => {
+    jest.useFakeTimers();
+    const { result } = await renderHook(() => useProfileAvatarCollapse(), {
+      wrapper: ({ children }) => (
+        <SafeAreaProvider
+          initialMetrics={{
+            frame: { x: 0, y: 0, width: 393, height: 852 },
+            insets: { top: 59, left: 0, right: 0, bottom: 34 },
+          }}
+        >
+          {children}
+        </SafeAreaProvider>
+      ),
+    });
+    const controller = result.current;
+    // Window position of the avatar for the scroll offset the shadow tree saw.
+    let anchorY = 300;
+    const scrollTo = (offset: number) => {
+      controller.scrollOffset.value = offset;
+      anchorY = 300 - offset;
+    };
+    let moveDuringMeasurement = true;
+    Object.assign(controller.hostRef, {
+      current: { measureInWindow: (cb: (x: number, y: number) => void) => cb(0, 0) },
+    });
+    Object.assign(controller.anchorRef, {
+      current: {
+        measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => {
+          const measuredY = anchorY;
+          // A programmatic scroll lands between the native measurement and the callback.
+          if (moveDuringMeasurement) {
+            moveDuringMeasurement = false;
+            scrollTo(150);
+          }
+          cb(100, measuredY, 96, 96);
+        },
+      },
+    });
+
+    await act(async () => {
+      controller.onScrollBeginDrag();
+      jest.advanceTimersByTime(200);
+    });
+
+    // The stale result (y 300 + offset 150) is dropped; the settled one maps back to 300.
+    expect(result.current.anchorFrame).toEqual({ left: 100, top: 300, width: 96, height: 96 });
+  });
+});
+
+type ScrollHandlers = Record<
+  "onBeginDrag" | "onScroll" | "onEndDrag" | "onMomentumEnd",
+  (event: { contentOffset: { x: number; y: number }; velocity?: { x: number; y: number } }) => void
+>;
+
+describe("profile avatar snap on release (#935)", () => {
+  const event = (y: number, velocity = 0) => ({
+    contentOffset: { x: 0, y },
+    velocity: { x: 0, y: velocity },
+  });
+
+  async function setup() {
+    const { result } = await renderHook(() => useProfileAvatarCollapse(), {
+      wrapper: ({ children }) => (
+        <SafeAreaProvider
+          initialMetrics={{
+            frame: { x: 0, y: 0, width: 393, height: 852 },
+            insets: { top: 0, left: 0, right: 0, bottom: 0 },
+          }}
+        >
+          {children}
+        </SafeAreaProvider>
+      ),
+    });
+    const scrollTo = jest.fn();
+    Object.assign(result.current.scrollRef, { current: { scrollTo } });
+    const handlers = result.current.onScroll as unknown as ScrollHandlers;
+    const drag = (start: number, ...moves: number[]) => {
+      handlers.onBeginDrag(event(start));
+      for (const y of moves) handlers.onScroll(event(y));
+    };
+    return { controller: result.current, handlers, drag, scrollTo };
+  }
+
+  beforeEach(() => mockHaptic.mockClear());
+
+  it("collapses an upward release 10% into the range", async () => {
+    const { handlers, drag, scrollTo } = await setup();
+    drag(0, 6, 12);
+    handlers.onEndDrag(event(12));
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: PROFILE_AVATAR_COLLAPSE_DISTANCE });
+    // The release itself does not tap; the snap's own scroll and momentum end
+    // do not re-snap.
+    expect(mockHaptic).not.toHaveBeenCalled();
+    handlers.onScroll(event(PROFILE_AVATAR_COLLAPSE_DISTANCE));
+    handlers.onMomentumEnd(event(PROFILE_AVATAR_COLLAPSE_DISTANCE));
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it("taps once, medium, when the photo starts merging into the island", async () => {
+    const { handlers, drag } = await setup();
+    const merge = PROFILE_AVATAR_COLLAPSE_DISTANCE * PROFILE_AVATAR_MERGE_PROGRESS;
+    drag(0, merge - 4);
+    expect(mockHaptic).not.toHaveBeenCalled();
+    handlers.onScroll(event(merge + 2));
+    handlers.onScroll(event(merge + 20));
+    expect(mockHaptic).toHaveBeenCalledTimes(1);
+    expect(mockHaptic).toHaveBeenCalledWith("medium");
+    // Coming back down does not tap; reaching the island again does.
+    handlers.onScroll(event(merge - 10));
+    expect(mockHaptic).toHaveBeenCalledTimes(1);
+    handlers.onScroll(event(merge + 1));
+    expect(mockHaptic).toHaveBeenCalledTimes(2);
+  });
+
+  it("taps once as a collapsed avatar starts stretching back out", async () => {
+    const { handlers, drag } = await setup();
+    const collapsed = PROFILE_AVATAR_COLLAPSE_DISTANCE;
+    drag(collapsed + 40, collapsed + 10, collapsed);
+    mockHaptic.mockClear();
+    // Jitter at the rest is not a pull.
+    handlers.onScroll(event(collapsed - 1.5));
+    handlers.onScroll(event(collapsed));
+    expect(mockHaptic).not.toHaveBeenCalled();
+    handlers.onScroll(event(collapsed - 5));
+    handlers.onScroll(event(collapsed - 20));
+    expect(mockHaptic).toHaveBeenCalledTimes(1);
+    expect(mockHaptic).toHaveBeenCalledWith("medium");
+  });
+
+  it("still taps when the snap settled a fraction short of the collapsed rest", async () => {
+    const { handlers, drag } = await setup();
+    const collapsed = PROFILE_AVATAR_COLLAPSE_DISTANCE;
+    drag(collapsed - 30, collapsed - 0.4);
+    mockHaptic.mockClear();
+    handlers.onScroll(event(collapsed - 6));
+    expect(mockHaptic).toHaveBeenCalledTimes(1);
+  });
+
+  it("expands a downward release 90% into the range", async () => {
+    const { handlers, drag, scrollTo } = await setup();
+    drag(200, 120, 112, 108);
+    const taps = mockHaptic.mock.calls.length;
+    handlers.onEndDrag(event(108));
+    expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: 0 });
+    expect(mockHaptic).toHaveBeenCalledTimes(taps);
+  });
+
+  it("follows the momentum's own direction when it ends inside the range", async () => {
+    const { handlers, drag, scrollTo } = await setup();
+    drag(200, 150);
+    handlers.onEndDrag(event(150, -1.2));
+    expect(scrollTo).not.toHaveBeenCalled();
+    handlers.onScroll(event(100));
+    handlers.onScroll(event(90));
+    const taps = mockHaptic.mock.calls.length;
+    handlers.onMomentumEnd(event(90));
+    expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: 0 });
+    expect(mockHaptic).toHaveBeenCalledTimes(taps);
+  });
+
+  it("measures the snap from a non-zero true top", async () => {
+    const { handlers, drag, scrollTo } = await setup();
+    // The automatic inset's first scroll event, before any drag.
+    handlers.onScroll(event(-59));
+    drag(-59, -50, -40);
+    handlers.onEndDrag(event(-40));
+    expect(scrollTo).toHaveBeenCalledWith({
+      animated: true,
+      y: -59 + PROFILE_AVATAR_COLLAPSE_DISTANCE,
+    });
+  });
+
+  it("falls back to the nearer rest for a release with no movement", async () => {
+    const { handlers, scrollTo } = await setup();
+    handlers.onScroll(event(80));
+    handlers.onBeginDrag(event(80));
+    handlers.onEndDrag(event(80));
+    expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: PROFILE_AVATAR_COLLAPSE_DISTANCE });
+  });
+
+  it("never snaps or taps for programmatic scrolls short of the island", async () => {
+    jest.useFakeTimers();
+    const { controller, handlers, scrollTo } = await setup();
+    handlers.onScroll(event(10));
+    handlers.onScroll(event(20));
+    handlers.onMomentumEnd(event(20));
+    expect(scrollTo).not.toHaveBeenCalled();
+    // The focus correction still moves to a rest, silently.
+    controller.settleAtRest();
+    jest.advanceTimersByTime(50);
+    expect(scrollTo).toHaveBeenCalledWith({ animated: false, y: 0 });
+    expect(mockHaptic).not.toHaveBeenCalled();
+    jest.useRealTimers();
+  });
+});
+
+describe("profile avatar snap under a native header (#935)", () => {
+  afterEach(() => jest.useRealTimers());
+
+  it("seeds the header's true top and collapses a short page from the first frames", async () => {
+    jest.useFakeTimers();
+    const { result } = await renderHook(
+      () => useProfileAvatarCollapse(undefined, { headerHeight: 103 }),
+      {
+        wrapper: ({ children }) => (
+          <SafeAreaProvider
+            initialMetrics={{
+              frame: { x: 0, y: 0, width: 393, height: 852 },
+              insets: { top: 59, left: 0, right: 0, bottom: 34 },
+            }}
+          >
+            {children}
+          </SafeAreaProvider>
+        ),
+      },
+    );
+    const scrollTo = jest.fn();
+    Object.assign(result.current.scrollRef, { current: { scrollTo } });
+    Object.assign(result.current.hostRef, {
+      current: { measureInWindow: (cb: (x: number, y: number) => void) => cb(0, 0) },
+    });
+    Object.assign(result.current.anchorRef, {
+      current: {
+        measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) =>
+          cb(140, 111, 112, 112),
+      },
+    });
+    await act(async () => {
+      result.current.onHostLayout({
+        nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 852 } },
+      } as never);
+      jest.advanceTimersByTime(1000);
+    });
+    // The page's own content is short; the floor keeps it scrollable.
+    const min = result.current.contentMinHeight as number;
+    expect(min).toBe(913);
+    await act(async () => {
+      result.current.onContentSizeChange(393, min);
+      jest.advanceTimersByTime(1000);
+    });
+    expect(result.current.restingOffset.value).toBe(-103);
+
+    const handlers = result.current.onScroll as unknown as ScrollHandlers;
+    const event = (y: number) => ({ contentOffset: { x: 0, y }, velocity: { x: 0, y: 0 } });
+    handlers.onBeginDrag(event(-103));
+    handlers.onScroll(event(-100));
+    handlers.onScroll(event(-97));
+    handlers.onEndDrag(event(-97));
+    expect(scrollTo).toHaveBeenLastCalledWith({
+      animated: true,
+      y: -103 + PROFILE_AVATAR_COLLAPSE_DISTANCE,
+    });
+
+    // The snap's own animation lands at the collapsed rest.
+    handlers.onScroll(event(17));
+    handlers.onBeginDrag(event(17));
+    handlers.onScroll(event(12));
+    handlers.onEndDrag(event(12));
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: true, y: -103 });
   });
 });

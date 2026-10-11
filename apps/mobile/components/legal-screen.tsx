@@ -1,4 +1,3 @@
-import { useScrollToTop } from "expo-router";
 import { useRef } from "react";
 import { Linking, ScrollView, useColorScheme } from "react-native";
 
@@ -6,6 +5,7 @@ import { ActionButton, Section, Separator } from "@/components/native-ui";
 import { EVENT_WEBSITE_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 
 /** Privacy and terms links kept out of the account overview. */
 export default function LegalScreen() {
@@ -14,11 +14,12 @@ export default function LegalScreen() {
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
 
-  useScrollToTop(scrollRef);
+  const trueTop = useTrueTopScroll(scrollRef);
 
   return (
     <ScrollView
       ref={scrollRef}
+      {...trueTop.scrollProps}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         gap: 20,

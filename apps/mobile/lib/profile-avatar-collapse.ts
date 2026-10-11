@@ -2,6 +2,57 @@ import telegramMaskTracks from "./telegram-avatar-mask.json";
 
 export const PROFILE_AVATAR_COLLAPSE_DISTANCE = 120;
 
+/**
+ * Morph progress where the photo first touches the camera cutout: the mask's
+ * lip track joins the island at frame 108 of the 540-frame Telegram timeline
+ * (`maskCanvas` maps progress to `time = p * 540`). The merge haptic fires here.
+ */
+export const PROFILE_AVATAR_MERGE_PROGRESS = 108 / 540;
+
+/** Below this release speed the scroll view does not decelerate, so no momentum end follows. */
+export const PROFILE_AVATAR_SNAP_REST_VELOCITY = 0.05;
+
+/**
+ * Direction of the scroll being released (#935): positive while the offset
+ * grows (content moving up, avatar heading into the camera), negative while it
+ * shrinks, 0 with no movement. The last non-zero scroll delta decides; the
+ * release velocity only stands in when no delta was seen, because its sign is
+ * not consistent across platforms (iOS reports the offset's, Android the
+ * finger's).
+ */
+export function profileAvatarSnapDirection(
+  lastDelta: number,
+  velocity: number,
+  platform: string,
+): number {
+  "worklet";
+  if (lastDelta !== 0) return Math.sign(lastDelta);
+  if (Math.abs(velocity) < PROFILE_AVATAR_SNAP_REST_VELOCITY) return 0;
+  return platform === "android" ? -Math.sign(velocity) : Math.sign(velocity);
+}
+
+/**
+ * Where a released scroll should settle so the avatar never rests half-morphed
+ * (#935): null outside the open collapse range, otherwise fully expanded (0) or
+ * fully collapsed (`distance`). Direction decides: moving up (merge started)
+ * collapses, moving down (droplet coming out) expands; with no movement at
+ * all, the nearer rest wins.
+ *
+ * `distance` is required: a worklet's default-parameter expression is not
+ * captured into its UI-thread closure, so a module constant there is undefined.
+ */
+export function profileAvatarSnapTarget(
+  offset: number,
+  direction: number,
+  distance: number,
+): number | null {
+  "worklet";
+  if (!(offset > 0 && offset < distance)) return null;
+  if (direction > 0) return distance;
+  if (direction < 0) return 0;
+  return offset >= distance / 2 ? distance : 0;
+}
+
 export type ProfileCameraCutoutFrame = {
   left: number;
   top: number;
@@ -27,6 +78,55 @@ const DYNAMIC_ISLAND_INSET = 1;
 const MAX_HOLE_PUNCH_SIZE = 72;
 /** A hole punch sits in the top strip; side cutouts (landscape) are ignored. */
 const MAX_HOLE_PUNCH_TOP = 96;
+
+/**
+ * Absolute content offset a released scroll should settle at, or null (#935).
+ * `restingOffset` is the content offset of the true top: negative under iOS's
+ * automatic inset, where y 0 sits that far past the top, inside the morph.
+ * `maxOffset` is the furthest offset the content surely reaches.
+ */
+export function profileAvatarSnapOffset(
+  contentOffset: number,
+  restingOffset: number,
+  direction: number,
+  distance: number,
+  maxOffset: number,
+): number | null {
+  "worklet";
+  const target = profileAvatarSnapTarget(contentOffset - restingOffset, direction, distance);
+  if (target === null) return null;
+  // A page too short to reach the collapsed rest expands instead of leaving
+  // the scroll past its end.
+  return target > 0 && restingOffset + target > maxOffset ? restingOffset : restingOffset + target;
+}
+
+/**
+ * Upper bound for the true top's content offset on iOS (#935): the automatic
+ * inset always covers the part of the scroll view under the status bar, or
+ * under a shown native header (`headerHeight`, status bar included), so the
+ * top rests at least that far above y 0. The scroll events observed before
+ * the first drag tighten it further when an inset is larger still.
+ */
+export function profileAvatarRestingOffsetBound(
+  safeAreaTop: number,
+  hostTop: number,
+  headerHeight = 0,
+): number {
+  return -Math.max(0, Math.max(safeAreaTop, headerHeight) - hostTop);
+}
+
+/**
+ * Smallest content height that keeps both rests reachable (#935): a short
+ * page must still scroll from its true top (`restingOffset`, at most 0) to
+ * the collapsed rest, or the snap could only ever expand.
+ */
+export function profileAvatarMinContentHeight(
+  viewportHeight: number,
+  restingOffset: number,
+  distance: number,
+): number {
+  return viewportHeight + Math.max(0, distance + Math.min(0, restingOffset));
+}
 
 /**
  * Pick the narrow, top-edge cutout among the rects reported by Android's
@@ -267,10 +367,13 @@ export function profileAvatarBlobBounds(
 }
 
 /**
- * Where the avatar image sits at `progress` (#935): a square covering the
- * mask's blob and centred on it, so the picture follows the clip instead of
- * exposing the backing at its top, joined with the neck that stretches up to
- * the island. After the blob ends it eases back to the neck alone.
+ * Where the avatar image sits at `progress` (#935): a square centred on the
+ * mask's blob and covering it, joined with the neck that stretches up to the
+ * island. The blob, not the linear mask frame, carries the picture: the mask
+ * reaches the island at a fixed progress whatever the start's distance, so on
+ * a page whose avatar sits lower (a native header above it) the linear frame
+ * trails below the clip and would pull the photo off its centre. After the
+ * blob ends, its last square travels on to the island.
  */
 export function profileAvatarContentFrame(
   size: number,
@@ -281,39 +384,36 @@ export function profileAvatarContentFrame(
 ): ProfileAvatarFrame {
   "worklet";
   const p = Math.max(0, Math.min(1, progress));
-  const frame = profileAvatarMaskFrame(size, start, target, p, simple);
-  if (simple) return { left: frame.left, top: frame.top, width: frame.width, height: frame.height };
-  const neck = Math.max(0, Math.min(1, (p - 0.15) / 0.35));
-  const neckTop = frame.top + (target.top - frame.top) * neck;
-  const neckHalf = Math.max(frame.width, target.width * neck) / 2;
-  const centerX = frame.left + frame.width / 2;
-  const neckBox = {
-    left: centerX - neckHalf,
-    top: neckTop,
-    right: centerX + neckHalf,
-    bottom: frame.top + frame.height,
-  };
-  // Past its end the blob is held at its last shape while the box eases back.
-  const blob = profileAvatarBlobBounds(size, start, target, Math.min(p, BLOB_END_PROGRESS - 1e-4));
-  let box = neckBox;
-  if (blob) {
-    const half = Math.max(blob.width, blob.height) / 2;
-    const cx = blob.left + blob.width / 2;
-    const cy = blob.top + blob.height / 2;
-    const fade = Math.max(0, Math.min(1, (p - BLOB_END_PROGRESS) / 0.1));
-    const mix = (covered: number, neckSide: number) => covered + (neckSide - covered) * fade;
-    box = {
-      left: mix(Math.min(neckBox.left, cx - half), neckBox.left),
-      top: mix(Math.min(neckBox.top, cy - half), neckBox.top),
-      right: mix(Math.max(neckBox.right, cx + half), neckBox.right),
-      bottom: mix(Math.max(neckBox.bottom, cy + half), neckBox.bottom),
-    };
+  if (simple) {
+    const frame = profileAvatarMaskFrame(size, start, target, p, true);
+    return { left: frame.left, top: frame.top, width: frame.width, height: frame.height };
   }
+  const blobProgress = Math.min(p, BLOB_END_PROGRESS - 1e-4);
+  const blob = profileAvatarBlobBounds(size, start, target, blobProgress);
+  let half = size / 2;
+  let cx = start.left + start.width / 2;
+  let cy = start.top + start.height / 2;
+  if (blob) {
+    half = Math.max(blob.width, blob.height) / 2;
+    cx = blob.left + blob.width / 2;
+    cy = blob.top + blob.height / 2;
+  }
+  if (p > blobProgress) {
+    // Past its end the blob's last square eases into the island.
+    const travel = (p - blobProgress) / (1 - blobProgress);
+    const endHalf = target.height / 2;
+    half += (endHalf - half) * travel;
+    cx += (target.left + target.width / 2 - cx) * travel;
+    cy += (target.top + target.height / 2 - cy) * travel;
+  }
+  const neck = Math.max(0, Math.min(1, (p - 0.15) / 0.35));
+  const top = Math.min(cy - half, cy - half + (target.top - (cy - half)) * neck);
+  const neckHalf = Math.max(half, (target.width * neck) / 2);
   return {
-    left: box.left,
-    top: box.top,
-    width: box.right - box.left,
-    height: box.bottom - box.top,
+    left: cx - neckHalf,
+    top,
+    width: 2 * neckHalf,
+    height: cy + half - top,
   };
 }
 

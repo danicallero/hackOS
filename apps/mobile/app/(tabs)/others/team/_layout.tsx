@@ -1,6 +1,8 @@
 import { Slot } from "expo-router";
 import { Stack } from "expo-router/stack";
 
+import { nativeStackScreenOptions } from "@/lib/navigation";
+
 import { isPadIdiom } from "@/lib/tabs";
 
 /**
@@ -13,7 +15,7 @@ export default function TeamLayout() {
   if (isPadIdiom()) return <Slot />;
 
   return (
-    <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
+    <Stack screenOptions={nativeStackScreenOptions}>
       <Stack.Screen name="[entryId]" options={{ headerLargeTitle: true }} />
     </Stack>
   );

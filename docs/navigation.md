@@ -167,21 +167,26 @@ directly on compact layouts; tablet-width layouts can fit up to six before the
 separate `Others` circle is needed. The full route registry remains mounted so
 hidden destinations stay routable:
 
-- **Non-operator account**: schedule, wallet, notifications, **Diary** (#935,
+- **Non-operator account**: schedule, **Diary** (#935,
   [`diary.md`](./diary.md); People and Companies segments only, with no
   directory to browse, opened directly with `?view=companies`; the direct tab is
   `app/(tabs)/diary/`, its own Stack for the native header and search) and
-  **Account** are direct; with a personal queue
-  the set grows to six, so Diary and Account move to Others. **My queue** is visible to participants even before their first
+  **Account** are direct, with My queue added when eligible (five fit
+  directly). **My queue** is visible to participants even before their first
   queue entry so they can see the empty state and tutorial; mentors, sponsors,
   and other accounts only see it once they have an actual queue entry. Wallet
-  remains unconditional for every mobile account.
+  is not a tab: every account reaches it from Account → Wallet → View tickets
+  (H28). Alerts are not a tab either: the Schedule header bell (with an unread
+  badge) presents the inbox as a sheet, and every notification setting lives in
+  Account → Notifications (H51, H59); the sheet's gear dismisses it and
+  navigates to `/(tabs)/others/account?highlight=notifications`, so the tab bar
+  selection follows the pathname to Account.
 - **Operator** (any of `accredit:scan`, `presence:scan`, `activity:scan`, or
   the admin wildcard): the daily shift tools take the bar — schedule,
-  **Scanner**, Activities (`activity:scan` holders only), notifications —
+  **Scanner**, Activities (`activity:scan` holders only) —
   scanning must never sit behind an ellipsis. The separate
-  **"Others" overflow selector** holds eligible personal Queue, Wallet,
-  Diary, Account, and any queue operations destination as pseudo-tabs. Account's
+  **"Others" overflow selector** (only when more than five destinations)
+  holds eligible personal Queue, Diary, Account, and any queue operations destination as pseudo-tabs. Account's
   Statistics destination is the staff operations hub for the person finder,
   scan history, and sync reconciliation. Holders of `sponsors:manage` (with or
   without a scanner capability) also get Account → Staff → Company tags, to
@@ -189,10 +194,16 @@ hidden destinations stay routable:
   tab. Company-tag links `/s/<code>` (`app/s/[code].tsx`) open outside the
   session guard and resume after sign-in.
 - **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
-  scanner capability): Queue operations is a direct tab alongside Schedule and
-  Alerts; an eligible personal Queue, Wallet, Diary and Account move to Others. If
+  scanner capability): Queue operations is a direct tab alongside Schedule; an eligible personal Queue, Diary and Account move to Others when the set
+  exceeds five. If
   the person also has a scanner capability, Queue operations joins Others so
   Scanner stays directly reachable.
+
+Account is always the last overflow destination (`overflowTabs()` order:
+Queue, Diary, Queue operations, Account) and therefore the entry nearest the
+thumb. SwiftUI's bottom-anchored `Menu` lists its first action closest to the
+trigger, so iOS passes `nativeMenuOrder(overflowIds)` (reversed); Android's
+card menu renders the array top-to-bottom as is (H55).
 
 The "Others" slot is a **dropdown selector**, not a screen. It is a
 direct custom button in its own perfect circle; it does not need fake
@@ -226,6 +237,20 @@ behaviour stays sane. Direct tabs use the headless Expo Router tab state
 scroll-to-top/live-activity handlers; deeper screens inside a section still
 push normally on top of it. Pathname matching normalizes Expo Router route groups first
 (`/others/...` vs `/(tabs)/others/...`).
+
+Section classification covers the whole Others stack: `queue`, `diary` and
+`operations` own their route (plus `others/team/*`, opened from queue
+operations), and every other `others/*` page (Wallet, notification settings,
+reminders, announcements, Storage, Statistics, Company tags, Legal, Delete
+account, scan log, sync queue, people and person details) is an Account
+subpage. The Others circle therefore stays on Account — and navigating
+programmatically to `/(tabs)/others/account` selects it — for as long as the
+user is anywhere inside Account.
+A direct Account tab uses the same rule through `RouterTabItem.isActive` (an
+optional per-tab predicate overriding the default href prefix match, for both
+the selection lens and the selected state), so it is not highlighted on
+queue/diary/operations pages that share the `/others` prefix. The Others circle
+shows the account photo on every Account subpage.
 
 A saved person's profile (#935) is the root-level `app/people/[id].tsx`,
 pushed above the tabs from either diary placement (direct tab or Others), the
@@ -272,6 +297,16 @@ second navigation-bar row and stops iOS from integrating back, status, search,
 and filter controls alongside the custom tab chrome. On compact devices those
 layouts retain their own Stack because overflow destinations are header-less
 pseudo-tabs and still need local navigation chrome.
+
+Every native Stack, including the root one that hosts `schedule/[id]` and
+`people/[id]`, spreads `nativeStackScreenOptions` from `lib/navigation.ts`
+(`headerBackButtonDisplayMode: "minimal"`). On iOS 26 a chevron-only back item
+is a circular Liquid Glass button; a back title widens it into a capsule.
+Pushed screens keep that native item. A route opened from a cold deep link has
+nothing to pop, so it hides the native item and sets `headerLeft` to
+`components/header-back-button.tsx`, which calls `safeBack`. UIKit pads a
+custom bar item horizontally: a 44 pt-wide view becomes a capsule, while the
+bare symbol with `hitSlop` becomes the same circle.
 
 ## Decision-only applications
 

@@ -17,7 +17,7 @@ import {
 
 describe("visibleTabs (H55)", () => {
   it("hides My queue for non-participants with no queue entry", () => {
-    expect(visibleTabs([])).toEqual(["schedule", "wallet", "notifications", "diary", "account"]);
+    expect(visibleTabs([])).toEqual(["schedule", "diary", "account"]);
   });
 
   it("shows My queue to accounts with the personal queue capability", () => {
@@ -54,29 +54,15 @@ describe("visibleTabs (H55)", () => {
 });
 
 describe("primaryTabs (H55; the custom bar keeps five direct tabs when they fit)", () => {
-  it("keeps Account in Others while preserving Wallet for non-participants", () => {
-    expect(primaryTabs([])).toEqual(["schedule", "wallet", "notifications"]);
-    expect(primaryTabs([CAPABILITIES.QUEUE_STATUS])).toEqual([
-      "schedule",
-      "queue",
-      "wallet",
-      "notifications",
-    ]);
+  it("leaves Wallet out of the bar; it opens from Account (H28)", () => {
+    expect(primaryTabs([])).toEqual(["schedule"]);
+    expect(primaryTabs([CAPABILITIES.QUEUE_STATUS])).toEqual(["schedule", "queue"]);
   });
 
-  it("replaces queue and wallet with operational tools for staff", () => {
-    expect(primaryTabs([CAPABILITIES.ACCREDIT_SCAN])).toEqual([
-      "schedule",
-      "scan",
-      "notifications",
-    ]);
+  it("replaces queue with operational tools for staff", () => {
+    expect(primaryTabs([CAPABILITIES.ACCREDIT_SCAN])).toEqual(["schedule", "scan"]);
     expect(primaryTabs([CAPABILITIES.PRESENCE_SCAN])).toContain("scan");
-    expect(primaryTabs([CAPABILITIES.ACTIVITY_SCAN])).toEqual([
-      "schedule",
-      "scan",
-      "activities",
-      "notifications",
-    ]);
+    expect(primaryTabs([CAPABILITIES.ACTIVITY_SCAN])).toEqual(["schedule", "scan", "activities"]);
   });
 
   it("always puts scan in the primary bar for operators", () => {
@@ -98,21 +84,23 @@ describe("overflowTabs / shouldUseOverflowMenu", () => {
     expect(shouldUseOverflowMenu([])).toBe(false);
   });
 
-  it("moves the diary and Account into Others once My queue joins the bar (#935)", () => {
+  it("keeps five destinations direct once My queue joins the bar (#935)", () => {
     expect(visibleTabs([CAPABILITIES.QUEUE_STATUS])).toEqual([
       "schedule",
       "queue",
-      "wallet",
-      "notifications",
       "diary",
       "account",
     ]);
-    expect(shouldUseOverflowMenu([CAPABILITIES.QUEUE_STATUS])).toBe(true);
+    expect(shouldUseOverflowMenu([CAPABILITIES.QUEUE_STATUS])).toBe(false);
   });
 
-  it("moves queue, wallet, and account to overflow for operators", () => {
-    expect(overflowTabs([CAPABILITIES.ACCREDIT_SCAN])).toEqual(["wallet", "diary", "account"]);
-    expect(shouldUseOverflowMenu([CAPABILITIES.ACCREDIT_SCAN])).toBe(true);
+  it("uses Others for operators only when the set exceeds five", () => {
+    expect(overflowTabs([CAPABILITIES.ACCREDIT_SCAN])).toEqual(["diary", "account"]);
+    expect(shouldUseOverflowMenu([CAPABILITIES.ACCREDIT_SCAN])).toBe(false);
+    expect(shouldUseOverflowMenu([CAPABILITIES.ACTIVITY_SCAN])).toBe(false);
+    expect(shouldUseOverflowMenu([CAPABILITIES.ACTIVITY_SCAN, CAPABILITIES.QUEUE_OPERATE])).toBe(
+      true,
+    );
   });
 
   it("keeps Account behind Others for unrelated capabilities", () => {
@@ -121,20 +109,29 @@ describe("overflowTabs / shouldUseOverflowMenu", () => {
   });
 
   it("gives queue-only operators a direct Queue operations tab and keeps personal tabs in Others", () => {
-    expect(primaryTabs([CAPABILITIES.QUEUE_OPERATE])).toEqual([
-      "schedule",
-      "operations",
-      "notifications",
-    ]);
-    expect(overflowTabs([CAPABILITIES.QUEUE_OPERATE])).toEqual(["wallet", "diary", "account"]);
+    expect(primaryTabs([CAPABILITIES.QUEUE_OPERATE])).toEqual(["schedule", "operations"]);
+    expect(overflowTabs([CAPABILITIES.QUEUE_OPERATE])).toEqual(["diary", "account"]);
     expect(queueOperationsInPrimaryBar([CAPABILITIES.QUEUE_OPERATE])).toBe(true);
   });
 
   it("puts Queue operations in Others when scanner tools already fill the bar", () => {
     const capabilities = [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.QUEUE_OPERATE];
-    expect(primaryTabs(capabilities)).toEqual(["schedule", "scan", "notifications"]);
-    expect(overflowTabs(capabilities)).toEqual(["wallet", "diary", "account", "operations"]);
+    expect(primaryTabs(capabilities)).toEqual(["schedule", "scan"]);
+    expect(overflowTabs(capabilities)).toEqual(["diary", "operations", "account"]);
     expect(queueOperationsInPrimaryBar(capabilities)).toBe(false);
+  });
+});
+
+describe("Account is the last overflow destination (H55)", () => {
+  const personal = { hasQueueItems: true };
+  it.each([
+    ["operator", [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.QUEUE_OPERATE]],
+    ["queue operator", [CAPABILITIES.QUEUE_OPERATE]],
+    ["participant with queue", [CAPABILITIES.QUEUE_STATUS]],
+  ])("%s", (_name, caps) => {
+    const tabs = overflowTabs(caps, personal);
+    expect(tabs.at(-1)).toBe("account");
+    expect(visibleTabs(caps, personal).at(-1)).toBe("account");
   });
 });
 

@@ -131,6 +131,20 @@ it("shows the whole profile with the saved note", async () => {
   expect(open).toHaveBeenCalledWith("https://github.com/ana");
 });
 
+it("keeps a short profile scrollable past the collapsed avatar (#935)", async () => {
+  await renderMobile(<PersonProfileScreen />);
+  await screen.findByText("Ana Souto");
+  const scroll = screen.getByTestId("person-profile");
+  let host = scroll.parent;
+  while (host && !host.props.onLayout) host = host.parent;
+  await fireEvent(host as NonNullable<typeof host>, "layout", {
+    nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 852 } },
+  });
+  const { minHeight } = screen.getByTestId("person-profile").props.contentContainerStyle;
+  // The viewport plus enough scroll for the 120 pt morph past the true top.
+  expect(minHeight).toBeGreaterThanOrEqual(852 + 120 - 59);
+});
+
 it("lists every project and work group the person is in (#935)", async () => {
   personResult = {
     ...profile,

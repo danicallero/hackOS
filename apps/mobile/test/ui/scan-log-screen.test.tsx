@@ -8,7 +8,7 @@ jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({}),
   useNavigation: () => ({ setOptions: mockSetOptions }),
   usePathname: () => "/(tabs)/others/scan-log",
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ canGoBack: () => true, push: mockPush }),
   useScrollToTop: jest.fn(),
 }));
 jest.mock("@/components/native-ui", () => {

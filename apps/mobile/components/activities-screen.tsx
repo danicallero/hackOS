@@ -1,6 +1,6 @@
 import { MenuView } from "@expo/ui/community/menu";
 import { type ActivityKindSymbolName, isMealActivityKind } from "@hackos/shared/activity-kinds";
-import { useFocusEffect, useNavigation, useRouter, useScrollToTop } from "expo-router";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from "react-native";
@@ -29,6 +29,7 @@ import { resolveActivityText, type ScannerActivity } from "@/lib/scanner-types";
 import { activityKindSymbol, scheduleTypeLabel } from "@/lib/schedule";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
 /** How often the "Now"/"Next" marker re-evaluates which row it belongs to. */
@@ -63,7 +64,7 @@ export function ActivitiesScreen() {
     [directory],
   );
 
-  useScrollToTop(listRef);
+  const trueTop = useTrueTopScroll(listRef);
 
   const load = useCallback(async () => {
     try {
@@ -369,6 +370,7 @@ export function ActivitiesScreen() {
       )}
       <FlatList
         ref={listRef}
+        {...trueTop.scrollProps}
         style={{ flex: 1 }}
         testID="activities-list"
         contentInsetAdjustmentBehavior="automatic"

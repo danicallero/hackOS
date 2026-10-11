@@ -1,6 +1,6 @@
 import { Stack } from "expo-router/stack";
 import { useLocale } from "@/lib/i18n";
-import { transparentDetailHeaderOptions } from "@/lib/navigation";
+import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
 import { isPadIdiom } from "@/lib/tabs";
 
 /**
@@ -16,7 +16,7 @@ export default function OthersLayout() {
   const headerShown = isPadIdiom();
 
   return (
-    <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal", headerShown: false }}>
+    <Stack screenOptions={{ ...nativeStackScreenOptions, headerShown: false }}>
       <Stack.Screen
         name="index"
         options={{ headerShown, headerLargeTitle: true, title: t("tabOthers") }}
@@ -38,8 +38,32 @@ export default function OthersLayout() {
         options={{ headerShown: true, headerLargeTitle: true, title: t("standsTitle") }}
       />
       <Stack.Screen
+        name="stand/[id]"
+        options={{ headerShown: true, headerLargeTitle: true, title: "" }}
+      />
+      <Stack.Screen
         name="sync-queue"
         options={{ headerShown: true, headerLargeTitle: true, title: t("scannerSyncQueueTitle") }}
+      />
+      <Stack.Screen
+        name="notification-settings/index"
+        options={{ headerShown: true, headerLargeTitle: true, title: t("alertsNotifications") }}
+      />
+      <Stack.Screen
+        name="notification-settings/[category]"
+        options={{ headerShown: true, headerLargeTitle: true }}
+      />
+      <Stack.Screen
+        name="reminders/[kind]"
+        options={{ headerShown: true, headerLargeTitle: true }}
+      />
+      <Stack.Screen
+        name="announcements"
+        options={{
+          headerShown: true,
+          headerLargeTitle: true,
+          title: t("notificationsAnnouncements"),
+        }}
       />
       <Stack.Screen
         name="legal"
@@ -63,7 +87,14 @@ export default function OthersLayout() {
       />
       <Stack.Screen
         name="wallet"
-        options={{ headerShown, headerLargeTitle: true, title: t("tabWallet") }}
+        // Compact inline title beside the back button: the QR should sit as
+        // high as possible on the screen (H28).
+        options={{
+          headerLargeTitle: false,
+          headerShadowVisible: false,
+          headerShown: true,
+          title: t("tabWallet"),
+        }}
       />
       <Stack.Screen
         name="diary"

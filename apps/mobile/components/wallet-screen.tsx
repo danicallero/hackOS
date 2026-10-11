@@ -2,7 +2,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { ButtonStyle, ButtonType, RNWalletView } from "@premieroctet/react-native-wallet";
 import * as Device from "expo-device";
 import { File, Paths } from "expo-file-system";
-import { useScrollToTop } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -39,8 +38,8 @@ import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { declineOwnSpot } from "@/lib/self-service";
 import { isServerEventConnected, subscribeToServerEvent } from "@/lib/server-events";
-import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { type WalletTicketPayload, walletCacheKey } from "@/lib/wallet-cache";
 import {
   ANDROID_PKPASS_MIME_TYPES,
@@ -58,11 +57,10 @@ import { colors } from "@/theme/colors";
 // the space the real card would occupy.
 const WALLET_CARD_MIN_HEIGHT = 400;
 
-/** Ticket and badge read model shared with web, with native Wallet handoff. */
+/** H28: ticket and badge read model shared with web, with native Wallet handoff. Opened from Account. */
 export default function WalletScreen() {
   useColorScheme();
   const { language, t } = useLocale();
-  const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const { me, refetch: refetchMe } = useMeContext();
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -78,7 +76,7 @@ export default function WalletScreen() {
   const declineKeys = useRef(new Map<number, string>());
   const scrollRef = useRef<ScrollView>(null);
 
-  useScrollToTop(scrollRef);
+  const trueTop = useTrueTopScroll(scrollRef);
 
   const fetchTicket = useCallback(() => apiFetch<WalletTicketPayload>("/api/me/ticket"), []);
   const {
@@ -92,6 +90,8 @@ export default function WalletScreen() {
     pollMs: 30_000,
     pollWhen: () => !isServerEventConnected(),
     backgroundRevalidationMs: 0,
+    // The QR must open instantly and survive a down or hanging server.
+    cacheFirst: true,
   });
   const [refreshing, setRefreshing] = useState(false);
 
@@ -247,17 +247,18 @@ export default function WalletScreen() {
   }
 
   if (!ticket)
-    return <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />;
+    return (
+      <View style={{ flex: 1, justifyContent: "center", padding: 16 }}>
+        <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />
+      </View>
+    );
 
   // Swipe left/right over the ticket/badge card to switch tabs, instead of
-  // only the SegmentedControl above it. Matches the ScheduleNotificationsSheet
-  // back-swipe's threshold pattern: activeOffsetX requires a clearly
+  // only the SegmentedControl above it. activeOffsetX requires a clearly
   // horizontal drag before this claims the gesture at all, and failOffsetY
   // yields immediately to the page's vertical ScrollView otherwise.
   //
-  // Unlike that back-swipe (whose GestureDetector wraps the whole screen,
-  // with the ScrollView nested *inside* it), this gesture sits on a single
-  // card nested *inside* the ScrollView — the reverse arrangement. Without an
+  // This gesture sits on a single card nested *inside* the ScrollView. Without an
   // explicit simultaneous relationship the ancestor ScrollView's own native
   // gesture wins outright and this pan gesture never gets to see the touch,
   // so it's declared simultaneous with a `Gesture.Native()` stand-in for the
@@ -289,12 +290,12 @@ export default function WalletScreen() {
     <GestureDetector gesture={scrollNativeGesture}>
       <ScrollView
         ref={scrollRef}
+        {...trueTop.scrollProps}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           gap: 20,
           padding: 16,
           paddingBottom: Math.max(32, tabBarBottomInset + 16),
-          paddingTop: 16 + androidTopInset,
         }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />

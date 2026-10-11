@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { HeaderHeightContext } from "expo-router/react-navigation";
 import Stack from "expo-router/stack";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -59,7 +60,12 @@ export function PersonProfileScreen() {
   const router = useRouter();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
-  const avatarCollapse = useProfileAvatarCollapse();
+  // iOS shows the transparent native header, whose height the automatic
+  // inset adds above the avatar's true top (#935).
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
+  const avatarCollapse = useProfileAvatarCollapse(undefined, {
+    headerHeight: process.env.EXPO_OS === "ios" ? headerHeight : 0,
+  });
   const [state, setState] = useState<State>({ status: "loading" });
   const [entry, setEntry] = useState<DiaryEntry | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -213,16 +219,22 @@ export function PersonProfileScreen() {
         }}
       />
       <Animated.ScrollView
+        ref={avatarCollapse.scrollRef}
         testID="person-profile"
         onScroll={avatarCollapse.onScroll}
         onTouchStart={avatarCollapse.onScrollBeginDrag}
         onContentSizeChange={avatarCollapse.onContentSizeChange}
         scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="automatic"
+        // iOS clamps programmatic scrolls to the raw inset (0), not the
+        // automatic one, so the avatar's true top would land mid-morph (#935).
+        scrollToOverflowEnabled
         style={{ backgroundColor: colors.background, flex: 1 }}
         contentContainerStyle={{
           flexGrow: 1,
           gap: 24,
+          // A short profile still scrolls to the collapsed avatar (#935).
+          minHeight: person ? avatarCollapse.contentMinHeight : undefined,
           paddingBottom: Math.max(40, insets.bottom + 24),
           paddingHorizontal: 16,
           paddingTop: usesCustomAndroidHeader ? insets.top + 64 : 8,

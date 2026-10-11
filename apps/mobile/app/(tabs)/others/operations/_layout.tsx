@@ -1,7 +1,7 @@
 import { Slot } from "expo-router";
 import { Stack } from "expo-router/stack";
-
 import { useLocale } from "@/lib/i18n";
+import { nativeStackScreenOptions } from "@/lib/navigation";
 import { isPadIdiom } from "@/lib/tabs";
 
 /**
@@ -15,7 +15,7 @@ export default function OperationsLayout() {
   if (isPadIdiom()) return <Slot />;
 
   return (
-    <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
+    <Stack screenOptions={nativeStackScreenOptions}>
       <Stack.Screen
         name="index"
         options={{

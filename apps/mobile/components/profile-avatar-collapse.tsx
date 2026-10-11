@@ -1,7 +1,24 @@
 import MaskedView from "@react-native-masked-view/masked-view";
-import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Image, Platform, useWindowDimensions, View } from "react-native";
+import {
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  Image,
+  type LayoutChangeEvent,
+  Platform,
+  type ScrollView,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Animated, {
+  runOnJS,
   useAnimatedProps,
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -13,14 +30,21 @@ import Svg, { Defs, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 import { useApiImage } from "@/components/person-avatar";
 import { avatarInitials } from "@/components/user-avatar";
 import { diaryInitials } from "@/lib/diary";
+import { haptic } from "@/lib/haptics";
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
+  PROFILE_AVATAR_MERGE_PROGRESS,
+  PROFILE_AVATAR_SNAP_REST_VELOCITY,
   type ProfileCameraCutoutFrame,
   profileAvatarCollapseBounds,
   profileAvatarContentFrame,
   profileAvatarCoverOpacity,
   profileAvatarMaskFrame,
+  profileAvatarMinContentHeight,
   profileAvatarMorphPath,
+  profileAvatarRestingOffsetBound,
+  profileAvatarSnapDirection,
+  profileAvatarSnapOffset,
   resolveProfileCameraTarget,
 } from "@/lib/profile-avatar-collapse";
 import CameraCapabilities from "@/modules/camera-capabilities";
@@ -35,57 +59,172 @@ export type ProfileAvatarCollapseController = ReturnType<typeof useProfileAvatar
  * Scroll-driven profile-avatar morph based on Telegram's PeerInfoHeaderNode:
  * the scroll offset drives one mask/cover progress value, with an always-clipped
  * avatar, a cutout-sized black backing and a dark radial gradient on top.
+ *
+ * A released drag never leaves the morph half-way (#935): it settles at fully
+ * expanded or fully collapsed. Pass the screen's own scroll ref when it has
+ * one; otherwise spread the returned `scrollRef` onto the scroll view.
+ * A screen under a shown native header passes its `headerHeight`, which the
+ * automatic inset adds to the true top. Spread `contentMinHeight` onto the
+ * content container so a short page still reaches the collapsed rest.
  */
-export function useProfileAvatarCollapse() {
+export function useProfileAvatarCollapse(
+  screenScrollRef?: RefObject<ScrollView | null>,
+  { headerHeight = 0 }: { headerHeight?: number } = {},
+) {
   const scrollOffset = useSharedValue(0);
+  const contentOffset = useSharedValue(0);
   const restingOffset = useSharedValue(0);
   const hasDragged = useSharedValue(false);
+  // Only a user drag arms the snap, so programmatic scrolls are left alone.
+  const snapArmed = useSharedValue(false);
+  // Last non-zero scroll delta: the direction of the drag or momentum (#935).
+  const lastDelta = useSharedValue(0);
+  // Set at the collapsed rest; the next pull out of it taps once (#935).
+  const stretchArmed = useSharedValue(false);
+  // Content height minus the viewport: an offset the page surely reaches.
+  const maxOffset = useSharedValue(Number.POSITIVE_INFINITY);
+  const contentHeight = useRef(0);
+  const viewportHeight = useRef(0);
+  const [viewport, setViewport] = useState(0);
+  const ownScrollRef = useRef<ScrollView>(null);
+  const scrollRef = screenScrollRef ?? ownScrollRef;
+  const reduceMotion = useReducedMotion();
+  const safeAreaTop = useSafeAreaInsets().top;
   const hostRef = useRef<View>(null);
   const anchorRef = useRef<View>(null);
   const [hostOrigin, setHostOrigin] = useState({ x: 0, y: 0 });
   const [anchorFrame, setAnchorFrame] = useState<ProfileAvatarFrame | null>(null);
 
-  const onScroll = useAnimatedScrollHandler({
-    onBeginDrag: () => {
-      hasDragged.value = true;
-    },
-    onScroll: (event) => {
-      // Capture automatic inset adjustments before the first gesture.
-      // A later pull-to-refresh bounce must not redefine the resting offset.
-      if (!hasDragged.value)
-        restingOffset.value = Math.min(restingOffset.value, event.contentOffset.y);
-      scrollOffset.value = Math.max(0, event.contentOffset.y - restingOffset.value);
-    },
-  });
+  const scrollToOffset = useCallback(
+    (y: number) => scrollRef.current?.scrollTo({ animated: !reduceMotion, y }),
+    [reduceMotion, scrollRef],
+  );
 
-  const measureAnchor = useCallback(() => {
-    const host = hostRef.current;
-    const anchor = anchorRef.current;
-    if (!host || !anchor || !host.measureInWindow || !anchor.measureInWindow) return;
+  // One tap as the photo starts merging into the camera cutout, and one as
+  // a collapsed avatar starts stretching back out of it (#935).
+  const mergeHaptic = useCallback(() => void haptic("medium"), []);
 
-    host.measureInWindow((hostX, hostY) => {
-      anchor.measureInWindow((x, y, width, height) => {
-        setHostOrigin((previous) =>
-          previous.x === hostX && previous.y === hostY ? previous : { x: hostX, y: hostY },
-        );
-        const next = { left: x - hostX, top: y - hostY + scrollOffset.value, width, height };
-        setAnchorFrame((previous) =>
-          previous &&
-          previous.left === next.left &&
-          previous.top === next.top &&
-          previous.width === next.width &&
-          previous.height === next.height
-            ? previous
-            : next,
-        );
+  // Plain locals so the scroll worklets capture them explicitly.
+  const collapseDistance = PROFILE_AVATAR_COLLAPSE_DISTANCE;
+  const restVelocity = PROFILE_AVATAR_SNAP_REST_VELOCITY;
+  const mergeOffset = PROFILE_AVATAR_COLLAPSE_DISTANCE * PROFILE_AVATAR_MERGE_PROGRESS;
+  // Tolerance around the collapsed rest before a pull counts (points).
+  const stretchSlop = 2;
+  const platform = Platform.OS;
+
+  const settle = (offset: number, velocity: number) => {
+    "worklet";
+    snapArmed.value = false;
+    const direction = profileAvatarSnapDirection(lastDelta.value, velocity, platform);
+    const target = profileAvatarSnapOffset(
+      offset,
+      restingOffset.value,
+      direction,
+      collapseDistance,
+      maxOffset.value,
+    );
+    if (target === null) return;
+    runOnJS(scrollToOffset)(target);
+  };
+
+  const onScroll = useAnimatedScrollHandler(
+    {
+      onBeginDrag: (event) => {
+        // The first drag usually starts at the top, even when the inset's
+        // own scroll event arrived before this handler was attached.
+        if (!hasDragged.value)
+          restingOffset.value = Math.min(restingOffset.value, event.contentOffset.y);
+        hasDragged.value = true;
+        snapArmed.value = true;
+        lastDelta.value = 0;
+      },
+      onScroll: (event) => {
+        // Capture automatic inset adjustments before the first gesture.
+        // A later pull-to-refresh bounce must not redefine the resting offset.
+        if (!hasDragged.value)
+          restingOffset.value = Math.min(restingOffset.value, event.contentOffset.y);
+        const delta = event.contentOffset.y - contentOffset.value;
+        if (delta !== 0) lastDelta.value = delta;
+        contentOffset.value = event.contentOffset.y;
+        const previous = scrollOffset.value;
+        scrollOffset.value = Math.max(0, event.contentOffset.y - restingOffset.value);
+        // Tap once each time the photo reaches the island on the way up, and
+        // as soon as a collapsed avatar starts stretching out on the way down.
+        const current = scrollOffset.value;
+        if (previous < mergeOffset && current >= mergeOffset) runOnJS(mergeHaptic)();
+        // A snap can settle a fraction of a point short of the collapsed rest,
+        // so arm near it and fire once the pull clearly leaves it.
+        if (current >= collapseDistance - stretchSlop) stretchArmed.value = true;
+        else if (stretchArmed.value && current < collapseDistance - 2 * stretchSlop) {
+          stretchArmed.value = false;
+          runOnJS(mergeHaptic)();
+        }
+      },
+      onEndDrag: (event) => {
+        const velocity = event.velocity?.y ?? 0;
+        // A moving release decelerates first; its momentum end decides.
+        if (Math.abs(velocity) >= restVelocity) return;
+        settle(event.contentOffset.y, velocity);
+      },
+      onMomentumEnd: (event) => {
+        // Momentum follows its own direction, which the last delta tracks.
+        if (snapArmed.value) settle(event.contentOffset.y, 0);
+      },
+    },
+    [scrollToOffset, mergeHaptic],
+  );
+
+  const measureFrame = useRef<number | null>(null);
+  // Fabric measures the committed shadow tree, whose scroll state trails the
+  // live offset. Mixing a measurement taken during a scroll (the gear's jump
+  // to the top and scroll to preferences, a fling) with the offset read when
+  // it lands bakes the scrolled distance into the anchor, drawing the mask
+  // away from the hidden avatar (#935). Measure only once the offset has held
+  // still for a frame, and retry if it moved before the result arrived.
+  const measureAnchor = useCallback(
+    function measure() {
+      if (measureFrame.current !== null) cancelAnimationFrame(measureFrame.current);
+      const offset = scrollOffset.value;
+      measureFrame.current = requestAnimationFrame(() => {
+        measureFrame.current = null;
+        const host = hostRef.current;
+        const anchor = anchorRef.current;
+        if (!host || !anchor || !host.measureInWindow || !anchor.measureInWindow) return;
+        if (scrollOffset.value !== offset) {
+          measure();
+          return;
+        }
+        host.measureInWindow((hostX, hostY) => {
+          anchor.measureInWindow((x, y, width, height) => {
+            if (scrollOffset.value !== offset) {
+              measure();
+              return;
+            }
+            setHostOrigin((previous) =>
+              previous.x === hostX && previous.y === hostY ? previous : { x: hostX, y: hostY },
+            );
+            const next = { left: x - hostX, top: y - hostY + offset, width, height };
+            setAnchorFrame((previous) =>
+              previous &&
+              previous.left === next.left &&
+              previous.top === next.top &&
+              previous.width === next.width &&
+              previous.height === next.height
+                ? previous
+                : next,
+            );
+          });
+        });
       });
-    });
-  }, [scrollOffset]);
+    },
+    [scrollOffset],
+  );
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(
     () => () => {
       for (const timer of timers.current) clearTimeout(timer);
+      if (measureFrame.current !== null) cancelAnimationFrame(measureFrame.current);
     },
     [],
   );
@@ -93,22 +232,92 @@ export function useProfileAvatarCollapse() {
   // it first lays out, so a single measurement leaves the host origin (and the
   // island target derived from it) offset. Re-measure once the transition ends.
   const measureAfterLayout = useCallback(() => {
-    requestAnimationFrame(() => requestAnimationFrame(measureAnchor));
+    requestAnimationFrame(measureAnchor);
     for (const timer of timers.current) clearTimeout(timer);
     timers.current = [450, 900].map((delay) => setTimeout(measureAnchor, delay));
   }, [measureAnchor]);
+
+  // iOS: seed the true top from the status-bar (or native header) overlap
+  // once the host is measured, so it holds even when no scroll event preceded
+  // a programmatic scroll or a remount restored the offset at y 0 (#935).
+  useEffect(() => {
+    if (Platform.OS !== "ios" || !anchorFrame) return;
+    const bound = profileAvatarRestingOffsetBound(safeAreaTop, hostOrigin.y, headerHeight);
+    if (bound >= restingOffset.value) return;
+    restingOffset.value = bound;
+    scrollOffset.value = Math.max(0, contentOffset.value - bound);
+  }, [
+    anchorFrame,
+    contentOffset,
+    headerHeight,
+    hostOrigin.y,
+    restingOffset,
+    safeAreaTop,
+    scrollOffset,
+  ]);
+
+  // The snap compares the collapsed rest with `contentHeight - viewport`, so
+  // the floor uses the status-bar bound alone: a header only lowers the rest.
+  const contentMinHeight =
+    viewport > 0
+      ? profileAvatarMinContentHeight(
+          viewport,
+          Platform.OS === "ios" ? profileAvatarRestingOffsetBound(safeAreaTop, hostOrigin.y) : 0,
+          PROFILE_AVATAR_COLLAPSE_DISTANCE,
+        )
+      : undefined;
+
+  /** Scroll to the true top, for tab re-press (`useScrollToTop`). */
+  const scrollToTopRef = useMemo(
+    () => ({ current: { scrollToTop: () => scrollToOffset(restingOffset.value) } }),
+    [restingOffset, scrollToOffset],
+  );
+
+  const updateMaxOffset = () => {
+    if (contentHeight.current > 0 && viewportHeight.current > 0)
+      maxOffset.value = contentHeight.current - viewportHeight.current;
+  };
+
+  /** Move a scroll left inside the morph by a non-drag (remount, focus) to the nearer rest. */
+  const settleAtRest = useCallback(() => {
+    requestAnimationFrame(() => {
+      const target = profileAvatarSnapOffset(
+        contentOffset.value,
+        restingOffset.value,
+        0,
+        PROFILE_AVATAR_COLLAPSE_DISTANCE,
+        maxOffset.value,
+      );
+      if (target !== null) scrollRef.current?.scrollTo({ animated: false, y: target });
+    });
+  }, [contentOffset, maxOffset, restingOffset, scrollRef]);
 
   return {
     anchorFrame,
     anchorRef,
     hostOrigin,
+    contentMinHeight,
     hostRef,
     onAnchorLayout: measureAfterLayout,
-    onHostLayout: measureAfterLayout,
+    onHostLayout: ({ nativeEvent }: LayoutChangeEvent) => {
+      viewportHeight.current = nativeEvent.layout.height;
+      setViewport(nativeEvent.layout.height);
+      updateMaxOffset();
+      measureAfterLayout();
+    },
     onScrollBeginDrag: measureAnchor,
-    onContentSizeChange: measureAfterLayout,
+    onContentSizeChange: (_width: number, height: number) => {
+      contentHeight.current = height;
+      updateMaxOffset();
+      measureAfterLayout();
+    },
     onScroll,
+    /** Content offset of the true top (negative under an automatic inset). */
+    restingOffset,
     scrollOffset,
+    scrollRef,
+    scrollToTopRef,
+    settleAtRest,
   };
 }
 
@@ -240,16 +449,17 @@ export function ProfileAvatarCollapse({
   }, [size, localStart, localTarget, distance, reduceMotion, target.hasCutout]);
   const initialsStyle = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
-    const frame = profileAvatarMaskFrame(
-      size,
-      localStart,
-      localTarget,
-      p,
-      reduceMotion || !target.hasCutout,
-    );
+    const simple = reduceMotion || !target.hasCutout;
+    const frame = profileAvatarMaskFrame(size, localStart, localTarget, p, simple);
+    // Centred where the photo would be, on the clip's blob (#935).
+    const content = profileAvatarContentFrame(size, localStart, localTarget, p, simple);
     return {
-      left: frame.left,
-      top: frame.top,
+      left: content.left + content.width / 2 - frame.width / 2,
+      top:
+        content.top +
+        content.height -
+        Math.min(content.width, content.height) / 2 -
+        frame.height / 2,
       width: frame.width,
       height: frame.height,
       transform: [{ scale: 1 - p * 0.5 }],
@@ -267,6 +477,17 @@ export function ProfileAvatarCollapse({
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
     return { opacity: target.hasCutout ? p : 0 };
   }, [distance, target.hasCutout]);
+  // Telegram-style progressive blur: blurred copies of the photo fade in as
+  // the avatar heads into the camera cutout (#935). Two radii keep the ramp
+  // smooth without animating a native blur on every frame.
+  const softBlurStyle = useAnimatedStyle(() => {
+    const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
+    return { opacity: reduceMotion ? 0 : Math.min(1, Math.max(0, (p - 0.05) / 0.4)) };
+  }, [distance, reduceMotion]);
+  const strongBlurStyle = useAnimatedStyle(() => {
+    const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
+    return { opacity: reduceMotion ? 0 : Math.min(1, Math.max(0, (p - 0.35) / 0.45)) };
+  }, [distance, reduceMotion]);
   if (!anchorFrame) return null;
   const fallbackColor = variant === "account" ? colors.accent : colors.accentSurface;
   const initialsColor = variant === "account" ? colors.accentText : colors.onAccentSurface;
@@ -301,12 +522,28 @@ export function ProfileAvatarCollapse({
         {children || source ? (
           <Animated.View style={[{ position: "absolute" }, contentStyle]}>
             {children ?? (
-              <Image
-                accessible={false}
-                source={{ uri: source as string }}
-                resizeMode="cover"
-                style={{ height: "100%", width: "100%" }}
-              />
+              <>
+                <Image
+                  accessible={false}
+                  source={{ uri: source as string }}
+                  resizeMode="cover"
+                  style={{ height: "100%", width: "100%" }}
+                />
+                <Animated.Image
+                  accessible={false}
+                  blurRadius={6}
+                  source={{ uri: source as string }}
+                  resizeMode="cover"
+                  style={[absoluteFill, softBlurStyle]}
+                />
+                <Animated.Image
+                  accessible={false}
+                  blurRadius={18}
+                  source={{ uri: source as string }}
+                  resizeMode="cover"
+                  style={[absoluteFill, strongBlurStyle]}
+                />
+              </>
             )}
           </Animated.View>
         ) : (

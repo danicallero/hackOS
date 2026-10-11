@@ -1,6 +1,17 @@
 import type { Href, ImperativeRouter } from "expo-router";
 
 /**
+ * Shared `screenOptions` for every native Stack. iOS 26 draws a chevron-only
+ * back item as a circular Liquid Glass button; any back title (the default
+ * mode shows the previous screen's title, e.g. a root-level detail pushed over
+ * the tab navigator) widens it into a capsule. The previous title remains in
+ * the long-press back menu.
+ */
+export const nativeStackScreenOptions = {
+  headerBackButtonDisplayMode: "minimal",
+} as const;
+
+/**
  * Keep the native stack back action while removing the app-bar surface and
  * dynamic route title from detail screens.
  */

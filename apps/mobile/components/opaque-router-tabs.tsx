@@ -32,6 +32,7 @@ import {
   resolveOperationsNavigationAction,
 } from "@/lib/operations-navigation";
 import {
+  nativeMenuOrder,
   OVERFLOW_TAB_ICON,
   OVERFLOW_TAB_LABEL_KEY,
   OVERFLOW_TAB_ROUTE,
@@ -50,12 +51,10 @@ type TabLabelKey =
   | "tabAccount"
   | "tabActivities"
   | "tabDiary"
-  | "tabNotifications"
   | "tabQueue"
   | "tabQueueOperations"
   | "tabScan"
-  | "tabSchedule"
-  | "tabWallet";
+  | "tabSchedule";
 
 interface TabDefinition {
   href: Href;
@@ -79,13 +78,6 @@ const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
     labelKey: "tabQueue",
     selectedIcon: "clock.fill",
     triggerName: "queue",
-  },
-  wallet: {
-    href: "/(tabs)/wallet",
-    icon: "wallet.pass",
-    labelKey: "tabWallet",
-    selectedIcon: "wallet.pass.fill",
-    triggerName: "wallet",
   },
   diary: {
     href: "/(tabs)/diary",
@@ -114,13 +106,6 @@ const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
     selectedIcon: "list.bullet.rectangle.fill",
     triggerName: "activities",
   },
-  notifications: {
-    href: "/(tabs)/notifications",
-    icon: "bell",
-    labelKey: "tabNotifications",
-    selectedIcon: "bell.fill",
-    triggerName: "notifications",
-  },
   account: {
     href: "/(tabs)/others",
     icon: "person.crop.circle",
@@ -133,19 +118,21 @@ const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
 const REGISTERED_TAB_ROUTES: RouterTabRoute[] = [
   { href: "/(tabs)/schedule", name: "schedule" },
   { href: "/(tabs)/queue", name: "queue" },
-  { href: "/(tabs)/wallet", name: "wallet" },
   { href: "/(tabs)/diary", name: "diary" },
   { href: "/(tabs)/operations", name: "operations" },
   { href: "/(tabs)/scan", name: "scan" },
   { href: "/(tabs)/activities", name: "activities" },
-  { href: "/(tabs)/notifications", name: "notifications" },
   { href: "/(tabs)/others", name: "others" },
 ];
+
+/** Account owns its subpages but not the queue/diary/operations pseudo-tabs that share `/others`. */
+function isAccountPath(pathname: string): boolean {
+  return operationsSectionFromPathname(pathname) === "account";
+}
 
 export interface OpaqueRouterTabsProps {
   capabilities: string[];
   hasQueueItems: boolean;
-  hasUnreadNotifications: boolean;
   /** The signed-in person; their account photo replaces the Account symbol (#934). */
   account?: { name: string; image: string | null };
 }
@@ -186,12 +173,7 @@ function AccountTabAvatar({
  * the Liquid Glass/opaque geometry; this adapter owns hackOS capabilities,
  * copy, icons and the Others pseudo-tab menu.
  */
-export function OpaqueRouterTabs({
-  capabilities,
-  hasQueueItems,
-  hasUnreadNotifications,
-  account,
-}: OpaqueRouterTabsProps) {
+export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: OpaqueRouterTabsProps) {
   const { t } = useLocale();
   const pathname = usePathname();
   const systemColorScheme = useColorScheme();
@@ -218,15 +200,14 @@ export function OpaqueRouterTabs({
   const overflowIds = showOverflow ? overflowTabKeys.slice(directOverflowCount) : [];
   const tabs: RouterTabItem[] = visibleTabKeys.map((key) => {
     const definition = TAB_DEFINITIONS[key];
-    const unread = key === "notifications" && hasUnreadNotifications;
-    const icon = unread ? "bell.badge" : definition.icon;
-    const selectedIcon = unread ? "bell.badge.fill" : definition.selectedIcon;
+    const { icon, selectedIcon } = definition;
     const accountImage = key === "account" ? account?.image : null;
 
     if (account && accountImage) {
       return {
         href: definition.href,
         icon: <AccountTabAvatar name={account.name} image={accountImage} ringColor={null} />,
+        isActive: isAccountPath,
         label: t(definition.labelKey),
         name: definition.triggerName,
         selectedIcon: (
@@ -247,6 +228,7 @@ export function OpaqueRouterTabs({
           accessible={false}
         />
       ),
+      isActive: key === "account" ? isAccountPath : undefined,
       label: t(definition.labelKey),
       name: definition.triggerName,
       selectedIcon: (
@@ -429,7 +411,7 @@ function NativeOverflowMenu({
   const focusedSection = operationsSectionFromPathname(pathname);
   const activeOverflowId =
     focusedSection !== "external" && overflowIds.includes(focusedSection) ? focusedSection : null;
-  const items: OpaqueOperationsMenuItem[] = overflowIds.map((id) => ({
+  const items: OpaqueOperationsMenuItem[] = nativeMenuOrder(overflowIds).map((id) => ({
     id,
     image: OVERFLOW_TAB_ICON[id],
     label: t(OVERFLOW_TAB_LABEL_KEY[id]),

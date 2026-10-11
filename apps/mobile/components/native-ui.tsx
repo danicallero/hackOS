@@ -101,17 +101,46 @@ export function Separator({
   );
 }
 
+/**
+ * React Native's iOS Switch defaults to `alignSelf: "flex-start"`, which
+ * overrides a row's `alignItems: "center"` and pins the toggle to the top of
+ * any row taller than the switch. Every switch inside a row needs this.
+ */
+export const SWITCH_IN_ROW_STYLE: ViewStyle = { alignSelf: "center" };
+
+/**
+ * A settings row with a trailing switch. `detail` adds a secondary line;
+ * `onPress` makes the label side open a detail screen, set apart from the
+ * switch by a hairline (two targets in one row). `busy` blocks the switch
+ * while a write is in flight without dimming the label; `disabled` dims both.
+ */
 export function ToggleRow({
   label,
   value,
   onChange,
   disabled = false,
+  busy = false,
+  detail,
+  accessibilityLabel,
+  onPress,
 }: {
   label: string;
   value: boolean;
   onChange: (value: boolean) => void;
   disabled?: boolean;
+  busy?: boolean;
+  detail?: string;
+  accessibilityLabel?: string;
+  onPress?: () => void;
 }) {
+  const text = (
+    <View style={{ flex: 1, gap: 2, justifyContent: "center", paddingVertical: 10 }}>
+      <Text style={{ color: disabled ? colors.tertiaryLabel : colors.label, fontSize: 16 }}>
+        {label}
+      </Text>
+      {detail ? <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>{detail}</Text> : null}
+    </View>
+  );
   return (
     <View
       style={{
@@ -120,15 +149,42 @@ export function ToggleRow({
         gap: 12,
         minHeight: 50,
         paddingHorizontal: 16,
-        paddingVertical: 10,
       }}
     >
-      <Text
-        style={{ color: disabled ? colors.tertiaryLabel : colors.label, flex: 1, fontSize: 16 }}
-      >
-        {label}
-      </Text>
-      <Switch disabled={disabled} onValueChange={onChange} value={value} />
+      {onPress ? (
+        <Pressable
+          accessibilityLabel={detail ? `${label}, ${detail}` : label}
+          accessibilityRole="button"
+          onPress={onPress}
+          style={({ pressed }) => ({
+            alignSelf: "stretch",
+            flex: 1,
+            flexDirection: "row",
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          {text}
+        </Pressable>
+      ) : (
+        text
+      )}
+      {onPress ? (
+        <View
+          style={{
+            alignSelf: "stretch",
+            backgroundColor: colors.separator,
+            marginVertical: 12,
+            width: 0.5,
+          }}
+        />
+      ) : null}
+      <Switch
+        accessibilityLabel={accessibilityLabel ?? label}
+        disabled={disabled || busy}
+        onValueChange={onChange}
+        style={SWITCH_IN_ROW_STYLE}
+        value={value}
+      />
     </View>
   );
 }
@@ -170,13 +226,14 @@ export function InfoRow({
       {icon ? (
         <SymbolView name={icon} tintColor={colors.accent} size={20} accessible={false} />
       ) : null}
-      <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
+      {/* The label keeps its width; long values (emails, badge ids) wrap instead. */}
+      <Text selectable style={{ color: colors.label, flexShrink: 0, fontSize: 16 }}>
         {label}
       </Text>
       <Text
         selectable
         style={[
-          { color: colors.secondaryLabel, flexShrink: 1, fontSize: 16, textAlign: "right" },
+          { color: colors.secondaryLabel, flex: 1, fontSize: 16, textAlign: "right" },
           valueStyle,
         ]}
       >

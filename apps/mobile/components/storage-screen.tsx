@@ -1,4 +1,3 @@
-import { useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, useColorScheme, View } from "react-native";
 
@@ -14,6 +13,7 @@ import {
   type StorageUsage,
 } from "@/lib/storage-usage";
 import { isOperator } from "@/lib/tabs";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 
 /** Device-storage controls. Staff metrics live on the separate Statistics page. */
 export default function StorageScreen() {
@@ -26,7 +26,7 @@ export default function StorageScreen() {
   const [clearingCache, setClearingCache] = useState(false);
   const [storageError, setStorageError] = useState<Error | null>(null);
 
-  useScrollToTop(scrollRef);
+  const trueTop = useTrueTopScroll(scrollRef);
 
   const operator = isOperator(me?.capabilities ?? []);
 
@@ -77,6 +77,7 @@ export default function StorageScreen() {
   return (
     <ScrollView
       ref={scrollRef}
+      {...trueTop.scrollProps}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         gap: 20,

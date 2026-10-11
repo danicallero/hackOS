@@ -19,11 +19,17 @@ export interface UseCachedApiOptions {
   pollWhen?: () => boolean;
   /** Set to 0 to opt out of the long-background revalidation. */
   backgroundRevalidationMs?: number;
+  /**
+   * Render the persisted payload while the first request is in flight, for
+   * reads that must not wait on a slow or unreachable server (Wallet QR, H28).
+   */
+  cacheFirst?: boolean;
 }
 
 /**
- * Keeps the last successful API payload on device. Cached data is only exposed
- * after a request fails, so online users never see a stale-data flash. Reads
+ * Keeps the last successful API payload on device. By default cached data is
+ * only exposed after a request fails, so online users never see a stale-data
+ * flash; `cacheFirst` callers show it immediately instead. Reads
  * revalidate quietly after a long app suspension; callers with an SSE-backed
  * view can also opt into a foreground safety poll.
  */
@@ -35,6 +41,7 @@ export function useCachedApi<T>(
     pollMs = 0,
     pollWhen,
     backgroundRevalidationMs = BACKGROUND_REVALIDATION_MS,
+    cacheFirst = false,
   }: UseCachedApiOptions = {},
 ) {
   const [data, setDataState] = useState<T | null>(null);
@@ -88,8 +95,24 @@ export function useCachedApi<T>(
     if (dataCacheKey.current !== cacheKey || dataRef.current === null) setLoading(true);
     const request = (async () => {
       setError(null);
+      let settled = false;
+      if (cacheFirst && (dataCacheKey.current !== cacheKey || dataRef.current === null)) {
+        // Read storage alongside the request, not before it. The network
+        // result always wins: a late cache read never replaces it.
+        void readCachedValue<T>(cacheKey).then((cached) => {
+          if (!cached || settled || currentRequest !== requestId.current) return;
+          if (dataCacheKey.current === cacheKey && dataRef.current !== null) return;
+          dataRef.current = cached.data;
+          dataCacheKey.current = cacheKey;
+          updatedAtRef.current = cached.updatedAt;
+          setDataState(cached.data);
+          setLoading(false);
+        });
+      }
       try {
-        const next = await fetcher(controller.signal);
+        const next = await fetcher(controller.signal).finally(() => {
+          settled = true;
+        });
         if (currentRequest !== requestId.current) return;
         const updatedAt = new Date().toISOString();
         dataRef.current = next;
@@ -123,7 +146,7 @@ export function useCachedApi<T>(
     inFlight.current = request;
     inFlightCacheKey.current = cacheKey;
     return request;
-  }, [cacheKey, enabled, fetcher]);
+  }, [cacheFirst, cacheKey, enabled, fetcher]);
 
   useEffect(() => {
     if (enabled) return;

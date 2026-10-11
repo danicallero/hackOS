@@ -23,6 +23,7 @@ let mockFailNextScroll = false;
  * press on an already-open Schedule. */
 let mockIsFocused = false;
 
+jest.mock("@/lib/use-unread-notifications", () => ({ useUnreadNotificationCount: () => 0 }));
 jest.mock("react-native", () => {
   const RN = jest.requireActual("react-native");
   const React = require("react");
