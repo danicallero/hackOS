@@ -7,20 +7,25 @@ import { pool, withTransaction } from "../../db/pool.js";
 import {
   getRequestAuthorizationContext,
   requireAuth,
+  requireCapability,
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
 import { normalizeLanguage } from "../notifications/templates.js";
 import {
   deviceResponseSchema,
   endSessionBodySchema,
+  liveActivitySettingsSchema,
   myLiveActivitiesQuerySchema,
   myLiveActivitiesResponseSchema,
+  putLiveActivitySettingsBodySchema,
   statusResponseSchema,
   upsertDeviceBodySchema,
   upsertSessionBodySchema,
 } from "./schemas.js";
+import { readLiveActivitySettings, saveLiveActivitySettings } from "./settings.js";
 import { myLiveActivities } from "./state.js";
 
 /**
@@ -277,5 +282,56 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
       );
       return myLiveActivities(userId, language, canScan);
     },
+  );
+
+  // Organizer configuration (#966; H8, H53): the event-settings capability
+  // that owns event identity and timing also owns these event-wide surfaces.
+  const settingsAccess = {
+    ...routeAccess({ kind: "capability", capability: CAPABILITIES.EVENT_MANAGE }),
+  };
+
+  api.get(
+    "/api/live-activities/settings",
+    {
+      ...settingsAccess,
+      preHandler: requireCapability(CAPABILITIES.EVENT_MANAGE),
+      schema: {
+        summary: "Live Activity configuration",
+        description:
+          "Organizer configuration of Live Activity kinds (`activity` staff meals/activities, " +
+          "`attendee_activity`, `queue`, `deadline`, `judging`, `accreditation`): whether each " +
+          "is on, its priority (`kinds` is sorted by it, 0 = highest), the role ids allowed to " +
+          "receive it, and the capability it still requires on top of the role " +
+          "(`requiredCapability`, null when only data gates it, e.g. a queue entry or a judging " +
+          "room). `maxConcurrent` is the most Live Activities one device shows at once; lower " +
+          "priority candidates beyond it are not started. `roles` lists every assignable " +
+          "(non-deleted) role, highest position first, with the same raw name `GET /api/roles` " +
+          "returns, so the editor needs no roles-manager permission.",
+        response: { 200: liveActivitySettingsSchema },
+      },
+    },
+    async () => readLiveActivitySettings(),
+  );
+
+  api.put(
+    "/api/live-activities/settings",
+    {
+      ...settingsAccess,
+      preHandler: [requireCapability(CAPABILITIES.EVENT_MANAGE), idempotencyGuard],
+      schema: {
+        summary: "Save the Live Activity configuration",
+        description:
+          "Replaces the whole configuration. `kinds` must list every kind exactly once; its " +
+          "array order is the priority (first = highest). `roleIds` replaces the kind's role " +
+          "list (unknown or deleted roles are a 400); an empty list means nobody receives it. " +
+          "Roles created later are not added to any kind automatically. `maxConcurrent` is " +
+          "1–5. Audited; returns the saved configuration. Running Live Activities follow on the " +
+          "worker's next tick (ended when no longer allowed, or outranked when a higher-priority " +
+          "one starts).",
+        body: putLiveActivitySettingsBodySchema,
+        response: { 200: liveActivitySettingsSchema },
+      },
+    },
+    async (req) => saveLiveActivitySettings(req.userId as number, req.body),
   );
 }

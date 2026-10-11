@@ -1,5 +1,8 @@
 import {
+  LIVE_ACTIVITY_CONFIG_KINDS,
   LIVE_ACTIVITY_KINDS,
+  LIVE_ACTIVITY_MAX_CONCURRENT_MAX,
+  LIVE_ACTIVITY_MAX_CONCURRENT_MIN,
   LIVE_ACTIVITY_PROPS_VERSION,
   QUEUE_LIVE_ACTIVITY_SUBJECT,
 } from "@hackos/shared/live-activities";
@@ -119,3 +122,45 @@ export const myLiveActivitiesResponseSchema = z.object({
   queue: queueLivePropsSchema.nullable(),
   activities: z.array(activityLivePropsSchema),
 });
+
+const configKindSchema = z.enum(LIVE_ACTIVITY_CONFIG_KINDS);
+
+export const liveActivitySettingsSchema = z.object({
+  maxConcurrent: z.number().int(),
+  kinds: z.array(
+    z.object({
+      kind: configKindSchema,
+      enabled: z.boolean(),
+      priority: z.number().int(),
+      roleIds: z.array(z.number().int()),
+      requiredCapability: z.string().nullable(),
+    }),
+  ),
+  roles: z.array(z.object({ id: z.number().int(), name: z.string() })),
+});
+
+/** Array order of `kinds` is the priority (index 0 = highest); every kind exactly once. */
+export const putLiveActivitySettingsBodySchema = z
+  .object({
+    maxConcurrent: z
+      .number()
+      .int()
+      .min(LIVE_ACTIVITY_MAX_CONCURRENT_MIN)
+      .max(LIVE_ACTIVITY_MAX_CONCURRENT_MAX),
+    kinds: z
+      .array(
+        z
+          .object({
+            kind: configKindSchema,
+            enabled: z.boolean(),
+            roleIds: z.array(z.number().int().positive()).max(500),
+          })
+          .strict(),
+      )
+      .length(LIVE_ACTIVITY_CONFIG_KINDS.length),
+  })
+  .strict()
+  .refine((body) => new Set(body.kinds.map((k) => k.kind)).size === body.kinds.length, {
+    message: "kinds must list every Live Activity kind exactly once",
+    path: ["kinds"],
+  });
