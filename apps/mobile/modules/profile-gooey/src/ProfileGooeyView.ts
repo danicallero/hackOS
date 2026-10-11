@@ -10,7 +10,7 @@ export type ProfileGooeyViewProps = ViewProps & {
   avatarX?: number;
   avatarY?: number;
   avatarDiameter?: number;
-  imageAlpha?: number;
+  darkness?: number;
   blurRadius?: number;
   bridgeReach?: number;
   drip?: number;

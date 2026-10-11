@@ -511,27 +511,30 @@ export function profileAvatarMorphPath(
 
 /*
  * Android hole-punch gooey morph (`modules/profile-gooey`): the avatar stays
- * a circle, scales uniformly and travels to the lens, ending a hair smaller
- * than it, while a black liquid neck joins the two. The native view only
- * draws the frame computed here.
+ * a circle, rides up with the scroll while it shrinks uniformly, darkens and
+ * blurs into a black disc the size of the lens, centred under it, and then a
+ * black liquid neck fuses it into the lens. The native view only draws the
+ * frame computed here.
  */
 
 /** A circle in view-local dp: centre and diameter. */
 export type ProfileGooeyCircle = { x: number; y: number; diameter: number };
 
 /**
- * Progress at which the shrinking photo reaches the lens size, centred under
- * it. The liquid neck only forms after this, so a large photo never stretches
- * towards the lens.
+ * Progress at which the shrinking avatar reaches the lens size, centred under
+ * it and fully black. The liquid neck only forms after this, so a photo never
+ * stretches towards the lens.
  */
 export const PROFILE_GOOEY_SHRINK_END = 0.65;
-/** Edge-to-edge gap (in lens diameters) between the shrunken photo and the lens. */
+/** Progress at which the avatar starts darkening and blurring. */
+const PROFILE_GOOEY_FADE_START = 0.15;
+/** Edge-to-edge gap (in lens diameters) between the shrunken avatar and the lens. */
 const PROFILE_GOOEY_STAGING_GAP = 0.9;
 /** The end circle sits this far (dp) inside the lens edge so it never pokes out. */
 const PROFILE_GOOEY_LENS_INSET = 1;
-/** Padding (dp) around the native canvas for the neck, drip and blur. */
+/** Padding (dp) around the native canvas for the neck and drip. */
 export const PROFILE_GOOEY_MARGIN = 24;
-/** Strongest progressive blur on the photo (dp, Android 12+ only). */
+/** Strongest progressive blur on the avatar (dp, Android 12+ only). */
 const PROFILE_GOOEY_MAX_BLUR = 6;
 
 function clamp01(value: number) {
@@ -570,12 +573,13 @@ export function profileGooeyProgress(scrollOffset: number, distance: number): nu
 
 /**
  * Everything the native gooey view draws at `progress`, in its local dp:
- * - Until `PROFILE_GOOEY_SHRINK_END` the photo shrinks uniformly to the end
- *   diameter while gliding (ease-out) to a point centred under the lens.
+ * - Until `PROFILE_GOOEY_SHRINK_END` the avatar shrinks uniformly to the end
+ *   diameter while travelling at a constant rate (carried by the scroll) to a
+ *   point centred under the lens; from `PROFILE_GOOEY_FADE_START` it darkens
+ *   (`darkness`, 0 → 1) and blurs, so it arrives as a black disc.
  * - Afterwards it rises into the lens; the neck may form (`bridgeReach` is
- *   how far apart the two circles' edges can be and still join), a short drip
- *   hangs from the lens, and the photo fades to its black silhouette so the
- *   last frames are a droplet sinking into the camera.
+ *   how far apart the two circles' edges can be and still join) and a short
+ *   drip hangs from the lens: a droplet sinking into the camera.
  */
 export function profileGooeyFrame(
   start: ProfileCameraCutoutFrame,
@@ -593,15 +597,18 @@ export function profileGooeyFrame(
   const startX = start.left + start.width / 2;
   const startY = start.top + start.height / 2;
   const shrink = clamp01(t / PROFILE_GOOEY_SHRINK_END);
-  const glide = 1 - (1 - shrink) * (1 - shrink);
+  const fade = clamp01(
+    (t - PROFILE_GOOEY_FADE_START) / (PROFILE_GOOEY_SHRINK_END - PROFILE_GOOEY_FADE_START),
+  );
   const rise = clamp01((t - PROFILE_GOOEY_SHRINK_END) / (1 - PROFILE_GOOEY_SHRINK_END));
   const neck = clamp01((t - PROFILE_GOOEY_SHRINK_END) / 0.08);
   return {
-    avatarX: startX + (holeX - startX) * glide,
-    avatarY: startY + (stagingY - startY) * glide + (holeY - stagingY) * rise,
-    avatarDiameter: start.width + (endDiameter - start.width) * glide,
-    imageAlpha: 1 - clamp01((t - 0.7) / 0.25),
-    blurRadius: PROFILE_GOOEY_MAX_BLUR * clamp01((t - 0.3) / 0.5),
+    avatarX: startX + (holeX - startX) * shrink,
+    avatarY: startY + (stagingY - startY) * shrink + (holeY - stagingY) * rise,
+    avatarDiameter: start.width + (endDiameter - start.width) * shrink,
+    // Smoothstep, reaching exactly 1 at the shrink end.
+    darkness: fade * fade * (3 - 2 * fade),
+    blurRadius: PROFILE_GOOEY_MAX_BLUR * fade,
     bridgeReach: gap * 1.2 * neck,
     drip: holeDiameter * 0.25 * Math.sin(Math.PI * rise),
   };

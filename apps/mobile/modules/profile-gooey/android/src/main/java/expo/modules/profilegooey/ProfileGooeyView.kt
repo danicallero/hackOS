@@ -26,11 +26,13 @@ import kotlin.math.sin
 
 /**
  * Android hole-punch profile avatar morph. The single React child (the avatar
- * photo or initials, laid out by Yoga at the expanded frame) is drawn here
- * scaled uniformly to the animated circle, so layout never changes. Under it a
- * black "ink" silhouette (lens + avatar + a metaball neck + a short drip) fuses
- * the shrunken avatar into the camera lens.
- * Android 12+ softens the ink with a blur + alpha threshold. Every frame value comes from `profileGooeyFrame` (lib/profile-avatar-collapse.ts).
+ * photo or initials, laid out once by Yoga at the expanded frame) is drawn
+ * here scaled uniformly onto the animated circle and clipped to it, so its
+ * layout never changes. It darkens and blurs into a black disc; once fully
+ * black it is handed to the "ink" silhouette (lens + avatar + a metaball neck
+ * + a short drip) that fuses it into the camera lens. Android 12+ softens the
+ * ink with a blur + alpha threshold. Every frame value comes from
+ * `profileGooeyFrame` (lib/profile-avatar-collapse.ts).
  */
 class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
   // dp, view-local
@@ -40,40 +42,50 @@ class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(cont
   var avatarX = 0f
   var avatarY = 0f
   var avatarDiameter = 0f
-  var imageAlpha = 1f
+  var darkness = 0f
   var blurRadius = 0f
   var bridgeReach = 0f
   var drip = 0f
 
   private val density = resources.displayMetrics.density
   private val inkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK }
+  private val avatarClip = Path()
   private val bridge = Path()
   private val dripPath = Path()
   private val effects: Effects? =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Effects() else null
 
+  // ExpoView is a LinearLayout: an Android layout pass would stack and stretch
+  // the React child (moving it to the top-left and resizing it), so measure
+  // only this view and leave the child exactly where Yoga put it.
+  override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+    setMeasuredDimension(
+      MeasureSpec.getSize(widthMeasureSpec),
+      MeasureSpec.getSize(heightMeasureSpec),
+    )
+  }
+
+  override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) = Unit
+
   override fun dispatchDraw(canvas: Canvas) {
     val child = if (childCount > 0) getChildAt(0) else null
     if (child == null || child.width == 0 || avatarDiameter <= 0f) return
-    // Ink only shows once the photo fades or the neck forms; before that it
-    // would only darken the photo's anti-aliased rim.
-    if (bridgeReach > 0f || imageAlpha < 1f) {
-      val fx = effects
-      if (fx != null && canvas.isHardwareAccelerated) fx.drawInk(canvas) else drawInk(canvas)
+    val fx = if (canvas.isHardwareAccelerated) effects else null
+    if (darkness >= 1f) {
+      // Fully black: the ink's own avatar disc replaces the photo, so the
+      // neck fuses with it seamlessly.
+      if (fx != null) fx.drawInk(canvas) else drawInk(canvas)
+      return
     }
-    if (imageAlpha <= 0f) return
-    val fx = effects
-    if (fx != null && canvas.isHardwareAccelerated) {
-      fx.drawContent(canvas, child)
-    } else {
-      val r = avatarDiameter * density / 2f
-      val cx = avatarX * density
-      val cy = avatarY * density
-      val layer = imageAlpha < 1f
-      if (layer) canvas.saveLayerAlpha(cx - r, cy - r, cx + r, cy + r, (imageAlpha * 255).roundToInt())
-      drawAvatar(canvas, child)
-      if (layer) canvas.restore()
-    }
+    val r = avatarDiameter * density / 2f
+    avatarClip.rewind()
+    avatarClip.addCircle(avatarX * density, avatarY * density, r, Path.Direction.CW)
+    canvas.save()
+    // The clip also trims the blur, so nothing bleeds outside the circle.
+    canvas.clipPath(avatarClip)
+    if (fx != null) fx.drawContent(canvas, child) else drawAvatar(canvas, child)
+    if (darkness > 0f) canvas.drawColor(Color.argb((darkness * 255).roundToInt(), 0, 0, 0))
+    canvas.restore()
   }
 
   override fun onDetachedFromWindow() {
@@ -182,7 +194,8 @@ class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(cont
 
   /**
    * Android 12+: the ink is blurred and re-thresholded on the RenderThread
-   * (surface tension), and the photo gets a progressive blur. Both nodes are
+   * (surface tension), and the photo gets a progressive blur (clipped back to
+   * the circle by the caller). Both nodes are
    * allocated once and reused; effects are rebuilt only when a radius changes.
    */
   @RequiresApi(Build.VERSION_CODES.S)
@@ -240,7 +253,6 @@ class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(cont
         )
         contentBlur = blur
       }
-      contentNode.setAlpha(imageAlpha)
       canvas.drawRenderNode(contentNode)
     }
 

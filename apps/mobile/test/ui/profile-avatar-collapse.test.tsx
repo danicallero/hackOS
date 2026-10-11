@@ -815,22 +815,27 @@ describe("android hole-punch gooey geometry", () => {
       avatarX: 200,
       avatarY: 228,
       avatarDiameter: 96,
-      imageAlpha: 1,
+      darkness: 0,
       blurRadius: 0,
       bridgeReach: 0,
     });
     const end = profileGooeyFrame(avatar, lens, 1);
-    expect(end).toMatchObject({ avatarX: 200, avatarY: 25, avatarDiameter: 24, imageAlpha: 0 });
+    expect(end).toMatchObject({ avatarX: 200, avatarY: 25, avatarDiameter: 24, darkness: 1 });
     expect(end.drip).toBeCloseTo(0);
   });
 
-  it("shrinks to the lens size under it before any neck forms", () => {
+  it("shrinks to a black disc the lens size under it before any neck forms", () => {
     const staged = profileGooeyFrame(avatar, lens, PROFILE_GOOEY_SHRINK_END);
     expect(staged.avatarDiameter).toBeCloseTo(24);
     expect(staged.avatarX).toBe(200);
-    // Below the lens with a clear gap, photo still opaque, no neck yet.
+    // Below the lens with a clear gap, already fully black, no neck yet.
     expect(staged.avatarY - staged.avatarDiameter / 2).toBeGreaterThan(38 + 20);
-    expect(staged).toMatchObject({ imageAlpha: 1, bridgeReach: 0 });
+    expect(staged).toMatchObject({ darkness: 1, bridgeReach: 0 });
+    // Halfway it is mid-fade and mid-blur, never a sudden switch.
+    const half = profileGooeyFrame(avatar, lens, 0.4);
+    expect(half.darkness).toBeGreaterThan(0);
+    expect(half.darkness).toBeLessThan(1);
+    expect(half.blurRadius).toBeGreaterThan(0);
     for (let p = 0; p <= PROFILE_GOOEY_SHRINK_END; p += 0.05) {
       expect(profileGooeyFrame(avatar, lens, p).bridgeReach).toBe(0);
     }
@@ -840,13 +845,13 @@ describe("android hole-punch gooey geometry", () => {
     expect(rising.avatarY).toBeLessThan(staged.avatarY);
   });
 
-  it("never grows or reverses along the way, so scrolling back retraces it", () => {
+  it("never grows, lightens or reverses along the way, so scrolling back retraces it", () => {
     let previous = profileGooeyFrame(avatar, lens, 0);
     for (let i = 1; i <= 100; i++) {
       const frame = profileGooeyFrame(avatar, lens, i / 100);
       expect(frame.avatarDiameter).toBeLessThanOrEqual(previous.avatarDiameter + 1e-9);
       expect(frame.avatarY).toBeLessThanOrEqual(previous.avatarY + 1e-9);
-      expect(frame.imageAlpha).toBeLessThanOrEqual(previous.imageAlpha);
+      expect(frame.darkness).toBeGreaterThanOrEqual(previous.darkness);
       previous = frame;
     }
     expect(profileGooeyFrame(avatar, lens, 0.42)).toEqual(profileGooeyFrame(avatar, lens, 0.42));
