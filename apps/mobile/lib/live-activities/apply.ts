@@ -192,11 +192,12 @@ export function applyAndroidLiveUpdate(
       return;
     }
 
-    const item: DesiredActivity = {
-      kind: message.kind,
-      subject: message.subject,
-      props: message.props,
-    };
+    // The message's rank orders the post (sort key) when the props lack one.
+    const props =
+      typeof message.rank === "number" && typeof message.props.rank !== "number"
+        ? { ...message.props, rank: message.rank }
+        : message.props;
+    const item: DesiredActivity = { kind: message.kind, subject: message.subject, props };
     const phase = message.props.phase;
     // Only a real dismissal (delete intent) holds it back, until the phase
     // changes; a notification missing for any other reason is posted again.

@@ -16,7 +16,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.graphics.drawable.IconCompat
 
 /**
- * Posts Android Live Updates (#966, H38, H25, H26). Hybrid, because promotion
+ * Posts Android Live Updates (#966, H38, H25, H26, H59, H19, H22). Hybrid, because promotion
  * forbids custom views and colorized notifications:
  *
  * - Promoted (Android 16+ and `canPostPromotedNotifications()`): a real Live
@@ -88,7 +88,15 @@ object LiveUpdatePoster {
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
       .setContentIntent(viewIntent(context, content.url, requestCode(content.id, 0)))
       .setDeleteIntent(LiveUpdateDismissals.deleteIntent(context, content.id, content.phase, requestCode(content.id, 2)))
+      .apply { sortKey(content.rank)?.let { setSortKey(it) } }
   }
+
+  /**
+   * The device rank as a sort key (sort keys compare as strings): rank 0
+   * sorts before rank 1, and before 10. Null leaves the system order.
+   */
+  fun sortKey(rank: Int?): String? =
+    rank?.takeIf { it >= 0 }?.let { "hackos-" + it.toString().padStart(4, '0') }
 
   private fun promoted(context: Context, content: LiveUpdateContent): NotificationCompat.Builder {
     val builder = base(context, content)

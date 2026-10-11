@@ -1,10 +1,13 @@
 import {
   ACCREDITATION_LIVE_ACTIVITY_SUBJECT,
+  type AccreditationLiveProps,
   type ActivityLiveProps,
   type AndroidLiveUpdateMessage,
+  type AttendeeActivityLiveProps,
   activityLiveActivitySubject,
   attendeeActivityLiveActivitySubject,
   DEADLINE_LIVE_ACTIVITY_SUBJECT,
+  type DeadlineLiveProps,
   LIVE_ACTIVITY_KINDS,
   LIVE_ACTIVITY_PROPS_VERSION,
   type LiveActivityKind,
@@ -259,7 +262,10 @@ export function nextPhaseBoundary(desired: DesiredActivity[], now: number): numb
 
 // ─── Android Live Updates ────────────────────────────────────────────────
 
-/** Notification identity: `queue:judging` or `activity:12`. */
+/**
+ * Notification identity: `queue:judging`, else the subject itself
+ * (`activity:12`, `schedule:21`, `deadline`, `accreditation`).
+ */
 export function androidLiveUpdateId(kind: LiveActivityKind, subject: string): string {
   return kind === "queue" ? liveActivityKey(kind, subject) : subject;
 }
@@ -269,6 +275,9 @@ export function parseAndroidLiveUpdateId(
 ): { kind: LiveActivityKind; subject: string } | null {
   if (id.startsWith("queue:")) return { kind: "queue", subject: id.slice("queue:".length) };
   if (/^activity:\d+$/.test(id)) return { kind: "activity", subject: id };
+  if (/^schedule:\d+$/.test(id)) return { kind: "attendee_activity", subject: id };
+  if (id === DEADLINE_LIVE_ACTIVITY_SUBJECT) return { kind: "deadline", subject: id };
+  if (id === ACCREDITATION_LIVE_ACTIVITY_SUBJECT) return { kind: "accreditation", subject: id };
   return null;
 }
 
@@ -292,8 +301,8 @@ function clamp01(value: number): number {
   return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
 }
 
-/** "142" + "Served" → "142 served": a count followed by its (en/es/gl) label. */
-function counted(count: number, label: string | undefined): string | null {
+/** "142" + "Served" → "142 served": a value followed by its (en/es/gl) label. */
+function counted(count: number | string, label: string | undefined): string | null {
   if (!label) return null;
   return `${count} ${label.charAt(0).toLocaleLowerCase()}${label.slice(1)}`;
 }
@@ -378,14 +387,31 @@ function queueProgress(props: QueueLiveProps): LiveUpdateProgress {
 }
 
 /** A single stage from 0 to 1, e.g. the served share or the elapsed time. */
-function shareProgress(fraction: number, tracker: LiveUpdateGlyph): LiveUpdateProgress {
+function shareProgress(
+  fraction: number,
+  tracker: LiveUpdateGlyph,
+  tone: LiveUpdateTone = "accent",
+): LiveUpdateProgress {
   const value = Math.round(clamp01(fraction) * 100);
   return {
     value,
-    segments: trackSegments([{ length: 100, tone: "accent" }], value),
+    segments: trackSegments([{ length: 100, tone }], value),
     tracker,
-    trackerTone: "accent",
+    trackerTone: tone,
   };
+}
+
+/** Elapsed share of [start, end] at `now`, or null without a valid window. */
+function elapsedShare(start: number, end: number, now: number): number | null {
+  return Number.isFinite(start) && Number.isFinite(end) && end > start
+    ? clamp01((now - start) / (end - start))
+    : null;
+}
+
+/** An instant still worth counting down to, or null. */
+function futureInstant(iso: string | null | undefined, now: number): number | null {
+  const at = iso ? Date.parse(iso) : Number.NaN;
+  return Number.isFinite(at) && at > now ? at : null;
 }
 
 function queueTrackLabels(
@@ -571,19 +597,204 @@ function activitySpec(props: ActivityLiveProps, now: number): LiveUpdateSpec {
   };
 }
 
+/** Mirrors the iOS attendee widget's symbols (`ActivityKind.symbol`). */
+function attendeeGlyph(category: string): LiveUpdateGlyph {
+  if (category === "deadline") return "flag";
+  if (category === "activity") return "sparkles";
+  if (["meal", "talk", "workshop", "ceremony"].includes(category)) return activityGlyph(category);
+  return "calendar";
+}
+
 /**
- * Props → Android Live Update (#966; H38 queue, H25/H26 staff), or null for
- * kinds Android does not render yet. The queue alerts (heads-up and sound)
- * only on the transition into "called"; every other post is silent.
+ * H59 attendee activity: upcoming counts down to the start, live ("Now ·
+ * name") to the end with the elapsed time as the track. No action: the whole
+ * surface opens the schedule item. The chip shows the countdown itself.
+ */
+function attendeeSpec(props: AttendeeActivityLiveProps, now: number): LiveUpdateSpec {
+  const labels = props.labels ?? ({} as Partial<AttendeeActivityLiveProps["labels"]>);
+  const live = props.phase === "live";
+  const when = `${clock(props.startsAt)}–${clock(props.endsAt)}`;
+  const where = props.location ? `${when} · ${props.location}` : when;
+  const icon = attendeeGlyph(props.category);
+  const caption = (live ? labels.endsIn : labels.startsIn) ?? null;
+  const nowLabel = live ? (labels.now ?? null) : null;
+  const title = nowLabel ? `${nowLabel} · ${props.name}` : props.name;
+  const elapsed = live
+    ? elapsedShare(Date.parse(props.startsAt), Date.parse(props.endsAt), now)
+    : null;
+  return {
+    id: androidLiveUpdateId(
+      "attendee_activity",
+      attendeeActivityLiveActivitySubject(props.scheduleId),
+    ),
+    url: props.url,
+    phase: props.phase,
+    tone: "accent",
+    icon,
+    alert: false,
+    title,
+    emphasis: nowLabel,
+    text: where,
+    subText: caption,
+    countdownTo: futureInstant(live ? props.endsAt : props.startsAt, now),
+    progress: elapsed === null ? null : shareProgress(elapsed, icon),
+    card: {
+      header: title,
+      lead: { caption, timer: "countDown", hero: true },
+      detail: where,
+    },
+  };
+}
+
+/**
+ * H19/H20 submission deadline. Open (blue) and closing (red) count down to
+ * the deadline in the header and the chip, with the hacking window as the
+ * track; submitted is the calm green state with the time left kept in the
+ * chip. Only the transition into `closing` alerts. A null submission is
+ * unknown and shows no status, never "not submitted".
+ */
+function deadlineSpec(
+  props: DeadlineLiveProps,
+  previousPhase: string | null,
+  now: number,
+): LiveUpdateSpec {
+  const labels = props.labels ?? ({} as Partial<DeadlineLiveProps["labels"]>);
+  const closing = props.phase === "closing";
+  const submitted = props.phase === "submitted";
+  const tone: LiveUpdateTone = submitted ? "go" : closing ? "alert" : "accent";
+  const icon: LiveUpdateGlyph = submitted ? "check" : closing ? "alert" : "hourglass";
+  const status =
+    (props.submission === "submitted"
+      ? labels.submitted
+      : props.submission === "draft"
+        ? labels.notSubmitted
+        : null) ?? null;
+  const statusTone: LiveUpdateTone =
+    props.submission === "submitted" ? "go" : closing ? "alert" : "warning";
+  const base = {
+    id: androidLiveUpdateId("deadline", DEADLINE_LIVE_ACTIVITY_SUBJECT),
+    url: props.url,
+    phase: props.phase,
+    tone,
+    icon,
+    subText: labels.closesIn ?? null,
+    countdownTo: futureInstant(props.endsAt, now),
+    alert: closing && previousPhase !== "closing",
+  };
+
+  if (submitted) {
+    return {
+      ...base,
+      title: labels.submitted ?? props.projectName ?? labels.title ?? "",
+      text: props.projectName,
+      card: {
+        header: labels.title ?? props.projectName ?? "",
+        lead: { caption: props.projectName, value: labels.submitted ?? null, hero: true },
+        trail: { caption: labels.closesIn ?? null, timer: "countDown", quiet: true },
+      },
+    };
+  }
+
+  const elapsed = elapsedShare(
+    props.startsAt ? Date.parse(props.startsAt) : Number.NaN,
+    Date.parse(props.endsAt),
+    now,
+  );
+  return {
+    ...base,
+    title: props.projectName ?? labels.title ?? labels.closesIn ?? "",
+    text: status,
+    progress: elapsed === null ? null : shareProgress(elapsed, "hourglass", tone),
+    card: {
+      header: labels.title ?? props.projectName ?? "",
+      lead: { caption: labels.closesIn ?? null, timer: "countDown", hero: true },
+      // The project and its status opposite the countdown, as on iOS.
+      trail: status
+        ? { caption: props.projectName, value: status, quiet: true, tone: statusTone }
+        : props.projectName
+          ? { value: props.projectName, quiet: true }
+          : null,
+    },
+  };
+}
+
+/**
+ * H22 accreditation desk: "412/600 accredited" leads, the pace and the
+ * presence follow, the track is the accredited share and Scan opens the
+ * accreditation scanner. A count in the chip, so no `when`.
+ */
+function accreditationSpec(props: AccreditationLiveProps): LiveUpdateSpec {
+  const labels = props.labels ?? ({} as Partial<AccreditationLiveProps["labels"]>);
+  const accredited = count(props.accredited) ?? 0;
+  const eligible = count(props.eligible);
+  const inside = count(props.inside);
+  const recent = count(props.recentArrivals) ?? 0;
+  const ratio = eligible ? `${accredited}/${eligible}` : String(accredited);
+  const pace = labels.lastTenMinutes ? `+${recent}` : null;
+  const action = labels.scan ? { label: labels.scan, url: props.scanUrl } : null;
+  const stats = [
+    { caption: labels.accredited ?? null, value: ratio, hero: true },
+    ...(pace ? [{ caption: labels.lastTenMinutes ?? null, value: pace }] : []),
+    ...(inside !== null && labels.inside
+      ? [{ caption: labels.inside, value: String(inside) }]
+      : []),
+  ];
+  return {
+    id: androidLiveUpdateId("accreditation", ACCREDITATION_LIVE_ACTIVITY_SUBJECT),
+    url: props.url,
+    phase: props.phase,
+    tone: "accent",
+    icon: "badge",
+    alert: false,
+    // "412/600 accredited" with 412 bold; "+23 last 10 min · 380 inside".
+    title: counted(ratio, labels.accredited) ?? ratio,
+    emphasis: String(accredited),
+    text:
+      [
+        pace && counted(pace, labels.lastTenMinutes),
+        inside !== null && counted(inside, labels.inside),
+      ]
+        .filter(Boolean)
+        .join(" · ") || null,
+    subText: labels.title ?? null,
+    shortCriticalText: chip(String(accredited)),
+    progress: eligible ? shareProgress(accredited / eligible, "badge") : null,
+    card: {
+      header: labels.title ?? ratio,
+      lead: stats[0]!,
+      stats,
+    },
+    action,
+  };
+}
+
+/**
+ * Props → Android Live Update (#966; H38 queue, H25/H26 staff, H59
+ * attendee, H19 deadline, H22 accreditation). The queue alerts (heads-up and
+ * sound) only on the transition into "called" and the deadline only on the
+ * one into "closing"; every other post is silent. `rank` orders the posts.
  */
 export function toLiveUpdateSpec(
-  props: QueueLiveProps | ActivityLiveProps,
+  props: LiveActivityProps,
   previousPhase: string | null,
   now = Date.now(),
 ): LiveUpdateSpec | null {
-  if (props.kind === "queue") return queueSpec(props, previousPhase);
-  if (props.kind === "activity") return activitySpec(props, now);
-  return null;
+  const spec =
+    props.kind === "queue"
+      ? queueSpec(props, previousPhase)
+      : props.kind === "activity"
+        ? activitySpec(props, now)
+        : props.kind === "attendee_activity"
+          ? attendeeSpec(props, now)
+          : props.kind === "deadline"
+            ? deadlineSpec(props, previousPhase, now)
+            : props.kind === "accreditation"
+              ? accreditationSpec(props)
+              : null;
+  if (!spec) return null;
+  return typeof props.rank === "number" && Number.isFinite(props.rank) && props.rank >= 0
+    ? { ...spec, rank: Math.floor(props.rank) }
+    : spec;
 }
 
 /**
@@ -613,7 +824,7 @@ export function parseAndroidLiveUpdateMessage(
     if (
       message &&
       (message.event === "start" || message.event === "update" || message.event === "end") &&
-      (message.kind === "queue" || message.kind === "activity") &&
+      (Object.values(LIVE_ACTIVITY_KINDS) as unknown[]).includes(message.kind) &&
       typeof message.subject === "string" &&
       (message.event === "end" || isProps(message.props))
     ) {

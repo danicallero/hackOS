@@ -115,7 +115,7 @@ function load() {
     posted: Map<string, string>;
     recorded: Record<string, string>;
     render: { mode: string };
-    liveActivityHost: { update: jest.Mock };
+    liveActivityHost: { update: jest.Mock; start: jest.Mock };
   };
   jest.isolateModules(() => {
     sync = require("./sync");
@@ -138,6 +138,7 @@ function load() {
     recorded: host.recorded,
     render: host.render,
     update: host.liveActivityHost.update,
+    start: host.liveActivityHost.start,
     serve(next: MyLiveActivities) {
       current = next;
     },
@@ -243,6 +244,19 @@ describe("Android Live Update dismissals (#966)", () => {
     posted.clear();
     await apply.applyAndroidLiveUpdate({ ...message, props: queueProps({ position: 3 }) });
     expect(posted.has("queue:judging")).toBe(true);
+  });
+
+  it("passes the push's rank to the post when the props carry none", async () => {
+    const { apply, start } = load();
+    start.mockClear();
+    await apply.applyAndroidLiveUpdate({
+      event: "start",
+      kind: "queue",
+      subject: "judging",
+      props: queueProps(),
+      rank: 2,
+    });
+    expect(start.mock.calls[0]?.[0].props.rank).toBe(2);
   });
 
   it("reposts unchanged surfaces when the rendering changes (Live updates re-enabled)", async () => {

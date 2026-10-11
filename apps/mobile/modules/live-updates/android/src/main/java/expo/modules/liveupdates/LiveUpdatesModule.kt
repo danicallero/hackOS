@@ -59,7 +59,9 @@ class LiveUpdateMetricRecord : Record {
 
   @Field val quiet: Boolean = false
 
-  fun toMetric() = LiveUpdateMetric(caption, value, timer, hero, quiet)
+  @Field val tone: String? = null
+
+  fun toMetric() = LiveUpdateMetric(caption, value, timer, hero, quiet, tone)
 }
 
 class LiveUpdateFooterRecord : Record {
@@ -134,6 +136,8 @@ class LiveUpdateSpecRecord : Record {
 
   @Field val alert: Boolean = false
 
+  @Field val rank: Double? = null
+
   fun toContent() = LiveUpdateContent(
     id = id,
     title = title,
@@ -152,10 +156,11 @@ class LiveUpdateSpecRecord : Record {
     tone = tone,
     icon = icon,
     alert = alert,
+    rank = rank?.toInt(),
   )
 }
 
-/** JS bridge for Android Live Updates (#966, H38, H25, H26); see LiveUpdatePoster. */
+/** JS bridge for Android Live Updates (#966, H38, H25, H26, H59, H19, H22); see LiveUpdatePoster. */
 class LiveUpdatesModule : Module() {
   private val context: Context
     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()

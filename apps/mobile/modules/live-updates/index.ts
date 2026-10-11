@@ -16,13 +16,27 @@ import { NativeModule, requireOptionalNativeModule } from "expo";
  */
 
 /** Monochrome glyph: the small icon, the badge and the track icons. */
-export type LiveUpdateGlyph = "people" | "door" | "queue" | "meal" | "mic" | "star";
+export type LiveUpdateGlyph =
+  | "people"
+  | "door"
+  | "queue"
+  | "meal"
+  | "mic"
+  | "star"
+  | "calendar"
+  | "flag"
+  | "sparkles"
+  | "hourglass"
+  | "check"
+  | "alert"
+  | "badge";
 
 /**
  * Colour resolved natively for light and dark: blue, green (go), grey
- * (neutral), and the lighter grey of a track's travelled part.
+ * (neutral), amber (warning), red (alert), and the lighter grey of a track's
+ * travelled part.
  */
-export type LiveUpdateTone = "accent" | "go" | "neutral" | "travelled";
+export type LiveUpdateTone = "accent" | "go" | "neutral" | "warning" | "alert" | "travelled";
 
 /**
  * A track like Google Maps' navigation Live Update: the travelled part grey,
@@ -51,6 +65,8 @@ export interface LiveUpdateMetric {
   hero?: boolean;
   /** A placeholder such as "Estimating…": drawn smaller than a number. */
   quiet?: boolean;
+  /** Colour of the value when it differs from the phase colour (e.g. an amber status). */
+  tone?: LiveUpdateTone | null;
 }
 
 /** The custom card (non-promoted path), laid out like the iOS Lock Screen. */
@@ -105,6 +121,8 @@ export interface LiveUpdateSpec {
   icon: LiveUpdateGlyph;
   /** Heads-up + sound for this post (e.g. the team was called); silent otherwise. */
   alert?: boolean;
+  /** Device rank (0 = most important): orders the posts (`setSortKey`). */
+  rank?: number | null;
 }
 
 declare class LiveUpdatesModule extends NativeModule<Record<string, never>> {

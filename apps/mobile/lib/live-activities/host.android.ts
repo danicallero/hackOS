@@ -22,11 +22,8 @@ function available(): boolean {
 }
 
 function show(item: Parameters<LiveActivityHost["start"]>[0], previousPhase: string | null) {
-  // #966: the attendee, deadline, judging and accreditation kinds have no
-  // Android rendering yet; they are skipped rather than posted half-mapped.
-  if (item.props.kind !== "queue" && item.props.kind !== "activity") return null;
   const spec = toLiveUpdateSpec(item.props, previousPhase);
-  // Kinds without an Android rendering yet are not posted.
+  // A kind this build does not know (newer server) is not posted.
   if (!spec) return null;
   LiveUpdates?.show(spec);
   return spec.id;

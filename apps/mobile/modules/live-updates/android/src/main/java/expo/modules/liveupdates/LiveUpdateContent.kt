@@ -16,11 +16,13 @@ data class LiveUpdateContent(
   val url: String,
   val actionLabel: String? = null,
   val actionUrl: String? = null,
-  /** `accent` | `go` | `neutral`. */
+  /** `accent` | `go` | `neutral` | `warning` | `alert`. */
   val tone: String = "accent",
-  /** Glyph name: `people`, `door`, `queue`, `meal`, `mic`, `star`. */
+  /** Glyph name, see [LiveUpdateArt.glyphRes]. */
   val icon: String = "people",
   val alert: Boolean = false,
+  /** Device rank (0 = most important), the post's sort key. */
+  val rank: Int? = null,
 )
 
 data class LiveUpdateSegment(val length: Int, val tone: String)
@@ -41,6 +43,8 @@ data class LiveUpdateMetric(
   val timer: String? = null,
   val hero: Boolean = false,
   val quiet: Boolean = false,
+  /** Value colour when it differs from the phase colour (e.g. an amber status). */
+  val tone: String? = null,
 )
 
 data class LiveUpdateCard(

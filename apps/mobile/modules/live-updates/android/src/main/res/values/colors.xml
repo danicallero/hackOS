@@ -8,6 +8,8 @@
   <color name="hackos_lu_accent">#FF007AFF</color>
   <color name="hackos_lu_go">#FF248A3D</color>
   <color name="hackos_lu_neutral">#FF8E8E93</color>
+  <color name="hackos_lu_warning">#FFC93400</color>
+  <color name="hackos_lu_alert">#FFD70015</color>
   <!-- The travelled part of a track (Maps style: grey behind, colour ahead). -->
   <color name="hackos_lu_travelled">#FFC7C7CC</color>
   <color name="hackos_lu_track">#FFE5E5EA</color>

@@ -27,6 +27,8 @@ object LiveUpdateArt {
   fun toneRes(tone: String?): Int = when (tone) {
     "go" -> R.color.hackos_lu_go
     "neutral" -> R.color.hackos_lu_neutral
+    "warning" -> R.color.hackos_lu_warning
+    "alert" -> R.color.hackos_lu_alert
     "travelled" -> R.color.hackos_lu_travelled
     else -> R.color.hackos_lu_accent
   }
@@ -42,6 +44,13 @@ object LiveUpdateArt {
     "mic" -> R.drawable.hackos_live_update_mic
     "star" -> R.drawable.hackos_live_update_star
     "scan" -> R.drawable.hackos_live_update_scan
+    "calendar" -> R.drawable.hackos_live_update_calendar
+    "flag" -> R.drawable.hackos_live_update_flag
+    "sparkles" -> R.drawable.hackos_live_update_sparkles
+    "hourglass" -> R.drawable.hackos_live_update_hourglass
+    "check" -> R.drawable.hackos_live_update_check
+    "alert" -> R.drawable.hackos_live_update_alert
+    "badge" -> R.drawable.hackos_live_update_badge
     else -> R.drawable.hackos_live_update_people
   }
 

@@ -1573,9 +1573,11 @@ maps the same props to one `modules/live-updates` spec that carries both
 Android renderings (see Android Live Updates below for the hybrid): the
 promoted Live Update's title/text/chip/track and the custom card's layout.
 Each state has one hero, mirroring the iOS widgets; a label missing from an
-older server's props is omitted, never replaced with English. Kinds without
-an Android rendering yet (attendee, deadline, accreditation) map to
-`null` and are not posted.
+older server's props is omitted, never replaced with English. A kind this
+build does not know maps to `null` and is not posted. The props' `rank` (or
+the data push's, when the props carry none) becomes the notification's sort
+key, so the most important surface sorts first; `desiredActivities` keeps the
+device within `maxConcurrent` on both platforms.
 
 | State | Chip (≤ 7 chars) | Promoted: title / text · header | Card: lead · trail, track |
 | --- | --- | --- | --- |
@@ -1585,6 +1587,12 @@ an Android rendering yet (attendee, deadline, accreditation) map to
 | Staff upcoming | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown | Starts in + countdown (blue); time · location |
 | Staff live meal (`inside`, `remaining`) | `remaining` | **168** still to eat / 142 served · 310 inside · name · location | Served · **Still to eat** (blue) · Inside; track + **Scan**; "Ends in" countdown |
 | Staff live, other | `scanned` | **142** scanned / name · location | Scanned (blue); location; elapsed-time track + **Scan**; "Ends in" countdown |
+| Attendee upcoming (H59) | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown; category glyph | Starts in + countdown (blue); time · location |
+| Attendee live | countdown to `endsAt` | **Now** · name / time · location · "Ends in" + countdown; elapsed-time track | Now · name; Ends in + countdown (blue); time · location; elapsed-time track |
+| Deadline open (H19) | countdown to `endsAt` | project (else the title) / status · "Closes in" + countdown; hourglass, blue; hacking-window track (none without `startsAt`) | Closes in + countdown (blue) · project over its status (amber "Not submitted", green "Submitted", none when unknown); window track |
+| Deadline closing | countdown | the same in red (`exclamationmark` glyph); heads-up only on the transition into `closing` | the same in red |
+| Deadline submitted | countdown (time left) | Submitted / project · "Closes in" + countdown; check, green; no track | Submitted (green) under the project · Closes in + a small countdown |
+| Accreditation (H22) | accredited count | **412**/600 accredited / +23 last 10 min · 380 inside · title; accredited-share track; **Scan** | Accredited `412/600` (blue) · Last 10 min · Inside; share track + **Scan** |
 
 **Tracks.** Like Google Maps' navigation Live Update: the travelled part is
 one grey segment, a round tracker (white disc, glyph in the phase colour)
@@ -1596,7 +1604,9 @@ first stage while waiting (#1 of 4 → 0.75; at the start on the first
 sighting or without `startPosition`), at the boundary once called and at the
 end in the room, with the door as the end icon. Meals track the served share
 `(inside − remaining) / inside` (none when nobody is inside); other live
-activities the time elapsed between start and end, as of the post.
+activities and live attendee items the time elapsed between start and end,
+the deadline the hacking window's elapsed time (in its phase colour), and the
+desk the accredited share `accredited / eligible`, all as of the post.
 
 **Orchestration (`lib/live-activities/`).**
 
@@ -1721,7 +1731,8 @@ release bundles drop it.
 ### Android Live Updates (#966)
 
 `modules/live-updates` (Kotlin, Android-only; `null` on iOS/web) posts the
-Android counterpart of a Live Activity (H38 queue, H25/H26 staff activity):
+Android counterpart of a Live Activity (H38 queue, H25/H26 staff activity,
+H59 attendee activity, H19 deadline, H22 accreditation desk):
 one ongoing notification per `spec.id`, tagged `hackos.live-update:<id>`.
 
 **Hybrid, and why.** Android 16 only promotes a notification to a Live
@@ -1745,13 +1756,16 @@ an id's first post).
 - Built with `NotificationCompat` (androidx.core 1.17: `ProgressStyle`,
   `setShortCriticalText`, `setRequestPromotedOngoing`). `MetricStyle` is
   Android 17-era and absent from compileSdk 36, so it is not used.
-- Colours: blue (waiting, upcoming, live), green (called), grey (in room), a
-  lighter grey for travelled track. Text colours are resources with
+- Colours: blue (waiting, upcoming, live, deadline open), green (called,
+  submitted), grey (in room), red (deadline closing), amber (a draft's "Not
+  submitted" on the card), a lighter grey for travelled track. Text colours are resources with
   `values-night` variants, resolved by SystemUI (`RemoteViews.setColor` on
   API 31+), so the card follows the shade's light/dark mode; bitmaps (badge,
   tracker, card track) use the mode at post time.
 - Small icon: the kind's monochrome glyph (`people`, `door`, `meal`, `mic`,
-  `star`; `scan` for the action). Android 16 shows the app icon in the
+  `star`, `calendar`, `flag`, `sparkles` for schedule categories, `hourglass`
+  / `alert` / `check` for the deadline, `badge` for the desk; `scan` for the
+  action). Android 16 shows the app icon in the
   notification header regardless; the glyph appears in the chip and the
   status bar.
 - Chip and `when`: the chip shows `shortCriticalText` whenever it is set,
@@ -1766,11 +1780,14 @@ an id's first post).
   Android 16 emulator).
 - Channels: `hackos_live_updates` (default importance, no sound/vibration)
   for routine updates; `hackos_live_updates_alert` (high importance) only
-  when `spec.alert` is true, such as the team being called. Names are
+  when `spec.alert` is true: the team being called, or the deadline entering
+  `closing`. Names are
   localized es/gl/en in the module's string resources. On the custom path,
   Android may move an already-seen alert into the lock screen's icon shelf.
 - Taps, the Scan action and the card's Scan button fire `ACTION_VIEW` deep
-  links pinned to this package (`FLAG_IMMUTABLE`).
+  links pinned to this package (`FLAG_IMMUTABLE`). Notification ids are the
+  subjects (`activity:12`, `schedule:21`, `deadline`, `accreditation`) and
+  `queue:judging`.
 - Without notification permission (`expo-notifications` asks for it), `show`
   is a no-op.
 - Dismissals: every post carries a delete intent to the module's

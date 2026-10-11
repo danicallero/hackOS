@@ -22,9 +22,9 @@ object LiveUpdateCardViews {
     views.setTextViewText(R.id.lu_header, card.header)
     // Collapsed: the card's hero metric (a stat for meals) and the trailing one.
     val hero = card.stats.firstOrNull { it.hero } ?: card.lead
-    metric(context, views, content, hero, R.id.lu_lead_caption, R.id.lu_lead_value, R.id.lu_lead_timer, content.tone, 17f)
+    metric(context, views, content, hero, R.id.lu_lead_caption, R.id.lu_lead_value, R.id.lu_lead_timer, hero.tone ?: content.tone, 17f)
     val trail = card.trail.takeIf { hero === card.lead }
-    metric(context, views, content, trail, null, R.id.lu_trail_value, R.id.lu_trail_timer, null)
+    metric(context, views, content, trail, null, R.id.lu_trail_value, R.id.lu_trail_timer, trail?.tone, 15f)
     return views
   }
 
@@ -55,15 +55,15 @@ object LiveUpdateCardViews {
         }
         text(views, caption, stat.caption)
         text(views, value, stat.value)
-        if (stat.hero) textColor(context, views, value, LiveUpdateArt.toneRes(content.tone))
+        (stat.tone ?: content.tone.takeIf { stat.hero })?.let { textColor(context, views, value, LiveUpdateArt.toneRes(it)) }
       }
     } else {
       views.setViewVisibility(R.id.lu_stats, View.GONE)
-      metric(context, views, content, card.lead, R.id.lu_lead_caption, R.id.lu_lead_value, R.id.lu_lead_timer, content.tone.takeIf { card.lead.hero }, 22f)
+      metric(context, views, content, card.lead, R.id.lu_lead_caption, R.id.lu_lead_value, R.id.lu_lead_timer, toneOf(content, card.lead), 22f)
       if (card.trail == null) {
         views.setViewVisibility(R.id.lu_trail, View.GONE)
       } else {
-        metric(context, views, content, card.trail, R.id.lu_trail_caption, R.id.lu_trail_value, R.id.lu_trail_timer, content.tone.takeIf { card.trail.hero })
+        metric(context, views, content, card.trail, R.id.lu_trail_caption, R.id.lu_trail_value, R.id.lu_trail_timer, toneOf(content, card.trail), 17f)
       }
     }
     text(views, R.id.lu_detail, card.detail)
@@ -116,6 +116,10 @@ object LiveUpdateCardViews {
       views.setViewVisibility(valueId, View.GONE)
       timer(views, timerId, target, countDown = metric?.timer == "countDown")
       tone?.let { textColor(context, views, timerId, LiveUpdateArt.toneRes(it)) }
+      // A secondary timer (the deadline's time left once submitted) stays small.
+      if (metric?.quiet == true && quietSizeSp != null) {
+        views.setTextViewTextSize(timerId, TypedValue.COMPLEX_UNIT_SP, quietSizeSp)
+      }
     } else {
       text(views, valueId, metric?.value)
       tone?.let { textColor(context, views, valueId, LiveUpdateArt.toneRes(it)) }
@@ -125,6 +129,10 @@ object LiveUpdateCardViews {
       }
     }
   }
+
+  /** The metric's own colour, else the phase colour for the hero. */
+  private fun toneOf(content: LiveUpdateContent, metric: LiveUpdateMetric): String? =
+    metric.tone ?: content.tone.takeIf { metric.hero }
 
   private fun text(views: RemoteViews, id: Int, value: String?) {
     if (value.isNullOrEmpty()) {

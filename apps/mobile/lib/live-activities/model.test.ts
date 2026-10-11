@@ -438,8 +438,8 @@ describe("toLiveUpdateSpec (Android, #966)", () => {
     });
   });
 
-  it("does not render kinds Android has no layout for yet", () => {
-    expect(toLiveUpdateSpec({ ...activityProps(), kind: "deadline" } as never, null)).toBeNull();
+  it("does not render a kind this build does not know", () => {
+    expect(toLiveUpdateSpec({ ...activityProps(), kind: "future" } as never, null)).toBeNull();
   });
   it("round-trips notification ids", () => {
     expect(parseAndroidLiveUpdateId(androidLiveUpdateId("queue", "judging"))).toEqual({
