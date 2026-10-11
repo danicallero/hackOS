@@ -1443,6 +1443,11 @@ physical iOS/Android and EAS verification remains a release-gate task in
   from `/api/me`. `mobile.json` is intentionally smaller than the web app's
   `web.json`: it covers scanner and participant controls, not the full web
   admin surface.
+- Account language row (`components/account-screen.tsx`) — on iOS the whole row
+  is the `MenuView` trigger. On Android, `@expo/ui`'s Material `DropdownMenu`
+  aligns its popup to the anchor's start edge, so a full-width trigger opened the
+  menu at the screen's left; the row is a `Pressable` calling `MenuView`'s
+  `ref.show()` and the menu is anchored to a 1dp strip at the row's trailing edge.
 - `lib/haptics.ts` — best-effort Expo Haptics feedback for custom controls and
   meaningful outcomes. Selection/light feedback is used for custom toggles,
   segmented choices, scanner capture and retry actions; success/warning/error
