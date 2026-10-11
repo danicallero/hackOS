@@ -482,6 +482,8 @@ describe("account removal UI flow", () => {
     });
 
     expect(scrollTo).toHaveBeenLastCalledWith({ animated: false, y: -150 });
+    // Without it iOS clamps a negative target to the raw inset, i.e. y 0.
+    expect(scroll.props.scrollToOverflowEnabled).toBe(true);
     // Tab re-press scrolls to the same true top, not y 0.
     const { useScrollToTop } = require("expo-router");
     const topRef = (useScrollToTop as jest.Mock).mock.calls.at(-1)[0];

@@ -745,14 +745,21 @@ header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
 no bar covers the centred avatar; Android floats its own glass back button.
 That public photo uses the same `ProfileAvatarCollapse` overlay as the signed-in
 account: Reanimated maps 120 pt of upward scroll to the shared mask and dark
-cover progress. A released drag never rests half-morphed: inside that range it
-auto-scrolls to fully expanded or collapsed by release direction on a flick,
-otherwise by the nearer half (after momentum, instantly under Reduce Motion);
-programmatic scrolls are never snapped. Both rests are measured from the true
+cover progress. A released drag never rests half-morphed: inside that range direction
+decides, from the last non-zero scroll delta (the release velocity only
+without one). Moving up, with the merge started, auto-collapses; moving down,
+with the droplet coming out, auto-expands; only a release with no movement
+takes the nearer rest. A moving release decides when its momentum ends, by the
+momentum's own direction. Each snap starts with one light haptic (also under
+Reduce Motion, where the scroll is instant); programmatic scrolls are never
+snapped and never tap. Both rests are measured from the true
 top, which on iOS sits at a negative content offset under the automatic inset
 (at least the status-bar overlap, seeded once the host is measured, then
 lowered by scroll events before the first drag), never from y 0, which is
-inside the morph. Account's tab re-press and gear scroll go to that true top,
+inside the morph. Both scroll views set `scrollToOverflowEnabled`: iOS otherwise clamps every
+programmatic scroll to the raw `contentInset` (0), so a snap or jump to the
+true top landed at y 0, mid-morph. A page too short to reach the collapsed
+rest snaps expanded instead. Account's tab re-press and gear scroll go to that true top,
 and on focus it moves a scroll left inside the morph (such as a remount
 restoring y 0) to the nearer rest. A native `MaskedView` clips the original cubic keyframes from
 Telegram's `UserAvatarMask` (`lib/telegram-avatar-mask.json`), evaluated on the

@@ -9,7 +9,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { Image, Platform, type ScrollView, useWindowDimensions, View } from "react-native";
+import {
+  Image,
+  type LayoutChangeEvent,
+  Platform,
+  type ScrollView,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Animated, {
   runOnJS,
   useAnimatedProps,
@@ -23,6 +30,7 @@ import Svg, { Defs, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 import { useApiImage } from "@/components/person-avatar";
 import { avatarInitials } from "@/components/user-avatar";
 import { diaryInitials } from "@/lib/diary";
+import { haptic } from "@/lib/haptics";
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
   PROFILE_AVATAR_SNAP_REST_VELOCITY,
@@ -33,6 +41,7 @@ import {
   profileAvatarMaskFrame,
   profileAvatarMorphPath,
   profileAvatarRestingOffsetBound,
+  profileAvatarSnapDirection,
   profileAvatarSnapOffset,
   resolveProfileCameraTarget,
 } from "@/lib/profile-avatar-collapse";
@@ -60,7 +69,12 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
   const hasDragged = useSharedValue(false);
   // Only a user drag arms the snap, so programmatic scrolls are left alone.
   const snapArmed = useSharedValue(false);
-  const releaseVelocity = useSharedValue(0);
+  // Last non-zero scroll delta: the direction of the drag or momentum (#935).
+  const lastDelta = useSharedValue(0);
+  // Content height minus the viewport: an offset the page surely reaches.
+  const maxOffset = useSharedValue(Number.POSITIVE_INFINITY);
+  const contentHeight = useRef(0);
+  const viewportHeight = useRef(0);
   const ownScrollRef = useRef<ScrollView>(null);
   const scrollRef = screenScrollRef ?? ownScrollRef;
   const reduceMotion = useReducedMotion();
@@ -75,15 +89,28 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     [reduceMotion, scrollRef],
   );
 
+  // One light tap as a user-released snap starts, also under Reduce Motion.
+  const snapHaptic = useCallback(() => void haptic("light"), []);
+
   // Plain locals so the scroll worklets capture them explicitly.
   const collapseDistance = PROFILE_AVATAR_COLLAPSE_DISTANCE;
   const restVelocity = PROFILE_AVATAR_SNAP_REST_VELOCITY;
+  const platform = Platform.OS;
 
   const settle = (offset: number, velocity: number) => {
     "worklet";
     snapArmed.value = false;
-    const target = profileAvatarSnapOffset(offset, restingOffset.value, velocity, collapseDistance);
-    if (target !== null) runOnJS(scrollToOffset)(target);
+    const direction = profileAvatarSnapDirection(lastDelta.value, velocity, platform);
+    const target = profileAvatarSnapOffset(
+      offset,
+      restingOffset.value,
+      direction,
+      collapseDistance,
+      maxOffset.value,
+    );
+    if (target === null) return;
+    runOnJS(snapHaptic)();
+    runOnJS(scrollToOffset)(target);
   };
 
   const onScroll = useAnimatedScrollHandler(
@@ -95,27 +122,30 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
           restingOffset.value = Math.min(restingOffset.value, event.contentOffset.y);
         hasDragged.value = true;
         snapArmed.value = true;
+        lastDelta.value = 0;
       },
       onScroll: (event) => {
         // Capture automatic inset adjustments before the first gesture.
         // A later pull-to-refresh bounce must not redefine the resting offset.
         if (!hasDragged.value)
           restingOffset.value = Math.min(restingOffset.value, event.contentOffset.y);
+        const delta = event.contentOffset.y - contentOffset.value;
+        if (delta !== 0) lastDelta.value = delta;
         contentOffset.value = event.contentOffset.y;
         scrollOffset.value = Math.max(0, event.contentOffset.y - restingOffset.value);
       },
       onEndDrag: (event) => {
         const velocity = event.velocity?.y ?? 0;
-        releaseVelocity.value = velocity;
         // A moving release decelerates first; its momentum end decides.
         if (Math.abs(velocity) >= restVelocity) return;
         settle(event.contentOffset.y, velocity);
       },
       onMomentumEnd: (event) => {
-        if (snapArmed.value) settle(event.contentOffset.y, releaseVelocity.value);
+        // Momentum follows its own direction, which the last delta tracks.
+        if (snapArmed.value) settle(event.contentOffset.y, 0);
       },
     },
-    [scrollToOffset],
+    [scrollToOffset, snapHaptic],
   );
 
   const measureFrame = useRef<number | null>(null);
@@ -198,6 +228,11 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     [restingOffset, scrollToOffset],
   );
 
+  const updateMaxOffset = () => {
+    if (contentHeight.current > 0 && viewportHeight.current > 0)
+      maxOffset.value = contentHeight.current - viewportHeight.current;
+  };
+
   /** Move a scroll left inside the morph by a non-drag (remount, focus) to the nearer rest. */
   const settleAtRest = useCallback(() => {
     requestAnimationFrame(() => {
@@ -206,10 +241,11 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
         restingOffset.value,
         0,
         PROFILE_AVATAR_COLLAPSE_DISTANCE,
+        maxOffset.value,
       );
       if (target !== null) scrollRef.current?.scrollTo({ animated: false, y: target });
     });
-  }, [contentOffset, restingOffset, scrollRef]);
+  }, [contentOffset, maxOffset, restingOffset, scrollRef]);
 
   return {
     anchorFrame,
@@ -217,9 +253,17 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     hostOrigin,
     hostRef,
     onAnchorLayout: measureAfterLayout,
-    onHostLayout: measureAfterLayout,
+    onHostLayout: ({ nativeEvent }: LayoutChangeEvent) => {
+      viewportHeight.current = nativeEvent.layout.height;
+      updateMaxOffset();
+      measureAfterLayout();
+    },
     onScrollBeginDrag: measureAnchor,
-    onContentSizeChange: measureAfterLayout,
+    onContentSizeChange: (_width: number, height: number) => {
+      contentHeight.current = height;
+      updateMaxOffset();
+      measureAfterLayout();
+    },
     onScroll,
     /** Content offset of the true top (negative under an automatic inset). */
     restingOffset,
