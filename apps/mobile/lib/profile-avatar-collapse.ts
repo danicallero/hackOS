@@ -12,11 +12,14 @@ export const PROFILE_AVATAR_SNAP_REST_VELOCITY = 0.05;
  * (#935): null outside the open collapse range, otherwise fully expanded (0) or
  * fully collapsed (`distance`). A flick decides by direction, a slow release by
  * which half of the range the offset is in.
+ *
+ * `distance` is required: a worklet's default-parameter expression is not
+ * captured into its UI-thread closure, so a module constant there is undefined.
  */
 export function profileAvatarSnapTarget(
   offset: number,
   velocity: number,
-  distance = PROFILE_AVATAR_COLLAPSE_DISTANCE,
+  distance: number,
 ): number | null {
   "worklet";
   if (!(offset > 0 && offset < distance)) return null;

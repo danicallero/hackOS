@@ -767,7 +767,12 @@ every side (124 x 35.33 pt, horizontally centred on the window) so the shrinking
 avatar and black backing hide inside the island instead of poking out. The
 avatar and target are both measured in the same `measureInWindow` coordinate
 space, and the host is re-measured about 450 and 900 ms after layout so a screen
-that is still sliding in (stack push, modal) does not leave a stale origin. The
+that is still sliding in (stack push, modal) does not leave a stale origin. A
+measurement waits until the scroll offset has held still for a frame and is
+retried if it moved meanwhile, because Fabric measures the committed shadow tree
+(whose scroll state trails the live offset); otherwise a programmatic scroll,
+such as the alerts gear's jump to notification preferences, would leave the
+mask drawn away from the avatar. The
 mask frame centre travels linearly from the avatar centre to the target centre,
 matching the Telegram path canvas, so the image, mask and backing stay on one
 centre line and end on the island centre. The Telegram blob rises and narrows

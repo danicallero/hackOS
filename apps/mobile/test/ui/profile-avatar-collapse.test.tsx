@@ -1,9 +1,10 @@
-import { screen } from "@testing-library/react-native";
+import { act, renderHook, screen } from "@testing-library/react-native";
 import { Text } from "react-native";
 import {
   ProfileAvatarCollapse,
   ProfileAvatarCollapseAnchor,
   type ProfileAvatarCollapseController,
+  useProfileAvatarCollapse,
 } from "@/components/profile-avatar-collapse";
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
@@ -175,22 +176,28 @@ describe("profile avatar snap (#935)", () => {
   const distance = PROFILE_AVATAR_COLLAPSE_DISTANCE;
 
   it("leaves offsets outside the collapse range alone", () => {
-    expect(profileAvatarSnapTarget(0, 0)).toBeNull();
-    expect(profileAvatarSnapTarget(-40, -1)).toBeNull();
-    expect(profileAvatarSnapTarget(distance, 0)).toBeNull();
-    expect(profileAvatarSnapTarget(distance + 300, 2)).toBeNull();
+    expect(profileAvatarSnapTarget(0, 0, distance)).toBeNull();
+    expect(profileAvatarSnapTarget(-40, -1, distance)).toBeNull();
+    expect(profileAvatarSnapTarget(distance, 0, distance)).toBeNull();
+    expect(profileAvatarSnapTarget(distance + 300, 2, distance)).toBeNull();
   });
 
   it("settles a slow release at the nearer end of the range", () => {
-    expect(profileAvatarSnapTarget(10, 0)).toBe(0);
-    expect(profileAvatarSnapTarget(distance / 2 - 1, 0.1)).toBe(0);
-    expect(profileAvatarSnapTarget(distance / 2, 0)).toBe(distance);
-    expect(profileAvatarSnapTarget(distance - 10, -0.1)).toBe(distance);
+    expect(profileAvatarSnapTarget(10, 0, distance)).toBe(0);
+    expect(profileAvatarSnapTarget(distance / 2 - 1, 0.1, distance)).toBe(0);
+    expect(profileAvatarSnapTarget(distance / 2, 0, distance)).toBe(distance);
+    expect(profileAvatarSnapTarget(distance - 10, -0.1, distance)).toBe(distance);
   });
 
   it("follows the flick direction over the halfway threshold", () => {
-    expect(profileAvatarSnapTarget(10, 0.6)).toBe(distance);
-    expect(profileAvatarSnapTarget(distance - 10, -0.6)).toBe(0);
+    expect(profileAvatarSnapTarget(10, 0.6, distance)).toBe(distance);
+    expect(profileAvatarSnapTarget(distance - 10, -0.6, distance)).toBe(0);
+  });
+
+  it("takes the distance explicitly, with no worklet default parameter", () => {
+    // A worklet's default-parameter expression is not captured on the UI thread.
+    expect(profileAvatarSnapTarget.length).toBe(3);
+    expect(profileAvatarSnapTarget.toString()).not.toContain("PROFILE_AVATAR_COLLAPSE_DISTANCE");
   });
 
   it("honours a custom collapse distance", () => {
@@ -392,5 +399,46 @@ describe("profile avatar placeholder", () => {
       screen.getByTestId("profile-avatar-collapse-mask", { includeHiddenElements: true }),
     ).toBeTruthy();
     expect(screen.getByText("AH", { includeHiddenElements: true })).toBeTruthy();
+  });
+});
+
+describe("profile avatar anchor measurement (#935)", () => {
+  afterEach(() => jest.useRealTimers());
+
+  it("drops a measurement taken while the scroll moves and remeasures once it holds still", async () => {
+    jest.useFakeTimers();
+    const { result } = await renderHook(() => useProfileAvatarCollapse());
+    const controller = result.current;
+    // Window position of the avatar for the scroll offset the shadow tree saw.
+    let anchorY = 300;
+    const scrollTo = (offset: number) => {
+      controller.scrollOffset.value = offset;
+      anchorY = 300 - offset;
+    };
+    let moveDuringMeasurement = true;
+    Object.assign(controller.hostRef, {
+      current: { measureInWindow: (cb: (x: number, y: number) => void) => cb(0, 0) },
+    });
+    Object.assign(controller.anchorRef, {
+      current: {
+        measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) => {
+          const measuredY = anchorY;
+          // A programmatic scroll lands between the native measurement and the callback.
+          if (moveDuringMeasurement) {
+            moveDuringMeasurement = false;
+            scrollTo(150);
+          }
+          cb(100, measuredY, 96, 96);
+        },
+      },
+    });
+
+    await act(async () => {
+      controller.onScrollBeginDrag();
+      jest.advanceTimersByTime(200);
+    });
+
+    // The stale result (y 300 + offset 150) is dropped; the settled one maps back to 300.
+    expect(result.current.anchorFrame).toEqual({ left: 100, top: 300, width: 96, height: 96 });
   });
 });
