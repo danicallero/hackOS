@@ -1578,7 +1578,20 @@ older server's props is omitted, never replaced with English. A kind this
 build does not know maps to `null` and is not posted. The props' `rank` (or
 the data push's, when the props carry none) becomes the notification's sort
 key, so the most important surface sorts first; `desiredActivities` keeps the
-device within `maxConcurrent` on both platforms.
+device within `maxConcurrent` on both platforms. Android documents the sort
+key as ordering notifications of the same app and may ignore it when their
+priorities differ (an alerting post uses the alert channel), so on Android
+the order is a hint, not a guarantee.
+
+**Ordering (iOS).** ActivityKit orders an app's activities (Dynamic Island,
+Lock Screen) by each one's `relevanceScore`, and with equal scores by start
+time. Every local start and update replaces the activity's whole content, so
+`host.ios.ts` passes `relevanceForRank(rank)` (`100 − 10 × rank`, the same
+value the API sends as APNs `relevance-score`) on each of them, through the
+`patches/expo-widgets@57.0.23.patch` extra argument (expo-widgets 57 had no
+relevance parameter, so every app-side update used to reset the score to 0
+and the oldest activity led the island regardless of the Settings order). A
+rank change alone changes the props signature, so it re-applies the score.
 
 | State | Chip (≤ 7 chars) | Promoted: title / text · header | Card: lead · trail, track |
 | --- | --- | --- | --- |
@@ -1650,7 +1663,13 @@ desk the accredited share `accredited / eligible`, all as of the post.
 - `use-live-activities.ts` (mounted in `app/_layout.tsx`) reconciles on sign-in,
   foreground, the personal queue events, the next start/end boundary (staff
   and attendee activities, the deadline, the desk window) and every minute
-  while a staff counter or the accreditation desk is live. Sign-out ends every surface and sends
+  while a staff counter or the accreditation desk is live. A received or
+  tapped queue or schedule push notification (`push-refresh.ts`,
+  `isLiveActivityPushCategory`: `queue`, `schedule:<id>`) also triggers a
+  reconcile, debounced together with the SSE events (a call sends both), so
+  the activity catches up even when its APNs update is late or cannot be
+  delivered yet (a push-started activity before the app reported its token).
+  Sign-out ends every surface and sends
   `enabled: false` with the session that registered the device; `signOut()`
   revokes that session only after this cleanup settles (or after 4 s), since
   `notifySignOut()` returns a promise for asynchronous listeners. Sign-out
@@ -1661,7 +1680,15 @@ desk the accredited share `accredited / eligible`, all as of the post.
 - `background-task.ts` — Android data pushes (`AndroidLiveUpdateMessage`) go
   through an `expo-task-manager` notification task defined in the entry file
   `index.ts` (before `expo-router/entry`), and through the foreground received
-  listener; both render through the same `applyAndroidLiveUpdate`.
+  listener; both render through the same `applyAndroidLiveUpdate`. On iOS the
+  same task runs `reconcileLiveActivities` for a queue or schedule push
+  received while the app is in the background: the API sends those
+  `_contentAvailable` and the app declares the `remote-notification`
+  background mode (`expo-notifications` plugin,
+  `enableBackgroundRemoteNotifications`). iOS does not wake a force-quit app,
+  throttles background wakes, and does not let a backgrounded app start a new
+  activity (only update or end one); those cases wait for APNs or the next
+  foreground reconcile.
 - The activity scanner bumps the live counter right after a first-time scan.
 - Web is a no-op (`host.ts`).
 
@@ -1701,7 +1728,8 @@ release bundles drop it.
   focus — the default suppresses it), sets up the Android notification
   channel, and wires `addNotificationReceivedListener`/
   `addNotificationResponseReceivedListener`. Both re-emit the notification's
-  `category` on `lib/notification-events.ts` (a tiny in-process pub-sub); a
+  `category` on `lib/notification-events.ts` (a tiny in-process pub-sub) and
+  pass the data to the Live Activity push refresh (#966); a
   tapped `category: "queue"` notification also navigates to the queue tab.
   Wired once for the app's lifetime from `app/_layout.tsx`.
 - `lib/server-events.ts` — one authenticated transport per native instance,

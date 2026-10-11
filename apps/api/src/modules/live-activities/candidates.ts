@@ -404,11 +404,6 @@ export function selectForDevice(
   return { shown, suppressed };
 }
 
-/** iOS `relevance-score`: the device's top-ranked activity leads the Dynamic Island. */
-export function relevanceForRank(rank: number | undefined): number {
-  return Math.max(1, 100 - 10 * (rank ?? 0));
-}
-
 /**
  * `GET /api/me/live-activities` for one user (the app's foreground source).
  * With `deviceId` (the caller's own registered install) the per-device cut
