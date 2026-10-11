@@ -36,8 +36,8 @@ import { createLiveActivity, type LiveActivityEnvironment } from "expo-widgets";
  * Each phase answers one question — waiting: "when am I up?" (ETA hero,
  * position secondary); called: "where do I go, since when?" (room, green,
  * count-up since the call); in room: "where am I" (calm, neutral). A three
- * stage track (In line → Called → In room) shows progress, filling the first
- * segment as the team moves up from its highest position (`startPosition`).
+ * stage track (In line → Called → In room) shows progress, filling each
+ * segment from the server's counts (`queueTotal`, `calledAhead`).
  *
  * `'widget'` functions are serialized into the widget extension's own JS
  * runtime: they may only use `@expo/ui/swift-ui` components/modifiers and
@@ -124,18 +124,20 @@ export const QueueActivityLayout = (
   // payload without it (older server) simply omits the ETA.
   const etaOrEstimating = etaLong ?? labels.estimating ?? null;
 
-  // First segment fill while waiting: share of the climb from the highest
-  // position seen to the front, `(start - position) / start` (#1 of 4 → 0.75).
-  const start = props.startPosition;
+  // Current stage fill, the same formulas as Android's `queueStageFill`.
+  // Waiting: `(total - position + 1) / (total + 1)` (#1 of 10 → 10/11,
+  // #10 of 10 → 1/11). Called: `2 / (calledAhead + 3)`. Never 0 or full
+  // inside a stage; 0 when an older server sends no counts.
+  const whole = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+  const total = whole(props.queueTotal);
+  const place = whole(props.position);
+  const ahead = whole(props.calledAhead);
   const climb =
-    stage === 0 &&
-    typeof start === "number" &&
-    Number.isFinite(start) &&
-    start > 0 &&
-    typeof props.position === "number" &&
-    Number.isFinite(props.position)
-      ? Math.min(1, Math.max(0, (start - props.position) / start))
+    stage === 0 && total !== null && place !== null && place >= 1 && place <= total
+      ? (total - place + 1) / (total + 1)
       : 0;
+  const callFill = stage === 1 && ahead !== null ? 2 / (ahead + 3) : 0;
 
   // Count-up since the call (H34 shows operators the same elapsed time).
   const calledMs = typeof props.calledAt === "string" ? Date.parse(props.calledAt) : Number.NaN;
@@ -228,7 +230,7 @@ export const QueueActivityLayout = (
           {unit(Math.min(1, first * 2))}
           {unit(Math.max(0, first * 2 - 1), true)}
           {node(1)}
-          {unit(stage > 1 ? 1 : 0)}
+          {unit(stage > 1 ? 1 : callFill)}
           {node(2)}
         </HStack>
         {names ? (

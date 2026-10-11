@@ -125,7 +125,8 @@ const queueLivePropsSchema = z.object({
   roomName: z.string().nullable(),
   roomLocation: z.string().nullable(),
   calledAt: isoString.nullable().optional(),
-  startPosition: z.number().int().nullable().optional(),
+  queueTotal: z.number().int().nullable().optional(),
+  calledAhead: z.number().int().nullable().optional(),
   otherQueues: z.number().int(),
   url: z.string(),
   labels: z.object({

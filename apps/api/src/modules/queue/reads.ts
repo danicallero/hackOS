@@ -918,6 +918,32 @@ export async function myQueueStatus(userId: number) {
      SELECT qe.*, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title, r.name AS repo_name,
             ar.id AS called_room_id, ar.name AS called_room_name, ar.location AS called_room_location,
             wr.queue_rank,
+            -- #966 Live Activity progress: every team in this queue (group),
+            -- judged or still to go, counted like queue_rank (one per repo).
+            CASE WHEN qe.status = 'waiting' THEN (
+              SELECT COUNT(DISTINCT t.repo_id)
+                FROM queue_entries t
+                JOIN repos tr ON tr.id = t.repo_id
+                JOIN challenges tc ON tc.id = t.challenge_id
+                JOIN queue_group_challenges tg ON tg.challenge_id = t.challenge_id
+               WHERE tg.queue_group_id = mine.queue_key
+                 AND t.status NOT IN ('cancelled', 'disqualified')
+                 AND tr.is_test_account = v.is_test_account
+                 AND tc.is_test_account = v.is_test_account
+            ) END::int AS queue_total,
+            -- #966: other teams called to the same room earlier and still not in it.
+            CASE WHEN qe.status = 'called' AND qe.assigned_room_id IS NOT NULL THEN (
+              SELECT COUNT(DISTINCT o.repo_id)
+                FROM queue_entries o
+                JOIN repos orp ON orp.id = o.repo_id
+                JOIN challenges oc ON oc.id = o.challenge_id
+               WHERE o.assigned_room_id = qe.assigned_room_id
+                 AND o.status = 'called'
+                 AND o.repo_id <> qe.repo_id
+                 AND (o.called_at, o.id) < (qe.called_at, qe.id)
+                 AND orp.is_test_account = v.is_test_account
+                 AND oc.is_test_account = v.is_test_account
+            ) END::int AS called_ahead,
             COALESCE(qp.minutes_per_slot, 8) AS minutes_per_slot,
             COALESCE(
               (SELECT jsonb_agg(
@@ -970,6 +996,8 @@ export async function myQueueStatus(userId: number) {
     called_room_location: string | null;
     possible_rooms: { id: number; name: string; location: string | null }[];
     queue_rank: number | null;
+    queue_total: number | null;
+    called_ahead: number | null;
     minutes_per_slot: string | number;
   }[]) {
     let position: number | null = null;
@@ -988,6 +1016,10 @@ export async function myQueueStatus(userId: number) {
       status: e.status,
       position,
       etaMinutes,
+      // Teams in this queue, judged or not; set only while waiting (#966).
+      queueTotal: e.status === "waiting" ? e.queue_total : null,
+      // Teams called earlier to the same room, not yet in it; set only while called (#966).
+      calledAhead: e.status === "called" ? e.called_ahead : null,
       calledAt: e.called_at,
       // Concrete room once called; null while still waiting.
       room: e.called_room_id
