@@ -77,11 +77,26 @@ the account language.
   `position` and `etaMinutes` only while it is waiting. `calledAt` drives a
   count-up "Called 2:13" timer — the same elapsed time H34 shows operators,
   never presented as a deadline.
-- `startPosition`: the highest position the entry has had while waiting, so
-  the progress track fills as the team moves up. Positions are not stored
-  historically, so the API keeps a per-entry high-water mark in Valkey
-  (`live-activities:queue-peak:<entryId>`, 24 h TTL, atomic Lua max). A
-  Valkey failure only drops the field; the track then shows the stage alone.
+- Progress counts, both from `myQueueStatus` (same scope and H54 isolation):
+  - `queueTotal` (waiting only): every team in the queue or shared queue
+    group, judged, on stage, called or still waiting, one per project as
+    `position` counts them. The "In line" segment fills to
+    `(queueTotal − position + 1) / (queueTotal + 1)`: #1 of 10 → 10/11,
+    #10 of 10 → 1/11. It grows as the team moves up, is partly full on the
+    first update and never full before the call.
+  - `calledAhead` (called only): other teams called earlier to the same room
+    and still `called` (not yet in it). The "Called" segment fills to
+    `2 / (calledAhead + 3)`: ⅔ with none, ½ with one, ⅓ with three. The
+    "In room" node is reached only at `in_room`, which fills the track.
+  - **Decision:** no throttling or quantization. A call already moves every
+    waiting team's `position`, and `queueTotal` stays the same then (a called
+    team still counts); it changes only when a team joins or is cancelled.
+    `calledAhead` changes only when a team ahead in the same room enters it,
+    a handful of pushes per room. Both stay within the queue's existing
+    one-push-per-transition cadence.
+  - Both are optional: an older app ignores them, and the widget shows the
+    stage alone when a count is absent. They replaced a Valkey high-water
+    mark (`startPosition`), which was 0 at first sight.
 - `url`: `hackos://queue` (the scheme is `MOBILE_APP_SCHEME`).
 
 ### Staff activities (H25, H26)
@@ -567,7 +582,7 @@ and `deploy/README.md`.
 `apps/api/test/live-activities/`:
 
 - `state.test.ts`: window gating, nearest-queue selection, room only when
-  called, lead window, phases, distinct and fixture-isolated counts, and
+  called, the queue progress counts (`queueTotal`, `calledAhead`), lead window, phases, distinct and fixture-isolated counts, and
   capability resolution.
 - `worker.test.ts`: start once, idempotent re-run, update on change and the
   call alert, throttle, end and restart, dismissal kept until the phase

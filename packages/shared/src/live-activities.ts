@@ -130,12 +130,17 @@ export interface QueueLiveProps {
    */
   calledAt?: string | null;
   /**
-   * Highest position this entry has had while waiting (server high-water
-   * mark), so the queue progress track can fill as the team moves up:
-   * `(startPosition - position) / startPosition`. Null once called or when
-   * unknown. Optional: added after v1 shipped.
+   * Teams in this queue (shared group included), judged or still to go;
+   * null unless waiting. The track fills the "In line" segment to
+   * `(queueTotal - position + 1) / (queueTotal + 1)`. Optional (post-v1).
    */
-  startPosition?: number | null;
+  queueTotal?: number | null;
+  /**
+   * Teams called earlier to the same room and not yet in it; null unless
+   * called. The track fills the "Called" segment to `2 / (calledAhead + 3)`.
+   * Optional (post-v1).
+   */
+  calledAhead?: number | null;
   /** Other queues this participant is still waiting in. */
   otherQueues: number;
   /** Deep link opened on tap. */

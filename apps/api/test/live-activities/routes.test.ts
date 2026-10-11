@@ -278,7 +278,7 @@ describe("GET /api/me/live-activities", () => {
       maxConcurrent: 5,
     });
     // Fields added after v1 survive response serialization.
-    expect(body.queue).toMatchObject({ calledAt: null, startPosition: 1, rank: 0 });
+    expect(body.queue).toMatchObject({ calledAt: null, queueTotal: 1, calledAhead: null, rank: 0 });
     expect(body.queue.labels.stageInLine).toBe("Na cola");
 
     const staffId = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);

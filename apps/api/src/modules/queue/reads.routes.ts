@@ -167,7 +167,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Participant queue status",
         description:
-          "Returns one current row per queue for each project the participant belongs to. Challenge entries in a shared queue are collapsed and named by the queue group.",
+          "Returns one current row per queue for each project the participant belongs to. Challenge entries in a shared queue are collapsed and named by the queue group. While waiting, queueTotal counts every team in that queue, judged or not; while called, calledAhead counts teams called earlier to the same room and not yet in it.",
       },
     },
     async (req) => myQueueStatus(req.userId!),

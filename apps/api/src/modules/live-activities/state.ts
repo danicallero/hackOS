@@ -11,7 +11,6 @@ import {
 import type { Language } from "@hackos/shared/locale";
 import { config } from "../../config.js";
 import { pool, type Queryable } from "../../db/pool.js";
-import { valkey } from "../../lib/valkey.js";
 import { occupancyEstimate } from "../logistics/presence.js";
 import { hasMyQueueItems, myQueueStatus } from "../queue/reads.js";
 
@@ -137,6 +136,8 @@ export function selectQueueLiveProps(
       isCalled && Number.isFinite(calledAtMs(nearest))
         ? new Date(calledAtMs(nearest)).toISOString()
         : null,
+    queueTotal: isCalled ? null : nearest.queueTotal,
+    calledAhead: nearest.status === "called" ? nearest.calledAhead : null,
     otherQueues,
     url: queueDeepLink(),
     labels: queueLiveLabels(language, otherQueues),
@@ -265,42 +266,6 @@ export async function loadMealPresence(
     });
   }
   return result;
-}
-
-const PEAK_POSITION_TTL_SECONDS = 24 * 60 * 60;
-// Atomic high-water mark: keep the larger of the stored and the new value.
-const PEAK_POSITION_SCRIPT = `
-local cur = tonumber(redis.call('GET', KEYS[1]) or '0')
-local nxt = tonumber(ARGV[1])
-if nxt > cur then cur = nxt end
-redis.call('SET', KEYS[1], cur, 'EX', ARGV[2])
-return cur`;
-
-/**
- * The queue progress track (#966) fills from the highest position an entry
- * has had while waiting; positions are not stored historically, so the API
- * keeps a per-entry high-water mark in Valkey. Best-effort: a Valkey failure
- * leaves the props without a start (the track then shows the stage only).
- */
-export async function withStartPosition(
-  props: QueueLiveProps | null,
-): Promise<QueueLiveProps | null> {
-  if (!props || props.position == null) return props;
-  try {
-    const peak = Number(
-      await valkey.eval(
-        PEAK_POSITION_SCRIPT,
-        1,
-        `live-activities:queue-peak:${props.entryId}`,
-        String(props.position),
-        String(PEAK_POSITION_TTL_SECONDS),
-      ),
-    );
-    return { ...props, startPosition: Number.isFinite(peak) && peak > 0 ? peak : null };
-  } catch (err) {
-    console.warn("live-activities: peak position unavailable", err);
-    return props;
-  }
 }
 
 export function buildActivityLiveProps(

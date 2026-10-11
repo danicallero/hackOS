@@ -158,7 +158,7 @@ describe("Live Activity layouts (#966)", () => {
     queue({ phase: "called", position: null, etaMinutes: null, roomName: "Room B" }),
     queue({ phase: "called", position: null, etaMinutes: null, roomName: null }),
     queue({ phase: "in_room", position: null, etaMinutes: null, roomName: "Room B" }),
-    queue({ position: 4, startPosition: 9, calledAt: null }),
+    queue({ position: 4, queueTotal: 9, calledAt: null }),
     queue({
       phase: "called",
       position: null,
@@ -189,30 +189,39 @@ describe("Live Activity layouts (#966)", () => {
   });
 
   it.each([
-    // #4 after starting at #9: 5/9 of the first segment, split over its two units.
-    [{ position: 4, startPosition: 9 }, [1, 1 / 9, 0]],
-    // #1 of 4 → 0.75.
-    [{ position: 1, startPosition: 4 }, [1, 0.5, 0]],
-    // First sighting, unknown start, or a position behind the start: empty.
-    [{ position: 9, startPosition: 9 }, [0, 0, 0]],
-    [{ position: 4, startPosition: null }, [0, 0, 0]],
+    // Waiting: (total - position + 1) / (total + 1) of the first segment,
+    // split over its two units.
+    [{ position: 1, queueTotal: 10 }, [1, 9 / 11, 0]],
+    [{ position: 5, queueTotal: 10 }, [1, 1 / 11, 0]],
+    [{ position: 10, queueTotal: 10 }, [2 / 11, 0, 0]],
+    // Older server, or a position outside the total: the stage only.
+    [{ position: 4, queueTotal: null }, [0, 0, 0]],
     [{ position: 4 }, [0, 0, 0]],
-    [{ position: 12, startPosition: 9 }, [0, 0, 0]],
-    [{ position: 4, startPosition: 0 }, [0, 0, 0]],
-  ] as const)("fills the queue track from real progress only (%o)", (overrides, expected) => {
+    [{ position: 12, queueTotal: 9 }, [0, 0, 0]],
+    [{ position: 4, queueTotal: 0 }, [0, 0, 0]],
+  ] as const)("fills the queue track from the queue size (%o)", (overrides, expected) => {
     const fill = trackFill(QueueActivityLayout(queue(overrides), environment));
     expect(fill).toHaveLength(3);
     for (const [index, value] of fill.entries()) expect(value).toBeCloseTo(expected[index]!, 5);
   });
 
-  it("completes the track stage by stage once called and in the room", () => {
-    const called = { position: null, etaMinutes: null, roomName: "Room B", startPosition: 9 };
-    expect(
-      trackFill(QueueActivityLayout(queue({ ...called, phase: "called" }), environment)),
-    ).toEqual([1, 1, 0]);
-    expect(
-      trackFill(QueueActivityLayout(queue({ ...called, phase: "in_room" }), environment)),
-    ).toEqual([1, 1, 1]);
+  const called = { phase: "called", position: null, etaMinutes: null, roomName: "Room B" } as const;
+
+  it.each([
+    // Called: 2 / (calledAhead + 3) of the second segment.
+    [0, 2 / 3],
+    [1, 1 / 2],
+    [3, 1 / 3],
+    [undefined, 0],
+  ])("fills the called segment from the teams called ahead (%p)", (calledAhead, expected) => {
+    const fill = trackFill(QueueActivityLayout(queue({ ...called, calledAhead }), environment));
+    expect(fill.slice(0, 2)).toEqual([1, 1]);
+    expect(fill[2]).toBeCloseTo(expected, 5);
+  });
+
+  it("completes the track once in the room", () => {
+    const inRoom = queue({ ...called, phase: "in_room", calledAhead: 2 });
+    expect(trackFill(QueueActivityLayout(inRoom, environment))).toEqual([1, 1, 1]);
   });
 
   it("labels each track node only when the stage names arrive", () => {

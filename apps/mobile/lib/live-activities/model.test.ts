@@ -16,7 +16,7 @@ import {
   planReconcile,
   propsSignature,
   pruneDismissed,
-  queueWaitingFraction,
+  queueStageFill,
   toLiveUpdateSpec,
   trackSegments,
   withScannedIncrement,
@@ -205,7 +205,7 @@ describe("staff counter and boundaries", () => {
 });
 
 describe("toLiveUpdateSpec (Android, #966)", () => {
-  const waiting = () => queueProps({ position: 4, startPosition: 9, etaMinutes: 12 });
+  const waiting = () => queueProps({ position: 4, queueTotal: 9, etaMinutes: 12 });
   const spec = (props: Parameters<typeof toLiveUpdateSpec>[0], previous: string | null = null) =>
     toLiveUpdateSpec(props, previous, Date.parse("2026-02-20T12:45:00.000Z"))!;
 
@@ -253,8 +253,8 @@ describe("toLiveUpdateSpec (Android, #966)", () => {
 
   it("fills the queue track up to the team: 2:1 stages, grey rest, the tracker at the team", () => {
     const track = spec(waiting()).progress!;
-    // (9 - 4) / 9 of the first (two-thirds) stage is behind the team.
-    const value = Math.round((5 / 9) * 200);
+    // #4 of 9: (9 - 4 + 1) / (9 + 1) of the first (two-thirds) stage.
+    const value = Math.round(0.6 * 200);
     expect(track.value).toBe(value);
     expect(track.segments).toEqual([
       { length: value, tone: "accent" },
@@ -262,12 +262,8 @@ describe("toLiveUpdateSpec (Android, #966)", () => {
       { length: 100, tone: "rest" },
     ]);
     expect(track).toMatchObject({ tracker: "people", trackerTone: "accent", stops: [0, 200, 300] });
-    // First sighting, or no high-water mark: nothing filled, no fake progress.
-    expect(spec(queueProps({ startPosition: 4 })).progress!.segments[0]).toEqual({
-      length: 200,
-      tone: "rest",
-    });
-    expect(spec(queueProps({ startPosition: null })).progress!.value).toBe(0);
+    // Older server (no total): nothing filled, no fake progress.
+    expect(spec(queueProps({ queueTotal: null })).progress!.value).toBe(0);
   });
 
   it("fills the queue track in the phase colour", () => {
@@ -275,6 +271,12 @@ describe("toLiveUpdateSpec (Android, #966)", () => {
     expect(spec(called).progress!.segments).toEqual([
       { length: 200, tone: "go" },
       { length: 100, tone: "rest" },
+    ]);
+    // One team called earlier still outside the room: half the second stage.
+    expect(spec({ ...called, calledAhead: 1 }).progress!.segments).toEqual([
+      { length: 200, tone: "go" },
+      { length: 50, tone: "go" },
+      { length: 50, tone: "rest" },
     ]);
     const inRoom = queueProps({ phase: "in_room", position: null, etaMinutes: null });
     expect(spec(inRoom).progress!.segments).toEqual([
@@ -299,9 +301,24 @@ describe("toLiveUpdateSpec (Android, #966)", () => {
     ]);
   });
 
-  it("computes the waiting fraction from the high-water mark", () => {
-    expect(queueWaitingFraction(queueProps({ position: 1, startPosition: 4 }))).toBe(0.75);
-    expect(queueWaitingFraction(queueProps({ position: 6, startPosition: 4 }))).toBe(0);
+  it.each([
+    // Waiting: (total - position + 1) / (total + 1), never 0 or full.
+    [{ position: 1, queueTotal: 10 }, 10 / 11],
+    [{ position: 5, queueTotal: 10 }, 6 / 11],
+    [{ position: 10, queueTotal: 10 }, 1 / 11],
+    // Older server, or a position outside the total: stage only.
+    [{ position: 4 }, 0],
+    [{ position: 4, queueTotal: null }, 0],
+    [{ position: 12, queueTotal: 10 }, 0],
+    [{ position: 1, queueTotal: 0 }, 0],
+    // Called: 2 / (calledAhead + 3).
+    [{ phase: "called", position: null, calledAhead: 0 }, 2 / 3],
+    [{ phase: "called", position: null, calledAhead: 1 }, 1 / 2],
+    [{ phase: "called", position: null, calledAhead: 3 }, 1 / 3],
+    [{ phase: "called", position: null }, 0],
+    [{ phase: "in_room", position: null }, 1],
+  ] as const)("fills the current stage from the queue counts (%o)", (overrides, expected) => {
+    expect(queueStageFill(queueProps(overrides))).toBeCloseTo(expected, 10);
   });
 
   it("shows the room as hero and chip once called, counting up from the call", () => {
