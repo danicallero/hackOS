@@ -283,15 +283,31 @@ const kindPreferenceSchema = z.object({ kind: configKindSchema, enabled: z.boole
 
 export const myLiveActivityPreferencesSchema = z.object({
   kinds: z.array(kindPreferenceSchema),
+  customOrder: z.boolean(),
 });
 
-/** The kinds to change (each at most once); unlisted kinds keep their choice. */
+const kindOrderSchema = z
+  .array(configKindSchema)
+  .min(1)
+  .max(LIVE_ACTIVITY_CONFIG_KINDS.length)
+  .refine((kinds) => new Set(kinds).size === kinds.length, {
+    message: "order must list each Live Activity kind at most once",
+  });
+
+/**
+ * The kinds to change (each at most once; unlisted kinds keep their choice)
+ * and/or the caller's kind order (`null` = back to the organizer order).
+ */
 export const putMyLiveActivityPreferencesBodySchema = z
   .object({
-    kinds: z.array(kindPreferenceSchema).min(1).max(LIVE_ACTIVITY_CONFIG_KINDS.length),
+    kinds: z.array(kindPreferenceSchema).min(1).max(LIVE_ACTIVITY_CONFIG_KINDS.length).optional(),
+    order: kindOrderSchema.nullable().optional(),
   })
   .strict()
-  .refine((body) => new Set(body.kinds.map((k) => k.kind)).size === body.kinds.length, {
-    message: "kinds must list each Live Activity kind at most once",
-    path: ["kinds"],
-  });
+  .refine((body) => body.kinds !== undefined || body.order !== undefined, {
+    message: "send kinds, order or both",
+  })
+  .refine(
+    (body) => !body.kinds || new Set(body.kinds.map((k) => k.kind)).size === body.kinds.length,
+    { message: "kinds must list each Live Activity kind at most once", path: ["kinds"] },
+  );

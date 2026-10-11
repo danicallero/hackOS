@@ -336,7 +336,7 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
     },
   );
 
-  // The caller's own per-kind choice: a self-preference with the same posture
+  // The caller's own per-kind choice and kind order: a self-preference with the same posture
   // as the device switch (no capability, no audit row, idempotent writes).
   api.get(
     "/api/me/live-activities/preferences",
@@ -346,8 +346,10 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
       schema: {
         summary: "My Live Activity kinds",
         description:
-          "The Live Activity kinds the caller may receive, in priority order, each with the " +
-          "caller's own on/off choice (`enabled`, default true). A kind is listed only when " +
+          "The Live Activity kinds the caller may receive, in the caller's priority order, each " +
+          "with their own on/off choice (`enabled`, default true). The order is the caller's own " +
+          "when they reordered the kinds (`customOrder: true`), else the organizer priority. " +
+          "A kind is listed only when " +
           "organizers enabled it, the caller holds one of its configured roles and its " +
           "capability (`activity:scan` for `activity`, `accredit:scan` for `accreditation`, " +
           "`queue:status` with event access for `deadline`). Data gates such as a queue entry " +
@@ -365,19 +367,24 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
       ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
       preHandler: requireAuth,
       schema: {
-        summary: "Turn Live Activity kinds on or off",
+        summary: "Change my Live Activity kinds or their order",
         description:
-          "Sets the listed kinds on or off for the caller's account; kinds not listed keep " +
-          "their choice. Each kind at most once; an unknown kind is a 400. A kind the caller " +
-          "does not receive may be set too and applies if they receive it later. Turning a " +
-          "kind off ends its running Live Activities on the worker's next tick and drops it " +
-          "from `GET /api/me/live-activities`; turning it back on lets it start again. " +
-          "Idempotent; returns the same shape as the GET.",
+          "`kinds` sets the listed kinds on or off for the caller's account; kinds not listed " +
+          "keep their choice. Each kind at most once; an unknown kind is a 400. A kind the " +
+          "caller does not receive may be set too and applies if they receive it later. " +
+          "Turning a kind off ends its running Live Activities on the worker's next tick and " +
+          "drops it from `GET /api/me/live-activities`; turning it back on lets it start again. " +
+          "`order` (highest priority first, each kind at most once) replaces the caller's kind " +
+          "order: it decides which kinds take the device's `maxConcurrent` slots first, for " +
+          "this caller only. Kinds the caller does not receive are ignored, unlisted kinds " +
+          "follow in the organizer order, and an order equal to the organizer order is stored " +
+          "as none. `order: null` resets to the organizer order. Send `kinds`, `order` or " +
+          "both. Idempotent; returns the same shape as the GET.",
         body: putMyLiveActivityPreferencesBodySchema,
         response: { 200: myLiveActivityPreferencesSchema },
       },
     },
-    async (req) => saveLiveActivityPreferences(req.userId as number, req.body.kinds),
+    async (req) => saveLiveActivityPreferences(req.userId as number, req.body),
   );
 
   // Organizer configuration (#966; H8, H53): the event-settings capability

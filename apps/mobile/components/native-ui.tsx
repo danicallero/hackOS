@@ -110,8 +110,8 @@ export const SWITCH_IN_ROW_STYLE: ViewStyle = { alignSelf: "center" };
 
 /**
  * A settings row with a trailing switch. `detail` adds a secondary line;
- * `onPress` makes the label side open a detail screen, set apart from the
- * switch by a hairline (two targets in one row). `busy` blocks the switch
+ * `onPress` makes the label side open a detail screen (with a disclosure
+ * chevron), set apart from the switch by a hairline (two targets in one row). `busy` blocks the switch
  * while a write is in flight without dimming the label; `disabled` dims both.
  */
 export function ToggleRow({
@@ -164,6 +164,14 @@ export function ToggleRow({
           })}
         >
           {text}
+          <SymbolView
+            name="chevron.right"
+            tintColor={colors.tertiaryLabel}
+            size={12}
+            weight="semibold"
+            accessible={false}
+            style={{ alignSelf: "center", marginLeft: 8 }}
+          />
         </Pressable>
       ) : (
         text

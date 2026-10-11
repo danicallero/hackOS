@@ -215,6 +215,22 @@ Organizers decide which kinds exist and for which roles
   the moment arrives. `candidates.ts` drops opted-out kinds, so the worker
   ends a running session of a kind turned off (`finished`) and never starts
   it; turning it back on lets it start again on the next tick.
+- **Kind order (per account):** the same `PUT` takes `order`, the caller's
+  kinds highest first. It replaces the organizer priority for that user only:
+  their first kind wins the device's `maxConcurrent` slots, so a participant
+  can keep the queue showing while a schedule item also applies. Organizer
+  settings still decide which kinds exist. Kinds the caller does not receive
+  are dropped, unlisted kinds follow in the organizer order, and
+  `order: null` resets. The GET lists the kinds in the caller's order with
+  `customOrder`.
+
+**Decision:** only a customized order is stored (R018). An order that ranks
+the caller's kinds exactly as organizers do is saved as no order, so a later
+organizer reorder still reaches everyone who never customized theirs.
+
+**Decision:** the master switch stays the per-device `enabled` flag; there
+is no account-level master. Live Activities are a per-device surface, and the
+app's single Live Activities switch already ends every surface on that device.
 
 **Decision:** the per-kind choice is stored per user, not per device. The
 candidates are computed per user, the choice follows the account to every
@@ -286,8 +302,10 @@ an audience) sets `liveActivityAudience`.
 
 ### Ranking and the per-device limit
 
-A user's candidates are ranked by kind priority, then by each kind's own
-order: earliest activity or schedule item first. Each
+A user's candidates are ranked by kind priority (the user's own kind order
+when they set one, see [Preferences](#preferences); else the organizer
+priority), then by each kind's own order: earliest activity or schedule item
+first. Each
 device keeps at most `maxConcurrent` of them:
 
 - **Hysteresis:** within a kind, a subject already open on the device
@@ -335,8 +353,8 @@ Organizers can rank `queue` higher.
 | `DELETE /api/me/live-activities/sessions` | `{deviceId, kind, subject, phase?}`. The user swiped it away, or the app ended it locally. `phase` is the phase it showed; without it the server uses the last phase it sent, or records the next one it computes. |
 | `POST /api/me/live-activities/dismissals/reopen` | `{deviceId}`, sent by the app on launch and foreground. Every `dismissed` session of the device becomes `finished` (startable); returns `{status, reopened}`. Idempotent. Background pushes never do this. |
 | `GET /api/me/live-activities[?language=][&deviceId=]` | `MyLiveActivities` for the caller. With `deviceId`, also opens the device's 30 s foreground window (below). |
-| `GET /api/me/live-activities/preferences` | `MyLiveActivityPreferences`: `{ kinds: [{ kind, enabled }] }`, the kinds the caller may receive in priority order (see [Preferences](#preferences)). |
-| `PUT /api/me/live-activities/preferences` | `{ kinds: [{ kind, enabled }] }`, 1–5 entries, each kind at most once; unlisted kinds keep their choice. An unknown kind is a 400. A kind the caller does not receive may be set and applies if they receive it later. Returns the GET shape. |
+| `GET /api/me/live-activities/preferences` | `MyLiveActivityPreferences`: `{ kinds: [{ kind, enabled }], customOrder }`, the kinds the caller may receive in their priority order (see [Preferences](#preferences)). |
+| `PUT /api/me/live-activities/preferences` | `{ kinds?: [{ kind, enabled }], order?: kind[] \| null }`, at least one of them. `kinds`: 1–5 entries, each kind at most once; unlisted kinds keep their choice. A kind the caller does not receive may be set and applies if they receive it later. `order`: 1–5 distinct kinds, highest priority first; `null` resets to the organizer order. An unknown kind is a 400. Saves serialize on the user row; idempotent. Returns the GET shape. |
 
 The access posture matches `POST /api/me/push-tokens`: any signed-in, active
 account may manage its own devices, with no capability and no audit row,
@@ -376,11 +394,16 @@ route mapping in `apps/mobile`):
 - `live_activity_kind_opt_outs` (migration
   `0605_live_activity_kind_opt_outs.sql`): `(user_id, kind)` primary key
   (user cascade) and `created_at`. A row means the user turned that kind off.
+- `live_activity_kind_orders` (migration
+  `0606_live_activity_kind_orders.sql`): `user_id` primary key (cascade),
+  `kinds text[]` (1–5 kinds, highest first), `created_at`, `updated_at`. No
+  row means the organizer order.
 
-Account removal deletes the devices and the kind opt-outs together with
-`push_tokens`. The H54 export lists only device metadata (platform,
-language, opt-out, creation date), never tokens, plus the kind opt-outs
-(`notifications.liveActivityKindOptOuts`).
+Account removal deletes the devices, the kind opt-outs and the kind order
+together with `push_tokens`. The H54 export lists only device metadata
+(platform, language, opt-out, creation date), never tokens, plus the kind
+opt-outs (`notifications.liveActivityKindOptOuts`) and order
+(`notifications.liveActivityKindOrder`, `null` when not customized).
 
 ## Worker state machine
 
@@ -714,7 +737,10 @@ and `deploy/README.md`.
   audit, idempotent replay).
 - `preferences.test.ts`: per-kind preferences (entitlement, partial and
   idempotent writes, validation, the export bundle) and the worker ending an
-  opted-out kind and starting it again once back on.
+  opted-out kind and starting it again once back on; the per-user kind
+  order (organizer default, a custom order changing the cut in the read model
+  and the worker, reset, the organizer order stored as none, unreceived kinds
+  dropped, concurrent saves, export).
 - `test/notifications/push.test.ts`: queue and schedule pushes are
   `content-available`; others are not.
 - `worker.test.ts` also covers start, update and end per new kind, the

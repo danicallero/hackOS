@@ -1,8 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { LiveActivityConfigKind } from "@hackos/shared/live-activities";
-import { useNavigation, useRouter } from "expo-router";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
-import { useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { ManageAnnouncementsView } from "@/components/announcement-manage-view";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
@@ -46,14 +45,6 @@ export function categoryTitle(category: NotificationCategory, t: Translate): str
   if (category === "schedule") return t("notificationsActivityReminders");
   return t("notificationsQueueStaff");
 }
-
-const LIVE_ACTIVITY_KIND_LABEL = {
-  activity: "liveActivityKindActivity",
-  attendee_activity: "liveActivityKindAttendeeActivity",
-  queue: "liveActivityKindQueue",
-  deadline: "liveActivityKindDeadline",
-  accreditation: "liveActivityKindAccreditation",
-} as const satisfies Record<LiveActivityConfigKind, string>;
 
 function channelLabel(channel: NotificationChannel, t: Translate) {
   const labels: Record<NotificationChannel, string> = {
@@ -123,11 +114,20 @@ export function NotificationSettingsScreen() {
   const preferences = useNotificationPreferences();
   const reminders = useScheduleReminders();
   const liveActivities = useLiveActivitiesSetting();
-  // Per-kind rows only while this device shows Live Activities at all: with
-  // the master switch off nothing appears here, so they would be inert.
+  // The per-kind screen only while this device shows Live Activities at
+  // all: with the master switch off nothing appears here, so it would be inert.
   const liveActivityKinds = useLiveActivityKinds(
     liveActivities.available && liveActivities.enabled,
   );
+  const kindsActive = liveActivities.available && liveActivities.enabled;
+  const reloadKinds = liveActivityKinds.load;
+  // Back from the per-kind screen: refresh its "n of m on" summary.
+  useFocusEffect(
+    useCallback(() => {
+      if (kindsActive) void reloadKinds();
+    }, [kindsActive, reloadKinds]),
+  );
+  const kindsOn = liveActivityKinds.kinds.filter((item) => item.enabled).length;
   const [refreshing, setRefreshing] = useState(false);
   const contentContainerStyle = useScrollContentStyle();
   const capabilities = me?.capabilities ?? [];
@@ -202,21 +202,23 @@ export function NotificationSettingsScreen() {
             <Section>
               <ToggleRow
                 label={t(liveActivities.platform === "android" ? "liveUpdates" : "liveActivities")}
+                detail={
+                  liveActivityKinds.kinds.length > 0
+                    ? t("alertsKindCount", {
+                        count: String(kindsOn),
+                        total: String(liveActivityKinds.kinds.length),
+                      })
+                    : undefined
+                }
                 busy={liveActivities.busy}
                 value={liveActivities.enabled}
                 onChange={(enabled) => void liveActivities.toggle(enabled)}
+                onPress={
+                  liveActivityKinds.kinds.length > 0
+                    ? () => router.push("/(tabs)/others/notification-settings/live-activities")
+                    : undefined
+                }
               />
-              {liveActivityKinds.kinds.map(({ kind, enabled }) => (
-                <View key={kind}>
-                  <Separator />
-                  <ToggleRow
-                    label={t(LIVE_ACTIVITY_KIND_LABEL[kind])}
-                    busy={liveActivityKinds.busyKind === kind}
-                    value={enabled}
-                    onChange={(next) => void liveActivityKinds.toggle(kind, next)}
-                  />
-                </View>
-              ))}
             </Section>
           ) : null}
 

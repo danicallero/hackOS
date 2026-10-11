@@ -1,7 +1,7 @@
 /**
- * #966 (H38, H25, H59, H19, H22): per-kind Live Activity toggles in
- * Notifications — load only while active, optimistic toggle, re-sync this
- * device, roll back on failure.
+ * #966 (H38, H25, H59, H19, H22): per-kind Live Activity toggles and kind
+ * order in Notifications — load only while active, optimistic changes,
+ * re-sync this device, roll back on failure.
  */
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
@@ -20,6 +20,7 @@ const LIST = {
     { kind: "activity", enabled: true },
     { kind: "queue", enabled: true },
   ],
+  customOrder: false,
 };
 
 beforeEach(() => {
@@ -56,7 +57,7 @@ describe("useLiveActivityKinds", () => {
     expect(mockReconcile).not.toHaveBeenCalled();
 
     await act(async () => {
-      resolvePut({ kinds: [{ kind: "activity", enabled: false }, LIST.kinds[1]] });
+      resolvePut({ ...LIST, kinds: [{ kind: "activity", enabled: false }, LIST.kinds[1]] });
       await pending;
     });
     expect(mockReconcile).toHaveBeenCalledTimes(1);
@@ -75,5 +76,60 @@ describe("useLiveActivityKinds", () => {
     expect(result.current.kinds[1]).toEqual({ kind: "queue", enabled: true });
     expect(mockReconcile).not.toHaveBeenCalled();
     expect(result.current.busyKind).toBeNull();
+  });
+
+  it("reorders optimistically, sends the whole order and re-syncs the device", async () => {
+    mockApiFetch.mockResolvedValueOnce(LIST);
+    const { result } = await renderHook(() => useLiveActivityKinds(true));
+    await waitFor(() => expect(result.current.kinds).toEqual(LIST.kinds));
+
+    const reordered = { kinds: [LIST.kinds[1], LIST.kinds[0]], customOrder: true };
+    let resolvePut!: (value: unknown) => void;
+    mockApiFetch.mockReturnValueOnce(new Promise((resolve) => (resolvePut = resolve)));
+    let pending!: Promise<void>;
+    await act(async () => {
+      pending = result.current.reorder(["queue", "activity"]);
+    });
+    expect(result.current.kinds).toEqual(reordered.kinds);
+    expect(result.current.customOrder).toBe(true);
+    expect(result.current.ordering).toBe(true);
+    expect(mockApiFetch).toHaveBeenLastCalledWith("/api/me/live-activities/preferences", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ order: ["queue", "activity"] }),
+    });
+
+    await act(async () => {
+      resolvePut(reordered);
+      await pending;
+    });
+    expect(mockReconcile).toHaveBeenCalledTimes(1);
+    expect(result.current.ordering).toBe(false);
+  });
+
+  it("restores the previous order when the save fails, and resets with null", async () => {
+    const custom = { kinds: [LIST.kinds[1], LIST.kinds[0]], customOrder: true };
+    mockApiFetch.mockResolvedValueOnce(custom);
+    const { result } = await renderHook(() => useLiveActivityKinds(true));
+    await waitFor(() => expect(result.current.customOrder).toBe(true));
+
+    mockApiFetch.mockRejectedValueOnce(new Error("offline"));
+    await act(async () => {
+      await result.current.reorder(["activity", "queue"]);
+    });
+    expect(result.current.kinds).toEqual(custom.kinds);
+    expect(result.current.ordering).toBe(false);
+
+    mockApiFetch.mockResolvedValueOnce(LIST);
+    await act(async () => {
+      await result.current.resetOrder();
+    });
+    expect(mockApiFetch).toHaveBeenLastCalledWith("/api/me/live-activities/preferences", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ order: null }),
+    });
+    expect(result.current.kinds).toEqual(LIST.kinds);
+    expect(result.current.customOrder).toBe(false);
   });
 });
