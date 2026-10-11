@@ -28,16 +28,37 @@ export function resolveOperationsNavigationAction(
   return "replace";
 }
 
+/**
+ * Deep pages that belong to a pseudo-tab other than the one whose route they
+ * share a prefix with: a queue-operations entry opens `others/team/[entryId]`.
+ */
+const OVERFLOW_SECTION_SUBTREES: Record<string, OverflowTabKey> = {
+  "/others/team": "operations",
+};
+
+const OTHERS_ROOT = "/others";
+
 export function operationsSectionFromPathname(pathname: string): OperationsSection {
   // Expo Router may hand us a pathname with route groups stripped
   // (for example `/others/queue`) or preserved in tests / internal flow
   // (`/(tabs)/others/queue`). Normalize both shapes before matching.
   const normalized = normalizeOperationsPath(pathname);
   for (const section of OVERFLOW_TAB_KEYS) {
-    const sectionPath = normalizeOperationsPath(OVERFLOW_TAB_ROUTE[section]);
-    if (normalized === sectionPath || normalized.startsWith(`${sectionPath}/`)) return section;
+    if (isWithin(normalized, normalizeOperationsPath(OVERFLOW_TAB_ROUTE[section]))) return section;
   }
+  for (const [subtree, section] of Object.entries(OVERFLOW_SECTION_SUBTREES)) {
+    if (isWithin(normalized, subtree)) return section;
+  }
+  // Every other page in the Others stack (Wallet, notification settings,
+  // reminders, announcements, Storage, Statistics, Company tags, Legal,
+  // Delete account, scan log, sync queue, person details...) is pushed from
+  // Account, so the user is still inside it.
+  if (isWithin(normalized, OTHERS_ROOT)) return "account";
   return "external";
+}
+
+function isWithin(path: string, root: string): boolean {
+  return path === root || path.startsWith(`${root}/`);
 }
 
 export function operationsSectionFromRoute(route: OperationsRoute): OverflowTabKey {

@@ -230,6 +230,15 @@ scroll-to-top/live-activity handlers; deeper screens inside a section still
 push normally on top of it. Pathname matching normalizes Expo Router route groups first
 (`/others/...` vs `/(tabs)/others/...`).
 
+Section classification covers the whole Others stack: `queue`, `diary` and
+`operations` own their route (plus `others/team/*`, opened from queue
+operations), and every other `others/*` page (Wallet, notification settings,
+reminders, announcements, Storage, Statistics, Company tags, Legal, Delete
+account, scan log, sync queue, people and person details) is an Account
+subpage. The Others circle therefore stays on Account — and navigating
+programmatically to `/(tabs)/others/account` selects it — for as long as the
+user is anywhere inside Account.
+
 A saved person's profile (#935) is the root-level `app/people/[id].tsx`,
 pushed above the tabs from either diary placement (direct tab or Others), the
 same way `app/schedule/[id].tsx` sits above Schedule; its back action falls
