@@ -584,6 +584,7 @@ Table live_activity_devices {
 Table live_activity_sessions {
   activity_push_token text
   device_id integer [not null]
+  dismissed_phase text
   end_reason text
   ended_at "timestamp with time zone"
   id integer [pk, increment, not null]

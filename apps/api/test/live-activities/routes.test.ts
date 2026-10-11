@@ -186,7 +186,20 @@ describe("Live Activity sessions", () => {
     });
     expect(dismissed.statusCode).toBe(200);
     expect(await sessionsOf(row.id)).toEqual([
-      expect.objectContaining({ end_reason: "dismissed", activity_push_token: null }),
+      expect.objectContaining({
+        end_reason: "dismissed",
+        activity_push_token: null,
+        dismissed_phase: null,
+      }),
+    ]);
+    await app.inject({
+      method: "DELETE",
+      url: "/api/me/live-activities/sessions",
+      headers: asUser(owner),
+      payload: { deviceId: "phone", kind: "activity", subject: "activity:7", phase: "live" },
+    });
+    expect(await sessionsOf(row.id)).toEqual([
+      expect.objectContaining({ dismissed_phase: "live" }),
     ]);
 
     // A later local start re-registers (reopens) it.

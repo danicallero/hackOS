@@ -92,7 +92,7 @@ the account language.
 and the Live Activity mirrors the queue screen rather than adding a new
 notification category. The opt-out is therefore the device's `enabled` flag
 (`PUT /api/me/live-activities/device`) rather than an H51 preference row. A
-dismissed activity is never restarted remotely.
+dismissed activity stays away until its phase changes (see the state machine).
 
 ## Registry
 
@@ -100,7 +100,7 @@ dismissed activity is never restarted remotely.
 | --- | --- |
 | `PUT /api/me/live-activities/device` | Upsert this install: `deviceId`, `platform`, `pushToStartToken` (iOS 17.2+), `expoPushToken` (Android), `language`, `enabled`. Omitted fields keep their value; `null` clears it. A `deviceId` registered by another account moves to the caller and its old sessions are dropped. |
 | `PUT /api/me/live-activities/sessions` | `{deviceId, kind, subject, activityPushToken}`. Registers or rotates the iOS per-activity token after a local start, a remote start, or a token rotation. Re-registering a dismissed activity reopens it. |
-| `DELETE /api/me/live-activities/sessions` | `{deviceId, kind, subject}`. The user dismissed it, or the app ended it locally. |
+| `DELETE /api/me/live-activities/sessions` | `{deviceId, kind, subject, phase?}`. The user swiped it away, or the app ended it locally. `phase` is the phase it showed; without it the server uses the last phase it sent, or records the next one it computes. |
 | `GET /api/me/live-activities[?language=]` | `MyLiveActivities` for the caller. |
 
 The access posture matches `POST /api/me/push-tokens`: any signed-in, active
@@ -119,9 +119,10 @@ for activities.
   `language` and `enabled`.
 - `live_activity_sessions`: one row per `(device, kind, subject)`, with
   `activity_push_token`, `state_hash`/`props` for the last state sent,
-  `last_sent_at`, `started_at`, `ended_at` and `end_reason`
-  (`finished` = the server ended it and may restart it; `dismissed` = never
-  restart remotely).
+  `last_sent_at`, `started_at`, `ended_at`, `end_reason` and
+  `dismissed_phase` (`finished` = the server ended it and may restart it;
+  `dismissed` = restart remotely only once the phase differs from
+  `dismissed_phase`).
 
 Account removal deletes the devices together with `push_tokens`. The H54
 export lists only device metadata (platform, language, opt-out, creation
@@ -145,7 +146,9 @@ next repetition. Each tick does the following:
 | none, or `finished` | **start**, if a start path exists: iOS `push_to_start_token` (and APNs configured) or Android `expo_push_token` |
 | open, state hash changed | **update**. Activity updates where only the counter changed are throttled to one per 30 s per session; queue changes and phase changes go out immediately. iOS waits until the app reports the activity's own token. |
 | open, hash unchanged | nothing |
-| `dismissed` | nothing, ever (the user removed it) |
+| `dismissed`, same phase as `dismissed_phase` | nothing (the user removed it) |
+| `dismissed`, phase changed (e.g. waiting → called, upcoming → live) | **start** again: new, essential information |
+| `dismissed`, no `dismissed_phase` yet | record the current phase, send nothing |
 
 3. Every open session that is no longer desired is **ended**. This happens
    when the window closes, the team is done, the activity ends, the
@@ -168,7 +171,7 @@ next repetition. Each tick does the following:
 - A dead token clears that token: APNs 410, `BadDeviceToken`, `ExpiredToken`
   or `Unregistered`, or Expo `DeviceNotRegistered`. A dead iOS
   *per-activity* token means the activity is gone from the device, so its
-  session is marked `dismissed`.
+  session is marked `dismissed` in its last phase.
 
 ## Push formats
 
@@ -216,6 +219,9 @@ next repetition. Each tick does the following:
   activities.
 - `relevance-score`: 100 when called or in a room, 50 while waiting, 75 for a
   live activity and 25 for an upcoming one.
+- `attributes` is expo-widgets' `LiveActivityAttributes { url: String? }`:
+  `hackos://queue` or `hackos://scan?activity=<id>`. It is the tap target, so
+  it must be present on every remote start.
 - `dismissal-date` (on `end` only): 15 minutes after the end.
 
 ### Android (Expo data push)
@@ -318,7 +324,8 @@ and `deploy/README.md`.
   called, lead window, phases, distinct and fixture-isolated counts, and
   capability resolution.
 - `worker.test.ts`: start once, idempotent re-run, update on change and the
-  call alert, throttle, end and restart, dismissed never restarted,
+  call alert, throttle, end and restart, dismissal kept until the phase
+  changes,
   concurrent ticks giving one start, and token cleanup. It uses stubbed
   APNs/Expo transports.
 - `apns.test.ts`: payload shape and JWT signing with a generated P-256 key.

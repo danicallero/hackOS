@@ -168,7 +168,8 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
              started_at = CASE WHEN live_activity_sessions.ended_at IS NULL
                                THEN live_activity_sessions.started_at ELSE now() END,
              ended_at = NULL,
-             end_reason = NULL`,
+             end_reason = NULL,
+             dismissed_phase = NULL`,
           [id, kind, subject, activityPushToken ?? null],
         );
       });
@@ -185,26 +186,33 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
         summary: "Dismiss a Live Activity",
         description:
           "Marks the Live Activity `kind`/`subject` on the caller's device as dismissed (the " +
-          "user removed it, or the app ended it locally). The server stops updating it and " +
-          "never starts it remotely again; a later local start re-registers it.",
+          "user swiped it away, or the app ended it locally). The server stops updating it " +
+          "and starts it remotely again only once its phase differs from the dismissed one " +
+          "(`phase`, else the last phase the server sent), e.g. a waiting queue activity " +
+          "comes back when the team is called. A later local start re-registers it.",
         body: endSessionBodySchema,
         response: { 200: statusResponseSchema },
       },
     },
     async (req) => {
       const userId = req.userId as number;
-      const { deviceId, kind, subject } = req.body;
+      const { deviceId, kind, subject, phase } = req.body;
       await withTransaction(async (client) => {
         await lockActiveUser(client, userId);
         const id = await ownDeviceId(client, userId, deviceId);
+        // Without a phase from the client and no state sent yet, the worker
+        // records the phase it next computes (worker.ts).
         await client.query(
-          `INSERT INTO live_activity_sessions (device_id, kind, subject, ended_at, end_reason)
-           VALUES ($1, $2, $3, now(), 'dismissed')
+          `INSERT INTO live_activity_sessions
+             (device_id, kind, subject, ended_at, end_reason, dismissed_phase)
+           VALUES ($1, $2, $3, now(), 'dismissed', $4)
            ON CONFLICT (device_id, kind, subject) DO UPDATE SET
              activity_push_token = NULL,
              ended_at = COALESCE(live_activity_sessions.ended_at, now()),
-             end_reason = 'dismissed'`,
-          [id, kind, subject],
+             end_reason = 'dismissed',
+             dismissed_phase = COALESCE(EXCLUDED.dismissed_phase,
+                                        live_activity_sessions.props->>'phase')`,
+          [id, kind, subject, phase ?? null],
         );
       });
       return { status: true as const };

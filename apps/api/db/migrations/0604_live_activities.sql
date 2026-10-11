@@ -16,8 +16,8 @@
 --   locally by the app — with the iOS per-activity push token, the hash and
 --   props of the last state sent (to update only on change and to send a
 --   final content-state on end), and why it ended. The unique key is the
---   worker's idempotent start claim: INSERT … ON CONFLICT DO NOTHING lets
---   exactly one concurrent tick send a start.
+--   worker's idempotent start claim: INSERT … ON CONFLICT lets exactly one
+--   concurrent tick send a start.
 CREATE TABLE live_activity_devices (
   id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -48,8 +48,11 @@ CREATE TABLE live_activity_sessions (
   ended_at timestamptz,
   -- 'finished': the server ended it (window closed, team done, activity
   -- over) and may start it again if it becomes relevant. 'dismissed': the
-  -- user or the app ended it; the worker never restarts it remotely.
+  -- user swiped it away or the app ended it; the worker restarts it
+  -- remotely only once its phase differs from `dismissed_phase` (e.g. the
+  -- dismissed waiting queue activity comes back when the team is called).
   end_reason text CHECK (end_reason IN ('finished', 'dismissed')),
+  dismissed_phase text,
   UNIQUE (device_id, kind, subject),
   CHECK ((ended_at IS NULL) = (end_reason IS NULL))
 );

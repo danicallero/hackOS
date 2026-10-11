@@ -149,18 +149,49 @@ describe("queue Live Activity (H38)", () => {
     expect(apns.events()).toEqual(["start", "end"]);
   });
 
-  it("never restarts an activity the user dismissed", async () => {
+  it("keeps a dismissed activity away until its phase changes", async () => {
     await openJudgingWindow();
-    const { userId } = await participantInQueue();
+    const { userId, entryId, roomId } = await participantInQueue();
     const device = await registerDevice(userId);
     await tick();
     const { pool } = await import("../../src/db/pool.js");
+    // The user swipes it away while waiting (as DELETE …/sessions records it).
     await pool.query(
-      `UPDATE live_activity_sessions SET ended_at = now(), end_reason = 'dismissed' WHERE device_id = $1`,
+      `UPDATE live_activity_sessions
+          SET ended_at = now(), end_reason = 'dismissed', dismissed_phase = props->>'phase'
+        WHERE device_id = $1`,
       [device.id],
     );
     await tick();
     expect(apns.events()).toEqual(["start"]);
+
+    // Being called is new, essential information: start it again.
+    await callEntry(entryId, roomId);
+    expect(await tick()).toMatchObject({ started: 1 });
+    expect(apns.events()).toEqual(["start", "start"]);
+    const [session] = await sessionsOf(device.id);
+    expect(session).toMatchObject({ ended_at: null, end_reason: null, dismissed_phase: null });
+    expect(session.props.phase).toBe("called");
+  });
+
+  it("records the dismissed phase on the next tick when the client sent none", async () => {
+    await openJudgingWindow();
+    const { userId } = await participantInQueue();
+    const device = await registerDevice(userId, { pushToStartToken: null });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `INSERT INTO live_activity_sessions (device_id, kind, subject, ended_at, end_reason)
+       VALUES ($1, 'queue', 'judging', now(), 'dismissed')`,
+      [device.id],
+    );
+    await pool.query(`UPDATE live_activity_devices SET push_to_start_token = 'pts' WHERE id = $1`, [
+      device.id,
+    ]);
+    await tick();
+    await tick();
+    expect(apns.sent).toHaveLength(0);
+    const [session] = await sessionsOf(device.id);
+    expect(session.dismissed_phase).toBe("waiting");
   });
 
   it("produces exactly one start under concurrent ticks", async () => {

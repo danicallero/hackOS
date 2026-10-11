@@ -60,7 +60,11 @@ export const upsertSessionBodySchema = z
   .refine(subjectMatchesKind, subjectRule);
 
 export const endSessionBodySchema = z
-  .object(sessionKeyShape)
+  .object({
+    ...sessionKeyShape,
+    /** Phase the activity showed when dismissed; it comes back only in another phase. */
+    phase: z.enum(["waiting", "called", "in_room", "upcoming", "live"]).optional(),
+  })
   .refine(subjectMatchesKind, subjectRule);
 
 export const statusResponseSchema = z.object({ status: z.literal(true) });
