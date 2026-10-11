@@ -170,13 +170,14 @@ export function InfoRow({
       {icon ? (
         <SymbolView name={icon} tintColor={colors.accent} size={20} accessible={false} />
       ) : null}
-      <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
+      {/* The label keeps its width; long values (emails, badge ids) wrap instead. */}
+      <Text selectable style={{ color: colors.label, flexShrink: 0, fontSize: 16 }}>
         {label}
       </Text>
       <Text
         selectable
         style={[
-          { color: colors.secondaryLabel, flexShrink: 1, fontSize: 16, textAlign: "right" },
+          { color: colors.secondaryLabel, flex: 1, fontSize: 16, textAlign: "right" },
           valueStyle,
         ]}
       >

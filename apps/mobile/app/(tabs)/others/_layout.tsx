@@ -42,6 +42,26 @@ export default function OthersLayout() {
         options={{ headerShown: true, headerLargeTitle: true, title: t("scannerSyncQueueTitle") }}
       />
       <Stack.Screen
+        name="notification-settings/index"
+        options={{ headerShown: true, headerLargeTitle: true, title: t("alertsNotifications") }}
+      />
+      <Stack.Screen
+        name="notification-settings/[category]"
+        options={{ headerShown: true, headerLargeTitle: true }}
+      />
+      <Stack.Screen
+        name="reminders/[kind]"
+        options={{ headerShown: true, headerLargeTitle: true }}
+      />
+      <Stack.Screen
+        name="announcements"
+        options={{
+          headerShown: true,
+          headerLargeTitle: true,
+          title: t("notificationsAnnouncements"),
+        }}
+      />
+      <Stack.Screen
         name="legal"
         options={{ headerShown: true, headerLargeTitle: true, title: t("accountLegalTitle") }}
       />
@@ -63,7 +83,7 @@ export default function OthersLayout() {
       />
       <Stack.Screen
         name="wallet"
-        options={{ headerShown, headerLargeTitle: true, title: t("tabWallet") }}
+        options={{ headerShown: true, headerLargeTitle: true, title: t("tabWallet") }}
       />
       <Stack.Screen
         name="diary"

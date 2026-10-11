@@ -85,6 +85,9 @@ export default function AccountScreen() {
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState<Error | null>(null);
   const [languageRetry, setLanguageRetry] = useState<Lang | null>(null);
+  // The iOS MenuView hosts its trigger at intrinsic size, so the row needs an
+  // explicit width to span the section and keep its value right-aligned.
+  const [languageRowWidth, setLanguageRowWidth] = useState<number>();
   const [refreshingAccount, setRefreshingAccount] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<Error | null>(null);
@@ -304,31 +307,34 @@ export default function AccountScreen() {
         <Section title={t("accountProfile")}>
           <InfoRow label={t("accountName")} value={fullName} icon="person" />
           <Separator inset={48} />
-          <MenuView
-            actions={LANGUAGES.map(
-              (lang): MenuAction => ({
-                id: lang,
-                title: languageName(lang),
-                state: lang === me.language ? "on" : "off",
-                attributes: savingLanguage ? { disabled: true } : undefined,
-              }),
-            )}
-            onPressAction={({ nativeEvent }) => void changeLanguage(nativeEvent.event as Lang)}
-          >
-            <View
-              accessible
-              accessibilityLabel={t("accountLanguage")}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: savingLanguage, busy: savingLanguage }}
+          <View onLayout={({ nativeEvent }) => setLanguageRowWidth(nativeEvent.layout.width)}>
+            <MenuView
+              actions={LANGUAGES.map(
+                (lang): MenuAction => ({
+                  id: lang,
+                  title: languageName(lang),
+                  state: lang === me.language ? "on" : "off",
+                  attributes: savingLanguage ? { disabled: true } : undefined,
+                }),
+              )}
+              onPressAction={({ nativeEvent }) => void changeLanguage(nativeEvent.event as Lang)}
             >
-              <InfoRow
-                label={t("accountLanguage")}
-                value={languageName(me.language)}
-                icon="globe"
-                accessoryIcon="chevron.down"
-              />
-            </View>
-          </MenuView>
+              <View
+                accessible
+                accessibilityLabel={t("accountLanguage")}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: savingLanguage, busy: savingLanguage }}
+                style={{ width: languageRowWidth }}
+              >
+                <InfoRow
+                  label={t("accountLanguage")}
+                  value={languageName(me.language)}
+                  icon="globe"
+                  accessoryIcon="chevron.down"
+                />
+              </View>
+            </MenuView>
+          </View>
         </Section>
 
         <Section title={t("accountContact")}>
@@ -419,6 +425,24 @@ export default function AccountScreen() {
               </View>
             </>
           ) : null}
+        </Section>
+
+        {/* H28: Wallet lives in Account rather than in the tab bar. */}
+        <Section title={t("tabWallet")}>
+          <AccountSubpageRow
+            label={t("accountViewTickets")}
+            icon="wallet.pass"
+            onPress={() => router.push("/(tabs)/others/wallet")}
+          />
+        </Section>
+
+        {/* H51: every notification setting lives here; the Schedule bell only shows the inbox. */}
+        <Section title={t("alertsNotifications")}>
+          <AccountSubpageRow
+            label={t("notificationsPreferences")}
+            icon="bell"
+            onPress={() => router.push("/(tabs)/others/notification-settings")}
+          />
         </Section>
 
         {isSponsorRep && mealPlan.data && mealPlan.data.meals.length > 0 ? (

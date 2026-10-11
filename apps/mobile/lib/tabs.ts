@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { Platform } from "react-native";
 import type { OverflowTabKey } from "./overflow-tabs";
 
-export type TabKey = "schedule" | "notifications" | "scan" | "activities" | OverflowTabKey;
+export type TabKey = "schedule" | "scan" | "activities" | OverflowTabKey;
 
 export interface PersonalTabContext {
   hasQueueItems: boolean;
@@ -83,22 +83,16 @@ export function primaryTabs(
   context: PersonalTabContext = NO_PERSONAL_QUEUE,
 ): TabKey[] {
   if (queueOperationsInPrimaryBar(capabilities)) {
-    return ["schedule", "operations", "notifications"];
+    return ["schedule", "operations"];
   }
   if (!isOperator(capabilities)) {
-    return [
-      "schedule",
-      ...(canSeeMyQueue(capabilities, context) ? (["queue"] as const) : []),
-      "wallet",
-      "notifications",
-    ];
+    return ["schedule", ...(canSeeMyQueue(capabilities, context) ? (["queue"] as const) : [])];
   }
 
   return [
     "schedule",
     "scan",
     ...(canScanActivities(capabilities) ? (["activities"] as const) : []),
-    "notifications",
   ];
 }
 
@@ -112,7 +106,6 @@ export function overflowTabs(
   if (!isOperator(capabilities) && !canOperateQueues(capabilities)) return ["diary", "account"];
   return [
     ...(canSeeMyQueue(capabilities, context) ? (["queue"] as const) : []),
-    "wallet",
     "diary",
     "account",
     ...(isOperator(capabilities) && canOperateQueues(capabilities)

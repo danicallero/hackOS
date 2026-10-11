@@ -18,7 +18,11 @@ describe("company-tag links (#935)", () => {
       pathname: "/(tabs)/diary",
       params: { view: "companies", collect: "STAND-X" },
     });
-    const operator = [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.ACTIVITY_SCAN];
+    const operator = [
+      CAPABILITIES.ACCREDIT_SCAN,
+      CAPABILITIES.ACTIVITY_SCAN,
+      CAPABILITIES.QUEUE_OPERATE,
+    ];
     expect(collectCompanyTagHref("STAND-X", operator)).toEqual({
       pathname: "/(tabs)/others/diary",
       params: { view: "companies", collect: "STAND-X" },

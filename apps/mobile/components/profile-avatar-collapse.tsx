@@ -267,6 +267,17 @@ export function ProfileAvatarCollapse({
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
     return { opacity: target.hasCutout ? p : 0 };
   }, [distance, target.hasCutout]);
+  // Telegram-style progressive blur: blurred copies of the photo fade in as
+  // the avatar heads into the camera cutout (#935). Two radii keep the ramp
+  // smooth without animating a native blur on every frame.
+  const softBlurStyle = useAnimatedStyle(() => {
+    const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
+    return { opacity: reduceMotion ? 0 : Math.min(1, Math.max(0, (p - 0.05) / 0.4)) };
+  }, [distance, reduceMotion]);
+  const strongBlurStyle = useAnimatedStyle(() => {
+    const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
+    return { opacity: reduceMotion ? 0 : Math.min(1, Math.max(0, (p - 0.35) / 0.45)) };
+  }, [distance, reduceMotion]);
   if (!anchorFrame) return null;
   const fallbackColor = variant === "account" ? colors.accent : colors.accentSurface;
   const initialsColor = variant === "account" ? colors.accentText : colors.onAccentSurface;
@@ -301,12 +312,28 @@ export function ProfileAvatarCollapse({
         {children || source ? (
           <Animated.View style={[{ position: "absolute" }, contentStyle]}>
             {children ?? (
-              <Image
-                accessible={false}
-                source={{ uri: source as string }}
-                resizeMode="cover"
-                style={{ height: "100%", width: "100%" }}
-              />
+              <>
+                <Image
+                  accessible={false}
+                  source={{ uri: source as string }}
+                  resizeMode="cover"
+                  style={{ height: "100%", width: "100%" }}
+                />
+                <Animated.Image
+                  accessible={false}
+                  blurRadius={6}
+                  source={{ uri: source as string }}
+                  resizeMode="cover"
+                  style={[absoluteFill, softBlurStyle]}
+                />
+                <Animated.Image
+                  accessible={false}
+                  blurRadius={18}
+                  source={{ uri: source as string }}
+                  resizeMode="cover"
+                  style={[absoluteFill, strongBlurStyle]}
+                />
+              </>
             )}
           </Animated.View>
         ) : (

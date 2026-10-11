@@ -41,7 +41,6 @@ import {
   scheduleItemToForm,
   scheduleItemToTranslations,
 } from "@/components/schedule-form-modal";
-import { ScheduleNotificationsSheet } from "@/components/schedule-notifications-sheet";
 import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
@@ -70,6 +69,7 @@ import { has } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
+import { useUnreadNotificationCount } from "@/lib/use-unread-notifications";
 import { colors } from "@/theme/colors";
 
 type NowMarker = { kind: "now"; id: string };
@@ -150,6 +150,7 @@ export default function ScheduleScreen() {
   const scrollRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollAnimated = useRef(false);
   const navigation = useNavigation();
+  const router = useRouter();
   const tabNavigation = navigation.getParent?.();
   const insets = useSafeAreaInsets();
   const tabBarBottomInset = useRouterTabBarBottomInset();
@@ -176,7 +177,10 @@ export default function ScheduleScreen() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [legacySearchOpen, setLegacySearchOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const unreadCount = useUnreadNotificationCount();
+  const bellIcon = unreadCount > 0 ? "bell.badge" : "bell";
+  const bellLabel =
+    unreadCount > 0 ? t("alertsOpenUnread", { count: String(unreadCount) }) : t("tabNotifications");
   const [formTarget, setFormTarget] = useState<"create" | ScheduleItem | null>(null);
 
   const filterActive = selectedKinds.length > 0 || selectedAudiences.length > 0;
@@ -410,6 +414,11 @@ export default function ScheduleScreen() {
     }
   }
 
+  // H51/H59: the bell opens Alerts (inbox, reminders, preferences) on this stack.
+  function openAlerts() {
+    router.push("/(tabs)/schedule/alerts");
+  }
+
   function confirmDelete(item: ScheduleItem) {
     Alert.alert(t("scheduleDeleteConfirmTitle"), t("scheduleDeleteConfirmMessage"), [
       { text: t("cancel"), style: "cancel" },
@@ -447,11 +456,13 @@ export default function ScheduleScreen() {
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       {glassAvailable ? (
         <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Button
-            icon="bell.badge"
-            accessibilityLabel={t("scheduleNotificationsTitle")}
-            onPress={() => setSettingsOpen(true)}
-          />
+          <Stack.Toolbar.Button icon={bellIcon} accessibilityLabel={bellLabel} onPress={openAlerts}>
+            {unreadCount > 0 ? (
+              <Stack.Toolbar.Badge>
+                {unreadCount > 99 ? "99+" : String(unreadCount)}
+              </Stack.Toolbar.Badge>
+            ) : null}
+          </Stack.Toolbar.Button>
           <Stack.Toolbar.Button
             icon={
               filterActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease"
@@ -472,9 +483,10 @@ export default function ScheduleScreen() {
               style={{ alignItems: "center", borderRadius: 22, flexDirection: "row", height: 44 }}
             >
               <LegacyHeaderIconButton
-                icon="bell.badge"
-                accessibilityLabel={t("scheduleNotificationsTitle")}
-                onPress={() => setSettingsOpen(true)}
+                icon={bellIcon}
+                accessibilityLabel={bellLabel}
+                tintColor={unreadCount > 0 ? colors.accent : colors.label}
+                onPress={openAlerts}
               />
               <View
                 style={{ backgroundColor: colors.separator, height: 20, opacity: 0.6, width: 1 }}
@@ -665,20 +677,6 @@ export default function ScheduleScreen() {
           onSubmit={submitForm}
         />
       ) : null}
-
-      <ScheduleNotificationsSheet
-        visible={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        kinds={kinds}
-        items={items}
-        categoryState={notifications.categoryState}
-        onToggleCategory={(kind, enabled) => void notifications.toggleCategory(kind, enabled)}
-        isEntrySubscribed={(item) =>
-          notifications.ready ? notifications.isEntrySubscribed(item) : false
-        }
-        onToggleEntry={(item) => void notifications.toggleEntry(item)}
-        savingKey={notifications.savingKey}
-      />
 
       <ScheduleFilterPanel
         open={filterOpen}

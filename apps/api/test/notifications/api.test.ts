@@ -220,6 +220,21 @@ describe("in-app inbox (H50/H51)", () => {
       headers: asUser(userId),
     });
     expect(again.json().read_at).toBe(read.json().read_at);
+
+    // H51: marking unread clears the marker and returns it to the unread list
+    const markUnread = await app.inject({
+      method: "POST",
+      url: `/api/me/notifications/${firstId}/unread`,
+      headers: asUser(userId),
+    });
+    expect(markUnread.statusCode).toBe(200);
+    expect(markUnread.json().read_at).toBeNull();
+    const unreadAgain = await app.inject({
+      method: "GET",
+      url: "/api/me/notifications?unread=true",
+      headers: asUser(userId),
+    });
+    expect(unreadAgain.json().total).toBe(3);
   });
 
   it("cannot read or mark another user's notifications", async () => {
@@ -245,6 +260,13 @@ describe("in-app inbox (H50/H51)", () => {
       headers: asUser(intruder),
     });
     expect(mark.statusCode).toBe(404);
+
+    const markUnread = await app.inject({
+      method: "POST",
+      url: `/api/me/notifications/${id}/unread`,
+      headers: asUser(intruder),
+    });
+    expect(markUnread.statusCode).toBe(404);
   });
 
   it("email/push outbox rows never appear in the inbox", async () => {

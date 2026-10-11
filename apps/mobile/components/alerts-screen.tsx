@@ -1,7 +1,15 @@
-import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { useScrollToTop } from "expo-router";
-import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigation, useScrollToTop } from "expo-router";
+import Stack from "expo-router/stack";
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   AppState,
@@ -10,8 +18,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  ScrollView,
-  Switch,
+  type ScrollView,
   Text,
   useColorScheme,
   View,
@@ -21,7 +28,10 @@ import {
   type NativeGesture,
   useNativeGesture,
 } from "react-native-gesture-handler";
-import Swipeable, { type SwipeableProps } from "react-native-gesture-handler/ReanimatedSwipeable";
+import Swipeable, {
+  type SwipeableMethods,
+  type SwipeableProps,
+} from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, {
   runOnJS,
   type SharedValue,
@@ -30,12 +40,11 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
-import { ManageAnnouncementsView } from "@/components/announcement-manage-view";
-import { GlassView } from "@/components/glass-view";
-import { EmptyState, Section, Separator } from "@/components/native-ui";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { EmptyState, LegacyHeaderIconButton, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { SegmentedControl } from "@/components/segmented-control";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
@@ -44,33 +53,17 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import {
   emitNotificationChange,
-  emitNotificationPreferenceChange,
   subscribeToCategory,
   subscribeToNotificationChanges,
-  subscribeToNotificationPreferenceChanges,
 } from "@/lib/notification-events";
-import {
-  type NotificationChannel,
-  type NotificationPreferences,
-  withNotificationOverrides,
-} from "@/lib/notification-preferences";
-import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import type { NotificationChannel } from "@/lib/notification-preferences";
 import { subscribeToServerEvent } from "@/lib/server-events";
-import { has } from "@/lib/tabs";
-import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 type Channel = NotificationChannel;
-const VALID_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
-
-/** Drops any stale channel a device cached before a channel was retired (e.g. the old Discord channel). */
-function validChannels(channels: NotificationChannel[]): NotificationChannel[] {
-  return channels.filter((channel) => (VALID_CHANNELS as string[]).includes(channel));
-}
-
 interface InboxItem {
   id: number;
   category: string;
@@ -110,227 +103,62 @@ function NotificationScrollGestureBoundary({
   return <GestureDetector gesture={gesture}>{children}</GestureDetector>;
 }
 
-/** The segmented control plus an optional trailing action, memoized so toggling the bell doesn't also re-render whichever hidden tab it's shared with. */
-const NotificationsHeader = memo(function NotificationsHeader({
-  values,
-  selectedIndex,
-  onChangeIndex,
-  trailing,
-  t,
-}: {
-  values: string[];
-  selectedIndex: number;
-  onChangeIndex: (index: number) => void;
-  trailing?: ReactNode;
-  t: ReturnType<typeof useLocale>["t"];
-}) {
-  return (
-    <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
-      <View style={{ flex: 1 }}>
-        <SegmentedControl
-          label={t("tabNotifications")}
-          values={values}
-          selectedIndex={selectedIndex}
-          onChange={onChangeIndex}
-        />
-      </View>
-      {trailing ?? <View style={{ width: 36 }} />}
-    </View>
-  );
-});
-
-function UnreadBellButton({
-  active,
-  checked,
-  onToggle,
-  t,
-}: {
-  active: boolean;
-  checked: boolean;
-  onToggle: () => void;
-  t: ReturnType<typeof useLocale>["t"];
-}) {
-  return (
-    <GlassView
-      glassEffectStyle="regular"
-      isInteractive={active}
-      tintColor={active && checked ? (colors.accent as string) : undefined}
-      style={{ borderRadius: 18, height: 36, opacity: active ? 1 : 0.4, width: 36 }}
-    >
-      <Pressable
-        accessibilityLabel={t("notificationsUnreadOnly")}
-        accessibilityRole="switch"
-        accessibilityState={{ checked, disabled: !active }}
-        disabled={!active}
-        hitSlop={6}
-        onPress={onToggle}
-        style={({ pressed }) => ({
-          alignItems: "center",
-          flex: 1,
-          justifyContent: "center",
-          opacity: pressed ? 0.6 : 1,
-        })}
-      >
-        <SymbolView
-          name="bell.badge.fill"
-          tintColor={active && checked ? "white" : colors.secondaryLabel}
-          size={17}
-          accessible={false}
-        />
-      </Pressable>
-    </GlassView>
-  );
-}
-
-function AddAnnouncementButton({
-  onPress,
-  t,
-}: {
-  onPress: () => void;
-  t: ReturnType<typeof useLocale>["t"];
-}) {
-  return (
-    <GlassView
-      glassEffectStyle="regular"
-      isInteractive
-      style={{ borderRadius: 18, height: 36, width: 36 }}
-    >
-      <Pressable
-        accessibilityLabel={t("announcementAdd")}
-        accessibilityRole="button"
-        hitSlop={6}
-        onPress={() => {
-          void haptic("light");
-          onPress();
-        }}
-        style={({ pressed }) => ({
-          alignItems: "center",
-          flex: 1,
-          justifyContent: "center",
-          opacity: pressed ? 0.6 : 1,
-        })}
-      >
-        <SymbolView
-          name="plus"
-          tintColor={colors.label}
-          size={17}
-          weight="semibold"
-          accessible={false}
-        />
-      </Pressable>
-    </GlassView>
-  );
-}
-
-/** Full in-app inbox, notification preferences, and (ANNOUNCEMENTS_MANAGE only) announcement management, matching the web participant/admin views. */
-export default function NotificationsScreen() {
+/**
+ * H51: the inbox viewer, presented as a sheet from the Schedule bell. Read,
+ * unread and delete live on each row; every notification setting is in
+ * Account → Notifications.
+ */
+export default function AlertsScreen() {
   useColorScheme();
   const { t } = useLocale();
-  const { me } = useMeContext();
-  const canManageAnnouncements = has(me?.capabilities ?? [], CAPABILITIES.ANNOUNCEMENTS_MANAGE);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const navigation = useNavigation();
   const [unreadOnly, setUnreadOnly] = useState(false);
-  const [announcementForm, setAnnouncementForm] = useState<"create" | number | null>(null);
-  const androidTopInset = useAndroidTopInset();
-  const onMessages = selectedIndex === 0;
-  const onManage = canManageAnnouncements && selectedIndex === 2;
-
-  const headerValues = canManageAnnouncements
-    ? [t("notificationsMessages"), t("notificationsPreferences"), t("notificationsManage")]
-    : [t("notificationsMessages"), t("notificationsPreferences")];
+  const glassAvailable = isRealLiquidGlassAvailable();
+  const filterIcon = unreadOnly
+    ? "line.3.horizontal.decrease.circle.fill"
+    : "line.3.horizontal.decrease";
 
   const toggleUnread = useCallback(() => {
     void haptic("selection");
     setUnreadOnly((current) => !current);
   }, []);
 
-  // A separate header element per tab (not one shared node) so a change that
-  // only matters on one tab — the unread bell on Messages, the Add button on
-  // Manage — doesn't also re-render the other hidden trees it would
-  // otherwise be passed into: each copy's props are stable unless its own
-  // tab's state actually changed, so the memoized header bails out and the
-  // other tabs stay fully idle.
-  const messagesHeader = useMemo(
-    () => (
-      <NotificationsHeader
-        values={headerValues}
-        selectedIndex={selectedIndex}
-        onChangeIndex={setSelectedIndex}
-        trailing={
-          <UnreadBellButton
-            active={onMessages}
-            checked={unreadOnly}
-            onToggle={toggleUnread}
-            t={t}
-          />
-        }
-        t={t}
-      />
-    ),
-    [headerValues, selectedIndex, onMessages, unreadOnly, toggleUnread, t],
-  );
-  const preferencesHeader = useMemo(
-    () => (
-      <NotificationsHeader
-        values={headerValues}
-        selectedIndex={selectedIndex}
-        onChangeIndex={setSelectedIndex}
-        t={t}
-      />
-    ),
-    [headerValues, selectedIndex, t],
-  );
-  const manageHeader = useMemo(
-    () => (
-      <NotificationsHeader
-        values={headerValues}
-        selectedIndex={selectedIndex}
-        onChangeIndex={setSelectedIndex}
-        trailing={<AddAnnouncementButton onPress={() => setAnnouncementForm("create")} t={t} />}
-        t={t}
-      />
-    ),
-    [headerValues, selectedIndex, t],
-  );
+  // Liquid Glass owns the toolbar grouping below; other platforms get the
+  // same toggle as a plain header button.
+  useLayoutEffect(() => {
+    if (glassAvailable) return;
+    navigation.setOptions({
+      headerRight: () => (
+        <LegacyHeaderIconButton
+          icon={filterIcon}
+          accessibilityLabel={t("notificationsUnreadOnly")}
+          accessibilityState={{ selected: unreadOnly }}
+          tintColor={unreadOnly ? colors.accent : colors.label}
+          onPress={toggleUnread}
+        />
+      ),
+    });
+  }, [filterIcon, glassAvailable, navigation, t, toggleUnread, unreadOnly]);
 
-  // All tabs stay mounted (toggled with `display`, not conditional
-  // rendering) so switching back to one that already loaded its data shows
-  // it instantly instead of remounting into a fresh loading state.
   return (
     <>
-      <View style={{ display: onMessages ? "flex" : "none", flex: 1 }}>
-        <MessagesView
-          tabSwitcher={messagesHeader}
-          androidTopInset={androidTopInset}
-          unreadOnly={unreadOnly}
-        />
-      </View>
-      <View style={{ display: !onMessages && !onManage ? "flex" : "none", flex: 1 }}>
-        <PreferencesView tabSwitcher={preferencesHeader} androidTopInset={androidTopInset} />
-      </View>
-      {canManageAnnouncements ? (
-        <View style={{ display: onManage ? "flex" : "none", flex: 1 }}>
-          <ManageAnnouncementsView
-            tabSwitcher={manageHeader}
-            androidTopInset={androidTopInset}
-            formOpen={announcementForm}
-            onFormOpenChange={setAnnouncementForm}
+      {glassAvailable ? (
+        <Stack.Toolbar placement="right">
+          <Stack.Toolbar.Button
+            icon={filterIcon}
+            accessibilityLabel={t("notificationsUnreadOnly")}
+            selected={unreadOnly}
+            tintColor={unreadOnly ? colors.accent : undefined}
+            onPress={toggleUnread}
           />
-        </View>
+        </Stack.Toolbar>
       ) : null}
+      <MessagesView unreadOnly={unreadOnly} />
     </>
   );
 }
 
-const MessagesView = memo(function MessagesView({
-  tabSwitcher,
-  androidTopInset,
-  unreadOnly,
-}: {
-  tabSwitcher: ReactNode;
-  androidTopInset: number;
-  unreadOnly: boolean;
-}) {
+const MessagesView = memo(function MessagesView({ unreadOnly }: { unreadOnly: boolean }) {
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -345,7 +173,8 @@ const MessagesView = memo(function MessagesView({
   const pullProgress = useSharedValue(0);
   const pullArmed = useSharedValue(false);
   const pullBand = useSharedValue(0);
-  const tabBarBottomInset = useRouterTabBarScrollBottomInset();
+  // Presented as a sheet over the tab bar, so only the home indicator needs clearing.
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const notificationScrollGuardEnabled = Platform.OS === "android";
   const notificationScrollGesture = useNativeGesture({ enabled: notificationScrollGuardEnabled });
@@ -452,6 +281,32 @@ const MessagesView = memo(function MessagesView({
     } finally {
       setReadingId(null);
     }
+  }
+
+  async function markUnread(item: InboxItem) {
+    if (!item.read_at) return;
+    actionRetry.current = () => markUnread(item);
+    setReadingId(item.id);
+    setActionError(null);
+    try {
+      await apiFetch<{ id: number; read_at: null }>(`/api/me/notifications/${item.id}/unread`, {
+        method: "POST",
+      });
+      updateBothCaches(item.id, (row) => ({ ...row, read_at: null }));
+      // The unread list is its own server page; refetch so the item reappears there.
+      void unread.load();
+      emitNotificationChange();
+      void haptic("selection");
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause : new Error(t("alertsCouldNotUpdate")));
+    } finally {
+      setReadingId(null);
+    }
+  }
+
+  function toggleRead(item: InboxItem) {
+    if (item.read_at) void markUnread(item);
+    else void markRead(item);
   }
 
   function toggleExpanded(item: InboxItem) {
@@ -650,8 +505,8 @@ const MessagesView = memo(function MessagesView({
         contentContainerStyle={{
           gap: 16,
           padding: 16,
-          paddingBottom: Math.max(32, tabBarBottomInset + 16),
-          paddingTop: 16 + androidTopInset,
+          paddingBottom: Math.max(32, bottomInset + 16),
+          paddingTop: 16,
         }}
         keyboardShouldPersistTaps="handled"
         refreshControl={
@@ -662,7 +517,6 @@ const MessagesView = memo(function MessagesView({
         onMomentumScrollEnd={Platform.OS === "android" ? loadMoreAtAndroidEnd : undefined}
         scrollEventThrottle={1}
       >
-        {tabSwitcher}
         <StaleDataBanner updatedAt={staleSince} />
 
         {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
@@ -696,6 +550,7 @@ const MessagesView = memo(function MessagesView({
                   busy={readingId === item.id}
                   deleting={deletingId === item.id}
                   onDelete={() => confirmDelete(item)}
+                  onToggleRead={() => toggleRead(item)}
                   scrollGesture={
                     notificationScrollGuardEnabled ? notificationScrollGesture : undefined
                   }
@@ -912,6 +767,49 @@ function DeleteRevealAction({
   );
 }
 
+/** H51: swiping right reveals read/unread, like Mail's leading swipe action. */
+function ReadRevealAction({
+  progress,
+  unread,
+  onPress,
+}: {
+  progress: SharedValue<number>;
+  unread: boolean;
+  onPress: () => void;
+}) {
+  const { t } = useLocale();
+  const style = useAnimatedStyle(() => ({ opacity: progress.value }));
+  const label = unread ? t("alertsMarkRead") : t("alertsMarkUnread");
+  return (
+    <Animated.View style={[{ justifyContent: "center", marginRight: 8 }, style]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        onPress={onPress}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          backgroundColor: colors.accent,
+          borderCurve: "continuous",
+          flexDirection: "row",
+          gap: 6,
+          height: "100%",
+          justifyContent: "center",
+          opacity: pressed ? 0.75 : 1,
+          paddingHorizontal: 18,
+        })}
+      >
+        <SymbolView
+          name={unread ? "envelope" : "envelope.badge.fill"}
+          tintColor="white"
+          size={16}
+          accessible={false}
+        />
+        <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>{label}</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 function NotificationRow({
   item,
   expanded,
@@ -920,6 +818,7 @@ function NotificationRow({
   busy,
   deleting,
   onDelete,
+  onToggleRead,
   scrollGesture,
 }: {
   item: InboxItem;
@@ -929,8 +828,10 @@ function NotificationRow({
   busy: boolean;
   deleting: boolean;
   onDelete: () => void;
+  onToggleRead: () => void;
   scrollGesture?: NativeGesture;
 }) {
+  const swipeableRef = useRef<SwipeableMethods>(null);
   const { t } = useLocale();
   const subject = payloadField(item.payload, "subject") ?? categoryLabel(item.category, t);
   const body = payloadField(item.payload, "body");
@@ -949,10 +850,22 @@ function NotificationRow({
 
   return (
     <Swipeable
+      ref={swipeableRef}
       enabled={!deleting && !busy}
+      renderLeftActions={(progress) => (
+        <ReadRevealAction
+          progress={progress}
+          unread={unread}
+          onPress={() => {
+            swipeableRef.current?.close();
+            onToggleRead();
+          }}
+        />
+      )}
       renderRightActions={(progress) => (
         <DeleteRevealAction progress={progress} onDelete={onDelete} />
       )}
+      leftThreshold={40}
       rightThreshold={40}
       simultaneousWith={scrollGesture as SwipeableProps["simultaneousWith"]}
       onSwipeableOpenStartDrag={() => {
@@ -1072,216 +985,6 @@ function NotificationRow({
  * Per-activity and per-kind reminder subscriptions live on the Schedule
  * tab's own bell/settings sheet now, not here.
  */
-const PreferencesView = memo(function PreferencesView({
-  tabSwitcher,
-  androidTopInset,
-}: {
-  tabSwitcher: ReactNode;
-  androidTopInset: number;
-}) {
-  const { t } = useLocale();
-  const { me } = useMeContext();
-  const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<Error | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const actionRetry = useRef<(() => Promise<void>) | null>(null);
-  const tabBarBottomInset = useRouterTabBarScrollBottomInset();
-  const scrollRef = useRef<ScrollView>(null);
-
-  useScrollToTop(scrollRef);
-
-  const fetchPreferences = useCallback(
-    () => apiFetch<NotificationPreferences>("/api/me/notification-preferences"),
-    [],
-  );
-  const {
-    data: prefs,
-    loading,
-    error,
-    staleSince,
-    load,
-    setData,
-  } = useCachedApi(`user:${me?.id ?? "unknown"}:notification-preferences`, fetchPreferences, {
-    enabled: me !== null,
-  });
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // Keeps this tab's independent cache in sync with toggles made elsewhere
-  // (e.g. the schedule bell) without refetching the inbox or unread counter
-  // for a preference-only change (H51, issue #626).
-  useEffect(() => subscribeToNotificationPreferenceChanges((next) => setData(next)), [setData]);
-
-  function enabledFor(category: string, channel: Channel): boolean {
-    const override = prefs?.overrides.find(
-      (row) => row.category === category && row.channel === channel,
-    );
-    return override ? override.enabled : category !== "queue.staff";
-  }
-
-  async function toggle(category: string, channel: Channel, enabled: boolean) {
-    if (!prefs) return;
-    const key = `${category}:${channel}`;
-    const previous = prefs;
-    actionRetry.current = () => toggle(category, channel, enabled);
-    setSavingKey(key);
-    setActionError(null);
-    // Optimistic: flip instantly, reconcile with the server in the
-    // background — only revert if the request actually fails.
-    setData(withNotificationOverrides(prefs, [{ category, channel, enabled }]));
-    void haptic("selection");
-    try {
-      const next = await savePreferences([{ category, channel, enabled }]);
-      setData(next);
-      emitNotificationPreferenceChange(next);
-    } catch (cause) {
-      setData(previous);
-      setActionError(cause instanceof Error ? cause : new Error("Failed to save preference"));
-    } finally {
-      setSavingKey(null);
-    }
-  }
-
-  async function onRefresh() {
-    setRefreshing(true);
-    try {
-      await load();
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
-  const scrollProps = {
-    ref: scrollRef,
-    contentInsetAdjustmentBehavior: "automatic" as const,
-    contentContainerStyle: {
-      gap: 18,
-      padding: 16,
-      paddingBottom: Math.max(32, tabBarBottomInset + 16),
-      paddingTop: 16 + androidTopInset,
-    },
-    keyboardShouldPersistTaps: "handled" as const,
-    refreshControl: <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />,
-  };
-
-  if (!prefs)
-    return (
-      <ScrollView {...scrollProps}>
-        {tabSwitcher}
-        <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />
-      </ScrollView>
-    );
-
-  // Application decisions are email-only and intentionally have no mobile
-  // preference: accepted/rejected applicants must always receive them.
-  const editableCategories = ["announcements", "schedule"];
-  const capabilities = me?.capabilities ?? [];
-  const canReceiveQueueStaffAlerts =
-    capabilities.includes(CAPABILITIES.ADMIN_ALL) ||
-    capabilities.includes(CAPABILITIES.QUEUE_OPERATE) ||
-    capabilities.includes(CAPABILITIES.QUEUE_ADMIN) ||
-    capabilities.includes(CAPABILITIES.JUDGE_PANEL);
-  const retryAction = actionRetry.current;
-
-  return (
-    <ScrollView {...scrollProps}>
-      {tabSwitcher}
-      <StaleDataBanner updatedAt={staleSince} />
-      {actionError ? (
-        <RequestFeedback
-          error={actionError}
-          onRetry={retryAction ? () => void retryAction() : undefined}
-          retrying={savingKey !== null}
-        />
-      ) : null}
-      <Section title={t("notificationsRequired")} footer={t("notificationsMandatoryHint")}>
-        <View
-          style={{
-            alignItems: "center",
-            flexDirection: "row",
-            minHeight: 50,
-            paddingHorizontal: 16,
-          }}
-        >
-          <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
-            {t("queueCalls")}
-          </Text>
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
-            {t("notificationsAlwaysOn")}
-          </Text>
-        </View>
-      </Section>
-
-      {canReceiveQueueStaffAlerts ? (
-        <Section title={t("notificationsQueueStaff")} footer={t("notificationsQueueStaffHint")}>
-          <View
-            style={{
-              alignItems: "center",
-              flexDirection: "row",
-              minHeight: 50,
-              paddingHorizontal: 16,
-            }}
-          >
-            <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
-              {t("notificationsPush")}
-            </Text>
-            <Switch
-              accessibilityLabel={`${t("notificationsQueueStaff")}, ${t("notificationsPush")}`}
-              disabled={savingKey === "queue.staff:push"}
-              style={{ alignSelf: "center" }}
-              value={enabledFor("queue.staff", "push")}
-              onValueChange={(enabled) => void toggle("queue.staff", "push", enabled)}
-            />
-          </View>
-        </Section>
-      ) : null}
-
-      {editableCategories.map((category) => (
-        <Section key={category} title={categoryLabel(category, t)}>
-          {validChannels(prefs.channels).map((channel, index) => {
-            return (
-              <View key={channel}>
-                {index > 0 ? <Separator /> : null}
-                <View
-                  style={{
-                    alignItems: "center",
-                    flexDirection: "row",
-                    minHeight: 50,
-                    paddingHorizontal: 16,
-                  }}
-                >
-                  <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
-                    {channelLabel(channel, t)}
-                  </Text>
-                  <Switch
-                    accessibilityLabel={`${categoryLabel(category, t)}, ${channelLabel(channel, t)}`}
-                    disabled={savingKey === `${category}:${channel}`}
-                    style={{ alignSelf: "center" }}
-                    value={enabledFor(category, channel)}
-                    onValueChange={(enabled) => void toggle(category, channel, enabled)}
-                  />
-                </View>
-              </View>
-            );
-          })}
-        </Section>
-      ))}
-    </ScrollView>
-  );
-});
-
-function savePreferences(
-  preferences: Array<{ category: string; channel: Channel; enabled: boolean }>,
-) {
-  return apiFetch<NotificationPreferences>("/api/me/notification-preferences", {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ preferences }),
-  });
-}
-
 function payloadField(payload: unknown, key: "subject" | "body") {
   if (!payload || typeof payload !== "object") return null;
   const value = (payload as Record<string, unknown>)[key];
@@ -1348,13 +1051,4 @@ function categoryLabel(category: string, t: ReturnType<typeof useLocale>["t"]) {
   if (category === "announcements") return t("notificationsAnnouncements");
   if (category === "schedule") return t("notificationsActivityReminders");
   return t("notificationsApplications");
-}
-
-function channelLabel(channel: Channel, t: ReturnType<typeof useLocale>["t"]) {
-  const labels: Record<Channel, string> = {
-    in_app: t("notificationsInApp"),
-    email: t("emailLabel"),
-    push: t("notificationsPush"),
-  };
-  return labels[channel];
 }

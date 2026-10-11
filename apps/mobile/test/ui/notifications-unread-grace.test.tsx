@@ -1,7 +1,14 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, waitFor } from "@testing-library/react-native";
+import type { ReactElement } from "react";
 import { Platform } from "react-native";
 
+// The unread filter is a header action; capture it to press it like the header would.
+const mockNavOptions: { headerRight?: () => ReactElement } = {};
 jest.mock("expo-router", () => ({
+  useNavigation: () => ({
+    setOptions: (options: object) => Object.assign(mockNavOptions, options),
+  }),
+  useRouter: () => ({ push: () => {} }),
   useScrollToTop: () => {},
 }));
 
@@ -41,7 +48,10 @@ jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
 }));
 jest.mock("@/components/glass-view", () => ({
   GlassView: ({ children }: { children: unknown }) => children,
+  isRealLiquidGlassAvailable: () => false,
 }));
+jest.mock("expo-router/stack", () => ({ __esModule: true, default: { Toolbar: () => null } }));
+jest.mock("@/components/reminders-view", () => ({ RemindersView: () => null }));
 jest.mock("@/components/native-ui", () => {
   const ReactLib = require("react");
   const Native = jest.requireActual("react-native");
@@ -50,6 +60,18 @@ jest.mock("@/components/native-ui", () => {
     Section: ({ children }: { children: unknown }) =>
       ReactLib.createElement(Native.View, null, children),
     Separator: () => ReactLib.createElement(Native.View),
+    LegacyHeaderIconButton: ({
+      accessibilityLabel,
+      onPress,
+    }: {
+      accessibilityLabel: string;
+      onPress: () => void;
+    }) =>
+      ReactLib.createElement(Native.Pressable, {
+        accessibilityLabel,
+        accessibilityRole: "button",
+        onPress,
+      }),
   };
 });
 jest.mock("@/components/RequestFeedback", () => ({
@@ -126,7 +148,7 @@ jest.mock("@/theme/colors", () => ({
   },
 }));
 
-import NotificationsScreen from "@/app/(tabs)/notifications";
+import NotificationsScreen from "@/components/alerts-screen";
 import { renderMobile } from "./render";
 
 const unreadItem = {
@@ -161,14 +183,19 @@ afterEach(() => {
 
 describe("unread-only grace period (H489)", () => {
   it("keeps a just-read notification visible until it is collapsed again", async () => {
-    await renderMobile(<NotificationsScreen />);
+    const inbox = await renderMobile(<NotificationsScreen />);
 
-    const unreadOnlyToggle = await screen.findByRole("switch", { name: "Unread only" });
+    // Press the header's Unread only action, as the native header would.
+    const headerRight = mockNavOptions.headerRight?.() as ReactElement<{
+      accessibilityLabel: string;
+      onPress: () => void;
+    }>;
+    expect(headerRight.props.accessibilityLabel).toBe("Unread only");
     await act(async () => {
-      fireEvent.press(unreadOnlyToggle);
+      headerRight.props.onPress();
     });
 
-    const row = await screen.findByRole("button", { name: /Kickoff moved/ });
+    const row = await inbox.findByRole("button", { name: /Kickoff moved/ });
 
     await act(async () => {
       fireEvent.press(row);
@@ -181,13 +208,13 @@ describe("unread-only grace period (H489)", () => {
     );
 
     // Read, but still filtered in — the user hasn't closed it yet.
-    expect(screen.getByText("Kickoff moved")).toBeTruthy();
+    expect(inbox.getByText("Kickoff moved")).toBeTruthy();
 
     await act(async () => {
       fireEvent.press(row);
     });
 
-    await waitFor(() => expect(screen.queryByText("Kickoff moved")).toBeNull());
-    expect(screen.getByText("No unread notifications")).toBeTruthy();
+    await waitFor(() => expect(inbox.queryByText("Kickoff moved")).toBeNull());
+    expect(inbox.getByText("No unread notifications")).toBeTruthy();
   });
 });

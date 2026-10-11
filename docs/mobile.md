@@ -216,7 +216,7 @@ distributed to other Expo Router apps without importing hackOS code.
   solid surfaces. Five total destinations are shown directly on compact
   layouts; tablet-width layouts can place up to six before using `Others`,
   whose bar surface and circle become 56pt instead of 64pt. With no scan
-  capability, Schedule, Wallet, Notifications, and Account are direct; Queue
+  capability, Schedule, Diary, and Account are direct; Queue
   joins them for accounts with `queue:status` even before the first queue
   entry so the empty state and tutorial are available. Other accounts see
   Queue only when they have an actual queue entry. `queue:status` is assigned
@@ -224,8 +224,10 @@ distributed to other Expo Router apps without importing hackOS code.
   name. For
   `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the
   admin `*` wildcard) holders, the daily tools take the bar — Schedule,
-  Scanner, Activities (for `ACTIVITY_SCAN`), Notifications — and Queue,
-  Wallet, Account, and any secondary operations stay in Others. Queue-only
+  Scanner, Activities (for `ACTIVITY_SCAN`) — and Queue,
+  Diary, Account, and any secondary operations join them directly while five
+  fit, moving to Others only beyond that. Wallet is not a tab: Account →
+  Wallet → View tickets pushes `app/(tabs)/others/wallet.tsx` (H28). Queue-only
   operators instead get Queue operations in the primary bar; scanner
   operators with queue access find it in Others, preserving Scanner's direct
   placement.
@@ -255,13 +257,13 @@ distributed to other Expo Router apps without importing hackOS code.
   flashes Schedule over the selected tab.
 
   The entries inside the native `Others` dropdown (Account for participants;
-  eligible personal Queue, Wallet, Account, and Queue operations when a scanner
+  eligible personal Queue, Diary, Account, and Queue operations when a scanner
   operator has queue access — routes under `app/(tabs)/others/`) are intentionally
   pseudo-tabs (`lib/operations-navigation.ts`):
 
   - Selecting the pseudo-tab whose section is already on screen is a no-op.
   - Changing pseudo-tabs always uses `replace()`, never `push()`, so repeated
-    selections do not stack duplicate queue/wallet/account screens.
+    selections do not stack duplicate queue/diary/account screens.
   - Deeper screens inside a section (e.g. the person drill-downs) still push
     normally on top of that section's root.
   - Route matching must normalize Expo Router route groups first, because
@@ -356,8 +358,9 @@ distributed to other Expo Router apps without importing hackOS code.
 
 ## Participant screens
 
-- `app/(tabs)/schedule.tsx`, `queue.tsx`, `wallet.tsx`, `notifications.tsx`,
-  `account.tsx` — the five participant screens. API-backed screens expose
+- `app/(tabs)/schedule.tsx`, `queue.tsx`, `schedule/alerts.tsx` (inbox sheet),
+  `others/account.tsx`, and `components/wallet-screen.tsx` (pushed from
+  Account at `others/wallet`) — the five participant screens. API-backed screens expose
   loading, retryable error, and empty states without leaking rejected promises.
   The account screen displays the shared `/api/me` profile and keeps the
   participant-facing overview short. Pulling down refreshes `/api/me` and the
@@ -435,7 +438,7 @@ distributed to other Expo Router apps without importing hackOS code.
   offline scan queue — the only record of not-yet-synced scans — or the auth
   session; see "Scanner cache encryption & isolation" below. Ordinary account
   caches are namespaced by user/session and are cleared on logout; late writes
-  that began before cleanup are serialized behind the cleanup. `wallet.tsx`
+  that began before cleanup are serialized behind the cleanup. `wallet-screen.tsx`
   renders ticket/badge QR codes. After an eligible session is restored, a
   best-effort startup warmup stores the `/api/me/ticket` payload under an
   account-scoped cache key and discards a response if the session changes; the
@@ -496,9 +499,18 @@ distributed to other Expo Router apps without importing hackOS code.
   stage changes use a short directional fade, reduced to an opacity-only
   crossfade when Reduce Motion is enabled. Completion is stored in
   account-scoped SecureStore and does not change the queue state machine.
-  `notifications.tsx` pages past the initial 20 inbox messages on
-  demand, allows an expanded message to be deleted after native confirmation,
-  and mirrors the web activity/kind reminder preferences. On Android its
+  The inbox (`components/alerts-screen.tsx`, presented as a modal sheet from
+  the Schedule bell at `schedule/alerts`) pages past the initial 20 messages on
+  demand. A row swipes left to delete (after native confirmation) and right to
+  mark read/unread (`POST /api/me/notifications/:id/unread`); the header holds
+  the unread-only filter. Settings are not in the sheet: Account →
+  Notifications (`components/notification-settings-screen.tsx`,
+  `others/notification-settings/`) lists each notification type with its state;
+  a type opens its channel switches, and Activity reminders also lists the
+  upcoming reminders, an "Add an activity" picker (`others/reminders/[kind]`)
+  and a bulk switch per activity type (`components/reminders-view.tsx`).
+  Announcement management (`others/announcements`) sits under Notifications →
+  Send for `announcements:manage` holders. On Android the inbox
   inbox mounts the same native scroll gesture boundary as Schedule, so
   vertical scrolling takes precedence over a row's horizontal delete reveal.
   A third "Manage"
@@ -516,11 +528,9 @@ distributed to other Expo Router apps without importing hackOS code.
   (`lib/announcements-admin.ts`'s `fetchAnnouncementRecipientCandidates`),
   scoped to `ANNOUNCEMENTS_MANAGE` rather than the broader `USERS_READ`,
   mirroring `/api/schedule/owner-candidates`.
-- `app/(tabs)/wallet.tsx` — the ticket/badge toggle is a `SegmentedControl`
+- `components/wallet-screen.tsx` — the ticket/badge toggle is a `SegmentedControl`
   plus a swipe over the QR card itself as an alternative. The swipe gesture is
-  nested *inside* the page's `ScrollView` (the reverse of
-  `ScheduleNotificationsSheet`'s back-swipe, whose `GestureDetector` wraps the
-  `ScrollView`), so it declares itself simultaneous with a `Gesture.Native()`
+  nested *inside* the page's `ScrollView`, so it declares itself simultaneous with a `Gesture.Native()`
   stand-in for the `ScrollView` — without that relationship the ancestor
   ScrollView's own gesture wins outright and the swipe never activates at all.
   Switching sides (by swipe or by tapping the control) plays a directional
@@ -571,7 +581,8 @@ distributed to other Expo Router apps without importing hackOS code.
   `isRealLiquidGlassAvailable()` (`components/glass-view.tsx`): on iOS 26+ it's
   a real native header (`app/(tabs)/schedule/_layout.tsx` gives this tab its
   own Stack so `navigation.setOptions` can drive one) with a compact
-  left-aligned title, `Stack.Toolbar.Button` pair for notifications/filter —
+  left-aligned title, `Stack.Toolbar.Button` pair for the Alerts bell (unread
+  count badge, `lib/use-unread-notifications.ts`) and the filter —
   real adjacent `UIBarButtonItem`s the OS groups into one Liquid Glass capsule
   on its own, no manual divider or shadow to get wrong — and Apple's own
   integrated search button (`headerSearchBarOptions`, which owns its
@@ -1322,8 +1333,7 @@ physical iOS/Android and EAS verification remains a release-gate task in
   Symbols on Android. For `bell.badge` and `bell.badge.fill`, where Material Symbols
   has no badge-dot equivalent (only `notifications_active` depicting ringing waves),
   it maps to `notifications_none`/`notifications` with an overlaid accent badge dot.
-  This gives Android a visible unread indicator on the bottom tab bar
-  (`OpaqueRouterTabs`) and notifications inbox filter button (`UnreadBellButton`)
+  This gives Android a visible unread indicator on the Schedule header bell
   that matches iOS SF Symbol badge behavior without altering geometry. (issue #625)
 
 ## Other infrastructure

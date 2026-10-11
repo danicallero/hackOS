@@ -39,7 +39,6 @@ import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { declineOwnSpot } from "@/lib/self-service";
 import { isServerEventConnected, subscribeToServerEvent } from "@/lib/server-events";
-import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { type WalletTicketPayload, walletCacheKey } from "@/lib/wallet-cache";
 import {
@@ -58,11 +57,10 @@ import { colors } from "@/theme/colors";
 // the space the real card would occupy.
 const WALLET_CARD_MIN_HEIGHT = 400;
 
-/** Ticket and badge read model shared with web, with native Wallet handoff. */
+/** H28: ticket and badge read model shared with web, with native Wallet handoff. Opened from Account. */
 export default function WalletScreen() {
   useColorScheme();
   const { language, t } = useLocale();
-  const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const { me, refetch: refetchMe } = useMeContext();
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -250,14 +248,11 @@ export default function WalletScreen() {
     return <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />;
 
   // Swipe left/right over the ticket/badge card to switch tabs, instead of
-  // only the SegmentedControl above it. Matches the ScheduleNotificationsSheet
-  // back-swipe's threshold pattern: activeOffsetX requires a clearly
+  // only the SegmentedControl above it. activeOffsetX requires a clearly
   // horizontal drag before this claims the gesture at all, and failOffsetY
   // yields immediately to the page's vertical ScrollView otherwise.
   //
-  // Unlike that back-swipe (whose GestureDetector wraps the whole screen,
-  // with the ScrollView nested *inside* it), this gesture sits on a single
-  // card nested *inside* the ScrollView — the reverse arrangement. Without an
+  // This gesture sits on a single card nested *inside* the ScrollView. Without an
   // explicit simultaneous relationship the ancestor ScrollView's own native
   // gesture wins outright and this pan gesture never gets to see the touch,
   // so it's declared simultaneous with a `Gesture.Native()` stand-in for the
@@ -294,7 +289,6 @@ export default function WalletScreen() {
           gap: 20,
           padding: 16,
           paddingBottom: Math.max(32, tabBarBottomInset + 16),
-          paddingTop: 16 + androidTopInset,
         }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />

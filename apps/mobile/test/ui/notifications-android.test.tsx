@@ -2,6 +2,8 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { AppState, Platform, StyleSheet } from "react-native";
 
 jest.mock("expo-router", () => ({
+  useNavigation: () => ({ setOptions: () => {} }),
+  useRouter: () => ({ push: () => {} }),
   useScrollToTop: () => {},
 }));
 
@@ -43,7 +45,10 @@ jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
 }));
 jest.mock("@/components/glass-view", () => ({
   GlassView: ({ children }: { children: unknown }) => children,
+  isRealLiquidGlassAvailable: () => false,
 }));
+jest.mock("expo-router/stack", () => ({ __esModule: true, default: { Toolbar: () => null } }));
+jest.mock("@/components/reminders-view", () => ({ RemindersView: () => null }));
 jest.mock("@/components/native-ui", () => {
   const ReactLib = require("react");
   const Native = jest.requireActual("react-native");
@@ -52,6 +57,7 @@ jest.mock("@/components/native-ui", () => {
     Section: ({ children }: { children: unknown }) =>
       ReactLib.createElement(Native.View, null, children),
     Separator: () => ReactLib.createElement(Native.View),
+    LegacyHeaderIconButton: () => null,
   };
 });
 jest.mock("@/components/RequestFeedback", () => ({
@@ -135,7 +141,7 @@ jest.mock("@/theme/colors", () => ({
   },
 }));
 
-import NotificationsScreen from "@/app/(tabs)/notifications";
+import NotificationsScreen from "@/components/alerts-screen";
 import { renderMobile } from "./render";
 
 const page = (start: number) => ({

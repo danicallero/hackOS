@@ -167,21 +167,24 @@ directly on compact layouts; tablet-width layouts can fit up to six before the
 separate `Others` circle is needed. The full route registry remains mounted so
 hidden destinations stay routable:
 
-- **Non-operator account**: schedule, wallet, notifications, **Diary** (#935,
+- **Non-operator account**: schedule, **Diary** (#935,
   [`diary.md`](./diary.md); People and Companies segments only, with no
   directory to browse, opened directly with `?view=companies`; the direct tab is
   `app/(tabs)/diary/`, its own Stack for the native header and search) and
-  **Account** are direct; with a personal queue
-  the set grows to six, so Diary and Account move to Others. **My queue** is visible to participants even before their first
+  **Account** are direct, with My queue added when eligible (five fit
+  directly). **My queue** is visible to participants even before their first
   queue entry so they can see the empty state and tutorial; mentors, sponsors,
   and other accounts only see it once they have an actual queue entry. Wallet
-  remains unconditional for every mobile account.
+  is not a tab: every account reaches it from Account → Wallet → View tickets
+  (H28). Alerts are not a tab either: the Schedule header bell (with an unread
+  badge) presents the inbox as a sheet, and every notification setting lives in
+  Account → Notifications (H51, H59).
 - **Operator** (any of `accredit:scan`, `presence:scan`, `activity:scan`, or
   the admin wildcard): the daily shift tools take the bar — schedule,
-  **Scanner**, Activities (`activity:scan` holders only), notifications —
+  **Scanner**, Activities (`activity:scan` holders only) —
   scanning must never sit behind an ellipsis. The separate
-  **"Others" overflow selector** holds eligible personal Queue, Wallet,
-  Diary, Account, and any queue operations destination as pseudo-tabs. Account's
+  **"Others" overflow selector** (only when more than five destinations)
+  holds eligible personal Queue, Diary, Account, and any queue operations destination as pseudo-tabs. Account's
   Statistics destination is the staff operations hub for the person finder,
   scan history, and sync reconciliation. Holders of `sponsors:manage` (with or
   without a scanner capability) also get Account → Staff → Company tags, to
@@ -189,8 +192,8 @@ hidden destinations stay routable:
   tab. Company-tag links `/s/<code>` (`app/s/[code].tsx`) open outside the
   session guard and resume after sign-in.
 - **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
-  scanner capability): Queue operations is a direct tab alongside Schedule and
-  Alerts; an eligible personal Queue, Wallet, Diary and Account move to Others. If
+  scanner capability): Queue operations is a direct tab alongside Schedule; an eligible personal Queue, Diary and Account move to Others when the set
+  exceeds five. If
   the person also has a scanner capability, Queue operations joins Others so
   Scanner stays directly reachable.
 
