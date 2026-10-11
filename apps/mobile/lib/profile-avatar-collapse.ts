@@ -102,12 +102,30 @@ export function profileAvatarSnapOffset(
 
 /**
  * Upper bound for the true top's content offset on iOS (#935): the automatic
- * inset always covers the part of the scroll view under the status bar, so
- * the top rests at least that far above y 0. A native header can add more,
- * which the scroll events observed before the first drag then capture.
+ * inset always covers the part of the scroll view under the status bar, or
+ * under a shown native header (`headerHeight`, status bar included), so the
+ * top rests at least that far above y 0. The scroll events observed before
+ * the first drag tighten it further when an inset is larger still.
  */
-export function profileAvatarRestingOffsetBound(safeAreaTop: number, hostTop: number): number {
-  return -Math.max(0, safeAreaTop - hostTop);
+export function profileAvatarRestingOffsetBound(
+  safeAreaTop: number,
+  hostTop: number,
+  headerHeight = 0,
+): number {
+  return -Math.max(0, Math.max(safeAreaTop, headerHeight) - hostTop);
+}
+
+/**
+ * Smallest content height that keeps both rests reachable (#935): a short
+ * page must still scroll from its true top (`restingOffset`, at most 0) to
+ * the collapsed rest, or the snap could only ever expand.
+ */
+export function profileAvatarMinContentHeight(
+  viewportHeight: number,
+  restingOffset: number,
+  distance: number,
+): number {
+  return viewportHeight + Math.max(0, distance + Math.min(0, restingOffset));
 }
 
 /**
@@ -349,10 +367,13 @@ export function profileAvatarBlobBounds(
 }
 
 /**
- * Where the avatar image sits at `progress` (#935): a square covering the
- * mask's blob and centred on it, so the picture follows the clip instead of
- * exposing the backing at its top, joined with the neck that stretches up to
- * the island. After the blob ends it eases back to the neck alone.
+ * Where the avatar image sits at `progress` (#935): a square centred on the
+ * mask's blob and covering it, joined with the neck that stretches up to the
+ * island. The blob, not the linear mask frame, carries the picture: the mask
+ * reaches the island at a fixed progress whatever the start's distance, so on
+ * a page whose avatar sits lower (a native header above it) the linear frame
+ * trails below the clip and would pull the photo off its centre. After the
+ * blob ends, its last square travels on to the island.
  */
 export function profileAvatarContentFrame(
   size: number,
@@ -363,39 +384,36 @@ export function profileAvatarContentFrame(
 ): ProfileAvatarFrame {
   "worklet";
   const p = Math.max(0, Math.min(1, progress));
-  const frame = profileAvatarMaskFrame(size, start, target, p, simple);
-  if (simple) return { left: frame.left, top: frame.top, width: frame.width, height: frame.height };
-  const neck = Math.max(0, Math.min(1, (p - 0.15) / 0.35));
-  const neckTop = frame.top + (target.top - frame.top) * neck;
-  const neckHalf = Math.max(frame.width, target.width * neck) / 2;
-  const centerX = frame.left + frame.width / 2;
-  const neckBox = {
-    left: centerX - neckHalf,
-    top: neckTop,
-    right: centerX + neckHalf,
-    bottom: frame.top + frame.height,
-  };
-  // Past its end the blob is held at its last shape while the box eases back.
-  const blob = profileAvatarBlobBounds(size, start, target, Math.min(p, BLOB_END_PROGRESS - 1e-4));
-  let box = neckBox;
-  if (blob) {
-    const half = Math.max(blob.width, blob.height) / 2;
-    const cx = blob.left + blob.width / 2;
-    const cy = blob.top + blob.height / 2;
-    const fade = Math.max(0, Math.min(1, (p - BLOB_END_PROGRESS) / 0.1));
-    const mix = (covered: number, neckSide: number) => covered + (neckSide - covered) * fade;
-    box = {
-      left: mix(Math.min(neckBox.left, cx - half), neckBox.left),
-      top: mix(Math.min(neckBox.top, cy - half), neckBox.top),
-      right: mix(Math.max(neckBox.right, cx + half), neckBox.right),
-      bottom: mix(Math.max(neckBox.bottom, cy + half), neckBox.bottom),
-    };
+  if (simple) {
+    const frame = profileAvatarMaskFrame(size, start, target, p, true);
+    return { left: frame.left, top: frame.top, width: frame.width, height: frame.height };
   }
+  const blobProgress = Math.min(p, BLOB_END_PROGRESS - 1e-4);
+  const blob = profileAvatarBlobBounds(size, start, target, blobProgress);
+  let half = size / 2;
+  let cx = start.left + start.width / 2;
+  let cy = start.top + start.height / 2;
+  if (blob) {
+    half = Math.max(blob.width, blob.height) / 2;
+    cx = blob.left + blob.width / 2;
+    cy = blob.top + blob.height / 2;
+  }
+  if (p > blobProgress) {
+    // Past its end the blob's last square eases into the island.
+    const travel = (p - blobProgress) / (1 - blobProgress);
+    const endHalf = target.height / 2;
+    half += (endHalf - half) * travel;
+    cx += (target.left + target.width / 2 - cx) * travel;
+    cy += (target.top + target.height / 2 - cy) * travel;
+  }
+  const neck = Math.max(0, Math.min(1, (p - 0.15) / 0.35));
+  const top = Math.min(cy - half, cy - half + (target.top - (cy - half)) * neck);
+  const neckHalf = Math.max(half, (target.width * neck) / 2);
   return {
-    left: box.left,
-    top: box.top,
-    width: box.right - box.left,
-    height: box.bottom - box.top,
+    left: cx - neckHalf,
+    top,
+    width: 2 * neckHalf,
+    height: cy + half - top,
   };
 }
 

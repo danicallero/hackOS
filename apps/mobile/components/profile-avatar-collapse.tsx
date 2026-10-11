@@ -40,6 +40,7 @@ import {
   profileAvatarContentFrame,
   profileAvatarCoverOpacity,
   profileAvatarMaskFrame,
+  profileAvatarMinContentHeight,
   profileAvatarMorphPath,
   profileAvatarRestingOffsetBound,
   profileAvatarSnapDirection,
@@ -62,8 +63,14 @@ export type ProfileAvatarCollapseController = ReturnType<typeof useProfileAvatar
  * A released drag never leaves the morph half-way (#935): it settles at fully
  * expanded or fully collapsed. Pass the screen's own scroll ref when it has
  * one; otherwise spread the returned `scrollRef` onto the scroll view.
+ * A screen under a shown native header passes its `headerHeight`, which the
+ * automatic inset adds to the true top. Spread `contentMinHeight` onto the
+ * content container so a short page still reaches the collapsed rest.
  */
-export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView | null>) {
+export function useProfileAvatarCollapse(
+  screenScrollRef?: RefObject<ScrollView | null>,
+  { headerHeight = 0 }: { headerHeight?: number } = {},
+) {
   const scrollOffset = useSharedValue(0);
   const contentOffset = useSharedValue(0);
   const restingOffset = useSharedValue(0);
@@ -78,6 +85,7 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
   const maxOffset = useSharedValue(Number.POSITIVE_INFINITY);
   const contentHeight = useRef(0);
   const viewportHeight = useRef(0);
+  const [viewport, setViewport] = useState(0);
   const ownScrollRef = useRef<ScrollView>(null);
   const scrollRef = screenScrollRef ?? ownScrollRef;
   const reduceMotion = useReducedMotion();
@@ -229,16 +237,35 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     timers.current = [450, 900].map((delay) => setTimeout(measureAnchor, delay));
   }, [measureAnchor]);
 
-  // iOS: seed the true top from the status-bar overlap once the host is
-  // measured, so it holds even when no scroll event preceded a programmatic
-  // scroll or a remount restored the offset at y 0 (#935).
+  // iOS: seed the true top from the status-bar (or native header) overlap
+  // once the host is measured, so it holds even when no scroll event preceded
+  // a programmatic scroll or a remount restored the offset at y 0 (#935).
   useEffect(() => {
     if (Platform.OS !== "ios" || !anchorFrame) return;
-    const bound = profileAvatarRestingOffsetBound(safeAreaTop, hostOrigin.y);
+    const bound = profileAvatarRestingOffsetBound(safeAreaTop, hostOrigin.y, headerHeight);
     if (bound >= restingOffset.value) return;
     restingOffset.value = bound;
     scrollOffset.value = Math.max(0, contentOffset.value - bound);
-  }, [anchorFrame, contentOffset, hostOrigin.y, restingOffset, safeAreaTop, scrollOffset]);
+  }, [
+    anchorFrame,
+    contentOffset,
+    headerHeight,
+    hostOrigin.y,
+    restingOffset,
+    safeAreaTop,
+    scrollOffset,
+  ]);
+
+  // The snap compares the collapsed rest with `contentHeight - viewport`, so
+  // the floor uses the status-bar bound alone: a header only lowers the rest.
+  const contentMinHeight =
+    viewport > 0
+      ? profileAvatarMinContentHeight(
+          viewport,
+          Platform.OS === "ios" ? profileAvatarRestingOffsetBound(safeAreaTop, hostOrigin.y) : 0,
+          PROFILE_AVATAR_COLLAPSE_DISTANCE,
+        )
+      : undefined;
 
   /** Scroll to the true top, for tab re-press (`useScrollToTop`). */
   const scrollToTopRef = useMemo(
@@ -269,10 +296,12 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     anchorFrame,
     anchorRef,
     hostOrigin,
+    contentMinHeight,
     hostRef,
     onAnchorLayout: measureAfterLayout,
     onHostLayout: ({ nativeEvent }: LayoutChangeEvent) => {
       viewportHeight.current = nativeEvent.layout.height;
+      setViewport(nativeEvent.layout.height);
       updateMaxOffset();
       measureAfterLayout();
     },
@@ -420,16 +449,17 @@ export function ProfileAvatarCollapse({
   }, [size, localStart, localTarget, distance, reduceMotion, target.hasCutout]);
   const initialsStyle = useAnimatedStyle(() => {
     const p = Math.max(0, Math.min(1, scrollOffset.value / distance));
-    const frame = profileAvatarMaskFrame(
-      size,
-      localStart,
-      localTarget,
-      p,
-      reduceMotion || !target.hasCutout,
-    );
+    const simple = reduceMotion || !target.hasCutout;
+    const frame = profileAvatarMaskFrame(size, localStart, localTarget, p, simple);
+    // Centred where the photo would be, on the clip's blob (#935).
+    const content = profileAvatarContentFrame(size, localStart, localTarget, p, simple);
     return {
-      left: frame.left,
-      top: frame.top,
+      left: content.left + content.width / 2 - frame.width / 2,
+      top:
+        content.top +
+        content.height -
+        Math.min(content.width, content.height) / 2 -
+        frame.height / 2,
       width: frame.width,
       height: frame.height,
       transform: [{ scale: 1 - p * 0.5 }],

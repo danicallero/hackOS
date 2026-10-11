@@ -15,6 +15,7 @@ import {
   profileAvatarContentFrame,
   profileAvatarCoverOpacity,
   profileAvatarMaskFrame,
+  profileAvatarMinContentHeight,
   profileAvatarMorphPath,
   profileAvatarRestingOffsetBound,
   profileAvatarSnapDirection,
@@ -151,6 +152,41 @@ describe("profile avatar collapse geometry", () => {
     }
   });
 
+  it("keeps the photo centred on the blob for an avatar far below the island (#935)", () => {
+    // A person profile under a native header starts ~30 pt lower than Account,
+    // so the linear mask frame trails below the clip.
+    for (const low of [start, { ...start, top: start.top + 40 }]) {
+      for (let step = 0; step <= 28; step += 1) {
+        const progress = step / 100;
+        const blob = profileAvatarBlobBounds(112, low, island, progress);
+        const image = profileAvatarContentFrame(112, low, island, progress);
+        if (!blob) continue;
+        const half = Math.max(blob.width, blob.height) / 2;
+        // Never extended below the blob's square, so the neck alone adds height.
+        expect(image.top + image.height).toBeCloseTo(blob.top + blob.height / 2 + half, 3);
+        expect(image.left + image.width / 2).toBeCloseTo(blob.left + blob.width / 2, 3);
+        if (progress <= 0.15) {
+          expect(image.top + image.height / 2).toBeCloseTo(blob.top + blob.height / 2, 3);
+        }
+      }
+    }
+  });
+
+  it("eases the image into the island after the blob ends, without jumps", () => {
+    // Around the blob's end (progress 153/540) the square hands over smoothly.
+    let previous = profileAvatarContentFrame(112, start, island, 0.27);
+    for (let progress = 0.271; progress <= 0.3; progress += 0.001) {
+      const frame = profileAvatarContentFrame(112, start, island, progress);
+      expect(Math.abs(frame.top - previous.top)).toBeLessThan(2);
+      expect(Math.abs(frame.left - previous.left)).toBeLessThan(2);
+      expect(Math.abs(frame.width - previous.width)).toBeLessThan(2);
+      previous = frame;
+    }
+    const end = profileAvatarContentFrame(112, start, island, 1);
+    expect(end.left + end.width / 2).toBeCloseTo(island.left + island.width / 2, 3);
+    expect(end.top + end.height).toBeCloseTo(island.top + island.height, 3);
+  });
+
   it("keeps every interpolated state circular or capsule-clipped", () => {
     for (let step = 0; step <= 20; step += 1) {
       const frame = profileAvatarMaskFrame(112, start, island, step / 20);
@@ -251,6 +287,24 @@ describe("profile avatar snap (#935)", () => {
     expect(profileAvatarRestingOffsetBound(59, 0)).toBe(-59);
     expect(profileAvatarRestingOffsetBound(59, 20)).toBe(-39);
     expect(profileAvatarRestingOffsetBound(59, 120)).toBe(-0);
+  });
+
+  it("adds a shown native header to the iOS true top", () => {
+    // Transparent header: status bar plus navigation bar above y 0.
+    expect(profileAvatarRestingOffsetBound(59, 0, 103)).toBe(-103);
+    expect(profileAvatarRestingOffsetBound(59, 0, 0)).toBe(-59);
+  });
+
+  it("keeps a short page tall enough to reach both rests", () => {
+    // 852 pt viewport: the status-bar bound needs 61 pt of scroll past y 0.
+    const min = profileAvatarMinContentHeight(852, -59, distance);
+    expect(min).toBe(913);
+    const maxOffset = min - 852;
+    // Under a header (true top -103) the morph's first frames already collapse.
+    expect(profileAvatarSnapOffset(-98, -103, 1, distance, maxOffset)).toBe(-103 + distance);
+    expect(profileAvatarSnapOffset(-98, -103, -1, distance, maxOffset)).toBe(-103);
+    // Without the iOS inset (Android), the full distance.
+    expect(profileAvatarMinContentHeight(800, 0, distance)).toBe(920);
   });
 
   it("honours a custom collapse distance", () => {
@@ -652,5 +706,71 @@ describe("profile avatar snap on release (#935)", () => {
     expect(scrollTo).toHaveBeenCalledWith({ animated: false, y: 0 });
     expect(mockHaptic).not.toHaveBeenCalled();
     jest.useRealTimers();
+  });
+});
+
+describe("profile avatar snap under a native header (#935)", () => {
+  afterEach(() => jest.useRealTimers());
+
+  it("seeds the header's true top and collapses a short page from the first frames", async () => {
+    jest.useFakeTimers();
+    const { result } = await renderHook(
+      () => useProfileAvatarCollapse(undefined, { headerHeight: 103 }),
+      {
+        wrapper: ({ children }) => (
+          <SafeAreaProvider
+            initialMetrics={{
+              frame: { x: 0, y: 0, width: 393, height: 852 },
+              insets: { top: 59, left: 0, right: 0, bottom: 34 },
+            }}
+          >
+            {children}
+          </SafeAreaProvider>
+        ),
+      },
+    );
+    const scrollTo = jest.fn();
+    Object.assign(result.current.scrollRef, { current: { scrollTo } });
+    Object.assign(result.current.hostRef, {
+      current: { measureInWindow: (cb: (x: number, y: number) => void) => cb(0, 0) },
+    });
+    Object.assign(result.current.anchorRef, {
+      current: {
+        measureInWindow: (cb: (x: number, y: number, w: number, h: number) => void) =>
+          cb(140, 111, 112, 112),
+      },
+    });
+    await act(async () => {
+      result.current.onHostLayout({
+        nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 852 } },
+      } as never);
+      jest.advanceTimersByTime(1000);
+    });
+    // The page's own content is short; the floor keeps it scrollable.
+    const min = result.current.contentMinHeight as number;
+    expect(min).toBe(913);
+    await act(async () => {
+      result.current.onContentSizeChange(393, min);
+      jest.advanceTimersByTime(1000);
+    });
+    expect(result.current.restingOffset.value).toBe(-103);
+
+    const handlers = result.current.onScroll as unknown as ScrollHandlers;
+    const event = (y: number) => ({ contentOffset: { x: 0, y }, velocity: { x: 0, y: 0 } });
+    handlers.onBeginDrag(event(-103));
+    handlers.onScroll(event(-100));
+    handlers.onScroll(event(-97));
+    handlers.onEndDrag(event(-97));
+    expect(scrollTo).toHaveBeenLastCalledWith({
+      animated: true,
+      y: -103 + PROFILE_AVATAR_COLLAPSE_DISTANCE,
+    });
+
+    // The snap's own animation lands at the collapsed rest.
+    handlers.onScroll(event(17));
+    handlers.onBeginDrag(event(17));
+    handlers.onScroll(event(12));
+    handlers.onEndDrag(event(12));
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: true, y: -103 });
   });
 });

@@ -768,12 +768,15 @@ cutout on the way up (morph progress 0.2, where the mask's lip joins the
 island) and the first pull out of the collapsed rest on the way down; a
 release never taps. Both rests are measured from the true
 top, which on iOS sits at a negative content offset under the automatic inset
-(at least the status-bar overlap, seeded once the host is measured, then
-lowered by scroll events before the first drag), never from y 0, which is
-inside the morph. Both scroll views set `scrollToOverflowEnabled`: iOS otherwise clamps every
+(at least the status-bar overlap, or the full native header height on a
+screen that shows one, such as the person profile's transparent header,
+seeded once the host is measured, then lowered by scroll events before the
+first drag), never from y 0, which is inside the morph. Both scroll views set `scrollToOverflowEnabled`: iOS otherwise clamps every
 programmatic scroll to the raw `contentInset` (0), so a snap or jump to the
 true top landed at y 0, mid-morph. A page too short to reach the collapsed
-rest snaps expanded instead. Account's tab re-press and gear scroll go to that true top,
+rest snaps expanded instead, so the person profile floors its content at the
+viewport plus the collapse distance past the true top (`contentMinHeight`):
+otherwise a short profile could only ever expand. Account's tab re-press and gear scroll go to that true top,
 and on focus it moves a scroll left inside the morph (such as a remount
 restoring y 0) to the nearer rest. A native `MaskedView` clips the original cubic keyframes from
 Telegram's `UserAvatarMask` (`lib/telegram-avatar-mask.json`), evaluated on the
@@ -805,8 +808,12 @@ mask frame centre travels linearly from the avatar centre to the target centre,
 matching the Telegram path canvas, so the image, mask and backing stay on one
 centre line and end on the island centre. The Telegram blob rises and narrows
 faster than that linear frame, so while it exists the image is a square
-covering the blob's real bounds (`profileAvatarContentFrame`), never exposing
-the backing at its top; it eases back to the neck once the blob ends. The
+centred on the blob's real bounds (`profileAvatarContentFrame`), plus the neck
+above it, never exposing the backing at its top. The image never follows the
+linear frame: the mask reaches the island at a fixed progress whatever the
+start's distance, so on a lower avatar (the person profile under its header)
+the linear frame trails below the clip and would pull the photo off centre.
+Once the blob ends its last square eases into the island. The
 lower-lip track of the path (bezier handles included) is narrowed to the
 straight run of the island's lower edge (`width - height`; a circular hole
 punch gets the chord at the lip's depth), so it never reaches into the
