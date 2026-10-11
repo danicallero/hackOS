@@ -5,9 +5,10 @@ import { subscribeToServerEvent } from "@/lib/server-events";
 import { registerSignOutListener } from "@/lib/sign-out-events";
 import { liveActivityHost } from "./host";
 import { type DesiredActivity, nextPhaseBoundary } from "./model";
+import { subscribeToLiveActivityPushes } from "./push-refresh";
 import { reconcileLiveActivities, registerLiveActivityDevice, signOutLiveActivities } from "./sync";
 
-/** Coalesces bursts of queue events into one read. */
+/** Coalesces bursts of queue events and pushes (a call sends both) into one read. */
 const EVENT_DEBOUNCE_MS = 1_000;
 /** A live staff or desk counter refreshes this often while the app is open; APNs covers the rest. */
 const LIVE_COUNTER_REFRESH_MS = 60_000;
@@ -15,9 +16,11 @@ const LIVE_COUNTER_REFRESH_MS = 60_000;
 /**
  * Drives the Live Activity orchestration from the root layout (#966): device
  * registration after sign-in, a reconcile on launch and foreground (which
- * also brings back swiped-away activities), on the personal
- * queue events (H38) and at the next staff start/end boundary, and cleanup
- * on sign-out. Background delivery is the server's job (APNs / data pushes).
+ * also brings back swiped-away activities), on the personal queue events
+ * (H38), on a received or tapped queue or schedule push notification and at
+ * the next staff start/end boundary, and cleanup on sign-out. Background
+ * delivery is the server's job (APNs / data pushes); background-task.ts adds
+ * the iOS refresh for a push received in background.
  */
 export function useLiveActivities({
   signedIn,
@@ -101,6 +104,7 @@ export function useLiveActivities({
       EVENTS.USER_QUEUE_PRECALL,
       EVENTS.REALTIME_RESYNC,
     ].map((event) => subscribeToServerEvent(event, runSoon));
+    unsubscribes.push(subscribeToLiveActivityPushes(runSoon));
 
     return () => {
       cancelled = true;

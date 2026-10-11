@@ -4,6 +4,7 @@ import {
   type LiveActivityKind,
   type LiveActivityProps,
   QUEUE_LIVE_ACTIVITY_SUBJECT,
+  relevanceForRank,
 } from "@hackos/shared/live-activities";
 import { addPushToStartTokenListener, after, type LiveActivity } from "expo-widgets";
 import { AccreditationActivity } from "@/widgets/accreditation-activity";
@@ -23,7 +24,12 @@ import { readLiveActivityState, updateLiveActivityState } from "./store";
 type AnyInstance = LiveActivity<LiveActivityProps>;
 
 interface Factory {
-  start(props: LiveActivityProps, url?: string, staleDate?: Date): AnyInstance;
+  start(
+    props: LiveActivityProps,
+    url?: string,
+    staleDate?: Date,
+    relevanceScore?: number,
+  ): AnyInstance;
   getInstances(): AnyInstance[];
 }
 
@@ -132,7 +138,15 @@ export const liveActivityHost: LiveActivityHost = {
     try {
       const factory = FACTORIES[item.props.kind];
       if (!factory) return null;
-      const instance = factory.start(item.props, item.props.url, staleDateFor(item.props));
+      // A local start or update replaces the whole ActivityKit content, so
+      // it must carry the rank's relevance too: without it the score is 0
+      // and iOS orders the Dynamic Island by start time instead (#966).
+      const instance = factory.start(
+        item.props,
+        item.props.url,
+        staleDateFor(item.props),
+        relevanceForRank(item.props.rank),
+      );
       const id = instance.getId();
       if (!id) return null;
       instances.set(id, instance);
@@ -147,7 +161,7 @@ export const liveActivityHost: LiveActivityHost = {
     const instance = instances.get(id);
     if (!instance) return;
     if (!(item.kind in FIXED_SUBJECTS)) rememberSubject(id, item.subject);
-    await instance.update(item.props, staleDateFor(item.props));
+    await instance.update(item.props, staleDateFor(item.props), relevanceForRank(item.props.rank));
   },
   async end(surface, mode) {
     const instance = instances.get(surface.id);
