@@ -252,6 +252,34 @@ describe("queue Live Activity (H38)", () => {
     expect(await tick()).toMatchObject({ updated: 0 });
   });
 
+  it("an update rejected as gone records the phase the device showed, so the call restarts it", async () => {
+    await openJudgingWindow();
+    const { userId, entryId, roomId } = await participantInQueue();
+    const device = await registerDevice(userId);
+    await tick();
+    await setActivityToken(device.id, "activity-token");
+
+    // The user removed the waiting activity while the app was not running.
+    await callEntry(entryId, roomId);
+    apns.respond = (request) =>
+      request.token === "activity-token"
+        ? { status: 410, reason: "Unregistered" }
+        : { status: 200 };
+    await tick();
+    const [gone] = await sessionsOf(device.id);
+    expect(gone).toMatchObject({
+      end_reason: "dismissed",
+      dismissed_phase: "waiting",
+      activity_push_token: null,
+    });
+
+    // Being called differs from what was dismissed: push-to-start it again.
+    expect(await tick()).toMatchObject({ started: 1 });
+    expect(apns.events()).toEqual(["start", "update", "start"]);
+    const restart = apns.sent.at(-1)!;
+    expect(restart.token).toBe(`pts-${device.deviceId}`);
+  });
+
   it("records the dismissed phase on the next tick when the client sent none", async () => {
     await openJudgingWindow();
     const { userId } = await participantInQueue();

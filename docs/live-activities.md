@@ -183,7 +183,10 @@ next repetition. Each tick does the following:
 - A dead token clears that token: APNs 410, `BadDeviceToken`, `ExpiredToken`
   or `Unregistered`, or Expo `DeviceNotRegistered`. A dead iOS
   *per-activity* token means the activity is gone from the device, so its
-  session is marked `dismissed` in its last phase.
+  session is marked `dismissed` in the phase the device last showed, not
+  the phase of the update that failed. Otherwise an update to `called`
+  rejected because the user had removed the waiting activity would record
+  `called`, and the call would never bring it back.
 
 ## Push formats
 

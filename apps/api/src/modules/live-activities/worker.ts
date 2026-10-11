@@ -584,7 +584,11 @@ async function updateSession(
 
 /**
  * The token is dead: on iOS the activity is gone from the device (the user
- * removed it), so treat it as dismissed in its current phase.
+ * removed it), so treat it as dismissed in the phase the device last showed.
+ * `session` is the snapshot from before this tick's claim: an update claim
+ * has already written the new props, and recording *that* phase would
+ * suppress the very phase change (e.g. waiting → called) that should bring
+ * the activity back.
  */
 async function markGone(device: DeviceRow, session: SessionRow): Promise<void> {
   if (device.platform === "android") {
@@ -594,9 +598,16 @@ async function markGone(device: DeviceRow, session: SessionRow): Promise<void> {
   await pool.query(
     `UPDATE live_activity_sessions
         SET activity_push_token = NULL, ended_at = COALESCE(ended_at, now()),
-            end_reason = 'dismissed', dismissed_phase = COALESCE(props->>'phase', dismissed_phase)
-      WHERE id = $1`,
-    [session.id],
+            end_reason = 'dismissed', dismissed_phase = COALESCE($2, dismissed_phase),
+            state_hash = $3, props = $4
+      WHERE id = $1 AND activity_push_token IS NOT DISTINCT FROM $5`,
+    [
+      session.id,
+      session.props?.phase ?? null,
+      session.state_hash,
+      session.props ? JSON.stringify(session.props) : null,
+      session.activity_push_token,
+    ],
   );
 }
 
