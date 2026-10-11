@@ -12,7 +12,7 @@ import type { Language } from "../notifications/translate/index.js";
 import { isTranslationAvailable, translateFields } from "../notifications/translate/index.js";
 
 const SCHEDULE_COLUMNS =
-  "id, title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, reminded_at, audiences, contact_note, notes, primary_language, title_i18n, description_i18n, created_at, updated_at";
+  "id, title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, reminded_at, audiences, contact_note, notes, primary_language, title_i18n, description_i18n, live_activity_audience, created_at, updated_at";
 
 const ALL_LANGUAGES: Language[] = ["es", "gl", "en"];
 
@@ -68,6 +68,8 @@ export interface ScheduleInput {
   audiences?: ScheduleAudience[];
   contactNote?: string | null;
   notes?: string | null;
+  /** #966: the item's audience gets an attendee Live Activity. */
+  liveActivityAudience?: boolean;
 }
 
 export interface SchedulePatch {
@@ -83,6 +85,7 @@ export interface SchedulePatch {
   audiences?: ScheduleAudience[];
   contactNote?: string | null;
   notes?: string | null;
+  liveActivityAudience?: boolean;
 }
 
 function serialize(row: Record<string, unknown>) {
@@ -104,6 +107,7 @@ function serialize(row: Record<string, unknown>) {
     primaryLanguage: (row.primary_language as Language | null) ?? "es",
     titleI18n: (row.title_i18n as Record<string, string> | null) ?? {},
     descriptionI18n: (row.description_i18n as Record<string, string | null> | null) ?? {},
+    liveActivityAudience: Boolean(row.live_activity_audience),
     createdAt: (row.created_at as Date).toISOString(),
     updatedAt: (row.updated_at as Date).toISOString(),
   };
@@ -257,8 +261,8 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
   const item = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO schedule
-         (title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, audiences, contact_note, notes, primary_language)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         (title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, audiences, contact_note, notes, primary_language, live_activity_audience)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING ${SCHEDULE_COLUMNS}`,
       [
         input.title,
@@ -274,6 +278,7 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
         input.contactNote ?? null,
         input.notes ?? null,
         primaryLanguage,
+        input.liveActivityAudience ?? false,
       ],
     );
     const item = serialize(rows[0]);
@@ -409,7 +414,8 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
               notes = $13,
               primary_language = $14,
               title_i18n = $15,
-              description_i18n = $16
+              description_i18n = $16,
+              live_activity_audience = $17
         WHERE id = $1
         RETURNING ${SCHEDULE_COLUMNS}`,
       [
@@ -429,6 +435,7 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
         nextPrimaryLanguage,
         nextTitleI18n,
         nextDescriptionI18n,
+        patch.liveActivityAudience ?? current.rows[0].live_activity_audience,
       ],
     );
     const after = serialize(rows[0]);
@@ -893,6 +900,40 @@ export async function callerScheduleAudiences(
   if (isSponsorRep) audiences.add("sponsor");
   if (attendeeType === "mentor") audiences.add("mentor");
   return { isStaff: false, audiences };
+}
+
+/**
+ * Bulk counterpart of {@link callerScheduleAudiences}'s attendee rule, for
+ * the Live Activity worker (#966): the universal participant audience, plus
+ * `sponsor` for a linked sponsor rep and `mentor` for a holder of the Mentor
+ * role as their displayed role (`user_effective_role_name`, the bulk form of
+ * `mentorOrParticipantType`). The staff override (capability holders see
+ * every item) is deliberately not applied: it exists so staff can run the
+ * show, and would push every opted-in item onto every staff device.
+ * Keep the two rules in step.
+ */
+export async function attendeeScheduleAudiencesForUsers(
+  userIds: number[],
+  db: Queryable = pool,
+): Promise<Map<number, Set<ScheduleAudience>>> {
+  const result = new Map<number, Set<ScheduleAudience>>();
+  if (userIds.length === 0) return result;
+  const { rows } = await db.query<{ id: number; is_sponsor_rep: boolean; is_mentor: boolean }>(
+    `SELECT u.id,
+            EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) AS is_sponsor_rep,
+            COALESCE(uern.role_name = 'Mentor', false) AS is_mentor
+       FROM users u
+       LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
+      WHERE u.id = ANY($1::int[]) AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
+    [userIds],
+  );
+  for (const row of rows) {
+    const audiences = new Set<ScheduleAudience>(["participant"]);
+    if (row.is_sponsor_rep) audiences.add("sponsor");
+    if (row.is_mentor) audiences.add("mentor");
+    result.set(row.id, audiences);
+  }
+  return result;
 }
 
 export interface AudienceScheduleItem {
