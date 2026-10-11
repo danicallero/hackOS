@@ -9,6 +9,7 @@ import {
 } from "@/components/profile-avatar-collapse";
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
+  PROFILE_AVATAR_MERGE_PROGRESS,
   pickHolePunchCutout,
   profileAvatarBlobBounds,
   profileAvatarContentFrame,
@@ -542,27 +543,58 @@ describe("profile avatar snap on release (#935)", () => {
 
   beforeEach(() => mockHaptic.mockClear());
 
-  it("collapses an upward release 10% into the range with one light haptic", async () => {
+  it("collapses an upward release 10% into the range", async () => {
     const { handlers, drag, scrollTo } = await setup();
     drag(0, 6, 12);
     handlers.onEndDrag(event(12));
     expect(scrollTo).toHaveBeenCalledTimes(1);
     expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: PROFILE_AVATAR_COLLAPSE_DISTANCE });
-    expect(mockHaptic).toHaveBeenCalledTimes(1);
-    expect(mockHaptic).toHaveBeenCalledWith("light");
-    // The snap's own scroll and momentum end neither re-snap nor tap again.
+    // The release itself does not tap; the snap's own scroll and momentum end
+    // do not re-snap.
+    expect(mockHaptic).not.toHaveBeenCalled();
     handlers.onScroll(event(PROFILE_AVATAR_COLLAPSE_DISTANCE));
     handlers.onMomentumEnd(event(PROFILE_AVATAR_COLLAPSE_DISTANCE));
     expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it("taps once, medium, when the photo starts merging into the island", async () => {
+    const { handlers, drag } = await setup();
+    const merge = PROFILE_AVATAR_COLLAPSE_DISTANCE * PROFILE_AVATAR_MERGE_PROGRESS;
+    drag(0, merge - 4);
+    expect(mockHaptic).not.toHaveBeenCalled();
+    handlers.onScroll(event(merge + 2));
+    handlers.onScroll(event(merge + 20));
     expect(mockHaptic).toHaveBeenCalledTimes(1);
+    expect(mockHaptic).toHaveBeenCalledWith("medium");
+    // Coming back down does not tap; reaching the island again does.
+    handlers.onScroll(event(merge - 10));
+    expect(mockHaptic).toHaveBeenCalledTimes(1);
+    handlers.onScroll(event(merge + 1));
+    expect(mockHaptic).toHaveBeenCalledTimes(2);
+  });
+
+  it("taps once as a collapsed avatar starts stretching back out", async () => {
+    const { handlers, drag } = await setup();
+    const collapsed = PROFILE_AVATAR_COLLAPSE_DISTANCE;
+    drag(collapsed + 40, collapsed + 10, collapsed);
+    mockHaptic.mockClear();
+    // Sub-point jitter at the rest is not a pull.
+    handlers.onScroll(event(collapsed - 0.5));
+    handlers.onScroll(event(collapsed));
+    expect(mockHaptic).not.toHaveBeenCalled();
+    handlers.onScroll(event(collapsed - 3));
+    handlers.onScroll(event(collapsed - 20));
+    expect(mockHaptic).toHaveBeenCalledTimes(1);
+    expect(mockHaptic).toHaveBeenCalledWith("medium");
   });
 
   it("expands a downward release 90% into the range", async () => {
     const { handlers, drag, scrollTo } = await setup();
     drag(200, 120, 112, 108);
+    const taps = mockHaptic.mock.calls.length;
     handlers.onEndDrag(event(108));
     expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: 0 });
-    expect(mockHaptic).toHaveBeenCalledTimes(1);
+    expect(mockHaptic).toHaveBeenCalledTimes(taps);
   });
 
   it("follows the momentum's own direction when it ends inside the range", async () => {
@@ -572,9 +604,10 @@ describe("profile avatar snap on release (#935)", () => {
     expect(scrollTo).not.toHaveBeenCalled();
     handlers.onScroll(event(100));
     handlers.onScroll(event(90));
+    const taps = mockHaptic.mock.calls.length;
     handlers.onMomentumEnd(event(90));
     expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: 0 });
-    expect(mockHaptic).toHaveBeenCalledTimes(1);
+    expect(mockHaptic).toHaveBeenCalledTimes(taps);
   });
 
   it("measures the snap from a non-zero true top", async () => {
@@ -597,12 +630,12 @@ describe("profile avatar snap on release (#935)", () => {
     expect(scrollTo).toHaveBeenCalledWith({ animated: true, y: PROFILE_AVATAR_COLLAPSE_DISTANCE });
   });
 
-  it("never snaps or taps for programmatic scrolls", async () => {
+  it("never snaps or taps for programmatic scrolls short of the island", async () => {
     jest.useFakeTimers();
     const { controller, handlers, scrollTo } = await setup();
-    handlers.onScroll(event(30));
-    handlers.onScroll(event(40));
-    handlers.onMomentumEnd(event(40));
+    handlers.onScroll(event(10));
+    handlers.onScroll(event(20));
+    handlers.onMomentumEnd(event(20));
     expect(scrollTo).not.toHaveBeenCalled();
     // The focus correction still moves to a rest, silently.
     controller.settleAtRest();

@@ -33,6 +33,7 @@ import { diaryInitials } from "@/lib/diary";
 import { haptic } from "@/lib/haptics";
 import {
   PROFILE_AVATAR_COLLAPSE_DISTANCE,
+  PROFILE_AVATAR_MERGE_PROGRESS,
   PROFILE_AVATAR_SNAP_REST_VELOCITY,
   type ProfileCameraCutoutFrame,
   profileAvatarCollapseBounds,
@@ -89,12 +90,16 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     [reduceMotion, scrollRef],
   );
 
-  // One light tap as a user-released snap starts, also under Reduce Motion.
-  const snapHaptic = useCallback(() => void haptic("light"), []);
+  // One tap as the photo starts merging into the camera cutout, and one as
+  // a collapsed avatar starts stretching back out of it (#935).
+  const mergeHaptic = useCallback(() => void haptic("medium"), []);
 
   // Plain locals so the scroll worklets capture them explicitly.
   const collapseDistance = PROFILE_AVATAR_COLLAPSE_DISTANCE;
   const restVelocity = PROFILE_AVATAR_SNAP_REST_VELOCITY;
+  const mergeOffset = PROFILE_AVATAR_COLLAPSE_DISTANCE * PROFILE_AVATAR_MERGE_PROGRESS;
+  // Ignore sub-point jitter at the collapsed rest before calling it a pull.
+  const stretchSlop = 1;
   const platform = Platform.OS;
 
   const settle = (offset: number, velocity: number) => {
@@ -109,7 +114,6 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
       maxOffset.value,
     );
     if (target === null) return;
-    runOnJS(snapHaptic)();
     runOnJS(scrollToOffset)(target);
   };
 
@@ -132,7 +136,14 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
         const delta = event.contentOffset.y - contentOffset.value;
         if (delta !== 0) lastDelta.value = delta;
         contentOffset.value = event.contentOffset.y;
+        const previous = scrollOffset.value;
         scrollOffset.value = Math.max(0, event.contentOffset.y - restingOffset.value);
+        // Tap once each time the photo reaches the island on the way up, and
+        // as soon as a collapsed avatar starts stretching out on the way down.
+        const current = scrollOffset.value;
+        if (previous < mergeOffset && current >= mergeOffset) runOnJS(mergeHaptic)();
+        else if (previous >= collapseDistance && current < collapseDistance - stretchSlop)
+          runOnJS(mergeHaptic)();
       },
       onEndDrag: (event) => {
         const velocity = event.velocity?.y ?? 0;
@@ -145,7 +156,7 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
         if (snapArmed.value) settle(event.contentOffset.y, 0);
       },
     },
-    [scrollToOffset, snapHaptic],
+    [scrollToOffset, mergeHaptic],
   );
 
   const measureFrame = useRef<number | null>(null);

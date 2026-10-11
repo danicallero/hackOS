@@ -750,9 +750,11 @@ decides, from the last non-zero scroll delta (the release velocity only
 without one). Moving up, with the merge started, auto-collapses; moving down,
 with the droplet coming out, auto-expands; only a release with no movement
 takes the nearer rest. A moving release decides when its momentum ends, by the
-momentum's own direction. Each snap starts with one light haptic (also under
-Reduce Motion, where the scroll is instant); programmatic scrolls are never
-snapped and never tap. Both rests are measured from the true
+momentum's own direction (instant under Reduce Motion); programmatic scrolls
+are never snapped. One medium haptic marks the photo touching the camera
+cutout on the way up (morph progress 0.2, where the mask's lip joins the
+island) and the first pull out of the collapsed rest on the way down; a
+release never taps. Both rests are measured from the true
 top, which on iOS sits at a negative content offset under the automatic inset
 (at least the status-bar overlap, seeded once the host is measured, then
 lowered by scroll events before the first drag), never from y 0, which is

@@ -2,6 +2,13 @@ import telegramMaskTracks from "./telegram-avatar-mask.json";
 
 export const PROFILE_AVATAR_COLLAPSE_DISTANCE = 120;
 
+/**
+ * Morph progress where the photo first touches the camera cutout: the mask's
+ * lip track joins the island at frame 108 of the 540-frame Telegram timeline
+ * (`maskCanvas` maps progress to `time = p * 540`). The merge haptic fires here.
+ */
+export const PROFILE_AVATAR_MERGE_PROGRESS = 108 / 540;
+
 /** Below this release speed the scroll view does not decelerate, so no momentum end follows. */
 export const PROFILE_AVATAR_SNAP_REST_VELOCITY = 0.05;
 
