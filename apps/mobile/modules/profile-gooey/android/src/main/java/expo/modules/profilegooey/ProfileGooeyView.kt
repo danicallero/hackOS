@@ -57,9 +57,9 @@ class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(cont
   private val effects: Effects? =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Effects() else null
 
-  // ExpoView is a LinearLayout: an Android layout pass would stack and stretch
-  // the React child (moving it to the top-left and resizing it), so measure
-  // only this view and leave the child exactly where Yoga put it.
+  // ExpoView is a LinearLayout: an Android layout pass would re-measure the
+  // React child at wrap-content (the whole canvas) and stack it at the origin,
+  // so the drawn avatar became a tall rounded rect. Yoga owns the child frame.
   override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
     setMeasuredDimension(
       MeasureSpec.getSize(widthMeasureSpec),
@@ -96,7 +96,7 @@ class ProfileGooeyView(context: Context, appContext: AppContext) : ExpoView(cont
     super.onDetachedFromWindow()
   }
 
-  /** The child scaled about its centre onto the animated circle. */
+  /** The child's display list scaled about its centre onto the animated circle. */
   private fun drawAvatar(canvas: Canvas, child: View) {
     val scale = avatarDiameter * density / child.width
     canvas.save()
