@@ -104,9 +104,11 @@ describe("selectQueueLiveProps (H38)", () => {
       etaMinutes: null,
       roomName: "Room B",
       roomLocation: "Floor 2",
+      calledAt: "2026-10-11T09:59:00.000Z",
       otherQueues: 1,
     });
     expect(props?.labels.goTo).toBe("Ve a");
+    expect(props?.labels.stageCalled).toBe("Llamados");
   });
 
   it("orders simultaneous calls by instant, as pg returns them (Date), not by weekday name", async () => {
@@ -176,6 +178,9 @@ describe("myLiveActivities", () => {
       otherQueues: 0,
     });
     expect(waiting.queue?.etaMinutes).toBeGreaterThan(0);
+    expect(waiting.queue?.calledAt).toBeNull();
+    // First sighting: the progress track starts at the current position.
+    expect(waiting.queue?.startPosition).toBe(3);
 
     await callEntry(entryId, roomId);
     const called = await myLiveActivities(userId, "en", false);
@@ -185,6 +190,78 @@ describe("myLiveActivities", () => {
       etaMinutes: null,
       roomName: "Room B",
       roomLocation: "Floor 2",
+    });
+  });
+
+  it("keeps the highest waiting position as the progress start while the team moves up", async () => {
+    const { myLiveActivities } = await import("../../src/modules/live-activities/state.js");
+    const { pool } = await import("../../src/db/pool.js");
+    await openJudgingWindow();
+    const { userId, entryId, challengeId } = await participantInQueue({ position: 4 });
+
+    expect((await myLiveActivities(userId, "en", false)).queue).toMatchObject({
+      position: 4,
+      startPosition: 4,
+    });
+    // Two teams ahead leave the queue: position drops, the start stays.
+    await pool.query(
+      `DELETE FROM queue_entries
+        WHERE id IN (SELECT id FROM queue_entries
+                      WHERE challenge_id = $1 AND id <> $2 ORDER BY id LIMIT 2)`,
+      [challengeId, entryId],
+    );
+    expect((await myLiveActivities(userId, "en", false)).queue).toMatchObject({
+      position: 2,
+      startPosition: 4,
+    });
+  });
+
+  it("breaks a live meal down into inside and still-to-eat; other activities get none", async () => {
+    const { myLiveActivities } = await import("../../src/modules/live-activities/state.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const staffId = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    const lunch = await createScannableActivity({ name: "Lunch", startsInMinutes: -10 });
+    const dinner = await createScannableActivity({ name: "Dinner", startsInMinutes: 10 });
+    const workshop = await createScannableActivity({
+      name: "Workshop",
+      category: "workshop",
+      requiresScan: true,
+      startsInMinutes: -5,
+    });
+    const [a, b, c, gone] = [
+      await createUser(),
+      await createUser(),
+      await createUser(),
+      await createUser(),
+    ];
+    for (const id of [a, b, c, gone]) {
+      await pool.query(
+        `INSERT INTO time_logs (user_id, kind, scanned_at) VALUES ($1, 'in', now() - interval '1 hour')`,
+        [id],
+      );
+    }
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at) VALUES ($1, 'out', now() - interval '5 minutes')`,
+      [gone],
+    );
+    await logScan(lunch, a);
+    await logScan(lunch, a);
+    await logScan(workshop, b);
+
+    const result = await myLiveActivities(staffId, "en", true);
+    const byId = new Map(result.activities.map((x) => [x.activityId, x]));
+    // `gone` checked out: 3 inside (a, b, c), a already ate, b and c still to eat.
+    expect(byId.get(lunch)).toMatchObject({ scanned: 1, inside: 3, remaining: 2 });
+    expect(byId.get(dinner)).toMatchObject({ phase: "upcoming", inside: null, remaining: null });
+    expect(byId.get(workshop)).toMatchObject({ inside: null, remaining: null });
+    expect(byId.get(lunch)?.labels.remaining).toBe("Still to eat");
+
+    // A synthetic operator never sees the real-venue breakdown.
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [staffId]);
+    const synthetic = await myLiveActivities(staffId, "en", true);
+    expect(synthetic.activities.find((x) => x.activityId === lunch)).toMatchObject({
+      inside: null,
+      remaining: null,
     });
   });
 

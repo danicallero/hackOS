@@ -26,12 +26,15 @@ import {
   type LiveScannableActivity,
   liveStateHash,
   loadLiveScannableActivities,
+  loadMealPresence,
   loadScannedCounts,
+  type MealPresence,
   participantQueueStatuses,
   readJudgingWindow,
   scannedKey,
   selectQueueLiveProps,
   usersWithActivityScan,
+  withStartPosition,
 } from "./state.js";
 
 /**
@@ -256,12 +259,14 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
   let activities: LiveScannableActivity[] = [];
   let scanners = new Set<number>();
   let counts = new Map<string, number>();
+  let meals = new Map<number, MealPresence>();
   let timezone = "UTC";
   if (userIds.length > 0) {
     activities = await loadLiveScannableActivities();
     if (activities.length > 0) {
       scanners = await usersWithActivityScan(userIds);
       counts = await loadScannedCounts(activities.map((a) => a.id));
+      meals = await loadMealPresence(activities, now);
     }
   }
   if (activities.length > 0 || window.open) {
@@ -285,7 +290,9 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
       const desired: Desired[] = [];
       if (actionableIds.has(device.id)) {
         const statuses = queueStatuses.get(device.user_id);
-        const queueProps = statuses ? selectQueueLiveProps(statuses, device.language, now) : null;
+        const queueProps = statuses
+          ? await withStartPosition(selectQueueLiveProps(statuses, device.language, now))
+          : null;
         if (queueProps) {
           desired.push({ kind: "queue", subject: QUEUE_LIVE_ACTIVITY_SUBJECT, props: queueProps });
         }
@@ -295,7 +302,13 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
             desired.push({
               kind: "activity",
               subject: activityLiveActivitySubject(activity.id),
-              props: buildActivityLiveProps(activity, scanned, device.language, now),
+              props: buildActivityLiveProps(
+                activity,
+                scanned,
+                device.language,
+                now,
+                device.is_test_account ? null : (meals.get(activity.id) ?? null),
+              ),
             });
           }
         }

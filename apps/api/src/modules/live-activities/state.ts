@@ -13,6 +13,8 @@ import {
 import type { Language } from "@hackos/shared/locale";
 import { config } from "../../config.js";
 import { pool, type Queryable } from "../../db/pool.js";
+import { valkey } from "../../lib/valkey.js";
+import { occupancyEstimate } from "../logistics/presence.js";
 import { hasMyQueueItems, myQueueStatus } from "../queue/reads.js";
 
 /**
@@ -133,6 +135,10 @@ export function selectQueueLiveProps(
     etaMinutes: isCalled ? null : nearest.etaMinutes,
     roomName: isCalled ? (nearest.room?.name ?? null) : null,
     roomLocation: isCalled ? (nearest.room?.location ?? null) : null,
+    calledAt:
+      isCalled && Number.isFinite(calledAtMs(nearest))
+        ? new Date(calledAtMs(nearest)).toISOString()
+        : null,
     otherQueues,
     url: queueDeepLink(),
     labels: queueLiveLabels(language, otherQueues),
@@ -232,11 +238,94 @@ export async function usersWithActivityScan(
   return new Set(rows.map((r) => r.user_id));
 }
 
+/** True when `activity` is a meal that has started (the only case `expected` applies). */
+export function isLiveMeal(activity: LiveScannableActivity, now: Date): boolean {
+  return (
+    (MEAL_ACTIVITY_KINDS as readonly string[]).includes(activity.category) &&
+    now >= activity.startsAt
+  );
+}
+
+export interface MealPresence {
+  inside: number;
+  remaining: number;
+}
+
+/**
+ * H24/H27 meal breakdown for staff: people estimated in the venue right now
+ * (the logistics panel's served-vs-present denominator) and, of those, who
+ * has no scan for the meal yet. Real accounts only; a test-account viewer
+ * gets no breakdown rather than one from the wrong side of the H54 fixture
+ * boundary. Only computed while a meal is live (it reads every presence event).
+ */
+export async function loadMealPresence(
+  activities: LiveScannableActivity[],
+  now: Date,
+  db: Queryable = pool,
+): Promise<Map<number, MealPresence>> {
+  const result = new Map<number, MealPresence>();
+  const meals = activities.filter((a) => isLiveMeal(a, now)).map((a) => a.id);
+  if (meals.length === 0) return result;
+  const { present } = await occupancyEstimate();
+  const { rows } = await db.query<{ activity_id: number; served: number }>(
+    `SELECT activity_id, count(DISTINCT user_id)::int AS served
+       FROM activity_logs
+      WHERE activity_id = ANY($1::int[]) AND user_id = ANY($2::int[])
+      GROUP BY activity_id`,
+    [meals, present],
+  );
+  const served = new Map(rows.map((r) => [r.activity_id, r.served]));
+  for (const id of meals) {
+    result.set(id, {
+      inside: present.length,
+      remaining: Math.max(0, present.length - (served.get(id) ?? 0)),
+    });
+  }
+  return result;
+}
+
+const PEAK_POSITION_TTL_SECONDS = 24 * 60 * 60;
+// Atomic high-water mark: keep the larger of the stored and the new value.
+const PEAK_POSITION_SCRIPT = `
+local cur = tonumber(redis.call('GET', KEYS[1]) or '0')
+local nxt = tonumber(ARGV[1])
+if nxt > cur then cur = nxt end
+redis.call('SET', KEYS[1], cur, 'EX', ARGV[2])
+return cur`;
+
+/**
+ * The queue progress track (#966) fills from the highest position an entry
+ * has had while waiting; positions are not stored historically, so the API
+ * keeps a per-entry high-water mark in Valkey. Best-effort: a Valkey failure
+ * leaves the props without a start (the track then shows the stage only).
+ */
+export async function withStartPosition(
+  props: QueueLiveProps | null,
+): Promise<QueueLiveProps | null> {
+  if (!props || props.position == null) return props;
+  try {
+    const peak = Number(
+      await valkey.eval(
+        PEAK_POSITION_SCRIPT,
+        1,
+        `live-activities:queue-peak:${props.entryId}`,
+        String(props.position),
+        String(PEAK_POSITION_TTL_SECONDS),
+      ),
+    );
+    return { ...props, startPosition: Number.isFinite(peak) && peak > 0 ? peak : null };
+  } catch (err) {
+    console.warn("live-activities: peak position unavailable", err);
+    return props;
+  }
+}
+
 export function buildActivityLiveProps(
   activity: LiveScannableActivity,
   scanned: number,
   language: Language,
   now: Date,
+  meal: MealPresence | null = null,
 ): ActivityLiveProps {
   const link = activityScanDeepLink(activity.id);
   return {
@@ -252,6 +341,8 @@ export function buildActivityLiveProps(
     startsAt: activity.startsAt.toISOString(),
     endsAt: activity.endsAt.toISOString(),
     scanned,
+    inside: isLiveMeal(activity, now) ? (meal?.inside ?? null) : null,
+    remaining: isLiveMeal(activity, now) ? (meal?.remaining ?? null) : null,
     scanUrl: link,
     url: link,
     labels: activityLiveLabels(language),
@@ -277,7 +368,9 @@ export async function myLiveActivities(
   const now = new Date();
   const window = await readJudgingWindow();
   const queue = window.open
-    ? selectQueueLiveProps(await participantQueueStatuses(userId), language, now)
+    ? await withStartPosition(
+        selectQueueLiveProps(await participantQueueStatuses(userId), language, now),
+      )
     : null;
 
   let activities: ActivityLiveProps[] = [];
@@ -290,12 +383,14 @@ export async function myLiveActivities(
       );
       const testAccount = userRows[0]?.is_test_account === true;
       const counts = await loadScannedCounts(rows.map((r) => r.id));
+      const meals = testAccount ? new Map() : await loadMealPresence(rows, now);
       activities = rows.map((row) =>
         buildActivityLiveProps(
           row,
           counts.get(scannedKey(row.id, testAccount)) ?? 0,
           language,
           now,
+          meals.get(row.id) ?? null,
         ),
       );
     }

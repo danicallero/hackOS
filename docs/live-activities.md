@@ -58,8 +58,15 @@ the account language.
   `etaMinutes` wins, then position. `presenting` and `completed` entries are
   skipped: they are over for the participant.
 - `otherQueues`: the other entries still waiting, called or in a room.
-- `roomName`/`roomLocation` are set only once the team is called; `position`
-  and `etaMinutes` only while it is waiting.
+- `roomName`/`roomLocation`/`calledAt` are set only once the team is called;
+  `position` and `etaMinutes` only while it is waiting. `calledAt` drives a
+  count-up "Called 2:13" timer — the same elapsed time H34 shows operators,
+  never presented as a deadline.
+- `startPosition`: the highest position the entry has had while waiting, so
+  the progress track fills as the team moves up. Positions are not stored
+  historically, so the API keeps a per-entry high-water mark in Valkey
+  (`live-activities:queue-peak:<entryId>`, 24 h TTL, atomic Lua max). A
+  Valkey failure only drops the field; the track then shows the stage alone.
 - `url`: `hackos://queue` (the scheme is `MOBILE_APP_SCHEME`).
 
 ### Staff activities (H25, H26)
@@ -81,6 +88,13 @@ the account language.
   elsewhere for H54, these are split by `is_test_account`: a synthetic
   (review fixture) operator counts only synthetic subjects, and a real
   operator only real ones.
+- `inside`/`remaining` (live meals only, H24/H27): `inside` is the presence
+  estimate (`occupancyEstimate`, the logistics panel's served-vs-present
+  denominator) and `remaining` is how many of those people have no scan for
+  the meal yet. Computed once per tick and only while a meal is live, since
+  the estimate reads every presence event. A synthetic operator gets `null`
+  (the estimate covers real accounts only). Other activities and upcoming
+  meals get `null`.
 - `name`: `name_i18n[language]`, then `name_i18n.en`, then `name`.
 - `url` and `scanUrl`: both `hackos://scan?activity=<id>`. A tap and the Scan
   button both open the scanner bound to that activity. iOS keeps the tap URL
