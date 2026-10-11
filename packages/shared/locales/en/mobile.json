@@ -382,6 +382,8 @@
   "notificationsRequired": "Required",
   "queueCalls": "Queue calls",
   "notificationsAlwaysOn": "Always on",
+  "liveActivities": "Live Activities",
+  "liveUpdates": "Live updates",
   "notificationsAnnouncements": "Announcements",
   "notificationsQueueStaff": "Teams entering rooms",
   "notificationsQueueStaffHint": "Receive a push when judges ask a team to enter a room.",
