@@ -150,6 +150,18 @@ data-gated kinds (`judging` also adds the `judge:panel` roles). **Roles created
 later are not added to any kind automatically**; organizers tick them in the
 editor. A missing kind row reads as disabled with no roles (fail closed).
 
+**Admin UI.** Event settings → Live Activities (`/settings/event?tab=liveActivities`,
+`apps/web/src/app/(app)/settings/event/live-activities-tab.tsx`) follows the
+roles manager's list/editor layout (drill-down below `md`). The list is the
+priority order: reorder by drag handle (pointer or keyboard) or the editor's
+move up/down buttons; each row has its on/off switch and a plain-text role
+summary. The editor shows the kind's description, the read-only
+`requiredCapability` and role checkboxes from the response's `roles`. The
+shown-at-once limit and every kind share one draft and the category's single
+Save footer and unsaved-changes guard, sent as one `PUT`. Per schedule item,
+the item editor's "Show Live Activity to audience" switch (only for items with
+an audience) sets `liveActivityAudience`.
+
 ## Registry
 
 | Route | Purpose |
