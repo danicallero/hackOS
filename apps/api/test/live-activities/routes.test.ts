@@ -7,6 +7,7 @@ import {
   buildTestApp,
   createUser,
   createUserWithCapabilities,
+  seedAttendeeRoles,
   truncateAll,
 } from "../helpers.js";
 import {
@@ -297,6 +298,47 @@ describe("GET /api/me/live-activities", () => {
 
     const anonymous = await app.inject({ method: "GET", url: "/api/me/live-activities" });
     expect(anonymous.statusCode).toBe(401);
+  });
+
+  it("counts people accredited through check-in as the activity and desk denominator", async () => {
+    await seedAttendeeRoles();
+    const staffId = await createUserWithCapabilities([
+      CAPABILITIES.ACTIVITY_SCAN,
+      CAPABILITIES.ACCREDIT_SCAN,
+    ]);
+    await createScannableActivity({ startsInMinutes: -5 });
+    const { pool } = await import("../../src/db/pool.js");
+    // Inside the desk's window (opens before the event start).
+    await pool.query(
+      `INSERT INTO event_config (id, event_starts_at, hacking_starts_at)
+       VALUES (1, now() + interval '30 minutes', now() + interval '2 hours')
+       ON CONFLICT (id) DO UPDATE
+         SET event_starts_at = EXCLUDED.event_starts_at,
+             hacking_starts_at = EXCLUDED.hacking_starts_at`,
+    );
+    // The real accreditation flow (H22), as the desk and the people finder see it.
+    for (const [index, attendeeRole] of (["participant", "mentor"] as const).entries()) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/accreditation/check-in-user",
+        headers: { ...asUser(staffId), "idempotency-key": `la-accredit-${index}` },
+        payload: { userId: await createUser(), badgeId: `B-LA-${index}`, attendeeRole },
+      });
+      expect(res.statusCode).toBe(200);
+    }
+    await createUser(); // no badge: not accredited
+    await allowLiveActivities();
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/me/live-activities",
+      headers: asUser(staffId),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      activities: [{ phase: "live", scanned: 0, accredited: 2 }],
+      accreditation: { accredited: 2 },
+    });
   });
 
   it("cuts to maxConcurrent by kind priority and keeps the device's running activity", async () => {

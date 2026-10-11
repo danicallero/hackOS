@@ -6,6 +6,7 @@ import {
   createRole,
   createUser,
   createUserWithCapabilities,
+  grantAttendeeRole,
   truncateAll,
 } from "../helpers.js";
 import { createRepoWithTeam } from "../queue/fixtures.js";
@@ -298,13 +299,15 @@ describe("accreditation desk (H22, H24)", () => {
       scanUrl: "hackos://scan",
     });
 
-    // A synthetic operator counts synthetic subjects only, without presence.
-    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [desk]);
-    expect((await mine(desk)).accreditation).toMatchObject({
-      accredited: 0,
-      eligible: 1,
-      inside: null,
-    });
+    // A synthetic operator counts its people finder's roster only (synthetic
+    // participant fixtures, not other synthetic accounts), without presence.
+    const fixture = await createUser();
+    await grantAttendeeRole(fixture, "participant");
+    await pool.query(`UPDATE users SET badge_id = 'B-F' WHERE id = $1`, [fixture]);
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = ANY($1::int[])`, [
+      [desk, fixture, people[0]],
+    ]);
+    expect((await mine(desk)).accreditation).toMatchObject({ accredited: 1, inside: null });
     // Without accredit:scan nothing shows, whatever the role list says.
     expect((await mine(people[2]!)).accreditation).toBeNull();
   });
