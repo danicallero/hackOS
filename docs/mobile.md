@@ -1568,19 +1568,28 @@ they tick without updates.
 leading, compact trailing and minimal views in hard width caps of 24, 56 and
 36 pt with a fixed Dynamic Type size (`dynamicTypeSize("large")`), so no
 value, locale or text size can widen the island; text scales down
-(`minimumScaleFactor(0.6)`) instead of truncating. Countdowns are
-`Text(timerInterval:)`: `2:41:20` from an hour, `40:21` below it, ticking
-on the device. A timer takes every point it is offered, so the compact and
-minimal ones get the exact width of their value at render time (12 pt and
-10 pt; ⅔ em a digit, ⅓ em a colon: `12:59:59` is the 56 pt cap); the value
-only gets shorter until the next update. Every other countdown keeps one
-line that scales down within its cap (expanded and Lock Screen 120 pt).
-**Decision:** no unit format (`2h 41m`, `40m 21s`). Checked on the iOS 26
-simulator: a unit-based system format (`Date.ComponentsFormatStyle` over a
-`TimeDataSource`) renders once and then stays frozen in a Live Activity, a
-custom format style is redacted, and Apple's `SystemFormatStyle.Timer`
-spells out hours (`2 hours, 40…`). Only timer text keeps ticking without
-pushes. Taps open the props' `url` (passed as the
+(`minimumScaleFactor(0.6)`) instead of truncating. The slots get a 3 pt
+leading / 7 pt trailing inset so the glyph and the time sit on the pill's
+concentric margin (HIG). Countdowns read `2h 34m` from an hour and `34m 21s`
+below it, ticking on the device, never `H:MM:SS`: the compact view shows
+that form at 12 pt, the minimal view the leading unit only (`2h`, `34m`) at
+10 pt, and the expanded and Lock Screen heroes add the seconds from an hour
+(`2h 34m 21s`). `Text`'s `compactCountdown` (`full`, `short`, `long`; a
+`patches/@expo__ui@57.0.22.patch` addition) draws it natively: each number
+is one field cut out of a live `Text(timerInterval:)` (trailing-aligned,
+shifted by the width of what follows it, clipped to its digits; monospaced
+digits keep each field at a fixed offset) next to static `h`/`m`/`s`.
+**Decision:** checked on the iOS 26.5 simulator over 90 s, a unit format
+over a live date source (`Duration.UnitsFormatStyle` over
+`.durationOffset`) renders nothing, `Date.ComponentsFormatStyle` renders
+once and freezes (19–29 s off the timer), `SystemFormatStyle.Timer`,
+`.offset` and `.reference` spell units out, and a custom format style is
+redacted; only timer text ticks. The form is chosen when the activity
+renders, and a stale date does not re-render it, so the props carry
+`countdownUnderHour`: it flips once, an hour before the countdown's
+target, which sends one update (the worker's normal hash path) and makes
+the foreground app reconcile then (`nextPhaseBoundary`). Between the hour
+and that update the compact view can read `h 59m` for up to a tick. Taps open the props' `url` (passed as the
 activity's static URL); the API must send the same `attributes.url` on
 push-to-start. APNs props reach the layouts directly, so a props version
 other than `1` renders only the title. Room and activity names truncate;
@@ -1860,9 +1869,12 @@ an id's first post).
   status bar.
 - Chip and `when`: the chip shows `shortCriticalText` whenever it is set,
   even with a running chronometer, so the called state counts up in the
-  header while the chip keeps the room. `countdownTo` (future) counts down,
-  `countUpFrom` counts up, anything else hides `when` (live staff updates),
-  so a count is never displaced. Tapping the chip opens the notification as a
+  header while the chip keeps the room. `countdownTo` (future) is shown as
+  the system's own short time delta (`5min`; `LiveUpdatePoster.whenStyle`),
+  not a chronometer, so the chip never shows `H:MM:SS`; the system shows it
+  from 2 minutes ahead. `countUpFrom` counts up as a chronometer, anything
+  else hides `when` (live staff updates), so a count is never displaced.
+  The custom card (the pre-Android 16 fallback) keeps its chronometers. Tapping the chip opens the notification as a
   popup and the popup opens the deep link (`hackos://queue`, the scan link).
   The chip is hidden while hackOS is in the foreground, and it shows the
   icon alone while its own heads-up or popup is on screen and for a moment

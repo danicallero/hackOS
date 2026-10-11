@@ -9,6 +9,7 @@ import {
   accreditationLiveLabels,
   activityLiveLabels,
   attendeeActivityLiveLabels,
+  countdownUnderHour,
   type DeadlineLiveProps,
   deadlineLiveLabels,
   type MyLiveActivities,
@@ -155,13 +156,29 @@ describe("nextPhaseBoundary: new kinds", () => {
   it("refreshes at an attendee start, the deadline and the desk's end", () => {
     const now = Date.parse("2026-02-20T12:00:00.000Z");
     const at = (iso: string) => Date.parse(iso);
+    const desk = desiredActivities(response({ accreditation: accreditation() }));
+    expect(nextPhaseBoundary(desk, now)).toBe(at("2026-02-20T13:30:00.000Z"));
+    // #966: the deadline (14:00) is first refreshed when it drops under an
+    // hour, so the widget switches from `2h 34m` to `34m 21s`.
     const desired = desiredActivities(
       response({ deadline: deadline(), accreditation: accreditation() }),
     );
-    expect(nextPhaseBoundary(desired, now)).toBe(at("2026-02-20T13:30:00.000Z"));
+    expect(nextPhaseBoundary(desired, now)).toBe(at("2026-02-20T13:00:01.000Z"));
+    expect(nextPhaseBoundary(desired, at("2026-02-20T13:00:01.000Z"))).toBe(
+      at("2026-02-20T13:30:00.000Z"),
+    );
     const withAttendee = desiredActivities(
       response({ attendeeActivities: [attendee(21)], deadline: deadline() }),
     );
     expect(nextPhaseBoundary(withAttendee, now)).toBe(at("2026-02-20T12:10:00.000Z"));
+  });
+});
+
+describe("countdownUnderHour (#966)", () => {
+  it("flips once the time left is under an hour", () => {
+    const target = "2026-02-20T14:00:00.000Z";
+    expect(countdownUnderHour(target, Date.parse("2026-02-20T13:00:00.000Z"))).toBe(false);
+    expect(countdownUnderHour(target, Date.parse("2026-02-20T13:00:00.001Z"))).toBe(true);
+    expect(countdownUnderHour(new Date(target), new Date("2026-02-20T13:59:00.000Z"))).toBe(true);
   });
 });

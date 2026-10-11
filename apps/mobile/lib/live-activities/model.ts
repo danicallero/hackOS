@@ -10,6 +10,7 @@ import {
   type DeadlineLiveProps,
   LIVE_ACTIVITY_KINDS,
   LIVE_ACTIVITY_PROPS_VERSION,
+  LIVE_COUNTDOWN_HOUR_MS,
   type LiveActivityKind,
   type LiveActivityProps,
   type MyLiveActivities,
@@ -240,7 +241,9 @@ export function withScannedIncrement(props: ActivityLiveProps, by = 1): Activity
 /**
  * Next instant a surface changes phase or ends on its own (an activity or
  * schedule item starting or ending, the deadline, the accreditation window),
- * so the foreground app can refresh exactly then instead of polling.
+ * or a countdown drops under an hour (#966: the widget then switches from
+ * `2h 34m` to `34m 21s`), so the foreground app can refresh exactly then
+ * instead of polling.
  */
 export function nextPhaseBoundary(desired: DesiredActivity[], now: number): number | null {
   let next: number | null = null;
@@ -252,9 +255,14 @@ export function nextPhaseBoundary(desired: DesiredActivity[], now: number): numb
         : props.kind === "deadline" || props.kind === "accreditation"
           ? [props.endsAt]
           : [];
+    // Countdowns also refresh a second after they drop under an hour.
+    const countdown = props.kind !== "accreditation";
     for (const iso of instants) {
-      const at = Date.parse(iso);
-      if (Number.isFinite(at) && at > now && (next === null || at < next)) next = at;
+      const end = Date.parse(iso);
+      const marks = countdown ? [end - LIVE_COUNTDOWN_HOUR_MS + 1_000, end] : [end];
+      for (const at of marks) {
+        if (Number.isFinite(at) && at > now && (next === null || at < next)) next = at;
+      }
     }
   }
   return next;

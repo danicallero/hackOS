@@ -163,6 +163,22 @@ export interface QueueLiveProps {
 
 export type ActivityLivePhase = "upcoming" | "live";
 
+/** One hour, the boundary between the two countdown forms. */
+export const LIVE_COUNTDOWN_HOUR_MS = 3_600_000;
+
+/**
+ * Whether the countdown to `target` is under an hour (#966). The iOS widget
+ * shows `2h 34m` from an hour and `34m 21s` below it, and picks the form only
+ * when it renders, so the props carry this flag: it flips once, at the hour,
+ * which changes the state hash and sends the one update that re-renders the
+ * widget in the shorter form.
+ */
+export function countdownUnderHour(target: string | Date, now: Date | number): boolean {
+  const at = typeof target === "string" ? Date.parse(target) : target.getTime();
+  const from = typeof now === "number" ? now : now.getTime();
+  return at - from < LIVE_COUNTDOWN_HOUR_MS;
+}
+
 export interface ActivityLiveLabels {
   /** "Starts in" */
   startsIn: string;
@@ -199,6 +215,8 @@ export interface ActivityLiveProps {
   /** Deep link opened on tap. */
   url: string;
   labels: ActivityLiveLabels;
+  /** The countdown shown is under an hour (`countdownUnderHour`). Optional (post-v1). */
+  countdownUnderHour?: boolean;
   /** Device rank among the Live Activities it shows (0 = most important). Optional (post-v1). */
   rank?: number;
   updatedAt: string;
@@ -244,6 +262,8 @@ export interface AttendeeActivityLiveProps {
   /** Deep link: `hackos://schedule/<scheduleId>`. */
   url: string;
   labels: AttendeeActivityLiveLabels;
+  /** The countdown shown is under an hour (`countdownUnderHour`). Optional (post-v1). */
+  countdownUnderHour?: boolean;
   /** Device rank among the Live Activities it shows (0 = most important). */
   rank?: number;
   updatedAt: string;
@@ -291,6 +311,8 @@ export interface DeadlineLiveProps {
   /** Deep link: `hackos://project`. */
   url: string;
   labels: DeadlineLiveLabels;
+  /** The countdown shown is under an hour (`countdownUnderHour`). Optional (post-v1). */
+  countdownUnderHour?: boolean;
   rank?: number;
   updatedAt: string;
 }

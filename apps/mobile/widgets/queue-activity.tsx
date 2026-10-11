@@ -62,12 +62,16 @@ export const QueueActivityLayout = (
     view: Parameters<typeof HStack>[0]["children"],
     width: number,
     alignment: "leading" | "center" | "trailing",
+    // The outer end's inset, so the content's margin to the pill's rounded
+    // end matches its top and bottom margins (HIG: concentric margins).
+    inset: { leading?: number; trailing?: number } = {},
   ) => (
     <HStack
       spacing={0}
       modifiers={[
         frame({ maxWidth: width, alignment }),
         fixedSize({ horizontal: true }),
+        padding(inset),
         minimumScaleFactor(0.6),
         dynamicTypeSize("large"),
       ]}
@@ -81,8 +85,8 @@ export const QueueActivityLayout = (
     layout: L,
   ) => ({
     ...layout,
-    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing"),
-    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading"),
+    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing", { leading: 3 }),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { trailing: 7 }),
     minimal: islandSlot(layout.minimal as never, 36, "center"),
   });
   // APNs delivers props straight to this layout, so a newer, incompatible

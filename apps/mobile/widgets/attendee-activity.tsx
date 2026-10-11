@@ -8,8 +8,6 @@ import {
   labelsHidden,
   lineLimit,
   minimumScaleFactor,
-  monospacedDigit,
-  multilineTextAlignment,
   padding,
   tint,
 } from "@expo/ui/swift-ui/modifiers";
@@ -43,12 +41,16 @@ export const AttendeeActivityLayout = (
     view: Parameters<typeof HStack>[0]["children"],
     width: number,
     alignment: "leading" | "center" | "trailing",
+    // The outer end's inset, so the content's margin to the pill's rounded
+    // end matches its top and bottom margins (HIG: concentric margins).
+    inset: { leading?: number; trailing?: number } = {},
   ) => (
     <HStack
       spacing={0}
       modifiers={[
         frame({ maxWidth: width, alignment }),
         fixedSize({ horizontal: true }),
+        padding(inset),
         minimumScaleFactor(0.6),
         dynamicTypeSize("large"),
       ]}
@@ -62,8 +64,8 @@ export const AttendeeActivityLayout = (
     layout: L,
   ) => ({
     ...layout,
-    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing"),
-    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading"),
+    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing", { leading: 3 }),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { trailing: 7 }),
     minimal: islandSlot(layout.minimal as never, 36, "center"),
   });
   // APNs delivers props straight to this layout, so a newer, incompatible
@@ -132,48 +134,28 @@ export const AttendeeActivityLayout = (
       : startsAt.getTime() - 3_600_000,
   );
 
-  // A timer takes every point it is offered, so the compact views get the
-  // exact width of its current value: `2:41:20` from an hour, `40:21` below
-  // it (12 pt semibold monospaced digits: ⅔ em a digit, ⅓ em a colon). The
-  // value only gets shorter, so the width never needs to grow.
-  const timerWidth = (target: number, size: number, max: number) => {
-    const left = Math.max(0, target - Date.now()) / 1000;
-    const hours = Math.floor(left / 3600);
-    const digits = hours > 0 ? String(hours).length + 4 : Math.floor(left / 60) >= 10 ? 4 : 3;
-    const colons = hours > 0 ? 2 : 1;
-    return Math.min(max, Math.ceil((size * (digits * 2 + colons)) / 3) + 1);
-  };
-
-  // Upcoming counts down to the start, live to the end (`2:41:20`, `40:21`),
-  // on one line that scales down rather than truncating. `fit` sizes it to
-  // its value (compact views).
+  // Upcoming counts down to the start, live to the end: `2h 34m` from an hour, `34m 21s` below it, ticking live and never
+  // H:MM:SS (`compactCountdown`); `short` keeps the leading unit (`2h`,
+  // `34m`), `long` adds the seconds from an hour (`2h 34m 21s`). It is as wide as its value; a width cap scales it down rather
+  // than truncating.
   const timer = (
     size: number,
     color: string | null,
     width: number | null,
-    weight = "semibold",
-    fit = false,
+    weight: "semibold" | "bold" = "semibold",
+    form: "full" | "short" | "long" = "full",
   ) =>
     (live ? validEnd : validStart) ? (
       <Text
         timerInterval={live ? { lower: startsAt, upper: endsAt } : { lower, upper: startsAt }}
         countsDown
+        compactCountdown={form}
+        compactCountdownSize={size}
+        compactCountdownWeight={weight}
         modifiers={[
-          font({ size, weight: weight as "semibold" | "bold" }),
-          monospacedDigit(),
           lineLimit(1),
           minimumScaleFactor(0.6),
-          multilineTextAlignment(fit ? "leading" : "trailing"),
-          ...(fit && width
-            ? [
-                frame({
-                  width: timerWidth((live ? endsAt : startsAt).getTime(), size, width),
-                  alignment: "leading",
-                }),
-              ]
-            : width
-              ? [frame({ maxWidth: width, alignment: "trailing" })]
-              : []),
+          ...(width ? [frame({ maxWidth: width, alignment: "trailing" })] : []),
           ...colorMods(color),
         ]}
       />
@@ -188,7 +170,7 @@ export const AttendeeActivityLayout = (
 
   // Countdown with its caption above ("Starts in" / "Ends in").
   const countdownStat = (size: number, color: string | null, width: number) => {
-    const value = timer(size, color, width, "bold");
+    const value = timer(size, color, width, "bold", "long");
     return value ? (
       <VStack alignment="trailing" spacing={0}>
         {caption(live ? labels.endsIn : labels.startsIn)}
@@ -258,10 +240,10 @@ export const AttendeeActivityLayout = (
   const compactLeading = glyph(islandAccent, 15);
   // The accent countdown to the start, or to the end while live (one colour
   // with the symbol, so both sides read as one piece of information).
-  const compactTrailing = timer(12, islandAccent, 56, "semibold", true) ?? <Text> </Text>;
+  const compactTrailing = timer(12, islandAccent, 56) ?? <Text> </Text>;
 
   // Minimal: the time left.
-  const minimal = timer(10, islandAccent, 36, "semibold", true) ?? glyph(islandAccent, 14);
+  const minimal = timer(10, islandAccent, 36, "semibold", "short") ?? glyph(islandAccent, 14);
 
   const expandedLeading = (
     <VStack modifiers={[padding({ leading: 8, top: 6 })]}>{glyph(islandAccent, 24)}</VStack>
@@ -269,7 +251,7 @@ export const AttendeeActivityLayout = (
   // Inset from the island's rounded corners so labels never clip.
   const expandedTrailing = (
     <VStack alignment="trailing" modifiers={[padding({ trailing: 8, top: 4 })]}>
-      {countdownStat(28, live ? null : islandAccent, 120) ?? <Text> </Text>}
+      {countdownStat(28, live ? null : islandAccent, 160) ?? <Text> </Text>}
     </VStack>
   );
   // Live: "Now" leads the name on one line, so the bar, the name and the
@@ -326,7 +308,7 @@ export const AttendeeActivityLayout = (
       <HStack alignment="center" spacing={10}>
         <HStack modifiers={[frame({ width: 26 })]}>{glyph(bannerAccent, 20)}</HStack>
         {nameBlock(17)}
-        {countdownStat(28, live ? null : bannerAccent, 120)}
+        {countdownStat(28, live ? null : bannerAccent, 160)}
       </HStack>
       {bar(bannerAccent)}
     </VStack>

@@ -618,45 +618,34 @@ describe("New Live Activity kinds (#966)", () => {
       );
     }
 
-    it.each(states)("%s: one line that scales rather than truncating", (_name, layout) => {
+    it.each(states)("%s: `2h 34m` / `34m 21s` units, never H:MM:SS", (_name, layout) => {
       const found = countdowns(layout);
       expect(found.length).toBeGreaterThan(0);
       for (const [slot, text] of found) {
-        const modifiers = text.props?.modifiers as { modifier: string; args: unknown[] }[];
-        expect(modifiers.map((m) => m.modifier)).toEqual(
-          expect.arrayContaining(["lineLimit", "minimumScaleFactor"]),
-        );
-        // A timer takes every point it is offered: the compact views give it
-        // the exact width of its value, within the slot's cap.
-        if (slot === "compactTrailing" || slot === "minimal") {
-          const frame = modifiers.find((m) => m.modifier === "frame")?.args[0] as {
-            width: number;
-          };
-          expect(frame.width).toBeLessThanOrEqual(slot === "minimal" ? 36 : 56);
-        }
+        // The minimal view keeps the leading unit (`2h`, `34m`); expanded and
+        // Lock Screen heroes add the seconds from an hour (`2h 34m 21s`).
+        const expected =
+          slot === "minimal" ? ["short"] : slot === "compactTrailing" ? ["full"] : ["full", "long"];
+        expect(expected).toContain(text.props?.compactCountdown);
+        expect(typeof text.props?.compactCountdownSize).toBe("number");
+        const modifiers = (text.props?.modifiers as { modifier: string }[]).map((m) => m.modifier);
+        expect(modifiers).toEqual(expect.arrayContaining(["lineLimit", "minimumScaleFactor"]));
       }
     });
 
-    it("sizes the compact timer to its value: wider from an hour, never past the cap", () => {
-      const width = (startsAt: string) => {
-        const layout = AttendeeActivityLayout(attendee({ startsAt }), environment);
-        const [, text] = countdowns(layout).find(([slot]) => slot === "compactTrailing")!;
-        const modifiers = text.props?.modifiers as { modifier: string; args: unknown[] }[];
-        return (modifiers.find((m) => m.modifier === "frame")?.args[0] as { width: number }).width;
-      };
-      // NOW is 12:00. `9:59`, `40:21`, `2:41:20`, `12:59:59` at 12 pt.
-      expect(width("2026-02-20T12:09:59.000Z")).toBe(29);
-      expect(width("2026-02-20T12:40:21.000Z")).toBe(37);
-      expect(width("2026-02-20T14:41:20.000Z")).toBe(49);
-      expect(width("2026-02-21T00:59:59.000Z")).toBe(56);
-      expect(width("2026-02-25T00:00:00.000Z")).toBe(56);
+    it("shows the seconds in the expanded and Lock Screen heroes", () => {
+      const layout = DeadlineActivityLayout(deadline(), environment);
+      for (const slot of ["expandedTrailing", "banner"]) {
+        const forms = nodes(layout[slot], "Text").map((text) => text.props?.compactCountdown);
+        expect(forms).toContain("long");
+      }
     });
 
-    it("puts the countdown in the compact trailing and minimal views", () => {
-      const slots = countdowns(DeadlineActivityLayout(deadline(), environment)).map(([s]) => s);
-      expect(slots).toEqual(
-        expect.arrayContaining(["compactTrailing", "minimal", "expandedTrailing", "banner"]),
-      );
+    it("keeps the island sizes fixed: 12 pt compact, 10 pt minimal", () => {
+      const layout = DeadlineActivityLayout(deadline(), environment);
+      const size = (slot: string) => nodes(layout[slot], "Text")[0]?.props?.compactCountdownSize;
+      expect(size("compactTrailing")).toBe(12);
+      expect(size("minimal")).toBe(10);
     });
 
     it.each([

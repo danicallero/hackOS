@@ -1,0 +1,170 @@
+diff --git a/build/swift-ui/Text/index.d.ts b/build/swift-ui/Text/index.d.ts
+index a8843b7..d7c394d 100644
+--- a/build/swift-ui/Text/index.d.ts
++++ b/build/swift-ui/Text/index.d.ts
+@@ -41,6 +41,17 @@ export interface TextProps extends CommonViewModifierProps {
+      * @platform tvos 16.0+
+      */
+     pauseTime?: Date;
++    /**
++     * Renders a counting-down `timerInterval` as `2h 34m` from one hour and
++     * `34m 21s` below it (`"short"`: `2h` / `34m`; `"long"`: `2h 34m 21s`),
++     * ticking live, never
++     * `H:MM:SS`. Sized by `compactCountdownSize` (default 12) and
++     * `compactCountdownWeight` (`"semibold"` default, or `"bold"`).
++     * (hackOS patch, #966)
++     */
++    compactCountdown?: 'full' | 'short' | 'long';
++    compactCountdownSize?: number;
++    compactCountdownWeight?: 'semibold' | 'bold';
+ }
+ export declare function Text(props: TextProps): import("react/jsx-runtime").JSX.Element | null;
+ //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
+diff --git a/ios/TextView.swift b/ios/TextView.swift
+index 7dfe0a9..0e8ec04 100644
+--- a/ios/TextView.swift
++++ b/ios/TextView.swift
+@@ -25,6 +25,10 @@ public final class TextViewProps: UIBaseViewProps {
+   @Field public var timerInterval: ClosedRangeDate?
+   @Field public var countsDown: Bool?
+   @Field public var pauseTime: Date?
++  // hackOS patch (#966): a counting-down timer as `2h 34m` / `34m 21s`.
++  @Field public var compactCountdown: String?
++  @Field public var compactCountdownSize: Double?
++  @Field public var compactCountdownWeight: String?
+ 
+   // Override default frame alignment for text views
+   override var defaultFrameAlignment: Alignment { .leading }
+@@ -37,9 +41,21 @@ public struct TextView: ExpoSwiftUI.View {
+     self.props = props
+   }
+ 
++  @ViewBuilder
+   public var body: some View {
+-    buildText(applyModifiers: false)
++    if let form = props.compactCountdown, props.countsDown ?? true, let end = props.timerInterval?.upper {
++      CompactCountdown(
++        end: end,
++        short: form == "short",
++        long: form == "long",
++        size: props.compactCountdownSize ?? 12,
++        bold: props.compactCountdownWeight == "bold"
++      )
+       .applyModifiers(props.modifiers, appContext: props.appContext, globalEventDispatcher: props.globalEventDispatcher)
++    } else {
++      buildText(applyModifiers: false)
++        .applyModifiers(props.modifiers, appContext: props.appContext, globalEventDispatcher: props.globalEventDispatcher)
++    }
+   }
+ 
+   internal func buildText(applyModifiers: Bool = true) -> Text {
+@@ -73,3 +89,76 @@ public struct TextView: ExpoSwiftUI.View {
+     return result
+   }
+ }
++
++/// hackOS patch (#966): a live countdown with units, `2h 34m` from one hour
++/// and `34m 21s` below it (`short`: `2h` / `34m`; `long`: `2h 34m 21s` from
++/// one hour), never `H:MM:SS`.
++///
++/// Only timer text ticks inside a Live Activity (unit format styles render
++/// once and freeze, custom ones are redacted), so each number is one field
++/// cut out of a live `Text(timerInterval:)`: the timer (`H:MM:SS` or `M:SS`)
++/// is trailing-aligned in a wide frame, shifted right by the width of what
++/// follows the field and clipped to the field's digits. Monospaced digits
++/// keep every field at a fixed offset from the trailing edge. The units are
++/// static text. The form is chosen when the Live Activity renders; the API
++/// updates it when the hour boundary passes.
++struct CompactCountdown: View {
++  let end: Date
++  let short: Bool
++  var long = false
++  let size: Double
++  let bold: Bool
++
++  private var uiFont: UIFont {
++    UIFont.monospacedDigitSystemFont(ofSize: size, weight: bold ? .bold : .semibold)
++  }
++  private var font: Font { .system(size: size, weight: bold ? .bold : .semibold) }
++  private func advance(_ s: String) -> CGFloat {
++    (s as NSString).size(withAttributes: [.font: uiFont]).width
++  }
++  private var digit: CGFloat { advance("0000000000") / 10 }
++  private var colon: CGFloat { advance(":") }
++
++  /// One field of the live timer: `skip` is the width that follows it.
++  private func field(skip: CGFloat, digits: Int) -> some View {
++    Text(timerInterval: Date.now...max(Date.now, end), countsDown: true)
++      .font(font)
++      .monospacedDigit()
++      .lineLimit(1)
++      .multilineTextAlignment(.trailing)
++      .frame(width: 400, alignment: .trailing)
++      .offset(x: skip)
++      .frame(width: ceil(CGFloat(digits) * digit), alignment: .trailing)
++      .clipped()
++  }
++
++  private func unit(_ text: String) -> some View {
++    Text(text).font(font).lineLimit(1).fixedSize()
++  }
++
++  var body: some View {
++    let left = end.timeIntervalSinceNow
++    HStack(spacing: 0) {
++      if left >= 3600 {
++        field(skip: 2 * colon + 4 * digit, digits: left >= 36000 ? 2 : 1)
++        unit(short ? "h" : "h ")
++        if !short {
++          field(skip: colon + 2 * digit, digits: 2)
++          unit(long ? "m " : "m")
++          if long {
++            field(skip: 0, digits: 2)
++            unit("s")
++          }
++        }
++      } else {
++        field(skip: colon + 2 * digit, digits: left >= 600 ? 2 : 1)
++        unit(short ? "m" : "m ")
++        if !short {
++          field(skip: 0, digits: 2)
++          unit("s")
++        }
++      }
++    }
++    .fixedSize()
++  }
++}
+diff --git a/src/swift-ui/Text/index.tsx b/src/swift-ui/Text/index.tsx
+index 2351ee8..15dcbc4 100644
+--- a/src/swift-ui/Text/index.tsx
++++ b/src/swift-ui/Text/index.tsx
+@@ -52,6 +52,17 @@ export interface TextProps extends CommonViewModifierProps {
+    * @platform tvos 16.0+
+    */
+   pauseTime?: Date;
++  /**
++   * Renders a counting-down `timerInterval` as `2h 34m` from one hour and
++   * `34m 21s` below it (`"short"`: `2h` / `34m`; `"long"`: `2h 34m 21s`),
++   * ticking live, never
++   * `H:MM:SS`. Sized by `compactCountdownSize` (default 12) and
++   * `compactCountdownWeight` (`"semibold"` default, or `"bold"`).
++   * (hackOS patch, #966)
++   */
++  compactCountdown?: 'full' | 'short' | 'long';
++  compactCountdownSize?: number;
++  compactCountdownWeight?: 'semibold' | 'bold';
+ }
+ 
+ type NativeTextProps = CommonViewModifierProps & {
+@@ -63,6 +74,9 @@ type NativeTextProps = CommonViewModifierProps & {
+   timerInterval?: { lower: number; upper: number };
+   countsDown?: boolean;
+   pauseTime?: number;
++  compactCountdown?: 'full' | 'short' | 'long';
++  compactCountdownSize?: number;
++  compactCountdownWeight?: 'semibold' | 'bold';
+ };
+ 
+ const TextNativeView: React.ComponentType<NativeTextProps> = requireNativeView(

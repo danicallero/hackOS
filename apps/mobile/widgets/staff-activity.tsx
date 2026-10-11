@@ -13,7 +13,6 @@ import {
   lineLimit,
   minimumScaleFactor,
   monospacedDigit,
-  multilineTextAlignment,
   padding,
   scaleEffect,
   tint,
@@ -50,12 +49,16 @@ export const StaffActivityLayout = (
     view: Parameters<typeof HStack>[0]["children"],
     width: number,
     alignment: "leading" | "center" | "trailing",
+    // The outer end's inset, so the content's margin to the pill's rounded
+    // end matches its top and bottom margins (HIG: concentric margins).
+    inset: { leading?: number; trailing?: number } = {},
   ) => (
     <HStack
       spacing={0}
       modifiers={[
         frame({ maxWidth: width, alignment }),
         fixedSize({ horizontal: true }),
+        padding(inset),
         minimumScaleFactor(0.6),
         dynamicTypeSize("large"),
       ]}
@@ -69,8 +72,8 @@ export const StaffActivityLayout = (
     layout: L,
   ) => ({
     ...layout,
-    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing"),
-    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading"),
+    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing", { leading: 3 }),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { trailing: 7 }),
     minimal: islandSlot(layout.minimal as never, 36, "center"),
   });
   // APNs delivers props straight to this layout, so a newer, incompatible
@@ -146,35 +149,25 @@ export const StaffActivityLayout = (
   const share = accredited ? Math.min(1, scannedCount / accredited) : null;
   const scanned = String(scannedCount);
 
-  // A timer takes every point it is offered, so the compact views get the
-  // exact width of its current value: `2:41:20` from an hour, `40:21` below
-  // it (12 pt semibold monospaced digits: ⅔ em a digit, ⅓ em a colon). The
-  // value only gets shorter, so the width never needs to grow.
-  const timerWidth = (target: number, size: number, max: number) => {
-    const left = Math.max(0, target - Date.now()) / 1000;
-    const hours = Math.floor(left / 3600);
-    const digits = hours > 0 ? String(hours).length + 4 : Math.floor(left / 60) >= 10 ? 4 : 3;
-    const colons = hours > 0 ? 2 : 1;
-    return Math.min(max, Math.ceil((size * (digits * 2 + colons)) / 3) + 1);
-  };
-
-  // The live timer to the start (`2:41:20`, `40:21`), on one line that scales
-  // down rather than truncating. `fit` sizes it to its value (compact views).
-  const countdown = (size: number, color: string | null, width: number | null, fit = false) => (
+  // `2h 34m` from an hour, `34m 21s` below it, ticking live and never
+  // H:MM:SS (`compactCountdown`); `short` keeps the leading unit (`2h`,
+  // `34m`), `long` adds the seconds from an hour (`2h 34m 21s`). It is as wide as its value; a width cap scales it down rather
+  // than truncating.
+  const countdown = (
+    size: number,
+    color: string | null,
+    width: number | null,
+    form: "full" | "short" | "long" = "full",
+  ) => (
     <Text
       timerInterval={{ lower, upper: startsAt }}
       countsDown
+      compactCountdown={form}
+      compactCountdownSize={size}
       modifiers={[
-        font({ size, weight: "semibold" }),
-        monospacedDigit(),
         lineLimit(1),
         minimumScaleFactor(0.6),
-        multilineTextAlignment(fit ? "leading" : "trailing"),
-        ...(fit && width
-          ? [frame({ width: timerWidth(startsAt.getTime(), size, width), alignment: "leading" })]
-          : width
-            ? [frame({ maxWidth: width, alignment: "trailing" })]
-            : []),
+        ...(width ? [frame({ maxWidth: width, alignment: "trailing" })] : []),
         ...colorMods(color),
       ]}
     />
@@ -192,12 +185,11 @@ export const StaffActivityLayout = (
         <Text
           timerInterval={{ lower: startsAt, upper: endsAt }}
           countsDown
+          compactCountdown="full"
+          compactCountdownSize={size}
           modifiers={[
-            font({ size, weight: "semibold" }),
-            monospacedDigit(),
             lineLimit(1),
             minimumScaleFactor(0.6),
-            multilineTextAlignment("trailing"),
             frame({ width, alignment: "trailing" }),
           ]}
         />
@@ -310,9 +302,7 @@ export const StaffActivityLayout = (
   // Compact: the symbol a little larger than the text so both sides weigh
   // about the same; the countdown is as wide as its value, snug to the camera.
   const compactLeading = <Image systemName={symbol} color={islandAccent} size={15} />;
-  const compactTrailing = live
-    ? ratio(15, 11, null, "semibold")
-    : countdown(12, islandAccent, 56, true);
+  const compactTrailing = live ? ratio(15, 11, null, "semibold") : countdown(12, islandAccent, 56);
 
   // Minimal: the scanned share as a ring, else the count or the countdown.
   const minimal =
@@ -329,7 +319,7 @@ export const StaffActivityLayout = (
     ) : live ? (
       counter(scanned, 13, islandAccent, "semibold")
     ) : (
-      countdown(10, islandAccent, 36, true)
+      countdown(10, islandAccent, 36, "short")
     );
 
   const expandedLeading = (
@@ -345,7 +335,7 @@ export const StaffActivityLayout = (
           <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
             {labels.startsIn}
           </Text>
-          {countdown(28, islandAccent, 120)}
+          {countdown(28, islandAccent, 160, "long")}
         </VStack>
       )}
     </VStack>
@@ -413,7 +403,7 @@ export const StaffActivityLayout = (
       {nameBlock(17)}
       <VStack alignment="trailing" spacing={0}>
         {caption(labels.startsIn)}
-        {countdown(28, bannerAccent, 120)}
+        {countdown(28, bannerAccent, 160, "long")}
       </VStack>
     </HStack>
   );
