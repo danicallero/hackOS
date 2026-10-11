@@ -7,6 +7,7 @@ import {
   foregroundStyle,
   frame,
   lineLimit,
+  minimumScaleFactor,
   monospacedDigit,
   padding,
 } from "@expo/ui/swift-ui/modifiers";
@@ -24,8 +25,39 @@ import { createLiveActivity, type LiveActivityEnvironment } from "expo-widgets";
  * colour lives inside it. Colours mirror `theme/colors.ts` `accent`
  * (systemBlue light/dark); the extension cannot import the app's tokens.
  */
-const QueueActivityLayout = (props: QueueLiveProps, environment: LiveActivityEnvironment) => {
+export const QueueActivityLayout = (
+  props: QueueLiveProps,
+  environment: LiveActivityEnvironment,
+) => {
   "widget";
+  // APNs delivers props straight to this layout, so a newer, incompatible
+  // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the title
+  // instead of rendering half-understood fields.
+  if (props.v !== 1 || !props.labels) {
+    const title = (
+      <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
+        {typeof props.challengeTitle === "string" ? props.challengeTitle : ""}
+      </Text>
+    );
+    const symbol = <Image systemName="person.3.sequence.fill" color="#0A84FF" size={15} />;
+    return {
+      banner: (
+        <VStack
+          alignment="leading"
+          modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
+        >
+          {title}
+        </VStack>
+      ),
+      bannerSmall: <VStack modifiers={[padding({ all: 8 })]}>{title}</VStack>,
+      compactLeading: symbol,
+      compactTrailing: <Text> </Text>,
+      minimal: symbol,
+      expandedLeading: symbol,
+      expandedTrailing: <Text> </Text>,
+      expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
+    };
+  }
   // Dynamic Island is always dark; the Lock Screen follows the system scheme.
   // Always-On (reduced luminance) drops the accent and lets the system dim.
   const islandAccent = "#0A84FF";
@@ -100,18 +132,21 @@ const QueueActivityLayout = (props: QueueLiveProps, environment: LiveActivityEnv
       ]}
     >
       {called || inRoom
-        ? room.slice(0, 1).toUpperCase()
+        ? room.slice(0, 1).toUpperCase() || "–"
         : eta === null
           ? (position ?? "–")
           : `${eta}m`}
     </Text>
   );
 
+  // Numbers keep their full width (`fixedSize`); a room name can be long, so
+  // it shrinks and then truncates instead of pushing out of the island.
   const metric = (
     label: string,
     value: string,
     align: "leading" | "trailing",
     color: string | null,
+    numeric = true,
   ) => (
     <VStack alignment={align} spacing={0}>
       <Text
@@ -129,7 +164,7 @@ const QueueActivityLayout = (props: QueueLiveProps, environment: LiveActivityEnv
           contentTransition("numericText", { countsDown: true }),
           lineLimit(1),
           allowsTightening(true),
-          fixedSize({ horizontal: true }),
+          ...(numeric ? [fixedSize({ horizontal: true })] : [minimumScaleFactor(0.6)]),
           ...accentMods(color),
         ]}
       >
@@ -156,7 +191,13 @@ const QueueActivityLayout = (props: QueueLiveProps, environment: LiveActivityEnv
   const expandedTrailing = (
     <VStack modifiers={[padding({ trailing: 8, top: 4 })]}>
       {called || inRoom
-        ? metric(called ? props.labels.goTo : props.labels.inRoom, room, "trailing", islandAccent)
+        ? metric(
+            called ? props.labels.goTo : props.labels.inRoom,
+            room || "–",
+            "trailing",
+            islandAccent,
+            false,
+          )
         : metric(props.labels.wait, etaLong, "trailing", islandAccent)}
     </VStack>
   );
@@ -207,6 +248,7 @@ const QueueActivityLayout = (props: QueueLiveProps, environment: LiveActivityEnv
             modifiers={[
               font({ size: 28, weight: "bold" }),
               lineLimit(1),
+              minimumScaleFactor(0.7),
               ...accentMods(bannerAccent),
             ]}
           >

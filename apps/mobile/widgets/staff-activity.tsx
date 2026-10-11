@@ -24,8 +24,39 @@ import { createLiveActivity, type LiveActivityEnvironment } from "expo-widgets";
  * the layout needs is declared inside the function or arrives in props.
  * Countdowns are SwiftUI timer texts, so they tick without any update.
  */
-const StaffActivityLayout = (props: ActivityLiveProps, environment: LiveActivityEnvironment) => {
+export const StaffActivityLayout = (
+  props: ActivityLiveProps,
+  environment: LiveActivityEnvironment,
+) => {
   "widget";
+  // APNs delivers props straight to this layout, so a newer, incompatible
+  // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the name
+  // instead of rendering half-understood fields (or an invalid timer range).
+  if (props.v !== 1 || !props.labels) {
+    const title = (
+      <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
+        {typeof props.name === "string" ? props.name : ""}
+      </Text>
+    );
+    const symbol = <Image systemName="person.3.fill" color="#0A84FF" size={15} />;
+    return {
+      banner: (
+        <VStack
+          alignment="leading"
+          modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
+        >
+          {title}
+        </VStack>
+      ),
+      bannerSmall: <VStack modifiers={[padding({ all: 8 })]}>{title}</VStack>,
+      compactLeading: symbol,
+      compactTrailing: <Text> </Text>,
+      minimal: symbol,
+      expandedLeading: symbol,
+      expandedTrailing: <Text> </Text>,
+      expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
+    };
+  }
   const islandAccent = "#0A84FF";
   const bannerAccent = environment.isLuminanceReduced
     ? null
@@ -45,7 +76,14 @@ const StaffActivityLayout = (props: ActivityLiveProps, environment: LiveActivity
   const startsAt = new Date(props.startsAt);
   const endsAt = new Date(props.endsAt);
   // A ClosedRange needs lower <= upper; the server timestamp can trail the start.
-  const lower = new Date(Math.min(Date.parse(props.updatedAt), startsAt.getTime()));
+  // Any earlier lower bound renders the same remaining time; an unparsable
+  // timestamp must not produce an invalid range.
+  const updatedAt = Date.parse(props.updatedAt);
+  const lower = new Date(
+    Number.isFinite(updatedAt)
+      ? Math.min(updatedAt, startsAt.getTime())
+      : startsAt.getTime() - 3_600_000,
+  );
   const count = String(props.scanned);
 
   const countdown = (size: number, color: string | null, width: number | null) => (

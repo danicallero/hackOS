@@ -1511,7 +1511,10 @@ names must equal `LIVE_ACTIVITY_WIDGET_NAMES`. Following Apple's HIG:
 Numbers use `monospacedDigit` with numeric content transitions; countdowns
 are SwiftUI timer texts, so they tick without updates. Taps open the props'
 `url` (passed as the activity's static URL); the API must send the same
-`attributes.url` on push-to-start.
+`attributes.url` on push-to-start. APNs props reach the layouts directly, so a
+props version other than `1` renders only the title. Room names shrink, then
+truncate; only numbers keep their full width. `test/live-activity-widgets.test.tsx`
+evaluates the serialized layouts with nothing but `@expo/ui/swift-ui` in scope.
 
 **Surfaces (Android).** `lib/live-activities/model.ts` `toLiveUpdateSpec`
 maps the same props to `modules/live-updates` promoted ongoing notifications:
