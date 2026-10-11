@@ -869,26 +869,41 @@ and the native view exists; every other case keeps the paths above unchanged
 
 - **Children**: one React child, the avatar circle (photo, initials or live
   content), laid out once by Yoga at the expanded frame. The native view draws
-  it with its own canvas transform, so layout never changes during the morph.
+  it with its own canvas transform (a uniform scale) clipped to the animated
+  circle, so photo and initials alike shrink as one picture and layout never
+  changes during the morph. `ExpoView` is a `LinearLayout`, so the view
+  overrides `onMeasure`/`onLayout` to never lay the child out itself (an
+  Android layout pass would otherwise stack and stretch it).
 - **Static props** (dp, view-local): `holeX`, `holeY`, `holeDiameter`.
 - **Animated props** from `useAnimatedProps` on the UI thread, no per-frame JS:
-  `avatarX`, `avatarY`, `avatarDiameter`, `imageAlpha`, `blurRadius`,
-  `bridgeReach`, `drip`, all computed by `profileGooeyFrame` in
+  `avatarX`, `avatarY`, `avatarDiameter`, `darkness`, `blurRadius`,
+  `bridgeReach`, `pill`, `drip`, all computed by `profileGooeyFrame` in
   `lib/profile-avatar-collapse.ts` from `profileGooeyProgress(scrollOffset, 120)`.
-- **Timeline**: until progress 0.65 (`PROFILE_GOOEY_SHRINK_END`) the photo
-  stays a circle, shrinks uniformly to the lens diameter minus 1 dp per side
-  (`profileGooeyEndDiameter` / `profileGooeyEndScale`) and glides (ease-out) to a
-  point centred under the lens, a gap of 0.9 lens diameters below it. Then it
-  rises to the lens centre (`profileGooeyEndOffset` is the full travel); a black
-  metaball neck (two-circle tangent construction, spread growing from 0 so it
-  emerges from a point) joins it to the lens, a short drip bulges from the lens
-  and retracts, and the photo fades (0.7 → 0.95) to its black silhouette. The
-  photo blurs progressively from 0.3 to 0.8 (up to 6 dp). Everything is a pure
-  function of progress, so scrolling back retraces it exactly.
-- **Rendering**: Android 12+ (API 31) records the black ink (lens, avatar, neck,
-  drip) into a reused `RenderNode`, blurs it with `RenderEffect` and composites it
-  through an alpha-threshold color matrix (liquid edges); the photo goes through
-  a second reused node with the progressive blur. Android 9–11 draws the same
+- **Timeline** (`profileGooeyFrame`, a pure function of progress and the
+  scroll distance, so scrolling back retraces it exactly). The avatar never
+  stops rising: its bottom edge moves up with the content, keeping its gap to
+  the text below, or along an ease-in path to the lens centre when that is
+  higher, so it is in the lens by progress 1. It stays a circle and shrinks
+  uniformly towards its top to the lens diameter minus 1 dp per side by 0.55
+  (`PROFILE_GOOEY_SHRINK_END`; `profileGooeyEndDiameter` /
+  `profileGooeyEndScale`), gliding to the lens column; until then it also
+  keeps at least the staging gap (0.9 lens diameters) below the lens, so a
+  photo never touches it. It blurs (up to 6 dp) and darkens (`darkness`) from
+  55% of the shrink (`PROFILE_GOOEY_FADE_START`), is 85% black once fully
+  shrunk, and turns fully black exactly at the staging gap, where the black
+  metaball neck starts (two-circle tangent construction, emerging from a
+  point), fattens into a straight-sided pill (`pill`) that shortens into the
+  lens, and a short drip bulges from the lens and retracts.
+- **Rendering**: while `darkness < 1` the avatar is drawn clipped to its
+  circle (which also trims the blur, so nothing bleeds outside it) over a black
+  underlay that fills the rim the blur leaves translucent, with a black wash of
+  `darkness` on top; above it the ink draws only the lens. Once fully black,
+  the ink's own avatar disc, neck, pill and drip replace it at the same size
+  and position, so there is never a second blob or a coloured halo.
+  Android 12+ (API 31) records the ink into a reused `RenderNode`, blurs it with
+  `RenderEffect` and composites it through an alpha-threshold color matrix
+  (liquid edges); the avatar goes through a second reused node with the
+  progressive blur. Android 9–11 draws the same
   shapes directly, anti-aliased, without blur. No bitmaps are allocated; both
   nodes drop their display lists and effects on detach. The canvas is the
   avatar/lens bounds plus a 24 dp margin (`PROFILE_GOOEY_MARGIN`).
@@ -907,13 +922,16 @@ black status-bar target.
 **Testing on a Pixel (9a or any hole-punch device)**: build a development
 client (`pnpm --filter @hackos/mobile android`, or an EAS development build;
 a JS-only reload is not enough the first time), sign in, open Others ›
-Account and scroll up slowly: the photo should stay round, shrink until it
-matches the lens just below it, then rise with a liquid neck and disappear
-into the lens. Scroll back down slowly to watch the droplet come out and
+Account and scroll up slowly: the photo (or initials) should stay a perfect
+circle, shrink as one picture while darkening and blurring into a black disc
+the size of the lens just below it, then rise with a liquid neck and disappear
+into the lens, with no second blob or coloured halo at any point. Scroll back down slowly to watch the droplet come out and
 regrow; release mid-way to check it snaps to a rest; repeat quickly with a
 fling. Repeat on a person profile (Diary › a person). Check dark mode, with
-Developer options › Display cutout set to "Punch hole" on an emulator or a
-device without one, and with Remove animations on (plain circle collapse, no
+a centred punch hole on an emulator (the system image's Pixel overlays carry
+the real cutout: `adb shell cmd overlay enable
+com.android.internal.emulation.pixel_9` plus `adb shell wm size 1080x2424`;
+the emulator reports the hole to apps but does not paint it black), and with Remove animations on (plain circle collapse, no
 neck). On a device without a cutout the plain collapse must be unchanged.
 The CV route needs the session, so it is
 downloaded with the session cookie (`expo-file-system`) into the cache and shown

@@ -510,7 +510,12 @@ export function ProfileAvatarCollapse({
   };
   const gooeyProps = useAnimatedProps(
     () =>
-      profileGooeyFrame(gooeyStart, gooeyHole, profileGooeyProgress(scrollOffset.value, distance)),
+      profileGooeyFrame(
+        gooeyStart,
+        gooeyHole,
+        profileGooeyProgress(scrollOffset.value, distance),
+        distance,
+      ),
     [gooeyStart, gooeyHole, distance],
   );
   const maskProps = useAnimatedProps(() => {

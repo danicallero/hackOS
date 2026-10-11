@@ -17,9 +17,10 @@ class ProfileGooeyModule : Module() {
       Prop("avatarX") { view: ProfileGooeyView, value: Float -> view.avatarX = value; view.invalidate() }
       Prop("avatarY") { view: ProfileGooeyView, value: Float -> view.avatarY = value; view.invalidate() }
       Prop("avatarDiameter") { view: ProfileGooeyView, value: Float -> view.avatarDiameter = value; view.invalidate() }
-      Prop("imageAlpha") { view: ProfileGooeyView, value: Float -> view.imageAlpha = value; view.invalidate() }
+      Prop("darkness") { view: ProfileGooeyView, value: Float -> view.darkness = value; view.invalidate() }
       Prop("blurRadius") { view: ProfileGooeyView, value: Float -> view.blurRadius = value; view.invalidate() }
       Prop("bridgeReach") { view: ProfileGooeyView, value: Float -> view.bridgeReach = value; view.invalidate() }
+      Prop("pill") { view: ProfileGooeyView, value: Float -> view.pill = value; view.invalidate() }
       Prop("drip") { view: ProfileGooeyView, value: Float -> view.drip = value; view.invalidate() }
     }
   }
