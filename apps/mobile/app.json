@@ -69,6 +69,14 @@
       ],
       "expo-sqlite",
       "expo-sharing",
+      [
+        "expo-widgets",
+        {
+          "groupIdentifier": "group.com.hackudc.os",
+          "enablePushNotifications": true,
+          "frequentUpdates": true
+        }
+      ],
       "./plugins/withStripDsymPaths.js"
     ],
     "experiments": {
