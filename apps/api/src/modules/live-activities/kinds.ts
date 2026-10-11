@@ -10,6 +10,7 @@ import {
 import type { Language } from "@hackos/shared/locale";
 import { config } from "../../config.js";
 import { pool, type Queryable } from "../../db/pool.js";
+import { scannerSubjectScope } from "../logistics/review-fixture-scope.js";
 
 /**
  * Loaders and builders for the attendee, deadline and accreditation Live
@@ -257,31 +258,27 @@ export interface AccreditationCounts {
 /**
  * The scanner home tile's totals (`scannerRoleStats` in logistics/stats.ts):
  * eligible = active accounts with event access, accredited = active accounts
- * with a badge; plus badges assigned in the last 10 minutes. Split by the H54
- * fixture marker so each operator side counts only its own subjects.
+ * with a badge; plus badges assigned in the last 10 minutes. Keyed by the
+ * operator's H54 side, over the same people the scanner roster (the people
+ * finder) shows that side (`scannerSubjectScope`). Also the staff activity
+ * denominator (`accredited`, H24/H25).
  */
 export async function loadAccreditationCounts(
   db: Queryable = pool,
 ): Promise<Map<boolean, AccreditationCounts>> {
-  const { rows } = await db.query<{
-    is_test_account: boolean;
-    eligible: number;
-    accredited: number;
-    recent: number;
-  }>(
-    `SELECT u.is_test_account,
-            count(*) FILTER (WHERE EXISTS (SELECT 1 FROM user_event_access uea WHERE uea.user_id = u.id))::int AS eligible,
-            count(*) FILTER (WHERE u.badge_id IS NOT NULL)::int AS accredited,
-            count(*) FILTER (WHERE u.badge_id IS NOT NULL
-                               AND u.badge_assigned_at >= now() - make_interval(mins => $1))::int AS recent
-       FROM users u
-      WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
-      GROUP BY u.is_test_account`,
-    [ACCREDITATION_RECENT_MINUTES],
-  );
   const result = new Map<boolean, AccreditationCounts>();
-  for (const row of rows) {
-    result.set(row.is_test_account, {
+  for (const fixtureOnly of [false, true]) {
+    const { rows } = await db.query<{ eligible: number; accredited: number; recent: number }>(
+      `SELECT count(*) FILTER (WHERE EXISTS (SELECT 1 FROM user_event_access uea WHERE uea.user_id = u.id))::int AS eligible,
+              count(*) FILTER (WHERE u.badge_id IS NOT NULL)::int AS accredited,
+              count(*) FILTER (WHERE u.badge_id IS NOT NULL
+                                 AND u.badge_assigned_at >= now() - make_interval(mins => $1))::int AS recent
+         FROM users u
+        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL${scannerSubjectScope(fixtureOnly)}`,
+      [ACCREDITATION_RECENT_MINUTES],
+    );
+    const row = rows[0]!;
+    result.set(fixtureOnly, {
       eligible: row.eligible,
       accredited: row.accredited,
       recentArrivals: row.recent,

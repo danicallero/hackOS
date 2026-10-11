@@ -147,7 +147,7 @@ export const AccreditationActivityLayout = (
           background(color ?? "#3A3A3C", { shape: "containerRelativeShape" }),
         ]}
       >
-        <Image systemName="qrcode.viewfinder" color="#FFFFFF" size={14} />
+        <Image systemName="wave.3.right" color="#FFFFFF" size={14} />
         <Text
           modifiers={[
             font({ size: 15, weight: "semibold" }),

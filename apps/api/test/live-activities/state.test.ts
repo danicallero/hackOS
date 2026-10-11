@@ -1,7 +1,12 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { createUser, createUserWithCapabilities, truncateAll } from "../helpers.js";
+import {
+  createUser,
+  createUserWithCapabilities,
+  grantAttendeeRole,
+  truncateAll,
+} from "../helpers.js";
 import {
   allowLiveActivities,
   callEntry,
@@ -228,7 +233,7 @@ describe("myLiveActivities", () => {
     });
   });
 
-  it("breaks a live meal down into inside and still-to-eat; other activities get none", async () => {
+  it("counts live activities out of accredited people, split by the fixture marker", async () => {
     const myLiveActivities = mine;
     const { pool } = await import("../../src/db/pool.js");
     const staffId = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
@@ -240,40 +245,41 @@ describe("myLiveActivities", () => {
       requiresScan: true,
       startsInMinutes: -5,
     });
-    const [a, b, c, gone] = [
+    const [a, b, c, fixture, fixtureStaff, leaving] = [
       await createUser(),
       await createUser(),
       await createUser(),
+      await createUser(),
+      await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]),
       await createUser(),
     ];
-    for (const id of [a, b, c, gone]) {
-      await pool.query(
-        `INSERT INTO time_logs (user_id, kind, scanned_at) VALUES ($1, 'in', now() - interval '1 hour')`,
-        [id],
-      );
-    }
-    await pool.query(
-      `INSERT INTO time_logs (user_id, kind, scanned_at) VALUES ($1, 'out', now() - interval '5 minutes')`,
-      [gone],
-    );
+    await pool.query(`UPDATE users SET badge_id = 'B-' || id WHERE id = ANY($1::int[])`, [
+      [a, b, c, fixture, fixtureStaff, leaving],
+    ]);
+    await grantAttendeeRole(fixture, "participant");
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = ANY($1::int[])`, [
+      [fixture, fixtureStaff],
+    ]);
+    await pool.query(`UPDATE users SET account_state = 'removal_pending' WHERE id = $1`, [leaving]);
     await logScan(lunch, a);
     await logScan(lunch, a);
     await logScan(workshop, b);
 
     const result = await myLiveActivities(staffId, "en");
     const byId = new Map(result.activities.map((x) => [x.activityId, x]));
-    // `gone` checked out: 3 inside (a, b, c), a already ate, b and c still to eat.
-    expect(byId.get(lunch)).toMatchObject({ scanned: 1, inside: 3, remaining: 2 });
-    expect(byId.get(dinner)).toMatchObject({ phase: "upcoming", inside: null, remaining: null });
-    expect(byId.get(workshop)).toMatchObject({ inside: null, remaining: null });
-    expect(byId.get(lunch)?.labels.remaining).toBe("Still to eat");
+    // Active real accounts with a badge: a, b, c (not the fixture, not pending removal).
+    expect(byId.get(lunch)).toMatchObject({ scanned: 1, accredited: 3 });
+    expect(byId.get(workshop)).toMatchObject({ scanned: 1, accredited: 3 });
+    // Upcoming keeps its countdown and carries no denominator.
+    expect(byId.get(dinner)).toMatchObject({ phase: "upcoming", accredited: null });
 
-    // A synthetic operator never sees the real-venue breakdown.
+    // A synthetic operator counts what its people finder lists: the synthetic
+    // participant fixtures only, not other synthetic accounts (H54).
     await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [staffId]);
     const synthetic = await myLiveActivities(staffId, "en");
     expect(synthetic.activities.find((x) => x.activityId === lunch)).toMatchObject({
-      inside: null,
-      remaining: null,
+      scanned: 0,
+      accredited: 1,
     });
   });
 
