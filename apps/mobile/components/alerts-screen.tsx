@@ -1,5 +1,5 @@
 import { EVENTS } from "@hackos/shared/events";
-import { useNavigation, useScrollToTop } from "expo-router";
+import { useNavigation, useRouter, useScrollToTop } from "expo-router";
 import Stack from "expo-router/stack";
 import {
   memo,
@@ -104,6 +104,15 @@ function NotificationScrollGestureBoundary({
 }
 
 /**
+ * Where the alerts gear lands: Account, with the Notifications row
+ * highlighted once so people learn where preferences live (H51).
+ */
+export const ALERTS_PREFERENCES_HREF = {
+  pathname: "/(tabs)/others/account",
+  params: { highlight: "notifications" },
+} as const;
+
+/**
  * H51: the inbox viewer, presented as a sheet from the Schedule bell. Read,
  * unread and delete live on each row; every notification setting is in
  * Account → Notifications.
@@ -112,6 +121,7 @@ export default function AlertsScreen() {
   useColorScheme();
   const { t } = useLocale();
   const navigation = useNavigation();
+  const router = useRouter();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const glassAvailable = isRealLiquidGlassAvailable();
   const filterIcon = unreadOnly
@@ -122,36 +132,62 @@ export default function AlertsScreen() {
     void haptic("selection");
     setUnreadOnly((current) => !current);
   }, []);
+  const close = useCallback(() => router.dismiss(), [router]);
+  // Dismiss first so the Schedule stack does not keep the sheet on top.
+  const openPreferences = useCallback(() => {
+    router.dismiss();
+    router.navigate(ALERTS_PREFERENCES_HREF);
+  }, [router]);
 
   // Liquid Glass owns the toolbar grouping below; other platforms get the
-  // same toggle as a plain header button.
+  // same controls as plain header buttons.
   useLayoutEffect(() => {
     if (glassAvailable) return;
     navigation.setOptions({
+      headerLeft: () => (
+        <View style={{ flexDirection: "row" }}>
+          <LegacyHeaderIconButton icon="xmark" accessibilityLabel={t("close")} onPress={close} />
+          <LegacyHeaderIconButton
+            icon={filterIcon}
+            accessibilityLabel={t("notificationsUnreadOnly")}
+            accessibilityState={{ selected: unreadOnly }}
+            tintColor={unreadOnly ? colors.accent : colors.label}
+            onPress={toggleUnread}
+          />
+        </View>
+      ),
       headerRight: () => (
         <LegacyHeaderIconButton
-          icon={filterIcon}
-          accessibilityLabel={t("notificationsUnreadOnly")}
-          accessibilityState={{ selected: unreadOnly }}
-          tintColor={unreadOnly ? colors.accent : colors.label}
-          onPress={toggleUnread}
+          icon="gearshape"
+          accessibilityLabel={t("notificationsPreferences")}
+          onPress={openPreferences}
         />
       ),
     });
-  }, [filterIcon, glassAvailable, navigation, t, toggleUnread, unreadOnly]);
+  }, [close, filterIcon, glassAvailable, navigation, openPreferences, t, toggleUnread, unreadOnly]);
 
   return (
     <>
       {glassAvailable ? (
-        <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Button
-            icon={filterIcon}
-            accessibilityLabel={t("notificationsUnreadOnly")}
-            selected={unreadOnly}
-            tintColor={unreadOnly ? colors.accent : undefined}
-            onPress={toggleUnread}
-          />
-        </Stack.Toolbar>
+        <>
+          <Stack.Toolbar placement="left">
+            <Stack.Toolbar.Button icon="xmark" accessibilityLabel={t("close")} onPress={close} />
+            <Stack.Toolbar.Button
+              icon={filterIcon}
+              accessibilityLabel={t("notificationsUnreadOnly")}
+              selected={unreadOnly}
+              tintColor={unreadOnly ? colors.accent : undefined}
+              onPress={toggleUnread}
+            />
+          </Stack.Toolbar>
+          <Stack.Toolbar placement="right">
+            <Stack.Toolbar.Button
+              icon="gearshape"
+              accessibilityLabel={t("notificationsPreferences")}
+              onPress={openPreferences}
+            />
+          </Stack.Toolbar>
+        </>
       ) : null}
       <MessagesView unreadOnly={unreadOnly} />
     </>
