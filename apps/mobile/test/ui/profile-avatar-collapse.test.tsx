@@ -176,22 +176,28 @@ describe("profile avatar snap (#935)", () => {
   const distance = PROFILE_AVATAR_COLLAPSE_DISTANCE;
 
   it("leaves offsets outside the collapse range alone", () => {
-    expect(profileAvatarSnapTarget(0, 0)).toBeNull();
-    expect(profileAvatarSnapTarget(-40, -1)).toBeNull();
-    expect(profileAvatarSnapTarget(distance, 0)).toBeNull();
-    expect(profileAvatarSnapTarget(distance + 300, 2)).toBeNull();
+    expect(profileAvatarSnapTarget(0, 0, distance)).toBeNull();
+    expect(profileAvatarSnapTarget(-40, -1, distance)).toBeNull();
+    expect(profileAvatarSnapTarget(distance, 0, distance)).toBeNull();
+    expect(profileAvatarSnapTarget(distance + 300, 2, distance)).toBeNull();
   });
 
   it("settles a slow release at the nearer end of the range", () => {
-    expect(profileAvatarSnapTarget(10, 0)).toBe(0);
-    expect(profileAvatarSnapTarget(distance / 2 - 1, 0.1)).toBe(0);
-    expect(profileAvatarSnapTarget(distance / 2, 0)).toBe(distance);
-    expect(profileAvatarSnapTarget(distance - 10, -0.1)).toBe(distance);
+    expect(profileAvatarSnapTarget(10, 0, distance)).toBe(0);
+    expect(profileAvatarSnapTarget(distance / 2 - 1, 0.1, distance)).toBe(0);
+    expect(profileAvatarSnapTarget(distance / 2, 0, distance)).toBe(distance);
+    expect(profileAvatarSnapTarget(distance - 10, -0.1, distance)).toBe(distance);
   });
 
   it("follows the flick direction over the halfway threshold", () => {
-    expect(profileAvatarSnapTarget(10, 0.6)).toBe(distance);
-    expect(profileAvatarSnapTarget(distance - 10, -0.6)).toBe(0);
+    expect(profileAvatarSnapTarget(10, 0.6, distance)).toBe(distance);
+    expect(profileAvatarSnapTarget(distance - 10, -0.6, distance)).toBe(0);
+  });
+
+  it("takes the distance explicitly, with no worklet default parameter", () => {
+    // A worklet's default-parameter expression is not captured on the UI thread.
+    expect(profileAvatarSnapTarget.length).toBe(3);
+    expect(profileAvatarSnapTarget.toString()).not.toContain("PROFILE_AVATAR_COLLAPSE_DISTANCE");
   });
 
   it("honours a custom collapse distance", () => {

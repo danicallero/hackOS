@@ -72,10 +72,18 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
     [reduceMotion, scrollRef],
   );
 
+  // Plain locals so the scroll worklets capture them explicitly.
+  const collapseDistance = PROFILE_AVATAR_COLLAPSE_DISTANCE;
+  const restVelocity = PROFILE_AVATAR_SNAP_REST_VELOCITY;
+
   const settle = (contentOffset: number, velocity: number) => {
     "worklet";
     snapArmed.value = false;
-    const target = profileAvatarSnapTarget(contentOffset - restingOffset.value, velocity);
+    const target = profileAvatarSnapTarget(
+      contentOffset - restingOffset.value,
+      velocity,
+      collapseDistance,
+    );
     if (target !== null) runOnJS(scrollToOffset)(restingOffset.value + target);
   };
 
@@ -96,7 +104,7 @@ export function useProfileAvatarCollapse(screenScrollRef?: RefObject<ScrollView 
         const velocity = event.velocity?.y ?? 0;
         releaseVelocity.value = velocity;
         // A moving release decelerates first; its momentum end decides.
-        if (Math.abs(velocity) >= PROFILE_AVATAR_SNAP_REST_VELOCITY) return;
+        if (Math.abs(velocity) >= restVelocity) return;
         settle(event.contentOffset.y, velocity);
       },
       onMomentumEnd: (event) => {
