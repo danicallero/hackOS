@@ -1,5 +1,6 @@
 import { Stack } from "expo-router/stack";
 import { useLocale } from "@/lib/i18n";
+import { nativeStackScreenOptions } from "@/lib/navigation";
 
 /**
  * Gives the Schedule tab its own native stack so `index.tsx` can drive a real
@@ -10,7 +11,7 @@ import { useLocale } from "@/lib/i18n";
 export default function ScheduleLayout() {
   const { t } = useLocale();
   return (
-    <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
+    <Stack screenOptions={nativeStackScreenOptions}>
       <Stack.Screen name="index" />
       <Stack.Screen
         name="alerts"

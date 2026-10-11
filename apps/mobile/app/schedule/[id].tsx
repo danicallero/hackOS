@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
+import { HeaderBackButton } from "@/components/header-back-button";
 import { EmptyState, LegacyHeaderIconButton } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import {
@@ -54,6 +55,8 @@ const sectionHeaderStyle = {
 export default function ScheduleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  // Decided at mount, like the person profile (H59).
+  const [coldLink] = useState(() => !router.canGoBack());
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const insets = useSafeAreaInsets();
@@ -215,17 +218,13 @@ export default function ScheduleDetailScreen() {
             // the activity name alongside the explicit back and reminder items
             // and applies its own single-line tail ellipsis when collapsed.
             title: item?.title ?? t("scheduleDetails"),
-            // The iOS native back item can become an empty glass control on
-            // this root-level detail route (H59). Keep the action explicit so
-            // it remains visible and also works when the route was deep-linked.
-            headerBackVisible: false,
-            headerLeft: () => (
-              <LegacyHeaderIconButton
-                accessibilityLabel={t("back")}
-                icon="chevron.left"
-                onPress={() => safeBack(router, "/(tabs)/schedule")}
-              />
-            ),
+            // The native back item is a glass circle while the root Stack
+            // keeps its minimal display mode. A cold deep link has nothing to
+            // pop, so it gets an equivalent explicit back action (H59).
+            headerBackVisible: !coldLink,
+            headerLeft: coldLink
+              ? () => <HeaderBackButton onPress={() => safeBack(router, "/(tabs)/schedule")} />
+              : undefined,
             headerRight:
               item && reminderOn !== null
                 ? () => (
