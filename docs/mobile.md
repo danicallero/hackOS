@@ -504,7 +504,7 @@ distributed to other Expo Router apps without importing hackOS code.
   demand. A row swipes left to delete (after native confirmation) and right to
   mark read/unread (`POST /api/me/notifications/:id/unread`). The sheet header
   has an inline centered title (20pt bold) on the screen background with no
-  hairline, close (X) alone on the left and the unread-only eye filter next
+  hairline, close (X) alone on the left and the unread-only envelope-badge filter next
   to the gear on the right (`Stack.Toolbar` on Liquid Glass,
   `headerLeft`/`headerRight` elsewhere). Settings are not in the sheet: the
   gear dismisses it and opens `others/account?highlight=notifications`, which

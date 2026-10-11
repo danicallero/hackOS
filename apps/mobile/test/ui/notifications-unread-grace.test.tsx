@@ -233,7 +233,7 @@ describe("unread-only grace period (H489)", () => {
 });
 
 describe("alerts sheet header (H51)", () => {
-  it("puts the eye filter beside the gear and sends the gear to Account → Notifications", async () => {
+  it("puts the envelope filter beside the gear and sends the gear to Account → Notifications", async () => {
     await renderMobile(<NotificationsScreen />);
     expect(headerButtons("headerLeft").map((button) => button.props.accessibilityLabel)).toEqual([
       "Close",
@@ -242,7 +242,7 @@ describe("alerts sheet header (H51)", () => {
       "Unread only",
       "Preferences",
     ]);
-    expect(headerButton("headerRight", "Unread only").props.icon).toBe("eye");
+    expect(headerButton("headerRight", "Unread only").props.icon).toBe("envelope.badge");
 
     headerButton("headerLeft", "Close").props.onPress();
     expect(mockRouter.dismiss).toHaveBeenCalledTimes(1);

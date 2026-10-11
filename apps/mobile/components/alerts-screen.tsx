@@ -124,7 +124,7 @@ export default function AlertsScreen() {
   const router = useRouter();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const glassAvailable = isRealLiquidGlassAvailable();
-  const filterIcon = unreadOnly ? "eye.fill" : "eye";
+  const filterIcon = unreadOnly ? "envelope.badge.fill" : "envelope.badge";
 
   const toggleUnread = useCallback(() => {
     void haptic("selection");
