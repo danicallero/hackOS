@@ -99,7 +99,10 @@ function deferred<T>() {
 function load() {
   let sync!: Sync;
   let api!: { apiFetch: jest.Mock; ApiError: new (message: string, status: number) => Error };
-  let host!: { surfaces: unknown[]; liveActivityHost: { dismissEnded: jest.Mock } };
+  let host!: {
+    surfaces: unknown[];
+    liveActivityHost: { dismissEnded: jest.Mock; update: jest.Mock };
+  };
   let events!: typeof import("@/lib/sign-out-events");
   jest.isolateModules(() => {
     sync = require("./sync");
@@ -113,6 +116,7 @@ function load() {
     ApiError: api.ApiError,
     surfaces: host.surfaces,
     dismissEnded: host.liveActivityHost.dismissEnded,
+    update: host.liveActivityHost.update,
     events,
   };
 }
@@ -192,6 +196,23 @@ describe("Live Activity sync (#966)", () => {
     await first;
 
     expect(surfaces).toHaveLength(0);
+  });
+
+  it("re-applies a running activity when only its rank changes", async () => {
+    const { sync, apiFetch, update } = load();
+    apiFetch.mockResolvedValue(undefined);
+    await sync.registerLiveActivityDevice("en");
+
+    apiFetch.mockResolvedValueOnce(response(queueProps({ rank: 1 })));
+    await sync.reconcileLiveActivities();
+    update.mockClear();
+
+    // The higher-ranked activity ended: the host must receive the new rank
+    // (and with it the new relevance score) although nothing else changed.
+    apiFetch.mockResolvedValueOnce(response(queueProps({ rank: 0 })));
+    await sync.reconcileLiveActivities();
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][1].props).toMatchObject({ rank: 0 });
   });
 
   it("retries a failed device registration on the next reconcile", async () => {

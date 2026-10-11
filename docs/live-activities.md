@@ -271,8 +271,24 @@ device keeps at most `maxConcurrent` of them:
   stays desired, so its dismissal is kept.
 - `rank` (0 = most important) goes into every props object and the Android
   message (`hackosLiveUpdate.rank`, for the notification sort key). iOS gets
-  `relevance-score = 100 − 10 × rank`, so the Dynamic Island shows the top
+  `relevance-score = 100 − 10 × rank` (`relevanceForRank`,
+  `@hackos/shared/live-activities`), so the Dynamic Island shows the top
   one. A rank change is a visible change, so it is pushed.
+- **The app must send the same score.** ActivityKit's `relevanceScore`
+  belongs to the activity's *content*, and every update, remote or local,
+  replaces the whole content; an update without a score sets it to 0, and
+  ActivityKit shows the first-started of equal-score activities. Without a
+  score, the app's own starts and updates (every foreground reconcile, through
+  `expo-widgets`, which had no relevance parameter) reset the score to 0, so
+  the oldest activity led the island whatever the Settings order; the
+  server's hash was already current and never re-sent it. The app now passes
+  `relevanceForRank(rank)` on each local start and update (a pnpm patch of
+  `expo-widgets` adds the argument; see [mobile.md](./mobile.md)).
+- **Platform limits.** The order applies among this app's activities. Which
+  app's activity the Dynamic Island shows when several apps have one is the
+  system's choice. On Android the sort key orders the app's own
+  notifications only while their priorities match, so an alerting post may
+  sort first regardless of rank.
 - `GET /api/me/live-activities?deviceId=` applies the same cut with that
   device's sessions. Without `deviceId`, it treats the device as showing
   nothing yet.
@@ -456,6 +472,30 @@ background notification task receives it and renders it through
 
 `props` and `rank` are omitted on `end`.
 
+### Push-triggered refresh (app side)
+
+A notification push can reach the phone before the Live Activity update for
+the same change: the worker's early run follows a call by 2 s, and iOS can
+only update a push-started activity after the app has reported its token.
+The app therefore re-reads `GET /api/me/live-activities` when a queue or
+schedule notification (`isLiveActivityPushCategory`: `queue`,
+`schedule:<id>`) arrives:
+
+- Foreground (received) and tap (response): a reconcile, debounced with the
+  SSE events that the same change publishes.
+- iOS background: the notification channel sends those pushes with
+  `_contentAvailable: true` (Expo's `content-available`; ignored on Android),
+  which wakes a backgrounded app; its notification task runs the same
+  reconcile. The alert is unchanged, so this costs no extra push. iOS does not
+  wake a force-quit app and throttles background wakes; a backgrounded app can
+  update or end an activity but not start one. Those cases rely on APNs alone
+  until the next foreground reconcile.
+
+The refresh does not fight a newer APNs update: the notification is sent
+after the change it announces is committed, so the read returns at least that
+state; reads are applied in order (an older response never overwrites a
+newer one); and identical props cause no update.
+
 ## Design rationale (Apple HIG)
 
 Followed: <https://developer.apple.com/design/human-interface-guidelines/live-activities>.
@@ -597,6 +637,8 @@ and `deploy/README.md`.
   new kind's state, gates and H54 isolation.
 - `settings.test.ts`: configuration routes (access, validation, priorities,
   audit, idempotent replay).
+- `test/notifications/push.test.ts`: queue and schedule pushes are
+  `content-available`; others are not.
 - `worker.test.ts` also covers start, update and end per new kind, the
   deadline alert, throttled desk counters,
   displacement by a higher-priority kind without flapping, and ending a

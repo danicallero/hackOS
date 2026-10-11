@@ -340,6 +340,27 @@ export type LiveActivityProps =
   | AccreditationLiveProps;
 
 /**
+ * Notification push categories that announce a change a Live Activity shows:
+ * the participant's queue (H29 call and pre-call) and schedule reminders
+ * (`schedule:<id>`, H59). The API marks their iOS pushes `content-available`
+ * and the app refreshes its Live Activities when one arrives, in case the
+ * activity's own APNs update is late.
+ */
+export function isLiveActivityPushCategory(category: unknown): boolean {
+  return typeof category === "string" && (category === "queue" || category.startsWith("schedule:"));
+}
+
+/**
+ * ActivityKit relevance for a device rank (0 = most important): the
+ * highest score leads the Dynamic Island and the Lock Screen order. The API
+ * sends it as APNs `relevance-score` and the app passes it on every local
+ * start and update, which would otherwise reset it to 0.
+ */
+export function relevanceForRank(rank: number | undefined): number {
+  return Math.max(1, 100 - 10 * (rank ?? 0));
+}
+
+/**
  * Response of `GET /api/me/live-activities`: what this device should show
  * now, after kind configuration, role gating and the per-device
  * `maxConcurrent` cut. Every field added after v1 is optional for older
