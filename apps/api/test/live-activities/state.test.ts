@@ -109,6 +109,30 @@ describe("selectQueueLiveProps (H38)", () => {
     expect(props?.labels.goTo).toBe("Ve a");
   });
 
+  it("orders simultaneous calls by instant, as pg returns them (Date), not by weekday name", async () => {
+    const { selectQueueLiveProps } = await import("../../src/modules/live-activities/state.js");
+    // String(Date) starts with the weekday: "Sun Oct 11" sorts after "Mon Oct 12".
+    const props = selectQueueLiveProps(
+      [
+        status({
+          entryId: 1,
+          challengeTitle: "Later call",
+          status: "called",
+          calledAt: new Date("2026-10-12T10:00:00Z") as unknown as string,
+        }),
+        status({
+          entryId: 2,
+          challengeTitle: "Earlier call",
+          status: "called",
+          calledAt: new Date("2026-10-11T10:00:00Z") as unknown as string,
+        }),
+      ],
+      "en",
+      new Date(),
+    );
+    expect(props?.challengeTitle).toBe("Earlier call");
+  });
+
   it("returns null when nothing is live", async () => {
     const { selectQueueLiveProps } = await import("../../src/modules/live-activities/state.js");
     expect(

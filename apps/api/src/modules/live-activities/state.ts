@@ -81,6 +81,16 @@ function calledRank(status: QueueStatus): number {
 }
 
 /**
+ * `called_at` arrives from pg as a Date (typed as string upstream). Compare
+ * instants, never `String(date)` ("Sun Oct 11 …"), which orders by weekday.
+ */
+function calledAtMs(status: QueueStatus): number {
+  if (status.calledAt == null) return Number.POSITIVE_INFINITY;
+  const ms = new Date(status.calledAt as unknown as string | Date).getTime();
+  return Number.isNaN(ms) ? Number.POSITIVE_INFINITY : ms;
+}
+
+/**
  * H38: the participant's *nearest* queue, from `myQueueStatus` rows. A
  * `called`/`in_room` entry beats any waiting one; among waiting entries the
  * smallest ETA wins (then position). The room is shown only once called
@@ -98,9 +108,7 @@ export function selectQueueLiveProps(
     .filter((s) => s.status !== "waiting")
     .sort(
       (a, b) =>
-        calledRank(a) - calledRank(b) ||
-        String(a.calledAt ?? "").localeCompare(String(b.calledAt ?? "")) ||
-        a.entryId - b.entryId,
+        calledRank(a) - calledRank(b) || calledAtMs(a) - calledAtMs(b) || a.entryId - b.entryId,
     );
   const waiting = live
     .filter((s) => s.status === "waiting")
