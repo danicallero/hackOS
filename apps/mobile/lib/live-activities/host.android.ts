@@ -50,6 +50,8 @@ export const liveActivityHost: LiveActivityHost = {
     if (!available()) return;
     LiveUpdates?.dismiss(surface.id);
   },
+  // Android dismisses a notification as soon as it ends: nothing lingers.
+  dismissEnded: async () => undefined,
   pushToken: async () => null,
   onPushToken: () => undefined,
 };

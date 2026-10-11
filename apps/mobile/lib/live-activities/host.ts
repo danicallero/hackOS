@@ -8,6 +8,7 @@ export const liveActivityHost: LiveActivityHost = {
   start: async () => null,
   update: async () => undefined,
   end: async () => undefined,
+  dismissEnded: async () => undefined,
   pushToken: async () => null,
   onPushToken: () => undefined,
 };

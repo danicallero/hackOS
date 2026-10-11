@@ -14,6 +14,12 @@ import { readLiveActivityState, updateLiveActivityState } from "./store";
 type AnyInstance = LiveActivity<QueueLiveProps> | LiveActivity<ActivityLiveProps>;
 
 const instances = new Map<string, AnyInstance>();
+/**
+ * Ended with a delayed dismissal and still on the Lock Screen. ActivityKit
+ * keeps them in `Activity.activities` until dismissed, but `getInstances()`
+ * lists only active ones, so these handles are the only way to remove them.
+ */
+const lingering = new Map<string, AnyInstance>();
 /** One token subscription per activity, removed once the activity is gone. */
 const tokenListeners = new Map<string, { remove(): void }>();
 /** ActivityKit id → staff subject; push-started activities are unknown until adopted. */
@@ -103,9 +109,21 @@ export const liveActivityHost: LiveActivityHost = {
     if (!instance) return;
     forget(surface.id);
     if (surface.kind === "activity") rememberStaffSubject(surface.id, null);
-    await instance.end(
-      mode === "immediate" ? "immediate" : after(new Date(Date.now() + FINISHED_DISMISSAL_MS)),
-    );
+    if (mode === "immediate") {
+      lingering.delete(surface.id);
+      await instance.end("immediate");
+      return;
+    }
+    lingering.set(surface.id, instance);
+    await instance.end(after(new Date(Date.now() + FINISHED_DISMISSAL_MS)));
+  },
+  async dismissEnded() {
+    const ended = [...lingering.values()];
+    lingering.clear();
+    for (const instance of ended) {
+      // Already dismissed by the system or the person: nothing to remove.
+      await instance.end("immediate").catch(() => undefined);
+    }
   },
   async pushToken(id) {
     try {

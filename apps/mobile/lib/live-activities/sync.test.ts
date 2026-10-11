@@ -52,6 +52,7 @@ jest.mock("./host", () => {
         const index = surfaces.findIndex((candidate) => candidate.id === surface.id);
         if (index >= 0) surfaces.splice(index, 1);
       }),
+      dismissEnded: jest.fn(async () => undefined),
       pushToken: async () => null,
       onPushToken: () => undefined,
     },
@@ -98,7 +99,7 @@ function deferred<T>() {
 function load() {
   let sync!: Sync;
   let api!: { apiFetch: jest.Mock; ApiError: new (message: string, status: number) => Error };
-  let host!: { surfaces: unknown[] };
+  let host!: { surfaces: unknown[]; liveActivityHost: { dismissEnded: jest.Mock } };
   let events!: typeof import("@/lib/sign-out-events");
   jest.isolateModules(() => {
     sync = require("./sync");
@@ -106,7 +107,14 @@ function load() {
     host = require("./host");
     events = require("@/lib/sign-out-events");
   });
-  return { sync, apiFetch: api.apiFetch, ApiError: api.ApiError, surfaces: host.surfaces, events };
+  return {
+    sync,
+    apiFetch: api.apiFetch,
+    ApiError: api.ApiError,
+    surfaces: host.surfaces,
+    dismissEnded: host.liveActivityHost.dismissEnded,
+    events,
+  };
 }
 
 function callsTo(apiFetch: jest.Mock, path: string, method = "GET") {
@@ -141,6 +149,14 @@ describe("Live Activity sync (#966)", () => {
     put.resolve(undefined);
     await cleanup;
     expect(settled).toBe(true);
+  });
+
+  it("removes finished surfaces still on the Lock Screen at sign-out", async () => {
+    const { sync, apiFetch, dismissEnded } = load();
+    apiFetch.mockResolvedValue(undefined);
+    await sync.registerLiveActivityDevice("en");
+    await sync.signOutLiveActivities();
+    expect(dismissEnded).toHaveBeenCalledTimes(1);
   });
 
   it("does not repaint surfaces from a read that was in flight at sign-out", async () => {

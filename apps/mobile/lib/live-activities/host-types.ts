@@ -15,6 +15,12 @@ export interface LiveActivityHost {
   update(id: string, item: DesiredActivity, previousPhase: string | null): Promise<void>;
   /** `finished`: the moment passed (iOS keeps it ~15 min); `immediate`: opt-out/sign-out. */
   end(surface: RunningActivity, mode: "finished" | "immediate"): Promise<void>;
+  /**
+   * Removes surfaces this process ended as `finished` that still show their
+   * final state (iOS Lock Screen). `running()` no longer lists them, so
+   * sign-out and opt-out would otherwise leave them up to ~15 min.
+   */
+  dismissEnded(): Promise<void>;
   /** iOS per-activity APNs token; Android updates arrive as Expo data pushes instead. */
   pushToken(id: string): Promise<string | null>;
   onPushToken(id: string, listener: (token: string) => void): void;

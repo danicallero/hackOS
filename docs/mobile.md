@@ -1552,7 +1552,11 @@ then a no-op.
   minute while a counter is live. Sign-out ends every surface and sends
   `enabled: false` with the session that registered the device; `signOut()`
   revokes that session only after this cleanup settles (or after 4 s), since
-  `notifySignOut()` returns a promise for asynchronous listeners.
+  `notifySignOut()` returns a promise for asynchronous listeners. Sign-out
+  and opt-out also remove iOS activities that already ended but still show
+  their final state on the Lock Screen (`dismissEnded`), which
+  `getInstances()` no longer lists, so a previous account's "Go to Room B"
+  does not stay up for its 15-minute dismissal window.
 - `background-task.ts` — Android data pushes (`AndroidLiveUpdateMessage`) go
   through an `expo-task-manager` notification task defined in the entry file
   `index.ts` (before `expo-router/entry`), and through the foreground received

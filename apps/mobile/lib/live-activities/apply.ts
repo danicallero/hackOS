@@ -95,6 +95,9 @@ export function endAllActivities(): Promise<void> {
       for (const surface of host.running()) {
         await host.end(surface, "immediate").catch(() => undefined);
       }
+      // An earlier account's final state (e.g. "Go to Room B") must not stay
+      // on the Lock Screen after sign-out or opt-out.
+      await host.dismissEnded().catch(() => undefined);
     }
     await updateLiveActivityState((current) => ({
       ...current,
