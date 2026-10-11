@@ -766,15 +766,24 @@ header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
 no bar covers the centred avatar; Android floats its own glass back button.
 That public photo uses the same `ProfileAvatarCollapse` overlay as the signed-in
 account: Reanimated maps 120 pt of upward scroll to the shared mask and dark
-cover progress. A released drag never rests half-morphed: inside that range direction
-decides, from the last non-zero scroll delta (the release velocity only
+cover progress. An avatar that starts farther from the camera than the pose
+where Telegram's mask begins (its centre 234/300 of its size below the cutout's
+lower edge) first rides up with the content, unchanged and at the text's own
+speed, for that extra distance (`profileAvatarCarryDistance`); the in-content
+avatar stays visible through that carry and the mask takes over only as the
+morph starts, so a lower avatar (Account below the Wallet button, the person
+profile under its header) never shoots up ahead of the text. The 120 pt range
+then begins after the carry. The Android gooey view below already rises with
+the content, so it has no carry. A released drag never rests half-morphed: inside
+that range direction decides, from the last non-zero scroll delta (the release velocity only
 without one). Moving up, with the merge started, auto-collapses; moving down,
 with the droplet coming out, auto-expands; only a release with no movement
-takes the nearer rest. A moving release decides when its momentum ends, by the
+takes the nearer rest. The expanded rest is where the morph starts, and a
+release during the carry is plain scrolling and stays put. A moving release decides when its momentum ends, by the
 momentum's own direction (instant under Reduce Motion); programmatic scrolls
 are never snapped. One medium haptic marks the photo touching the camera
-cutout on the way up (morph progress 0.2, where the mask's lip joins the
-island) and the first pull out of the collapsed rest on the way down; a
+cutout on the way up (morph progress 0.2 after the carry, where the mask's
+lip joins the island) and the first pull out of the collapsed rest on the way down; a
 release never taps. Both rests are measured from the true
 top, which on iOS sits at a negative content offset under the automatic inset
 (at least the status-bar overlap, or the full native header height on a
@@ -784,7 +793,7 @@ first drag), never from y 0, which is inside the morph. Both scroll views set `s
 programmatic scroll to the raw `contentInset` (0), so a snap or jump to the
 true top landed at y 0, mid-morph. A page too short to reach the collapsed
 rest snaps expanded instead, so the person profile floors its content at the
-viewport plus the collapse distance past the true top (`contentMinHeight`):
+viewport plus the carry and collapse distance past the true top (`contentMinHeight`):
 otherwise a short profile could only ever expand. Account's tab re-press and gear scroll go to that true top,
 and on focus it moves a scroll left inside the morph (such as a remount
 restoring y 0) to the nearer rest. A native `MaskedView` clips the original cubic keyframes from
@@ -818,7 +827,12 @@ matching the Telegram path canvas, so the image, mask and backing stay on one
 centre line and end on the island centre. The Telegram blob rises and narrows
 faster than that linear frame, so while it exists the image is a square
 centred on the blob's real bounds (`profileAvatarContentFrame`), plus the neck
-above it, never exposing the backing at its top. The image never follows the
+above it, never exposing the backing at its top. The image also carries its
+own clip (`profileAvatarContentRadii`): until the neck forms (morph progress
+0.15) the mask is exactly the circle inscribed in that square, so the image is
+cut to the same circle (radius half its side, starting at the expanded size)
+and no frame shows it square while the native mask catches up; the top corners
+then straighten as the neck fills the top of the frame. The image never follows the
 linear frame: the mask reaches the island at a fixed progress whatever the
 start's distance, so on a lower avatar (the person profile under its header)
 the linear frame trails below the clip and would pull the photo off centre.

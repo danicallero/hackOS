@@ -15,7 +15,10 @@ import {
   PROFILE_GOOEY_SHRINK_END,
   pickHolePunchCutout,
   profileAvatarBlobBounds,
+  profileAvatarCarry,
+  profileAvatarCarryDistance,
   profileAvatarContentFrame,
+  profileAvatarContentRadii,
   profileAvatarCoverOpacity,
   profileAvatarMaskFrame,
   profileAvatarMinContentHeight,
@@ -236,6 +239,119 @@ describe("profile avatar collapse geometry", () => {
   });
 });
 
+/** Points along every cubic of a morph path, sampled 16 times per segment. */
+function morphPathPoints(path: string) {
+  const points: [number, number][] = [];
+  let current: [number, number] = [0, 0];
+  for (const command of path.split(/(?=[MCZ])/)) {
+    const v = command.slice(1).trim().split(/\s+/).filter(Boolean).map(Number);
+    if (command.startsWith("M")) current = [v[0], v[1]];
+    if (!command.startsWith("C")) continue;
+    for (let k = 0; k <= 16; k++) {
+      const u = k / 16;
+      const w = 1 - u;
+      const at = (a: number, b: number, c: number, d: number) =>
+        w * w * w * a + 3 * w * w * u * b + 3 * w * u * u * c + u * u * u * d;
+      points.push([at(current[0], v[0], v[2], v[4]), at(current[1], v[1], v[3], v[5])]);
+    }
+    current = [v[4], v[5]];
+  }
+  return points;
+}
+
+describe("profile avatar image clip (#935)", () => {
+  const target = resolveProfileCameraTarget({
+    height: 852,
+    platform: "ios",
+    safeAreaTop: 59,
+    screenWidth: 393,
+  });
+
+  it("is the mask's own circle, at the mask's size, from the first frame of the morph", () => {
+    for (const from of [start, { ...start, top: 180 }]) {
+      const expanded = profileAvatarContentFrame(112, from, target, 0);
+      expect(expanded).toEqual({ left: from.left, top: from.top, width: 112, height: 112 });
+      expect(profileAvatarContentRadii(expanded, 0)).toEqual({
+        borderTopLeftRadius: 56,
+        borderTopRightRadius: 56,
+        borderBottomLeftRadius: 56,
+        borderBottomRightRadius: 56,
+      });
+      for (let step = 0; step <= 30; step += 1) {
+        const progress = step / 200;
+        const image = profileAvatarContentFrame(112, from, target, progress);
+        const radius = image.width / 2;
+        // A square frame, cut to its inscribed circle on every corner.
+        expect(image.height).toBeCloseTo(image.width, 6);
+        for (const corner of Object.values(profileAvatarContentRadii(image, progress)))
+          expect(corner).toBeCloseTo(radius, 6);
+        // The mask is that same circle: same size, same centre.
+        const blob = profileAvatarBlobBounds(112, from, target, progress);
+        expect(blob?.height).toBeCloseTo(image.height, 1);
+        const cx = image.left + radius;
+        const cy = image.top + radius;
+        const distances = morphPathPoints(profileAvatarMorphPath(112, from, target, progress)).map(
+          ([x, y]) => Math.hypot(x - cx, y - cy),
+        );
+        expect(Math.max(...distances)).toBeCloseTo(radius, 1);
+      }
+    }
+  });
+
+  it("straightens only its top corners as the neck reaches for the camera", () => {
+    const image = profileAvatarContentFrame(112, start, target, 0.5);
+    const radii = profileAvatarContentRadii(image, 0.5);
+    expect(radii.borderTopLeftRadius).toBe(0);
+    expect(radii.borderTopRightRadius).toBe(0);
+    expect(radii.borderBottomLeftRadius).toBeCloseTo(Math.min(image.width, image.height) / 2, 6);
+    expect(radii.borderBottomRightRadius).toBe(radii.borderBottomLeftRadius);
+  });
+});
+
+describe("profile avatar carry before the morph (#935)", () => {
+  const target = resolveProfileCameraTarget({
+    height: 852,
+    platform: "ios",
+    safeAreaTop: 59,
+    screenWidth: 393,
+  });
+  const far = { left: 140, top: 300, width: 112, height: 112 };
+  // The Telegram mask starts with the avatar centre 234/300 of its size below
+  // the island's lower edge.
+  const morphStartY = target.top + target.height + (234 * 112) / 300;
+
+  it("rides a far avatar up to where the morph starts", () => {
+    const carry = profileAvatarCarryDistance(112, far, target);
+    expect(carry).toBeCloseTo(far.top + 56 - morphStartY, 6);
+    expect(profileAvatarCarryDistance(112, { ...far, top: morphStartY - 56 - 10 }, target)).toBe(0);
+    expect(profileAvatarCarry(-5, carry, 120)).toEqual({ shift: 0, progress: 0 });
+    expect(profileAvatarCarry(carry / 2, carry, 120)).toEqual({ shift: carry / 2, progress: 0 });
+    expect(profileAvatarCarry(carry + 60, carry, 120)).toEqual({ shift: carry, progress: 0.5 });
+    expect(profileAvatarCarry(carry + 500, carry, 120)).toEqual({ shift: carry, progress: 1 });
+  });
+
+  it("keeps pace with the text until the merge, then starts the morph without a jump", () => {
+    const carry = profileAvatarCarryDistance(112, far, target);
+    const centreAt = (offset: number) => {
+      const { shift, progress } = profileAvatarCarry(offset, carry, 120);
+      const from = { ...far, top: far.top - shift };
+      const blob = profileAvatarBlobBounds(112, from, target, progress);
+      if (!blob) throw new Error("blob ended");
+      return blob.top + blob.height / 2;
+    };
+    let previous = centreAt(0);
+    expect(previous).toBeCloseTo(far.top + 56, 6);
+    for (let offset = 1; offset <= Math.ceil(carry) + 12; offset += 1) {
+      const centre = centreAt(offset);
+      // One point per scrolled point during the carry, at most a little more
+      // as the blob starts rising into the neck.
+      if (offset <= carry) expect(previous - centre).toBeCloseTo(1, 6);
+      else expect(previous - centre).toBeLessThan(1.5);
+      previous = centre;
+    }
+  });
+});
+
 describe("profile avatar snap (#935)", () => {
   const distance = PROFILE_AVATAR_COLLAPSE_DISTANCE;
 
@@ -320,6 +436,19 @@ describe("profile avatar snap (#935)", () => {
     expect(profileAvatarSnapOffset(-98, -103, -1, distance, maxOffset)).toBe(-103);
     // Without the iOS inset (Android), the full distance.
     expect(profileAvatarMinContentHeight(800, 0, distance)).toBe(920);
+  });
+
+  it("snaps only inside the morph, after the carry", () => {
+    expect(profileAvatarSnapTarget(20, 1, 120, 40)).toBeNull();
+    expect(profileAvatarSnapTarget(40, 1, 120, 40)).toBeNull();
+    expect(profileAvatarSnapTarget(50, 1, 120, 40)).toBe(160);
+    expect(profileAvatarSnapTarget(150, -1, 120, 40)).toBe(40);
+    expect(profileAvatarSnapTarget(80, 0, 120, 40)).toBe(40);
+    expect(profileAvatarSnapTarget(120, 0, 120, 40)).toBe(160);
+    expect(profileAvatarSnapOffset(-40, -62, 1, 120, 500, 40)).toBeNull();
+    expect(profileAvatarSnapOffset(-12, -62, 1, 120, 500, 40)).toBe(98);
+    // A page too short for the collapsed rest settles where the morph starts.
+    expect(profileAvatarSnapOffset(-12, -62, 1, 120, 60, 40)).toBe(-22);
   });
 
   it("honours a custom collapse distance", () => {
@@ -523,6 +652,56 @@ describe("profile avatar placeholder", () => {
       screen.getByTestId("profile-avatar-collapse-mask", { includeHiddenElements: true }),
     ).toBeTruthy();
     expect(screen.getByText("AH", { includeHiddenElements: true })).toBeTruthy();
+  });
+
+  describe("handover after the carry", () => {
+    const controllerAt = (offset: number) =>
+      ({
+        anchorFrame: { left: 100, top: 300, width: 96, height: 96 },
+        anchorRef: { current: null },
+        carryDistance: 40,
+        hostOrigin: { x: 0, y: 0 },
+        onAnchorLayout: () => {},
+        scrollOffset: { value: offset },
+        simple: false,
+        target: island,
+      }) as unknown as ProfileAvatarCollapseController;
+    const render = async (offset: number) =>
+      renderMobile(
+        <>
+          <ProfileAvatarCollapseAnchor controller={controllerAt(offset)} size={96}>
+            <Text testID="anchor-photo">AH</Text>
+          </ProfileAvatarCollapseAnchor>
+          <ProfileAvatarCollapse
+            controller={controllerAt(offset)}
+            image={null}
+            name="Admin HackOS"
+            size={96}
+            variant="account"
+          />
+        </>,
+      );
+    const anchorOpacity = () =>
+      StyleSheet.flatten(
+        screen.getByTestId("anchor-photo", { includeHiddenElements: true }).parent?.props.style,
+      ).opacity;
+    const maskOpacity = () =>
+      StyleSheet.flatten(
+        screen.getByTestId("profile-avatar-collapse-mask", { includeHiddenElements: true }).props
+          .style,
+      ).opacity;
+
+    it("keeps the in-content avatar while it rides with the content", async () => {
+      await render(30);
+      expect(anchorOpacity()).toBe(1);
+      expect(maskOpacity()).toBe(0);
+    });
+
+    it("hands over to the mask once the morph starts", async () => {
+      await render(41);
+      expect(anchorOpacity()).toBe(0);
+      expect(maskOpacity()).toBe(1);
+    });
   });
 });
 
@@ -764,32 +943,52 @@ describe("profile avatar snap under a native header (#935)", () => {
       } as never);
       jest.advanceTimersByTime(1000);
     });
-    // The page's own content is short; the floor keeps it scrollable.
+    // The avatar sits far below the island, so it rides up with the content
+    // before the morph starts; the floor keeps the page scrollable past both.
+    const carryFor = (anchor: typeof start | null) =>
+      profileAvatarCarryDistance(
+        112,
+        anchor as typeof start,
+        resolveProfileCameraTarget({
+          height: 852,
+          platform: "ios",
+          safeAreaTop: 59,
+          screenWidth: 393,
+        }),
+      );
+    expect(result.current.carryDistance).toBeGreaterThan(30);
+    expect(result.current.carryDistance).toBeCloseTo(carryFor(result.current.anchorFrame), 6);
     const min = result.current.contentMinHeight as number;
-    expect(min).toBe(913);
+    expect(min).toBeCloseTo(913 + result.current.carryDistance, 6);
     await act(async () => {
       result.current.onContentSizeChange(393, min);
       jest.advanceTimersByTime(1000);
     });
+    const carry = result.current.carryDistance;
+    expect(carry).toBeCloseTo(carryFor(result.current.anchorFrame), 6);
     expect(result.current.restingOffset.value).toBe(-103);
 
     const handlers = result.current.onScroll as unknown as ScrollHandlers;
     const event = (y: number) => ({ contentOffset: { x: 0, y }, velocity: { x: 0, y: 0 } });
+    // A release during the carry is plain scrolling: nothing to settle.
     handlers.onBeginDrag(event(-103));
     handlers.onScroll(event(-100));
-    handlers.onScroll(event(-97));
-    handlers.onEndDrag(event(-97));
-    expect(scrollTo).toHaveBeenLastCalledWith({
-      animated: true,
-      y: -103 + PROFILE_AVATAR_COLLAPSE_DISTANCE,
-    });
+    handlers.onEndDrag(event(-100));
+    expect(scrollTo).not.toHaveBeenCalled();
+    handlers.onBeginDrag(event(-100));
+    handlers.onScroll(event(-103 + carry + 3));
+    handlers.onScroll(event(-103 + carry + 6));
+    handlers.onEndDrag(event(-103 + carry + 6));
+    const collapsed = -103 + carry + PROFILE_AVATAR_COLLAPSE_DISTANCE;
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: true, y: collapsed });
 
-    // The snap's own animation lands at the collapsed rest.
-    handlers.onScroll(event(17));
-    handlers.onBeginDrag(event(17));
-    handlers.onScroll(event(12));
-    handlers.onEndDrag(event(12));
-    expect(scrollTo).toHaveBeenLastCalledWith({ animated: true, y: -103 });
+    // The snap's own animation lands at the collapsed rest; a pull back out
+    // settles where the morph starts, the avatar whole again.
+    handlers.onScroll(event(collapsed));
+    handlers.onBeginDrag(event(collapsed));
+    handlers.onScroll(event(collapsed - 5));
+    handlers.onEndDrag(event(collapsed - 5));
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: true, y: -103 + carry });
   });
 });
 
