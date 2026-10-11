@@ -124,6 +124,11 @@ const REGISTERED_TAB_ROUTES: RouterTabRoute[] = [
   { href: "/(tabs)/others", name: "others" },
 ];
 
+/** Account owns its subpages but not the queue/diary/operations pseudo-tabs that share `/others`. */
+function isAccountPath(pathname: string): boolean {
+  return operationsSectionFromPathname(pathname) === "account";
+}
+
 export interface OpaqueRouterTabsProps {
   capabilities: string[];
   hasQueueItems: boolean;
@@ -201,6 +206,7 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
       return {
         href: definition.href,
         icon: <AccountTabAvatar name={account.name} image={accountImage} ringColor={null} />,
+        isActive: isAccountPath,
         label: t(definition.labelKey),
         name: definition.triggerName,
         selectedIcon: (
@@ -221,6 +227,7 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
           accessible={false}
         />
       ),
+      isActive: key === "account" ? isAccountPath : undefined,
       label: t(definition.labelKey),
       name: definition.triggerName,
       selectedIcon: (
