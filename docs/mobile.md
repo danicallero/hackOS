@@ -1604,6 +1604,39 @@ release bundles drop it.
   This gives Android a visible unread indicator on the Schedule header bell
   that matches iOS SF Symbol badge behavior without altering geometry. (issue #625)
 
+### Android Live Updates (#966)
+
+`modules/live-updates` (Kotlin, Android-only; `null` on iOS/web) posts the
+Android counterpart of a Live Activity (H38 queue, H25/H26 staff activity):
+one ongoing notification per `spec.id`, tagged `hackos.live-update:<id>`.
+
+| Android | Result |
+|---|---|
+| 16+ (API 36), promotion allowed | Live Update: status-bar chip (`shortCriticalText`, else the chronometer countdown), lock screen, top of the shade |
+| 16+, user revoked promotion | Same notification, not promoted; `canPostPromotedNotifications()` is false and `openPromotionSettings()` opens the per-app toggle |
+| 8–15 (API 26–35) | Plain ongoing notification with the same content, countdown and action |
+| < 8 (API 24–25) | `isSupported()` is false; `show` posts nothing |
+
+- Promotion requirements met by the poster: `POST_PROMOTED_NOTIFICATIONS`
+  (module manifest), `android.requestPromotedOngoing`, ongoing, a title,
+  `BigTextStyle` or standard style, no custom views, not colorized, and a
+  channel above `IMPORTANCE_MIN`.
+- Channels: `hackos_live_updates` (default importance, no sound/vibration)
+  for routine updates; `hackos_live_updates_alert` (high importance) only
+  when `spec.alert` is true, such as the team being called. Names are
+  localized es/gl/en in the module's string resources.
+- `countdownTo` in the past is ignored instead of showing a negative timer.
+- Taps and the single action fire `ACTION_VIEW` deep links pinned to this
+  package (`FLAG_IMMUTABLE`).
+- Without notification permission (`expo-notifications` asks for it), `show`
+  is a no-op. A user can dismiss an ongoing notification on Android 14+;
+  callers compare `activeIds()` with what they posted and do not repost it.
+- Debug builds only: `LiveUpdatesDebugReceiver` (module `src/debug`) posts
+  samples without the API, e.g.
+  `adb shell am broadcast -f 32 -p com.hackudc.os -a expo.modules.liveupdates.DEBUG_SHOW --es id queue:judging --es title Queue --es chip '#4' --es icon queue`
+  (extras: `text`, `subText`, `countdownSeconds` int, `actionLabel`,
+  `actionUrl`, `color`, `url`, `alert` bool; `DEBUG_DISMISS` with `id`).
+
 ## Other infrastructure
 
 - `lib/app-version.ts` shows the installed binary's version and a seven-character

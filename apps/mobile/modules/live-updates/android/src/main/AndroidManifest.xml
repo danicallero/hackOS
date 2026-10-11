@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- #966: Android 16 only promotes ongoing notifications to Live Updates
+       (status-bar chip, lock screen) for apps declaring this normal permission. -->
+  <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+</manifest>
