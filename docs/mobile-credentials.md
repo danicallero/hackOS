@@ -163,6 +163,33 @@ Run `eas credentials --platform ios` and configure a Push Notifications key for
 the correct Apple team. Ensure the App ID has Push Notifications enabled and
 regenerate the provisioning profile after capability changes.
 
+### iOS Live Activities widget extension (#966)
+
+`expo-widgets` (configured in `app.json`) generates a second target during
+prebuild, `ExpoWidgetsTarget`, with bundle ID
+`com.hackudc.os.ExpoWidgetsTarget` (`com.hackudc.os.debug.ExpoWidgetsTarget`
+for `APP_VARIANT=development`). It renders the queue and staff Live
+Activities. One-time Apple/EAS setup per team:
+
+1. In Certificates, Identifiers & Profiles, create the App Group
+   `group.com.hackudc.os` and enable **App Groups** (with that group) on the
+   app ID and on both widget extension IDs. The app ID also keeps Push
+   Notifications enabled; Live Activity pushes reuse that capability.
+2. Run `eas credentials --platform ios` (or let the next `eas build` do it):
+   EAS reads the `appExtensions` entry the plugin writes into
+   `extra.eas.build.experimental.ios` and creates a provisioning profile for
+   the extension as well as the app. Regenerate both profiles after any
+   capability change.
+3. The server side needs an APNs **token-auth key** (`.p8`, key ID, team ID)
+   to send ActivityKit pushes directly to APNs (Expo's push service does not
+   send `liveactivity` pushes). Store it in the deployment secret manager;
+   the variables are listed in [`live-activities.md`](./live-activities.md)
+   and [`env-vars.md`](./env-vars.md).
+
+A build without the extension profile fails at signing, not at runtime.
+Push-to-start needs iOS 17.2+; older devices still get locally started
+activities while the app is open.
+
 ### Test delivery
 
 Use a production-like signed build on a physical device (or supported modern

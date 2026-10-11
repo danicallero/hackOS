@@ -382,6 +382,8 @@
   "notificationsRequired": "Obligatorias",
   "queueCalls": "Avisos de turno",
   "notificationsAlwaysOn": "Siempre activo",
+  "liveActivities": "Actividades en directo",
+  "liveUpdates": "Actualizaciones en directo",
   "notificationsAnnouncements": "Anuncios",
   "notificationsQueueStaff": "Equipos entrando en salas",
   "notificationsQueueStaffHint": "Recibe una notificación cuando los jueces indiquen que un equipo entre en una sala.",

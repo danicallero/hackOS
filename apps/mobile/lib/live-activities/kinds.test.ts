@@ -1,0 +1,167 @@
+/**
+ * #966 (H59 attendee, H19 deadline, H22 accreditation): the newer kinds in
+ * the server's list, rank order and the per-device `maxConcurrent` limit.
+ */
+import {
+  type AccreditationLiveProps,
+  type ActivityLiveProps,
+  type AttendeeActivityLiveProps,
+  accreditationLiveLabels,
+  activityLiveLabels,
+  attendeeActivityLiveLabels,
+  type DeadlineLiveProps,
+  deadlineLiveLabels,
+  type MyLiveActivities,
+} from "@hackos/shared/live-activities";
+import { desiredActivities, nextPhaseBoundary } from "./model";
+
+const attendee = (scheduleId: number, rank?: number): AttendeeActivityLiveProps => ({
+  v: 1,
+  kind: "attendee_activity",
+  phase: "upcoming",
+  scheduleId,
+  name: "Workshop",
+  category: "workshop",
+  location: null,
+  startsAt: "2026-02-20T12:10:00.000Z",
+  endsAt: "2026-02-20T13:10:00.000Z",
+  url: `hackos://schedule/${scheduleId}`,
+  labels: attendeeActivityLiveLabels("en"),
+  ...(rank === undefined ? {} : { rank }),
+  updatedAt: "2026-02-20T12:00:00.000Z",
+});
+
+const deadline = (rank?: number): DeadlineLiveProps => ({
+  v: 1,
+  kind: "deadline",
+  phase: "open",
+  startsAt: null,
+  endsAt: "2026-02-20T14:00:00.000Z",
+  submission: null,
+  projectName: null,
+  url: "hackos://project",
+  labels: deadlineLiveLabels("en"),
+  ...(rank === undefined ? {} : { rank }),
+  updatedAt: "2026-02-20T12:00:00.000Z",
+});
+
+const accreditation = (rank?: number): AccreditationLiveProps => ({
+  v: 1,
+  kind: "accreditation",
+  phase: "live",
+  accredited: 1,
+  eligible: 2,
+  inside: null,
+  recentArrivals: 0,
+  endsAt: "2026-02-20T13:30:00.000Z",
+  scanUrl: "hackos://scan",
+  url: "hackos://scan",
+  labels: accreditationLiveLabels("en"),
+  ...(rank === undefined ? {} : { rank }),
+  updatedAt: "2026-02-20T12:00:00.000Z",
+});
+
+const staff = (rank?: number): ActivityLiveProps => ({
+  v: 1,
+  kind: "activity",
+  phase: "upcoming",
+  activityId: 7,
+  name: "Lunch",
+  category: "meal",
+  location: null,
+  startsAt: "2026-02-20T12:30:00.000Z",
+  endsAt: "2026-02-20T13:30:00.000Z",
+  scanned: 0,
+  scanUrl: "hackos://scan?activity=7",
+  url: "hackos://scan?activity=7",
+  labels: activityLiveLabels("en"),
+  ...(rank === undefined ? {} : { rank }),
+  updatedAt: "2026-02-20T12:00:00.000Z",
+});
+
+function response(overrides: Partial<MyLiveActivities>): MyLiveActivities {
+  return { judgingWindowOpen: false, queue: null, activities: [], ...overrides };
+}
+
+const keys = (list: ReturnType<typeof desiredActivities>) =>
+  list.map((item) => `${item.kind}:${item.subject}`);
+
+describe("desiredActivities: attendee, deadline and accreditation (#966)", () => {
+  it("keys each new kind by its subject", () => {
+    expect(
+      keys(
+        desiredActivities(
+          response({
+            attendeeActivities: [attendee(21)],
+            deadline: deadline(),
+            accreditation: accreditation(),
+          }),
+        ),
+      ),
+    ).toEqual([
+      "attendee_activity:schedule:21",
+      "deadline:deadline",
+      "accreditation:accreditation",
+    ]);
+  });
+
+  it("reads an older server's response, without the new fields", () => {
+    expect(desiredActivities(response({}))).toEqual([]);
+  });
+
+  it("skips a new kind from an unknown contract version", () => {
+    const future = { ...deadline(), v: 2 } as unknown as DeadlineLiveProps;
+    expect(desiredActivities(response({ deadline: future }))).toEqual([]);
+  });
+
+  it("orders by rank, the most important first, unranked last", () => {
+    const list = desiredActivities(
+      response({
+        activities: [staff(2)],
+        attendeeActivities: [attendee(21), attendee(22, 0)],
+        deadline: deadline(1),
+      }),
+    );
+    expect(keys(list)).toEqual([
+      "attendee_activity:schedule:22",
+      "deadline:deadline",
+      "activity:activity:7",
+      "attendee_activity:schedule:21",
+    ]);
+  });
+
+  it("never starts more than maxConcurrent locally, keeping the top ranks", () => {
+    const list = desiredActivities(
+      response({
+        maxConcurrent: 2,
+        activities: [staff(0)],
+        attendeeActivities: [attendee(21, 1)],
+        deadline: deadline(2),
+        accreditation: accreditation(3),
+      }),
+    );
+    expect(keys(list)).toEqual(["activity:activity:7", "attendee_activity:schedule:21"]);
+  });
+
+  it("ignores an invalid limit", () => {
+    const list = desiredActivities(
+      response({ maxConcurrent: 0, deadline: deadline(), accreditation: accreditation() }),
+    );
+    expect(list).toHaveLength(2);
+  });
+});
+
+describe("nextPhaseBoundary: new kinds", () => {
+  it("refreshes at an attendee start, the deadline and the desk's end", () => {
+    const now = Date.parse("2026-02-20T12:00:00.000Z");
+    const at = (iso: string) => Date.parse(iso);
+    const desired = desiredActivities(
+      response({ deadline: deadline(), accreditation: accreditation() }),
+    );
+    expect(nextPhaseBoundary(desired, now)).toBe(at("2026-02-20T13:30:00.000Z"));
+    const withAttendee = desiredActivities(
+      response({ attendeeActivities: [attendee(21)], deadline: deadline() }),
+    );
+    expect(nextPhaseBoundary(withAttendee, now)).toBe(at("2026-02-20T12:10:00.000Z"));
+  });
+});

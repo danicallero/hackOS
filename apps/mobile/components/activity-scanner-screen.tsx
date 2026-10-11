@@ -13,6 +13,7 @@ import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { bumpActivityScanned } from "@/lib/live-activities/sync";
 import { subscribeToManualActivityScan } from "@/lib/manual-activity-scan";
 import { useMeContext } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
@@ -133,6 +134,8 @@ export function ActivityScannerScreen() {
           wasRepeat: allowRepeat,
         });
         void haptic("light");
+        // #966: the staff Live Activity counts distinct people (first scans).
+        if (!allowRepeat) void bumpActivityScanned(activityId);
         await runSync();
         const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
         if (stored?.status === "failed") {

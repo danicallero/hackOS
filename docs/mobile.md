@@ -53,6 +53,7 @@ the hardware-free native screen suite.
   - [Scanner](#scanner)
   - [Activities](#activities)
 - [Scanner cache encryption & isolation](#scanner-cache-encryption--isolation)
+- [Live Activities and Live Updates (#966)](#live-activities-and-live-updates-966)
 - [Realtime & notifications infrastructure](#realtime--notifications-infrastructure)
 - [Other infrastructure](#other-infrastructure)
 - [UI testing](#ui-testing)
@@ -78,6 +79,7 @@ documented in full in its own section below.
 | H24 | Presence (door in/out) scanner, manual back-dated entries | [Scanner](#scanner) |
 | H25 | Meals scanner, repeat-serving confirmation | [Scanner](#scanner) |
 | H26 | Registrable-activity scanner | [Scanner](#scanner), [Activities](#activities) |
+| H38, H25/H26, H59, H19, H22 | Queue, staff-activity, attendee-activity, submission-deadline and accreditation-desk Live Activities / Live Updates (#966) | [Live Activities](#live-activities-and-live-updates-966) |
 
 ## Backend changes
 
@@ -1483,6 +1485,211 @@ physical iOS/Android and EAS verification remains a release-gate task in
   or a device wipe; central tombstones prevent permanently retired credentials
   from being accepted or re-uploaded.
 
+## Live Activities and Live Updates (#966)
+
+System surfaces for time-bound moments: the participant's nearest judging
+queue (H38); for `activity:scan` holders, an upcoming or live meal /
+scannable activity (H25/H26); a schedule item organizers opted in for its
+audience (H59); the submission deadline (H19/H20); and the accreditation desk
+during the arrival rush (H22/H24). The API computes every state, sends background
+updates (APNs ActivityKit pushes on iOS, data-only Expo pushes on Android) and
+documents the contract in [`live-activities.md`](./live-activities.md); the
+app renders the pre-localized props of `@hackos/shared/live-activities`.
+
+**Surfaces (iOS, `expo-widgets`).** `widgets/queue-activity.tsx`
+(`QueueActivity`), `widgets/staff-activity.tsx` (`StaffActivity`),
+`widgets/attendee-activity.tsx` (`AttendeeActivity`),
+`widgets/deadline-activity.tsx` (`DeadlineActivity`) and
+`widgets/accreditation-activity.tsx` (`AccreditationActivity`) are
+`'widget'` layouts serialized into the `ExpoWidgetsTarget` extension, so they
+use only `@expo/ui/swift-ui` and declare every helper and colour inside the
+function. The names must equal `LIVE_ACTIVITY_WIDGET_NAMES`. Each state
+answers one question with one hero value; everything else is secondary.
+Colours: waiting/upcoming = systemBlue, called = systemGreen (go), in room =
+neutral grey; Always-On drops the accent fills. Lock Screen colours are
+dynamic (`{ dynamic: { light, dark } }`, light green `#248A3D` for contrast)
+because the layout's `environment.colorScheme` does not reliably match the
+Lock Screen's appearance; the Dynamic Island is always dark. Following
+Apple's HIG:
+
+| Presentation | Queue | Staff activity |
+| --- | --- | --- |
+| Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: the count (still to eat for meals, else scanned) |
+| Minimal | ring of the climb to the front with the position inside; called/in room: the phase symbol | meals: ring of the served share; else the count or countdown |
+| Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: stage track, location · called count-up, challenge · +N more queues | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live meal: served / still to eat, served-share bar, inside, ends-in, **Scan**; live other: symbol / scanned, elapsed-time bar, name, ends-in, **Scan** |
+| Lock Screen | challenge … +N more queues; hero ETA (34 pt, accent) and position; called: "Go to" room (green) + location and the count-up since the call; stage track with labels | upcoming: symbol, name, time · location … starts-in countdown; live: symbol, name … ends-in; stats (served · **still to eat** · inside for meals, else scanned); bar with **Scan** in the bottom trailing corner |
+| Watch Smart Stack / CarPlay (`bannerSmall`) | challenge + `#4 · ~12 min` or the room | name + countdown or hero count, no buttons |
+
+| Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
+| --- | --- | --- | --- |
+| Compact leading / trailing | category symbol / countdown to the start (blue); live: countdown to the end | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (grey once submitted) | `person.badge.key` / accredited count |
+| Minimal | countdown; live: elapsed-time ring around the symbol | ring of the hacking window's elapsed time around the symbol (none without `startsAt`); submitted: the check | ring of accredited / eligible |
+| Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: live elapsed-time bar, "Now" + name, `hh:mm–hh:mm · place` | symbol / "Closes in" countdown (24 pt, hours long; small and grey once submitted); bottom: window bar, title, project, status | Accredited `412 /600` / Last 10 min `+23`; bottom: share bar, Inside 380, closing time, **Scan** |
+| Lock Screen | symbol, ("Now"), name, time · place … countdown hero; live adds the elapsed-time bar | symbol + title; hero "Closes in" countdown (34 pt) with project and status opposite; window bar. Closing: red. Submitted: green "Submitted" hero, the time left small, no bar | symbol + title … closing time; Accredited (hero) · Last 10 min · Inside; share bar with **Scan** in the bottom trailing corner |
+| Watch / CarPlay | name + countdown, or "Now" + time left | title + countdown ("Not submitted" while closing) or "Submitted" | title + `412 /600` |
+
+The attendee activity has no buttons (the whole surface opens the schedule
+item). The deadline shows a status only when it is known: `submitted` is a
+green check, a `draft` reads `labels.notSubmitted` (amber, red while closing)
+and `null` (not in hackOS yet) shows nothing. The desk's end time is a clock
+symbol and the time, because the contract has no label for it.
+
+**Queue stage track.** Three nodes (In line → Called → In room) and two
+segments; completed parts take the phase colour and the current node is
+larger with a halo. Waiting is the long part of the journey, so the first
+segment takes two thirds of the width: with no GeometryReader (and
+`containerRelativeFrame` needing iOS 17), the row is built from three equally
+flexible units, the first segment being two ProgressViews overlapped by 4 pt
+and filled half by half. While waiting it fills with
+`(startPosition − position) / startPosition` (#1 of 4 → 0.75; empty on the
+first sighting or without `startPosition`). The node labels repeat the same
+units so each sits under its node. Meals use `(inside − remaining) / inside`
+(no bar when nobody is inside); other live activities show elapsed time with
+a `ProgressView` timer between `startsAt` and `endsAt`.
+
+**Margins and shapes.** The Lock Screen uses one 14 pt margin on every edge
+and stays within the 160 pt height (the live header is a single line for
+that reason). The only filled control, **Scan**, sits in the bottom trailing
+corner with a `containerRelativeShape` background, so it is concentric with
+the Live Activity's (or the island's) corner. There are no tiles or cards
+behind symbols. Fields and labels added after v1 (`calledAt`,
+`startPosition`, `inside`, `remaining`, `labels.estimating` …) are optional:
+an absent one hides its element; the widget never falls back to hardcoded
+copy.
+
+Numbers use `monospacedDigit` with numeric content transitions; countdowns,
+the count-up since the call and the elapsed-time bar are SwiftUI timers, so
+they tick without updates. Taps open the props' `url` (passed as the
+activity's static URL); the API must send the same `attributes.url` on
+push-to-start. APNs props reach the layouts directly, so a props version
+other than `1` renders only the title. Room and activity names truncate;
+only numbers keep their full width. `test/live-activity-widgets.test.tsx`
+evaluates the serialized layouts with nothing but `@expo/ui/swift-ui` in
+scope and covers the track fill, the meal breakdown, the old-server
+(v1 labels) fallbacks and, for the newer kinds, every phase, missing labels,
+the deadline's unknown status and the desk's missing estimate.
+
+**Surfaces (Android).** `lib/live-activities/model.ts` `toLiveUpdateSpec`
+maps the same props to one `modules/live-updates` spec that carries both
+Android renderings (see Android Live Updates below for the hybrid): the
+promoted Live Update's title/text/chip/track and the custom card's layout.
+Each state has one hero, mirroring the iOS widgets; a label missing from an
+older server's props is omitted, never replaced with English. A kind this
+build does not know maps to `null` and is not posted. The props' `rank` (or
+the data push's, when the props carry none) becomes the notification's sort
+key, so the most important surface sorts first; `desiredActivities` keeps the
+device within `maxConcurrent` on both platforms.
+
+| State | Chip (≤ 7 chars) | Promoted: title / text · header | Card: lead · trail, track |
+| --- | --- | --- | --- |
+| Queue waiting | `#4·12m`; `#4` when the ETA is unknown or both overflow | **~12 min** · #4 (unknown: **Estimating…**) / +N more queues · challenge | Wait ~12 min (blue) · Position #4; stage track |
+| Queue called | room (truncated) | Go to **Room B** / location · "Called" + count-up from `calledAt`; heads-up only on the transition | Go to Room B (green) · Called + count-up; location; stage track |
+| Queue in room | room | In room · **Room B** / location · challenge | In room · Room B (grey); stage track at the end |
+| Staff upcoming | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown | Starts in + countdown (blue); time · location |
+| Staff live meal (`inside`, `remaining`) | `remaining` | **168** still to eat / 142 served · 310 inside · name · location | Served · **Still to eat** (blue) · Inside; track + **Scan**; "Ends in" countdown |
+| Staff live, other | `scanned` | **142** scanned / name · location | Scanned (blue); location; elapsed-time track + **Scan**; "Ends in" countdown |
+| Attendee upcoming (H59) | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown; category glyph | Starts in + countdown (blue); time · location |
+| Attendee live | countdown to `endsAt` | **Now** · name / time · location · "Ends in" + countdown; elapsed-time track | Now · name; Ends in + countdown (blue); time · location; elapsed-time track |
+| Deadline open (H19) | countdown to `endsAt` | project (else the title) / status · "Closes in" + countdown; hourglass, blue; hacking-window track (none without `startsAt`) | Closes in + countdown (blue) · project over its status (amber "Not submitted", green "Submitted", none when unknown); window track |
+| Deadline closing | countdown | the same in red (`exclamationmark` glyph); heads-up only on the transition into `closing` | the same in red |
+| Deadline submitted | countdown (time left) | Submitted / project · "Closes in" + countdown; check, green; no track | Submitted (green) under the project · Closes in + a small countdown |
+| Accreditation (H22) | accredited count | **412**/600 accredited / +23 last 10 min · 380 inside · title; accredited-share track; **Scan** | Accredited `412/600` (blue) · Last 10 min · Inside; share track + **Scan** |
+
+**Tracks.** Like the iOS bars: each stage fills in its colour up to the
+current value and the rest of it stays grey, stages separated by the segment
+gaps, with a round tracker (white disc, glyph in the phase colour) at the
+current value (`trackSegments`). The queue has two stages,
+In line and Called, the first two thirds of the width as on iOS, filled in
+the phase colour (blue waiting, green called, grey in the room); the tracker sits at `(startPosition − position) / startPosition` of the
+first stage while waiting (#1 of 4 → 0.75; at the start on the first
+sighting or without `startPosition`), at the boundary once called and at the
+end in the room, with the door as the end icon. Meals track the served share
+`(inside − remaining) / inside` (none when nobody is inside); other live
+activities and live attendee items the time elapsed between start and end,
+the deadline the hacking window's elapsed time (in its phase colour), and the
+desk the accredited share `accredited / eligible`, all as of the post.
+
+**Orchestration (`lib/live-activities/`).**
+
+- `store.ts` — the install id (`deviceId`, created once in SecureStore), the
+  opt-out flag and the reconcile memory, shared with Android's headless task.
+- `sync.ts` — `PUT /api/me/live-activities/device` after sign-in, on language
+  change and when iOS rotates the push-to-start token (iOS 17.2+); on Android
+  it sends the Expo push token instead (permission is still prompted by
+  `lib/push.ts`). `reconcileLiveActivities` reads `GET /api/me/live-activities`
+  (with `?deviceId=`, so the server applies this device's `maxConcurrent`
+  cut and rank hysteresis) and applies it; every running iOS activity, including ones APNs started,
+  reports its per-activity token through `PUT …/sessions`. A failed device
+  registration (offline sign-in, opt-out) is retried before the next
+  reconcile. A read that was in flight across sign-out/sign-in, or that a
+  newer read overtook, is discarded instead of applied. A 404 (an API without
+  the module) silences the orchestration until the next sign-in or language
+  change.
+- `model.ts` `desiredActivities` — reads every kind (the newer fields are
+  optional for older servers), orders by `rank` (0 first, unranked last) and
+  never keeps more than `maxConcurrent` even if the server sent more.
+  `planReconcile` — one surface per (kind, subject): start missing
+  ones (the queue only while `judgingWindowOpen`), update changed props
+  (ignoring `updatedAt`), end duplicates and dropped subjects (iOS keeps the
+  final state 15 minutes). A dismissed surface is not restarted until its
+  phase changes (called, live), and `DELETE …/sessions` with the dismissed
+  phase stops remote restarts. On iOS, a surface that vanished while the
+  server still lists it counts as dismissed. On Android only the
+  notification's delete intent counts (see Android Live Updates below): one
+  that vanished for another reason (force-stop, reboot) is simply posted
+  again. Unreported dismissals stay in `store.ts` (`unreportedDismissals`)
+  until the API accepts the `DELETE`, so one recorded headlessly or offline
+  is reported on a later foreground sync. Android also remembers the rendering the
+  surfaces were posted with (`renderMode`: promoted or card); when it changes,
+  for example after the person turns Live updates back on, every surface is
+  posted again so it becomes a promoted Live Update without waiting for a
+  state change. iOS cannot
+  read a push-started activity's props, so an unidentified `StaffActivity` or
+  `AttendeeActivity` is adopted by an unmatched subject of its kind and
+  immediately updated (`host.ios.ts` remembers id → subject; the queue,
+  deadline and desk have a single subject each).
+- `use-live-activities.ts` (mounted in `app/_layout.tsx`) reconciles on sign-in,
+  foreground, the personal queue events, the next start/end boundary (staff
+  and attendee activities, the deadline, the desk window) and every minute
+  while a staff counter or the accreditation desk is live. Sign-out ends every surface and sends
+  `enabled: false` with the session that registered the device; `signOut()`
+  revokes that session only after this cleanup settles (or after 4 s), since
+  `notifySignOut()` returns a promise for asynchronous listeners. Sign-out
+  and opt-out also remove iOS activities that already ended but still show
+  their final state on the Lock Screen (`dismissEnded`), which
+  `getInstances()` no longer lists, so a previous account's "Go to Room B"
+  does not stay up for its 15-minute dismissal window.
+- `background-task.ts` — Android data pushes (`AndroidLiveUpdateMessage`) go
+  through an `expo-task-manager` notification task defined in the entry file
+  `index.ts` (before `expo-router/entry`), and through the foreground received
+  listener; both render through the same `applyAndroidLiveUpdate`.
+- The activity scanner bumps the live counter right after a first-time scan.
+- Web is a no-op (`host.ts`).
+
+**Deep links.** `hackos://queue` resolves to the participant queue tab.
+`hackos://scan?activity=<id>` (activity tap and Scan) is rewritten by
+`app/+native-intent.tsx` to `/activities/<id>`, the activity scanner bound to
+that activity, so the camera starts without a chooser (R008).
+`hackos://schedule/<id>` (attendee activity) opens `app/schedule/[id].tsx`
+and `hackos://scan` (accreditation tap and Scan) the scanner tab, both
+unchanged. The app has no project screen, so `hackos://project` (deadline) is
+mapped to `/queue`, the participant's My queue tab, which lists the team's
+projects; the deadline goes to `queue:status` holders, who always have it.
+
+**Opt-out.** Notifications settings has a Live Activities (iOS) / Live
+updates (Android) switch: off ends every surface immediately and registers the
+device with `enabled: false`.
+
+**Development samples.** Debug builds only: opening
+`hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-submitted|accreditation|all|end>`
+(for example `xcrun simctl openurl booted …`) renders sample states without a
+backend: waiting #4 of a start of 9 with a 12 min ETA, the same with an
+unknown ETA, called 2 minutes ago, in room, an upcoming meal, a live meal
+(142 served, 310 inside, 168 still to eat), a live non-meal activity, an
+upcoming and a running workshop, the deadline open with a draft or an
+unknown status, closing and submitted, and the desk at 412 of 600. The handler is required behind `__DEV__` in `+native-intent.tsx`, so
+release bundles drop it.
+
 ## Realtime & notifications infrastructure
 
 - `lib/push.ts` — best-effort Expo push token registration, called once per
@@ -1521,6 +1728,112 @@ physical iOS/Android and EAS verification remains a release-gate task in
   it maps to `notifications_none`/`notifications` with an overlaid accent badge dot.
   This gives Android a visible unread indicator on the Schedule header bell
   that matches iOS SF Symbol badge behavior without altering geometry. (issue #625)
+
+### Android Live Updates (#966)
+
+`modules/live-updates` (Kotlin, Android-only; `null` on iOS/web) posts the
+Android counterpart of a Live Activity (H38 queue, H25/H26 staff activity,
+H59 attendee activity, H19 deadline, H22 accreditation desk):
+one ongoing notification per `spec.id`, tagged `hackos.live-update:<id>`.
+
+**Hybrid, and why.** Android 16 only promotes a notification to a Live
+Update (status-bar chip, lock screen, top of the shade) when it uses a
+standard, BigText, Call, Progress or Metric style, is ongoing, has a title,
+is not colorized and has **no custom RemoteViews**. An iOS-like layout needs
+custom views, so the poster picks one of two renderings per post
+(`LiveUpdatePoster.choosePath`, unit tested in `src/test`):
+
+| Device | Rendering |
+| --- | --- |
+| Android 16+ (API 36), `canPostPromotedNotifications()` and `hasPromotableCharacteristics()` | **Promoted Live Update** (default): hero datum as title with the number in bold, round badge as large icon (white glyph on the phase colour), segmented `ProgressStyle` track, chip text, single Scan action |
+| Android 16+ with promotion revoked (user/OEM) or a build the system would not promote; Android 8–15 (API 26–35) | **Custom card**: `DecoratedCustomViewStyle` with collapsed and expanded layouts (`res/layout/hackos_live_update_card_*.xml`): header, 34 sp metrics (one in the phase colour), meal stats row, the same track drawn as a bitmap with stage labels, a capsule Scan button inside the card, chronometers for countdowns/count-ups |
+| < 8 (API 24–25) | `isSupported()` is false; `show` posts nothing |
+
+**Lock screen (verified on the Android 16 emulator).** A promoted Live Update
+always shows as a full card on the lock screen (title, text, track, action),
+even after the person has seen it in the shade. A non-promoted notification
+is shown with its collapsed layout (`hackos_live_update_card_small`: header,
+hero value, trailing value; the chevron expands it). With Android 16's
+compact lock-screen notifications (`lock_screen_notification_minimalism`, on
+by default when unset), a non-promoted notification the person has already
+seen (opened the shade, or its heads-up such as "called") moves into the
+icon shelf under the clock. An app cannot override that user setting, which
+is one more reason the promoted path is the default and the card only the
+fallback.
+
+**Actions.** Card path: Scan is only the filled accent pill inside the
+expanded layout, trailing the bar on one row; no system action is added, so
+no text-button row duplicates it (the collapsed card has no button). Promoted
+path: SystemUI draws the single action as a text button under the content.
+Promoted notifications cannot be colorized, and Android 16 strips
+colour/background spans from action titles and does not draw action icons
+(tested), so a filled pill beside the track is impossible there; the label
+is bold, the only styling that survives. The same kind and phase therefore
+always looks the same within a path; the two looks differ only between the
+promoted and the card path.
+
+The card is never chosen on a device that can promote; each post logs
+`path`, `canPostPromoted`, `promotable` and the read-back
+`FLAG_PROMOTED_ONGOING` under the `LiveUpdates` tag (the read-back can lag on
+an id's first post).
+
+- Built with `NotificationCompat` (androidx.core 1.17: `ProgressStyle`,
+  `setShortCriticalText`, `setRequestPromotedOngoing`). `MetricStyle` is
+  Android 17-era and absent from compileSdk 36, so it is not used.
+- Colours: blue (waiting, upcoming, live, deadline open), green (called,
+  submitted), grey (in room), red (deadline closing), amber (a draft's "Not
+  submitted" on the card), a lighter grey for the unfilled rest of a track. Text colours are resources with
+  `values-night` variants, resolved by SystemUI (`RemoteViews.setColor` on
+  API 31+), so the card follows the shade's light/dark mode; bitmaps (badge,
+  tracker, card track) use the mode at post time.
+- Small icon: the kind's monochrome glyph (`people`, `door`, `meal`, `mic`,
+  `star`, `calendar`, `flag`, `sparkles` for schedule categories, `hourglass`
+  / `alert` / `check` for the deadline, `badge` for the desk; `scan` for the
+  action). Android 16 shows the app icon in the
+  notification header regardless; the glyph appears in the chip and the
+  status bar.
+- Chip and `when`: the chip shows `shortCriticalText` whenever it is set,
+  even with a running chronometer, so the called state counts up in the
+  header while the chip keeps the room. `countdownTo` (future) counts down,
+  `countUpFrom` counts up, anything else hides `when` (live staff updates),
+  so a count is never displaced. Tapping the chip opens the notification as a
+  popup and the popup opens the deep link (`hackos://queue`, the scan link).
+  The chip is hidden while hackOS is in the foreground, and it shows the
+  icon alone while its own heads-up or popup is on screen and for a moment
+  after the app leaves the foreground (system behaviour, verified on the
+  Android 16 emulator).
+- Channels: `hackos_live_updates` (default importance, no sound/vibration)
+  for routine updates; `hackos_live_updates_alert` (high importance) only
+  when `spec.alert` is true: the team being called, or the deadline entering
+  `closing`. Names are
+  localized es/gl/en in the module's string resources. On the custom path,
+  Android may move an already-seen alert into the lock screen's icon shelf.
+- Taps, the Scan action and the card's Scan button fire `ACTION_VIEW` deep
+  links pinned to this package (`FLAG_IMMUTABLE`). Notification ids are the
+  subjects (`activity:12`, `schedule:21`, `deadline`, `accreditation`) and
+  `queue:judging`.
+- Without notification permission (`expo-notifications` asks for it), `show`
+  is a no-op.
+- Dismissals: every post carries a delete intent to the module's
+  non-exported `LiveUpdateDismissReceiver` with the spec's `phase`. The system
+  sends it only when the person swipes the notification away (Android 14+
+  allows that for ongoing ones), never for app cancels, force-stop or
+  reboot. The receiver stores `id → phase` in SharedPreferences
+  (`hackos.live-updates`), so a dismissal while no JS runs is kept;
+  `consumeDismissals()` returns and clears them, and `host.android.ts`
+  exposes them to the orchestration as `consumeDismissals()`.
+- Testing the card on Android 16: `adb shell appops set com.hackudc.os.debug POST_PROMOTED_NOTIFICATIONS deny`
+  (restore with `default`), or the per-app Live updates toggle in Settings.
+- Debug builds only: `LiveUpdatesDebugReceiver` (module `src/debug`) posts
+  samples without JS, e.g.
+  `adb shell am broadcast -f 32 -p com.hackudc.os.debug -a expo.modules.liveupdates.DEBUG_SHOW --es id queue:judging --es title Queue --es chip '#4' --es icon people`
+  (extras: `text`, `subText`, `countdownSeconds`/`countUpSeconds` int,
+  `progress`/`progressMax` int for a one-stage track, `tracker`, `tone`,
+  `actionLabel`, `actionUrl`, `url`, `phase`, `alert` bool; `DEBUG_DISMISS`
+  with `id`). The full states, including the card, come from the JS samples
+  (`hackos://dev/live-activity?sample=…`, above), which run the real mapping;
+  on Android, open them with `adb shell am start -a android.intent.action.VIEW -d '<link>' com.hackudc.os.debug`
+  while the app runs. Samples respect the in-app opt-out.
 
 ## Other infrastructure
 

@@ -17,6 +17,7 @@ import { ScheduleReminderSections, useScheduleReminders } from "@/components/rem
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import type { SymbolViewProps } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
+import { useLiveActivitiesSetting } from "@/lib/live-activities/use-live-activities-setting";
 import { useMeContext } from "@/lib/me-context";
 import type { NotificationChannel } from "@/lib/notification-preferences";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
@@ -111,6 +112,7 @@ export function NotificationSettingsScreen() {
   const { me } = useMeContext();
   const preferences = useNotificationPreferences();
   const reminders = useScheduleReminders();
+  const liveActivities = useLiveActivitiesSetting();
   const [refreshing, setRefreshing] = useState(false);
   const contentContainerStyle = useScrollContentStyle();
   const capabilities = me?.capabilities ?? [];
@@ -180,6 +182,17 @@ export function NotificationSettingsScreen() {
           <Section footer={t("notificationsMandatoryHint")}>
             <NavigationRow label={t("queueCalls")} value={t("notificationsAlwaysOn")} icon="bell" />
           </Section>
+
+          {liveActivities.available ? (
+            <Section>
+              <ToggleRow
+                label={t(liveActivities.platform === "android" ? "liveUpdates" : "liveActivities")}
+                busy={liveActivities.busy}
+                value={liveActivities.enabled}
+                onChange={(enabled) => void liveActivities.toggle(enabled)}
+              />
+            </Section>
+          ) : null}
 
           {canManageAnnouncements ? (
             <Section title={t("alertsSend")}>

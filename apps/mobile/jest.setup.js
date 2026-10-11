@@ -75,3 +75,19 @@ jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => {
       ),
   };
 });
+
+// #966: ActivityKit has no jest runtime. Live Activity factories behave like
+// a device where none are running and starting one is refused.
+jest.mock("expo-widgets", () => ({
+  createLiveActivity: () => ({
+    start: () => {
+      throw new Error("Live Activities are unavailable in tests");
+    },
+    getInstances: () => [],
+  }),
+  createWidget: () => ({ reload() {}, updateTimeline() {}, updateSnapshot() {} }),
+  addPushToStartTokenListener: () => ({ remove() {} }),
+  addUserInteractionListener: () => ({ remove() {} }),
+  after: (date) => ({ after: date }),
+  widgetsDirectory: "",
+}));

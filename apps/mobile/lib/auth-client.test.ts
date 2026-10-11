@@ -121,6 +121,26 @@ describe("mobile sign-out", () => {
     expect(mockNotifySignOut).toHaveBeenCalledTimes(1);
   });
 
+  it("revokes the server session only after sign-out cleanup that still needs it (#966)", async () => {
+    let finishCleanup!: () => void;
+    mockNotifySignOut.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishCleanup = resolve;
+      }),
+    );
+
+    await signOut();
+    expect(mockAuthClient.$fetch).not.toHaveBeenCalled();
+
+    finishCleanup();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mockAuthClient.$fetch).toHaveBeenCalledWith(
+      "https://api.example.test/api/auth/sign-out",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("clears the in-memory session immediately when the fallback storage cleanup hangs", () => {
     mockSecureStore.getItemAsync.mockReturnValue(new Promise<string | null>(() => {}));
 

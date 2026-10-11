@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import { handleLiveUpdatePayload } from "./live-activities/background-task";
 import { emitCategory } from "./notification-events";
 
 /**
@@ -51,6 +52,11 @@ function categoryOf(data: Record<string, unknown> | undefined): string | undefin
  */
 export function setupNotificationListeners(navigateToQueue: () => void): () => void {
   const received = Notifications.addNotificationReceivedListener((event) => {
+    // #966: an Android Live Update data push delivered while open renders
+    // immediately (the background task handles the other states).
+    if (Platform.OS === "android") {
+      void handleLiveUpdatePayload(event.request.content.data).catch(() => undefined);
+    }
     emitCategory(categoryOf(event.request.content.data));
   });
 

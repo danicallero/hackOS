@@ -17,6 +17,7 @@ import { ApiModeProvider, useApiMode } from "@/lib/api-mode";
 import { signOut } from "@/lib/auth-client";
 import { collectCompanyTagHref, takePendingCompanyTag } from "@/lib/company-tag-link";
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
+import { useLiveActivities } from "@/lib/live-activities/use-live-activities";
 import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
 import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
@@ -94,6 +95,7 @@ function RootLayoutSessionContents() {
     <View style={{ flex: 1 }}>
       <LanguageSync />
       <PushRegistration authenticated={authenticated} />
+      <LiveActivities authenticated={authenticated} />
       <WalletCacheWarmup authenticated={authenticated} />
       <NotificationListeners />
       <MobileAccessGate authenticated={authenticated} />
@@ -206,6 +208,18 @@ function PushRegistration({ authenticated }: { authenticated: boolean }) {
       });
     }
   }, [authenticated, me?.hasEventAccess, me?.id]);
+  return null;
+}
+
+/** #966: Live Activities (iOS) / Live Updates (Android) for H38 and H25/H26. */
+function LiveActivities({ authenticated }: { authenticated: boolean }) {
+  const { me } = useMeContext();
+  const { language } = useLocale();
+  useLiveActivities({
+    signedIn: authenticated && Boolean(me?.hasEventAccess),
+    userId: me?.id ?? null,
+    language,
+  });
   return null;
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@hackos/mobile",
-  "main": "expo-router/entry",
+  "main": "index.ts",
   "version": "0.0.0",
   "private": true,
   "expo": {
@@ -13,7 +13,7 @@
   "dependencies": {
     "@better-auth/expo": "1.6.23",
     "@expo/metro-runtime": "~57.0.15",
-    "@expo/ui": "~57.0.18",
+    "@expo/ui": "~57.0.22",
     "@hackos/shared": "workspace:*",
     "@premieroctet/react-native-wallet": "^1.0.2",
     "@react-native-community/datetimepicker": "^9.1.0",
@@ -42,7 +42,9 @@
     "expo-sqlite": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.3",
+    "expo-task-manager": "~57.0.21",
     "expo-web-browser": "~57.0.3",
+    "expo-widgets": "~57.0.23",
     "i18next": "^26.3.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
