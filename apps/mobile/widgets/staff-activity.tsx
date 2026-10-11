@@ -22,11 +22,11 @@ import { createLiveActivity, type LiveActivityEnvironment } from "expo-widgets";
 
 /**
  * H25/H26 staff activity Live Activity (#966). Upcoming: "how long until it
- * starts?" (countdown). Live meal (H24/H27, `inside`/`remaining` set): "how
- * many still to eat?" — served, still to eat (hero) and inside, with a bar of
- * the served share. Live, anything else: the scanned count and a bar of the
- * elapsed time. While live, the single Scan action opens the scanner bound to
- * the activity.
+ * starts?" (countdown). Live (H24/H25): "how many have come through?" —
+ * `scanned/accredited`, with the scanned share as a ring (minimal) or a bar;
+ * without `accredited` (older server) the bare count and a bar of the elapsed
+ * time. While live, the single Scan action opens the scanner bound to the
+ * activity.
  *
  * See `queue-activity.tsx` for the `'widget'` runtime constraints: everything
  * the layout needs is declared inside the function or arrives in props.
@@ -104,18 +104,13 @@ export const StaffActivityLayout = (
       : startsAt.getTime() - 3_600_000,
   );
 
-  // Live meal breakdown (H24/H27): served share = (inside - remaining) / inside.
-  // `scanned` stays the "served" headline (distinct people, incl. ones who left).
+  // H24/H25: distinct people scanned out of accredited people.
   const count = (value: unknown) =>
     typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
-  const inside = count(props.inside);
-  const remaining = count(props.remaining);
-  const meal = live && inside !== null && remaining !== null;
-  const servedShare =
-    meal && inside! > 0 ? Math.min(1, Math.max(0, (inside! - remaining!) / inside!)) : null;
-  const scanned = String(count(props.scanned) ?? 0);
-  // The one number each live state is about.
-  const heroCount = meal ? String(remaining) : scanned;
+  const scannedCount = count(props.scanned) ?? 0;
+  const accredited = live ? count(props.accredited) : null;
+  const share = accredited ? Math.min(1, scannedCount / accredited) : null;
+  const scanned = String(scannedCount);
 
   const countdown = (size: number, color: string | null, width: number | null) => (
     <Text
@@ -169,29 +164,43 @@ export const StaffActivityLayout = (
     </Text>
   );
 
-  const stat = (
-    label: string | undefined,
-    value: string,
-    color: string | null,
-    align: "leading" | "trailing",
-    size = 28,
-    weight = "semibold",
-  ) => (
+  // "42/180": the scanned count with its denominator, smaller and secondary
+  // (as the accreditation desk's `accredited/eligible`).
+  const ratio = (size: number, denominatorSize: number, color: string | null, weight = "bold") => (
+    <HStack alignment="firstTextBaseline" spacing={1} modifiers={[fixedSize({ horizontal: true })]}>
+      {counter(scanned, size, color, weight)}
+      {accredited ? (
+        <Text
+          modifiers={[
+            font({ size: denominatorSize, weight: "semibold" }),
+            monospacedDigit(),
+            contentTransition("numericText"),
+            secondary,
+            lineLimit(1),
+          ]}
+        >
+          {`/${accredited}`}
+        </Text>
+      ) : null}
+    </HStack>
+  );
+
+  const stat = (label: string | undefined, color: string | null, align: "leading" | "trailing") => (
     <VStack alignment={align} spacing={0}>
       {label ? (
         <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
           {label}
         </Text>
       ) : null}
-      {counter(value, size, color, weight)}
+      {ratio(28, 15, color)}
     </VStack>
   );
 
-  // Meals: the served share. Anything else: elapsed time from start to end.
+  // The scanned share; without a denominator, elapsed time from start to end.
   const bar = (color: string | null) =>
-    servedShare !== null ? (
-      <ProgressView value={servedShare} modifiers={[tint(color ?? neutral)]} />
-    ) : !meal && validEnd ? (
+    share !== null ? (
+      <ProgressView value={share} modifiers={[tint(color ?? neutral)]} />
+    ) : validEnd ? (
       <ProgressView
         timerInterval={{ lower: startsAt, upper: endsAt }}
         countsDown={false}
@@ -228,7 +237,7 @@ export const StaffActivityLayout = (
             background(color ?? "#3A3A3C", { shape: "containerRelativeShape" }),
           ]}
         >
-          <Image systemName="qrcode.viewfinder" color="#FFFFFF" size={14} />
+          <Image systemName="wave.3.right" color="#FFFFFF" size={14} />
           <Text
             modifiers={[
               font({ size: 15, weight: "semibold" }),
@@ -243,15 +252,13 @@ export const StaffActivityLayout = (
     ) : null;
 
   const compactLeading = <Image systemName={symbol} color={islandAccent} size={15} />;
-  const compactTrailing = live
-    ? counter(heroCount, 15, null, "semibold")
-    : countdown(15, islandAccent, 52);
+  const compactTrailing = live ? ratio(15, 11, null, "semibold") : countdown(15, islandAccent, 52);
 
-  // Minimal: the served share as a ring for meals, else the count or countdown.
+  // Minimal: the scanned share as a ring, else the count or the countdown.
   const minimal =
-    servedShare !== null ? (
+    share !== null ? (
       <Gauge
-        value={servedShare}
+        value={share}
         modifiers={[
           gaugeStyle("circularCapacity"),
           tint(islandAccent),
@@ -260,25 +267,19 @@ export const StaffActivityLayout = (
         ]}
       />
     ) : live ? (
-      counter(heroCount, 13, islandAccent, "semibold")
+      counter(scanned, 13, islandAccent, "semibold")
     ) : (
       countdown(11, islandAccent, 34)
     );
 
-  const expandedLeading = meal ? (
-    <VStack modifiers={[padding({ leading: 8, top: 4 })]}>
-      {stat(labels.served, scanned, null, "leading")}
-    </VStack>
-  ) : (
+  const expandedLeading = (
     <VStack modifiers={[padding({ leading: 8, top: 6 })]}>{glyph(islandAccent, 24)}</VStack>
   );
   // Inset from the island's rounded corners so labels never clip.
   const expandedTrailing = (
     <VStack alignment="trailing" modifiers={[padding({ trailing: 8, top: 4 })]}>
-      {meal ? (
-        stat(labels.remaining, heroCount, islandAccent, "trailing", 28, "bold")
-      ) : live ? (
-        stat(labels.scanned, scanned, islandAccent, "trailing", 28, "bold")
+      {live ? (
+        stat(labels.scanned, islandAccent, "trailing")
       ) : (
         <VStack alignment="trailing" spacing={0}>
           <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
@@ -314,15 +315,7 @@ export const StaffActivityLayout = (
       {bar(islandAccent)}
       <HStack spacing={8}>
         <VStack alignment="leading" spacing={1}>
-          {meal && labels.inside ? (
-            <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1)]}>
-              {`${labels.inside} ${inside}`}
-            </Text>
-          ) : (
-            <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1)]}>
-              {props.name}
-            </Text>
-          )}
+          <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1)]}>{props.name}</Text>
           {endsIn(13, 52)}
         </VStack>
         <Spacer />
@@ -365,21 +358,9 @@ export const StaffActivityLayout = (
     </HStack>
   );
 
-  const stats = meal ? (
-    <HStack alignment="top" spacing={8}>
-      <VStack alignment="leading" modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}>
-        {stat(labels.served, scanned, null, "leading")}
-      </VStack>
-      <VStack alignment="leading" modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}>
-        {stat(labels.remaining, heroCount, bannerAccent, "leading", 28, "bold")}
-      </VStack>
-      <VStack alignment="trailing" modifiers={[frame({ maxWidth: 10000, alignment: "trailing" })]}>
-        {stat(labels.inside, String(inside), null, "trailing")}
-      </VStack>
-    </HStack>
-  ) : (
+  const stats = (
     <HStack alignment="top">
-      {stat(labels.scanned, scanned, bannerAccent, "leading", 28, "bold")}
+      {stat(labels.scanned, bannerAccent, "leading")}
       <Spacer />
     </HStack>
   );
@@ -401,7 +382,7 @@ export const StaffActivityLayout = (
     </VStack>
   );
 
-  // watchOS Smart Stack and CarPlay: name plus the countdown or hero count, no buttons.
+  // watchOS Smart Stack and CarPlay: name plus the countdown or the count, no buttons.
   const bannerSmall = (
     <VStack alignment="leading" spacing={2} modifiers={[padding({ all: 8 })]}>
       <HStack spacing={4}>
@@ -410,18 +391,7 @@ export const StaffActivityLayout = (
           {props.name}
         </Text>
       </HStack>
-      {live ? (
-        <HStack spacing={4} alignment="firstTextBaseline">
-          {counter(heroCount, 20, bannerAccent)}
-          {meal && labels.remaining ? (
-            <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
-              {labels.remaining}
-            </Text>
-          ) : null}
-        </HStack>
-      ) : (
-        countdown(20, bannerAccent, null)
-      )}
+      {live ? ratio(20, 13, bannerAccent) : countdown(20, bannerAccent, null)}
     </VStack>
   );
 

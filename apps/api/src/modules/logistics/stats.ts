@@ -1,7 +1,7 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
 import { occupancyEstimate } from "./presence.js";
-import { isSyntheticOperator } from "./review-fixture-scope.js";
+import { isSyntheticOperator, scannerSubjectScope } from "./review-fixture-scope.js";
 
 export interface ActivityAggregate {
   activityId: number;
@@ -221,13 +221,7 @@ export async function scannerRoleStats(actorId?: number): Promise<
   }>
 > {
   const fixtureOnly = actorId != null && (await isSyntheticOperator(pool, actorId));
-  const subjectScope = fixtureOnly
-    ? `AND u.is_test_account = true
-          AND EXISTS (
-            SELECT 1 FROM user_effective_role_name uern
-             WHERE uern.user_id = u.id AND uern.role_name = 'Participant'
-          )`
-    : "AND u.is_test_account = false";
+  const subjectScope = scannerSubjectScope(fixtureOnly);
   const { rows } = await pool.query<{
     role: ScannerRole;
     eligible: number;

@@ -1,7 +1,7 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
 import type { Language } from "../notifications/translate/index.js";
-import { isSyntheticOperator } from "./review-fixture-scope.js";
+import { isSyntheticOperator, scannerSubjectScope } from "./review-fixture-scope.js";
 
 /**
  * H22-H26 scanner seed/sync payload. Native scanners keep this deliberately
@@ -20,13 +20,7 @@ export async function scannerSnapshot(actorId?: number) {
   // fixtures. Real event scanners, however, need every active attendee type
   // (mentors, sponsors, judges and capability holders included); the role
   // stats read model and the mobile role filter already use that full roster.
-  const subjectScope = fixtureOnly
-    ? ` AND u.is_test_account = true
-              AND EXISTS (
-                SELECT 1 FROM user_effective_role_name uern
-                 WHERE uern.user_id = u.id AND uern.role_name = 'Participant'
-              )`
-    : " AND u.is_test_account = false";
+  const subjectScope = scannerSubjectScope(fixtureOnly);
   // The snapshot is replace-all. Retired credentials are represented by
   // keyed digests centrally and are intentionally not sent back to every
   // scanner as raw bearer values. A stale queued mutation is rejected by the

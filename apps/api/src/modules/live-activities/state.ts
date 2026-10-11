@@ -12,7 +12,6 @@ import type { Language } from "@hackos/shared/locale";
 import { config } from "../../config.js";
 import { pool, type Queryable } from "../../db/pool.js";
 import { valkey } from "../../lib/valkey.js";
-import { occupancyEstimate } from "../logistics/presence.js";
 import { hasMyQueueItems, myQueueStatus } from "../queue/reads.js";
 
 /**
@@ -221,52 +220,6 @@ export function scannedKey(activityId: number, testAccount: boolean): string {
   return `${activityId}:${testAccount ? 1 : 0}`;
 }
 
-/** True when `activity` is a meal that has started (the only case `expected` applies). */
-export function isLiveMeal(activity: LiveScannableActivity, now: Date): boolean {
-  return (
-    (MEAL_ACTIVITY_KINDS as readonly string[]).includes(activity.category) &&
-    now >= activity.startsAt
-  );
-}
-
-export interface MealPresence {
-  inside: number;
-  remaining: number;
-}
-
-/**
- * H24/H27 meal breakdown for staff: people estimated in the venue right now
- * (the logistics panel's served-vs-present denominator) and, of those, who
- * has no scan for the meal yet. Real accounts only; a test-account viewer
- * gets no breakdown rather than one from the wrong side of the H54 fixture
- * boundary. Only computed while a meal is live (it reads every presence event).
- */
-export async function loadMealPresence(
-  activities: LiveScannableActivity[],
-  now: Date,
-  db: Queryable = pool,
-): Promise<Map<number, MealPresence>> {
-  const result = new Map<number, MealPresence>();
-  const meals = activities.filter((a) => isLiveMeal(a, now)).map((a) => a.id);
-  if (meals.length === 0) return result;
-  const { present } = await occupancyEstimate();
-  const { rows } = await db.query<{ activity_id: number; served: number }>(
-    `SELECT activity_id, count(DISTINCT user_id)::int AS served
-       FROM activity_logs
-      WHERE activity_id = ANY($1::int[]) AND user_id = ANY($2::int[])
-      GROUP BY activity_id`,
-    [meals, present],
-  );
-  const served = new Map(rows.map((r) => [r.activity_id, r.served]));
-  for (const id of meals) {
-    result.set(id, {
-      inside: present.length,
-      remaining: Math.max(0, present.length - (served.get(id) ?? 0)),
-    });
-  }
-  return result;
-}
-
 const PEAK_POSITION_TTL_SECONDS = 24 * 60 * 60;
 // Atomic high-water mark: keep the larger of the stored and the new value.
 const PEAK_POSITION_SCRIPT = `
@@ -306,15 +259,16 @@ export async function withStartPosition(
 export function buildActivityLiveProps(
   activity: LiveScannableActivity,
   scanned: number,
+  accredited: number | null,
   language: Language,
   now: Date,
-  meal: MealPresence | null = null,
 ): ActivityLiveProps {
   const link = activityScanDeepLink(activity.id);
+  const live = now >= activity.startsAt;
   return {
     v: LIVE_ACTIVITY_PROPS_VERSION,
     kind: "activity",
-    phase: now < activity.startsAt ? "upcoming" : "live",
+    phase: live ? "live" : "upcoming",
     activityId: activity.id,
     // Same fallback chain as the scanner list: requested language, English,
     // then the activity's own (primary-language) name.
@@ -324,8 +278,9 @@ export function buildActivityLiveProps(
     startsAt: activity.startsAt.toISOString(),
     endsAt: activity.endsAt.toISOString(),
     scanned,
-    inside: isLiveMeal(activity, now) ? (meal?.inside ?? null) : null,
-    remaining: isLiveMeal(activity, now) ? (meal?.remaining ?? null) : null,
+    // H24/H25: the denominator of `scanned`, only while live (upcoming shows
+    // the countdown, and an unused count would only cost pushes).
+    accredited: live ? accredited : null,
     scanUrl: link,
     url: link,
     labels: activityLiveLabels(language),
