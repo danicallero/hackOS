@@ -582,27 +582,61 @@ export const QueueActivityLayout = (
     </VStack>
   );
 
-  // watchOS Smart Stack and CarPlay: compact, glanceable, no buttons.
+  // watchOS Smart Stack and CarPlay (`.small` family, #966, H29, H38): glyph and
+  // title in secondary, one hero value, at most one status line. The accent
+  // tints the glyph only; Always-On drops it.
+  const watchGlyph = reduced ? null : islandColor;
+  const watchHero = (text: string) => (
+    <Text
+      modifiers={[
+        font({ size: 26, weight: "bold" }),
+        monospacedDigit(),
+        lineLimit(1),
+        minimumScaleFactor(0.6),
+      ]}
+    >
+      {text}
+    </Text>
+  );
+  const watchLine = (text: string | null | undefined) =>
+    text ? (
+      <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
+        {text}
+      </Text>
+    ) : null;
+  // Waiting: position, then the estimate. Called: where to go. In room: the room.
+  const watchHeroText = called
+    ? `${labels.goTo} ${room}`.trim()
+    : inRoom
+      ? room || labels.inRoom
+      : (position ?? etaOrEstimating ?? "");
+  const watchLineText = called
+    ? props.roomLocation
+    : inRoom
+      ? room
+        ? labels.inRoom
+        : null
+      : position
+        ? etaOrEstimating
+        : null;
   const bannerSmall = (
-    <VStack alignment="leading" spacing={2} modifiers={[padding({ all: 8 })]}>
-      <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
-        {props.challengeTitle}
-      </Text>
-      <Text
-        modifiers={[
-          font({ size: 17, weight: "bold" }),
-          monospacedDigit(),
-          lineLimit(1),
-          minimumScaleFactor(0.7),
-          ...colorMods(bannerColor),
-        ]}
-      >
-        {called
-          ? `${labels.goTo} ${room}`.trim()
-          : inRoom
-            ? room || labels.inRoom
-            : [position, etaOrEstimating].filter(Boolean).join(" · ")}
-      </Text>
+    <VStack
+      alignment="leading"
+      spacing={2}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ horizontal: 10, vertical: 8 }),
+        dynamicTypeSize({ max: "xLarge" }),
+      ]}
+    >
+      <HStack spacing={5}>
+        <Image systemName={symbol} color={watchGlyph ?? neutral} size={13} />
+        <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
+          {props.challengeTitle}
+        </Text>
+      </HStack>
+      {watchHero(watchHeroText)}
+      {watchLine(watchLineText)}
     </VStack>
   );
 

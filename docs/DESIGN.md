@@ -1261,6 +1261,10 @@ HIG](https://developer.apple.com/design/human-interface-guidelines/live-activiti
 - Keep semantic colour, dynamic light/dark Lock Screen accents and reduced
   luminance handling. Colour never replaces a state label or symbol. Continuous
   progress bars share a treatment; the queue retains its meaningful stage track.
+- Watch (`.small` family, `bannerSmall`): glyph + title in secondary, one 26 pt
+  hero, at most one 13 pt status line; the accent tints the glyph only and
+  disappears in Always-On. Red is for urgency, once per surface and never on a
+  countdown or progress bar (closing deadline: the "Not submitted" status).
 - Height follows content: upcoming sessions do not reserve space for absent
   progress or actions. Do not make every kind equally tall or add filler copy.
 

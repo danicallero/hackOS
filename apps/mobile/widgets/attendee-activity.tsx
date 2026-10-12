@@ -320,35 +320,61 @@ export const AttendeeActivityLayout = (
     </VStack>
   );
 
-  // watchOS Smart Stack and CarPlay: name plus the countdown (or "Live").
+  // watchOS Smart Stack and CarPlay (`.small` family, #966, H59): glyph and
+  // title in secondary, one hero value, at most one status line. The accent
+  // tints the glyph only; Always-On drops it.
+  const watchGlyph = environment.isLuminanceReduced ? null : islandAccent;
+  const watchTimer = (size: number, weight: "semibold" | "bold", muted: boolean) =>
+    (live ? validEnd : validStart) ? (
+      <Text
+        timerInterval={live ? { lower: startsAt, upper: endsAt } : { lower, upper: startsAt }}
+        countsDown
+        compactCountdown="full"
+        compactCountdownSize={size}
+        compactCountdownWeight={weight}
+        modifiers={[
+          lineLimit(1),
+          minimumScaleFactor(0.6),
+          frame({ maxWidth: 10000, alignment: "leading" }),
+          ...(muted ? [secondary] : []),
+        ]}
+      />
+    ) : null;
   const bannerSmall = (
-    <VStack alignment="leading" spacing={2} modifiers={[padding({ all: 8 })]}>
-      <HStack spacing={4}>
-        <Image systemName={symbol} color={bannerAccent ?? neutral} size={12} />
+    <VStack
+      alignment="leading"
+      spacing={2}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ horizontal: 10, vertical: 8 }),
+        dynamicTypeSize({ max: "xLarge" }),
+      ]}
+    >
+      <HStack spacing={5}>
+        <Image systemName={symbol} color={watchGlyph ?? neutral} size={13} />
         <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
           {props.name}
         </Text>
       </HStack>
-      {live ? (
-        <HStack spacing={6} alignment="firstTextBaseline">
-          {liveLabel ? (
-            <Text
-              modifiers={[
-                font({ size: 20, weight: "bold" }),
-                lineLimit(1),
-                fixedSize({ horizontal: true }),
-                ...colorMods(bannerAccent),
-              ]}
-            >
-              {liveLabel}
+      {live && liveLabel ? (
+        <Text
+          modifiers={[font({ size: 24, weight: "bold" }), lineLimit(1), minimumScaleFactor(0.6)]}
+        >
+          {liveLabel}
+        </Text>
+      ) : (
+        watchTimer(26, "bold", false)
+      )}
+      {live && liveLabel ? (
+        <HStack alignment="firstTextBaseline" spacing={4}>
+          {labels.endsIn ? (
+            <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
+              {labels.endsIn}
             </Text>
           ) : null}
-          <Spacer />
-          {timer(15, null, 72)}
+          {watchTimer(13, "semibold", true)}
         </HStack>
-      ) : (
-        timer(20, bannerAccent, null)
-      )}
+      ) : null}
     </VStack>
   );
 

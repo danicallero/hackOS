@@ -299,16 +299,28 @@ export const AccreditationActivityLayout = (
     </VStack>
   );
 
-  // watchOS Smart Stack and CarPlay: title and accredited/eligible, no buttons.
+  // watchOS Smart Stack and CarPlay (`.small` family, #966, H22, H24): glyph and
+  // title in secondary, one hero value, at most one status line. The accent
+  // tints the glyph only; Always-On drops it.
+  const watchGlyph = environment.isLuminanceReduced ? null : islandAccent;
   const bannerSmall = (
-    <VStack alignment="leading" spacing={2} modifiers={[padding({ all: 8 })]}>
-      <HStack spacing={4}>
-        <Image systemName={symbol} color={bannerAccent ?? neutral} size={12} />
+    <VStack
+      alignment="leading"
+      spacing={2}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ horizontal: 10, vertical: 8 }),
+        dynamicTypeSize({ max: "xLarge" }),
+      ]}
+    >
+      <HStack spacing={5}>
+        <Image systemName={symbol} color={watchGlyph ?? neutral} size={13} />
         <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
           {labels.title}
         </Text>
       </HStack>
-      {accreditedValue(20, bannerAccent)}
+      {accreditedValue(26, null)}
+      {caption(labels.accredited)}
     </VStack>
   );
 
