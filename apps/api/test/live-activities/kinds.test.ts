@@ -242,6 +242,8 @@ describe("submission deadline (H19, H20)", () => {
       labels: { title: "Peche de entregas", closesIn: "Pecha en" },
       // #966: two hours left, so the widget shows `2h 00m`.
       countdownUnderHour: false,
+      countdownLastFiveMinutes: false,
+      countdownLastMinute: false,
     });
     expect(result.deadline?.startsAt).not.toBeNull();
     expect((await mine(withoutAccess)).deadline).toBeNull();
@@ -278,8 +280,16 @@ describe("submission deadline (H19, H20)", () => {
 
     await deadlineIn(10);
     expect((await mine(drafter)).deadline?.phase).toBe("closing");
-    // #966: under an hour the flag flips, so the widget re-renders as `9m 59s`.
+    // #966: under an hour the flag flips, so the widget re-renders as `9m`.
     expect((await mine(drafter)).deadline?.countdownUnderHour).toBe(true);
+    expect((await mine(drafter)).deadline?.countdownLastFiveMinutes).toBe(false);
+    await deadlineIn(5);
+    expect((await mine(drafter)).deadline?.countdownLastFiveMinutes).toBe(true);
+    expect((await mine(submitter)).deadline?.countdownLastFiveMinutes).toBe(true);
+    expect((await mine(drafter)).deadline?.countdownLastMinute).toBe(false);
+    await deadlineIn(1);
+    expect((await mine(drafter)).deadline?.countdownLastMinute).toBe(true);
+    expect((await mine(submitter)).deadline?.countdownLastMinute).toBe(true);
     // Unknown status (Devpost-only, not imported) never claims "not submitted".
     expect((await mine(devpostOnly)).deadline).toMatchObject({ phase: "open", submission: null });
   });

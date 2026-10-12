@@ -143,10 +143,8 @@ export const AttendeeActivityLayout = (
       : startsAt.getTime() - 3_600_000,
   );
 
-  // Upcoming counts down to the start, live to the end: `2h 34m` from an hour, `34m 21s` below it, ticking live and never
-  // H:MM:SS (`compactCountdown`); `short` keeps the leading unit (`2h`,
-  // `34m`), `long` adds the seconds from an hour (`2h 34m 21s`). It is as wide as its value; a width cap scales it down rather
-  // than truncating.
+  // #966: minute precision normally; seconds only in the last five minutes.
+  // The native timer removes seconds and their spacing in Always-On.
   const timer = (
     size: number,
     color: string | null,
@@ -231,21 +229,10 @@ export const AttendeeActivityLayout = (
       </HStack>
     ) : null;
 
-  // Name with the live badge above it while live, then time · place.
-  const nameBlock = (nameSize: number) => (
-    <VStack
-      alignment="leading"
-      spacing={1}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}
-    >
-      {live ? liveBadge(12, bannerAccent ?? neutral) : null}
-      <Text modifiers={[font({ size: nameSize, weight: "semibold" }), lineLimit(1)]}>
-        {props.name}
-      </Text>
-      <HStack modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
-        {timeAndPlace}
-      </HStack>
-    </VStack>
+  const context = (
+    <HStack modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
+      {timeAndPlace}
+    </HStack>
   );
 
   // Compact: the symbol a little larger than the text so both sides weigh
@@ -288,50 +275,47 @@ export const AttendeeActivityLayout = (
       {countdownStat(28, live ? null : islandAccent, 160) ?? <Text> </Text>}
     </VStack>
   );
-  // Live: the badge leads the name on one line, so the bar, the name and the
-  // time · place fit the island's expanded height.
   const expandedBottom = (
     <VStack
       alignment="leading"
       spacing={8}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ horizontal: 8 })]}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ horizontal: 8, bottom: 8 }),
+      ]}
     >
+      <HStack spacing={8}>
+        <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>{props.name}</Text>
+        <Spacer />
+        {live ? liveBadge(12, islandAccent) : null}
+      </HStack>
+      {context}
       {bar(islandAccent)}
-      {live ? (
-        <VStack
-          alignment="leading"
-          spacing={1}
-          modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}
-        >
-          <HStack spacing={6}>
-            {liveBadge(15, islandAccent)}
-            <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
-              {props.name}
-            </Text>
-          </HStack>
-          <HStack modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
-            {timeAndPlace}
-          </HStack>
-        </VStack>
-      ) : (
-        nameBlock(15)
-      )}
     </VStack>
   );
 
-  // Lock Screen: one 14 pt margin on every edge, default background. The
-  // symbol, name and time · place lead; the countdown is the hero on the
-  // trailing side. Live adds the elapsed-time bar below.
+  // H59 / #966: shared header, context + trailing hero, optional progress.
   const banner = (
     <VStack
       alignment="leading"
-      spacing={12}
+      spacing={10}
       modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
     >
-      <HStack alignment="center" spacing={10}>
-        <HStack modifiers={[frame({ width: 26 })]}>{glyph(bannerAccent, 20)}</HStack>
-        {nameBlock(17)}
-        {countdownStat(28, live ? null : bannerAccent, 160)}
+      <HStack spacing={8}>
+        {glyph(bannerAccent, 17)}
+        <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>{props.name}</Text>
+        <Spacer />
+        {live ? liveBadge(12, bannerAccent ?? neutral) : null}
+      </HStack>
+      <HStack alignment="bottom" spacing={12}>
+        <VStack
+          alignment="leading"
+          spacing={2}
+          modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}
+        >
+          {context}
+        </VStack>
+        {countdownStat(28, live ? null : bannerAccent, 180)}
       </HStack>
       {bar(bannerAccent)}
     </VStack>

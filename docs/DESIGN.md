@@ -1221,6 +1221,53 @@ architecture: [`mobile.md`](./mobile.md).**
 - Capability changes apply without reinstall: tabs recompute from a shared
   `/api/me` fetch that refetches on app foreground (H55).
 
+### Live Activities on iOS (#966)
+
+All five kinds share one visual grammar, following [Apple's Live Activities
+HIG](https://developer.apple.com/design/human-interface-guidelines/live-activities):
+
+- Lock Screen: 14 pt system margins, 10 pt between rows; icon + title and
+  optional state on the first row, secondary context leading and the primary
+  metric trailing on the second, then full-width progress. Scan sits beside
+  secondary context in the second row.
+- Expanded island: leading identity (or queue position, matching compact),
+  trailing primary metric; the bottom region contains title, context and
+  finally progress. Staff/desk put the circular Scan action in the leading
+  top slot to stay inside the expanded height budget (4 pt row gaps and bottom
+  inset); other
+  kinds use 8 pt row gaps and bottom inset. Keep controls clear of the curved
+  corners. Preserve the relative placement of changing values
+  across compact, expanded and Lock Screen presentations.
+- System typography: 17 pt semibold Lock Screen titles, 15 pt semibold
+  expanded titles, 28 pt primary metrics, 17 pt secondary values, 12 pt medium
+  captions and 13 pt medium context. Timer width fitting may reduce the hero
+  size; names truncate before primary values. Submitted deadlines demote the
+  remaining timer and promote the completed state.
+- Icons are bare SF Symbols: 17 pt in Lock Screen headers, 24 pt in expanded
+  identity slots, 15 pt compact. No nested icon containers or decorative badges.
+- Scan is the only explicit action on staff/desk surfaces: a 44 pt circle
+  with a 20 pt NFC symbol and a localized accessibility label. Place it leading
+  beside secondary context on the Lock Screen and in the expanded leading slot;
+  progress always occupies its own full-width row. The opaque blue fill is
+  `#0066CC`, reduced to neutral `#3A3A3C` in Always-On.
+- Countdowns use `2h 34m` / `34m` normally; only the last five minutes show
+  seconds (`4m 59s`, then `48s` below a minute) on every countdown surface, including minimal and small.
+  Always-On removes the seconds field and its spacing, leaving `4m` or `<1m` below a minute;
+  waking restores seconds. Never render a seconds placeholder.
+- The submission window's elapsed bar remains visible after submission.
+- Keep semantic colour, dynamic light/dark Lock Screen accents and reduced
+  luminance handling. Colour never replaces a state label or symbol. Continuous
+  progress bars share a treatment; the queue retains its meaningful stage track.
+- Height follows content: upcoming sessions do not reserve space for absent
+  progress or actions. Do not make every kind equally tall or add filler copy.
+
+The small scale here is specific to system Live Activity surfaces; do not apply
+web heading fonts or page/container tokens to the Dynamic Island. Runtime layouts
+must remain self-contained inside each serialized `'widget'` function; see
+[`mobile.md`](./mobile.md#live-activities-and-live-updates-966) for rendering
+constraints and [`live-activities.md`](./live-activities.md#design-rationale-apple-hig)
+for per-kind content.
+
 ## 13. Definition of done for UI work
 
 Every UI change, web or mobile:

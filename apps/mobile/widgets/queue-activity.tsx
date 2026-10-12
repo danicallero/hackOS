@@ -85,7 +85,9 @@ export const QueueActivityLayout = (
     layout: L,
   ) => ({
     ...layout,
-    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing", { leading: 3 }),
+    // Wider than the other kinds' 24 pt: the position reaches three digits
+    // (`#128` was truncated to `#1…`); four still scale down within it.
+    compactLeading: islandSlot(layout.compactLeading as never, 40, "trailing", { leading: 3 }),
     compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { trailing: 7 }),
     minimal: islandSlot(layout.minimal as never, 36, "center"),
   });
@@ -189,6 +191,9 @@ export const QueueActivityLayout = (
         modifiers={[
           font({ size, weight }),
           monospacedDigit(),
+          lineLimit(1),
+          minimumScaleFactor(0.6),
+          layoutPriority(1),
           multilineTextAlignment("trailing"),
           frame({ maxWidth: width, alignment: "trailing" }),
         ]}
@@ -324,7 +329,11 @@ export const QueueActivityLayout = (
         ? metric(labels.wait, etaLong, align, color, size)
         : metric(labels.wait, etaOrEstimating, align, color, Math.round(size * 0.62), false);
 
-  const symbol = inRoom ? "person.2.fill" : "door.left.hand.open";
+  const symbol = inRoom
+    ? "person.2.fill"
+    : called
+      ? "door.left.hand.open"
+      : "person.3.sequence.fill";
   const symbolColor = islandColor ?? neutral;
 
   const compactLeading =
@@ -340,6 +349,7 @@ export const QueueActivityLayout = (
           font({ size: 15, weight: "semibold" }),
           monospacedDigit(),
           contentTransition("numericText", { countsDown: true }),
+          lineLimit(1),
           foregroundStyle(symbolColor),
         ]}
       >
@@ -369,12 +379,13 @@ export const QueueActivityLayout = (
           font({ size: 15, weight: "semibold" }),
           monospacedDigit(),
           contentTransition("numericText", { countsDown: true }),
+          ...colorMods(islandColor),
         ]}
       >
         {etaShort}
       </Text>
     ) : (
-      <Image systemName="hourglass" color="#FFFFFF" size={14} />
+      <Image systemName="hourglass" color={symbolColor} size={14} />
     );
 
   // Minimal: the climb to the front as a ring around the position, or the
@@ -412,7 +423,7 @@ export const QueueActivityLayout = (
     <Image
       systemName={symbol}
       color={symbolColor}
-      size={26}
+      size={24}
       modifiers={[padding({ leading: 8, top: 6 })]}
     />
   ) : inRoom ? (
@@ -424,7 +435,7 @@ export const QueueActivityLayout = (
     />
   ) : (
     <VStack modifiers={[padding({ leading: 8, top: 4 })]}>
-      {metric(labels.position, position ?? "–", "leading", null, 28)}
+      {metric(labels.position, position ?? "–", "leading", null, 17)}
     </VStack>
   );
 
@@ -444,52 +455,55 @@ export const QueueActivityLayout = (
     </VStack>
   );
 
-  const subtitle = (size: number) => (
-    <HStack spacing={0} modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}>
-      <Text modifiers={[font({ size, weight: "medium" }), secondary, lineLimit(1)]}>
-        {props.challengeTitle}
-      </Text>
-      {labels.moreQueues ? (
-        <Text
-          modifiers={[font({ size, weight: "medium" }), secondary, lineLimit(1), layoutPriority(1)]}
-        >
-          {` · ${labels.moreQueues}`}
-        </Text>
-      ) : null}
-    </HStack>
-  );
-
-  const calledSince = calledTimer(13, "medium", 44);
+  const calledSince = calledTimer(17, "medium", 72);
   const expandedBottom = (
     <VStack
       alignment="leading"
       spacing={8}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ horizontal: 8 })]}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ horizontal: 8, bottom: 8 }),
+      ]}
     >
-      {track(islandColor, false)}
-      <VStack alignment="leading" spacing={2}>
-        {called && (props.roomLocation || calledSince) ? (
-          <HStack spacing={4}>
-            {props.roomLocation ? (
-              <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
-                {props.roomLocation}
-              </Text>
-            ) : null}
-            <Spacer />
-            {calledSince && labels.called ? (
-              <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
-                {labels.called}
-              </Text>
-            ) : null}
-            {calledSince ? <HStack modifiers={[secondary]}>{calledSince}</HStack> : null}
-          </HStack>
-        ) : inRoom && props.roomLocation ? (
-          <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
-            {props.roomLocation}
+      <HStack spacing={8}>
+        <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
+          {props.challengeTitle}
+        </Text>
+        <Spacer />
+        {labels.moreQueues ? (
+          <Text
+            modifiers={[
+              font({ size: 13, weight: "medium" }),
+              secondary,
+              lineLimit(1),
+              layoutPriority(1),
+            ]}
+          >
+            {labels.moreQueues}
           </Text>
         ) : null}
-        {subtitle(13)}
-      </VStack>
+      </HStack>
+      {called || inRoom ? (
+        <HStack spacing={8}>
+          {props.roomLocation ? (
+            <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
+              {props.roomLocation}
+            </Text>
+          ) : null}
+          <Spacer />
+          {called && calledSince ? (
+            <HStack spacing={4} modifiers={[secondary]}>
+              {labels.called ? (
+                <Text modifiers={[font({ size: 12, weight: "medium" }), lineLimit(1)]}>
+                  {labels.called}
+                </Text>
+              ) : null}
+              {calledSince}
+            </HStack>
+          ) : null}
+        </HStack>
+      ) : null}
+      {track(islandColor, false)}
     </VStack>
   );
 
@@ -497,7 +511,8 @@ export const QueueActivityLayout = (
   // default background. Header, hero row, then the stage track.
   const header = (
     <HStack spacing={8}>
-      <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
+      <Image systemName={symbol} color={bannerColor ?? neutral} size={17} />
+      <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>
         {props.challengeTitle}
       </Text>
       <Spacer />
@@ -516,28 +531,12 @@ export const QueueActivityLayout = (
     </HStack>
   );
 
-  const calledFor = calledTimer(28, "semibold", 120);
+  const calledFor = calledTimer(17, "semibold", 72);
   const hero =
     called || inRoom ? (
-      <HStack alignment="top" spacing={12}>
-        <VStack alignment="leading" spacing={0}>
-          {metric(
-            called ? labels.goTo : labels.inRoom,
-            room || "–",
-            "leading",
-            bannerColor,
-            28,
-            false,
-          )}
-          {props.roomLocation ? (
-            <Text modifiers={[font({ size: 15, weight: "medium" }), lineLimit(1)]}>
-              {props.roomLocation}
-            </Text>
-          ) : null}
-        </VStack>
-        <Spacer />
+      <HStack alignment="bottom" spacing={12}>
         {called && calledFor ? (
-          <VStack alignment="trailing" spacing={0}>
+          <VStack alignment="leading" spacing={0}>
             {labels.called ? (
               <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
                 {labels.called}
@@ -546,12 +545,28 @@ export const QueueActivityLayout = (
             {calledFor}
           </VStack>
         ) : null}
+        <Spacer />
+        <VStack alignment="trailing" spacing={0}>
+          {metric(
+            called ? labels.goTo : labels.inRoom,
+            room || "–",
+            "trailing",
+            bannerColor,
+            28,
+            false,
+          )}
+          {props.roomLocation ? (
+            <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
+              {props.roomLocation}
+            </Text>
+          ) : null}
+        </VStack>
       </HStack>
     ) : (
-      <HStack alignment="top" spacing={12}>
-        {etaMetric("leading", bannerColor, 34)}
+      <HStack alignment="bottom" spacing={12}>
+        {position ? metric(labels.position, position, "leading", null, 17) : null}
         <Spacer />
-        {position ? metric(labels.position, position, "trailing", null, 34) : null}
+        {etaMetric("trailing", bannerColor, 28)}
       </HStack>
     );
 

@@ -9,6 +9,8 @@ import {
   accreditationLiveLabels,
   activityLiveLabels,
   attendeeActivityLiveLabels,
+  countdownLastFiveMinutes,
+  countdownLastMinute,
   countdownUnderHour,
   type DeadlineLiveProps,
   deadlineLiveLabels,
@@ -170,7 +172,7 @@ describe("nextPhaseBoundary: new kinds", () => {
     const withAttendee = desiredActivities(
       response({ attendeeActivities: [attendee(21)], deadline: deadline() }),
     );
-    expect(nextPhaseBoundary(withAttendee, now)).toBe(at("2026-02-20T12:10:00.000Z"));
+    expect(nextPhaseBoundary(withAttendee, now)).toBe(at("2026-02-20T12:05:00.000Z"));
   });
 });
 
@@ -180,5 +182,35 @@ describe("countdownUnderHour (#966)", () => {
     expect(countdownUnderHour(target, Date.parse("2026-02-20T13:00:00.000Z"))).toBe(false);
     expect(countdownUnderHour(target, Date.parse("2026-02-20T13:00:00.001Z"))).toBe(true);
     expect(countdownUnderHour(new Date(target), new Date("2026-02-20T13:59:00.000Z"))).toBe(true);
+  });
+});
+
+describe("countdownLastFiveMinutes (#966)", () => {
+  it("adds seconds at five minutes, changing state without per-second pushes", () => {
+    const target = "2026-02-20T14:00:00.000Z";
+    expect(countdownLastFiveMinutes(target, Date.parse("2026-02-20T13:54:59.999Z"))).toBe(false);
+    expect(countdownLastFiveMinutes(target, Date.parse("2026-02-20T13:55:00.000Z"))).toBe(true);
+    expect(countdownLastFiveMinutes(new Date(target), new Date("2026-02-20T13:59:00.000Z"))).toBe(
+      true,
+    );
+    const desired = desiredActivities(response({ deadline: deadline() }));
+    expect(nextPhaseBoundary(desired, Date.parse("2026-02-20T13:30:00.000Z"))).toBe(
+      Date.parse("2026-02-20T13:55:00.000Z"),
+    );
+    expect(nextPhaseBoundary(desired, Date.parse("2026-02-20T13:55:00.000Z"))).toBe(
+      Date.parse("2026-02-20T13:59:01.000Z"),
+    );
+  });
+});
+
+describe("countdownLastMinute (#966)", () => {
+  it("switches below a minute and schedules the next foreground re-render", () => {
+    const target = "2026-02-20T14:00:00.000Z";
+    expect(countdownLastMinute(target, Date.parse("2026-02-20T13:59:00.000Z"))).toBe(false);
+    expect(countdownLastMinute(target, Date.parse("2026-02-20T13:59:00.001Z"))).toBe(true);
+    const desired = desiredActivities(response({ deadline: deadline() }));
+    expect(nextPhaseBoundary(desired, Date.parse("2026-02-20T13:59:01.000Z"))).toBe(
+      Date.parse(target),
+    );
   });
 });

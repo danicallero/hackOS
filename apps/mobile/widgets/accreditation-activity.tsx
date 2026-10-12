@@ -1,5 +1,6 @@
 import { Gauge, HStack, Image, Link, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
+  accessibilityLabel,
   allowsTightening,
   background,
   contentTransition,
@@ -174,30 +175,20 @@ export const AccreditationActivityLayout = (
   const bar = (color: string | null) =>
     share !== null ? <ProgressView value={share} modifiers={[tint(color ?? neutral)]} /> : null;
 
-  // The single interactive element (HIG), concentric with the corner it sits
-  // in: radius = outer radius − margin (`containerRelativeShape`).
-  const scanButton = (color: string | null) => (
-    <Link destination={props.scanUrl}>
-      <HStack
-        spacing={5}
-        modifiers={[
-          padding({ horizontal: 14, vertical: 8 }),
-          background(color ?? "#3A3A3C", { shape: "containerRelativeShape" }),
-        ]}
-      >
-        <Image systemName="wave.3.right" color="#FFFFFF" size={14} />
-        <Text
+  // #966: one 44 pt circular action, named for VoiceOver, separate from progress.
+  const scanButton = (color: string | null) =>
+    labels.scan ? (
+      <Link destination={props.scanUrl} modifiers={[accessibilityLabel(labels.scan)]}>
+        <HStack
           modifiers={[
-            font({ size: 15, weight: "semibold" }),
-            lineLimit(1),
-            foregroundStyle("#FFFFFF"),
+            frame({ width: 44, height: 44, alignment: "center" }),
+            background(color ? "#0066CC" : "#3A3A3C", { shape: "circle" }),
           ]}
         >
-          {labels.scan}
-        </Text>
-      </HStack>
-    </Link>
-  );
+          <Image systemName="wave.3.right" color="#FFFFFF" size={20} />
+        </HStack>
+      </Link>
+    ) : null;
 
   // The window's end as a clock time beside a clock symbol.
   const closesAt = (size: number) =>
@@ -213,7 +204,7 @@ export const AccreditationActivityLayout = (
     ) : null;
 
   const compactLeading = <Image systemName={symbol} color={islandAccent} size={15} />;
-  const compactTrailing = number(String(accredited), 15, null, "semibold");
+  const compactTrailing = number(String(accredited), 15, islandAccent, "semibold");
 
   // Minimal: the accredited share as a ring.
   const minimal =
@@ -232,88 +223,79 @@ export const AccreditationActivityLayout = (
     );
 
   const expandedLeading = (
-    <VStack modifiers={[padding({ leading: 8, top: 4 })]}>
-      {stat(labels.accredited, accreditedValue(28, islandAccent), "leading")}
+    <VStack modifiers={[padding({ leading: 8, top: 6 })]}>
+      {scanButton(islandAccent) ?? <Image systemName={symbol} color={islandAccent} size={24} />}
     </VStack>
   );
-  // Inset from the island's rounded corners so labels never clip.
   const expandedTrailing = (
     <VStack alignment="trailing" modifiers={[padding({ trailing: 8, top: 4 })]}>
-      {stat(labels.lastTenMinutes, recentValue(28), "trailing")}
+      {stat(labels.accredited, accreditedValue(28, islandAccent), "trailing")}
     </VStack>
+  );
+  const secondaryStats = (
+    <HStack alignment="top" spacing={12}>
+      {stat(labels.lastTenMinutes, recentValue(17), "leading")}
+      {inside !== null
+        ? stat(labels.inside, number(String(inside), 17, null, "semibold"), "trailing")
+        : null}
+    </HStack>
   );
   const expandedBottom = (
     <VStack
       alignment="leading"
-      spacing={8}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ horizontal: 8 })]}
+      spacing={4}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ horizontal: 8, bottom: 4 }),
+      ]}
     >
-      {bar(islandAccent)}
       <HStack spacing={8}>
-        <VStack alignment="leading" spacing={1}>
-          {inside !== null && labels.inside ? (
-            <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1)]}>
-              {`${labels.inside} ${inside}`}
-            </Text>
-          ) : (
-            <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1)]}>
-              {labels.title}
-            </Text>
-          )}
-          {closesAt(13)}
-        </VStack>
+        <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
+          {labels.title}
+        </Text>
         <Spacer />
-        {scanButton(islandAccent)}
+        {closesAt(13)}
       </HStack>
+      <HStack alignment="center" spacing={12}>
+        <HStack alignment="firstTextBaseline" spacing={12}>
+          <HStack alignment="firstTextBaseline" spacing={4}>
+            {caption(labels.lastTenMinutes)}
+            {recentValue(17)}
+          </HStack>
+          {inside !== null ? (
+            <HStack alignment="firstTextBaseline" spacing={4}>
+              {caption(labels.inside)}
+              {number(String(inside), 17, null, "semibold")}
+            </HStack>
+          ) : null}
+        </HStack>
+      </HStack>
+      {bar(islandAccent)}
     </VStack>
   );
 
-  // Lock Screen: one 14 pt margin on every edge. Header: symbol, title …
-  // closing time; stats (accredited hero · last 10 min · inside); bar with
-  // Scan in the bottom trailing corner.
-  const header = (
-    <HStack alignment="center" spacing={8}>
-      <Image systemName={symbol} color={bannerAccent ?? neutral} size={17} />
-      <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>{labels.title}</Text>
-      <Spacer />
-      {closesAt(13)}
-    </HStack>
-  );
-  const stats = (
-    <HStack alignment="top" spacing={8}>
-      <VStack alignment="leading" modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}>
-        {stat(labels.accredited, accreditedValue(28, bannerAccent), "leading")}
-      </VStack>
-      <VStack
-        alignment={inside !== null ? "leading" : "trailing"}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: inside !== null ? "leading" : "trailing" }),
-        ]}
-      >
-        {stat(labels.lastTenMinutes, recentValue(28), inside !== null ? "leading" : "trailing")}
-      </VStack>
-      {inside !== null ? (
-        <VStack
-          alignment="trailing"
-          modifiers={[frame({ maxWidth: 10000, alignment: "trailing" })]}
-        >
-          {stat(labels.inside, number(String(inside), 28, null, "semibold"), "trailing")}
-        </VStack>
-      ) : null}
-    </HStack>
-  );
+  // H22 / #966: one primary metric; pace and occupancy stay secondary.
   const banner = (
     <VStack
       alignment="leading"
       spacing={10}
       modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
     >
-      {header}
-      {stats}
-      <HStack alignment="center" spacing={14}>
-        {bar(bannerAccent) ?? <Spacer />}
-        {scanButton(bannerAccent)}
+      <HStack spacing={8}>
+        <Image systemName={symbol} color={bannerAccent ?? neutral} size={17} />
+        <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>
+          {labels.title}
+        </Text>
+        <Spacer />
+        {closesAt(13)}
       </HStack>
+      <HStack alignment="center" spacing={12}>
+        {scanButton(bannerAccent)}
+        {secondaryStats}
+        <Spacer />
+        {stat(labels.accredited, accreditedValue(28, bannerAccent), "trailing")}
+      </HStack>
+      {bar(bannerAccent)}
     </VStack>
   );
 

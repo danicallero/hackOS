@@ -1,18 +1,16 @@
 diff --git a/build/swift-ui/Text/index.d.ts b/build/swift-ui/Text/index.d.ts
-index a8843b7..d7c394d 100644
+index a8843b7..5369090 100644
 --- a/build/swift-ui/Text/index.d.ts
 +++ b/build/swift-ui/Text/index.d.ts
-@@ -41,6 +41,17 @@ export interface TextProps extends CommonViewModifierProps {
+@@ -41,6 +41,15 @@ export interface TextProps extends CommonViewModifierProps {
       * @platform tvos 16.0+
       */
      pauseTime?: Date;
 +    /**
-+     * Renders a counting-down `timerInterval` as `2h 34m` from one hour and
-+     * `34m 21s` below it (`"short"`: `2h` / `34m`; `"long"`: `2h 34m 21s`),
-+     * ticking live, never
-+     * `H:MM:SS`. Sized by `compactCountdownSize` (default 12) and
-+     * `compactCountdownWeight` (`"semibold"` default, or `"bold"`).
-+     * (hackOS patch, #966)
++     * Live unit countdown: `2h 34m`, then `34m`, with seconds only in the
++     * last five minutes (`4m 59s`). Under a minute: `48s` / `<1m` in Always-On.
++     * All legacy forms share this precision policy. Size defaults to 12;
++     * weight defaults to semibold. (hackOS patch, #966)
 +     */
 +    compactCountdown?: 'full' | 'short' | 'long';
 +    compactCountdownSize?: number;
@@ -22,32 +20,30 @@ index a8843b7..d7c394d 100644
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/ios/TextView.swift b/ios/TextView.swift
-index 7dfe0a9..0e8ec04 100644
+index 7dfe0a9..6b7caa1 100644
 --- a/ios/TextView.swift
 +++ b/ios/TextView.swift
 @@ -25,6 +25,10 @@ public final class TextViewProps: UIBaseViewProps {
    @Field public var timerInterval: ClosedRangeDate?
    @Field public var countsDown: Bool?
    @Field public var pauseTime: Date?
-+  // hackOS patch (#966): a counting-down timer as `2h 34m` / `34m 21s`.
++  // hackOS patch (#966): a live timer with seconds only in the last five minutes.
 +  @Field public var compactCountdown: String?
 +  @Field public var compactCountdownSize: Double?
 +  @Field public var compactCountdownWeight: String?
  
    // Override default frame alignment for text views
    override var defaultFrameAlignment: Alignment { .leading }
-@@ -37,9 +41,21 @@ public struct TextView: ExpoSwiftUI.View {
+@@ -37,9 +41,19 @@ public struct TextView: ExpoSwiftUI.View {
      self.props = props
    }
  
 +  @ViewBuilder
    public var body: some View {
 -    buildText(applyModifiers: false)
-+    if let form = props.compactCountdown, props.countsDown ?? true, let end = props.timerInterval?.upper {
++    if props.compactCountdown != nil, props.countsDown ?? true, let end = props.timerInterval?.upper {
 +      CompactCountdown(
 +        end: end,
-+        short: form == "short",
-+        long: form == "long",
 +        size: props.compactCountdownSize ?? 12,
 +        bold: props.compactCountdownWeight == "bold"
 +      )
@@ -59,29 +55,40 @@ index 7dfe0a9..0e8ec04 100644
    }
  
    internal func buildText(applyModifiers: Bool = true) -> Text {
-@@ -73,3 +89,80 @@ public struct TextView: ExpoSwiftUI.View {
+@@ -73,3 +87,89 @@ public struct TextView: ExpoSwiftUI.View {
      return result
    }
  }
 +
-+/// hackOS patch (#966): a live countdown with units, `2h 34m` from one hour,
-+/// `34m 21s` below it and `48s` below a minute (`short`: `2h` / `34m`;
-+/// `long`: `2h 34m 21s` from one hour), never `H:MM:SS`.
-+///
-+/// Only timer text ticks inside a Live Activity (unit format styles render
-+/// once and freeze, custom ones are redacted), so each number is one field
-+/// cut out of a live `Text(timerInterval:)`: the timer (`H:MM:SS` or `M:SS`)
-+/// is trailing-aligned in a wide frame, shifted right by the width of what
-+/// follows the field and clipped to the field's digits. Monospaced digits
-+/// keep every field at a fixed offset from the trailing edge. The units are
-+/// static text. The form is chosen when the Live Activity renders; the API
-+/// updates it when the hour boundary passes.
++/// #966: live units, minute precision until the last five minutes. The API
++/// sends an update at hour/five-minute boundaries; only timer Text ticks in
++/// Live Activities, so each numeric field is clipped from that live source.
++/// Reduced luminance removes the seconds field and its unit entirely.
 +struct CompactCountdown: View {
 +  let end: Date
-+  let short: Bool
-+  var long = false
 +  let size: Double
 +  let bold: Bool
++  @Environment(\.isLuminanceReduced) private var reduced
++
++  private func row(_ scale: Double) -> some View {
++    CompactCountdownRow(end: end, size: size * scale, bold: bold, reduced: reduced)
++  }
++
++  var body: some View {
++    ViewThatFits(in: .horizontal) {
++      row(1)
++      row(0.88)
++      row(0.76)
++      row(0.6)
++    }
++  }
++}
++
++struct CompactCountdownRow: View {
++  let end: Date
++  let size: Double
++  let bold: Bool
++  let reduced: Bool
 +
 +  private var uiFont: UIFont {
 +    UIFont.monospacedDigitSystemFont(ofSize: size, weight: bold ? .bold : .semibold)
@@ -111,27 +118,25 @@ index 7dfe0a9..0e8ec04 100644
 +  }
 +
 +  var body: some View {
-+    let left = end.timeIntervalSinceNow
++    let left = max(0, end.timeIntervalSinceNow)
++    let seconds = left <= 300 && !reduced
 +    HStack(spacing: 0) {
 +      if left >= 3600 {
 +        field(skip: 2 * colon + 4 * digit, digits: left >= 36000 ? 2 : 1)
-+        unit(short ? "h" : "h ")
-+        if !short {
-+          field(skip: colon + 2 * digit, digits: 2)
-+          unit(long ? "m " : "m")
-+          if long {
-+            field(skip: 0, digits: 2)
-+            unit("s")
-+          }
-+        }
++        unit("h ")
++        field(skip: colon + 2 * digit, digits: 2)
++        unit("m")
 +      } else if left < 60 {
-+        // Under a minute: the seconds alone (`48s`), never `0m 48s`.
-+        field(skip: 0, digits: left >= 10 ? 2 : 1)
-+        unit("s")
++        if reduced {
++          unit("<1m")
++        } else {
++          field(skip: 0, digits: 2)
++          unit("s")
++        }
 +      } else {
 +        field(skip: colon + 2 * digit, digits: left >= 600 ? 2 : 1)
-+        unit(short ? "m" : "m ")
-+        if !short {
++        unit(seconds ? "m " : "m")
++        if seconds {
 +          field(skip: 0, digits: 2)
 +          unit("s")
 +        }
@@ -141,20 +146,18 @@ index 7dfe0a9..0e8ec04 100644
 +  }
 +}
 diff --git a/src/swift-ui/Text/index.tsx b/src/swift-ui/Text/index.tsx
-index 2351ee8..15dcbc4 100644
+index 2351ee8..00432b5 100644
 --- a/src/swift-ui/Text/index.tsx
 +++ b/src/swift-ui/Text/index.tsx
-@@ -52,6 +52,17 @@ export interface TextProps extends CommonViewModifierProps {
+@@ -52,6 +52,15 @@ export interface TextProps extends CommonViewModifierProps {
     * @platform tvos 16.0+
     */
    pauseTime?: Date;
 +  /**
-+   * Renders a counting-down `timerInterval` as `2h 34m` from one hour and
-+   * `34m 21s` below it (`"short"`: `2h` / `34m`; `"long"`: `2h 34m 21s`),
-+   * ticking live, never
-+   * `H:MM:SS`. Sized by `compactCountdownSize` (default 12) and
-+   * `compactCountdownWeight` (`"semibold"` default, or `"bold"`).
-+   * (hackOS patch, #966)
++   * Live unit countdown: `2h 34m`, then `34m`, with seconds only in the
++   * last five minutes (`4m 59s`). Under a minute: `48s` / `<1m` in Always-On.
++   * All legacy forms share this precision policy. Size defaults to 12;
++   * weight defaults to semibold. (hackOS patch, #966)
 +   */
 +  compactCountdown?: 'full' | 'short' | 'long';
 +  compactCountdownSize?: number;
@@ -162,7 +165,7 @@ index 2351ee8..15dcbc4 100644
  }
  
  type NativeTextProps = CommonViewModifierProps & {
-@@ -63,6 +74,9 @@ type NativeTextProps = CommonViewModifierProps & {
+@@ -63,6 +72,9 @@ type NativeTextProps = CommonViewModifierProps & {
    timerInterval?: { lower: number; upper: number };
    countsDown?: boolean;
    pauseTime?: number;

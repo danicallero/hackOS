@@ -1535,19 +1535,19 @@ Apple's HIG:
 
 | Presentation | Queue | Staff activity |
 | --- | --- | --- |
-| Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: `42/180` (scanned / accredited, the denominator smaller and secondary; the bare count without one) |
+| Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: `42/180` (scanned / accredited, the denominator smaller and secondary; the bare count without one or past 7 characters) |
 | Minimal | ring of the climb to the front with the position inside; called/in room: the phase symbol | live: ring of the scanned share of accredited people (the count without a denominator); upcoming: countdown |
-| Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: stage track, location · called count-up, challenge · +N more queues | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live: symbol / Scanned `42/180`, scanned-share bar (elapsed time without a denominator), name, ends-in, **Scan** |
-| Lock Screen | challenge … +N more queues; hero ETA (34 pt, accent) and position; called: "Go to" room (green) + location and the count-up since the call; stage track with labels | upcoming: symbol, name, time · location … starts-in countdown; live: symbol, name … ends-in; Scanned `42/180`; bar with **Scan** in the bottom trailing corner |
+| Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: challenge · +N more queues, location · called count-up, stage track | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live: circular **Scan** / Scanned `42/180`, name + live state, ends-in, then scanned-share bar (elapsed time without a denominator) |
+| Lock Screen | challenge … +N more queues; position leading (17 pt), ETA trailing (28 pt, accent); called: count-up leading, "Go to" room (green) + location trailing; stage track with labels | symbol + name and optional live state; context/ends-in leading, 28 pt countdown/Scanned `42/180` trailing; live puts circular **Scan** beside ends-in, with a full-width bar below |
 | Watch Smart Stack / CarPlay (`bannerSmall`) | challenge + `#4 · ~12 min` or the room | name + countdown or `42/180`, no buttons |
 
 | Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
 | --- | --- | --- | --- |
-| Compact leading / trailing | category symbol / countdown to the start; live: to the end (both blue) | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (grey once submitted) | `person.badge.key` / accredited count |
-| Minimal | countdown (to the start; live: to the end) | countdown; submitted: the check | ring of accredited / eligible |
-| Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: live elapsed-time bar, "Now" + name, `hh:mm–hh:mm · place` | symbol / "Closes in" countdown (24 pt, hours long; small and grey once submitted); bottom: window bar, title, project, status | Accredited `412 /600` / Last 10 min `+23`; bottom: share bar, Inside 380, closing time, **Scan** |
-| Lock Screen | symbol, ("Now"), name, time · place … countdown hero; live adds the elapsed-time bar | symbol + title; hero "Closes in" countdown (34 pt) with project and status opposite; window bar. Closing: red. Submitted: green "Submitted" hero, the time left small, no bar | symbol + title … closing time; Accredited (hero) · Last 10 min · Inside; share bar with **Scan** in the bottom trailing corner |
-| Watch / CarPlay | name + countdown, or "Now" + time left | title + countdown ("Not submitted" while closing) or "Submitted" | title + `412 /600` |
+| Compact leading / trailing | category symbol / countdown to the start; live: "Live" (both blue) | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (grey once submitted) | `person.badge.key` / accredited count |
+| Minimal | countdown to the start; live: symbol with a live dot | countdown; submitted: the check | ring of accredited / eligible |
+| Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: name + live state, `hh:mm–hh:mm · place`, live elapsed-time bar | symbol / "Closes in" countdown (28 pt, hours long; small and grey once submitted); bottom: title + status, project, window bar | circular **Scan** / Accredited `412 /600`; bottom: title + closing time, secondary arrivals and inside, then share bar |
+| Lock Screen | symbol + name and optional live state; time · place leading, 28 pt countdown trailing; live adds the elapsed-time bar | symbol + title; project leading, "Closes in" countdown (28 pt) trailing; status in the header; window bar. Closing: red. Submitted: green "Submitted" trailing, project and small time left leading, window bar | symbol + title … closing time; Last 10 min · Inside secondary (17 pt) leading, Accredited hero (28 pt) trailing; circular **Scan** beside secondary stats; full-width share bar |
+| Watch / CarPlay | name + countdown, or "Live" + time left | title + countdown ("Not submitted" while closing) or "Submitted" | title + `412 /600` |
 
 The attendee activity has no buttons (the whole surface opens the schedule
 item). The deadline shows a status only when it is known: `submitted` is a
@@ -1567,15 +1567,25 @@ and filled half by half. While waiting it fills with
 `2 / (calledAhead + 3)` (⅔ when no team called earlier to the room is still
 outside) and the room completes it. Without the counts (older server) only
 the stage shows. The node labels repeat the same
-units so each sits under its node. Meals use `(inside − remaining) / inside`
-(no bar when nobody is inside); other live activities show elapsed time with
-a `ProgressView` timer between `startsAt` and `endsAt`.
+units so each sits under its node. Staff meals/activities use `scanned / accredited` when a positive denominator
+is available, otherwise elapsed time between `startsAt` and `endsAt`. Attendee
+activities show elapsed time while live. Accreditation uses `accredited / eligible`.
+
+**Shared visual grammar.** All five kinds follow
+[`DESIGN.md`](./DESIGN.md#live-activities-on-ios-966): identity row, secondary
+context leading and a primary metric trailing, then optional progress/action.
+Expanded islands retain identity/position leading and the primary value trailing,
+with title/context before the footer. Titles are 17 pt semibold on the Lock Screen
+and 15 pt expanded; primary values are 28 pt, secondary values 17 pt, captions
+12 pt and context 13 pt. Upcoming sessions no longer compress the title beside
+the countdown. Accreditation gives arrivals/occupancy less visual weight.
 
 **Margins and shapes.** The Lock Screen uses one 14 pt margin on every edge
 and stays within the 160 pt height (the live header is a single line for
-that reason). The only filled control, **Scan**, sits in the bottom trailing
-corner with a `containerRelativeShape` background, so it is concentric with
-the Live Activity's (or the island's) corner. There are no tiles or cards
+that reason). The only filled control, **Scan**, is a 44 pt circle with a
+20 pt NFC symbol and localized VoiceOver label. It sits beside the secondary
+values on the Lock Screen and in the expanded leading slot, leaving a separate
+full-width progress row. There are no tiles or cards
 behind symbols. Fields and labels added after v1 (`calledAt`,
 `queueTotal`, `calledAhead`, `accredited`, `labels.estimating` …) are optional:
 an absent one hides its element; the widget never falls back to hardcoded
@@ -1587,19 +1597,20 @@ they tick without updates.
 
 **Fitting the Dynamic Island (#966).** Every widget wraps its compact
 leading, compact trailing and minimal views in hard width caps of 24, 56 and
-36 pt with a fixed Dynamic Type size (`dynamicTypeSize("large")`), so no
+36 pt (the queue's compact leading is 40 pt, so a three-digit position fits) with a fixed Dynamic Type size (`dynamicTypeSize("large")`), so no
 value, locale or text size can widen the island; text scales down
 (`minimumScaleFactor(0.6)`) instead of truncating. The slots get a 3 pt
 leading / 7 pt trailing inset so the glyph and the time sit on the pill's
-concentric margin (HIG). Countdowns read `2h 34m` from an hour and `34m 21s`
-below it, ticking on the device, never `H:MM:SS`: the compact view shows
-that form at 12 pt, the minimal view the leading unit only (`2h`, `34m`) at
-10 pt, and the expanded and Lock Screen heroes add the seconds from an hour
-(`2h 34m 21s`). `Text`'s `compactCountdown` (`full`, `short`, `long`; a
-`patches/@expo__ui@57.0.22.patch` addition) draws it natively: each number
-is one field cut out of a live `Text(timerInterval:)` (trailing-aligned,
-shifted by the width of what follows it, clipped to its digits; monospaced
-digits keep each field at a fixed offset) next to static `h`/`m`/`s`.
+concentric margin (HIG). Every countdown surface uses `2h 34m` / `34m`
+normally and adds seconds only in the last five minutes (`4m 59s`, then `48s`
+below a minute, including minimal and `bannerSmall`). Always-On uses the native `isLuminanceReduced`
+environment to remove both the seconds field and its spacing, leaving `4m`
+or `<1m` below a minute; waking restores seconds, with no placeholder. `Text`'s
+`compactCountdown` (the legacy form names share this precision policy;
+`patches/@expo__ui@57.0.22.patch`) draws each number from a live
+`Text(timerInterval:)`, clipped to its digits next to static `h`/`m`/`s`.
+Monospaced digits keep the fields aligned. `ViewThatFits` fits the fixed-width
+row at 100%, 88%, 76%, then 60%, without dropping relevant seconds.
 **Decision:** checked on the iOS 26.5 simulator over 90 s, a unit format
 over a live date source (`Duration.UnitsFormatStyle` over
 `.durationOffset`) renders nothing, `Date.ComponentsFormatStyle` renders
@@ -1607,10 +1618,12 @@ once and freezes (19–29 s off the timer), `SystemFormatStyle.Timer`,
 `.offset` and `.reference` spell units out, and a custom format style is
 redacted; only timer text ticks. The form is chosen when the activity
 renders, and a stale date does not re-render it, so the props carry
-`countdownUnderHour`: it flips once, an hour before the countdown's
-target, which sends one update (the worker's normal hash path) and makes
-the foreground app reconcile then (`nextPhaseBoundary`). Between the hour
-and that update the compact view can read `h 59m` for up to a tick. Taps open the props' `url` (passed as the
+`countdownUnderHour`, `countdownLastFiveMinutes` and `countdownLastMinute`:
+they flip at the hour, five-minute and one-minute boundaries, sending one
+update each through the worker's normal hash path. The foreground app reconciles
+at all three boundaries (`nextPhaseBoundary`).
+At the hour, the timer can briefly read `h 59m` until that update; at five minutes,
+seconds appear on the next update. Taps open the props' `url` (passed as the
 activity's static URL); the API must send the same `attributes.url` on
 push-to-start. APNs props reach the layouts directly, so a props version
 other than `1` renders only the title. Room and activity names truncate;
@@ -1787,12 +1800,19 @@ the rows would be inert.
 
 **Development samples.** Debug builds only: opening
 `hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-submitted|accreditation|all|end>`
-(for example `xcrun simctl openurl booted …`) renders sample states without a
+(for example `xcrun simctl openurl booted …`; any scheme works, and
+`com.hackudc.os.debug://dev/…` avoids opening another installed hackOS build,
+which would overwrite the App Group's shared Live Activity layouts) renders sample states without a
 backend: waiting #4 of a start of 9 with a 12 min ETA, the same with an
 unknown ETA, called 2 minutes ago, in room, an upcoming meal, a live meal
 (142 of 180 accredited scanned), a live non-meal activity, an
 upcoming and a running workshop, the deadline open with a draft or an
-unknown status, closing and submitted, and the desk at 412 of 600. The handler is required behind `__DEV__` in `+native-intent.tsx`, so
+unknown status, closing and submitted, and the desk at 412 of 600. The
+`-long` samples are the layout worst cases (long names and places, two-digit
+hours, four-digit counts): `queue-waiting-long`, `queue-called-long`,
+`staff-upcoming-long`, `staff-live-long`, `attendee-upcoming-long`,
+`attendee-live-long`, `deadline-open-long`, `deadline-closing-long`,
+`deadline-submitted-long` and `accreditation-long`. The handler is required behind `__DEV__` in `+native-intent.tsx`, so
 release bundles drop it.
 
 ## Realtime & notifications infrastructure
