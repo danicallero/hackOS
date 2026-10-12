@@ -55,8 +55,13 @@ Tests: `apps/api/test/directory/api.test.ts` and
 ## Mobile and the confirmation invite
 
 The mobile app edits the same profile from Account ("Edit networking profile",
-see [`mobile.md`](./mobile.md)) with the opt-in, the three visibility switches,
-headline, location note and bio; links and the CV stay on web. After a
+see [`mobile.md`](./mobile.md)): it opens on the `preview` card exactly as
+scanners see it, with the opt-in switch always available, and a pencil edits it
+in place (headline, location note, bio, and an eye on the surname, photo,
+project and CV that greys what is hidden). Links stay on web. The CV follows
+the same source rules: an application CV is read-only; without one the phone
+can upload (PDF, 5 MB), replace and remove the CV through
+`POST`/`DELETE /api/me/public-profile/cv`, and the eye toggles `shareCv`. After a
 participant confirms their spot (H15), the web "place confirmed" card, the
 public confirmation page (only for the token holder's own session) and the
 mobile wallet banner show `NetworkingProfileInvite` / `NetworkingInvite`: one

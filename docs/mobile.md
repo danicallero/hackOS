@@ -417,12 +417,34 @@ distributed to other Expo Router apps without importing hackOS code.
   action buttons.
   "Edit networking profile" (#934, #935), always shown in the same section, opens the
   `app/networking-profile.tsx` modal (`components/networking-profile-screen.tsx`,
-  `lib/networking-profile.ts`): the opt-in switch, the surname/photo/project
-  switches (once shared), headline, where-to-find-you and bio (the same photo
-  control as Account sits above them), saved with
-  `PUT /api/me/public-profile` under one `Idempotency-Key` per change set. It omits
-  `socials` and `shareCv`, which the API then keeps; links and the CV are edited
-  on web ([`directory.md`](./directory.md)).
+  `lib/networking-profile.ts`). It opens on a **preview**: the card exactly as
+  people who scan the owner see it (`preview` from `GET /api/me/public-profile`,
+  rendered by the same `components/profile-card.tsx` the diary's person screen
+  uses), under an always-visible "Share my profile" switch. In the preview that
+  switch saves on its own (optimistic, rolled back with a localized error if the
+  PUT fails); a card that is not shared yet is drawn at half opacity and the
+  sheet starts in edit mode. The header follows the other form sheets
+  (`FloatingGlassButton`): X closes, pencil enters edit mode; while editing, X
+  discards the changes (back to the preview) and the checkmark saves.
+  **Edit mode** keeps the layout and edits in place: headline under the name,
+  bio and where-to-find-you as inputs, the account photo through
+  `ProfilePhotoMenu`. Small eyes (`VisibilityToggle`, a `switch` role) sit on
+  the name (full surname), the photo, the project and challenges rows and the CV
+  tile; closed (`eye.slash`) means scanners do not get it, and the element stays
+  on screen greyed instead of disappearing (while projects are hidden the card
+  carries none, so the last ones seen, or a placeholder row, are shown greyed).
+  Saving is `PUT /api/me/public-profile` under one `Idempotency-Key` per change
+  set; the response replaces the preview. It omits `socials` (links stay on web)
+  and sends `shareCv` only when a CV exists.
+  **CV** (the side tile): a CV taken from the application (`cv.source:
+  "application"`) always wins and is read-only here, with only the eye. With no
+  application CV the phone manages the upload with `expo-document-picker`
+  (`lib/profile-cv.ts`): with no CV the tile reads "Upload CV"; an uploaded CV
+  shows the tile with its eye plus Replace CV and Remove CV (confirmed) rows.
+  A PDF over 5 MB or a non-PDF is refused before sending, and the API's
+  400/413/409 answers map to localized errors. Upload and removal save on their
+  own (`POST`/`DELETE /api/me/public-profile/cv`, one `Idempotency-Key` per
+  attempt, a spinner on the tile) like the photo; only sharing waits for Save.
   Sponsor representatives (`isSponsorRep`) also
   see a Meals section listing `GET /api/me/meal-plan`, reloaded on every focus
   and cached under `user:<id>:meal-plan` so sign-out and 401 invalidation clear

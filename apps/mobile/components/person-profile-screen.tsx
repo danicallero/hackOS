@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { HeaderHeightContext } from "expo-router/react-navigation";
 import Stack from "expo-router/stack";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Alert, Linking, Pressable, RefreshControl, Text, View } from "react-native";
+import { Alert, Pressable, RefreshControl, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CvViewer } from "@/components/cv-viewer";
@@ -14,7 +14,6 @@ import {
   EmptyState,
   LegacyHeaderIconButton,
   Section,
-  Separator,
 } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import {
@@ -22,13 +21,14 @@ import {
   ProfileAvatarCollapseAnchor,
   useProfileAvatarCollapse,
 } from "@/components/profile-avatar-collapse";
-import { DetailRow, NoteRow, QuickAction } from "@/components/profile-parts";
+import { ProfileCard } from "@/components/profile-card";
+import { NoteRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
-import { type DirectoryEntry, displayUrl, socialLabel } from "@/lib/directory";
+import type { DirectoryEntry } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
-import { type MessageKey, useLocale } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { safeBack } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
@@ -38,14 +38,6 @@ type State =
   | { status: "ready"; person: DirectoryEntry }
   | { status: "missing" }
   | { status: "error"; error: Error };
-
-const ROW_ICON_INSET = 52;
-
-/** Singular and plural row labels per project kind. */
-const PROJECT_KINDS: { kind: "project" | "workGroup"; one: MessageKey; many: MessageKey }[] = [
-  { kind: "project", one: "directoryProject", many: "directoryProjects" },
-  { kind: "workGroup", one: "directoryWorkGroup", many: "directoryWorkGroups" },
-];
 
 /**
  * A saved person's profile (#934, #935), opened from a diary row. People get
@@ -251,162 +243,61 @@ export function PersonProfileScreen() {
           <EmptyState icon="person.crop.circle" title={t("directoryPersonNotFound")} />
         ) : (
           <>
-            <View style={{ alignItems: "center", gap: 14 }}>
-              <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={112}>
-                <PersonAvatar size={112} name={person.displayName} uri={person.photoUrl} />
-              </ProfileAvatarCollapseAnchor>
-              <View
-                onLayout={avatarCollapse.onNameLayout}
-                style={{ alignItems: "center", gap: 4, paddingHorizontal: 8 }}
-              >
-                <Text
-                  selectable
-                  accessibilityRole="header"
-                  style={{
-                    color: colors.label,
-                    fontSize: 26,
-                    fontWeight: "700",
-                    textAlign: "center",
-                  }}
-                >
-                  {person.displayName}
-                </Text>
-                {person.headline ? (
-                  <Text
-                    selectable
-                    style={{
-                      color: colors.secondaryLabel,
-                      fontSize: 16,
-                      lineHeight: 21,
-                      textAlign: "center",
-                    }}
-                  >
-                    {person.headline}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              {entry ? (
-                <QuickAction
-                  icon={entry.starred ? "star.fill" : "star"}
-                  iconTint={entry.starred ? colors.warning : colors.accent}
-                  label={t(entry.starred ? "diaryUnfavourite" : "diaryFavourite")}
-                  title={t("diaryFavourite")}
-                  selected={entry.starred}
-                  iconNode={<FavouriteStar on={entry.starred} size={22} />}
-                  busy={busy === "star"}
-                  onPress={() => patch({ starred: !entry.starred }, "star")}
-                />
-              ) : null}
-              {entry ? (
-                // With a note, its section below shows it; the tile edits it.
-                <QuickAction
-                  icon="note.text"
-                  label={t(entry.note ? "diaryEditNote" : "diaryNote")}
-                  title={t(entry.note ? "diaryEditNote" : "diaryNote")}
-                  busy={busy === "note"}
-                  onPress={() => setEditingNote(true)}
-                />
-              ) : null}
-              {person.cvUrl ? (
-                <QuickAction
-                  icon="doc.text"
-                  label={t("directoryCv")}
-                  title={t("directoryCv")}
-                  busy={false}
-                  onPress={() => setCvOpen(true)}
-                />
-              ) : null}
-            </View>
-
-            {person.bio ? (
-              <Section>
-                <Text
-                  selectable
-                  style={{
-                    color: colors.label,
-                    fontSize: 16,
-                    lineHeight: 23,
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                  }}
-                >
-                  {person.bio}
-                </Text>
-              </Section>
-            ) : null}
-
-            {entry?.note ? (
-              <Section title={t("diaryNote")}>
-                <NoteRow
-                  note={entry.note}
-                  hint={t("diaryEditNote")}
-                  onPress={() => setEditingNote(true)}
-                />
-              </Section>
-            ) : null}
-
-            {person.socials.length > 0 ? (
-              <Section title={t("directoryLinks")}>
-                {person.socials.map((link, index) => (
-                  <View key={`${link.kind}-${link.url}`}>
-                    {index > 0 ? <Separator inset={ROW_ICON_INSET} /> : null}
-                    <DetailRow
-                      icon={link.kind === "website" ? "globe" : "link"}
-                      label={socialLabel(link, t)}
-                      value={displayUrl(link.url)}
-                      onPress={() => void Linking.openURL(link.url)}
+            <ProfileCard
+              data={person}
+              onNameLayout={avatarCollapse.onNameLayout}
+              avatar={
+                <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={112}>
+                  <PersonAvatar size={112} name={person.displayName} uri={person.photoUrl} />
+                </ProfileAvatarCollapseAnchor>
+              }
+              actions={
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  {entry ? (
+                    <QuickAction
+                      icon={entry.starred ? "star.fill" : "star"}
+                      iconTint={entry.starred ? colors.warning : colors.accent}
+                      label={t(entry.starred ? "diaryUnfavourite" : "diaryFavourite")}
+                      title={t("diaryFavourite")}
+                      selected={entry.starred}
+                      iconNode={<FavouriteStar on={entry.starred} size={22} />}
+                      busy={busy === "star"}
+                      onPress={() => patch({ starred: !entry.starred }, "star")}
                     />
-                  </View>
-                ))}
-              </Section>
-            ) : null}
-
-            {person.locationNote || person.projects.length > 0 || person.challenges.length > 0 ? (
-              <Section>
-                {[
-                  person.locationNote ? (
-                    <DetailRow
-                      key="location"
-                      icon="mappin"
-                      label={t("directoryLocation")}
-                      value={person.locationNote}
+                  ) : null}
+                  {entry ? (
+                    // With a note, its section below shows it; the tile edits it.
+                    <QuickAction
+                      icon="note.text"
+                      label={t(entry.note ? "diaryEditNote" : "diaryNote")}
+                      title={t(entry.note ? "diaryEditNote" : "diaryNote")}
+                      busy={busy === "note"}
+                      onPress={() => setEditingNote(true)}
                     />
-                  ) : null,
-                  // Every project and work group, one row per kind (#935).
-                  ...PROJECT_KINDS.map(({ kind, one, many }) => {
-                    const names = person.projects
-                      .filter((project) => project.kind === kind)
-                      .map((project) => project.name);
-                    return names.length > 0 ? (
-                      <DetailRow
-                        key={kind}
-                        icon="hammer"
-                        label={t(names.length === 1 ? one : many)}
-                        value={names.join("\n")}
-                      />
-                    ) : null;
-                  }),
-                  person.challenges.length > 0 ? (
-                    <DetailRow
-                      key="challenges"
-                      icon="trophy"
-                      label={t("directoryChallenges")}
-                      value={person.challenges.map((challenge) => challenge.name).join("\n")}
+                  ) : null}
+                  {person.cvUrl ? (
+                    <QuickAction
+                      icon="doc.text"
+                      label={t("directoryCv")}
+                      title={t("directoryCv")}
+                      busy={false}
+                      onPress={() => setCvOpen(true)}
                     />
-                  ) : null,
-                ]
-                  .filter(Boolean)
-                  .map((row, index) => (
-                    <View key={(row as { key: string }).key}>
-                      {index > 0 ? <Separator inset={ROW_ICON_INSET} /> : null}
-                      {row}
-                    </View>
-                  ))}
-              </Section>
-            ) : null}
+                  ) : null}
+                </View>
+              }
+              afterBio={
+                entry?.note ? (
+                  <Section title={t("diaryNote")}>
+                    <NoteRow
+                      note={entry.note}
+                      hint={t("diaryEditNote")}
+                      onPress={() => setEditingNote(true)}
+                    />
+                  </Section>
+                ) : null
+              }
+            />
 
             {entry ? (
               <Section>
