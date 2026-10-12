@@ -1587,7 +1587,7 @@ they tick without updates.
 
 **Fitting the Dynamic Island (#966).** Every widget wraps its compact
 leading, compact trailing and minimal views in hard width caps of 24, 56 and
-36 pt with a fixed Dynamic Type size (`dynamicTypeSize("large")`), so no
+36 pt (the queue's compact leading is 40 pt, so a three-digit position fits) with a fixed Dynamic Type size (`dynamicTypeSize("large")`), so no
 value, locale or text size can widen the island; text scales down
 (`minimumScaleFactor(0.6)`) instead of truncating. The slots get a 3 pt
 leading / 7 pt trailing inset so the glyph and the time sit on the pill's

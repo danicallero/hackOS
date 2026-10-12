@@ -85,7 +85,9 @@ export const QueueActivityLayout = (
     layout: L,
   ) => ({
     ...layout,
-    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing", { leading: 3 }),
+    // Wider than the other kinds' 24 pt: the position reaches three digits
+    // (`#128` was truncated to `#1…`); four still scale down within it.
+    compactLeading: islandSlot(layout.compactLeading as never, 40, "trailing", { leading: 3 }),
     compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { trailing: 7 }),
     minimal: islandSlot(layout.minimal as never, 36, "center"),
   });
@@ -340,6 +342,7 @@ export const QueueActivityLayout = (
           font({ size: 15, weight: "semibold" }),
           monospacedDigit(),
           contentTransition("numericText", { countsDown: true }),
+          lineLimit(1),
           foregroundStyle(symbolColor),
         ]}
       >
