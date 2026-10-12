@@ -16,6 +16,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAccountWallet, WalletModal } from "@/components/account-wallet";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
 import { CompanyAlbum, CompanySheet } from "@/components/company-album";
+import {
+  ConnectionCelebration,
+  type ConnectionCelebrationTarget,
+} from "@/components/connection-celebration";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { DiaryPersonRow, PERSON_ROW_TEXT_INSET } from "@/components/diary-person-row";
 import { FavouriteStar } from "@/components/favourite-star";
@@ -38,6 +42,7 @@ import { filterDiaryEntries } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
+import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -121,6 +126,9 @@ export function DiaryScreen() {
   const [input, setInput] = useState<ScanInput | null>(null);
   const [scanning, setScanning] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(null);
+  const [celebration, setCelebration] = useState<ConnectionCelebrationTarget | null>(null);
+  const celebrations = useRef(0);
+  const { me } = useMeContext();
   const [highlightId, setHighlightId] = useState<number | null>(null);
   const [busyKeys, setBusyKeys] = useState<ReadonlySet<string>>(new Set());
   const [noteTarget, setNoteTarget] = useState<NoteTarget | null>(null);
@@ -246,10 +254,20 @@ export function DiaryScreen() {
         await loadCollection();
         scrollToTop();
       } else {
+        // A new person (not a re-scan) is met with the connection animation.
+        const isNew = entries !== null && !entries.some((current) => current.id === entry.id);
         scrollToTop();
         applyEntry(entry);
         setSavedId(entry.id);
         setSection("people");
+        if (isNew && entry.person) {
+          celebrations.current += 1;
+          setCelebration({
+            key: celebrations.current,
+            name: entry.person.displayName,
+            photoUrl: entry.person.photoUrl,
+          });
+        }
       }
     } catch (error) {
       void haptic("error");
@@ -550,6 +568,14 @@ export function DiaryScreen() {
   );
   const overlays = (
     <>
+      <ConnectionCelebration
+        target={celebration}
+        self={{
+          name: [me?.name, me?.surname].filter(Boolean).join(" ") || (me?.email ?? ""),
+          image: me?.image ?? null,
+        }}
+        onDone={() => setCelebration(null)}
+      />
       <WalletModal wallet={wallet} />
       <NfcReader
         visible={input === "nfc"}

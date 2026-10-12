@@ -1069,6 +1069,25 @@ for an account without event access, 429) maps to its own localized alert
 scanners share the NFC-A UID encoding, so a stand tag is never accepted as a
 badge (`diary.md`).
 
+**Meeting someone.** A scan that adds a person who was not yet in the loaded
+diary (never a re-scan, never a stand) plays `components/connection-celebration.tsx`:
+a transparent full-screen `Modal` where the viewer's photo (from `useMeContext`)
+and the scanned person's (`UserAvatar`, initials until the authenticated photo
+loads) fly in from opposite sides, merge with an elastic spring, then a ring,
+ten particles in the accent color and a link glyph burst from the join (about
+1.6 s), fading out onto the pinned card. Frames are shared-value transforms on
+the UI thread (reanimated; no Skia in the app, so the "gooey" feel is spring
+overshoot plus a squash on the merge, not a metaball filter). Haptics through
+`lib/haptics.ts`: light and medium as the photos approach, success at the
+merge (the lib has no user setting; it is best-effort and silent where there is
+no engine). A tap anywhere skips it; it never outlasts its timer. Under
+reduced motion it is a 1.1 s crossfade of the two photos and the glyph, with no
+travel, ring or particles and only the success haptic. It announces
+`diaryConnected` ("You are now connected with {name}") to screen readers and
+labels the overlay with it. The API reports `created` only as the status code
+(201 vs 200), which `apiFetch` does not expose, so "new" is decided against the
+loaded diary entries. Not verified on a device.
+
 `apiFetch` returns API timestamps as `Date` objects (Better Auth's client JSON
 parser revives ISO strings), so diary ordering goes through `timestampOf`
 rather than string comparison. Menus use `MenuTriggerIcon` (`native-ui.tsx`)

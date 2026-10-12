@@ -811,6 +811,7 @@
   "diaryScanNotShared": "This person doesn't share a profile.",
   "diaryScanStandUnavailable": "This sponsor isn't available yet.",
   "diaryScanSelf": "That's your own badge.",
+  "diaryConnected": "You are now connected with {name}",
   "diaryForbidden": "Your account has no event contacts.",
   "diaryScanRateLimited": "Too many scans. Try again in a minute.",
   "diaryScanError": "Couldn't save. Try again.",
