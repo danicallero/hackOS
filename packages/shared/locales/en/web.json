@@ -3712,6 +3712,6 @@
   "liveActivityAudienceLabel": "Show Live Activity to audience",
   "liveActivityNoRolesHint": "Nobody receives it until a role is selected.",
   "liveActivityAllRoles": "All roles",
-  "networkingInvite": "This is the profile other participants or company representatives you network with during the event will be able to see.",
+  "networkingInvite": "When other participants or company representatives scan your badge during the event, they'll see this profile to swap contact details or network with you.",
   "networkingInviteAction": "Complete profile"
 }

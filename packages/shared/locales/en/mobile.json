@@ -890,7 +890,7 @@
   "networkingCvFromApplication": "Your CV comes from your application and can't be changed here.",
   "networkingCvUploadError": "Couldn't upload the CV. Try again.",
   "networkingCvRemoveError": "Couldn't remove the CV. Try again.",
-  "networkingAudience": "Only people who scan your badge will see it.",
+  "networkingAudience": "People who scan your badge during the event will see it, so you can swap contact details or network.",
   "networkingShare": "Share my profile",
   "networkingShowSurname": "Full surname",
   "networkingShowPhoto": "Photo",
@@ -901,6 +901,6 @@
   "networkingBio": "Bio",
   "networkingLoadError": "Couldn't load the profile.",
   "networkingSaveError": "Couldn't save the profile.",
-  "networkingInvite": "This is the profile other participants or company representatives you network with during the event will be able to see.",
+  "networkingInvite": "When other participants or company representatives scan your badge during the event, they'll see this profile to swap contact details or network with you.",
   "networkingInviteAction": "Complete profile"
 }
