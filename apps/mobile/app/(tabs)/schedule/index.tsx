@@ -1,5 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { useNavigation, useRouter } from "expo-router";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import {
   type ReactNode,
@@ -59,6 +59,7 @@ import {
   fetchAdminSchedule,
   fetchPublicSchedule,
   resolveScheduleText,
+  SCHEDULE_POLL_MS,
   type ScheduleInput,
   type ScheduleItem,
   scheduleTypeLabel,
@@ -159,9 +160,15 @@ export default function ScheduleScreen() {
   const scheduleScrollGuardEnabled = process.env.EXPO_OS === "android" && canManage;
   const scheduleScrollGesture = useNativeGesture({ enabled: scheduleScrollGuardEnabled });
 
+  // The schedule has no push channel on mobile, so edits by others arrive by
+  // refetching on focus, on foreground (useCachedApi) and every minute while
+  // this tab is the one on screen.
+  const focusedRef = useRef(false);
+  const whileFocused = useCallback(() => focusedRef.current, []);
   const { data, loading, error, staleSince, load, setData } = useCachedApi(
     "schedule",
     fetchPublicSchedule,
+    { pollMs: SCHEDULE_POLL_MS, pollWhen: whileFocused },
   );
   // H50 extension: resolve each item's title/description into the viewer's
   // language here so every downstream renderer keeps reading plain
@@ -224,10 +231,19 @@ export default function ScheduleScreen() {
     });
   }, [navigation, t, glassAvailable]);
 
+  useFocusEffect(
+    useCallback(() => {
+      focusedRef.current = true;
+      void load();
+      return () => {
+        focusedRef.current = false;
+      };
+    }, [load]),
+  );
+
   useEffect(() => {
-    void load();
     void notifications.load();
-  }, [load, notifications.load]);
+  }, [notifications.load]);
 
   // Keeps the "now" line accurate without a full data reload.
   useEffect(() => {
@@ -967,20 +983,28 @@ function ScheduleCard({
             </Pressable>
           ) : null}
           <View style={{ gap: 11, padding: 18, paddingRight: 40 }}>
-            <View style={{ alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {/* A non-wrapping row: a wrapping row measured the title at its
+                single-line height and clipped it as soon as it wrapped. */}
+            <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 8 }}>
               <Text
                 selectable
                 numberOfLines={truncated ? COLLAPSED_TITLE_LINES : undefined}
-                style={{ color: colors.label, flexShrink: 1, fontSize: 17, fontWeight: "700" }}
+                style={{
+                  color: colors.label,
+                  flex: 1,
+                  fontSize: 17,
+                  fontWeight: "700",
+                  lineHeight: 22,
+                }}
               >
                 {item.title}
               </Text>
               {audienceBadge ? (
-                <StatusPill tone="neutral" style={{ alignSelf: "center" }}>
+                <StatusPill tone="neutral" style={{ flexShrink: 0 }}>
                   {audienceBadge}
                 </StatusPill>
               ) : item.visibility === "hidden" ? (
-                <StatusPill tone="warning" style={{ alignSelf: "center" }}>
+                <StatusPill tone="warning" style={{ flexShrink: 0 }}>
                   {t("scheduleDraftBadge")}
                 </StatusPill>
               ) : null}

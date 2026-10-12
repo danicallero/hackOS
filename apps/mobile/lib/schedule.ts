@@ -12,6 +12,9 @@ import { durationMinutes } from "./presence-timeline";
 
 type Translate = ReturnType<typeof useLocale>["t"];
 
+/** The schedule has no push channel on mobile: screens refetch this often while focused. */
+export const SCHEDULE_POLL_MS = 60_000;
+
 /** `sponsor`/`participant`/`mentor` (H59) — empty on an item means staff-only, never stored literally. */
 export type ScheduleAudience = "sponsor" | "participant" | "mentor";
 export const SCHEDULE_AUDIENCES: ScheduleAudience[] = ["sponsor", "participant", "mentor"];
@@ -73,6 +76,8 @@ export interface ScheduleInput {
   audiences: ScheduleAudience[];
   contactNote: string | null;
   notes: string | null;
+  /** Language `title`/`description` are written in, when it isn't the editor's own (single-language entry). */
+  titleLanguage?: Language;
 }
 
 export type ScheduleTranslation = { title?: string; description?: string | null };

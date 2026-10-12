@@ -36,6 +36,7 @@ import {
   scheduleTypeLabel,
   translateScheduleContent,
 } from "@/lib/schedule";
+import { prepareScheduleSubmission, scheduleSaveError } from "@/lib/schedule-save";
 import { colors } from "@/theme/colors";
 
 const LANGUAGES: Language[] = ["es", "gl", "en"];
@@ -178,6 +179,7 @@ export function ScheduleFormModal({
   const [scheduledPublish, setScheduledPublish] = useState(Boolean(initial?.publishAt));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
   // H50 extension: staged locally so translations can be filled in before
   // the item even exists — persisted right after create/update below.
   const [translations, setTranslations] = useState<ScheduleTranslations>(initialTranslations ?? {});
@@ -189,15 +191,21 @@ export function ScheduleFormModal({
   // (and the API silently forces them back to hidden/null) without one (H59 follow-up).
   const hasAudience = (values.audiences ?? []).length > 0;
 
+  // Parents rebuild these props on every render (and the schedule now
+  // refreshes in the background), so the form must only reset when it opens —
+  // never wipe what the user is typing.
+  const initialRef = useRef({ initial, initialOwners, initialTranslations });
+  initialRef.current = { initial, initialOwners, initialTranslations };
   useEffect(() => {
     if (!visible) return;
-    setValues(initial ?? emptyForm());
-    setOwners(initialOwners ?? []);
-    setScheduledPublish(Boolean(initial?.publishAt));
-    setTranslations(initialTranslations ?? {});
+    const start = initialRef.current;
+    setValues(start.initial ?? emptyForm());
+    setOwners(start.initialOwners ?? []);
+    setScheduledPublish(Boolean(start.initial?.publishAt));
+    setTranslations(start.initialTranslations ?? {});
     setTranslationsOpen(false);
     setError(null);
-  }, [visible, initial, initialOwners, initialTranslations]);
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -222,6 +230,10 @@ export function ScheduleFormModal({
 
   async function autoTranslate() {
     if (blankTargetLanguages.length === 0) return;
+    if (!values.title.trim()) {
+      showError(t("scheduleTitleRequired"));
+      return;
+    }
     setTranslating(true);
     setError(null);
     try {
@@ -232,15 +244,23 @@ export function ScheduleFormModal({
       });
       setTranslations((current) => ({ ...current, ...result }));
     } catch {
-      setError(t("couldNotTranslate"));
+      showError(t("couldNotTranslate"));
     } finally {
       setTranslating(false);
     }
   }
 
+  function showError(message: string) {
+    setError(message);
+    // The form is long: bring the message into view instead of leaving it
+    // below the fold.
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }
+
   async function save() {
-    if (!values.title.trim()) {
-      setError(t("scheduleSaveError"));
+    const prepared = prepareScheduleSubmission(values, translations);
+    if (!prepared) {
+      showError(t("scheduleTitleRequired"));
       return;
     }
     setPending(true);
@@ -248,9 +268,8 @@ export function ScheduleFormModal({
     try {
       let result = await onSubmit(
         {
-          ...values,
-          title: values.title.trim(),
-          publishAt: scheduledPublish ? values.publishAt : null,
+          ...prepared.values,
+          publishAt: scheduledPublish ? prepared.values.publishAt : null,
         },
         owners.map((owner) =>
           owner.userId !== null
@@ -258,12 +277,12 @@ export function ScheduleFormModal({
             : { freeTextName: owner.freeTextName as string },
         ),
       );
-      if (Object.keys(translations).length > 0) {
-        result = await saveScheduleTranslations(result.id, translations);
+      if (Object.keys(prepared.translations).length > 0) {
+        result = await saveScheduleTranslations(result.id, prepared.translations);
       }
       await onSaved?.(result);
-    } catch {
-      setError(t("scheduleSaveError"));
+    } catch (cause) {
+      showError(scheduleSaveError(cause, t));
     } finally {
       setPending(false);
     }
@@ -278,6 +297,7 @@ export function ScheduleFormModal({
     >
       <View style={{ backgroundColor: colors.background, flex: 1 }}>
         <ScrollView
+          ref={scrollRef}
           automaticallyAdjustKeyboardInsets
           contentInsetAdjustmentBehavior="automatic"
           keyboardShouldPersistTaps="handled"
@@ -297,6 +317,23 @@ export function ScheduleFormModal({
               {scheduleId ? t("scheduleEdit") : t("scheduleAdd")}
             </Text>
           </View>
+
+          {error ? (
+            <View
+              accessibilityLiveRegion="assertive"
+              accessibilityRole="alert"
+              style={{
+                backgroundColor: colors.destructiveSurface,
+                borderCurve: "continuous",
+                borderRadius: 12,
+                padding: 14,
+              }}
+            >
+              <Text selectable style={{ color: colors.onDestructiveSurface, fontSize: 15 }}>
+                {error}
+              </Text>
+            </View>
+          ) : null}
 
           <Section title={`${t("scheduleTitleLabel")} · ${languageTag(accountLanguage, t)}`}>
             <TextInput
@@ -665,15 +702,6 @@ export function ScheduleFormModal({
           </Section>
 
           <OwnersField owners={owners} onChange={setOwners} scheduleId={scheduleId} />
-
-          {error ? (
-            <Text
-              selectable
-              style={{ color: colors.destructive, fontSize: 14, textAlign: "center" }}
-            >
-              {error}
-            </Text>
-          ) : null}
         </ScrollView>
 
         <FloatingGlassButton

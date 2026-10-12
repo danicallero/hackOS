@@ -671,7 +671,16 @@ distributed to other Expo Router apps without importing hackOS code.
   (`components/schedule-swipe-row.tsx`); both the swipe's edit action and the
   Add button open `components/schedule-form-modal.tsx`, which mirrors the web
   admin's `ScheduleFormModal` field-for-field (including the
-  responsible-person picker). On Android, manager schedules also mount one
+  responsible-person picker). Title and description are required in only one
+  language: when the editor's own language is blank, `prepareScheduleSubmission`
+  (`lib/schedule-save.ts`) promotes the first filled translation and sends its
+  `titleLanguage`. A failed save shows the localized reason
+  (`scheduleSaveError`: business/validation errors from the API, the
+  connection message only when the request never got a response) in a banner
+  at the top of the form, scrolled into view. The schedule has no mobile push
+  channel (`content.schedule.changed` rides the public content topic), so the
+  list and detail screens refetch on focus and foreground and poll every
+  `SCHEDULE_POLL_MS` (60 s) while focused; both support pull-to-refresh. On Android, manager schedules also mount one
   native gesture on the `SectionList`; each row waits for that vertical gesture
   to fail before its horizontal swipe can activate, keeping diagonal/vertical
   drags in the list (issue #626). The row's `hitSlop` additionally excludes its

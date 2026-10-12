@@ -5,7 +5,11 @@ const mockPush = jest.fn();
 
 jest.mock("@/lib/use-unread-notifications", () => ({ useUnreadNotificationCount: () => 0 }));
 jest.mock("expo-router", () => ({
-  useFocusEffect: () => {},
+  // Focus is always on in these tests, so run the effect on mount.
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const { useEffect } = jest.requireActual("react");
+    useEffect(callback, [callback]);
+  },
   useNavigation: () => ({
     addListener: () => () => {},
     isFocused: () => true,

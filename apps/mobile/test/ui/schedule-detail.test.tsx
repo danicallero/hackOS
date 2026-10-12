@@ -30,6 +30,10 @@ const mockActivity: MockScheduleItem = {
 let mockSchedule: MockScheduleItem[] = [mockActivity];
 
 jest.mock("expo-router", () => ({
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const { useEffect } = jest.requireActual("react");
+    useEffect(callback, [callback]);
+  },
   useLocalSearchParams: () => ({ id: "1" }),
   useRouter: () => mockRouter,
 }));

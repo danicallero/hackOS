@@ -1,8 +1,8 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
-import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
 import { HeaderBackButton } from "@/components/header-back-button";
@@ -24,6 +24,7 @@ import {
   fetchAdminSchedule,
   fetchPublicSchedule,
   resolveScheduleText,
+  SCHEDULE_POLL_MS,
   type ScheduleAudience,
   type ScheduleInput,
   type ScheduleOwner,
@@ -61,34 +62,60 @@ export default function ScheduleDetailScreen() {
   const { me } = useMeContext();
   const insets = useSafeAreaInsets();
   const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
+  const focusedRef = useRef(false);
+  const whileFocused = useCallback(() => focusedRef.current, []);
   const { data, loading, error, staleSince, load, setData } = useCachedApi(
     "schedule",
     fetchPublicSchedule,
+    { pollMs: SCHEDULE_POLL_MS, pollWhen: whileFocused },
   );
   const notifications = useScheduleNotifications(data ?? []);
   const [editing, setEditing] = useState(false);
   const [adminItem, setAdminItem] = useState<AdminScheduleItem | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      focusedRef.current = true;
+      void load();
+      return () => {
+        focusedRef.current = false;
+      };
+    }, [load]),
+  );
 
   useEffect(() => {
-    void load();
     void notifications.load();
-  }, [load, notifications.load]);
+  }, [notifications.load]);
 
+  // `data` changes on every refresh and after a save, so the staff copy
+  // (owners, drafts, translations) is re-read along with it.
   useEffect(() => {
+    void data;
     if (!canManage) {
       setAdminItem(null);
       return;
     }
     let cancelled = false;
-    void fetchAdminSchedule().then((items) => {
-      if (cancelled) return;
-      const match = items.find((candidate) => String(candidate.id) === id);
-      setAdminItem(match ?? null);
-    });
+    fetchAdminSchedule()
+      .then((items) => {
+        if (cancelled) return;
+        const match = items.find((candidate) => String(candidate.id) === id);
+        setAdminItem(match ?? null);
+      })
+      .catch(() => {
+        // Keep the last staff copy; the public read above reports load errors.
+      });
     return () => {
       cancelled = true;
     };
-  }, [canManage, id]);
+  }, [canManage, id, data]);
 
   const rawItem = data?.find((candidate) => String(candidate.id) === id) ?? null;
   // H50 extension: resolve into the viewer's language here so the rest of
@@ -260,6 +287,9 @@ export default function ScheduleDetailScreen() {
       )}
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
+        refreshControl={
+          <RefreshControl onRefresh={() => void onRefresh()} refreshing={refreshing} />
+        }
         contentContainerStyle={{
           flexGrow: 1,
           paddingBottom: 40,
