@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TableHead } from "@/components/ui/table";
+import { useEventZoneHint } from "@/lib/event-time";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { uiPrefsApi } from "@/lib/logistics";
 
@@ -359,3 +360,16 @@ export function ResizableHead({
  * selections combine with OR: an item matches if it has any of the checked
  * audiences, or is staff-only and that option is checked.
  */
+
+/** Column header text; a time column adds a terse zone name when the event zone differs from the browser's. */
+export function ColumnLabel({ id }: { id: ColumnId }) {
+  const { t, language } = useLocale();
+  const hint = useEventZoneHint(language);
+  const showHint = hint && (id === "starts" || id === "ends" || id === "publishAt");
+  return (
+    <>
+      {t(COLUMN_LABEL_KEYS[id])}
+      {showHint && <span className="text-muted-foreground ml-1 font-normal">{hint}</span>}
+    </>
+  );
+}

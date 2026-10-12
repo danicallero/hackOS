@@ -55,6 +55,8 @@ export interface Me {
   /** H7: once an application is accepted, name/shirt-size/dietary fields are no longer self-editable. */
   profileLocked: boolean;
   hasStatisticsPanels: boolean;
+  /** H45/H47: the event's IANA timezone; every shown and typed time is this wall clock, not the browser's. */
+  eventTimezone: string;
   /** #933: when the person last saved an explicit dietary answer (an empty one counts). */
   dietaryConfirmedAt: string | null;
   /** #933: next-entry prompt steps, in display order. */

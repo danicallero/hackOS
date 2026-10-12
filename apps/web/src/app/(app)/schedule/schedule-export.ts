@@ -2,6 +2,7 @@
 // ones the table shows (localized times, audience names, yes/no), not raw ids.
 
 import { buildCsv } from "@/lib/csv";
+import { getEventTimeZone } from "@/lib/event-time";
 import { LOCALE_CODES, type Translate } from "@/lib/i18n";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import type { Language } from "@/lib/types";
@@ -19,7 +20,7 @@ import { COLUMN_LABEL_KEYS, type ColumnId, type TableConfig } from "./schedule-t
 export interface ScheduleExportContext {
   t: Translate;
   language: Language;
-  /** IANA zone; omitted means the browser's, which is what the roster displays. */
+  /** IANA zone; omitted means the event's, which is what the roster displays (H45/H47). */
   timeZone?: string;
   now?: number;
 }
@@ -55,7 +56,7 @@ function dateTime(iso: string | null, ctx: ScheduleExportContext): string {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: ctx.timeZone,
+    timeZone: ctx.timeZone ?? getEventTimeZone(),
   }).format(date);
 }
 

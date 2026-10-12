@@ -2002,7 +2002,6 @@
   "noTimezoneMatch": "No timezone matches.",
   "selectTimezonePlaceholder": "Select a timezone",
   "zonedTimeSameZone": "In the event's timezone ({zone}).",
-  "zonedTimePreview": "In the event's timezone ({zone}): {reading}.",
   "countdownPreviewEmpty": "Set the hacking start and end to preview the countdown.",
   "venueNameUnset": "Unnamed venue",
   "venuePinUnset": "No pin yet",

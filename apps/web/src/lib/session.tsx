@@ -14,6 +14,7 @@ import {
 import { useEventSource } from "../hooks/use-event-source";
 import { ApiError, api } from "./api";
 import { API_URL } from "./env";
+import { setEventTimeZone } from "./event-time";
 import { setServerStateIdentity } from "./server-state";
 import { registerSignOutListener } from "./sign-out-events";
 import { setSseIdentity } from "./sse-broker";
@@ -56,6 +57,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     inFlight.current = null;
     setSseIdentity(null, API_URL);
     setServerStateIdentity(null);
+    setEventTimeZone(null);
     meRef.current = null;
     setMe(null);
     setStatus("unauthenticated");
@@ -73,6 +75,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         setSseIdentity(data.id, API_URL);
         setServerStateIdentity(data.id);
         meRef.current = data;
+        setEventTimeZone(data.eventTimezone);
         setMe(data);
         setStatus("authenticated");
         setError(null);

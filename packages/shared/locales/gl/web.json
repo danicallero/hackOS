@@ -2002,7 +2002,6 @@
   "noTimezoneMatch": "Ningún fuso horario coincide.",
   "selectTimezonePlaceholder": "Selecciona un fuso horario",
   "zonedTimeSameZone": "No fuso horario do evento ({zone}).",
-  "zonedTimePreview": "No fuso horario do evento ({zone}): {reading}.",
   "countdownPreviewEmpty": "Define o inicio e o fin do hacking para previsualizar a conta atrás.",
   "venueNameUnset": "Sede sen nome",
   "venuePinUnset": "Sen coordenadas todavía",

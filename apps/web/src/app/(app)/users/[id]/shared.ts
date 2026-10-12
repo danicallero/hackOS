@@ -2,6 +2,7 @@
  * Constants and name helpers shared across the user-profile route's files.
  */
 
+import { getEventTimeZone } from "@/lib/event-time";
 import { LOCALE_CODES, type Translate } from "@/lib/i18n";
 import type { UserDetail } from "@/lib/types";
 
@@ -40,5 +41,6 @@ export function formatUserDate(value: string | Date, language: "es" | "gl" | "en
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: getEventTimeZone(),
   }).format(new Date(value));
 }

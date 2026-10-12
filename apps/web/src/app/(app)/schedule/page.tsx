@@ -73,9 +73,9 @@ import {
   NewDayDropzoneRow,
 } from "./schedule-rows";
 import {
-  COLUMN_LABEL_KEYS,
   ColumnConfigPopover,
   type ColumnId,
+  ColumnLabel,
   REQUIRED_COLUMNS,
   ResizableHead,
   useScheduleTableConfig,
@@ -453,7 +453,7 @@ export default function SchedulePage() {
                       onResize={handleColumnResize}
                       onResizeEnd={handleColumnResizeEnd}
                     >
-                      {t(COLUMN_LABEL_KEYS[id])}
+                      <ColumnLabel id={id} />
                     </ResizableHead>
                   ))}
                   {canEdit && <TableHead className="text-right">{t("actionsColumn")}</TableHead>}

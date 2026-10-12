@@ -8,6 +8,7 @@ import { WrenchIcon } from "@phosphor-icons/react/dist/ssr/Wrench";
 import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
+import { getEventTimeZone } from "@/lib/event-time";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import type {
   PresenceCertaintyWindow,
@@ -46,6 +47,7 @@ export function PresenceTimeline({
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: getEventTimeZone(),
   });
   const rows = timelineRows(data.signals, data.windows);
   const gapLabel = formatDuration(data.certaintyWindowMinutes, t);

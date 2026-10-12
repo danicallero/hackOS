@@ -30,7 +30,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { API_URL } from "@/lib/env";
+import { getEventTimeZone } from "@/lib/event-time";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import {
   logisticsApi,
@@ -46,13 +48,6 @@ import { formatUserDate } from "./shared";
 
 interface PresenceData {
   timeline: PresenceTimelineData;
-}
-
-function toDatetimeLocal(iso: string, includeSeconds = false): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  return includeSeconds ? `${value}:${pad(d.getSeconds())}` : value;
 }
 
 /**
@@ -307,7 +302,7 @@ export function EditTimeLogModal({
     try {
       await logisticsApi.updateTimeLog(log.id, {
         kind,
-        scannedAt: new Date(scannedAt).toISOString(),
+        scannedAt: fromDatetimeLocal(scannedAt) as string,
         notes: notes.trim() || null,
       });
       toast.success(t("scanUpdated"), { compactTitle: t("toastEditScan") });
@@ -433,6 +428,7 @@ export function PresenceSignalModal({
     hour: "2-digit",
     minute: "2-digit",
     month: "short",
+    timeZone: getEventTimeZone(),
   });
   const [kind, setKind] = useState<"in" | "out" | "activity">(
     resolvingConflict ? "out" : editingActivity ? "activity" : "in",
@@ -456,7 +452,7 @@ export function PresenceSignalModal({
 
   async function save() {
     if (!occurredAt || (kind === "activity" && !activityId)) return;
-    const occurredAtDate = new Date(occurredAt);
+    const occurredAtDate = new Date(fromDatetimeLocal(occurredAt) ?? Number.NaN);
     if (
       bounds &&
       (Number.isNaN(occurredAtDate.getTime()) ||
@@ -472,20 +468,20 @@ export function PresenceSignalModal({
       if (editingActivity && signal) {
         await logisticsApi.updatePresenceActivity(signal.id, {
           activityId: Number(activityId),
-          occurredAt: new Date(occurredAt).toISOString(),
+          occurredAt: fromDatetimeLocal(occurredAt) as string,
           notes: notes.trim() || null,
         });
       } else if (kind === "activity") {
         await logisticsApi.createPresenceSignal(userId, {
           kind,
           activityId: Number(activityId),
-          occurredAt: new Date(occurredAt).toISOString(),
+          occurredAt: fromDatetimeLocal(occurredAt) as string,
           notes: notes.trim() || null,
         });
       } else {
         await logisticsApi.createPresenceSignal(userId, {
           kind,
-          occurredAt: new Date(occurredAt).toISOString(),
+          occurredAt: fromDatetimeLocal(occurredAt) as string,
           notes: notes.trim() || null,
         });
       }

@@ -32,7 +32,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
-import { toDatetimeLocal } from "@/lib/datetime";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import {
   logisticsApi,
@@ -153,10 +153,10 @@ export function cleanScheduleForm(form: ScheduleInput): ScheduleInput {
     location: form.location?.trim() || null,
     type: form.type?.trim() || null,
     requiresScan: isMealActivityKind(form.type) || form.requiresScan === true,
-    startsAt: new Date(form.startsAt).toISOString(),
-    endsAt: new Date(form.endsAt).toISOString(),
+    startsAt: fromDatetimeLocal(form.startsAt) ?? form.startsAt,
+    endsAt: fromDatetimeLocal(form.endsAt) ?? form.endsAt,
     visibility: form.visibility,
-    publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : null,
+    publishAt: form.publishAt ? fromDatetimeLocal(form.publishAt) : null,
     audiences: form.audiences ?? [],
     // #966: only an item with an audience can show it a Live Activity.
     liveActivityAudience: (form.audiences ?? []).length > 0 && form.liveActivityAudience === true,

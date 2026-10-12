@@ -6,6 +6,7 @@ import {
   DEFAULT_ACTIVITY_KIND,
   toActivityKind,
 } from "@hackos/shared/activity-kinds";
+import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/ssr/CalendarDots";
 import { ConfettiIcon } from "@phosphor-icons/react/dist/ssr/Confetti";
@@ -13,6 +14,7 @@ import { FlagIcon } from "@phosphor-icons/react/dist/ssr/Flag";
 import { ForkKnifeIcon } from "@phosphor-icons/react/dist/ssr/ForkKnife";
 import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
 import { SparkleIcon } from "@phosphor-icons/react/dist/ssr/Sparkle";
+import { getEventTimeZone } from "@/lib/event-time";
 import { LOCALE_CODES, type Translate } from "@/lib/i18n";
 import type { PublicScheduleItem, ScheduleInput, ScheduleTranslations } from "@/lib/logistics";
 import type { Tone } from "@/lib/tones";
@@ -142,33 +144,43 @@ export function editingNavigationDirection(event: {
   return direction === "nextInRow" || direction === "previousInRow" ? null : direction;
 }
 
+// Every calendar day and clock reading below is the EVENT's (H45/H47), so a
+// roster opened from another time zone shows the same run-of-show.
+
 /** Short "Fri 22/08" style day label for a run-of-show table (H59). */
-export function scheduleDayLabel(iso: string, language: keyof typeof LOCALE_CODES): string {
+export function scheduleDayLabel(
+  iso: string,
+  language: keyof typeof LOCALE_CODES,
+  timeZone: string = getEventTimeZone(),
+): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat(LOCALE_CODES[language], {
     weekday: "short",
     day: "2-digit",
     month: "2-digit",
+    timeZone,
   }).format(date);
 }
 
-/** Stable local calendar key used to group schedule rows (H59). */
-export function scheduleDayKey(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+/** Stable event-zone calendar key used to group schedule rows (H59). */
+export function scheduleDayKey(iso: string, timeZone: string = getEventTimeZone()): string {
+  return instantToWallClock(iso, timeZone).slice(0, 10);
 }
 
 /** "08:00" time-of-day for a run-of-show table's separate Start/End columns (H59). */
-export function scheduleTimeOfDay(iso: string, language: keyof typeof LOCALE_CODES): string {
+export function scheduleTimeOfDay(
+  iso: string,
+  language: keyof typeof LOCALE_CODES,
+  timeZone: string = getEventTimeZone(),
+): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat(LOCALE_CODES[language], {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone,
   }).format(date);
 }
 
@@ -183,11 +195,9 @@ export function scheduleDuration(startsAt: string, endsAt: string): string {
   return `${hours}:${String(minutes).padStart(2, "0")}`;
 }
 
-/** HH:mm (local time) for populating a `<input type="time">` from an ISO timestamp. */
-export function timeInputValue(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+/** HH:mm (event time) for populating a `<input type="time">` from an ISO timestamp. */
+export function timeInputValue(iso: string, timeZone: string = getEventTimeZone()): string {
+  return instantToWallClock(iso, timeZone).slice(11, 16);
 }
 
 /**
@@ -223,17 +233,25 @@ export function parseTimeOfDay(raw: string): string | null {
 }
 
 /** Re-applies a new HH:mm to an existing ISO timestamp's date, keeping the date unchanged. */
-export function withTimeOfDay(iso: string, hhmm: string): string | null {
-  const match = /^(\d{2}):(\d{2})$/.exec(hhmm);
-  if (!match) return null;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setHours(Number(match[1]), Number(match[2]), 0, 0);
-  return date.toISOString();
+export function withTimeOfDay(
+  iso: string,
+  hhmm: string,
+  timeZone: string = getEventTimeZone(),
+): string | null {
+  if (!/^\d{2}:\d{2}$/.test(hhmm)) return null;
+  const wall = instantToWallClock(iso, timeZone);
+  if (!wall) return null;
+  return wallClockToInstant(`${wall.slice(0, 10)}T${hhmm}`, timeZone);
 }
 
-/** One calendar day, in ms — the roll applied when a window crosses midnight. */
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+/** The same event-zone clock reading `days` calendar days later (a DST day is not 24 h). */
+function addWallDays(ms: number, days: number, timeZone: string = getEventTimeZone()): number {
+  const wall = instantToWallClock(new Date(ms).toISOString(), timeZone, true);
+  const [y, m, d] = wall.slice(0, 10).split("-").map(Number);
+  const moved = new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+  const iso = wallClockToInstant(`${moved}T${wall.slice(11)}`, timeZone);
+  return iso ? new Date(iso).getTime() : ms + days * 86_400_000;
+}
 
 /**
  * How long a window the inline time cells will roll into the next day. A
@@ -287,7 +305,7 @@ export function withTimeOfDayAcrossMidnight(
   }
 
   // Inverted: the end is the side that crosses midnight, whichever one moved.
-  const rolledEnd = end + ONE_DAY_MS;
+  const rolledEnd = addWallDays(end, 1);
   if (rolledEnd - start > MAX_INLINE_ROLLED_HOURS * 60 * 60 * 1000) {
     return { ok: false, reason: "rolledWindowTooLong" };
   }
@@ -305,27 +323,22 @@ export function withTimeOfDayAcrossMidnight(
  * withTimeOfDay, used to drag a schedule item onto a different day without
  * disturbing when it starts/ends during that day.
  */
-export function withDate(iso: string, targetDateIso: string): string | null {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
+export function withDate(
+  iso: string,
+  targetDateIso: string,
+  timeZone: string = getEventTimeZone(),
+): string | null {
+  const wall = instantToWallClock(iso, timeZone);
+  if (!wall) return null;
 
-  // A YYYY-MM-DD value is a calendar date, not a UTC timestamp. Parsing it
-  // with `new Date()` would turn midnight into the previous local day in
-  // western time zones, so extract the parts explicitly (H59).
-  const calendarMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(targetDateIso);
-  if (calendarMatch) {
-    date.setFullYear(
-      Number(calendarMatch[1]),
-      Number(calendarMatch[2]) - 1,
-      Number(calendarMatch[3]),
-    );
-    return date.toISOString();
-  }
-
-  const target = new Date(targetDateIso);
-  if (Number.isNaN(target.getTime())) return null;
-  date.setFullYear(target.getFullYear(), target.getMonth(), target.getDate());
-  return date.toISOString();
+  // A YYYY-MM-DD value is a calendar date, not a UTC timestamp: use it as is
+  // rather than reading it as an instant (H59).
+  const calendarMatch = /^(\d{4}-\d{2}-\d{2})$/.exec(targetDateIso);
+  const targetDate = calendarMatch
+    ? calendarMatch[1]
+    : instantToWallClock(targetDateIso, timeZone).slice(0, 10);
+  if (!targetDate) return null;
+  return wallClockToInstant(`${targetDate}T${wall.slice(11)}`, timeZone);
 }
 
 // --- Inline row creation (H59) --------------------------------------------
@@ -337,11 +350,11 @@ export const DRAFT_DEFAULT_START_HOUR = 9;
 
 const MINUTE_MS = 60_000;
 
-/** Local midnight of a `YYYY-MM-DD` day key, as a timestamp. */
-function dayStartMs(dayKey: string): number | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
-  if (!match) return null;
-  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 0, 0, 0, 0).getTime();
+/** Event-zone midnight of a `YYYY-MM-DD` day key, as a timestamp. */
+function dayStartMs(dayKey: string, timeZone: string = getEventTimeZone()): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return null;
+  const iso = wallClockToInstant(`${dayKey}T00:00`, timeZone);
+  return iso ? new Date(iso).getTime() : null;
 }
 
 /**
@@ -390,7 +403,11 @@ export function draftWindowBetween(
     return { startsAt: new Date(start).toISOString(), endsAt: new Date(next).toISOString() };
   }
 
-  const start = dayStart + DRAFT_DEFAULT_START_HOUR * 60 * MINUTE_MS;
+  const defaultStart = wallClockToInstant(
+    `${dayKey}T${String(DRAFT_DEFAULT_START_HOUR).padStart(2, "0")}:00`,
+    getEventTimeZone(),
+  );
+  const start = defaultStart ? new Date(defaultStart).getTime() : dayStart;
   return {
     startsAt: new Date(start).toISOString(),
     endsAt: new Date(start + defaultMs).toISOString(),

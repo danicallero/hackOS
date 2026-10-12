@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
+import { formatEventClock } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { hasWaitedTooLong } from "@/lib/judging-workspace";
 import type {
@@ -68,17 +69,14 @@ export function QueueStatsCard({
       progress.other
     : 0;
   const estFinishLabel = pace?.estimatedFinishAt
-    ? new Date(pace.estimatedFinishAt).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
+    ? formatEventClock(pace.estimatedFinishAt)
     : pace && pace.pendingCount > 0
-      ? new Date(
+      ? formatEventClock(
           now +
             (pace.pendingCount / pace.roomCount) *
               (pace.estimatedCycleMinutes ?? pace.desiredMinutesPerTeam) *
               60_000,
-        ).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        )
       : "—";
   return (
     <div className="space-y-4 px-5 pt-5 pb-4">
@@ -114,12 +112,7 @@ export function QueueStatsCard({
           <div>
             <dt className="type-meta">{t("judgingCloseLabel")}</dt>
             <dd className="mt-1 text-lg font-semibold tabular-nums">
-              {pace?.judgingClosesAt
-                ? new Date(pace.judgingClosesAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "—"}
+              {pace?.judgingClosesAt ? formatEventClock(pace.judgingClosesAt) : "—"}
             </dd>
           </div>
         </dl>
@@ -593,10 +586,7 @@ export function QueueList({
                         )}
                       >
                         {t("calledAt", {
-                          time: new Date(entry.called_at).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          }),
+                          time: formatEventClock(entry.called_at),
                         })}
                         {hasWaitedTooLong(
                           entry.called_at,
