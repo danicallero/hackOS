@@ -13,7 +13,9 @@ People manage their public profile (opt-in, surname/photo/project, headline,
 location note, bio, links, CV and preview) from My profile
 (`/settings/profile`); there is no separate settings page. The account photo
 is uploaded in the same page's Personal details section, because it is the
-account's photo everywhere, not only on the public profile.
+account's photo everywhere, not only on the public profile. The mobile app
+edits the same photo from the Account avatar and the networking profile editor
+(`docs/mobile.md`).
 
 The "Public profile" section (`settings/profile/public-profile-card.tsx`)
 shows only the opt-in switch ("Share my profile"), with one line saying that

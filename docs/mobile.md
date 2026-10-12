@@ -246,6 +246,20 @@ distributed to other Expo Router apps without importing hackOS code.
   selected, and the Account screen header shows it in place of the initials.
   On a compact phone a participant's Account sits behind Others, so the Others
   circle shows the same ringed photo while Account is open.
+  Tapping the Account avatar (or the one at the top of the networking profile
+  editor) opens a native menu (#934): Take photo, Choose from library and, when
+  a photo exists, Remove photo (`components/profile-photo-menu.tsx`, one hook
+  `lib/use-profile-photo.ts`). The picker crops square (`allowsEditing`), then
+  `lib/profile-photo.ts` re-crops the centre square, downsizes to 1024 px and
+  re-encodes as JPEG at 0.8, far under the API's 2 MB cap, and posts it as
+  multipart `file` to `POST /api/me/photo` (removal is `DELETE`), each attempt
+  under its own `Idempotency-Key`. The avatar shows a spinner meanwhile and
+  `/api/me` is refetched afterwards: the API answers a new `?v=` route, which is
+  also the `loadApiImage` cache key, so every avatar reloads. Failures show a
+  localized alert (denied camera access, rejected image, account being removed
+  = 409, generic); the API has no other profile lock. `expo-image-picker`
+  (config plugin in `app.json`, iOS usage strings; Android needs no extra
+  permission) and `expo-image-manipulator` provide the native pieces.
   `components/user-avatar.tsx` fetches the private `/api/users/:id/photo` route
   with the session (`loadApiImage`, shown from memory: Android's image pipeline
   drops a `Cookie` header on an `Image` source) and keeps the initials until it
@@ -404,7 +418,8 @@ distributed to other Expo Router apps without importing hackOS code.
   "Edit networking profile" (#934, #935), always shown in the same section, opens the
   `app/networking-profile.tsx` modal (`components/networking-profile-screen.tsx`,
   `lib/networking-profile.ts`): the opt-in switch, the surname/photo/project
-  switches (once shared), headline, where-to-find-you and bio, saved with
+  switches (once shared), headline, where-to-find-you and bio (the same photo
+  control as Account sits above them), saved with
   `PUT /api/me/public-profile` under one `Idempotency-Key` per change set. It omits
   `socials` and `shareCv`, which the API then keeps; links and the CV are edited
   on web ([`directory.md`](./directory.md)).

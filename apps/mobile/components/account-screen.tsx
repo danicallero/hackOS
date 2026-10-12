@@ -40,9 +40,9 @@ import {
   ProfileAvatarCollapseAnchor,
   useProfileAvatarCollapse,
 } from "@/components/profile-avatar-collapse";
+import { ProfilePhotoMenu } from "@/components/profile-photo-menu";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
-import { UserAvatar } from "@/components/user-avatar";
 import { apiFetch } from "@/lib/api";
 import { useApiMode } from "@/lib/api-mode";
 import { appVersionLabel } from "@/lib/app-version";
@@ -306,7 +306,7 @@ export default function AccountScreen() {
 
         <View style={{ alignItems: "center", gap: 12, paddingVertical: 10 }}>
           <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={96}>
-            <UserAvatar testID="account-avatar" name={fullName} image={me.image} size={96} />
+            <ProfilePhotoMenu testID="account-avatar" name={fullName} image={me.image} size={96} />
           </ProfileAvatarCollapseAnchor>
           <View onLayout={avatarCollapse.onNameLayout} style={{ alignItems: "center", gap: 5 }}>
             <Text

@@ -55,6 +55,20 @@ jest.mock("@/components/native-ui", () => {
   };
 });
 jest.mock("@/components/RequestFeedback", () => ({ RequestFeedback: () => null }));
+jest.mock("@/lib/me-context", () => ({
+  useMeContext: () => ({
+    me: { name: "Ada", surname: "Lovelace", email: "ada@example.com", image: null },
+  }),
+}));
+// The photo control has its own tests (profile-photo-menu.test.tsx).
+jest.mock("@/components/profile-photo-menu", () => {
+  const Native = require("react-native");
+  const ReactLib = require("react");
+  return {
+    ProfilePhotoMenu: ({ name }: { name: string }) =>
+      ReactLib.createElement(Native.View, { accessibilityLabel: `photo-menu:${name}` }),
+  };
+});
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
 
 import { NetworkingInvite } from "@/components/networking-invite";
@@ -103,6 +117,12 @@ describe("NetworkingInvite after confirming a spot (H15)", () => {
 });
 
 describe("NetworkingProfileScreen", () => {
+  it("offers the account photo control beside the sharing switches (#934)", async () => {
+    mockApiFetch.mockResolvedValueOnce(profile);
+    await renderMobile(<NetworkingProfileScreen />);
+    expect(await screen.findByLabelText("photo-menu:Ada Lovelace")).toBeTruthy();
+  });
+
   it("saves the shared profile and leaves links and CV to the API's stored values", async () => {
     mockApiFetch.mockResolvedValueOnce(profile).mockResolvedValueOnce({ ...profile });
     await renderMobile(<NetworkingProfileScreen />);

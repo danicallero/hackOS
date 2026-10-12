@@ -3,10 +3,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActionButton, Section, Separator, ToggleRow } from "@/components/native-ui";
+import { ProfilePhotoMenu } from "@/components/profile-photo-menu";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
+import { useMeContext } from "@/lib/me-context";
 import {
   BIO_MAX,
   draftFromProfile,
@@ -27,6 +29,7 @@ export default function NetworkingProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useLocale();
+  const { me } = useMeContext();
   const [stored, setStored] = useState<NetworkingDraft | null>(null);
   const [draft, setDraft] = useState<NetworkingDraft | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
@@ -104,6 +107,15 @@ export default function NetworkingProfileScreen() {
         ) : null}
         {draft ? (
           <>
+            {me ? (
+              <View style={{ alignItems: "center" }}>
+                <ProfilePhotoMenu
+                  name={[me.name, me.surname].filter(Boolean).join(" ") || me.email}
+                  image={me.image}
+                  size={72}
+                />
+              </View>
+            ) : null}
             <Section footer={t("networkingAudience")}>
               <ToggleRow
                 label={t("networkingShare")}
