@@ -1221,6 +1221,46 @@ architecture: [`mobile.md`](./mobile.md).**
 - Capability changes apply without reinstall: tabs recompute from a shared
   `/api/me` fetch that refetches on app foreground (H55).
 
+### Live Activities on iOS (#966)
+
+All five kinds share one visual grammar, following [Apple's Live Activities
+HIG](https://developer.apple.com/design/human-interface-guidelines/live-activities):
+
+- Lock Screen: 14 pt system margins, 10 pt between rows; icon + title and
+  optional state on the first row, secondary context leading and the primary
+  metric trailing on the second, then progress and the optional Scan action.
+- Expanded island: leading identity (or queue position, matching compact),
+  trailing primary metric; the bottom region contains title, context and
+  finally progress. Staff/desk place Scan beside secondary context to stay
+  inside the expanded height budget (4 pt row gaps and bottom inset); other
+  kinds use 8 pt row gaps and bottom inset. Keep controls clear of the curved
+  corners. Preserve the relative placement of changing values
+  across compact, expanded and Lock Screen presentations.
+- System typography: 17 pt semibold Lock Screen titles, 15 pt semibold
+  expanded titles, 28 pt primary metrics, 17 pt secondary values, 12 pt medium
+  captions and 13 pt medium context. Timer width fitting may reduce the hero
+  size; names truncate before primary values. Submitted deadlines demote the
+  remaining timer and promote the completed state.
+- Icons are bare SF Symbols: 17 pt in Lock Screen headers, 24 pt in expanded
+  identity slots, 15 pt compact. No nested icon containers or decorative badges.
+- Scan is the only explicit action on staff/desk surfaces: one inset capsule,
+  15 pt semibold text, 14 pt NFC symbol, 12 pt horizontal / 8 pt vertical
+  padding, placed after the content at the trailing edge in both presentations.
+  Its opaque blue fill is `#0066CC` (5.57:1 with white text), reduced to neutral
+  `#3A3A3C` for Always-On. Hero/state tints retain their semantic colours.
+- Keep semantic colour, dynamic light/dark Lock Screen accents and reduced
+  luminance handling. Colour never replaces a state label or symbol. Continuous
+  progress bars share a treatment; the queue retains its meaningful stage track.
+- Height follows content: upcoming sessions do not reserve space for absent
+  progress or actions. Do not make every kind equally tall or add filler copy.
+
+The small scale here is specific to system Live Activity surfaces; do not apply
+web heading fonts or page/container tokens to the Dynamic Island. Runtime layouts
+must remain self-contained inside each serialized `'widget'` function; see
+[`mobile.md`](./mobile.md#live-activities-and-live-updates-966) for rendering
+constraints and [`live-activities.md`](./live-activities.md#design-rationale-apple-hig)
+for per-kind content.
+
 ## 13. Definition of done for UI work
 
 Every UI change, web or mobile:

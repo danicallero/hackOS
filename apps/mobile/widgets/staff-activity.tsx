@@ -183,27 +183,38 @@ export const StaffActivityLayout = (
   );
 
   // Countdown to the end, for the live bar's trailing label.
-  const endsIn = (size: number, width: number) =>
-    validEnd ? (
-      <HStack spacing={4} modifiers={[fixedSize({ horizontal: true })]}>
-        {labels.endsIn ? (
-          <Text modifiers={[font({ size, weight: "medium" }), secondary, lineLimit(1)]}>
-            {labels.endsIn}
-          </Text>
-        ) : null}
-        <Text
-          timerInterval={{ lower: startsAt, upper: endsAt }}
-          countsDown
-          compactCountdown="full"
-          compactCountdownSize={size}
-          modifiers={[
-            lineLimit(1),
-            minimumScaleFactor(0.6),
-            frame({ width, alignment: "trailing" }),
-          ]}
-        />
-      </HStack>
+  const endsIn = (size: number, width: number, stacked = true) => {
+    if (!validEnd) return null;
+    const label = labels.endsIn ? (
+      <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
+        {labels.endsIn}
+      </Text>
     ) : null;
+    const value = (
+      <Text
+        timerInterval={{ lower: startsAt, upper: endsAt }}
+        countsDown
+        compactCountdown="full"
+        compactCountdownSize={size}
+        modifiers={[
+          lineLimit(1),
+          minimumScaleFactor(0.6),
+          frame({ maxWidth: width, alignment: "leading" }),
+        ]}
+      />
+    );
+    return stacked ? (
+      <VStack alignment="leading" spacing={0}>
+        {label}
+        {value}
+      </VStack>
+    ) : (
+      <HStack alignment="firstTextBaseline" spacing={4}>
+        {label}
+        {value}
+      </HStack>
+    );
+  };
 
   const counter = (value: string, size: number, color: string | null, weight = "bold") => (
     <Text
@@ -280,18 +291,16 @@ export const StaffActivityLayout = (
     </HStack>
   );
 
-  // The single interactive element (HIG): only while the activity is live.
-  // It sits in the bottom trailing corner at the same margin as every other
-  // edge, so its shape is the container-relative one: concentric with the
-  // Live Activity's (or the island's) corner, radius = outer radius − margin.
+  // H22/H25 / #966: one direct Scan action, with the same inset capsule
+  // in the island and on the Lock Screen.
   const scanButton = (color: string | null) =>
     live ? (
       <Link destination={props.scanUrl}>
         <HStack
           spacing={5}
           modifiers={[
-            padding({ horizontal: 14, vertical: 8 }),
-            background(color ?? "#3A3A3C", { shape: "containerRelativeShape" }),
+            padding({ horizontal: 12, vertical: 8 }),
+            background(color ? "#0066CC" : "#3A3A3C", { shape: "capsule" }),
           ]}
         >
           <Image systemName="wave.3.right" color="#FFFFFF" size={14} />
@@ -344,8 +353,8 @@ export const StaffActivityLayout = (
     ? countdown(12, islandAccent, 56)
     : accredited || !liveText
       ? `${scanned}/${accredited ?? ""}`.length > 7
-        ? counter(scanned, 15, null, "semibold")
-        : ratio(15, 11, null, "semibold")
+        ? counter(scanned, 15, islandAccent, "semibold")
+        : ratio(15, 11, islandAccent, "semibold")
       : liveText;
 
   // Minimal: the scanned share as a ring; live without it, the symbol with a
@@ -392,96 +401,79 @@ export const StaffActivityLayout = (
     </VStack>
   );
 
-  const nameBlock = (nameSize: number) => (
+  const expandedBottom = (
     <VStack
       alignment="leading"
-      spacing={1}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}
+      spacing={4}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ horizontal: 8, bottom: 4 }),
+      ]}
     >
-      <Text modifiers={[font({ size: nameSize, weight: "semibold" }), lineLimit(1)]}>
-        {props.name}
-      </Text>
-      <HStack modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
-        {timeRange}
-      </HStack>
-    </VStack>
-  );
-
-  const expandedBottom = live ? (
-    <VStack
-      alignment="leading"
-      spacing={8}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ horizontal: 8 })]}
-    >
-      {bar(islandAccent)}
       <HStack spacing={8}>
-        <VStack alignment="leading" spacing={1}>
-          <HStack spacing={6}>
-            {liveBadge(13, islandAccent)}
-            <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1)]}>
-              {props.name}
-            </Text>
-          </HStack>
-          {endsIn(13, 52)}
-        </VStack>
+        <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>{props.name}</Text>
         <Spacer />
+        {live ? liveBadge(12, islandAccent) : null}
+      </HStack>
+      <HStack alignment="center" spacing={12}>
+        {live ? (
+          endsIn(17, 100, false)
+        ) : (
+          <HStack modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
+            {timeRange}
+          </HStack>
+        )}
+        {live ? <Spacer /> : null}
         {scanButton(islandAccent)}
       </HStack>
+      {live ? bar(islandAccent) : null}
     </VStack>
-  ) : (
-    <VStack modifiers={[padding({ horizontal: 8 })]}>{nameBlock(15)}</VStack>
   );
 
-  // Lock Screen: unique layout, one 14 pt margin on every edge, default
-  // background. Header: symbol, name, time · place, and the countdown to the
-  // start (upcoming) or to the end (live). Live adds the stats row and a
-  // bottom row with the bar and the Scan action in the trailing corner.
+  // H25/H26 / #966: preserve the trailing hero across all presentations.
   const caption = (text: string | undefined) =>
     text ? (
       <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
         {text}
       </Text>
     ) : null;
-  // Live packs the header into one line (name … Live; the place is known by
-  // then and shown before the start) and puts "Ends in" beside the stats, so
-  // the stats and the bottom row fit the Lock Screen's 160 pt height with
-  // the full 14 pt margin at the bottom too.
-  const header = live ? (
-    <HStack alignment="firstTextBaseline" spacing={8}>
-      {glyph(bannerAccent, 17)}
-      <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>{props.name}</Text>
-      <Spacer />
-      {liveBadge(13, bannerAccent ?? neutral)}
-    </HStack>
-  ) : (
-    <HStack alignment="center" spacing={10}>
-      <HStack modifiers={[frame({ width: 26 })]}>{glyph(bannerAccent, 20)}</HStack>
-      {nameBlock(17)}
-      <VStack alignment="trailing" spacing={0}>
-        {caption(labels.startsIn)}
-        {countdown(28, bannerAccent, 160, "long")}
-      </VStack>
-    </HStack>
-  );
-
-  const stats = (
-    <HStack alignment="top">
-      {stat(labels.scanned, bannerAccent, "leading")}
-      <Spacer />
-      {endsIn(13, 56)}
-    </HStack>
-  );
-
   const banner = (
     <VStack
       alignment="leading"
       spacing={10}
       modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
     >
-      {header}
-      {live ? stats : null}
+      <HStack spacing={8}>
+        {glyph(bannerAccent, 17)}
+        <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>{props.name}</Text>
+        <Spacer />
+        {live ? liveBadge(12, bannerAccent ?? neutral) : null}
+      </HStack>
+      <HStack alignment="bottom" spacing={12}>
+        <VStack
+          alignment="leading"
+          spacing={2}
+          modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}
+        >
+          {live ? (
+            endsIn(17, 100)
+          ) : (
+            <HStack modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
+              {timeRange}
+            </HStack>
+          )}
+        </VStack>
+        {live ? (
+          stat(labels.scanned, bannerAccent, "trailing")
+        ) : (
+          <VStack alignment="trailing" spacing={0}>
+            {caption(labels.startsIn)}
+            {countdown(28, bannerAccent, 180, "long")}
+          </VStack>
+        )}
+      </HStack>
       {live ? (
-        <HStack alignment="center" spacing={14}>
+        <HStack alignment="center" spacing={12}>
           {bar(bannerAccent) ?? <Spacer />}
           {scanButton(bannerAccent)}
         </HStack>

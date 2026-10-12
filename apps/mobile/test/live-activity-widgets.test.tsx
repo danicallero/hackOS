@@ -793,6 +793,74 @@ describe("New Live Activity kinds (#966)", () => {
     });
   });
 
+  it.each([
+    "es",
+    "gl",
+    "en",
+  ] as const)("%s: preserves localized state and direct actions after reorganizing the layouts", (language) => {
+    const queueLabels = queueLiveLabels(language, 2);
+    const called = QueueActivityLayout(
+      queue({
+        phase: "called",
+        roomName: "Room B",
+        roomLocation: "Floor 1",
+        calledAt: "2026-02-20T09:58:00.000Z",
+        labels: queueLabels,
+      }),
+      environment,
+    );
+    const staffLabels = activityLiveLabels(language);
+    const staff = StaffActivityLayout(
+      activity({
+        phase: "live",
+        scanned: 1142,
+        accredited: 1380,
+        labels: staffLabels,
+      }),
+      environment,
+    );
+    const deskLabels = accreditationLiveLabels(language);
+    const desk = AccreditationActivityLayout(
+      accreditation({
+        accredited: 1412,
+        eligible: 1600,
+        inside: 1380,
+        recentArrivals: 123,
+        labels: deskLabels,
+      }),
+      environment,
+    );
+    const attendeeLabels = attendeeActivityLiveLabels(language);
+    const attendeeLive = AttendeeActivityLayout(
+      attendee({ phase: "live", labels: attendeeLabels }),
+      environment,
+    );
+    const deadlineLabels = deadlineLiveLabels(language);
+    const submitted = DeadlineActivityLayout(
+      deadline({
+        phase: "submitted",
+        submission: "submitted",
+        labels: deadlineLabels,
+      }),
+      environment,
+    );
+    for (const slot of ["banner", "expandedBottom"] as const) {
+      expect(texts(called[slot])).toContain("Open data");
+      expect(texts(staff[slot])).toContain(staffLabels.live);
+      expect(texts(desk[slot])).toContain(deskLabels.title);
+      expect(texts(attendeeLive[slot])).toContain(attendeeLabels.live);
+      expect(texts(submitted[slot])).toContain(deadlineLabels.submitted);
+      for (const layout of [staff, desk]) {
+        expect(nodes(layout[slot], "Link")).toHaveLength(1);
+      }
+      for (const layout of [called, attendeeLive, submitted]) {
+        expect(nodes(layout[slot], "Link")).toHaveLength(0);
+      }
+    }
+    expect(texts(desk.banner)).toContain("1412");
+    expect(texts(staff.banner)).toContain("1142");
+  });
+
   it("drops accent colours on the Always-On Lock Screen", () => {
     const reduced = { colorScheme: "dark", isLuminanceReduced: true } as LiveActivityEnvironment;
     const layout = DeadlineActivityLayout(deadline({ phase: "closing" }), reduced);

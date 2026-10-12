@@ -273,91 +273,76 @@ export const DeadlineActivityLayout = (
       {caption(labels.closesIn, "trailing")}
       {submitted
         ? countdown(17, neutral, 140, "semibold", "trailing", "long")
-        : // Hours long (h:mm:ss): a little smaller than the other kinds' 28 pt.
-          (countdown(24, islandColor, 160, "bold", "trailing", "long") ?? <Text> </Text>)}
+        : // Same hero scale as the other kinds; width fitting handles long hours.
+          (countdown(28, islandColor, 180, "bold", "trailing", "long") ?? <Text> </Text>)}
     </VStack>
   );
   const expandedBottom = (
     <VStack
       alignment="leading"
       spacing={8}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ horizontal: 8 })]}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ horizontal: 8, bottom: 8 }),
+      ]}
     >
-      {bar(islandColor)}
       <HStack spacing={8}>
-        <VStack alignment="leading" spacing={1}>
-          <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
-            {labels.title}
-          </Text>
-          {props.projectName ? (
-            <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
-              {props.projectName}
-            </Text>
-          ) : null}
-        </VStack>
+        <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
+          {labels.title}
+        </Text>
         <Spacer />
-        {status(15, true)}
+        {status(12, true)}
       </HStack>
+      {caption(props.projectName)}
+      {bar(islandColor)}
     </VStack>
   );
 
-  // Lock Screen: one 14 pt margin on every edge. Header: symbol and title,
-  // with the team's status opposite. Hero row: the countdown (or
-  // "Submitted") with the project opposite; then the window bar. The status
-  // never truncates and the countdown keeps its row first, so only the title
-  // and the project name give way (#966: a two-digit-hour countdown beside
-  // the status overflowed both edges).
-  const header = (
-    <HStack alignment="center" spacing={8}>
-      {glyph(bannerColor, 17)}
-      <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>{labels.title}</Text>
-      <Spacer />
-      {submitted ? null : status(15, false)}
-    </HStack>
-  );
-  const hero = submitted ? (
-    <HStack alignment="bottom" spacing={12}>
-      <VStack alignment="leading" spacing={0}>
-        {caption(props.projectName)}
-        <Text
-          modifiers={[
-            font({ size: 28, weight: "bold" }),
-            lineLimit(1),
-            minimumScaleFactor(0.6),
-            ...colorMods(bannerColor),
-          ]}
-        >
-          {labels.submitted}
-        </Text>
-      </VStack>
-      <Spacer />
-      <VStack alignment="trailing" spacing={0} modifiers={[layoutPriority(1)]}>
-        {caption(labels.closesIn, "trailing")}
-        {countdown(17, null, 140, "semibold", "trailing", "long")}
-      </VStack>
-    </HStack>
-  ) : (
-    <HStack alignment="bottom" spacing={12}>
-      <VStack alignment="leading" spacing={0} modifiers={[layoutPriority(1)]}>
-        {caption(labels.closesIn)}
-        {countdown(34, bannerColor, 240, "bold", "leading", "long")}
-      </VStack>
-      <Spacer />
-      {props.projectName ? (
-        <VStack alignment="trailing" modifiers={[padding({ bottom: 6 })]}>
-          {caption(props.projectName, "trailing")}
-        </VStack>
-      ) : null}
-    </HStack>
-  );
+  // H19/H20 / #966: identity first, context left, primary value right.
   const banner = (
     <VStack
       alignment="leading"
       spacing={10}
       modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
     >
-      {header}
-      {hero}
+      <HStack spacing={8}>
+        {glyph(bannerColor, 17)}
+        <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>
+          {labels.title}
+        </Text>
+        <Spacer />
+        {submitted ? null : status(12, false)}
+      </HStack>
+      <HStack alignment="bottom" spacing={12}>
+        <VStack
+          alignment="leading"
+          spacing={2}
+          modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}
+        >
+          {caption(props.projectName)}
+          {submitted ? caption(labels.closesIn) : null}
+          {submitted ? countdown(17, null, 140, "semibold", "leading", "full") : null}
+        </VStack>
+        <VStack alignment="trailing" spacing={0} modifiers={[layoutPriority(1)]}>
+          {submitted ? (
+            <Text
+              modifiers={[
+                font({ size: 28, weight: "bold" }),
+                lineLimit(1),
+                minimumScaleFactor(0.6),
+                ...colorMods(bannerColor),
+              ]}
+            >
+              {labels.submitted}
+            </Text>
+          ) : (
+            <VStack alignment="trailing" spacing={0}>
+              {caption(labels.closesIn, "trailing")}
+              {countdown(28, bannerColor, 220, "bold", "trailing", "long")}
+            </VStack>
+          )}
+        </VStack>
+      </HStack>
       {bar(bannerColor)}
     </VStack>
   );

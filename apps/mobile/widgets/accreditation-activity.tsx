@@ -174,15 +174,15 @@ export const AccreditationActivityLayout = (
   const bar = (color: string | null) =>
     share !== null ? <ProgressView value={share} modifiers={[tint(color ?? neutral)]} /> : null;
 
-  // The single interactive element (HIG), concentric with the corner it sits
-  // in: radius = outer radius − margin (`containerRelativeShape`).
+  // H22/H25 / #966: one direct Scan action, with the same inset capsule
+  // in the island and on the Lock Screen.
   const scanButton = (color: string | null) => (
     <Link destination={props.scanUrl}>
       <HStack
         spacing={5}
         modifiers={[
-          padding({ horizontal: 14, vertical: 8 }),
-          background(color ?? "#3A3A3C", { shape: "containerRelativeShape" }),
+          padding({ horizontal: 12, vertical: 8 }),
+          background(color ? "#0066CC" : "#3A3A3C", { shape: "capsule" }),
         ]}
       >
         <Image systemName="wave.3.right" color="#FFFFFF" size={14} />
@@ -213,7 +213,7 @@ export const AccreditationActivityLayout = (
     ) : null;
 
   const compactLeading = <Image systemName={symbol} color={islandAccent} size={15} />;
-  const compactTrailing = number(String(accredited), 15, null, "semibold");
+  const compactTrailing = number(String(accredited), 15, islandAccent, "semibold");
 
   // Minimal: the accredited share as a ring.
   const minimal =
@@ -232,76 +232,80 @@ export const AccreditationActivityLayout = (
     );
 
   const expandedLeading = (
-    <VStack modifiers={[padding({ leading: 8, top: 4 })]}>
-      {stat(labels.accredited, accreditedValue(28, islandAccent), "leading")}
+    <VStack modifiers={[padding({ leading: 8, top: 6 })]}>
+      <Image systemName={symbol} color={islandAccent} size={24} />
     </VStack>
   );
-  // Inset from the island's rounded corners so labels never clip.
   const expandedTrailing = (
     <VStack alignment="trailing" modifiers={[padding({ trailing: 8, top: 4 })]}>
-      {stat(labels.lastTenMinutes, recentValue(28), "trailing")}
+      {stat(labels.accredited, accreditedValue(28, islandAccent), "trailing")}
     </VStack>
+  );
+  const secondaryStats = (
+    <HStack alignment="top" spacing={12}>
+      {stat(labels.lastTenMinutes, recentValue(17), "leading")}
+      {inside !== null
+        ? stat(labels.inside, number(String(inside), 17, null, "semibold"), "trailing")
+        : null}
+    </HStack>
   );
   const expandedBottom = (
     <VStack
       alignment="leading"
-      spacing={8}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ horizontal: 8 })]}
+      spacing={4}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ horizontal: 8, bottom: 4 }),
+      ]}
     >
-      {bar(islandAccent)}
       <HStack spacing={8}>
-        <VStack alignment="leading" spacing={1}>
-          {inside !== null && labels.inside ? (
-            <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1)]}>
-              {`${labels.inside} ${inside}`}
-            </Text>
-          ) : (
-            <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1)]}>
-              {labels.title}
-            </Text>
-          )}
-          {closesAt(13)}
-        </VStack>
+        <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
+          {labels.title}
+        </Text>
+        <Spacer />
+        {closesAt(13)}
+      </HStack>
+      <HStack alignment="center" spacing={12}>
+        <HStack alignment="firstTextBaseline" spacing={12}>
+          <HStack alignment="firstTextBaseline" spacing={4}>
+            {caption(labels.lastTenMinutes)}
+            {recentValue(17)}
+          </HStack>
+          {inside !== null ? (
+            <HStack alignment="firstTextBaseline" spacing={4}>
+              {caption(labels.inside)}
+              {number(String(inside), 17, null, "semibold")}
+            </HStack>
+          ) : null}
+        </HStack>
         <Spacer />
         {scanButton(islandAccent)}
       </HStack>
+      {bar(islandAccent)}
     </VStack>
   );
 
-  // Lock Screen: one 14 pt margin on every edge. Header: symbol, title …
-  // closing time; stats (accredited hero · last 10 min · inside); bar with
-  // Scan in the bottom trailing corner.
-  const header = (
-    <HStack alignment="center" spacing={8}>
-      <Image systemName={symbol} color={bannerAccent ?? neutral} size={17} />
-      <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>{labels.title}</Text>
-      <Spacer />
-      {closesAt(13)}
-    </HStack>
-  );
-  // Each stat is as wide as its value with the free space between them, so
-  // four-digit counts (`1412/1600`, `+123`) keep a gap instead of running
-  // into the next third of the row.
-  const stats = (
-    <HStack alignment="top" spacing={12}>
-      {stat(labels.accredited, accreditedValue(28, bannerAccent), "leading")}
-      <Spacer />
-      {stat(labels.lastTenMinutes, recentValue(28), inside !== null ? "leading" : "trailing")}
-      {inside !== null ? <Spacer /> : null}
-      {inside !== null
-        ? stat(labels.inside, number(String(inside), 28, null, "semibold"), "trailing")
-        : null}
-    </HStack>
-  );
+  // H22 / #966: one primary metric; pace and occupancy stay secondary.
   const banner = (
     <VStack
       alignment="leading"
       spacing={10}
       modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
     >
-      {header}
-      {stats}
-      <HStack alignment="center" spacing={14}>
+      <HStack spacing={8}>
+        <Image systemName={symbol} color={bannerAccent ?? neutral} size={17} />
+        <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>
+          {labels.title}
+        </Text>
+        <Spacer />
+        {closesAt(13)}
+      </HStack>
+      <HStack alignment="bottom" spacing={12}>
+        {secondaryStats}
+        <Spacer />
+        {stat(labels.accredited, accreditedValue(28, bannerAccent), "trailing")}
+      </HStack>
+      <HStack alignment="center" spacing={12}>
         {bar(bannerAccent) ?? <Spacer />}
         {scanButton(bannerAccent)}
       </HStack>

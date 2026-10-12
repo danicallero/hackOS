@@ -1537,17 +1537,17 @@ Apple's HIG:
 | --- | --- | --- |
 | Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: `42/180` (scanned / accredited, the denominator smaller and secondary; the bare count without one or past 7 characters) |
 | Minimal | ring of the climb to the front with the position inside; called/in room: the phase symbol | live: ring of the scanned share of accredited people (the count without a denominator); upcoming: countdown |
-| Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: stage track, location · called count-up, challenge · +N more queues | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live: symbol / Scanned `42/180`, scanned-share bar (elapsed time without a denominator), name, ends-in, **Scan** |
-| Lock Screen | challenge … +N more queues; hero ETA (34 pt, accent) and position; called: "Go to" room (green) + location and the count-up since the call; stage track with labels | upcoming: symbol, name, time · location … starts-in countdown; live: symbol, name … ends-in; Scanned `42/180`; bar with **Scan** in the bottom trailing corner |
+| Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: challenge · +N more queues, location · called count-up, stage track | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live: symbol / Scanned `42/180`, name + live state, ends-in beside **Scan**, then scanned-share bar (elapsed time without a denominator) |
+| Lock Screen | challenge … +N more queues; position leading (17 pt), ETA trailing (28 pt, accent); called: count-up leading, "Go to" room (green) + location trailing; stage track with labels | symbol + name and optional live state; context/ends-in leading, 28 pt countdown/Scanned `42/180` trailing; live adds bar with **Scan** in the bottom trailing corner |
 | Watch Smart Stack / CarPlay (`bannerSmall`) | challenge + `#4 · ~12 min` or the room | name + countdown or `42/180`, no buttons |
 
 | Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
 | --- | --- | --- | --- |
-| Compact leading / trailing | category symbol / countdown to the start; live: to the end (both blue) | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (grey once submitted) | `person.badge.key` / accredited count |
-| Minimal | countdown (to the start; live: to the end) | countdown; submitted: the check | ring of accredited / eligible |
-| Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: live elapsed-time bar, "Now" + name, `hh:mm–hh:mm · place` | symbol / "Closes in" countdown (24 pt, hours long; small and grey once submitted); bottom: window bar, title, project, status | Accredited `412 /600` / Last 10 min `+23`; bottom: share bar, Inside 380, closing time, **Scan** |
-| Lock Screen | symbol, ("Now"), name, time · place … countdown hero; live adds the elapsed-time bar | symbol + title; hero "Closes in" countdown (34 pt) with project and status opposite; window bar. Closing: red. Submitted: green "Submitted" hero, the time left small, no bar | symbol + title … closing time; Accredited (hero) · Last 10 min · Inside; share bar with **Scan** in the bottom trailing corner |
-| Watch / CarPlay | name + countdown, or "Now" + time left | title + countdown ("Not submitted" while closing) or "Submitted" | title + `412 /600` |
+| Compact leading / trailing | category symbol / countdown to the start; live: "Live" (both blue) | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (grey once submitted) | `person.badge.key` / accredited count |
+| Minimal | countdown to the start; live: symbol with a live dot | countdown; submitted: the check | ring of accredited / eligible |
+| Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: name + live state, `hh:mm–hh:mm · place`, live elapsed-time bar | symbol / "Closes in" countdown (28 pt, hours long; small and grey once submitted); bottom: title + status, project, window bar | symbol / Accredited `412 /600`; bottom: title + closing time, secondary arrivals and inside beside **Scan**, then share bar |
+| Lock Screen | symbol + name and optional live state; time · place leading, 28 pt countdown trailing; live adds the elapsed-time bar | symbol + title; project leading, "Closes in" countdown (28 pt) trailing; status in the header; window bar. Closing: red. Submitted: green "Submitted" trailing, project and small time left leading, no bar | symbol + title … closing time; Last 10 min · Inside secondary (17 pt) leading, Accredited hero (28 pt) trailing; share bar with **Scan** in the bottom trailing corner |
+| Watch / CarPlay | name + countdown, or "Live" + time left | title + countdown ("Not submitted" while closing) or "Submitted" | title + `412 /600` |
 
 The attendee activity has no buttons (the whole surface opens the schedule
 item). The deadline shows a status only when it is known: `submitted` is a
@@ -1567,15 +1567,24 @@ and filled half by half. While waiting it fills with
 `2 / (calledAhead + 3)` (⅔ when no team called earlier to the room is still
 outside) and the room completes it. Without the counts (older server) only
 the stage shows. The node labels repeat the same
-units so each sits under its node. Meals use `(inside − remaining) / inside`
-(no bar when nobody is inside); other live activities show elapsed time with
-a `ProgressView` timer between `startsAt` and `endsAt`.
+units so each sits under its node. Staff meals/activities use `scanned / accredited` when a positive denominator
+is available, otherwise elapsed time between `startsAt` and `endsAt`. Attendee
+activities show elapsed time while live. Accreditation uses `accredited / eligible`.
+
+**Shared visual grammar.** All five kinds follow
+[`DESIGN.md`](./DESIGN.md#live-activities-on-ios-966): identity row, secondary
+context leading and a primary metric trailing, then optional progress/action.
+Expanded islands retain identity/position leading and the primary value trailing,
+with title/context before the footer. Titles are 17 pt semibold on the Lock Screen
+and 15 pt expanded; primary values are 28 pt, secondary values 17 pt, captions
+12 pt and context 13 pt. Upcoming sessions no longer compress the title beside
+the countdown. Accreditation gives arrivals/occupancy less visual weight.
 
 **Margins and shapes.** The Lock Screen uses one 14 pt margin on every edge
 and stays within the 160 pt height (the live header is a single line for
 that reason). The only filled control, **Scan**, sits in the bottom trailing
-corner with a `containerRelativeShape` background, so it is concentric with
-the Live Activity's (or the island's) corner. There are no tiles or cards
+corner as an inset capsule with the same typography, padding and NFC symbol
+in both presentations. There are no tiles or cards
 behind symbols. Fields and labels added after v1 (`calledAt`,
 `queueTotal`, `calledAhead`, `accredited`, `labels.estimating` …) are optional:
 an absent one hides its element; the widget never falls back to hardcoded

@@ -613,6 +613,12 @@ newer one); and identical props cause no update.
 ## Design rationale (Apple HIG)
 
 Followed: <https://developer.apple.com/design/human-interface-guidelines/live-activities>.
+The visual contract is in [`DESIGN.md`](./DESIGN.md#live-activities-on-ios-966):
+identity, secondary context + trailing primary metric, then progress/action.
+Lock Screen and expanded layouts preserve the compact presentation's relative
+placement, use one metric scale and show secondary numbers with less emphasis.
+Every Scan action uses the same inset capsule. Upcoming layouts are shorter
+because they have no progress/action footer.
 
 - **One Live Activity per kind.** The queue activity tracks the nearest queue
   and shows how many others are pending ("track multiple events efficiently
@@ -656,7 +662,7 @@ Meal / activity (staff):
 | Compact leading | category symbol (fork.knife / person.3) | same |
 | Compact trailing | countdown to start (`1h 05m` / `34m 21s`) | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`, or when the ratio is longer than 7 characters, e.g. `1142/1380`, which no longer fits the slot); "Live" from the start until the live update brings the counts |
 | Minimal | countdown | progress ring `scanned / accredited` (the count without `accredited`) |
-| Expanded | name, location, `hh:mm–hh:mm`, countdown | symbol, Scanned `42/180`, scanned-share bar, name, ends in, **Scan** button |
+| Expanded | name, location, `hh:mm–hh:mm`, countdown | symbol, Scanned `42/180`; name and live state; ends in beside **Scan**, then scanned-share bar |
 | Lock Screen | as expanded | as expanded |
 
 Attendee activity:
@@ -666,7 +672,7 @@ Attendee activity:
 | Compact leading | category symbol | same |
 | Compact trailing | countdown to start (`1h 05m` / `34m 21s`) | "Live" (`labels.live`; older servers: "Now") |
 | Minimal | countdown | symbol with a live dot |
-| Expanded | name, location, `hh:mm–hh:mm`, "Starts in" timer | "● Live" badge + name, location, "Ends in" countdown to the end |
+| Expanded | name, location, `hh:mm–hh:mm`, "Starts in" timer | symbol / "Ends in" countdown; name + "● Live", location, elapsed-time bar |
 | Lock Screen | as expanded | as expanded, with a progress bar from `startsAt` to `endsAt` |
 | Watch / CarPlay | name + countdown | name + "Live" |
 
@@ -682,7 +688,7 @@ Submission deadline:
 | Compact trailing | countdown timer | countdown timer | countdown timer (muted) |
 | Minimal | countdown | countdown (tinted) | checkmark |
 | Expanded | title, countdown, project name; status only when known | "Not submitted · project", countdown | "Submitted ✓ · project", countdown |
-| Lock Screen | title with the status opposite; countdown with the project opposite; a progress bar from `startsAt` to `endsAt` | as open | "Submitted" with the project above, the countdown opposite |
+| Lock Screen | title with the status opposite; project leading and countdown trailing; a progress bar from `startsAt` to `endsAt` | as open | project and muted countdown leading, green "Submitted" trailing |
 | Watch | countdown | countdown + "Not submitted" | "Submitted" |
 
 Accreditation desk:
@@ -692,7 +698,7 @@ Accreditation desk:
 | Compact leading | `person.badge.key` |
 | Compact trailing | `accredited` |
 | Minimal | progress ring `accredited / eligible` |
-| Expanded | `accredited / eligible` with a ring, `inside`, arrivals in the last 10 min, **Scan** |
+| Expanded | symbol / `accredited / eligible`; title and closing time, smaller `inside` and arrivals in the last 10 min beside **Scan**; share bar |
 | Lock Screen | as expanded |
 | Watch | `accredited / eligible` |
 
