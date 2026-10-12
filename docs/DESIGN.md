@@ -1243,6 +1243,9 @@ HIG](https://developer.apple.com/design/human-interface-guidelines/live-activiti
   captions and 13 pt medium context. Timer width fitting may reduce the hero
   size; names truncate before primary values. Submitted deadlines demote the
   remaining timer and promote the completed state.
+- Minimal island: a recognizable 20 pt category or phase symbol; live activity
+  adds a dot, and operational progress keeps its ring. Multi-unit countdowns
+  belong in compact trailing, expanded and Lock Screen presentations.
 - Icons are bare SF Symbols: 17 pt in Lock Screen headers, 24 pt in expanded
   identity slots, 15 pt compact. No nested icon containers or decorative badges.
 - Scan is the only explicit action on staff/desk surfaces: a 44 pt circle
@@ -1251,7 +1254,7 @@ HIG](https://developer.apple.com/design/human-interface-guidelines/live-activiti
   progress always occupies its own full-width row. The opaque blue fill is
   `#0066CC`, reduced to neutral `#3A3A3C` in Always-On.
 - Countdowns use `2h 34m` / `34m` normally; only the last five minutes show
-  seconds (`4m 59s`, then `48s` below a minute) on every countdown surface, including minimal and small.
+  seconds (`4m 59s`, then `48s` below a minute) on every countdown surface, including small.
   Always-On removes the seconds field and its spacing, leaving `4m` or `<1m` below a minute;
   waking restores seconds. Never render a seconds placeholder.
 - The submission window's elapsed bar remains visible after submission.

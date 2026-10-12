@@ -1536,7 +1536,7 @@ Apple's HIG:
 | Presentation | Queue | Staff activity |
 | --- | --- | --- |
 | Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: `42/180` (scanned / accredited, the denominator smaller and secondary; the bare count without one or past 7 characters) |
-| Minimal | ring of the climb to the front with the position inside; called/in room: the phase symbol | live: ring of the scanned share of accredited people (the count without a denominator); upcoming: countdown |
+| Minimal | ring of the climb to the front with the position inside; called/in room: the phase symbol | live: ring of the scanned share of accredited people (the count without a denominator); upcoming: category symbol (20 pt) |
 | Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: challenge · +N more queues, location · called count-up, stage track | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live: circular **Scan** / Scanned `42/180`, name + live state, ends-in, then scanned-share bar (elapsed time without a denominator) |
 | Lock Screen | challenge … +N more queues; position leading (17 pt), ETA trailing (28 pt, accent); called: count-up leading, "Go to" room (green) + location trailing; stage track with labels | symbol + name and optional live state; context/ends-in leading, 28 pt countdown/Scanned `42/180` trailing; live puts circular **Scan** beside ends-in, with a full-width bar below |
 | Watch Smart Stack / CarPlay (`bannerSmall`) | challenge + `#4 · ~12 min` or the room | name + countdown or `42/180`, no buttons |
@@ -1544,7 +1544,7 @@ Apple's HIG:
 | Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
 | --- | --- | --- | --- |
 | Compact leading / trailing | category symbol / countdown to the start; live: "Live" (both blue) | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (grey once submitted) | `person.badge.key` / accredited count |
-| Minimal | countdown to the start; live: symbol with a live dot | countdown; submitted: the check | ring of accredited / eligible |
+| Minimal | category symbol (20 pt); live: symbol with a live dot | phase symbol (20 pt); submitted: the check | ring of accredited / eligible |
 | Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: name + live state, `hh:mm–hh:mm · place`, live elapsed-time bar | symbol / "Closes in" countdown (28 pt, hours long; small and grey once submitted); bottom: title + status, project, window bar | circular **Scan** / Accredited `412 /600`; bottom: title + closing time, secondary arrivals and inside, then share bar |
 | Lock Screen | symbol + name and optional live state; time · place leading, 28 pt countdown trailing; live adds the elapsed-time bar | symbol + title; project leading, "Closes in" countdown (28 pt) trailing; status in the header; window bar. Closing: red. Submitted: green "Submitted" trailing, project and small time left leading, window bar | symbol + title … closing time; Last 10 min · Inside secondary (17 pt) leading, Accredited hero (28 pt) trailing; circular **Scan** beside secondary stats; full-width share bar |
 | Watch / CarPlay | name + countdown, or "Live" + time left | title + countdown ("Not submitted" while closing) or "Submitted" | title + `412 /600` |
@@ -1603,7 +1603,7 @@ value, locale or text size can widen the island; text scales down
 leading / 7 pt trailing inset so the glyph and the time sit on the pill's
 concentric margin (HIG). Every countdown surface uses `2h 34m` / `34m`
 normally and adds seconds only in the last five minutes (`4m 59s`, then `48s`
-below a minute, including minimal and `bannerSmall`). Always-On uses the native `isLuminanceReduced`
+below a minute, including `bannerSmall`). Always-On uses the native `isLuminanceReduced`
 environment to remove both the seconds field and its spacing, leaving `4m`
 or `<1m` below a minute; waking restores seconds, with no placeholder. `Text`'s
 `compactCountdown` (the legacy form names share this precision policy;

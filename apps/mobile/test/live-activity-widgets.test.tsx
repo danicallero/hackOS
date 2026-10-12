@@ -556,7 +556,8 @@ describe("New Live Activity kinds (#966)", () => {
       const layout = AttendeeActivityLayout(attendee(), { ...environment, isStale: false });
       expect(allTexts(layout)).not.toContain("Live");
       expect(texts(layout.expandedTrailing)).toContain("Starts in");
-      expect(nodes(layout.minimal, "Text")[0]?.props?.compactCountdown).toBe("short");
+      expect(nodes(layout.minimal, "Text")).toHaveLength(0);
+      expect(nodes(layout.minimal, "Image")).toHaveLength(1);
     });
 
     it("falls back to Now from a server without the live label", () => {
@@ -619,10 +620,11 @@ describe("New Live Activity kinds (#966)", () => {
       expect(nodes(submitted.expandedBottom, "ProgressView")).toHaveLength(1);
     });
 
-    it("works without a window start (no bar, the time left still minimal)", () => {
+    it("works without a window start (no bar, minimal still identifies the phase)", () => {
       const layout = DeadlineActivityLayout(deadline({ startsAt: null }), environment);
       expect(nodes(layout.banner, "ProgressView")).toHaveLength(0);
-      expect(nodes(layout.minimal, "Text")[0]?.props?.timerInterval).toBeTruthy();
+      expect(nodes(layout.minimal, "Text")).toHaveLength(0);
+      expect(nodes(layout.minimal, "Image")[0]?.props?.systemName).toBe("hourglass");
 
       const submitted = DeadlineActivityLayout(
         deadline({ phase: "submitted", submission: "submitted" }),
@@ -706,13 +708,15 @@ describe("New Live Activity kinds (#966)", () => {
     }
 
     it.each(states)("%s: every countdown uses the native unit renderer", (_name, layout) => {
+      expect(
+        nodes(layout.minimal, "Text").filter((text) => text.props?.timerInterval),
+      ).toHaveLength(0);
       const found = countdowns(layout);
       expect(found.length).toBeGreaterThan(0);
       for (const [slot, text] of found) {
         // Legacy form names all follow the same native five-minute / Always-On
         // precision policy; each surface still supplies its own font size.
-        const expected =
-          slot === "minimal" ? ["short"] : slot === "compactTrailing" ? ["full"] : ["full", "long"];
+        const expected = slot === "compactTrailing" ? ["full"] : ["full", "long"];
         expect(expected).toContain(text.props?.compactCountdown);
         expect(typeof text.props?.compactCountdownSize).toBe("number");
         const modifiers = (text.props?.modifiers as { modifier: string }[]).map((m) => m.modifier);
@@ -728,11 +732,12 @@ describe("New Live Activity kinds (#966)", () => {
       }
     });
 
-    it("keeps the island sizes fixed: 12 pt compact, 10 pt minimal", () => {
+    it("keeps compact timers at 12 pt and minimal symbols legible", () => {
       const layout = DeadlineActivityLayout(deadline(), environment);
       const size = (slot: string) => nodes(layout[slot], "Text")[0]?.props?.compactCountdownSize;
       expect(size("compactTrailing")).toBe(12);
-      expect(size("minimal")).toBe(10);
+      expect(nodes(layout.minimal, "Text")).toHaveLength(0);
+      expect(nodes(layout.minimal, "Image")[0]?.props?.size).toBe(20);
     });
 
     it.each([

@@ -255,15 +255,14 @@ export const AttendeeActivityLayout = (
     ) : null;
   const compactTrailing = (live ? liveText(12) : timer(12, islandAccent, 56)) ?? <Text> </Text>;
 
-  // Minimal: the time to the start, then the symbol with a live dot, which
-  // still says which activity it is.
+  // #966: minimal keeps the category recognizable; live adds a status dot.
   const minimal = live ? (
     <HStack spacing={2}>
-      {glyph(islandAccent, 12)}
+      {glyph(islandAccent, 18)}
       <Image systemName="circle.fill" color={islandAccent} size={5} />
     </HStack>
   ) : (
-    (timer(10, islandAccent, 36, "semibold", "short") ?? glyph(islandAccent, 14))
+    glyph(islandAccent, 20)
   );
 
   const expandedLeading = (
