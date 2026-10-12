@@ -192,10 +192,11 @@ describe("attendee activity (H59)", () => {
 describe("submission deadline (H19, H20)", () => {
   async function deadlineIn(minutes: number) {
     const pool = await db();
+    // #966: use the API clock, not PostgreSQL's potentially skewed clock.
+    const now = Date.now();
     await pool.query(
-      `UPDATE event_config SET hacking_starts_at = now() - interval '20 hours',
-              hacking_ends_at = now() + make_interval(mins => $1) WHERE id = 1`,
-      [minutes],
+      `UPDATE event_config SET hacking_starts_at = $1, hacking_ends_at = $2 WHERE id = 1`,
+      [new Date(now - 20 * 60 * 60_000), new Date(now + minutes * 60_000)],
     );
   }
 
@@ -287,7 +288,8 @@ describe("submission deadline (H19, H20)", () => {
     expect((await mine(drafter)).deadline?.countdownLastFiveMinutes).toBe(true);
     expect((await mine(submitter)).deadline?.countdownLastFiveMinutes).toBe(true);
     expect((await mine(drafter)).deadline?.countdownLastMinute).toBe(false);
-    await deadlineIn(1);
+    // Below a minute, rather than racing the strict 60-second boundary.
+    await deadlineIn(0.5);
     expect((await mine(drafter)).deadline?.countdownLastMinute).toBe(true);
     expect((await mine(submitter)).deadline?.countdownLastMinute).toBe(true);
     // Unknown status (Devpost-only, not imported) never claims "not submitted".
