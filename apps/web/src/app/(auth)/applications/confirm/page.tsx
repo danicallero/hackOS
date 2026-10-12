@@ -9,6 +9,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { QrCode } from "@/components/common/qr-code";
 import { Spinner } from "@/components/common/spinner";
 import { WalletButtons } from "@/components/common/wallet-buttons";
+import { NetworkingProfileInvite } from "@/components/profile/networking-profile-invite";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -232,6 +233,10 @@ function ConfirmInner() {
               className="mx-auto w-full max-w-60"
             />
           </div>
+        )}
+        {/* The token is not a session: only the holder's own session may read the profile. */}
+        {sessionStatus === "authenticated" && me?.id === result?.user_id && (
+          <NetworkingProfileInvite />
         )}
         <div className="flex justify-start">
           <Button

@@ -24,6 +24,7 @@ import Animated, {
   SlideOutRight,
 } from "react-native-reanimated";
 import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
+import { NetworkingInvite } from "@/components/networking-invite";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -344,6 +345,7 @@ export default function WalletScreen({ contentTopInset = 0 }: { contentTopInset?
             </Text>
           </View>
         ) : null}
+        {spotConfirmed ? <NetworkingInvite /> : null}
         {spotDeclined ? (
           <View
             accessibilityLiveRegion="polite"

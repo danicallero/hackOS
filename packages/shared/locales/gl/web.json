@@ -3705,5 +3705,7 @@
   "liveActivityKindAccreditationDesc": "Contadores de acreditacións para o staff da mesa.",
   "liveActivityAudienceLabel": "Amosar actividade en directo ao seu público",
   "liveActivityNoRolesHint": "Ninguén a recibe ata que selecciones un rol.",
-  "liveActivityAllRoles": "Todos os roles"
+  "liveActivityAllRoles": "Todos os roles",
+  "networkingInvite": "Este é o perfil que poderán consultar outros participantes ou representantes de empresas cos que fagas networking durante o evento.",
+  "networkingInviteAction": "Completar perfil"
 }
