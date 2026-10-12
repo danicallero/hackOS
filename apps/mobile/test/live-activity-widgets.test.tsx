@@ -300,6 +300,15 @@ describe("Live Activity layouts (#966)", () => {
       environment,
     );
     expect(nodes(over.minimal, "Gauge")[0]?.props?.value).toBe(1);
+
+    // Four-digit counts no longer fit the compact slot: the scanned count
+    // alone, the full ratio everywhere else.
+    const large = StaffActivityLayout(
+      activity({ phase: "live", scanned: 1142, accredited: 1380 }),
+      environment,
+    );
+    expect(texts(large.compactTrailing)).toEqual(["1142"]);
+    expect(texts(large.expandedTrailing)).toEqual(["Scanned", "1142", "/1380"]);
   });
 
   it("shows Live in the island without a denominator, the count in the stats", () => {
@@ -748,8 +757,13 @@ describe("New Live Activity kinds (#966)", () => {
     ] as [
       string,
       Record<string, unknown>,
-    ][])("%s: hard island caps, whatever the value", (_name, layout) => {
-      const caps = { compactLeading: 24, compactTrailing: 56, minimal: 36 } as const;
+    ][])("%s: hard island caps, whatever the value", (name, layout) => {
+      // The queue's leading slot is wider so a three-digit position fits.
+      const caps = {
+        compactLeading: name.startsWith("queue") ? 40 : 24,
+        compactTrailing: 56,
+        minimal: 36,
+      } as const;
       for (const [slot, width] of Object.entries(caps)) {
         const root = layout[slot] as Node;
         const modifiers = root.props?.modifiers as { modifier: string; args: unknown[] }[];
