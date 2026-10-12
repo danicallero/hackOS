@@ -27,8 +27,12 @@ const APNS_HOSTS = {
  */
 export const EXPO_WIDGETS_ATTRIBUTES_TYPE = "LiveActivityAttributes";
 
-/** HIG: keep an ended activity on the Lock Screen briefly, not for the 4 h default. */
-export const END_DISMISSAL_SECONDS = 15 * 60;
+/**
+ * An `end` without a `dismissal-date` keeps the final state on the Lock Screen
+ * for up to 4 h, and a date 15 min out kept finished activities up long after
+ * their end (#966). The activity is over: remove it as soon as the end lands.
+ */
+export const END_DISMISSAL_SECONDS = 0;
 
 /** Apple accepts a provider token for up to an hour; refresh well before that. */
 const JWT_TTL_MS = 50 * 60 * 1000;

@@ -73,8 +73,11 @@ void readLiveActivityState().then((state) => {
   subjects = { ...state.iosStaffSubjects, ...subjects };
 });
 
-/** After an activity ends, how long its final state may stay on the Lock Screen (HIG). */
-const FINISHED_DISMISSAL_MS = 15 * 60 * 1000;
+/**
+ * After an activity ends, how long its final state may stay on the Lock Screen.
+ * Kept short: a 15-minute window made finished activities look stuck (#966).
+ */
+const FINISHED_DISMISSAL_MS = 30 * 1000;
 /**
  * Same `stale-date` the API sends (`liveActivityStaleDate`): an upcoming
  * staff or attendee activity turns live at its start (the widget reads
