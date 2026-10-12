@@ -1,7 +1,8 @@
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Pressable, ScrollView, Switch, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import {
+  AppSwitch,
   EmptyState,
   InfoRow,
   Section,
@@ -410,7 +411,7 @@ function ReminderRow({
           ) : null}
         </View>
       </Pressable>
-      <Switch
+      <AppSwitch
         accessibilityLabel={
           subscribed
             ? t("scheduleReminderOn", { name: item.title })
