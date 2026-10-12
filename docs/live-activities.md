@@ -534,7 +534,7 @@ stays on the device.
     "alert": { "title": "Robotics", "body": "Position #4 · ~12 min" },
     "stale-date": 1791714600,
     "relevance-score": 50,
-    "dismissal-date": 1791713700
+    "dismissal-date": 1791712800
   }
 }
 ```
@@ -569,8 +569,10 @@ stays on the device.
 - `attributes` is expo-widgets' `LiveActivityAttributes { url: String? }`,
   the props `url` (see the deep link table). It is the tap target, so it must
   be present on every remote start.
-- `dismissal-date` (on `end` only): 15 minutes after the end; immediately
-  when the activity is being replaced before ActivityKit's 8-hour limit.
+- `dismissal-date` (on `end` only): the send time, so the activity leaves the
+  Lock Screen as soon as the end lands (a later date, or none, keeps the final
+  state up for minutes to 4 hours). The same for a replacement before
+  ActivityKit's 8-hour limit.
 - A rescheduled item's update carries the new `startsAt`/`endsAt` in
   `content-state` (the widget's countdowns read them) and a new `stale-date`.
 
@@ -629,7 +631,8 @@ because they have no progress/action footer.
   are throttled.
 - **Alert only for essential updates.** The only alerting updates are the
   call and an unsubmitted team's final 15 minutes.
-- **End when the task ends**, with a custom dismissal of about 15 minutes.
+- **End when the task ends**, dismissed at once (`dismissal-date` = now); the app's local end keeps the
+  final state 30 seconds.
 - **Single interactive element at most** (staff and desk **Scan**, with a
   radio-waves symbol for the NFC badge: `wave.3.right` on iOS). Every tap
   deep-links to the related screen.

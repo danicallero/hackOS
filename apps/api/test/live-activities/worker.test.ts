@@ -156,7 +156,7 @@ describe("queue Live Activity (H38)", () => {
     const end = apns.sent.at(-1)!;
     const aps = end.payload.aps as Record<string, number | string>;
     expect(aps.event).toBe("end");
-    expect(Number(aps["dismissal-date"]) - Number(aps.timestamp)).toBe(15 * 60);
+    expect(Number(aps["dismissal-date"]) - Number(aps.timestamp)).toBe(0);
     const [session] = await sessionsOf(device.id);
     expect(session).toMatchObject({ end_reason: "finished" });
     expect(session.ended_at).not.toBeNull();

@@ -1737,7 +1737,7 @@ desk the accredited share `accredited / eligible`, all as of the post.
   `planReconcile` — one surface per (kind, subject): start missing
   ones (the queue only while `judgingWindowOpen`), update changed props
   (ignoring `updatedAt`), end duplicates and dropped subjects (iOS keeps the
-  final state 15 minutes). A dismissed surface is not restarted until its
+  final state 30 seconds). A dismissed surface is not restarted until its
   phase changes (called, live), and `DELETE …/sessions` with the dismissed
   phase stops remote restarts. On iOS, a surface that vanished while the
   server still lists it counts as dismissed. On Android only the
@@ -1770,7 +1770,7 @@ desk the accredited share `accredited / eligible`, all as of the post.
   and opt-out also remove iOS activities that already ended but still show
   their final state on the Lock Screen (`dismissEnded`), which
   `getInstances()` no longer lists, so a previous account's "Go to Room B"
-  does not stay up for its 15-minute dismissal window.
+  does not stay up for its 30-second dismissal window.
 - `background-task.ts` — Android data pushes (`AndroidLiveUpdateMessage`) go
   through an `expo-task-manager` notification task defined in the entry file
   `index.ts` (before `expo-router/entry`), and through the foreground received
