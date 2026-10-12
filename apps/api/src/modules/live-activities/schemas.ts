@@ -1,5 +1,6 @@
 import {
   ACCREDITATION_LIVE_ACTIVITY_SUBJECT,
+  COUNTDOWN_FLAG_KEYS,
   DEADLINE_LIVE_ACTIVITY_SUBJECT,
   LIVE_ACTIVITY_CONFIG_KINDS,
   LIVE_ACTIVITY_KINDS,
@@ -146,6 +147,14 @@ const queueLivePropsSchema = z.object({
   updatedAt: isoString,
 });
 
+/**
+ * Countdown format flags (#966): without them in the response the app's
+ * foreground refresh would see an unchanged state at each format boundary.
+ */
+const countdownFlagsShape = Object.fromEntries(
+  COUNTDOWN_FLAG_KEYS.map((key) => [key, z.boolean().optional()]),
+) as Record<(typeof COUNTDOWN_FLAG_KEYS)[number], z.ZodOptional<z.ZodBoolean>>;
+
 const activityLivePropsSchema = z.object({
   v: z.literal(LIVE_ACTIVITY_PROPS_VERSION),
   kind: z.literal("activity"),
@@ -167,6 +176,7 @@ const activityLivePropsSchema = z.object({
     endsIn: z.string().optional(),
     live: z.string().optional(),
   }),
+  ...countdownFlagsShape,
   rank,
   updatedAt: isoString,
 });
@@ -188,6 +198,7 @@ const attendeeActivityLivePropsSchema = z.object({
     endsIn: z.string(),
     live: z.string().optional(),
   }),
+  ...countdownFlagsShape,
   rank,
   updatedAt: isoString,
 });
@@ -207,6 +218,7 @@ const deadlineLivePropsSchema = z.object({
     submitted: z.string(),
     notSubmitted: z.string(),
   }),
+  ...countdownFlagsShape,
   rank,
   updatedAt: isoString,
 });

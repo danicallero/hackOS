@@ -10,10 +10,10 @@ import {
   type DeadlineLiveProps,
   LIVE_ACTIVITY_KINDS,
   LIVE_ACTIVITY_PROPS_VERSION,
-  LIVE_COUNTDOWN_HOUR_MS,
   type LiveActivityKind,
   type LiveActivityProps,
   type MyLiveActivities,
+  nextCountdownBoundary,
   QUEUE_LIVE_ACTIVITY_SUBJECT,
   type QueueLiveProps,
 } from "@hackos/shared/live-activities";
@@ -241,12 +241,17 @@ export function withScannedIncrement(props: ActivityLiveProps, by = 1): Activity
 /**
  * Next instant a surface changes phase or ends on its own (an activity or
  * schedule item starting or ending, the deadline, the accreditation window),
- * or a countdown drops under an hour (#966: the widget then switches from
- * `2h 34m` to `34m`), enters the last five minutes (seconds appear), or the last minute (seconds alone),
- * so the foreground app can refresh exactly then instead of polling.
+ * or its countdown reaches a native timer format boundary (#966: the hour,
+ * one-digit minutes, ten minutes, five minutes, a minute, ten seconds; see
+ * `nextCountdownBoundary`), so the foreground app can refresh then instead of
+ * polling (the caller's timer already waits a second past it, once the native
+ * timer text has rolled over).
  */
 export function nextPhaseBoundary(desired: DesiredActivity[], now: number): number | null {
   let next: number | null = null;
+  const consider = (at: number) => {
+    if (Number.isFinite(at) && at > now && (next === null || at < next)) next = at;
+  };
   for (const item of desired) {
     const props = item.props;
     const instants =
@@ -255,16 +260,16 @@ export function nextPhaseBoundary(desired: DesiredActivity[], now: number): numb
         : props.kind === "deadline" || props.kind === "accreditation"
           ? [props.endsAt]
           : [];
-    // Refresh after the hour format changes, and when seconds become relevant.
-    const countdown = props.kind !== "accreditation";
-    for (const iso of instants) {
-      const end = Date.parse(iso);
-      const marks = countdown
-        ? [end - LIVE_COUNTDOWN_HOUR_MS + 1_000, end - 300_000, end - 60_000 + 1_000, end]
-        : [end];
-      for (const at of marks) {
-        if (Number.isFinite(at) && at > now && (next === null || at < next)) next = at;
-      }
+    for (const iso of instants) consider(Date.parse(iso));
+    // The countdown shown runs to the start while upcoming, else to the end.
+    if (props.kind === "activity" || props.kind === "attendee_activity") {
+      const start = Date.parse(props.startsAt);
+      const target = now < start ? props.startsAt : props.endsAt;
+      const at = nextCountdownBoundary(target, now);
+      if (at !== null) consider(at);
+    } else if (props.kind === "deadline") {
+      const at = nextCountdownBoundary(props.endsAt, now);
+      if (at !== null) consider(at);
     }
   }
   return next;

@@ -221,6 +221,7 @@ jest.mock("@/lib/i18n", () => {
       statisticsStaffOnly: "Statistics are available to staff accounts only.",
       accountSecondaryEmail: "Secondary email",
       accountFoodIntolerances: "Food intolerances",
+      accountNetworkingProfile: "Edit networking profile",
       accountLegalTitle: "Legal",
       accountLanguage: "Language",
       accountName: "Name",
@@ -405,6 +406,10 @@ describe("account removal UI flow", () => {
       scroll.props.refreshControl.props.onRefresh();
     });
     await waitFor(() => expect(mockMeContext.refetch).toHaveBeenCalledTimes(1));
+
+    // #934, #935: always available, whatever the event window.
+    await user.press(screen.getByRole("button", { name: "Edit networking profile" }));
+    expect(mockPush).toHaveBeenCalledWith("/networking-profile");
 
     await user.press(screen.getByRole("button", { name: "Storage" }));
     expect(mockPush).toHaveBeenCalledWith("/(tabs)/others/storage");

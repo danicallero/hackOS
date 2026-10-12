@@ -330,6 +330,12 @@ export const scheduleBody = z.object({
   audiences: z.array(scheduleAudience).max(3).default([]),
   contactNote: z.string().max(300).nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
+  titleLanguage: languageSchema
+    .optional()
+    .describe(
+      "Language `title`/`description` are written in. Defaults to the editor's account language; " +
+        "send it when only a single, different language was filled in (H50).",
+    ),
   liveActivityAudience: z
     .boolean()
     .optional()

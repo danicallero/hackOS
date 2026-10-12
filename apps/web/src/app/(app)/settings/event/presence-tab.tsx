@@ -27,7 +27,6 @@ import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
-import { ZonedTimePreview } from "./zoned-time-preview";
 
 const createSchema = (t: Translate) =>
   z.object({
@@ -43,7 +42,7 @@ type Values = z.infer<ReturnType<typeof createSchema>>;
 
 function fromConfig(cfg: EventConfig): Values {
   return {
-    presenceAutoEntryAt: toLocalInputValue(cfg.presenceAutoEntryAt),
+    presenceAutoEntryAt: toLocalInputValue(cfg.presenceAutoEntryAt, cfg.timezone),
     presenceCertaintyWindowMinutes: cfg.presenceCertaintyWindowMinutes,
   };
 }
@@ -66,7 +65,7 @@ export function PresenceTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
     setSaveState("saving");
     try {
       const next = await api.put<EventConfig>("/api/event", {
-        presenceAutoEntryAt: fromLocalInputValue(values.presenceAutoEntryAt),
+        presenceAutoEntryAt: fromLocalInputValue(values.presenceAutoEntryAt, config?.timezone),
         presenceCertaintyWindowMinutes: values.presenceCertaintyWindowMinutes,
       });
       applyConfig(next);
@@ -105,7 +104,6 @@ export function PresenceTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
                   <FormControl>
                     <DateTimeInput value={field.value} onChange={field.onChange} />
                   </FormControl>
-                  <ZonedTimePreview value={field.value} timezone={config.timezone} />
                   <FormDescription>{t("automaticEntryTimeDesc")}</FormDescription>
                   <FormMessage />
                 </FormItem>

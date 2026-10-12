@@ -885,6 +885,78 @@ describe("New Live Activity kinds (#966)", () => {
     expect(colors(layout.banner).filter((color) => color.includes("dynamic"))).toEqual([]);
   });
 
+  describe("watch Smart Stack presentation (.small family)", () => {
+    const reduced = { colorScheme: "dark", isLuminanceReduced: true } as LiveActivityEnvironment;
+    const cases: [string, (env: LiveActivityEnvironment) => Record<string, unknown>][] = [
+      ["queue waiting", (env) => QueueActivityLayout(queue(), env)],
+      [
+        "queue called",
+        (env) =>
+          QueueActivityLayout(
+            queue({ phase: "called", position: null, etaMinutes: null, roomName: "Room B" }),
+            env,
+          ),
+      ],
+      ["staff upcoming", (env) => StaffActivityLayout(activity(), env)],
+      ["staff live", (env) => StaffActivityLayout(activity({ phase: "live", scanned: 42 }), env)],
+      ["attendee upcoming", (env) => AttendeeActivityLayout(attendee(), env)],
+      ["attendee live", (env) => AttendeeActivityLayout(attendee({ phase: "live" }), env)],
+      ["deadline open", (env) => DeadlineActivityLayout(deadline(), env)],
+      ["deadline closing", (env) => DeadlineActivityLayout(deadline({ phase: "closing" }), env)],
+      [
+        "deadline submitted",
+        (env) =>
+          DeadlineActivityLayout(deadline({ phase: "submitted", submission: "submitted" }), env),
+      ],
+      ["accreditation", (env) => AccreditationActivityLayout(accreditation(), env)],
+    ];
+    // Semantic hues only: the neutral fallback and hierarchical styles are not accents.
+    const hues = (node: unknown) =>
+      new Set(
+        colors(node).filter((color) => color !== "#8E8E93" && !color.includes("hierarchical")),
+      );
+
+    it.each(cases)("%s: at most one accent hue, none in Always-On", (_name, build) => {
+      expect(hues(build(environment).bannerSmall).size).toBeLessThanOrEqual(1);
+      expect(hues(build(reduced).bannerSmall).size).toBe(0);
+    });
+
+    it.each(cases)("%s: every line fits on one line", (_name, build) => {
+      const small = build(environment).bannerSmall;
+      expect(nodes(small, "Text").length).toBeGreaterThan(0);
+      for (const text of nodes(small, "Text")) {
+        const modifiers = (text.props?.modifiers as { modifier: string }[]).map((m) => m.modifier);
+        expect(modifiers).toContain("lineLimit");
+      }
+    });
+
+    it("tints only the status line red in the last minutes, never the countdown", () => {
+      const closing = DeadlineActivityLayout(deadline({ phase: "closing" }), environment);
+      expect([...hues(closing.bannerSmall)]).toEqual(["#FF6961"]);
+      const countdown = nodes(closing.bannerSmall, "Text").find(
+        (text) => text.props?.compactCountdown,
+      );
+      expect(colors(countdown)).toEqual([]);
+      expect(texts(closing.bannerSmall)).toContain("Not submitted");
+    });
+
+    it("keeps red off the iPhone countdowns and bars while closing", () => {
+      const closing = DeadlineActivityLayout(deadline({ phase: "closing" }), environment);
+      for (const slot of ["compactTrailing", "expandedTrailing", "banner"]) {
+        for (const text of nodes(closing[slot], "Text").filter((t) => t.props?.compactCountdown)) {
+          expect(colors(text)).toEqual([]);
+        }
+      }
+      for (const bar of nodes(closing.banner, "ProgressView")) {
+        const tints = (bar.props?.modifiers as { modifier: string; args: unknown[] }[])
+          .filter((modifier) => modifier.modifier === "tint")
+          .map((modifier) => modifier.args[0]);
+        expect(tints).toHaveLength(1);
+        expect(JSON.stringify(tints)).not.toMatch(/D70015|FF453A/);
+      }
+    });
+  });
+
   it("degrades a future props version to its title", () => {
     const future = (kind: string, extra: object) => ({ v: 2, kind, ...extra }) as never;
     expect(

@@ -242,6 +242,14 @@ re-implementing. Each is a **single canonical component configured by props**
 — never fork a second version. Representative primitives and widgets with
 variations are previewed at `/design-system` in the running app.
 
+Date and time inputs (`DateTimeInput`) and every formatter in `lib/datetime.ts`
+work in the **event's** timezone (`GET /api/me` `eventTimezone`, published by
+`SessionProvider` to `lib/event-time.ts`), not the browser's. Convert with
+`toDatetimeLocal` / `fromDatetimeLocal` (DST-safe, from
+`@hackos/shared/event-time`); never `new Date(localString)` or
+`getHours()` on a typed value. When the browser sits in another zone,
+`DateTimeInput` and the schedule's time columns add a terse zone name.
+
 Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `EmptyState`, `DataTable`, `TabBar`, `Modal`, `AlertModal`, `ContextualError`,
 `FullPageError`,

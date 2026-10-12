@@ -941,6 +941,8 @@
   "scheduleKindColumn": "Tipo de actividade",
   "scheduleAudienceColumn": "Audiencia",
   "scheduleScannableColumn": "Escaneable",
+  "scheduleLiveActivityColumn": "Actividade en directo",
+  "exportCsvAction": "Exportar CSV",
   "schedulePublishDateColumn": "Data de publicación",
   "inlineTimeRollTooLong": "Máis de {hours} h ao pasar da medianoite: pon as datas no editor do elemento.",
   "publishDateStaffOnlyHint": "Os elementos só para staff non teñen data de publicación: o staff sempre os ve.",
@@ -2000,7 +2002,6 @@
   "noTimezoneMatch": "Ningún fuso horario coincide.",
   "selectTimezonePlaceholder": "Selecciona un fuso horario",
   "zonedTimeSameZone": "No fuso horario do evento ({zone}).",
-  "zonedTimePreview": "No fuso horario do evento ({zone}): {reading}.",
   "countdownPreviewEmpty": "Define o inicio e o fin do hacking para previsualizar a conta atrás.",
   "venueNameUnset": "Sede sen nome",
   "venuePinUnset": "Sen coordenadas todavía",
@@ -2956,6 +2957,7 @@
   "capabilityDescriptionJudgingExport": "Exportar puntuacións e resultados de avaliación",
   "capabilityDescriptionSponsorsManage": "Xestionar empresas e invitacións de patrocinio",
   "capabilityDescriptionChallengesManage": "Crear, editar e publicar retos de patrocinadores",
+  "capabilityDescriptionScheduleRead": "Ver o programa completo do evento, incluídas as entradas ocultas e sen publicar e os campos do equipo",
   "capabilityDescriptionScheduleManage": "Xestionar o programa do evento",
   "capabilityDescriptionAnnouncementsManage": "Crear e enviar anuncios",
   "capabilityDescriptionTvControl": "Controlar o que se mostra nas pantallas de TV",
@@ -3705,5 +3707,7 @@
   "liveActivityKindAccreditationDesc": "Contadores de acreditacións para o staff da mesa.",
   "liveActivityAudienceLabel": "Amosar actividade en directo ao seu público",
   "liveActivityNoRolesHint": "Ninguén a recibe ata que selecciones un rol.",
-  "liveActivityAllRoles": "Todos os roles"
+  "liveActivityAllRoles": "Todos os roles",
+  "networkingInvite": "Este é o perfil que poderán consultar outros participantes ou representantes de empresas cos que fagas networking durante o evento.",
+  "networkingInviteAction": "Completar perfil"
 }

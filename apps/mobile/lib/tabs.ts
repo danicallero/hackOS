@@ -41,6 +41,17 @@ export function canManageStands(capabilities: string[]): boolean {
   return has(capabilities, CAPABILITIES.SPONSORS_MANAGE);
 }
 
+/** H48/H59: schedule:manage implies read of the full run-of-show. */
+export function canReadFullSchedule(capabilities: string[]): boolean {
+  return (
+    has(capabilities, CAPABILITIES.SCHEDULE_READ) || has(capabilities, CAPABILITIES.SCHEDULE_MANAGE)
+  );
+}
+
+export function canManageSchedule(capabilities: string[]): boolean {
+  return has(capabilities, CAPABILITIES.SCHEDULE_MANAGE);
+}
+
 export function canScanActivities(capabilities: string[]): boolean {
   return has(capabilities, CAPABILITIES.ACTIVITY_SCAN);
 }

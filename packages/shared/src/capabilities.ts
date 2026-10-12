@@ -65,6 +65,7 @@ export const CAPABILITIES = {
   CHALLENGES_MANAGE: "challenges:manage",
 
   // content (H45, H47-H50)
+  SCHEDULE_READ: "schedule:read", // read-only full schedule (H48, H59); SCHEDULE_MANAGE implies it
   SCHEDULE_MANAGE: "schedule:manage",
   ANNOUNCEMENTS_MANAGE: "announcements:manage",
   TV_CONTROL: "tv:control",
@@ -126,6 +127,8 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "judging:export": "Export judging scores and results",
   "sponsors:manage": "Manage enterprises and sponsor invites",
   "challenges:manage": "Create, edit, and publish sponsor challenges",
+  "schedule:read":
+    "View the full event schedule, including hidden and unpublished entries and staff fields",
   "schedule:manage": "Manage the event schedule",
   "announcements:manage": "Create and send announcements",
   "tv:control": "Control what displays on TV screens",

@@ -208,7 +208,11 @@ canonical text (in the editor's own language) is dropped from the i18n map so
 it isn't duplicated in both places — mirrored onto the linked `activities`
 row the same way. This only fires when the request actually includes `title`
 (the full edit form always does; a partial patch — reschedule, recipient
-toggle, drag-to-a-new-day — never touches language anchoring). `createScheduleItem`
+toggle, drag-to-a-new-day — never touches language anchoring). Both
+`POST /api/schedule` and `PATCH /api/schedule/:id` accept an optional
+`titleLanguage`: a single-language entry written in a language other than the
+editor's own (the editor filled in only that one) anchors to it instead, so one
+language is enough to save. `createScheduleItem`
 sets `primary_language` the same way, from the author's own account language
 at creation (`getUserLanguage`). Every translate call passes `source: "auto"`
 down to the provider (`translateFields` in `translate/index.ts`; Google's v2

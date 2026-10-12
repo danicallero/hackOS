@@ -3,9 +3,7 @@ import {
   type AttendeeActivityLiveProps,
   accreditationLiveLabels,
   attendeeActivityLiveLabels,
-  countdownLastFiveMinutes,
-  countdownLastMinute,
-  countdownUnderHour,
+  countdownFlags,
   type DeadlineLiveProps,
   deadlineLiveLabels,
   LIVE_ACTIVITY_PROPS_VERSION,
@@ -102,15 +100,7 @@ export function buildAttendeeActivityLiveProps(
     url: scheduleDeepLink(item.id),
     labels: attendeeActivityLiveLabels(language),
     // #966: precision flags trigger one re-render at each native timer format boundary.
-    countdownUnderHour: countdownUnderHour(now < item.startsAt ? item.startsAt : item.endsAt, now),
-    countdownLastMinute: countdownLastMinute(
-      now < item.startsAt ? item.startsAt : item.endsAt,
-      now,
-    ),
-    countdownLastFiveMinutes: countdownLastFiveMinutes(
-      now < item.startsAt ? item.startsAt : item.endsAt,
-      now,
-    ),
+    ...countdownFlags(now < item.startsAt ? item.startsAt : item.endsAt, now),
     updatedAt: now.toISOString(),
   };
 }
@@ -232,9 +222,7 @@ export function buildDeadlineLiveProps(
     projectName: fact?.projectName ?? null,
     url: projectDeepLink(),
     labels: deadlineLiveLabels(language),
-    countdownUnderHour: countdownUnderHour(window.endsAt, now),
-    countdownLastMinute: countdownLastMinute(window.endsAt, now),
-    countdownLastFiveMinutes: countdownLastFiveMinutes(window.endsAt, now),
+    ...countdownFlags(window.endsAt, now),
     updatedAt: now.toISOString(),
   };
 }

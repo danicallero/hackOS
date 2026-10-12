@@ -100,6 +100,9 @@ describe("iOS Live Activity host (#966)", () => {
 
     const ended = mockCreated.get(id!);
     expect(ended?.end).toHaveBeenCalledTimes(1);
+    // The final state leaves the Lock Screen within a minute, not 15 (#966).
+    const policy = ended?.end.mock.calls[0]?.[0] as { after: Date };
+    expect(policy.after.getTime() - Date.now()).toBeLessThanOrEqual(60_000);
     await liveActivityHost.dismissEnded();
     expect(ended?.end).toHaveBeenLastCalledWith("immediate");
 

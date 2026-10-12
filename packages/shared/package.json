@@ -9,6 +9,7 @@
     "./activity-kinds": "./src/activity-kinds.ts",
     "./applications": "./src/applications.ts",
     "./capabilities": "./src/capabilities.ts",
+    "./event-time": "./src/event-time.ts",
     "./events": "./src/events.ts",
     "./live-activities": "./src/live-activities.ts",
     "./locale": "./src/locale.ts",

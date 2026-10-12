@@ -9,12 +9,17 @@ import {
   accreditationLiveLabels,
   activityLiveLabels,
   attendeeActivityLiveLabels,
+  countdownFlags,
   countdownLastFiveMinutes,
   countdownLastMinute,
+  countdownLastTenSeconds,
+  countdownShortMinutes,
   countdownUnderHour,
+  countdownUnderTenMinutes,
   type DeadlineLiveProps,
   deadlineLiveLabels,
   type MyLiveActivities,
+  nextCountdownBoundary,
 } from "@hackos/shared/live-activities";
 import { desiredActivities, nextPhaseBoundary } from "./model";
 
@@ -160,13 +165,17 @@ describe("nextPhaseBoundary: new kinds", () => {
     const at = (iso: string) => Date.parse(iso);
     const desk = desiredActivities(response({ accreditation: accreditation() }));
     expect(nextPhaseBoundary(desk, now)).toBe(at("2026-02-20T13:30:00.000Z"));
-    // #966: the deadline (14:00) is first refreshed when it drops under an
-    // hour, so the widget switches from `2h 34m` to `34m 21s`.
+    // #966: the deadline (14:00) is first refreshed when the minutes-of-hour
+    // reach 9 (`1h 10m` left), so the widget goes from `1h 12m` to `1h 9m`.
     const desired = desiredActivities(
       response({ deadline: deadline(), accreditation: accreditation() }),
     );
-    expect(nextPhaseBoundary(desired, now)).toBe(at("2026-02-20T13:00:01.000Z"));
-    expect(nextPhaseBoundary(desired, at("2026-02-20T13:00:01.000Z"))).toBe(
+    expect(nextPhaseBoundary(desired, now)).toBe(at("2026-02-20T12:50:00.000Z"));
+    // Then the full hour (`1h 0m` to `59m`), before the desk ends at 13:30.
+    expect(nextPhaseBoundary(desired, at("2026-02-20T12:50:00.000Z"))).toBe(
+      at("2026-02-20T13:00:00.000Z"),
+    );
+    expect(nextPhaseBoundary(desired, at("2026-02-20T13:00:00.000Z"))).toBe(
       at("2026-02-20T13:30:00.000Z"),
     );
     const withAttendee = desiredActivities(
@@ -186,7 +195,7 @@ describe("countdownUnderHour (#966)", () => {
 });
 
 describe("countdownLastFiveMinutes (#966)", () => {
-  it("adds seconds at five minutes, changing state without per-second pushes", () => {
+  it("switches to colon notation at five minutes, changing state without per-second pushes", () => {
     const target = "2026-02-20T14:00:00.000Z";
     expect(countdownLastFiveMinutes(target, Date.parse("2026-02-20T13:54:59.999Z"))).toBe(false);
     expect(countdownLastFiveMinutes(target, Date.parse("2026-02-20T13:55:00.000Z"))).toBe(true);
@@ -194,11 +203,8 @@ describe("countdownLastFiveMinutes (#966)", () => {
       true,
     );
     const desired = desiredActivities(response({ deadline: deadline() }));
-    expect(nextPhaseBoundary(desired, Date.parse("2026-02-20T13:30:00.000Z"))).toBe(
+    expect(nextPhaseBoundary(desired, Date.parse("2026-02-20T13:50:01.000Z"))).toBe(
       Date.parse("2026-02-20T13:55:00.000Z"),
-    );
-    expect(nextPhaseBoundary(desired, Date.parse("2026-02-20T13:55:00.000Z"))).toBe(
-      Date.parse("2026-02-20T13:59:01.000Z"),
     );
   });
 });
@@ -209,8 +215,65 @@ describe("countdownLastMinute (#966)", () => {
     expect(countdownLastMinute(target, Date.parse("2026-02-20T13:59:00.000Z"))).toBe(false);
     expect(countdownLastMinute(target, Date.parse("2026-02-20T13:59:00.001Z"))).toBe(true);
     const desired = desiredActivities(response({ deadline: deadline() }));
-    expect(nextPhaseBoundary(desired, Date.parse("2026-02-20T13:59:01.000Z"))).toBe(
-      Date.parse(target),
+    expect(nextPhaseBoundary(desired, Date.parse("2026-02-20T13:55:01.000Z"))).toBe(
+      Date.parse("2026-02-20T13:59:00.000Z"),
     );
+  });
+});
+
+describe("no leading zero beside a unit (#966)", () => {
+  const target = "2026-02-20T14:00:00.000Z";
+  const left = (ms: number) => Date.parse(target) - ms;
+  const MIN = 60_000;
+  const HOUR = 60 * MIN;
+
+  it("countdownUnderTenMinutes: the minutes field drops to one digit (`9m`)", () => {
+    expect(countdownUnderTenMinutes(target, left(10 * MIN))).toBe(false);
+    expect(countdownUnderTenMinutes(target, left(10 * MIN - 1))).toBe(true);
+  });
+
+  it("countdownLastTenSeconds: the seconds field drops to one digit (`9s`)", () => {
+    expect(countdownLastTenSeconds(target, left(10_000))).toBe(false);
+    expect(countdownLastTenSeconds(target, left(9_999))).toBe(true);
+  });
+
+  it("countdownShortMinutes: `1h 5m` while the minutes-of-hour are under ten, never under an hour", () => {
+    expect(countdownShortMinutes(target, left(2 * HOUR + 34 * MIN))).toBe(false);
+    expect(countdownShortMinutes(target, left(2 * HOUR + 10 * MIN))).toBe(false);
+    expect(countdownShortMinutes(target, left(2 * HOUR + 10 * MIN - 1))).toBe(true);
+    expect(countdownShortMinutes(target, left(HOUR))).toBe(true);
+    expect(countdownShortMinutes(target, left(HOUR - 1))).toBe(false);
+    expect(countdownShortMinutes(target, left(5 * MIN))).toBe(false);
+    expect(countdownFlags(target, left(HOUR + 5 * MIN))).toEqual({
+      countdownUnderHour: false,
+      countdownShortMinutes: true,
+      countdownUnderTenMinutes: false,
+      countdownLastFiveMinutes: false,
+      countdownLastMinute: false,
+      countdownLastTenSeconds: false,
+    });
+  });
+
+  it("nextCountdownBoundary walks every width change down to the last ten seconds", () => {
+    const walk: string[] = [];
+    let now = left(2 * HOUR + 30 * MIN);
+    for (let i = 0; i < 9; i += 1) {
+      const next = nextCountdownBoundary(target, now);
+      if (next === null) break;
+      walk.push(new Date(next).toISOString().slice(11, 19));
+      now = next;
+    }
+    expect(walk).toEqual([
+      "11:50:00", // 2h 10m left: minutes-of-hour reach 9 (`2h 9m`)
+      "12:00:00", // 2h: `1h 59m`
+      "12:50:00", // 1h 10m: `1h 9m`
+      "13:00:00", // 1h: `59m`
+      "13:50:00", // 10m: `9m`
+      "13:55:00", // 5m: `4:59`
+      "13:59:00", // 1m: `59s`
+      "13:59:50", // 10s: `9s`
+    ]);
+    expect(nextCountdownBoundary(target, left(9_000))).toBeNull();
+    expect(nextCountdownBoundary("not a date", 0)).toBeNull();
   });
 });

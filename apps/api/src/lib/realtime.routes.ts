@@ -84,6 +84,7 @@ export async function authorizeRealtimeScopes(
           CAPABILITIES.PRESENCE_SCAN,
           CAPABILITIES.ACTIVITY_SCAN,
           CAPABILITIES.LOGISTICS_STATS,
+          CAPABILITIES.SCHEDULE_READ,
           CAPABILITIES.SCHEDULE_MANAGE,
         ]);
         topic = logisticsTopicForFixture(synthetic);

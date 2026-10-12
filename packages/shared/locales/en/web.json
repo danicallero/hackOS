@@ -941,6 +941,8 @@
   "scheduleKindColumn": "Activity kind",
   "scheduleAudienceColumn": "Audience",
   "scheduleScannableColumn": "Scannable",
+  "scheduleLiveActivityColumn": "Live Activity",
+  "exportCsvAction": "Export CSV",
   "schedulePublishDateColumn": "Publish date",
   "inlineTimeRollTooLong": "Over {hours} h once it crosses midnight — set the dates in the item editor.",
   "publishDateStaffOnlyHint": "Staff-only items have no publish date — staff always sees them.",
@@ -2000,7 +2002,6 @@
   "noTimezoneMatch": "No timezone matches.",
   "selectTimezonePlaceholder": "Select a timezone",
   "zonedTimeSameZone": "In the event's timezone ({zone}).",
-  "zonedTimePreview": "In the event's timezone ({zone}): {reading}.",
   "countdownPreviewEmpty": "Set the hacking start and end to preview the countdown.",
   "venueNameUnset": "Unnamed venue",
   "venuePinUnset": "No pin yet",
@@ -2956,6 +2957,7 @@
   "capabilityDescriptionJudgingExport": "Export judging scores and results",
   "capabilityDescriptionSponsorsManage": "Manage enterprises and sponsor invites",
   "capabilityDescriptionChallengesManage": "Create, edit, and publish sponsor challenges",
+  "capabilityDescriptionScheduleRead": "View the full event schedule, including hidden and unpublished entries and staff fields",
   "capabilityDescriptionScheduleManage": "Manage the event schedule",
   "capabilityDescriptionAnnouncementsManage": "Create and send announcements",
   "capabilityDescriptionTvControl": "Control what displays on TV screens",
@@ -3705,5 +3707,7 @@
   "liveActivityKindAccreditationDesc": "Check-in counters for staff at the accreditation desk.",
   "liveActivityAudienceLabel": "Show Live Activity to audience",
   "liveActivityNoRolesHint": "Nobody receives it until a role is selected.",
-  "liveActivityAllRoles": "All roles"
+  "liveActivityAllRoles": "All roles",
+  "networkingInvite": "This is the profile other participants or company representatives you network with during the event will be able to see.",
+  "networkingInviteAction": "Complete profile"
 }

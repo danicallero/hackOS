@@ -5,6 +5,7 @@ import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimpl
 import { LinkIcon } from "@phosphor-icons/react/dist/csr/Link";
 import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useCallback, useEffect, useState } from "react";
+import { DateTimeInput } from "@/components/common/datetime-input";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -15,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
+import { fromDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import type {
   EnterpriseSummary,
@@ -148,7 +150,7 @@ export function InviteUserDialog({
     )
       return setError(t("enterAtLeastOneUse"));
     const customMinutes = customExpiresAt
-      ? Math.ceil((new Date(customExpiresAt).getTime() - Date.now()) / 60_000)
+      ? Math.ceil((Date.parse(fromDatetimeLocal(customExpiresAt) ?? "") - Date.now()) / 60_000)
       : 0;
     if (method === "link" && expiration === "custom" && customMinutes < 1)
       return setError(t("selectExpirationDate"));
@@ -404,11 +406,7 @@ export function InviteUserDialog({
                   </label>
                 </div>
                 {expiration === "custom" && (
-                  <Input
-                    type="datetime-local"
-                    value={customExpiresAt}
-                    onChange={(event) => setCustomExpiresAt(event.target.value)}
-                  />
+                  <DateTimeInput value={customExpiresAt} onChange={setCustomExpiresAt} />
                 )}
               </div>
             </section>

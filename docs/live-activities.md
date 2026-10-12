@@ -534,7 +534,7 @@ stays on the device.
     "alert": { "title": "Robotics", "body": "Position #4 · ~12 min" },
     "stale-date": 1791714600,
     "relevance-score": 50,
-    "dismissal-date": 1791713700
+    "dismissal-date": 1791712800
   }
 }
 ```
@@ -561,16 +561,20 @@ stays on the device.
   (H25, H26, H59). Otherwise it is the item's own end: the activity or
   schedule item end, the deadline, or the accreditation window end.
 - Phase boundaries: the worker also schedules a tick at each desired staff
-  or attendee activity's start and end (`scheduleLiveActivityBoundaries`,
-  kick.ts), so the push that flips `phase` (and the end) goes out on time
-  and the server state converges with what the widget already shows.
+  or attendee activity's start and end, and at the next countdown format
+  boundary of the staff, attendee and deadline countdowns
+  (`scheduleLiveActivityBoundaries`, kick.ts), so the push that flips `phase`
+  (or a `countdown*` flag) goes out on time and the server state converges
+  with what the widget already shows.
 - `relevance-score`: `100 − 10 × rank` (see
   [Ranking](#ranking-and-the-per-device-limit)).
 - `attributes` is expo-widgets' `LiveActivityAttributes { url: String? }`,
   the props `url` (see the deep link table). It is the tap target, so it must
   be present on every remote start.
-- `dismissal-date` (on `end` only): 15 minutes after the end; immediately
-  when the activity is being replaced before ActivityKit's 8-hour limit.
+- `dismissal-date` (on `end` only): the send time, so the activity leaves the
+  Lock Screen as soon as the end lands (a later date, or none, keeps the final
+  state up for minutes to 4 hours). The same for a replacement before
+  ActivityKit's 8-hour limit.
 - A rescheduled item's update carries the new `startsAt`/`endsAt` in
   `content-state` (the widget's countdowns read them) and a new `stale-date`.
 
@@ -629,24 +633,32 @@ because they have no progress/action footer.
   are throttled.
 - **Alert only for essential updates.** The only alerting updates are the
   call and an unsubmitted team's final 15 minutes.
-- **End when the task ends**, with a custom dismissal of about 15 minutes.
+- **End when the task ends**, dismissed at once (`dismissal-date` = now); the app's local end keeps the
+  final state 30 seconds.
 - **Single interactive element at most** (staff and desk **Scan**, with a
   radio-waves symbol for the NFC badge: `wave.3.right` on iOS). Every tap
   deep-links to the related screen.
 - **Live timers tick on the device.** Countdowns and the pitch timer travel
   as instants, never as per-second pushes. Countdowns read `2h 34m` /
-  `34m`, with seconds only in the last five minutes (`4m 59s`, then `48s` below
-  a minute) on every countdown surface;
-  Always-On removes seconds and their spacing, using `<1m` below a minute
+  `34m`, then `4:59` (colon notation) in the last five minutes and `48s` below a
+  minute, on every countdown surface. A value beside a unit never has a leading
+  zero (`1h 5m`, `9m`, `9s`); only colon notation is zero-padded.
+  Always-On shows minutes only (`4m`) and `<1m` below a minute
   without a placeholder (rendering
   in [mobile.md](./mobile.md#live-activities-and-live-updates-966)).
-  The widget picks the form when it renders, so the staff activity,
-  attendee activity and deadline props carry `countdownUnderHour`,
-  `countdownLastFiveMinutes` and `countdownLastMinute`
-  (matching shared helpers; optional, older apps ignore them). They flip at one
-  hour, five minutes and below one minute before the target
-  (the start while upcoming, else the end), which changes the state hash and
-  sends one routine update per boundary.
+  The widget picks the form and the field widths when it renders, so the
+  staff activity, attendee activity and deadline props carry the flags
+  `countdownUnderHour`, `countdownShortMinutes`, `countdownUnderTenMinutes`,
+  `countdownLastFiveMinutes`, `countdownLastMinute` and
+  `countdownLastTenSeconds` (`countdownFlags` in `packages/shared`; optional,
+  older apps ignore them). They flip before the target (the start while
+  upcoming, else the end) at: every full hour and ten minutes past it
+  (`countdownShortMinutes`, minutes-of-hour under ten: `1h 5m`), one hour,
+  ten minutes (`9m`), five minutes, one minute and ten seconds (`9s`). A flip
+  changes the state hash and sends one routine update, exempt from the
+  30 s counter throttle. The worker schedules a tick at the next boundary
+  (`nextCountdownBoundary`, with the phase boundaries), so the update lands
+  within a second instead of on the next 20 s repetition.
 - **Few at once.** A device shows at most `maxConcurrent` (default 2), the
   most important leading the Dynamic Island.
 
@@ -660,14 +672,14 @@ Queue (participant):
 | Expanded | challenge title, position, ETA; **room only once called** |
 | Lock Screen | same as expanded, plus "+N more queues" when relevant |
 | Called state | compact: `Room B` · expanded: "Go to Room B — location" (alerting update) |
-| Watch / CarPlay | challenge + `#4 · ~12 min` / room when called |
+| Watch / CarPlay | challenge · `#4`, `~12 min` / room when called |
 
 Meal / activity (staff):
 
 | Presentation | Upcoming | Live |
 |---|---|---|
 | Compact leading | category symbol (fork.knife / person.3) | same |
-| Compact trailing | countdown to start (`1h 05m` / `34m` / `4m 21s`) | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`, or when the ratio is longer than 7 characters, e.g. `1142/1380`, which no longer fits the slot); "Live" from the start until the live update brings the counts |
+| Compact trailing | countdown to start (`1h 5m` / `34m` / `4:21`) | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`, or when the ratio is longer than 7 characters, e.g. `1142/1380`, which no longer fits the slot); "Live" from the start until the live update brings the counts |
 | Minimal | category symbol (20 pt) | progress ring `scanned / accredited` (the count without `accredited`) |
 | Expanded | name, location, `hh:mm–hh:mm`, countdown | symbol, Scanned `42/180`; name and live state; ends in beside **Scan**, then scanned-share bar |
 | Lock Screen | as expanded | as expanded |
@@ -677,11 +689,11 @@ Attendee activity:
 | Presentation | Upcoming | Live |
 |---|---|---|
 | Compact leading | category symbol | same |
-| Compact trailing | countdown to start (`1h 05m` / `34m` / `4m 21s`) | "Live" (`labels.live`; older servers: "Now") |
+| Compact trailing | countdown to start (`1h 5m` / `34m` / `4:21`) | "Live" (`labels.live`; older servers: "Now") |
 | Minimal | category symbol (20 pt) | symbol with a live dot |
 | Expanded | name, location, `hh:mm–hh:mm`, "Starts in" timer | symbol / "Ends in" countdown; name + "● Live", location, elapsed-time bar |
 | Lock Screen | as expanded | as expanded, with a progress bar from `startsAt` to `endsAt` |
-| Watch / CarPlay | name + countdown | name + "Live" |
+| Watch / CarPlay | name · countdown | name · "Live", "Ends in" countdown |
 
 Live starts at `startsAt` on the device itself: the upcoming state is stale
 from then (see `stale-date`), and the layout treats a stale upcoming state
@@ -696,7 +708,11 @@ Submission deadline:
 | Minimal | hourglass (20 pt) | exclamation mark (20 pt) | checkmark (20 pt) |
 | Expanded | title, countdown, project name; status only when known | "Not submitted · project", countdown | "Submitted ✓ · project", countdown |
 | Lock Screen | title with the status opposite; project leading and countdown trailing; a progress bar from `startsAt` to `endsAt` | as open | project and muted countdown leading, green "Submitted" trailing |
-| Watch | countdown | countdown + "Not submitted" | "Submitted" |
+| Watch | countdown, status line only for a known draft | countdown + red "Not submitted" (the only red element) | "Submitted" + small countdown |
+
+Red is reserved for the closing state and marks the symbol and the "Not
+submitted" status only; the countdown and the window bar keep their primary and
+neutral colours on every surface.
 
 Accreditation desk:
 
@@ -707,7 +723,20 @@ Accreditation desk:
 | Minimal | progress ring `accredited / eligible` |
 | Expanded | symbol / `accredited / eligible`; title and closing time, smaller `inside` and arrivals in the last 10 min beside **Scan**; share bar |
 | Lock Screen | as expanded |
-| Watch | `accredited / eligible` |
+| Watch | `accredited / eligible` and its label |
+
+### Apple Watch (Smart Stack)
+
+watchOS shows the iOS activity through the `.small` supplemental family,
+which `expo-widgets` enables on iOS 18+ (`supplementalActivityFamilies([.small,
+.medium])`) and which renders each layout's `bannerSmall` instead of the
+Dynamic Island compact views. There is one composition for every kind: glyph
+and title in secondary, one 26 pt hero (a native timer that ticks without
+pushes, or the count, room or "Submitted"), at most one status line. Colour is
+sparing: the phase accent tints the glyph only, Always-On drops it, and red is
+used once, for a known draft's "Not submitted" line in the last 15 minutes.
+Text is single-line with scaling, and Dynamic Type is capped at `xLarge`. The
+props contract is unchanged. Details: [mobile.md](./mobile.md#live-activities-and-live-updates-966).
 
 ## Operational setup
 

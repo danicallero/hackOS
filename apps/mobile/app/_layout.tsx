@@ -453,6 +453,10 @@ function RootLayoutNav({
             name="profile-tasks"
             options={{ headerShown: false, presentation: "modal" }}
           />
+          <Stack.Screen
+            name="networking-profile"
+            options={{ headerShown: false, presentation: "modal" }}
+          />
         </Stack.Protected>
         {/* #935 company-tag links resolve for any session state. */}
         <Stack.Screen name="s/[code]" options={{ headerShown: false }} />

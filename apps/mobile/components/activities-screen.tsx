@@ -22,6 +22,7 @@ import {
   filterActivities,
   sameActivities,
 } from "@/lib/activity-list";
+import { formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerActivities } from "@/lib/scanner-db";
@@ -458,6 +459,7 @@ const ActivityRow = memo(function ActivityRow({
   onPress: (item: ScannerActivity) => void;
   t: ReturnType<typeof useLocale>["t"];
 }) {
+  useEventTimeZone();
   const startsAt = item.startsAt ? new Date(item.startsAt) : null;
   return (
     <Pressable
@@ -519,7 +521,7 @@ const ActivityRow = memo(function ActivityRow({
                 numberOfLines={1}
                 style={{ color: colors.secondaryLabel, fontSize: 13 }}
               >
-                {startsAt.toLocaleString(language, {
+                {formatEventTime(startsAt, language, {
                   weekday: "short",
                   hour: "2-digit",
                   minute: "2-digit",

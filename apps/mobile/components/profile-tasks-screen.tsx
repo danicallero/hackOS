@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ActionButton, Section, Separator, ToggleRow } from "@/components/native-ui";
+import { FloatingGlassButton, Section, Separator, ToggleRow } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -109,64 +109,83 @@ export default function ProfileTasksScreen() {
     }
   }
 
+  const canSave = !(!dietaryReady || !mealsReady || nothingToSave);
+  const topInset = process.env.EXPO_OS === "android" ? insets.top : 0;
+  const title = editing ? t("accountFoodIntolerances") : t("profileTasksTitle");
+
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       <ScrollView
         automaticallyAdjustKeyboardInsets
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           gap: 22,
           padding: 16,
           paddingBottom: Math.max(32, insets.bottom + 16),
-          paddingTop: 16 + (process.env.EXPO_OS === "android" ? insets.top : 0),
+          paddingTop: 16 + topInset,
         }}
       >
-        {editing ? null : (
+        <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
           <Text
             accessibilityRole="header"
             selectable
             style={{ color: colors.label, fontSize: 20, fontWeight: "700", textAlign: "center" }}
           >
-            {t("profileTasksTitle")}
+            {title}
           </Text>
-        )}
+        </View>
 
         {showDietary ? (
-          <Section title={t("accountFoodIntolerances")} footer={t("dietaryDataHandlingNote")}>
-            <ToggleRow
-              label={t("noRestrictions")}
-              value={dietary.noRestrictions}
-              onChange={(on) => setDietary((current) => current && setNoRestrictions(current, on))}
-            />
-            {intolerances.map((item) => (
-              <View key={item.id}>
-                <Separator />
-                <ToggleRow
-                  label={item.label[language]}
-                  value={dietary.intolerances.includes(item.id)}
-                  onChange={(on) =>
-                    setDietary((current) => current && toggleIntolerance(current, item.id, on))
-                  }
-                />
-              </View>
-            ))}
-            {dietary.noRestrictions ? null : (
-              <>
-                <Separator />
-                <TextInput
-                  accessibilityLabel={t("accountDietaryNotes")}
-                  multiline
-                  onChangeText={(notes) =>
-                    setDietary((current) => current && { ...current, notes })
-                  }
-                  placeholder={t("accountDietaryNotes")}
-                  placeholderTextColor={colors.tertiaryLabel}
-                  style={{ color: colors.label, fontSize: 16, minHeight: 50, padding: 16 }}
-                  value={dietary.notes}
-                />
-              </>
-            )}
-          </Section>
+          <>
+            <Section>
+              <ToggleRow
+                label={t("noRestrictions")}
+                value={dietary.noRestrictions}
+                onChange={(on) =>
+                  setDietary((current) => current && setNoRestrictions(current, on))
+                }
+              />
+            </Section>
+
+            {intolerances.length > 0 ? (
+              <Section title={t("accountFoodIntolerances")}>
+                {intolerances.map((item, index) => (
+                  <View key={item.id}>
+                    {index > 0 ? <Separator /> : null}
+                    <ToggleRow
+                      label={item.label[language]}
+                      value={dietary.intolerances.includes(item.id)}
+                      onChange={(on) =>
+                        setDietary((current) => current && toggleIntolerance(current, item.id, on))
+                      }
+                    />
+                  </View>
+                ))}
+              </Section>
+            ) : null}
+
+            <Section title={t("accountDietaryNotes")} footer={t("dietaryDataHandlingNote")}>
+              <TextInput
+                accessibilityLabel={t("accountDietaryNotes")}
+                editable={!dietary.noRestrictions}
+                multiline
+                onChangeText={(notes) => setDietary((current) => current && { ...current, notes })}
+                placeholder={t("accountDietaryNotes")}
+                placeholderTextColor={colors.tertiaryLabel}
+                style={{
+                  color: dietary.noRestrictions ? colors.tertiaryLabel : colors.label,
+                  fontSize: 16,
+                  lineHeight: 22,
+                  minHeight: 90,
+                  padding: 16,
+                  textAlignVertical: "top",
+                }}
+                value={dietary.notes}
+              />
+            </Section>
+          </>
         ) : null}
 
         {wantsMeals ? (
@@ -200,22 +219,26 @@ export default function ProfileTasksScreen() {
         {saveError ? (
           <RequestFeedback error={new Error(saveError)} onRetry={() => void save()} />
         ) : null}
-
-        <View style={{ gap: 8 }}>
-          <ActionButton
-            label={t("save")}
-            variant="filled"
-            busy={saving}
-            disabled={!dietaryReady || !mealsReady || nothingToSave}
-            onPress={() => void save()}
-          />
-          <ActionButton
-            label={editing ? t("cancel") : t("profileTasksLater")}
-            disabled={saving}
-            onPress={() => router.back()}
-          />
-        </View>
       </ScrollView>
+
+      <FloatingGlassButton
+        top={16 + topInset}
+        side="left"
+        icon="xmark"
+        accessibilityLabel={editing ? t("cancel") : t("profileTasksLater")}
+        disabled={saving}
+        onPress={() => router.back()}
+      />
+      <FloatingGlassButton
+        top={16 + topInset}
+        side="right"
+        icon="checkmark"
+        tintColor={colors.accent}
+        accessibilityLabel={t("save")}
+        accessibilityState={{ busy: saving }}
+        disabled={saving || !canSave}
+        onPress={() => void save()}
+      />
     </View>
   );
 }

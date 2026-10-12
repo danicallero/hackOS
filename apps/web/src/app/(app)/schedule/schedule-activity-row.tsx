@@ -345,6 +345,8 @@ export function ActivityRow({
         ) : (
           t("noLabel")
         );
+      case "liveActivity":
+        return item.liveActivityAudience ? t("yesLabel") : t("noLabel");
       case "publishAt":
         return canEdit && !publishAtDisabledHint ? (
           <EditablePublishDateCell

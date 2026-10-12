@@ -27,6 +27,7 @@ import {
 import { SegmentedControl } from "@/components/segmented-control";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
+import { eventDayKey, formatEventTime } from "@/lib/event-time";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -407,12 +408,18 @@ export function PresenceManagement({
   );
 }
 
+// Day buckets and clock readings are the event's (H45/H47), not the phone's.
 function dayKey(date: Date): string {
-  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  return eventDayKey(date);
+}
+
+function previousDayKey(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
 }
 
 function fmtTime(date: Date, language: string): string {
-  return date.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
+  return formatEventTime(date, language, { hour: "2-digit", minute: "2-digit" });
 }
 
 interface TimelineRow {
@@ -434,9 +441,7 @@ function groupRowsByDay(
 ): DayGroup[] {
   const now = new Date();
   const todayKey = dayKey(now);
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  const yesterdayKey = dayKey(yesterday);
+  const yesterdayKey = previousDayKey(todayKey);
   const groups: DayGroup[] = [];
   for (const row of rows) {
     const occurredAt = new Date(row.signal.occurredAt);
@@ -446,13 +451,13 @@ function groupRowsByDay(
       current.items.push(row);
       continue;
     }
-    const dayMonth = occurredAt.toLocaleDateString(language, { day: "numeric", month: "short" });
+    const dayMonth = formatEventTime(occurredAt, language, { day: "numeric", month: "short" });
     const relative =
       key === todayKey
         ? t("presenceToday")
         : key === yesterdayKey
           ? t("presenceYesterday")
-          : occurredAt.toLocaleDateString(language, { weekday: "short" });
+          : formatEventTime(occurredAt, language, { weekday: "short" });
     groups.push({ key, label: `${relative}, ${dayMonth}`, items: [row] });
   }
   return groups;

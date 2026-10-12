@@ -8,6 +8,7 @@ import { groupApplicationFields } from "@/lib/application-field-groups";
 // the public read of open forms). Types are declared locally per module rules.
 
 import { ApiError } from "@/lib/api";
+import { getEventTimeZone } from "@/lib/event-time";
 import { type I18nText, LOCALE_CODES, type Translate } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
 import type { Language } from "@/lib/types";
@@ -382,5 +383,6 @@ export function fmtDateTime(iso: string | null | undefined, language: Language =
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: getEventTimeZone(),
   }).format(d);
 }

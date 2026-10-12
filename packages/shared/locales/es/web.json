@@ -941,6 +941,8 @@
   "scheduleKindColumn": "Tipo de actividad",
   "scheduleAudienceColumn": "Audiencia",
   "scheduleScannableColumn": "Escaneable",
+  "scheduleLiveActivityColumn": "Actividad en directo",
+  "exportCsvAction": "Exportar CSV",
   "schedulePublishDateColumn": "Fecha de publicación",
   "inlineTimeRollTooLong": "Más de {hours} h al pasar de medianoche: pon las fechas en el editor del elemento.",
   "publishDateStaffOnlyHint": "Los elementos solo para staff no tienen fecha de publicación: el staff siempre los ve.",
@@ -2000,7 +2002,6 @@
   "noTimezoneMatch": "Ninguna zona horaria coincide.",
   "selectTimezonePlaceholder": "Selecciona una zona horaria",
   "zonedTimeSameZone": "En la zona horaria del evento ({zone}).",
-  "zonedTimePreview": "En la zona horaria del evento ({zone}): {reading}.",
   "countdownPreviewEmpty": "Define el inicio y el fin del hacking para previsualizar la cuenta atrás.",
   "venueNameUnset": "Sede sin nombre",
   "venuePinUnset": "Sin coordenadas todavía",
@@ -2956,6 +2957,7 @@
   "capabilityDescriptionJudgingExport": "Exportar puntuaciones y resultados de evaluación",
   "capabilityDescriptionSponsorsManage": "Gestionar empresas e invitaciones de patrocinio",
   "capabilityDescriptionChallengesManage": "Crear, editar y publicar retos de patrocinadores",
+  "capabilityDescriptionScheduleRead": "Ver el programa completo del evento, incluidas las entradas ocultas y sin publicar y los campos del equipo",
   "capabilityDescriptionScheduleManage": "Gestionar el programa del evento",
   "capabilityDescriptionAnnouncementsManage": "Crear y enviar anuncios",
   "capabilityDescriptionTvControl": "Controlar lo que se muestra en las pantallas de TV",
@@ -3705,5 +3707,7 @@
   "liveActivityKindAccreditationDesc": "Contadores de acreditaciones para el staff de la mesa.",
   "liveActivityAudienceLabel": "Mostrar actividad en directo a su público",
   "liveActivityNoRolesHint": "Nadie la recibe hasta que selecciones un rol.",
-  "liveActivityAllRoles": "Todos los roles"
+  "liveActivityAllRoles": "Todos los roles",
+  "networkingInvite": "Este es el perfil que podrán consultar otros participantes o representantes de empresas con los que hagas networking durante el evento.",
+  "networkingInviteAction": "Completar perfil"
 }

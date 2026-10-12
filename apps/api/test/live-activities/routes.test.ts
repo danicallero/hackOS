@@ -295,6 +295,16 @@ describe("GET /api/me/live-activities", () => {
       queue: null,
       activities: [{ kind: "activity", phase: "upcoming", labels: { scan: "Scan" } }],
     });
+    // #966: the countdown format flags survive response serialization, or the
+    // app's foreground refresh would never see a width boundary.
+    expect(staff.json().activities[0]).toMatchObject({
+      countdownUnderHour: true,
+      countdownShortMinutes: false,
+      countdownUnderTenMinutes: true,
+      countdownLastFiveMinutes: true,
+      countdownLastMinute: false,
+      countdownLastTenSeconds: false,
+    });
 
     const anonymous = await app.inject({ method: "GET", url: "/api/me/live-activities" });
     expect(anonymous.statusCode).toBe(401);

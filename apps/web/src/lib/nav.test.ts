@@ -236,6 +236,12 @@ describe("capability-gated workspace, no association or wildcard", () => {
     expect(visibleHrefs(ctx)).toEqual(["/schedule"]);
   });
 
+  it("exposes the schedule to a read-only holder", () => {
+    const ctx = contextFor([CAPABILITIES.SCHEDULE_READ]);
+    expect(visibleWorkspaceIds(ctx)).toEqual(["programme"]);
+    expect(visibleHrefs(ctx)).toEqual(["/schedule"]);
+  });
+
   it("keeps announcement management in Programme without adding Manage schedule", () => {
     const ctx = contextFor([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
     expect(visibleWorkspaceIds(ctx)).toEqual(["programme"]);

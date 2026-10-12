@@ -12,7 +12,7 @@ import { Modal } from "@/components/common/modal";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { toDatetimeLocal } from "@/lib/datetime";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import type { PublicScheduleItem, ScheduleAudience } from "@/lib/logistics";
 import { SCHEDULE_AUDIENCES, scheduleAudienceLabel, scheduleTypeLabel } from "./schedule-model";
@@ -150,7 +150,7 @@ export function BulkSchedulePopover({
             variant="outline"
             disabled={!value}
             onClick={async () => {
-              await onApply(new Date(value).toISOString());
+              await onApply(fromDatetimeLocal(value));
               setOpen(false);
               setValue("");
             }}

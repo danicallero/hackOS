@@ -128,6 +128,7 @@ jest.mock("@/components/glass-view", () => ({
   isRealLiquidGlassAvailable: () => mockGlass,
 }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
+jest.mock("@/components/wallet-screen", () => ({ __esModule: true, default: () => null }));
 jest.mock("react-native-svg", () => {
   const { View } = require("react-native");
   return { __esModule: true, default: View, Path: View, Circle: View };
@@ -282,6 +283,24 @@ function WithNativeHeader() {
     </>
   );
 }
+
+describe("Wallet", () => {
+  it("opens the badge wallet from the header, beside the favourites star", async () => {
+    await renderMobile(<DiaryScreen />);
+    expect(await screen.findByText("Ana S.")).toBeTruthy();
+    expect(screen.getByLabelText("diaryShowFavourites")).toBeTruthy();
+    expect(screen.queryByTestId("wallet-modal")).toBeNull();
+    await fireEvent.press(screen.getByLabelText("tabWallet"));
+    expect(screen.getByTestId("wallet-modal")).toBeTruthy();
+  });
+
+  it("keeps the wallet button on Companies, where the star is hidden", async () => {
+    await renderMobile(<DiaryScreen />);
+    await fireEvent.press(await screen.findByRole("tab", { name: "diaryCompaniesTab" }));
+    expect(screen.queryByLabelText("diaryShowFavourites")).toBeNull();
+    expect(screen.getByLabelText("tabWallet")).toBeTruthy();
+  });
+});
 
 describe("People", () => {
   it("lists saved people only; stands live in Companies", async () => {

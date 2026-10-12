@@ -13,7 +13,9 @@ People manage their public profile (opt-in, surname/photo/project, headline,
 location note, bio, links, CV and preview) from My profile
 (`/settings/profile`); there is no separate settings page. The account photo
 is uploaded in the same page's Personal details section, because it is the
-account's photo everywhere, not only on the public profile.
+account's photo everywhere, not only on the public profile. The mobile app
+edits the same photo from the Account avatar and the networking profile editor
+(`docs/mobile.md`).
 
 The "Public profile" section (`settings/profile/public-profile-card.tsx`)
 shows only the opt-in switch ("Share my profile"), with one line saying that
@@ -49,6 +51,19 @@ Module: `apps/api/src/modules/directory/` (the photo routes live in
 `identity/routes/photo.ts`; shared storage helpers in `lib/profile-files.ts`).
 Tests: `apps/api/test/directory/api.test.ts` and
 `apps/api/test/directory/profile-files.test.ts`.
+
+## Mobile and the confirmation invite
+
+The mobile app edits the same profile from Account ("Edit networking profile",
+see [`mobile.md`](./mobile.md)) with the opt-in, the three visibility switches,
+headline, location note and bio; links and the CV stay on web. After a
+participant confirms their spot (H15), the web "place confirmed" card, the
+public confirmation page (only for the token holder's own session) and the
+mobile wallet banner show `NetworkingProfileInvite` / `NetworkingInvite`: one
+sentence saying other participants and company representatives they network
+with will read this profile, and a button to the editor. It appears only while
+`consentedAt` is `null` (the profile was never created) and is hidden when
+`GET /api/me/public-profile` fails.
 
 ## Model
 
