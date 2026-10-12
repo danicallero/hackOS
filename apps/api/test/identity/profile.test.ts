@@ -113,6 +113,24 @@ describe("GET /api/me (H7)", () => {
     expect(res.json().capabilities).toEqual([]);
   });
 
+  it("exposes the event timezone to a capability-less account (H45, H47)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const userId = await createUser();
+    const before = await a.inject({ method: "GET", url: "/api/me", headers: asUser(userId) });
+    expect(before.statusCode).toBe(200);
+    // No event_config row yet: the same fallback the API formats dates with.
+    expect(before.json().eventTimezone).toBe("UTC");
+
+    await pool.query(
+      `INSERT INTO event_config (id, timezone) VALUES (1, 'Europe/Madrid')
+       ON CONFLICT (id) DO UPDATE SET timezone = EXCLUDED.timezone`,
+    );
+    const after = await a.inject({ method: "GET", url: "/api/me", headers: asUser(userId) });
+    expect(after.json().capabilities).toEqual([]);
+    expect(after.json().eventTimezone).toBe("Europe/Madrid");
+  });
+
   it("allows event team members and sent acceptances into mobile, but not internal decisions", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");

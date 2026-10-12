@@ -1050,6 +1050,25 @@ Calibration examples:
 | "Nothing to show" | Contextual: "No users", "No applications", "No results" |
 | "Turn off" on mandatory queue alerts | Locked "Always on" row |
 
+### Event time
+
+Every date and time a person reads or types, on web and mobile, is the
+**event's** wall clock: the timezone in event settings (H45/H47), delivered to
+any signed-in account as `eventTimezone` on `GET /api/me`. It is never the
+device's or browser's. This covers the schedule roster and its CSV export, the
+schedule forms, every `DateTimeInput` / `DateTimeField`, and clock readings in
+queue, presence and application views. Convert only through
+`@hackos/shared/event-time` (`instantToWallClock`, `wallClockToInstant`,
+`formatInZone`): Intl only, DST-safe (a wall time that repeats when clocks go
+back means its first occurrence; one skipped when they go forward moves ahead by
+the gap). Web reads the zone through `lib/event-time.ts`, mobile through
+`lib/event-time.ts` (`useEventTimeZone`). Show a terse zone name ("CEST") next to
+a time or column header only when the event zone differs from the device's;
+otherwise add no label. Native mobile pickers only speak the phone's zone, so
+`DateTimeField` hands them the event wall clock as device-local fields
+(`toPickerDate`) and converts the answer back (`fromPickerDate`). Public pages
+and the TV already format with the zone in `GET /api/public/event`.
+
 ## 11. Web specifics
 
 **Summary: Next.js 16 + shadcn (vendored) + Tailwind v4 tokens; sidebar

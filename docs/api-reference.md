@@ -110,6 +110,11 @@ mix values from different authorization moments. Ticket QR/wallet exposure, scan
 eligibility, and physical check-in use the same live query; role transitions
 reconcile wallet passes and retain the historical ticket row.
 
+`/api/me` also returns `eventTimezone` (H45/H47), the event's IANA timezone,
+readable by any signed-in account (`GET /api/event` needs `event:manage`). Web
+and mobile show and accept every date and time as that zone's wall clock, never
+the device's; see [Event time](./DESIGN.md#event-time).
+
 `/api/me` also returns `pendingProfileTasks` (#933): `dietary` until an
 event-access account gives an explicit dietary answer (its own `PATCH /api/me`
 with `foodIntolerances`/`foodIntoleranceNotes`, an empty list included; an
@@ -352,7 +357,7 @@ rows already on screen — search and filters applied, the chosen columns in the
 table's current order, localized dates/audiences/yes-no, UTF-8 BOM for Excel,
 `schedule-YYYY-MM-DD.csv`. There is no server export run (`EXPORTS_RUN`) or
 audit entry: it adds no data beyond what the listing already returns (H53).
-Times use the browser's time zone, like the table itself.
+Times are the event's clock (the timezone in event settings), like the table itself, not the browser's.
 
 ### notifications (H50–H53)
 The in-app inbox, scheduled announcements (with translations and a
