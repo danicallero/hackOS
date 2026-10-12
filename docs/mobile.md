@@ -1638,10 +1638,12 @@ value, locale or text size can widen the island; text scales down
 (`minimumScaleFactor(0.6)`) instead of truncating. The slots get a 3 pt
 leading / 7 pt trailing inset so the glyph and the time sit on the pill's
 concentric margin (HIG). Every countdown surface uses `2h 34m` / `34m`
-normally and adds seconds only in the last five minutes (`4m 59s`, then `48s`
-below a minute, including `bannerSmall`). Always-On uses the native `isLuminanceReduced`
-environment to remove both the seconds field and its spacing, leaving `4m`
-or `<1m` below a minute; waking restores seconds, with no placeholder. `Text`'s
+normally, colon notation in the last five minutes (`4:59`), then `48s` below a
+minute (including `bannerSmall`). A value beside a unit never has a leading zero
+(`1h 5m`, `9m`, `9s`): the fields are as wide as their digits, and zero padding
+appears only in colon notation. Always-On uses the native `isLuminanceReduced`
+environment to show minutes only (`4m`) or `<1m` below a minute; waking restores
+the colon form, with no placeholder. `Text`'s
 `compactCountdown` (the legacy form names share this precision policy;
 `patches/@expo__ui@57.0.22.patch`) draws each number from a live
 `Text(timerInterval:)`, clipped to its digits next to static `h`/`m`/`s`.
@@ -1654,12 +1656,13 @@ once and freezes (19–29 s off the timer), `SystemFormatStyle.Timer`,
 `.offset` and `.reference` spell units out, and a custom format style is
 redacted; only timer text ticks. The form is chosen when the activity
 renders, and a stale date does not re-render it, so the props carry
-`countdownUnderHour`, `countdownLastFiveMinutes` and `countdownLastMinute`:
-they flip at the hour, five-minute and one-minute boundaries, sending one
-update each through the worker's normal hash path. The foreground app reconciles
-at all three boundaries (`nextPhaseBoundary`).
-At the hour, the timer can briefly read `h 59m` until that update; at five minutes,
-seconds appear on the next update. Taps open the props' `url` (passed as the
+`countdownUnderHour`, `countdownShortMinutes`, `countdownUnderTenMinutes`,
+`countdownLastFiveMinutes`, `countdownLastMinute` and `countdownLastTenSeconds`:
+they flip at each width boundary (every full hour and ten minutes after it, ten
+minutes, five minutes, a minute, ten seconds), sending one update each through
+the worker's normal hash path. The foreground app reconciles at every boundary
+(`nextPhaseBoundary`). Until that update lands the old width remains: the
+timer can briefly read `h 59m` at the hour, or `09s` at ten seconds. Taps open the props' `url` (passed as the
 activity's static URL); the API must send the same `attributes.url` on
 push-to-start. APNs props reach the layouts directly, so a props version
 other than `1` renders only the title. Room and activity names truncate;

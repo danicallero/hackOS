@@ -143,7 +143,7 @@ export const AttendeeActivityLayout = (
       : startsAt.getTime() - 3_600_000,
   );
 
-  // #966: minute precision normally; seconds only in the last five minutes.
+  // #966: unit values carry no leading zero (`1h 5m`, `9m`, `9s`); the last five minutes use colon notation (`4:05`).
   // The native timer removes seconds and their spacing in Always-On.
   const timer = (
     size: number,
@@ -176,7 +176,7 @@ export const AttendeeActivityLayout = (
     ) : null;
 
   // Countdown with its caption above: "Starts in" with the seconds, or
-  // "Ends in" (`1h 05m` / `34m 21s`).
+  // "Ends in" (`1h 5m` / `34m` / `4:21`).
   const countdownStat = (size: number, color: string | null, width: number) => {
     const value = timer(size, color, width, "bold", live ? "full" : "long");
     return value ? (

@@ -232,7 +232,8 @@ describe("submission deadline (H19, H20)", () => {
     );
     expect((await mine(userId)).deadline).toMatchObject({ kind: "deadline", startsAt: null });
 
-    await deadlineIn(120);
+    // Just over two hours: a few seconds under would read `1h 59m`.
+    await deadlineIn(125);
     const result = await mine(userId, "gl");
     expect(result.deadline).toMatchObject({
       kind: "deadline",
@@ -241,10 +242,13 @@ describe("submission deadline (H19, H20)", () => {
       projectName: null,
       url: "hackos://project",
       labels: { title: "Peche de entregas", closesIn: "Pecha en" },
-      // #966: two hours left, so the widget shows `2h 00m`.
+      // #966: two hours left, so the widget shows `2h 5m` (one-digit minutes).
       countdownUnderHour: false,
+      countdownShortMinutes: true,
+      countdownUnderTenMinutes: false,
       countdownLastFiveMinutes: false,
       countdownLastMinute: false,
+      countdownLastTenSeconds: false,
     });
     expect(result.deadline?.startsAt).not.toBeNull();
     expect((await mine(withoutAccess)).deadline).toBeNull();
@@ -283,6 +287,9 @@ describe("submission deadline (H19, H20)", () => {
     expect((await mine(drafter)).deadline?.phase).toBe("closing");
     // #966: under an hour the flag flips, so the widget re-renders as `9m`.
     expect((await mine(drafter)).deadline?.countdownUnderHour).toBe(true);
+    expect((await mine(drafter)).deadline?.countdownShortMinutes).toBe(false);
+    await deadlineIn(9);
+    expect((await mine(drafter)).deadline?.countdownUnderTenMinutes).toBe(true);
     expect((await mine(drafter)).deadline?.countdownLastFiveMinutes).toBe(false);
     await deadlineIn(5);
     expect((await mine(drafter)).deadline?.countdownLastFiveMinutes).toBe(true);
@@ -292,6 +299,9 @@ describe("submission deadline (H19, H20)", () => {
     await deadlineIn(0.5);
     expect((await mine(drafter)).deadline?.countdownLastMinute).toBe(true);
     expect((await mine(submitter)).deadline?.countdownLastMinute).toBe(true);
+    expect((await mine(drafter)).deadline?.countdownLastTenSeconds).toBe(false);
+    await deadlineIn(0.1);
+    expect((await mine(drafter)).deadline?.countdownLastTenSeconds).toBe(true);
     // Unknown status (Devpost-only, not imported) never claims "not submitted".
     expect((await mine(devpostOnly)).deadline).toMatchObject({ phase: "open", submission: null });
   });

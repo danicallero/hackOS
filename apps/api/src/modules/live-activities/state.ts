@@ -3,9 +3,7 @@ import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import {
   type ActivityLiveProps,
   activityLiveLabels,
-  countdownLastFiveMinutes,
-  countdownLastMinute,
-  countdownUnderHour,
+  countdownFlags,
   LIVE_ACTIVITY_PROPS_VERSION,
   type LiveActivityProps,
   type QueueLiveProps,
@@ -253,12 +251,7 @@ export function buildActivityLiveProps(
     url: link,
     labels: activityLiveLabels(language),
     // #966: precision flags trigger one re-render at each native timer format boundary.
-    countdownUnderHour: countdownUnderHour(live ? activity.endsAt : activity.startsAt, now),
-    countdownLastMinute: countdownLastMinute(live ? activity.endsAt : activity.startsAt, now),
-    countdownLastFiveMinutes: countdownLastFiveMinutes(
-      live ? activity.endsAt : activity.startsAt,
-      now,
-    ),
+    ...countdownFlags(live ? activity.endsAt : activity.startsAt, now),
     updatedAt: now.toISOString(),
   };
 }

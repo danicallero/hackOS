@@ -159,7 +159,7 @@ export const StaffActivityLayout = (
   const share = accredited ? Math.min(1, scannedCount / accredited) : null;
   const scanned = String(scannedCount);
 
-  // #966: hours/minutes normally, seconds only in the last five minutes.
+  // #966: unit values carry no leading zero (`1h 5m`, `9m`, `9s`); the last five minutes use colon notation (`4:05`).
   // The native timer removes seconds entirely in Always-On and fits its width.
   const countdown = (
     size: number,

@@ -147,7 +147,7 @@ export const DeadlineActivityLayout = (
     ),
   );
 
-  // #966: minute precision normally; seconds only in the last five minutes.
+  // #966: unit values carry no leading zero (`1h 5m`, `9m`, `9s`); the last five minutes use colon notation (`4:05`).
   // The native timer removes seconds and their spacing in Always-On.
   const countdown = (
     size: number,

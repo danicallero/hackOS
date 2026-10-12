@@ -561,9 +561,11 @@ stays on the device.
   (H25, H26, H59). Otherwise it is the item's own end: the activity or
   schedule item end, the deadline, or the accreditation window end.
 - Phase boundaries: the worker also schedules a tick at each desired staff
-  or attendee activity's start and end (`scheduleLiveActivityBoundaries`,
-  kick.ts), so the push that flips `phase` (and the end) goes out on time
-  and the server state converges with what the widget already shows.
+  or attendee activity's start and end, and at the next countdown format
+  boundary of the staff, attendee and deadline countdowns
+  (`scheduleLiveActivityBoundaries`, kick.ts), so the push that flips `phase`
+  (or a `countdown*` flag) goes out on time and the server state converges
+  with what the widget already shows.
 - `relevance-score`: `100 − 10 × rank` (see
   [Ranking](#ranking-and-the-per-device-limit)).
 - `attributes` is expo-widgets' `LiveActivityAttributes { url: String? }`,
@@ -638,18 +640,25 @@ because they have no progress/action footer.
   deep-links to the related screen.
 - **Live timers tick on the device.** Countdowns and the pitch timer travel
   as instants, never as per-second pushes. Countdowns read `2h 34m` /
-  `34m`, with seconds only in the last five minutes (`4m 59s`, then `48s` below
-  a minute) on every countdown surface;
-  Always-On removes seconds and their spacing, using `<1m` below a minute
+  `34m`, then `4:59` (colon notation) in the last five minutes and `48s` below a
+  minute, on every countdown surface. A value beside a unit never has a leading
+  zero (`1h 5m`, `9m`, `9s`); only colon notation is zero-padded.
+  Always-On shows minutes only (`4m`) and `<1m` below a minute
   without a placeholder (rendering
   in [mobile.md](./mobile.md#live-activities-and-live-updates-966)).
-  The widget picks the form when it renders, so the staff activity,
-  attendee activity and deadline props carry `countdownUnderHour`,
-  `countdownLastFiveMinutes` and `countdownLastMinute`
-  (matching shared helpers; optional, older apps ignore them). They flip at one
-  hour, five minutes and below one minute before the target
-  (the start while upcoming, else the end), which changes the state hash and
-  sends one routine update per boundary.
+  The widget picks the form and the field widths when it renders, so the
+  staff activity, attendee activity and deadline props carry the flags
+  `countdownUnderHour`, `countdownShortMinutes`, `countdownUnderTenMinutes`,
+  `countdownLastFiveMinutes`, `countdownLastMinute` and
+  `countdownLastTenSeconds` (`countdownFlags` in `packages/shared`; optional,
+  older apps ignore them). They flip before the target (the start while
+  upcoming, else the end) at: every full hour and ten minutes past it
+  (`countdownShortMinutes`, minutes-of-hour under ten: `1h 5m`), one hour,
+  ten minutes (`9m`), five minutes, one minute and ten seconds (`9s`). A flip
+  changes the state hash and sends one routine update, exempt from the
+  30 s counter throttle. The worker schedules a tick at the next boundary
+  (`nextCountdownBoundary`, with the phase boundaries), so the update lands
+  within a second instead of on the next 20 s repetition.
 - **Few at once.** A device shows at most `maxConcurrent` (default 2), the
   most important leading the Dynamic Island.
 
@@ -670,7 +679,7 @@ Meal / activity (staff):
 | Presentation | Upcoming | Live |
 |---|---|---|
 | Compact leading | category symbol (fork.knife / person.3) | same |
-| Compact trailing | countdown to start (`1h 05m` / `34m` / `4m 21s`) | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`, or when the ratio is longer than 7 characters, e.g. `1142/1380`, which no longer fits the slot); "Live" from the start until the live update brings the counts |
+| Compact trailing | countdown to start (`1h 5m` / `34m` / `4:21`) | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`, or when the ratio is longer than 7 characters, e.g. `1142/1380`, which no longer fits the slot); "Live" from the start until the live update brings the counts |
 | Minimal | category symbol (20 pt) | progress ring `scanned / accredited` (the count without `accredited`) |
 | Expanded | name, location, `hh:mm–hh:mm`, countdown | symbol, Scanned `42/180`; name and live state; ends in beside **Scan**, then scanned-share bar |
 | Lock Screen | as expanded | as expanded |
@@ -680,7 +689,7 @@ Attendee activity:
 | Presentation | Upcoming | Live |
 |---|---|---|
 | Compact leading | category symbol | same |
-| Compact trailing | countdown to start (`1h 05m` / `34m` / `4m 21s`) | "Live" (`labels.live`; older servers: "Now") |
+| Compact trailing | countdown to start (`1h 5m` / `34m` / `4:21`) | "Live" (`labels.live`; older servers: "Now") |
 | Minimal | category symbol (20 pt) | symbol with a live dot |
 | Expanded | name, location, `hh:mm–hh:mm`, "Starts in" timer | symbol / "Ends in" countdown; name + "● Live", location, elapsed-time bar |
 | Lock Screen | as expanded | as expanded, with a progress bar from `startsAt` to `endsAt` |
