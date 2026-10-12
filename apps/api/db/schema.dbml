@@ -619,6 +619,7 @@ Table live_activity_sessions {
 Table live_activity_settings {
   id integer [pk, not null, default: `1`]
   max_concurrent integer [not null, default: `2`]
+  lead_minutes integer
   updated_at "timestamp with time zone" [not null, default: `now()`]
 }
 

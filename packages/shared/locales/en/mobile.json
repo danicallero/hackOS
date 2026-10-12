@@ -488,6 +488,7 @@
   "yesLabel": "Yes",
   "noLabel": "No",
   "scheduleRequiresScanLabel": "Requires check-in scan",
+  "scheduleLiveActivityLabel": "Show as Live Activity",
   "scheduleContactNoteLabel": "Contact note",
   "scheduleNotesLabel": "Staff notes",
   "scheduleDraftBadge": "Draft",

@@ -12,6 +12,7 @@ import type { Language } from "@hackos/shared/locale";
 import { config } from "../../config.js";
 import { pool, type Queryable } from "../../db/pool.js";
 import { scannerSubjectScope } from "../logistics/review-fixture-scope.js";
+import { readLeadMinutes } from "./settings.js";
 
 /**
  * Loaders and builders for the attendee, deadline and accreditation Live
@@ -39,12 +40,13 @@ export interface LiveAttendeeItem {
  * Opted-in schedule items (`live_activity_audience`) that are live for their
  * audience — shown and published, the same visibility rule as the
  * audience-aware schedule feed (`listScheduleForAudiences`) — and start
- * within `LIVE_ACTIVITY_LEAD_MINUTES` or are still running.
+ * within the configured lead time (`readLeadMinutes`) or are still running.
  */
 export async function loadLiveAttendeeItems(
   db: Queryable = pool,
-  leadMinutes: number = config.LIVE_ACTIVITY_LEAD_MINUTES,
+  leadMinutes?: number,
 ): Promise<LiveAttendeeItem[]> {
+  const lead = leadMinutes ?? (await readLeadMinutes(db));
   const { rows } = await db.query<{
     id: number;
     title: string;
@@ -64,7 +66,7 @@ export async function loadLiveAttendeeItems(
         AND starts_at <= now() + make_interval(mins => $1)
         AND now() < ends_at
       ORDER BY starts_at ASC, id ASC`,
-    [leadMinutes],
+    [lead],
   );
   return rows.map((r) => ({
     id: r.id,

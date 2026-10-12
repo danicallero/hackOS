@@ -341,7 +341,7 @@ export const scheduleBody = z.object({
     .optional()
     .describe(
       "Opt-in (#966): the item's audience gets an attendee Live Activity (countdown from " +
-        "LIVE_ACTIVITY_LEAD_MINUTES before the start, then 'now, ends in'). Defaults to false.",
+        "the event's Live Activity lead time before the start, then 'now, ends in'). Defaults to false.",
     ),
 });
 

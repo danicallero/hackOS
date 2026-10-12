@@ -5,6 +5,7 @@ import {
   type LiveActivityKindSetting,
   type LiveActivitySettings,
 } from "@hackos/shared/live-activities";
+import { config } from "../../config.js";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError } from "../../lib/errors.js";
@@ -28,6 +29,20 @@ export const LIVE_ACTIVITY_REQUIRED_CAPABILITY: Record<LiveActivityConfigKind, s
 const DEFAULT_MAX_CONCURRENT = 2;
 
 /**
+ * Minutes before a schedule item starts that its staff or attendee Live
+ * Activity appears (H25, H26, H59). An organizer override wins; without one
+ * the deployment's `LIVE_ACTIVITY_LEAD_MINUTES` applies (R018: only intentional
+ * overrides are stored). The deadline and accreditation leads stay
+ * deployment-only: they anchor to the hacking window, not to schedule items.
+ */
+export async function readLeadMinutes(db: Queryable = pool): Promise<number> {
+  const { rows } = await db.query<{ lead_minutes: number | null }>(
+    `SELECT lead_minutes FROM live_activity_settings WHERE id = 1`,
+  );
+  return rows[0]?.lead_minutes ?? config.LIVE_ACTIVITY_LEAD_MINUTES;
+}
+
+/**
  * The stored configuration, sorted by priority. Missing rows (never in a
  * migrated database, but possible after a manual cleanup) read as a disabled
  * kind with no roles, ranked after the configured ones in the default order,
@@ -37,9 +52,10 @@ export async function readLiveActivitySettings(
   db: Queryable = pool,
 ): Promise<LiveActivitySettings> {
   // Sequential: `db` may be one transaction client.
-  const { rows: settingsRows } = await db.query<{ max_concurrent: number }>(
-    `SELECT max_concurrent FROM live_activity_settings WHERE id = 1`,
-  );
+  const { rows: settingsRows } = await db.query<{
+    max_concurrent: number;
+    lead_minutes: number | null;
+  }>(`SELECT max_concurrent, lead_minutes FROM live_activity_settings WHERE id = 1`);
   const { rows: kindRows } = await db.query<{
     kind: LiveActivityConfigKind;
     enabled: boolean;
@@ -72,6 +88,9 @@ export async function readLiveActivitySettings(
   kinds.sort((a, b) => a.order - b.order);
   return {
     maxConcurrent: settingsRows[0]?.max_concurrent ?? DEFAULT_MAX_CONCURRENT,
+    leadMinutes: settingsRows[0]?.lead_minutes ?? config.LIVE_ACTIVITY_LEAD_MINUTES,
+    defaultLeadMinutes: config.LIVE_ACTIVITY_LEAD_MINUTES,
+    leadMinutesCustom: settingsRows[0]?.lead_minutes != null,
     // Priorities are reported as consecutive ranks, so the UI and the
     // ranking never see gaps.
     kinds: kinds.map(({ order: _order, ...kind }, index) => ({ ...kind, priority: index })),
@@ -81,6 +100,8 @@ export async function readLiveActivitySettings(
 
 export interface LiveActivitySettingsInput {
   maxConcurrent: number;
+  /** Lead time in minutes; `undefined` keeps the stored value, `null` returns to the deployment default. */
+  leadMinutes?: number | null;
   /** Every configurable kind exactly once; array order is the priority (index 0 = highest). */
   kinds: { kind: LiveActivityConfigKind; enabled: boolean; roleIds: number[] }[];
 }
@@ -114,6 +135,16 @@ export async function saveLiveActivitySettings(
     await client.query(`UPDATE live_activity_settings SET max_concurrent = $1 WHERE id = 1`, [
       input.maxConcurrent,
     ]);
+    if (input.leadMinutes !== undefined) {
+      // R018: a value equal to the deployment default is stored as "no override".
+      const override =
+        input.leadMinutes === null || input.leadMinutes === config.LIVE_ACTIVITY_LEAD_MINUTES
+          ? null
+          : input.leadMinutes;
+      await client.query(`UPDATE live_activity_settings SET lead_minutes = $1 WHERE id = 1`, [
+        override,
+      ]);
+    }
     for (const [priority, kind] of input.kinds.entries()) {
       await client.query(
         `INSERT INTO live_activity_kind_settings (kind, enabled, priority)

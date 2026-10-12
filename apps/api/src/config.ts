@@ -252,10 +252,10 @@ const envSchema = z.object({
     (v) => (v === "" ? undefined : v),
     z.string().default("com.hackudc.os"),
   ),
-  /** Minutes before a scannable activity starts that staff get its Live Activity (H25, H26). */
+  /** Deployment default for the minutes before a schedule item starts that its Live Activity appears (H25, H26, H59); an organizer override lives in `live_activity_settings.lead_minutes`. */
   LIVE_ACTIVITY_LEAD_MINUTES: z.preprocess(
     (v) => (v === "" ? undefined : v),
-    z.coerce.number().int().min(1).max(240).default(15),
+    z.coerce.number().int().min(0).max(240).default(15),
   ),
   /** Minutes before submissions close (`hacking_ends_at`) that participants get the deadline Live Activity when `hacking_starts_at` is unset; otherwise it runs for the whole hacking period (H19, #966). */
   LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES: z.preprocess(

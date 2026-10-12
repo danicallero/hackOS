@@ -4,6 +4,8 @@ import {
   DEADLINE_LIVE_ACTIVITY_SUBJECT,
   LIVE_ACTIVITY_CONFIG_KINDS,
   LIVE_ACTIVITY_KINDS,
+  LIVE_ACTIVITY_LEAD_MINUTES_MAX,
+  LIVE_ACTIVITY_LEAD_MINUTES_MIN,
   LIVE_ACTIVITY_MAX_CONCURRENT_MAX,
   LIVE_ACTIVITY_MAX_CONCURRENT_MIN,
   LIVE_ACTIVITY_PROPS_VERSION,
@@ -259,6 +261,9 @@ const configKindSchema = z.enum(LIVE_ACTIVITY_CONFIG_KINDS);
 
 export const liveActivitySettingsSchema = z.object({
   maxConcurrent: z.number().int(),
+  leadMinutes: z.number().int(),
+  defaultLeadMinutes: z.number().int(),
+  leadMinutesCustom: z.boolean(),
   kinds: z.array(
     z.object({
       kind: configKindSchema,
@@ -279,6 +284,13 @@ export const putLiveActivitySettingsBodySchema = z
       .int()
       .min(LIVE_ACTIVITY_MAX_CONCURRENT_MIN)
       .max(LIVE_ACTIVITY_MAX_CONCURRENT_MAX),
+    leadMinutes: z
+      .number()
+      .int()
+      .min(LIVE_ACTIVITY_LEAD_MINUTES_MIN)
+      .max(LIVE_ACTIVITY_LEAD_MINUTES_MAX)
+      .nullable()
+      .optional(),
     kinds: z
       .array(
         z

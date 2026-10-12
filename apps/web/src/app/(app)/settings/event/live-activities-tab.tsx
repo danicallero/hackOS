@@ -23,6 +23,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import {
+  LIVE_ACTIVITY_LEAD_MINUTES_MAX,
+  LIVE_ACTIVITY_LEAD_MINUTES_MIN,
   LIVE_ACTIVITY_MAX_CONCURRENT_MAX,
   LIVE_ACTIVITY_MAX_CONCURRENT_MIN,
   type LiveActivityConfigKind,
@@ -38,7 +40,9 @@ import { DragHandle, SortableItem } from "@/components/common/drag-handle";
 import { FormActions } from "@/components/common/form-actions";
 import { IconButton } from "@/components/common/icon-button";
 import { SectionCard } from "@/components/common/section-card";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -90,12 +94,17 @@ type DraftKind = Pick<
 >;
 interface Draft {
   maxConcurrent: number;
+  /** Minutes before a schedule item starts; null while the field is empty or out of range. */
+  leadMinutes: number | null;
+  defaultLeadMinutes: number;
   kinds: DraftKind[];
 }
 
 function toDraft(settings: LiveActivitySettings): Draft {
   return {
     maxConcurrent: settings.maxConcurrent,
+    leadMinutes: settings.leadMinutes,
+    defaultLeadMinutes: settings.defaultLeadMinutes,
     kinds: [...settings.kinds]
       .sort((a, b) => a.priority - b.priority)
       .map(({ kind, enabled, roleIds, requiredCapability }) => ({
@@ -111,6 +120,7 @@ function toDraft(settings: LiveActivitySettings): Draft {
 export function toPayload(draft: Draft) {
   return {
     maxConcurrent: draft.maxConcurrent,
+    leadMinutes: draft.leadMinutes,
     kinds: draft.kinds.map(({ kind, enabled, roleIds }) => ({ kind, enabled, roleIds })),
   };
 }
@@ -132,6 +142,7 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
   const [pending, setPending] = useState(false);
 
   const isDirty = saved !== null && draft !== null && !samePayload(saved, draft);
+  const leadInvalid = draft !== null && draft.leadMinutes === null;
   const [saveState, setSaveState] = useCategorySaveState(isDirty, onDirtyChange);
 
   const load = useCallback(async () => {
@@ -176,7 +187,7 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!draft || pending) return;
+    if (!draft || pending || draft.leadMinutes === null) return;
     setPending(true);
     setSaveState("saving");
     try {
@@ -251,7 +262,9 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
         variant="plain"
         footerClassName="justify-start"
         stickyFooter
-        footer={<FormActions pending={pending} state={saveState} disabled={!isDirty} />}
+        footer={
+          <FormActions pending={pending} state={saveState} disabled={!isDirty || leadInvalid} />
+        }
       >
         <div className="space-y-6">
           {!(isMobile && current) && (
@@ -274,6 +287,49 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
                   ))}
                 </SelectContent>
               </Select>
+              <Label htmlFor="live-activities-lead">{t("liveActivitiesLeadMinutes")}</Label>
+              <Input
+                id="live-activities-lead"
+                type="number"
+                inputMode="numeric"
+                min={LIVE_ACTIVITY_LEAD_MINUTES_MIN}
+                max={LIVE_ACTIVITY_LEAD_MINUTES_MAX}
+                className="w-24"
+                value={draft.leadMinutes ?? ""}
+                aria-invalid={leadInvalid || undefined}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const value = Number(raw);
+                  setDraft((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          leadMinutes:
+                            raw !== "" &&
+                            Number.isInteger(value) &&
+                            value >= LIVE_ACTIVITY_LEAD_MINUTES_MIN &&
+                            value <= LIVE_ACTIVITY_LEAD_MINUTES_MAX
+                              ? value
+                              : null,
+                        }
+                      : prev,
+                  );
+                }}
+              />
+              {draft.leadMinutes !== draft.defaultLeadMinutes && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setDraft((prev) =>
+                      prev ? { ...prev, leadMinutes: prev.defaultLeadMinutes } : prev,
+                    )
+                  }
+                >
+                  {t("liveActivitiesLeadReset", { minutes: draft.defaultLeadMinutes })}
+                </Button>
+              )}
             </div>
           )}
 

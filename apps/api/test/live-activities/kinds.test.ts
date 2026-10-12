@@ -189,6 +189,38 @@ describe("attendee activity (H59)", () => {
   });
 });
 
+describe("configured lead time (H25, H26, H59)", () => {
+  async function setLead(minutes: number | null) {
+    const pool = await db();
+    await pool.query(`UPDATE live_activity_settings SET lead_minutes = $1 WHERE id = 1`, [minutes]);
+  }
+
+  it("moves when attendee and staff activities appear, without a deploy", async () => {
+    const attendee = await createUser();
+    const staff = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    const talk = await scheduleItem({ startsInMinutes: 40 });
+    await createScannableActivity({ startsInMinutes: 40 });
+    await allowLiveActivities();
+
+    // No override: the deployment default (15 min) applies.
+    expect((await mine(attendee)).attendeeActivities).toEqual([]);
+    expect((await mine(staff)).activities).toEqual([]);
+
+    await setLead(60);
+    expect((await mine(attendee)).attendeeActivities.map((a) => a.scheduleId)).toEqual([talk]);
+    expect((await mine(staff)).activities).toHaveLength(1);
+
+    await setLead(5);
+    const near = await scheduleItem({ title: "Soon", startsInMinutes: 10 });
+    expect((await mine(attendee)).attendeeActivities.map((a) => a.scheduleId)).not.toContain(near);
+
+    // 0: only items that already started.
+    await setLead(0);
+    const started = await scheduleItem({ title: "Started", startsInMinutes: -1 });
+    expect((await mine(attendee)).attendeeActivities.map((a) => a.scheduleId)).toEqual([started]);
+  });
+});
+
 describe("submission deadline (H19, H20)", () => {
   async function deadlineIn(minutes: number) {
     const pool = await db();

@@ -61,6 +61,16 @@ export interface LiveActivityKindSetting {
 export interface LiveActivitySettings {
   /** Most Live Activities one device shows at once (1–5). */
   maxConcurrent: number;
+  /**
+   * Minutes before a schedule item starts that its staff or attendee Live
+   * Activity appears (H25, H26, H59): the organizer override, else the
+   * deployment default.
+   */
+  leadMinutes: number;
+  /** The deployment default (`LIVE_ACTIVITY_LEAD_MINUTES`) used without an override. */
+  defaultLeadMinutes: number;
+  /** True when an organizer override is stored. */
+  leadMinutesCustom: boolean;
   /** Sorted by priority. */
   kinds: LiveActivityKindSetting[];
   /**
@@ -85,6 +95,10 @@ export interface MyLiveActivityPreferences {
 /** Bounds of `LiveActivitySettings.maxConcurrent`. */
 export const LIVE_ACTIVITY_MAX_CONCURRENT_MIN = 1;
 export const LIVE_ACTIVITY_MAX_CONCURRENT_MAX = 5;
+
+/** Bounds of `LiveActivitySettings.leadMinutes`. */
+export const LIVE_ACTIVITY_LEAD_MINUTES_MIN = 0;
+export const LIVE_ACTIVITY_LEAD_MINUTES_MAX = 240;
 
 /** Subject key of the single queue Live Activity a participant can have. */
 export const QUEUE_LIVE_ACTIVITY_SUBJECT = "judging";

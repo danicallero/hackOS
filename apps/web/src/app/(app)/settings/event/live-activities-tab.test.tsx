@@ -39,6 +39,9 @@ const KINDS = ["activity", "attendee_activity", "queue", "accreditation", "deadl
 function settings() {
   return {
     maxConcurrent: 2,
+    leadMinutes: 15,
+    defaultLeadMinutes: 15,
+    leadMinutesCustom: false,
     roles,
     kinds: KINDS.map((kind, priority) => ({
       kind,
@@ -89,6 +92,7 @@ const rowNames = () =>
 const lastPutBody = () =>
   vi.mocked(api.put).mock.calls.at(-1)?.[1] as {
     maxConcurrent: number;
+    leadMinutes: number;
     kinds: { kind: string; enabled: boolean; roleIds: number[] }[];
   };
 
@@ -103,6 +107,9 @@ beforeEach(() => {
     const b = body as ReturnType<typeof lastPutBody>;
     return Promise.resolve({
       maxConcurrent: b.maxConcurrent,
+      leadMinutes: b.leadMinutes,
+      defaultLeadMinutes: 15,
+      leadMinutesCustom: b.leadMinutes !== 15,
       roles,
       kinds: b.kinds.map((k, priority) => ({ ...k, priority, requiredCapability: null })),
     });
@@ -186,6 +193,30 @@ describe("LiveActivitiesTab", () => {
     expect(new Set(body.kinds.map((k) => k.kind)).size).toBe(KINDS.length);
     expect(body.kinds).toHaveLength(KINDS.length);
     expect(body.maxConcurrent).toBe(2);
+  });
+
+  it("edits the lead time, validates its range and resets to the default", async () => {
+    const user = userEvent.setup();
+    await render();
+    const input = container.querySelector<HTMLInputElement>("#live-activities-lead");
+    expect(input?.value).toBe("15");
+    expect(container.textContent).not.toContain("liveActivitiesLeadReset");
+
+    await act(async () => user.clear(input as HTMLInputElement));
+    await act(async () => user.type(input as HTMLInputElement, "300"));
+    expect(button("saveChanges").disabled).toBe(true);
+    expect(input?.getAttribute("aria-invalid")).toBe("true");
+
+    await act(async () => user.clear(input as HTMLInputElement));
+    await act(async () => user.type(input as HTMLInputElement, "45"));
+    expect(button("saveChanges").disabled).toBe(false);
+    await act(async () => user.click(button("saveChanges")));
+    expect(lastPutBody().leadMinutes).toBe(45);
+
+    await act(async () => user.click(button("liveActivitiesLeadReset")));
+    expect(input?.value).toBe("15");
+    await act(async () => user.click(button("saveChanges")));
+    expect(lastPutBody().leadMinutes).toBe(15);
   });
 
   it("keeps the draft and reports an error when saving fails", async () => {

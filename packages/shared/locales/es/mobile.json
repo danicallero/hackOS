@@ -488,6 +488,7 @@
   "yesLabel": "Sí",
   "noLabel": "No",
   "scheduleRequiresScanLabel": "Requiere escaneo de acreditación",
+  "scheduleLiveActivityLabel": "Mostrar como actividad en directo",
   "scheduleContactNoteLabel": "Nota de contacto",
   "scheduleNotesLabel": "Notas de staff",
   "scheduleDraftBadge": "Borrador",
