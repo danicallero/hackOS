@@ -663,7 +663,7 @@ Queue (participant):
 | Expanded | challenge title, position, ETA; **room only once called** |
 | Lock Screen | same as expanded, plus "+N more queues" when relevant |
 | Called state | compact: `Room B` · expanded: "Go to Room B — location" (alerting update) |
-| Watch / CarPlay | challenge + `#4 · ~12 min` / room when called |
+| Watch / CarPlay | challenge · `#4`, `~12 min` / room when called |
 
 Meal / activity (staff):
 
@@ -684,7 +684,7 @@ Attendee activity:
 | Minimal | category symbol (20 pt) | symbol with a live dot |
 | Expanded | name, location, `hh:mm–hh:mm`, "Starts in" timer | symbol / "Ends in" countdown; name + "● Live", location, elapsed-time bar |
 | Lock Screen | as expanded | as expanded, with a progress bar from `startsAt` to `endsAt` |
-| Watch / CarPlay | name + countdown | name + "Live" |
+| Watch / CarPlay | name · countdown | name · "Live", "Ends in" countdown |
 
 Live starts at `startsAt` on the device itself: the upcoming state is stale
 from then (see `stale-date`), and the layout treats a stale upcoming state
@@ -699,7 +699,11 @@ Submission deadline:
 | Minimal | hourglass (20 pt) | exclamation mark (20 pt) | checkmark (20 pt) |
 | Expanded | title, countdown, project name; status only when known | "Not submitted · project", countdown | "Submitted ✓ · project", countdown |
 | Lock Screen | title with the status opposite; project leading and countdown trailing; a progress bar from `startsAt` to `endsAt` | as open | project and muted countdown leading, green "Submitted" trailing |
-| Watch | countdown | countdown + "Not submitted" | "Submitted" |
+| Watch | countdown, status line only for a known draft | countdown + red "Not submitted" (the only red element) | "Submitted" + small countdown |
+
+Red is reserved for the closing state and marks the symbol and the "Not
+submitted" status only; the countdown and the window bar keep their primary and
+neutral colours on every surface.
 
 Accreditation desk:
 
@@ -710,7 +714,20 @@ Accreditation desk:
 | Minimal | progress ring `accredited / eligible` |
 | Expanded | symbol / `accredited / eligible`; title and closing time, smaller `inside` and arrivals in the last 10 min beside **Scan**; share bar |
 | Lock Screen | as expanded |
-| Watch | `accredited / eligible` |
+| Watch | `accredited / eligible` and its label |
+
+### Apple Watch (Smart Stack)
+
+watchOS shows the iOS activity through the `.small` supplemental family,
+which `expo-widgets` enables on iOS 18+ (`supplementalActivityFamilies([.small,
+.medium])`) and which renders each layout's `bannerSmall` instead of the
+Dynamic Island compact views. There is one composition for every kind: glyph
+and title in secondary, one 26 pt hero (a native timer that ticks without
+pushes, or the count, room or "Submitted"), at most one status line. Colour is
+sparing: the phase accent tints the glyph only, Always-On drops it, and red is
+used once, for a known draft's "Not submitted" line in the last 15 minutes.
+Text is single-line with scaling, and Dynamic Type is capped at `xLarge`. The
+props contract is unchanged. Details: [mobile.md](./mobile.md#live-activities-and-live-updates-966).
 
 ## Operational setup
 

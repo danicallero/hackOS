@@ -465,16 +465,47 @@ export const StaffActivityLayout = (
     </VStack>
   );
 
-  // watchOS Smart Stack and CarPlay: name plus the countdown or the count, no buttons.
+  // watchOS Smart Stack and CarPlay (`.small` family, #966, H25, H26): glyph and
+  // title in secondary, one hero value, at most one status line. The accent
+  // tints the glyph only; Always-On drops it.
+  const watchGlyph = environment.isLuminanceReduced ? null : islandAccent;
   const bannerSmall = (
-    <VStack alignment="leading" spacing={2} modifiers={[padding({ all: 8 })]}>
-      <HStack spacing={4}>
-        <Image systemName={symbol} color={bannerAccent ?? neutral} size={12} />
+    <VStack
+      alignment="leading"
+      spacing={2}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ horizontal: 10, vertical: 8 }),
+        dynamicTypeSize({ max: "xLarge" }),
+      ]}
+    >
+      <HStack spacing={5}>
+        <Image systemName={symbol} color={watchGlyph ?? neutral} size={13} />
         <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
           {props.name}
         </Text>
       </HStack>
-      {live ? ratio(20, 13, bannerAccent) : countdown(20, bannerAccent, null)}
+      {live ? (
+        ratio(26, 14, null)
+      ) : (
+        <Text
+          timerInterval={{ lower, upper: startsAt }}
+          countsDown
+          compactCountdown="full"
+          compactCountdownSize={26}
+          compactCountdownWeight="bold"
+          modifiers={[
+            lineLimit(1),
+            minimumScaleFactor(0.6),
+            frame({ maxWidth: 10000, alignment: "leading" }),
+          ]}
+        />
+      )}
+      {live && labels.scanned ? (
+        <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
+          {labels.scanned}
+        </Text>
+      ) : null}
     </VStack>
   );
 
