@@ -99,7 +99,11 @@ jest.mock("@/lib/schedule", () => ({
   updateScheduleItem: jest.fn(),
   upsertScheduleItem: jest.fn(),
 }));
-jest.mock("@/lib/tabs", () => ({ has: () => false }));
+jest.mock("@/lib/tabs", () => ({
+  has: () => false,
+  canManageSchedule: () => false,
+  canReadFullSchedule: () => false,
+}));
 jest.mock("@/lib/use-cached-api", () => ({
   useCachedApi: () => ({
     data: mockSchedule,
