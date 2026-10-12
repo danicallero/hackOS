@@ -766,3 +766,35 @@ agent launched or redirected, commit pushed), not just an assessment.
 ### Exceptions
 A genuine product decision the user must make (e.g. a platform trade-off)
 may be asked, but only alongside the fixes that don't depend on it.
+
+## [R024] Keep minimal Live Activities readable at their actual size
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-10-12
+
+### Trigger
+Choosing content for the minimal Dynamic Island presentation.
+
+### Mistake
+Fit an hours-and-minutes countdown into the minimal slot by reducing it to
+10 pt and allowing further scaling. It technically fit but was unreadable.
+
+### Lesson
+Fitting inside a width cap does not establish legibility. Minimal presentation
+should identify the activity or phase with a recognizable symbol; detailed
+timers belong on surfaces with room to read them.
+
+### Action
+Use category or phase symbols for minimal countdown activities. Preserve
+meaningful operational rings and short counts. Review alongside another Live
+Activity, where iOS switches to the minimal presentation.
+
+### Validation
+Inspect a native screenshot at actual device size with two activities active;
+check long countdowns and urgent/completed phases. Unit tests alone cannot
+establish visual readability.
+
+### Exceptions
+A short operational count can remain when readable at the actual slot size.

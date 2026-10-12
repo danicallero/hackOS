@@ -256,10 +256,8 @@ export const DeadlineActivityLayout = (
     "leading",
   ) ?? <Text> </Text>;
 
-  // Minimal: the time left; done: the check alone.
-  const minimal = submitted
-    ? glyph(islandColor, 14)
-    : (countdown(10, islandColor, 36, "semibold", "leading", "short") ?? glyph(islandColor, 14));
+  // #966: minimal identifies the phase without shrinking a multi-unit timer.
+  const minimal = glyph(islandColor, 20);
 
   const expandedLeading = (
     <VStack modifiers={[padding({ leading: 8, top: 6 })]}>{glyph(islandColor, 24)}</VStack>

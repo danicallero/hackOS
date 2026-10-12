@@ -668,7 +668,7 @@ Meal / activity (staff):
 |---|---|---|
 | Compact leading | category symbol (fork.knife / person.3) | same |
 | Compact trailing | countdown to start (`1h 05m` / `34m` / `4m 21s`) | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`, or when the ratio is longer than 7 characters, e.g. `1142/1380`, which no longer fits the slot); "Live" from the start until the live update brings the counts |
-| Minimal | countdown | progress ring `scanned / accredited` (the count without `accredited`) |
+| Minimal | category symbol (20 pt) | progress ring `scanned / accredited` (the count without `accredited`) |
 | Expanded | name, location, `hh:mm–hh:mm`, countdown | symbol, Scanned `42/180`; name and live state; ends in beside **Scan**, then scanned-share bar |
 | Lock Screen | as expanded | as expanded |
 
@@ -678,7 +678,7 @@ Attendee activity:
 |---|---|---|
 | Compact leading | category symbol | same |
 | Compact trailing | countdown to start (`1h 05m` / `34m` / `4m 21s`) | "Live" (`labels.live`; older servers: "Now") |
-| Minimal | countdown | symbol with a live dot |
+| Minimal | category symbol (20 pt) | symbol with a live dot |
 | Expanded | name, location, `hh:mm–hh:mm`, "Starts in" timer | symbol / "Ends in" countdown; name + "● Live", location, elapsed-time bar |
 | Lock Screen | as expanded | as expanded, with a progress bar from `startsAt` to `endsAt` |
 | Watch / CarPlay | name + countdown | name + "Live" |
@@ -693,7 +693,7 @@ Submission deadline:
 |---|---|---|---|
 | Compact leading | `hourglass` | `exclamationmark.circle` (tinted) | `checkmark.circle` |
 | Compact trailing | countdown timer | countdown timer | countdown timer (muted) |
-| Minimal | countdown | countdown (tinted) | checkmark |
+| Minimal | hourglass (20 pt) | exclamation mark (20 pt) | checkmark (20 pt) |
 | Expanded | title, countdown, project name; status only when known | "Not submitted · project", countdown | "Submitted ✓ · project", countdown |
 | Lock Screen | title with the status opposite; project leading and countdown trailing; a progress bar from `startsAt` to `endsAt` | as open | project and muted countdown leading, green "Submitted" trailing |
 | Watch | countdown | countdown + "Not submitted" | "Submitted" |

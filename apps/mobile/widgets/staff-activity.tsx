@@ -346,8 +346,8 @@ export const StaffActivityLayout = (
       : liveText;
 
   // Minimal: the scanned share as a ring; live without it, the symbol with a
-  // live dot (or the bare count from a build without the label); else the
-  // countdown.
+  // live dot (or the bare count from a build without the label); upcoming
+  // keeps the category recognizable instead of shrinking a multi-unit timer.
   const minimal =
     share !== null ? (
       <Gauge
@@ -361,13 +361,13 @@ export const StaffActivityLayout = (
       />
     ) : live && liveLabel ? (
       <HStack spacing={2}>
-        {glyph(islandAccent, 12)}
+        {glyph(islandAccent, 18)}
         <Image systemName="circle.fill" color={islandAccent} size={5} />
       </HStack>
     ) : live ? (
       counter(scanned, 13, islandAccent, "semibold")
     ) : (
-      countdown(10, islandAccent, 36, "short")
+      glyph(islandAccent, 20)
     );
 
   const expandedLeading = (
