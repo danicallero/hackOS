@@ -3712,6 +3712,6 @@
   "liveActivityAudienceLabel": "Mostrar actividad en directo a su público",
   "liveActivityNoRolesHint": "Nadie la recibe hasta que selecciones un rol.",
   "liveActivityAllRoles": "Todos los roles",
-  "networkingInvite": "Cuando otros participantes o representantes de empresas escaneen tu acreditación durante el evento, verán este perfil para intercambiar contacto o hacer networking contigo.",
+  "networkingInvite": "Cuando otros participantes o representantes de empresas escaneen tu acreditación durante el evento, verán este perfil para intercambiar contacto o hacer networking contigo. Un escaneo os añade a los contactos de ambos.",
   "networkingInviteAction": "Completar perfil"
 }

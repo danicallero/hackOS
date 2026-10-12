@@ -891,7 +891,7 @@
   "networkingCvFromApplication": "O teu CV vén da túa solicitude e non se pode cambiar aquí.",
   "networkingCvUploadError": "Non se puido subir o CV. Téntao de novo.",
   "networkingCvRemoveError": "Non se puido quitar o CV. Téntao de novo.",
-  "networkingAudience": "Verano quen escanee a túa acreditación durante o evento, para intercambiar contacto ou facer networking contigo.",
+  "networkingAudience": "Verano quen escanee a túa acreditación durante o evento, para intercambiar contacto ou facer networking contigo. Un escaneo engádevos aos contactos dos dous.",
   "networkingShare": "Compartir o meu perfil",
   "networkingShowSurname": "Apelido completo",
   "networkingShowPhoto": "Foto",
@@ -902,6 +902,6 @@
   "networkingBio": "Bio",
   "networkingLoadError": "Non se puido cargar o perfil.",
   "networkingSaveError": "Non se puido gardar o perfil.",
-  "networkingInvite": "Cando outros participantes ou representantes de empresas escaneen a túa acreditación durante o evento, verán este perfil para intercambiar contacto ou facer networking contigo.",
+  "networkingInvite": "Cando outros participantes ou representantes de empresas escaneen a túa acreditación durante o evento, verán este perfil para intercambiar contacto ou facer networking contigo. Un escaneo engádevos aos contactos dos dous.",
   "networkingInviteAction": "Completar perfil"
 }

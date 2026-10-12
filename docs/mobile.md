@@ -781,7 +781,9 @@ is direct and `app/(tabs)/others/diary.tsx` inside Others (`diary` is an
 segmented control splits it into **People** | **Companies**. There is no
 directory to browse: people get into the diary only by a badge scan. The
 `?view=people` / `?view=companies` route parameter opens a segment directly.
-Pull-to-refresh, focus and foregrounding refetch. Nothing is written to the
+Pull-to-refresh, focus and foregrounding refetch, which is also how a person
+who was scanned sees the scanner appear (scans are mutual when the scanner
+shares a profile, `diary.md`). Nothing is written to the
 offline cache, so a profile hidden later cannot reappear from device storage.
 
 The diary uses the system header, laid out like Activities. On iOS 26

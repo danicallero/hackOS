@@ -891,7 +891,7 @@
   "networkingCvFromApplication": "Your CV comes from your application and can't be changed here.",
   "networkingCvUploadError": "Couldn't upload the CV. Try again.",
   "networkingCvRemoveError": "Couldn't remove the CV. Try again.",
-  "networkingAudience": "People who scan your badge during the event will see it, so you can swap contact details or network.",
+  "networkingAudience": "People who scan your badge during the event will see it, so you can swap contact details or network. A scan adds you to each other's contacts.",
   "networkingShare": "Share my profile",
   "networkingShowSurname": "Full surname",
   "networkingShowPhoto": "Photo",
@@ -902,6 +902,6 @@
   "networkingBio": "Bio",
   "networkingLoadError": "Couldn't load the profile.",
   "networkingSaveError": "Couldn't save the profile.",
-  "networkingInvite": "When other participants or company representatives scan your badge during the event, they'll see this profile to swap contact details or network with you.",
+  "networkingInvite": "When other participants or company representatives scan your badge during the event, they'll see this profile to swap contact details or network with you. A scan adds you to each other's contacts.",
   "networkingInviteAction": "Complete profile"
 }

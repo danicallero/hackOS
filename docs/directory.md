@@ -6,7 +6,10 @@ CV and, if they choose, their projects and their challenges. There is no
 browsable people directory: the product owner retired it on #935 ("al final
 queremos que sea dinámico"), so a person enters someone's event diary only by
 a scan ([`diary.md`](./diary.md)), and only then can that attendee read their
-profile. The module and routes keep their `directory` names. There is no Hxx
+profile. A scan is mutual: if the scanner also shares a profile, the scanned
+person's diary gets the scanner too (one scan, both contacts); a scanner who
+shares nothing saves the person one-way, and stands are always one-way
+([`diary.md`](./diary.md), Mutual scan). The module and routes keep their `directory` names. There is no Hxx
 story; code and commits reference `#934` and `#935`.
 
 People manage their public profile (opt-in, surname/photo/project, headline,
