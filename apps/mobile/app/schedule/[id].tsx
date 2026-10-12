@@ -14,6 +14,7 @@ import {
 } from "@/components/schedule-form-modal";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { eventZoneHint, formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
@@ -146,16 +147,22 @@ export default function ScheduleDetailScreen() {
   const staffOnly = (staffItem?.audiences ?? []).length === 0;
   const showStaffVisibility = Boolean(staffItem && !staffOnly);
   const showStaffPublishAt = staffItem?.visibility === "hidden" && !staffOnly;
+  const eventZone = useEventTimeZone();
+  const zoneHint = eventZoneHint(language, eventZone);
   const startsAt = detailItem ? new Date(detailItem.startsAt) : null;
   const endsAt = detailItem ? new Date(detailItem.endsAt) : null;
-  const date = startsAt?.toLocaleDateString(language, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  const clock = { hour: "2-digit", minute: "2-digit" } as const;
+  const date = startsAt
+    ? formatEventTime(
+        startsAt,
+        language,
+        { weekday: "long", day: "numeric", month: "long" },
+        eventZone,
+      )
+    : undefined;
   const time =
     startsAt && endsAt
-      ? `${startsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" })}–${endsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" })}`
+      ? `${formatEventTime(startsAt, language, clock, eventZone)}–${formatEventTime(endsAt, language, clock, eventZone)}${zoneHint ? ` ${zoneHint}` : ""}`
       : null;
   const headerTitle = truncateHeaderTitle(item?.title ?? t("scheduleDetails"));
 
@@ -394,7 +401,12 @@ export default function ScheduleDetailScreen() {
                         label={t("schedulePublishAtLabel")}
                         value={
                           staffItem.publishAt
-                            ? new Date(staffItem.publishAt).toLocaleString(language)
+                            ? formatEventTime(
+                                staffItem.publishAt,
+                                language,
+                                { dateStyle: "medium", timeStyle: "short" },
+                                eventZone,
+                              )
                             : t("accountNotSet")
                         }
                         last

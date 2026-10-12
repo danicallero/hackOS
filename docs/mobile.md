@@ -615,6 +615,17 @@ distributed to other Expo Router apps without importing hackOS code.
   still swallow a swipe that starts very close to either edge before this
   screen ever sees the touch; there is no in-app fix for that short of a
   native `setSystemGestureExclusionRects` call.
+- **Event time (H45/H47).** Every schedule time, day grouping, reminder row,
+  presence timeline entry and `DateTimeField` is the event's clock, not the
+  phone's. `lib/me-context.tsx` publishes `GET /api/me`'s `eventTimezone`
+  (cached offline with the profile) to `lib/event-time.ts`; screens format with
+  `formatEventTime` / `eventDayKey` and re-render through `useEventTimeZone`.
+  The native pickers only speak the phone's zone, so `DateTimeField` feeds them
+  the event wall clock as device-local fields (`toPickerDate`) and converts the
+  result back (`fromPickerDate`); props and callbacks stay real instants. A
+  terse zone name (e.g. "CEST") follows a time only when the zone differs from
+  the phone's. Not yet converted: scan logs, scanner confirmations and sync
+  queue timestamps, which describe when something happened on this device.
 - `app/(tabs)/schedule.tsx` — the participant agenda, grouped by day. On first
   load it opens (unanimated) on whatever is happening now — the active card, or
   the "Now" divider drawn between entries when nothing is running — instead of

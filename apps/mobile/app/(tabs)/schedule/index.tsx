@@ -43,6 +43,7 @@ import {
 import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -272,14 +273,15 @@ export default function ScheduleScreen() {
     [items, selectedKinds, selectedAudiences, normalizedQuery],
   );
 
-  const todayKey = useMemo(() => new Date(now).toLocaleDateString("en-CA"), [now]);
+  const eventZone = useEventTimeZone();
+  const todayKey = useMemo(() => eventDayKey(now, eventZone), [now, eventZone]);
 
   const sections = useMemo<ScheduleSection[]>(() => {
     const grouped = new Map<string, ScheduleItem[]>();
     for (const item of [...filteredItems].sort(
       (a, b) => safeTimestamp(a.startsAt) - safeTimestamp(b.startsAt),
     )) {
-      const key = new Date(item.startsAt).toLocaleDateString("en-CA");
+      const key = eventDayKey(item.startsAt, eventZone);
       grouped.set(key, [...(grouped.get(key) ?? []), item]);
     }
     return [...grouped.entries()].map(([key, dayItems]) => {
@@ -302,14 +304,15 @@ export default function ScheduleScreen() {
       return {
         key,
         data: rows,
-        title: new Date(dayItems[0].startsAt).toLocaleDateString(language, {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-        }),
+        title: formatEventTime(
+          dayItems[0].startsAt,
+          language,
+          { weekday: "long", month: "long", day: "numeric" },
+          eventZone,
+        ),
       };
     });
-  }, [filteredItems, language, now, todayKey]);
+  }, [filteredItems, language, now, todayKey, eventZone]);
 
   // Jumps straight to "what's happening now" (or the marker between cards)
   // instead of opening at the beginning of a multi-day schedule. Reused below
@@ -773,10 +776,7 @@ function safeTimestamp(value: string) {
 }
 
 function formatTime(timestamp: number, locale: string) {
-  return new Date(timestamp).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatEventTime(timestamp, locale, { hour: "2-digit", minute: "2-digit" });
 }
 
 // Space between a time label and the line that follows it — kept tight so
@@ -859,14 +859,9 @@ function ScheduleCard({
   const audienceBadge = scheduleAudienceOnlyBadge(item, t);
   const startsAt = new Date(item.startsAt);
   const endsAt = new Date(item.endsAt);
-  const time = startsAt.toLocaleTimeString(language, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const end = endsAt.toLocaleTimeString(language, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  useEventTimeZone();
+  const time = formatEventTime(startsAt, language, { hour: "2-digit", minute: "2-digit" });
+  const end = formatEventTime(endsAt, language, { hour: "2-digit", minute: "2-digit" });
 
   function toggleReminder(event: GestureResponderEvent) {
     event.stopPropagation();
