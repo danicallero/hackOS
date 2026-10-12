@@ -866,5 +866,20 @@
   "standsRemoveTagConfirm": "Remove this tag?",
   "standsRemoveQrDetail": "Printed copies of this code will stop working.",
   "standsRemoveTagFailed": "Could not remove the tag.",
-  "companyTagCollecting": "Collecting…"
+  "companyTagCollecting": "Collecting…",
+  "accountNetworkingProfile": "Edit networking profile",
+  "networkingTitle": "Networking profile",
+  "networkingAudience": "Only people who scan your badge will see it.",
+  "networkingShare": "Share my profile",
+  "networkingShowSurname": "Full surname",
+  "networkingShowPhoto": "Photo",
+  "networkingShowProject": "Project and challenges",
+  "networkingHeadline": "Headline",
+  "networkingLocation": "Where to find you",
+  "networkingLocationPlaceholder": "Room 2.1",
+  "networkingBio": "Bio",
+  "networkingLoadError": "Couldn't load the profile.",
+  "networkingSaveError": "Couldn't save the profile.",
+  "networkingInvite": "This is the profile other participants or company representatives you network with during the event will be able to see.",
+  "networkingInviteAction": "Complete profile"
 }

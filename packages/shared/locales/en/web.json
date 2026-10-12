@@ -3706,5 +3706,7 @@
   "liveActivityKindAccreditationDesc": "Check-in counters for staff at the accreditation desk.",
   "liveActivityAudienceLabel": "Show Live Activity to audience",
   "liveActivityNoRolesHint": "Nobody receives it until a role is selected.",
-  "liveActivityAllRoles": "All roles"
+  "liveActivityAllRoles": "All roles",
+  "networkingInvite": "This is the profile other participants or company representatives you network with during the event will be able to see.",
+  "networkingInviteAction": "Complete profile"
 }

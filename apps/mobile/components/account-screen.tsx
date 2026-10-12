@@ -50,6 +50,7 @@ import { forceLocalSignOut, signOut } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { NETWORKING_PROFILE_PATH } from "@/lib/networking-profile";
 import {
   fetchMealPlan,
   mealLabel,
@@ -414,6 +415,13 @@ export default function AccountScreen() {
           ) : (
             <InfoRow label={t("accountFoodIntolerances")} value={dietaryValue} icon="fork.knife" />
           )}
+          {/* #934, #935: always available, not tied to the event window. */}
+          <Separator inset={48} />
+          <AccountSubpageRow
+            label={t("accountNetworkingProfile")}
+            icon="person.crop.circle"
+            onPress={() => router.push(NETWORKING_PROFILE_PATH)}
+          />
           {me.foodIntoleranceNotes ? (
             <>
               <Separator inset={48} />

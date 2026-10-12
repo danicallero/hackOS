@@ -866,5 +866,20 @@
   "standsRemoveTagConfirm": "Quitar esta etiqueta?",
   "standsRemoveQrDetail": "As copias impresas deste código deixarán de funcionar.",
   "standsRemoveTagFailed": "Non se puido quitar a etiqueta.",
-  "companyTagCollecting": "Coleccionando…"
+  "companyTagCollecting": "Coleccionando…",
+  "accountNetworkingProfile": "Editar perfil de networking",
+  "networkingTitle": "Perfil de networking",
+  "networkingAudience": "Só o verá quen escanee a túa acreditación.",
+  "networkingShare": "Compartir o meu perfil",
+  "networkingShowSurname": "Apelido completo",
+  "networkingShowPhoto": "Foto",
+  "networkingShowProject": "Proxecto e retos",
+  "networkingHeadline": "Titular",
+  "networkingLocation": "Onde atoparte",
+  "networkingLocationPlaceholder": "Aula 2.1",
+  "networkingBio": "Bio",
+  "networkingLoadError": "Non se puido cargar o perfil.",
+  "networkingSaveError": "Non se puido gardar o perfil.",
+  "networkingInvite": "Este é o perfil que poderán consultar outros participantes ou representantes de empresas cos que fagas networking durante o evento.",
+  "networkingInviteAction": "Completar perfil"
 }

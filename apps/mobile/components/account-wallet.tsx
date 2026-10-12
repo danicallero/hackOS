@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { BackHandler, Platform, Pressable } from "react-native";
+import { BackHandler, Modal, Platform, Pressable, View } from "react-native";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -77,7 +77,6 @@ export function AccountWalletButton({ wallet }: { wallet: AccountWalletControlle
 
 /** The wallet overlay and its close button; render it over the whole screen. */
 export function AccountWalletOverlay({ wallet }: { wallet: AccountWalletController }) {
-  const chrome = accountWalletChrome(useSafeAreaInsets().top, Platform.OS);
   if (!wallet.open) return null;
   return (
     <Animated.View
@@ -95,15 +94,51 @@ export function AccountWalletOverlay({ wallet }: { wallet: AccountWalletControll
         zIndex: 30,
       }}
     >
+      <WalletOverlayContent wallet={wallet} closeTestID="account-wallet-close" />
+    </Animated.View>
+  );
+}
+
+/**
+ * The same wallet and close button in a full-screen modal, for screens whose
+ * native header would cover an in-page overlay (the Diary, #935). The close
+ * button sits where the Account one does.
+ */
+export function WalletModal({ wallet }: { wallet: AccountWalletController }) {
+  return (
+    <Modal
+      visible={wallet.open}
+      animationType="slide"
+      onRequestClose={() => {
+        if (wallet.open) wallet.toggle();
+      }}
+    >
+      <View testID="wallet-modal" style={{ backgroundColor: colors.background, flex: 1 }}>
+        <WalletOverlayContent wallet={wallet} closeTestID="wallet-modal-close" />
+      </View>
+    </Modal>
+  );
+}
+
+function WalletOverlayContent({
+  closeTestID,
+  wallet,
+}: {
+  closeTestID: string;
+  wallet: AccountWalletController;
+}) {
+  const chrome = accountWalletChrome(useSafeAreaInsets().top, Platform.OS);
+  return (
+    <>
       <WalletScreen contentTopInset={chrome.walletContentTop} />
       <AndroidStatusBarScrim />
       <WalletToggleButton
-        testID="account-wallet-close"
+        testID={closeTestID}
         wallet={wallet}
         glyph="close"
         top={chrome.buttonTop}
       />
-    </Animated.View>
+    </>
   );
 }
 

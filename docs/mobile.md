@@ -401,6 +401,13 @@ distributed to other Expo Router apps without importing hackOS code.
   `foodIntoleranceNotes` field, read-only while No restrictions is on), a
   centred title, and floating close/confirm glass buttons instead of bottom
   action buttons.
+  "Edit networking profile" (#934, #935), always shown in the same section, opens the
+  `app/networking-profile.tsx` modal (`components/networking-profile-screen.tsx`,
+  `lib/networking-profile.ts`): the opt-in switch, the surname/photo/project
+  switches (once shared), headline, where-to-find-you and bio, saved with
+  `PUT /api/me/public-profile` under one `Idempotency-Key` per change set. It omits
+  `socials` and `shareCv`, which the API then keeps; links and the CV are edited
+  on web ([`directory.md`](./directory.md)).
   Sponsor representatives (`isSponsorRep`) also
   see a Meals section listing `GET /api/me/meal-plan`, reloaded on every focus
   and cached under `user:<id>:meal-plan` so sign-out and 401 invalidation clear
@@ -742,12 +749,14 @@ scrolls behind it, which turned a dynamic-colour title white for a moment over
 the blue scan pill (Activities has the same fix). The native search
 (`headerSearchBarOptions`, `integratedButton` placement) and the favourites
 star, a native `Stack.Toolbar.Button` (`star` / `star.fill`) drawn as the same
-circle as the search button, sit on the right. Android and earlier iOS use
-`LegacyScreenHeader`: the title, a glass star toggle and the search button that
+circle as the search button, sit on the right, with a wallet button after them (`wallet.pass`) that opens the
+badge/ticket wallet in a full-screen modal (`WalletModal` in
+`components/account-wallet.tsx`, the same `WalletScreen` and close button as
+Account's overlay, H28). The wallet button stays on Companies. Android and earlier iOS use
+`LegacyScreenHeader`: the title, a glass star toggle, the wallet button and the search button that
 expands into the field. Search and the star apply to People only, and only
 once it has someone to search; on Companies the native search and the star are
-removed (`LegacyScreenHeader`'s `searchEnabled` hides its search button, and a
-44pt spacer keeps the title row's height) and leaving People clears the query.
+removed (`LegacyScreenHeader`'s `searchEnabled` hides its search button) and leaving People clears the query.
 Below the header, the scroll content starts with the shared scan pill
 (`BadgeLinkActions`, as on the scanner screens), then the People | Companies
 control, then the list.

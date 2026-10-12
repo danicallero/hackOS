@@ -50,6 +50,19 @@ Module: `apps/api/src/modules/directory/` (the photo routes live in
 Tests: `apps/api/test/directory/api.test.ts` and
 `apps/api/test/directory/profile-files.test.ts`.
 
+## Mobile and the confirmation invite
+
+The mobile app edits the same profile from Account ("Edit networking profile",
+see [`mobile.md`](./mobile.md)) with the opt-in, the three visibility switches,
+headline, location note and bio; links and the CV stay on web. After a
+participant confirms their spot (H15), the web "place confirmed" card, the
+public confirmation page (only for the token holder's own session) and the
+mobile wallet banner show `NetworkingProfileInvite` / `NetworkingInvite`: one
+sentence saying other participants and company representatives they network
+with will read this profile, and a button to the editor. It appears only while
+`consentedAt` is `null` (the profile was never created) and is hidden when
+`GET /api/me/public-profile` fails.
+
 ## Model
 
 `user_public_profiles` (migrations `0101_public_profile.sql` and
