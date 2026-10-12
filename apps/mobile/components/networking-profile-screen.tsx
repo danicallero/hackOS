@@ -247,35 +247,52 @@ export default function NetworkingProfileScreen() {
     }
     // An application CV is read-only here; only an upload can be replaced or removed.
     const manageCv = editing && current.cv?.source === "upload";
-    const actions =
-      cvTile || manageCv ? (
-        <View style={{ gap: 14 }}>
-          {cvTile ? (
-            // The same slot the scanner's CV tile has: last of three.
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <View style={{ flex: 1 }} />
-              <View style={{ flex: 1 }} />
-              {cvTile}
-            </View>
-          ) : null}
-          {manageCv ? (
-            <Section>
-              <CvRow
-                label={t("networkingCvReplace")}
-                disabled={cvBusy !== null}
-                onPress={() => void changeCv("upload")}
-              />
-              <Separator />
-              <CvRow
-                label={t("networkingCvRemove")}
-                destructive
-                disabled={cvBusy !== null}
-                onPress={confirmRemoveCv}
-              />
-            </Section>
-          ) : null}
+    const actions = (
+      <View style={{ gap: 14 }}>
+        {/* The scanner's tile row: their favourite and note tiles, greyed and
+              inert here since they belong to whoever scans you (#934). */}
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            pointerEvents="none"
+            style={{ flex: 2, flexDirection: "row", gap: 10, opacity: 0.4 }}
+          >
+            <QuickAction
+              icon="star"
+              label={t("diaryFavourite")}
+              title={t("diaryFavourite")}
+              busy={false}
+              onPress={() => {}}
+            />
+            <QuickAction
+              icon="note.text"
+              label={t("diaryNote")}
+              title={t("diaryNote")}
+              busy={false}
+              onPress={() => {}}
+            />
+          </View>
+          {cvTile ?? <View style={{ flex: 1 }} />}
         </View>
-      ) : undefined;
+        {manageCv ? (
+          <Section>
+            <CvRow
+              label={t("networkingCvReplace")}
+              disabled={cvBusy !== null}
+              onPress={() => void changeCv("upload")}
+            />
+            <Separator />
+            <CvRow
+              label={t("networkingCvRemove")}
+              destructive
+              disabled={cvBusy !== null}
+              onPress={confirmRemoveCv}
+            />
+          </Section>
+        ) : null}
+      </View>
+    );
 
     if (!editing) {
       const preview = current.preview;
