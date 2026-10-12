@@ -1,5 +1,6 @@
 import { Gauge, HStack, Image, Link, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
+  accessibilityLabel,
   allowsTightening,
   background,
   contentTransition,
@@ -158,10 +159,8 @@ export const StaffActivityLayout = (
   const share = accredited ? Math.min(1, scannedCount / accredited) : null;
   const scanned = String(scannedCount);
 
-  // `2h 34m` from an hour, `34m 21s` below it, ticking live and never
-  // H:MM:SS (`compactCountdown`); `short` keeps the leading unit (`2h`,
-  // `34m`), `long` adds the seconds from an hour (`2h 34m 21s`). It is as wide as its value; a width cap scales it down rather
-  // than truncating.
+  // #966: hours/minutes normally, seconds only in the last five minutes.
+  // The native timer removes seconds entirely in Always-On and fits its width.
   const countdown = (
     size: number,
     color: string | null,
@@ -291,28 +290,17 @@ export const StaffActivityLayout = (
     </HStack>
   );
 
-  // H22/H25 / #966: one direct Scan action, with the same inset capsule
-  // in the island and on the Lock Screen.
+  // #966: one 44 pt circular action, named for VoiceOver, separate from progress.
   const scanButton = (color: string | null) =>
-    live ? (
-      <Link destination={props.scanUrl}>
+    live && labels.scan ? (
+      <Link destination={props.scanUrl} modifiers={[accessibilityLabel(labels.scan)]}>
         <HStack
-          spacing={5}
           modifiers={[
-            padding({ horizontal: 12, vertical: 8 }),
-            background(color ? "#0066CC" : "#3A3A3C", { shape: "capsule" }),
+            frame({ width: 44, height: 44, alignment: "center" }),
+            background(color ? "#0066CC" : "#3A3A3C", { shape: "circle" }),
           ]}
         >
-          <Image systemName="wave.3.right" color="#FFFFFF" size={14} />
-          <Text
-            modifiers={[
-              font({ size: 15, weight: "semibold" }),
-              lineLimit(1),
-              foregroundStyle("#FFFFFF"),
-            ]}
-          >
-            {labels.scan}
-          </Text>
+          <Image systemName="wave.3.right" color="#FFFFFF" size={20} />
         </HStack>
       </Link>
     ) : null;
@@ -383,7 +371,9 @@ export const StaffActivityLayout = (
     );
 
   const expandedLeading = (
-    <VStack modifiers={[padding({ leading: 8, top: 6 })]}>{glyph(islandAccent, 24)}</VStack>
+    <VStack modifiers={[padding({ leading: 8, top: 6 })]}>
+      {scanButton(islandAccent) ?? glyph(islandAccent, 24)}
+    </VStack>
   );
   // Inset from the island's rounded corners so labels never clip.
   const expandedTrailing = (
@@ -423,8 +413,6 @@ export const StaffActivityLayout = (
             {timeRange}
           </HStack>
         )}
-        {live ? <Spacer /> : null}
-        {scanButton(islandAccent)}
       </HStack>
       {live ? bar(islandAccent) : null}
     </VStack>
@@ -449,7 +437,8 @@ export const StaffActivityLayout = (
         <Spacer />
         {live ? liveBadge(12, bannerAccent ?? neutral) : null}
       </HStack>
-      <HStack alignment="bottom" spacing={12}>
+      <HStack alignment="center" spacing={12}>
+        {scanButton(bannerAccent)}
         <VStack
           alignment="leading"
           spacing={2}
@@ -472,12 +461,7 @@ export const StaffActivityLayout = (
           </VStack>
         )}
       </HStack>
-      {live ? (
-        <HStack alignment="center" spacing={12}>
-          {bar(bannerAccent) ?? <Spacer />}
-          {scanButton(bannerAccent)}
-        </HStack>
-      ) : null}
+      {live ? bar(bannerAccent) : null}
     </VStack>
   );
 

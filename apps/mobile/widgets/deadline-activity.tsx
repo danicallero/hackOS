@@ -141,10 +141,8 @@ export const DeadlineActivityLayout = (
     ),
   );
 
-  // `2h 34m` from an hour, `34m 21s` below it, ticking live and never
-  // H:MM:SS (`compactCountdown`); `short` keeps the leading unit (`2h`,
-  // `34m`), `long` adds the seconds from an hour (`2h 34m 21s`). It is as wide as its value; a width cap scales it down rather
-  // than truncating.
+  // #966: minute precision normally; seconds only in the last five minutes.
+  // The native timer removes seconds and their spacing in Always-On.
   const countdown = (
     size: number,
     color: string | null,
@@ -171,7 +169,7 @@ export const DeadlineActivityLayout = (
 
   // The hacking window's elapsed share (real time, not a fake fill).
   const bar = (color: string | null) =>
-    startsAt && validEnd && !submitted ? (
+    startsAt && validEnd ? (
       <ProgressView
         timerInterval={{ lower: startsAt, upper: endsAt }}
         countsDown={false}

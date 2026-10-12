@@ -1,5 +1,6 @@
 import { Gauge, HStack, Image, Link, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
+  accessibilityLabel,
   allowsTightening,
   background,
   contentTransition,
@@ -174,30 +175,20 @@ export const AccreditationActivityLayout = (
   const bar = (color: string | null) =>
     share !== null ? <ProgressView value={share} modifiers={[tint(color ?? neutral)]} /> : null;
 
-  // H22/H25 / #966: one direct Scan action, with the same inset capsule
-  // in the island and on the Lock Screen.
-  const scanButton = (color: string | null) => (
-    <Link destination={props.scanUrl}>
-      <HStack
-        spacing={5}
-        modifiers={[
-          padding({ horizontal: 12, vertical: 8 }),
-          background(color ? "#0066CC" : "#3A3A3C", { shape: "capsule" }),
-        ]}
-      >
-        <Image systemName="wave.3.right" color="#FFFFFF" size={14} />
-        <Text
+  // #966: one 44 pt circular action, named for VoiceOver, separate from progress.
+  const scanButton = (color: string | null) =>
+    labels.scan ? (
+      <Link destination={props.scanUrl} modifiers={[accessibilityLabel(labels.scan)]}>
+        <HStack
           modifiers={[
-            font({ size: 15, weight: "semibold" }),
-            lineLimit(1),
-            foregroundStyle("#FFFFFF"),
+            frame({ width: 44, height: 44, alignment: "center" }),
+            background(color ? "#0066CC" : "#3A3A3C", { shape: "circle" }),
           ]}
         >
-          {labels.scan}
-        </Text>
-      </HStack>
-    </Link>
-  );
+          <Image systemName="wave.3.right" color="#FFFFFF" size={20} />
+        </HStack>
+      </Link>
+    ) : null;
 
   // The window's end as a clock time beside a clock symbol.
   const closesAt = (size: number) =>
@@ -233,7 +224,7 @@ export const AccreditationActivityLayout = (
 
   const expandedLeading = (
     <VStack modifiers={[padding({ leading: 8, top: 6 })]}>
-      <Image systemName={symbol} color={islandAccent} size={24} />
+      {scanButton(islandAccent) ?? <Image systemName={symbol} color={islandAccent} size={24} />}
     </VStack>
   );
   const expandedTrailing = (
@@ -278,8 +269,6 @@ export const AccreditationActivityLayout = (
             </HStack>
           ) : null}
         </HStack>
-        <Spacer />
-        {scanButton(islandAccent)}
       </HStack>
       {bar(islandAccent)}
     </VStack>
@@ -300,15 +289,13 @@ export const AccreditationActivityLayout = (
         <Spacer />
         {closesAt(13)}
       </HStack>
-      <HStack alignment="bottom" spacing={12}>
+      <HStack alignment="center" spacing={12}>
+        {scanButton(bannerAccent)}
         {secondaryStats}
         <Spacer />
         {stat(labels.accredited, accreditedValue(28, bannerAccent), "trailing")}
       </HStack>
-      <HStack alignment="center" spacing={12}>
-        {bar(bannerAccent) ?? <Spacer />}
-        {scanButton(bannerAccent)}
-      </HStack>
+      {bar(bannerAccent)}
     </VStack>
   );
 

@@ -614,8 +614,9 @@ describe("New Live Activity kinds (#966)", () => {
       expect(colors(submitted.compactLeading)).toContain("#30D158");
       expect(texts(submitted.banner)).toEqual(expect.arrayContaining(["Submitted", "Closes in"]));
       expect(texts(submitted.bannerSmall)).toContain("Submitted");
-      // Calm: no urgency bar, the time left stays small.
-      expect(nodes(submitted.banner, "ProgressView")).toHaveLength(0);
+      // Submission keeps the elapsed window bar; the remaining time stays small.
+      expect(nodes(submitted.banner, "ProgressView")).toHaveLength(1);
+      expect(nodes(submitted.expandedBottom, "ProgressView")).toHaveLength(1);
     });
 
     it("works without a window start (no bar, the time left still minimal)", () => {
@@ -654,7 +655,7 @@ describe("New Live Activity kinds (#966)", () => {
     it("offers the single Scan action, never on the watch", () => {
       const layout = AccreditationActivityLayout(accreditation(), environment);
       expect(nodes(layout.banner, "Link")).toHaveLength(1);
-      expect(nodes(layout.expandedBottom, "Link")).toHaveLength(1);
+      expect(nodes(layout.expandedLeading, "Link")).toHaveLength(1);
       expect(nodes(layout.bannerSmall, "Link")).toHaveLength(0);
       expect(nodes(layout.banner, "Link")[0]?.props?.destination).toBe("hackos://scan");
     });
@@ -704,12 +705,12 @@ describe("New Live Activity kinds (#966)", () => {
       );
     }
 
-    it.each(states)("%s: `2h 34m` / `34m 21s` units, never H:MM:SS", (_name, layout) => {
+    it.each(states)("%s: every countdown uses the native unit renderer", (_name, layout) => {
       const found = countdowns(layout);
       expect(found.length).toBeGreaterThan(0);
       for (const [slot, text] of found) {
-        // The minimal view keeps the leading unit (`2h`, `34m`); expanded and
-        // Lock Screen heroes add the seconds from an hour (`2h 34m 21s`).
+        // Legacy form names all follow the same native five-minute / Always-On
+        // precision policy; each surface still supplies its own font size.
         const expected =
           slot === "minimal" ? ["short"] : slot === "compactTrailing" ? ["full"] : ["full", "long"];
         expect(expected).toContain(text.props?.compactCountdown);
@@ -719,7 +720,7 @@ describe("New Live Activity kinds (#966)", () => {
       }
     });
 
-    it("shows the seconds in the expanded and Lock Screen heroes", () => {
+    it("routes expanded and Lock Screen heroes through the native timer", () => {
       const layout = DeadlineActivityLayout(deadline(), environment);
       for (const slot of ["expandedTrailing", "banner"]) {
         const forms = nodes(layout[slot], "Text").map((text) => text.props?.compactCountdown);
@@ -851,7 +852,19 @@ describe("New Live Activity kinds (#966)", () => {
       expect(texts(attendeeLive[slot])).toContain(attendeeLabels.live);
       expect(texts(submitted[slot])).toContain(deadlineLabels.submitted);
       for (const layout of [staff, desk]) {
-        expect(nodes(layout[slot], "Link")).toHaveLength(1);
+        expect(
+          nodes(layout[slot === "expandedBottom" ? "expandedLeading" : slot], "Link"),
+        ).toHaveLength(1);
+        const link = nodes(layout.banner, "Link")[0]!;
+        expect(link.props?.modifiers).toEqual(
+          expect.arrayContaining([
+            {
+              modifier: "accessibilityLabel",
+              args: [layout === staff ? staffLabels.scan : deskLabels.scan],
+            },
+          ]),
+        );
+        expect(texts(link)).toHaveLength(0);
       }
       for (const layout of [called, attendeeLive, submitted]) {
         expect(nodes(layout[slot], "Link")).toHaveLength(0);

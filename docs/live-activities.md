@@ -617,7 +617,9 @@ The visual contract is in [`DESIGN.md`](./DESIGN.md#live-activities-on-ios-966):
 identity, secondary context + trailing primary metric, then progress/action.
 Lock Screen and expanded layouts preserve the compact presentation's relative
 placement, use one metric scale and show secondary numbers with less emphasis.
-Every Scan action uses the same inset capsule. Upcoming layouts are shorter
+Every Scan action uses the same 44 pt NFC circle with a localized accessibility
+label, separated from the full-width progress bar. Submitted deadlines keep
+the window bar. Upcoming layouts are shorter
 because they have no progress/action footer.
 
 - **One Live Activity per kind.** The queue activity tracks the nearest queue
@@ -633,13 +635,16 @@ because they have no progress/action footer.
   deep-links to the related screen.
 - **Live timers tick on the device.** Countdowns and the pitch timer travel
   as instants, never as per-second pushes. Countdowns read `2h 34m` /
-  `34m 21s` (rendering in [mobile.md](./mobile.md#live-activities-and-live-updates-966)).
+  `34m`, with seconds only in the last five minutes on every countdown surface;
+  Always-On removes seconds and their spacing without a placeholder (rendering
+  in [mobile.md](./mobile.md#live-activities-and-live-updates-966)).
   The widget picks the form when it renders, so the staff activity,
-  attendee activity and deadline props carry `countdownUnderHour`
-  (`countdownUnderHour()`, `@hackos/shared/live-activities`; optional, older
-  apps ignore it). It flips once, an hour before the countdown's target
+  attendee activity and deadline props carry `countdownUnderHour` and
+  `countdownLastFiveMinutes`
+  (`countdownUnderHour()` / `countdownLastFiveMinutes()`, shared; optional, older
+  apps ignore them). They flip at one hour and five minutes before the target
   (the start while upcoming, else the end), which changes the state hash and
-  sends one routine update.
+  sends one routine update per boundary.
 - **Few at once.** A device shows at most `maxConcurrent` (default 2), the
   most important leading the Dynamic Island.
 
@@ -660,7 +665,7 @@ Meal / activity (staff):
 | Presentation | Upcoming | Live |
 |---|---|---|
 | Compact leading | category symbol (fork.knife / person.3) | same |
-| Compact trailing | countdown to start (`1h 05m` / `34m 21s`) | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`, or when the ratio is longer than 7 characters, e.g. `1142/1380`, which no longer fits the slot); "Live" from the start until the live update brings the counts |
+| Compact trailing | countdown to start (`1h 05m` / `34m` / `4m 21s`) | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`, or when the ratio is longer than 7 characters, e.g. `1142/1380`, which no longer fits the slot); "Live" from the start until the live update brings the counts |
 | Minimal | countdown | progress ring `scanned / accredited` (the count without `accredited`) |
 | Expanded | name, location, `hh:mm–hh:mm`, countdown | symbol, Scanned `42/180`; name and live state; ends in beside **Scan**, then scanned-share bar |
 | Lock Screen | as expanded | as expanded |
@@ -670,7 +675,7 @@ Attendee activity:
 | Presentation | Upcoming | Live |
 |---|---|---|
 | Compact leading | category symbol | same |
-| Compact trailing | countdown to start (`1h 05m` / `34m 21s`) | "Live" (`labels.live`; older servers: "Now") |
+| Compact trailing | countdown to start (`1h 05m` / `34m` / `4m 21s`) | "Live" (`labels.live`; older servers: "Now") |
 | Minimal | countdown | symbol with a live dot |
 | Expanded | name, location, `hh:mm–hh:mm`, "Starts in" timer | symbol / "Ends in" countdown; name + "● Live", location, elapsed-time bar |
 | Lock Screen | as expanded | as expanded, with a progress bar from `startsAt` to `endsAt` |

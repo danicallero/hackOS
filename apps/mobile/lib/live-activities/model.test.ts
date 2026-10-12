@@ -195,10 +195,10 @@ describe("staff counter and boundaries", () => {
     expect(withScannedIncrement(activityProps({ scanned: 4 })).scanned).toBe(5);
   });
 
-  it("returns the next future start or end", () => {
+  it("returns the next precision or phase boundary", () => {
     const now = Date.parse("2026-02-20T11:50:00.000Z");
     expect(nextPhaseBoundary([queueItem(), activityItem()], now)).toBe(
-      Date.parse("2026-02-20T12:00:00.000Z"),
+      Date.parse("2026-02-20T11:55:00.000Z"),
     );
     expect(nextPhaseBoundary([queueItem()], now)).toBeNull();
   });

@@ -1228,11 +1228,13 @@ HIG](https://developer.apple.com/design/human-interface-guidelines/live-activiti
 
 - Lock Screen: 14 pt system margins, 10 pt between rows; icon + title and
   optional state on the first row, secondary context leading and the primary
-  metric trailing on the second, then progress and the optional Scan action.
+  metric trailing on the second, then full-width progress. Scan sits beside
+  secondary context in the second row.
 - Expanded island: leading identity (or queue position, matching compact),
   trailing primary metric; the bottom region contains title, context and
-  finally progress. Staff/desk place Scan beside secondary context to stay
-  inside the expanded height budget (4 pt row gaps and bottom inset); other
+  finally progress. Staff/desk put the circular Scan action in the leading
+  top slot to stay inside the expanded height budget (4 pt row gaps and bottom
+  inset); other
   kinds use 8 pt row gaps and bottom inset. Keep controls clear of the curved
   corners. Preserve the relative placement of changing values
   across compact, expanded and Lock Screen presentations.
@@ -1243,11 +1245,16 @@ HIG](https://developer.apple.com/design/human-interface-guidelines/live-activiti
   remaining timer and promote the completed state.
 - Icons are bare SF Symbols: 17 pt in Lock Screen headers, 24 pt in expanded
   identity slots, 15 pt compact. No nested icon containers or decorative badges.
-- Scan is the only explicit action on staff/desk surfaces: one inset capsule,
-  15 pt semibold text, 14 pt NFC symbol, 12 pt horizontal / 8 pt vertical
-  padding, placed after the content at the trailing edge in both presentations.
-  Its opaque blue fill is `#0066CC` (5.57:1 with white text), reduced to neutral
-  `#3A3A3C` for Always-On. Hero/state tints retain their semantic colours.
+- Scan is the only explicit action on staff/desk surfaces: a 44 pt circle
+  with a 20 pt NFC symbol and a localized accessibility label. Place it leading
+  beside secondary context on the Lock Screen and in the expanded leading slot;
+  progress always occupies its own full-width row. The opaque blue fill is
+  `#0066CC`, reduced to neutral `#3A3A3C` in Always-On.
+- Countdowns use `2h 34m` / `34m` normally; only the last five minutes show
+  seconds (`4m 59s`) on every countdown surface, including minimal and small.
+  Always-On removes the seconds field and its spacing, leaving `4m` / `0m`;
+  waking restores seconds. Never render a seconds placeholder.
+- The submission window's elapsed bar remains visible after submission.
 - Keep semantic colour, dynamic light/dark Lock Screen accents and reduced
   luminance handling. Colour never replaces a state label or symbol. Continuous
   progress bars share a treatment; the queue retains its meaningful stage track.

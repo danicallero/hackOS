@@ -68,6 +68,7 @@ type StaffSample = {
   phase: ActivityLiveProps["phase"];
   meal: boolean;
   startsIn?: number;
+  endsIn?: number;
   long?: boolean;
 };
 
@@ -75,6 +76,7 @@ function staff({
   phase,
   meal,
   startsIn = 18 * MINUTE,
+  endsIn,
   long = false,
 }: StaffSample): DesiredActivity {
   const now = Date.now();
@@ -97,7 +99,9 @@ function staff({
       category: meal ? "meal" : "ceremony",
       location: long ? "Faculty of Computer Science main hall" : meal ? "Cafeteria" : "Main hall",
       startsAt: new Date(startsAt).toISOString(),
-      endsAt: new Date(startsAt + (startsIn < MINUTE * 2 ? 65 : 90) * MINUTE).toISOString(),
+      endsAt: new Date(
+        endsIn === undefined ? startsAt + (startsIn < MINUTE * 2 ? 65 : 90) * MINUTE : now + endsIn,
+      ).toISOString(),
       scanned: live ? (long ? 1142 : 142) : 0,
       accredited: live ? (long ? 1380 : 180) : null,
       scanUrl: `hackos://scan?activity=${id}`,
@@ -152,6 +156,8 @@ const SAMPLES: Record<string, () => DesiredActivity[]> = {
       long: true,
     }),
   ],
+  "staff-upcoming-soon": () => [staff({ phase: "upcoming", meal: false, startsIn: 4 * MINUTE })],
+  "staff-live-ending": () => [staff({ phase: "live", meal: true, endsIn: 4 * MINUTE })],
   "staff-live-long": () => [staff({ phase: "live", meal: true, long: true })],
   "queue-waiting-long": () => [
     queue({ ...waiting, position: 128, etaMinutes: 184, queueTotal: 140 }, true),
@@ -229,15 +235,17 @@ function deadline(
   phase: DeadlineLiveProps["phase"],
   submission: DeadlineLiveProps["submission"],
   long = false,
+  endsIn?: number,
 ): DesiredActivity {
   const now = Date.now();
   const endsAt =
     now +
-    (phase === "closing"
-      ? 11 * MINUTE
-      : long
-        ? 22 * 60 * MINUTE + 45 * MINUTE
-        : 2 * 60 * MINUTE + 41 * MINUTE);
+    (endsIn ??
+      (phase === "closing"
+        ? 11 * MINUTE
+        : long
+          ? 22 * 60 * MINUTE + 45 * MINUTE
+          : 2 * 60 * MINUTE + 41 * MINUTE));
   return {
     kind: "deadline",
     subject: DEADLINE_LIVE_ACTIVITY_SUBJECT,
@@ -287,11 +295,15 @@ function accreditation(long = false): DesiredActivity {
 const KIND_SAMPLES: Record<string, () => DesiredActivity[]> = {
   "attendee-upcoming": () => [attendee("upcoming")],
   "attendee-live": () => [attendee("live")],
+  "attendee-upcoming-soon": () => [attendee("upcoming", 4 * MINUTE)],
   "attendee-starting": () => [attendee("upcoming", MINUTE)],
   "attendee-upcoming-long": () => [attendee("upcoming", 14 * 60 * MINUTE + 23 * MINUTE, true)],
   "attendee-live-long": () => [attendee("live", 12 * MINUTE, true)],
   "deadline-open": () => [deadline("open", "draft")],
   "deadline-open-unknown": () => [deadline("open", null)],
+  "deadline-last-five": () => [deadline("closing", "draft", false, 4 * MINUTE)],
+  "deadline-last-minute": () => [deadline("closing", "draft", false, 55_000)],
+  "deadline-submitted-soon": () => [deadline("submitted", "submitted", false, 4 * MINUTE)],
   "deadline-closing": () => [deadline("closing", "draft")],
   "deadline-submitted": () => [deadline("submitted", "submitted")],
   "deadline-open-long": () => [deadline("open", "draft", true)],

@@ -170,7 +170,7 @@ export const LIVE_COUNTDOWN_HOUR_MS = 3_600_000;
 
 /**
  * Whether the countdown to `target` is under an hour (#966). The iOS widget
- * shows `2h 34m` from an hour and `34m 21s` below it, and picks the form only
+ * shows `2h 34m` from an hour and `34m` below it, and picks the form only
  * when it renders, so the props carry this flag: it flips once, at the hour,
  * which changes the state hash and sends the one update that re-renders the
  * widget in the shorter form.
@@ -179,6 +179,13 @@ export function countdownUnderHour(target: string | Date, now: Date | number): b
   const at = typeof target === "string" ? Date.parse(target) : target.getTime();
   const from = typeof now === "number" ? now : now.getTime();
   return at - from < LIVE_COUNTDOWN_HOUR_MS;
+}
+
+/** #966: re-render once when seconds become relevant on iOS countdowns. */
+export function countdownLastFiveMinutes(target: string | Date, now: Date | number): boolean {
+  const at = typeof target === "string" ? Date.parse(target) : target.getTime();
+  const from = typeof now === "number" ? now : now.getTime();
+  return at - from <= 300_000;
 }
 
 export interface ActivityLiveLabels {
@@ -224,6 +231,8 @@ export interface ActivityLiveProps {
   labels: ActivityLiveLabels;
   /** The countdown shown is under an hour (`countdownUnderHour`). Optional (post-v1). */
   countdownUnderHour?: boolean;
+  /** Re-render at five minutes remaining; seconds hide again in Always-On. */
+  countdownLastFiveMinutes?: boolean;
   /** Device rank among the Live Activities it shows (0 = most important). Optional (post-v1). */
   rank?: number;
   updatedAt: string;
@@ -277,6 +286,8 @@ export interface AttendeeActivityLiveProps {
   labels: AttendeeActivityLiveLabels;
   /** The countdown shown is under an hour (`countdownUnderHour`). Optional (post-v1). */
   countdownUnderHour?: boolean;
+  /** Re-render at five minutes remaining; seconds hide again in Always-On. */
+  countdownLastFiveMinutes?: boolean;
   /** Device rank among the Live Activities it shows (0 = most important). */
   rank?: number;
   updatedAt: string;
@@ -326,6 +337,8 @@ export interface DeadlineLiveProps {
   labels: DeadlineLiveLabels;
   /** The countdown shown is under an hour (`countdownUnderHour`). Optional (post-v1). */
   countdownUnderHour?: boolean;
+  /** Re-render at five minutes remaining; seconds hide again in Always-On. */
+  countdownLastFiveMinutes?: boolean;
   rank?: number;
   updatedAt: string;
 }

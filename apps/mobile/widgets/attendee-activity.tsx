@@ -143,10 +143,8 @@ export const AttendeeActivityLayout = (
       : startsAt.getTime() - 3_600_000,
   );
 
-  // Upcoming counts down to the start, live to the end: `2h 34m` from an hour, `34m 21s` below it, ticking live and never
-  // H:MM:SS (`compactCountdown`); `short` keeps the leading unit (`2h`,
-  // `34m`), `long` adds the seconds from an hour (`2h 34m 21s`). It is as wide as its value; a width cap scales it down rather
-  // than truncating.
+  // #966: minute precision normally; seconds only in the last five minutes.
+  // The native timer removes seconds and their spacing in Always-On.
   const timer = (
     size: number,
     color: string | null,
