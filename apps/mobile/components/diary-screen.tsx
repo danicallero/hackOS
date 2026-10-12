@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAccountWallet, WalletModal } from "@/components/account-wallet";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
 import { CompanyAlbum, CompanySheet } from "@/components/company-album";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
@@ -25,6 +26,7 @@ import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SegmentedControl } from "@/components/segmented-control";
+import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { type DiaryEntry, diaryScanErrorKey, upsertDiaryEntry } from "@/lib/diary";
 import {
@@ -88,6 +90,7 @@ export function DiaryScreen() {
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
+  const wallet = useAccountWallet();
   const scrollRef = useRef<ScrollView>(null);
   // iOS rests at a negative offset under `contentInsetAdjustmentBehavior=
   // "automatic"`, so `y: 0` would leave the first rows under the status bar.
@@ -400,7 +403,10 @@ export function DiaryScreen() {
   }
 
   const headerItems = (
-    <FavouritesToggle visible={searchable} on={favouritesOnly} onToggle={toggleFavourites} />
+    <>
+      <FavouritesToggle visible={searchable} on={favouritesOnly} onToggle={toggleFavourites} />
+      <WalletToggle onToggle={wallet.toggle} />
+    </>
   );
 
   useLayoutEffect(() => {
@@ -544,6 +550,7 @@ export function DiaryScreen() {
   );
   const overlays = (
     <>
+      <WalletModal wallet={wallet} />
       <NfcReader
         visible={input === "nfc"}
         onValue={(uid) => void submitScan(uid)}
@@ -614,10 +621,9 @@ export function DiaryScreen() {
             </Text>
           </Stack.Toolbar.View>
         </Stack.Toolbar>
-        {searchable ? (
-          // A native SF Symbol bar item, so the system draws the same circle
-          // as its search button.
-          <Stack.Toolbar placement="right">
+        {/* Native SF Symbol bar items, so the system draws the same circles as its search button. */}
+        <Stack.Toolbar placement="right">
+          {searchable ? (
             <Stack.Toolbar.Button
               icon={favouritesOnly ? "star.fill" : "star"}
               accessibilityLabel={t("diaryShowFavourites")}
@@ -625,8 +631,13 @@ export function DiaryScreen() {
               tintColor={favouritesOnly ? colors.warning : undefined}
               onPress={toggleFavourites}
             />
-          </Stack.Toolbar>
-        ) : null}
+          ) : null}
+          <Stack.Toolbar.Button
+            icon="wallet.pass"
+            accessibilityLabel={t("tabWallet")}
+            onPress={wallet.toggle}
+          />
+        </Stack.Toolbar>
         {overlays}
       </>
     );
@@ -635,19 +646,14 @@ export function DiaryScreen() {
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       <LegacyScreenHeader
         actions={
-          searchable ? (
-            <GlassView
-              colorScheme="auto"
-              glassEffectStyle="regular"
-              isInteractive
-              style={{ borderRadius: 22, height: 44, width: 44 }}
-            >
-              {headerItems}
-            </GlassView>
-          ) : (
-            // Keeps the title row's height, so switching segments never jumps.
-            <View style={{ height: 44 }} />
-          )
+          <GlassView
+            colorScheme="auto"
+            glassEffectStyle="regular"
+            isInteractive
+            style={{ borderRadius: 22, flexDirection: "row", height: 44 }}
+          >
+            {headerItems}
+          </GlassView>
         }
         cancelLabel={t("cancel")}
         onCloseSearch={() => {
@@ -698,6 +704,27 @@ function FavouritesToggle({
     >
       {/* Material Symbols ship only an outlined star; this one also fills. */}
       <FavouriteStar on={on} />
+    </Pressable>
+  );
+}
+
+/** The wallet (badge QR) button in `LegacyScreenHeader`, beside the favourites star. */
+function WalletToggle({ onToggle }: { onToggle: () => void }) {
+  const { t } = useLocale();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={t("tabWallet")}
+      onPress={onToggle}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        height: 44,
+        justifyContent: "center",
+        opacity: pressed ? 0.6 : 1,
+        width: 44,
+      })}
+    >
+      <SymbolView accessible={false} name="wallet.pass" size={19} tintColor={colors.label} />
     </Pressable>
   );
 }
