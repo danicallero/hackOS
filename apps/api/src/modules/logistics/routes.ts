@@ -210,6 +210,11 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   const activity = requireCapability(CAPABILITIES.ACTIVITY_SCAN);
   const stats = requireCapability(CAPABILITIES.LOGISTICS_STATS);
   const scheduleManage = requireCapability(CAPABILITIES.SCHEDULE_MANAGE);
+  // schedule:manage implies read (H48, H59).
+  const scheduleRead = requireAnyCapability(
+    CAPABILITIES.SCHEDULE_READ,
+    CAPABILITIES.SCHEDULE_MANAGE,
+  );
   // Read guards let a station load its own data without the stats capability:
   // a door operator (PRESENCE_SCAN) sees occupancy/hours; a meal/activity
   // operator (ACTIVITY_SCAN) can list scannable activities with live counts.
@@ -236,6 +241,10 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     activity: { kind: "capability", capability: CAPABILITIES.ACTIVITY_SCAN } as const,
     stats: { kind: "capability", capability: CAPABILITIES.LOGISTICS_STATS } as const,
     scheduleManage: { kind: "capability", capability: CAPABILITIES.SCHEDULE_MANAGE } as const,
+    scheduleRead: {
+      kind: "capability",
+      anyOf: [CAPABILITIES.SCHEDULE_READ, CAPABILITIES.SCHEDULE_MANAGE],
+    } as const,
     presenceRead: {
       kind: "capability",
       anyOf: [CAPABILITIES.PRESENCE_SCAN, CAPABILITIES.LOGISTICS_STATS],
@@ -857,13 +866,14 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/schedule",
     {
-      ...routeAccess(access.scheduleManage),
-      preHandler: scheduleManage,
+      ...routeAccess(access.scheduleRead),
+      preHandler: scheduleRead,
       schema: {
-        summary: "Manage the schedule",
+        summary: "List the full schedule",
         description:
           "Every schedule item, drafts included, with owners, for the staff run-of-show " +
-          "(H48, H59). `liveActivityAudience` says whether the item's audience gets an " +
+          "(H48, H59). Open to `schedule:read` (view only) and `schedule:manage` holders. " +
+          "`liveActivityAudience` says whether the item's audience gets an " +
           "attendee Live Activity (#966).",
       },
     },
@@ -1045,8 +1055,8 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/schedule/:id/owners",
     {
-      ...routeAccess(access.scheduleManage),
-      preHandler: scheduleManage,
+      ...routeAccess(access.scheduleRead),
+      preHandler: scheduleRead,
       schema: {
         params: scheduleIdParam,
         summary: "List a schedule item's responsible person(s)",

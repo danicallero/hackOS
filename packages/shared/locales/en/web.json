@@ -2956,6 +2956,7 @@
   "capabilityDescriptionJudgingExport": "Export judging scores and results",
   "capabilityDescriptionSponsorsManage": "Manage enterprises and sponsor invites",
   "capabilityDescriptionChallengesManage": "Create, edit, and publish sponsor challenges",
+  "capabilityDescriptionScheduleRead": "View the full event schedule, including hidden and unpublished entries and staff fields",
   "capabilityDescriptionScheduleManage": "Manage the event schedule",
   "capabilityDescriptionAnnouncementsManage": "Create and send announcements",
   "capabilityDescriptionTvControl": "Control what displays on TV screens",

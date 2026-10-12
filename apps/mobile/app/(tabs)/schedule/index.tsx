@@ -1,4 +1,3 @@
-import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import {
@@ -66,7 +65,7 @@ import {
   updateScheduleItem,
   upsertScheduleItem,
 } from "@/lib/schedule";
-import { has } from "@/lib/tabs";
+import { canManageSchedule, canReadFullSchedule } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
@@ -156,7 +155,8 @@ export default function ScheduleScreen() {
   const insets = useSafeAreaInsets();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const tabBarScrollBottomInset = useRouterTabBarScrollBottomInset();
-  const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
+  const canManage = canManageSchedule(me?.capabilities ?? []);
+  const canReadFull = canReadFullSchedule(me?.capabilities ?? []);
   const scheduleScrollGuardEnabled = process.env.EXPO_OS === "android" && canManage;
   const scheduleScrollGesture = useNativeGesture({ enabled: scheduleScrollGuardEnabled });
 
@@ -701,7 +701,7 @@ export default function ScheduleScreen() {
         kinds={kinds}
         selectedKinds={selectedKinds}
         onToggleKind={toggleKind}
-        showAudience={canManage}
+        showAudience={canReadFull}
         selectedAudiences={selectedAudiences}
         onToggleAudience={toggleAudience}
         onClear={() => {

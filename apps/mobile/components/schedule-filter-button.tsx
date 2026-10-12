@@ -85,7 +85,7 @@ export interface ScheduleFilterAnchor {
  * layer regardless of where it's triggered from. `anchor` is the trigger's
  * on-screen frame (from `measureInWindow`) so the panel still opens right
  * under it. Kind multi-select is open to everyone; audience multi-select is
- * shown only to callers with SCHEDULE_MANAGE. Both dimensions AND together.
+ * shown only to callers with SCHEDULE_READ or SCHEDULE_MANAGE. Both dimensions AND together.
  */
 export function ScheduleFilterPanel({
   open,

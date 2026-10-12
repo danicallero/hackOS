@@ -403,11 +403,11 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | GET | `/api/roles/capability-catalogue` | capability:permissions:manage |
 | GET | `/api/scanner/role-stats` | capability:anyOf(accredit:scan,presence:scan,activity:scan,logistics:stats,schedule:manage) |
 | GET | `/api/scanner/snapshot` | capability:anyOf(accredit:scan,presence:scan,activity:scan,logistics:stats,schedule:manage) |
-| GET | `/api/schedule` | capability:schedule:manage |
+| GET | `/api/schedule` | capability:anyOf(schedule:read,schedule:manage) |
 | POST | `/api/schedule` | capability:schedule:manage + email-verification:caller |
 | DELETE | `/api/schedule/:id` | capability:schedule:manage + email-verification:caller |
 | PATCH | `/api/schedule/:id` | capability:schedule:manage + email-verification:caller |
-| GET | `/api/schedule/:id/owners` | capability:schedule:manage |
+| GET | `/api/schedule/:id/owners` | capability:anyOf(schedule:read,schedule:manage) |
 | POST | `/api/schedule/:id/owners` | capability:schedule:manage + email-verification:caller |
 | DELETE | `/api/schedule/:id/owners/:ownerId` | capability:schedule:manage + email-verification:caller |
 | PUT | `/api/schedule/:id/translations` | capability:schedule:manage + email-verification:caller |
