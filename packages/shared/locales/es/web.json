@@ -2956,6 +2956,7 @@
   "capabilityDescriptionJudgingExport": "Exportar puntuaciones y resultados de evaluación",
   "capabilityDescriptionSponsorsManage": "Gestionar empresas e invitaciones de patrocinio",
   "capabilityDescriptionChallengesManage": "Crear, editar y publicar retos de patrocinadores",
+  "capabilityDescriptionScheduleRead": "Ver el programa completo del evento, incluidas las entradas ocultas y sin publicar y los campos del equipo",
   "capabilityDescriptionScheduleManage": "Gestionar el programa del evento",
   "capabilityDescriptionAnnouncementsManage": "Crear y enviar anuncios",
   "capabilityDescriptionTvControl": "Controlar lo que se muestra en las pantallas de TV",

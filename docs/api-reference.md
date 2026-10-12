@@ -337,7 +337,9 @@ one — every item regardless of state, including drafts and items still
 scheduled to reveal, each with its owners, contactNote, notes, and its own
 `visibility` (staff-only field, lets a client tell a draft apart from a live
 item) — previewing a draft on the run-of-show doesn't require publishing it
-first. The `SCHEDULE_MANAGE`-gated `GET /api/schedule` is the same full
+first. The `GET /api/schedule` listing (and `GET /api/schedule/:id/owners`),
+gated by `SCHEDULE_READ` or `SCHEDULE_MANAGE` — `schedule:read` is view-only,
+and `schedule:manage` implies it — is the same full
 listing plus bulk-management concerns and is what the web "Manage Schedule"
 table uses. A linked sponsor rep instead only sees *live* items explicitly
 tagged `sponsor`, with owners/contactNote but never the (staff-internal)
