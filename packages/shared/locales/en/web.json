@@ -941,6 +941,8 @@
   "scheduleKindColumn": "Activity kind",
   "scheduleAudienceColumn": "Audience",
   "scheduleScannableColumn": "Scannable",
+  "scheduleLiveActivityColumn": "Live Activity",
+  "exportCsvAction": "Export CSV",
   "schedulePublishDateColumn": "Publish date",
   "inlineTimeRollTooLong": "Over {hours} h once it crosses midnight — set the dates in the item editor.",
   "publishDateStaffOnlyHint": "Staff-only items have no publish date — staff always sees them.",

@@ -941,6 +941,8 @@
   "scheduleKindColumn": "Tipo de actividad",
   "scheduleAudienceColumn": "Audiencia",
   "scheduleScannableColumn": "Escaneable",
+  "scheduleLiveActivityColumn": "Actividad en directo",
+  "exportCsvAction": "Exportar CSV",
   "schedulePublishDateColumn": "Fecha de publicación",
   "inlineTimeRollTooLong": "Más de {hours} h al pasar de medianoche: pon las fechas en el editor del elemento.",
   "publishDateStaffOnlyHint": "Los elementos solo para staff no tienen fecha de publicación: el staff siempre los ve.",

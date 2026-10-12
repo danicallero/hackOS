@@ -46,6 +46,7 @@ import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { ActivityRow } from "./schedule-activity-row";
 import { BulkSchedulePopover, MoveToDateModal, useScheduleFilters } from "./schedule-dialogs";
+import { ScheduleExportButton } from "./schedule-export-button";
 import {
   cleanScheduleForm,
   EMPTY_SCHEDULE_FORM,
@@ -406,6 +407,10 @@ export default function SchedulePage() {
                   <BulkSchedulePopover disabled={busy} onApply={bulkSchedule} />
                 </>
               )}
+              <ScheduleExportButton
+                items={groups.flatMap((group) => group.items)}
+                config={tableConfig}
+              />
               <ColumnConfigPopover config={tableConfig} onChange={setTableConfig} />
             </div>
           }

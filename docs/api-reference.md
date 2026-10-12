@@ -345,6 +345,15 @@ table uses. A linked sponsor rep instead only sees *live* items explicitly
 tagged `sponsor`, with owners/contactNote but never the (staff-internal)
 notes/visibility. One feed, not three parallel endpoints.
 
+The Manage Schedule table's optional "Live Activity" column reads the listing's
+`liveActivityAudience` (#966), and its "Export CSV" action (any
+`schedule:read`/`schedule:manage` holder) builds the file client-side from the
+rows already on screen — search and filters applied, the chosen columns in the
+table's current order, localized dates/audiences/yes-no, UTF-8 BOM for Excel,
+`schedule-YYYY-MM-DD.csv`. There is no server export run (`EXPORTS_RUN`) or
+audit entry: it adds no data beyond what the listing already returns (H53).
+Times use the browser's time zone, like the table itself.
+
 ### notifications (H50–H53)
 The in-app inbox, scheduled announcements (with translations and a
 publication window), per-user notification preferences, multi-channel

@@ -37,6 +37,7 @@ export type ColumnId =
   | "type"
   | "audience"
   | "scannable"
+  | "liveActivity"
   | "publishAt"
   | "location"
   | "item"
@@ -51,6 +52,7 @@ export const COLUMN_LABEL_KEYS: Record<ColumnId, MessageKey> = {
   type: "scheduleKindColumn",
   audience: "scheduleAudienceColumn",
   scannable: "scheduleScannableColumn",
+  liveActivity: "scheduleLiveActivityColumn",
   publishAt: "schedulePublishDateColumn",
   location: "locationLabel",
   item: "colItem",
@@ -66,6 +68,7 @@ const DEFAULT_COLUMN_WIDTHS: Record<ColumnId, number> = {
   type: 124,
   audience: 150,
   scannable: 96,
+  liveActivity: 140,
   publishAt: 156,
   location: 140,
   item: 320,
@@ -80,13 +83,14 @@ const COLUMN_FLOOR_WIDTHS: Partial<Record<ColumnId, number>> = { duration: 96 };
 const MIN_COLUMN_WIDTH = 56;
 const MAX_COLUMN_WIDTH = 480;
 
-const DEFAULT_COLUMN_ORDER: ColumnId[] = [
+export const DEFAULT_COLUMN_ORDER: ColumnId[] = [
   "starts",
   "ends",
   "duration",
   "type",
   "audience",
   "scannable",
+  "liveActivity",
   "publishAt",
   "location",
   "item",
@@ -156,7 +160,7 @@ function sanitizeWidths(raw: unknown): Record<ColumnId, number> {
   return widths;
 }
 
-function sanitizeTableConfig(raw: unknown): TableConfig | null {
+export function sanitizeTableConfig(raw: unknown): TableConfig | null {
   if (!raw || typeof raw !== "object") return null;
   const obj = raw as { order?: unknown; hidden?: unknown; widths?: unknown };
   const order = Array.isArray(obj.order) ? obj.order.filter(isColumnId) : [];
