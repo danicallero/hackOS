@@ -386,30 +386,45 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
   return { room, state, challenge, active, called, next, crossRoomSkips };
 }
 
+/** Why call_next passed over a waiting entry without moving it. */
+export type CrossRoomSkip =
+  | {
+      entryId: number;
+      position: number | null;
+      reason: "busy_member";
+      blockingRoomId: number;
+      blockingRoomName: string;
+      blockingTeamName: string;
+      blockingStatus: string;
+      positionPreserved: true;
+    }
+  | {
+      entryId: number;
+      position: number | null;
+      reason: "ineligible";
+      positionPreserved: true;
+    };
+
 /**
- * For each given waiting entry, reports the OTHER live queue_entries row
- * (called/in_room/presenting) that shares a team member and is therefore
- * blocking call_next from selecting it (H30). Mirrors
- * `isRepoBlockedByBusyMember` (guard.ts) exactly, minus the advisory lock —
- * this is informational only, never used to decide a transition. Exposes
- * just enough context to explain the skip (blocking room + team name)
- * without leaking which specific member is shared.
+ * For each given waiting entry, reports why call_next skips it: the project
+ * is not eligible for judging (H38, checked first, as call_next does), or
+ * the OTHER live queue_entries row (called/in_room/presenting) that shares a
+ * team member (H30). Mirrors `isRepoIneligibleForJudging` and
+ * `findBusyMemberEntry` (guard.ts), minus the advisory lock — this is
+ * informational only, never used to decide a transition. Exposes just enough
+ * context to explain the skip (blocking room + team name) without leaking
+ * which specific member is shared.
  */
 async function crossRoomSkipReasons(
   roomId: number,
   entries: { id: number; repo_id: number; position: number | null }[],
-): Promise<
-  {
-    entryId: number;
-    position: number | null;
-    blockingRoomId: number;
-    blockingRoomName: string;
-    blockingTeamName: string;
-    blockingStatus: string;
-    positionPreserved: true;
-  }[]
-> {
+): Promise<CrossRoomSkip[]> {
   if (entries.length === 0) return [];
+  const { rows: ineligibleRows } = await pool.query<{ id: number }>(
+    `SELECT id FROM project_reconciliation_state WHERE id = ANY($1) AND eligible = false`,
+    [entries.map((e) => e.repo_id)],
+  );
+  const ineligible = new Set(ineligibleRows.map((r) => r.id));
   const { rows } = await pool.query(
     `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL})
      SELECT DISTINCT ON (qe.id)
@@ -439,21 +454,28 @@ async function crossRoomSkipReasons(
       }[]
     ).map((r) => [r.entry_id, r]),
   );
-  return entries
-    .filter((e) => byEntryId.has(e.id))
-    .map((e) => {
-      const r = byEntryId.get(e.id)!;
-      return {
+  // H30 guarantee: a skip never reorders the queue, only call_next does.
+  return entries.flatMap((e): CrossRoomSkip[] => {
+    if (ineligible.has(e.repo_id)) {
+      return [
+        { entryId: e.id, position: e.position, reason: "ineligible", positionPreserved: true },
+      ];
+    }
+    const r = byEntryId.get(e.id);
+    if (!r) return [];
+    return [
+      {
         entryId: e.id,
         position: e.position,
+        reason: "busy_member",
         blockingRoomId: r.blocking_room_id,
         blockingRoomName: r.blocking_room_name,
         blockingTeamName: r.blocking_team_name,
         blockingStatus: r.blocking_status,
-        // H30 guarantee: a skip never reorders the queue, only call_next does.
         positionPreserved: true,
-      };
-    });
+      },
+    ];
+  });
 }
 
 /** H46 read surface: current room -> enterprise pool, serving queue_group, and the judges that follow. */
@@ -625,7 +647,11 @@ export async function challengeEtaMinutesPerSlot(
   );
   const avg = Number(rows[0].avg);
   const roomCount = Math.max(1, Number(rows[0].rooms));
-  return avg / roomCount;
+  const timing = await pool.query(
+    `SELECT t.estimated_cycle_minutes FROM queue_group_challenges qgc CROSS JOIN LATERAL queue_group_timing(qgc.queue_group_id) t WHERE qgc.challenge_id=$1`,
+    [challengeId],
+  );
+  return Number(timing.rows[0]?.estimated_cycle_minutes ?? avg) / roomCount;
 }
 
 /** Same ETA formula as myQueueStatus (H38), applied to an arbitrary set of waiting entries. */
@@ -691,7 +717,7 @@ WITH viewer AS (
     WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
       AND u.is_test_account = v.is_test_account
       AND er.is_test_account = v.is_test_account
-      AND (lower(dp.email) = lower(u.email)
+      AND ((u.email_verified AND lower(dp.email) = lower(u.email))
        OR (u.secondary_email_verified_at IS NOT NULL
            AND lower(dp.email) = lower(u.secondary_email)))
  ), enterprise_markers AS (
@@ -853,6 +879,17 @@ export async function myQueueStatus(userId: number) {
           AND qgc.queue_group_id IN (
             SELECT DISTINCT queue_key FROM my_entries
           )
+          -- H38/H46: a sibling already called or judged consumes this team's
+          -- shared-queue turn, just as in waitingQueueView/callNextForRoom.
+          AND NOT EXISTS (
+            SELECT 1 FROM queue_entries sibling
+            JOIN queue_group_challenges sibling_group
+              ON sibling_group.challenge_id = sibling.challenge_id
+             AND sibling_group.queue_group_id = qgc.queue_group_id
+            WHERE sibling.repo_id = qe.repo_id
+              AND sibling.id <> qe.id
+              AND sibling.status IN ('called', 'in_room', 'presenting', 'completed')
+          )
      ), waiting_ranks AS (
        SELECT id,
               CASE WHEN position IS NULL THEN 1
@@ -865,8 +902,8 @@ export async function myQueueStatus(userId: number) {
          FROM waiting_order
      ), queue_pace AS (
        SELECT qgc.challenge_id,
-              COALESCE(AVG(rqs.desired_minutes_per_team), 8) /
-                GREATEST(1, COUNT(rqs.room_id)) AS minutes_per_slot
+              (SELECT t.estimated_cycle_minutes FROM queue_group_challenges timing_group CROSS JOIN LATERAL queue_group_timing(timing_group.queue_group_id) t WHERE timing_group.challenge_id=qgc.challenge_id) /
+                GREATEST(1, COUNT(rqs.room_id) FILTER (WHERE NOT rqs.is_paused)) AS minutes_per_slot
          FROM queue_group_challenges qgc
          JOIN visible_queue_groups vq ON vq.queue_group_id = qgc.queue_group_id
          JOIN (SELECT DISTINCT challenge_id FROM my_entries) mine
@@ -881,6 +918,32 @@ export async function myQueueStatus(userId: number) {
      SELECT qe.*, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title, r.name AS repo_name,
             ar.id AS called_room_id, ar.name AS called_room_name, ar.location AS called_room_location,
             wr.queue_rank,
+            -- #966 Live Activity progress: every team in this queue (group),
+            -- judged or still to go, counted like queue_rank (one per repo).
+            CASE WHEN qe.status = 'waiting' THEN (
+              SELECT COUNT(DISTINCT t.repo_id)
+                FROM queue_entries t
+                JOIN repos tr ON tr.id = t.repo_id
+                JOIN challenges tc ON tc.id = t.challenge_id
+                JOIN queue_group_challenges tg ON tg.challenge_id = t.challenge_id
+               WHERE tg.queue_group_id = mine.queue_key
+                 AND t.status NOT IN ('cancelled', 'disqualified')
+                 AND tr.is_test_account = v.is_test_account
+                 AND tc.is_test_account = v.is_test_account
+            ) END::int AS queue_total,
+            -- #966: other teams called to the same room earlier and still not in it.
+            CASE WHEN qe.status = 'called' AND qe.assigned_room_id IS NOT NULL THEN (
+              SELECT COUNT(DISTINCT o.repo_id)
+                FROM queue_entries o
+                JOIN repos orp ON orp.id = o.repo_id
+                JOIN challenges oc ON oc.id = o.challenge_id
+               WHERE o.assigned_room_id = qe.assigned_room_id
+                 AND o.status = 'called'
+                 AND o.repo_id <> qe.repo_id
+                 AND (o.called_at, o.id) < (qe.called_at, qe.id)
+                 AND orp.is_test_account = v.is_test_account
+                 AND oc.is_test_account = v.is_test_account
+            ) END::int AS called_ahead,
             COALESCE(qp.minutes_per_slot, 8) AS minutes_per_slot,
             COALESCE(
               (SELECT jsonb_agg(
@@ -933,6 +996,8 @@ export async function myQueueStatus(userId: number) {
     called_room_location: string | null;
     possible_rooms: { id: number; name: string; location: string | null }[];
     queue_rank: number | null;
+    queue_total: number | null;
+    called_ahead: number | null;
     minutes_per_slot: string | number;
   }[]) {
     let position: number | null = null;
@@ -951,6 +1016,10 @@ export async function myQueueStatus(userId: number) {
       status: e.status,
       position,
       etaMinutes,
+      // Teams in this queue, judged or not; set only while waiting (#966).
+      queueTotal: e.status === "waiting" ? e.queue_total : null,
+      // Teams called earlier to the same room, not yet in it; set only while called (#966).
+      calledAhead: e.status === "called" ? e.called_ahead : null,
       calledAt: e.called_at,
       // Concrete room once called; null while still waiting.
       room: e.called_room_id
@@ -975,41 +1044,56 @@ export async function myQueueStatus(userId: number) {
  * this challenge's queue (they work the queue in parallel, so N rooms means
  * N× the throughput for the same remaining time).
  */
-export async function roomPace(roomId: number) {
-  const state = (await pool.query(`SELECT * FROM room_queue_state WHERE room_id = $1`, [roomId]))
+export async function roomPace(
+  roomId: number,
+  requestedChallengeId?: number,
+  db: Queryable = pool,
+  fixtureMarker = false,
+  startingEntryId?: number,
+) {
+  const state = (await db.query(`SELECT * FROM room_queue_state WHERE room_id = $1`, [roomId]))
     .rows[0];
   if (!state) throw new NotFoundError("Room not found", { roomId });
-  const settings = (await pool.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0];
+  const settings = (await db.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0];
 
   // H29/H46: the presentation-length ceiling comes from the room's queue_group.
   // Every group is 1:1 today, so this is that one challenge's own ceiling; for
   // a merged group the strictest member ceiling is the one that must hold for
   // every team the group calls.
   const primaryChallenge = (
-    await pool.query(
+    await db.query(
       `SELECT qgc.challenge_id::int AS id,
-              c.max_presentation_seconds::int AS max_presentation_seconds
+              (SELECT min(sc.max_presentation_seconds) FROM queue_group_challenges sg JOIN challenges sc ON sc.id=sg.challenge_id WHERE sg.queue_group_id=rqg.queue_group_id)::int AS max_presentation_seconds
          FROM room_queue_groups rqg
          JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
-         JOIN challenges c ON c.id = qgc.challenge_id AND c.is_test_account = false
-         WHERE rqg.room_id = $1
-         ORDER BY qgc.challenge_id ASC
+         JOIN challenges c ON c.id = qgc.challenge_id AND c.is_test_account = $3
+         WHERE rqg.room_id = $1 AND ($2::int IS NULL OR qgc.challenge_id=$2)
+         ORDER BY EXISTS(SELECT 1 FROM queue_entries active JOIN queue_group_challenges ag ON ag.challenge_id=active.challenge_id WHERE ag.queue_group_id=rqg.queue_group_id AND active.assigned_room_id=$1 AND active.status IN ('in_room','presenting')) DESC,qgc.challenge_id ASC
          LIMIT 1`,
-      [roomId],
+      [roomId, requestedChallengeId ?? null, fixtureMarker],
     )
   ).rows[0] as { id: number; max_presentation_seconds: number | null } | undefined;
 
-  const challengeIds = await roomChallengeIds(pool, roomId);
+  if (requestedChallengeId && !primaryChallenge)
+    throw new NotFoundError("This room does not judge the requested track");
+  const challengeIds = primaryChallenge
+    ? (
+        await db.query(
+          `SELECT sibling.challenge_id FROM queue_group_challenges anchor JOIN queue_group_challenges sibling ON sibling.queue_group_id=anchor.queue_group_id WHERE anchor.challenge_id=$1`,
+          [primaryChallenge.id],
+        )
+      ).rows.map((r) => Number(r.challenge_id))
+    : [];
 
   // Distinct teams, not rows: a repo merged across two of the group's
   // challenges is one team still to be judged (the "call once" view).
   const pendingCount = challengeIds.length
     ? (
-        await pool.query(
+        await db.query(
           `SELECT COUNT(DISTINCT repo_id)::int AS n FROM queue_entries
             WHERE challenge_id = ANY($1) AND status IN ('waiting', 'called')
-              AND repo_id IN (SELECT id FROM repos WHERE is_test_account = false)`,
-          [challengeIds],
+              AND repo_id IN (SELECT id FROM project_reconciliation_state WHERE is_test_account = $2 AND eligible)`,
+          [challengeIds, fixtureMarker],
         )
       ).rows[0].n
     : 0;
@@ -1021,39 +1105,89 @@ export async function roomPace(roomId: number) {
     ? Math.max(
         1,
         (
-          await pool.query(
+          await db.query(
             `SELECT COUNT(DISTINCT serving.room_id)::int AS n
-               FROM (${CHALLENGE_ROOM_IDS_SQL}) serving
+               FROM (${CHALLENGE_ROOM_IDS_FOR_MARKER_SQL}) serving
                JOIN room_queue_state rqs
                  ON rqs.room_id = serving.room_id
                 AND rqs.is_paused = false`,
-            [primaryChallenge.id],
+            [primaryChallenge.id, fixtureMarker],
           )
         ).rows[0].n,
       )
     : 1;
 
+  const timing = primaryChallenge
+    ? (
+        await db.query(
+          `SELECT t.* FROM queue_group_challenges qgc CROSS JOIN LATERAL queue_group_timing(qgc.queue_group_id) t WHERE qgc.challenge_id=$1`,
+          [primaryChallenge.id],
+        )
+      ).rows[0]
+    : null;
+  const targetMinutes = Number(timing?.target_minutes ?? state.desired_minutes_per_team);
+  const estimatedCycleMinutes = Number(timing?.estimated_cycle_minutes ?? targetMinutes + 2);
+  const samples = Number(timing?.sample_count ?? 0);
+  const estimatedPresentationMinutes =
+    (5 * targetMinutes + samples * Number(timing?.observed_presentation_minutes ?? targetMinutes)) /
+    (5 + samples);
+  const preparationMinutes = estimatedCycleMinutes - estimatedPresentationMinutes;
+  const activeEntries = challengeIds.length
+    ? (
+        await db.query(
+          `SELECT DISTINCT ON(repo_id) id,status,presentation_started_at,presentation_paused_at,presentation_paused_seconds,room_entered_at,called_at FROM queue_entries WHERE challenge_id=ANY($1::int[]) AND status IN ('in_room','presenting') ORDER BY repo_id,presentation_started_at DESC NULLS LAST`,
+          [challengeIds],
+        )
+      ).rows
+    : [];
+  const now = Date.now();
+  const activeMinutes = activeEntries.map((entry) => {
+    // #926: the entry being started has finished preparing; only its own
+    // presentation still occupies the room.
+    if (entry.id === startingEntryId) return estimatedPresentationMinutes;
+    if (entry.status === "presenting") {
+      const elapsed = entry.presentation_started_at
+        ? Math.max(
+            0,
+            ((entry.presentation_paused_at
+              ? new Date(entry.presentation_paused_at).getTime()
+              : now) -
+              new Date(entry.presentation_started_at).getTime() -
+              Number(entry.presentation_paused_seconds) * 1000) /
+              60000,
+          )
+        : 0;
+      return Math.max(0, estimatedPresentationMinutes - elapsed);
+    }
+    const entered = entry.room_entered_at ?? entry.called_at;
+    const elapsed = entered ? Math.max(0, (now - new Date(entered).getTime()) / 60000) : 0;
+    return estimatedPresentationMinutes + Math.max(0, preparationMinutes - elapsed);
+  });
+  const activeWork = activeMinutes.reduce((total, minutes) => total + minutes, 0);
   const challengeMaxMinutes = primaryChallenge?.max_presentation_seconds
     ? primaryChallenge.max_presentation_seconds / 60
     : null;
   const baselineMinutesPerTeam =
-    challengeMaxMinutes != null
-      ? Math.min(state.desired_minutes_per_team, challengeMaxMinutes)
-      : state.desired_minutes_per_team;
+    challengeMaxMinutes != null ? Math.min(targetMinutes, challengeMaxMinutes) : targetMinutes;
 
   const remainingMinutes = settings.schedule_end_at
     ? Math.max(0, (new Date(settings.schedule_end_at).getTime() - Date.now()) / 60_000)
     : null;
-  const requiredMinutes = (pendingCount / roomCount) * baselineMinutesPerTeam;
+  const requiredMinutes = Math.max(
+    (pendingCount * estimatedCycleMinutes + activeWork) / roomCount,
+    ...activeMinutes,
+    0,
+  );
   const insufficientTime = remainingMinutes !== null && requiredMinutes > remainingMinutes;
   const suggestedMinutesPerTeam =
     remainingMinutes !== null && pendingCount > 0
-      ? (remainingMinutes * roomCount) / pendingCount
+      ? Math.max(0, (remainingMinutes * roomCount - activeWork) / pendingCount - preparationMinutes)
       : null;
 
   // H39: honour the judging end time. When the desired pace won't fit every
   // pending team before schedule_end_at, the effective time per team is
-  // squeezed down to what does fit — so judging finishes on time. Never
+  // squeezed down to what would fit. The learned finish estimate can still
+  // exceed the close while judges adapt to that goal. Never
   // stretches beyond the challenge-capped baseline pace.
   //
   // This is ADVISORY ONLY: `effectiveMinutesPerTeam` is the target the judge's
@@ -1067,7 +1201,24 @@ export async function roomPace(roomId: number) {
 
   return {
     roomId,
-    desiredMinutesPerTeam: state.desired_minutes_per_team,
+    desiredMinutesPerTeam: targetMinutes,
+    judgingClosesAt: settings.schedule_end_at,
+    estimatedFinishAt:
+      pendingCount > 0 || activeEntries.length > 0
+        ? new Date(now + requiredMinutes * 60000).toISOString()
+        : null,
+    exceedsJudgingClose: insufficientTime,
+    estimatedCycleMinutes,
+    preparationMinutes,
+    timingSampleCount: Number(timing?.sample_count ?? 0),
+    observedPresentationMinutes:
+      timing?.observed_presentation_minutes == null
+        ? null
+        : Number(timing.observed_presentation_minutes),
+    observedPreparationMinutes:
+      timing?.observed_preparation_minutes == null
+        ? null
+        : Number(timing.observed_preparation_minutes),
     challengeMaxMinutes,
     roomCount,
     pendingCount,
@@ -1092,7 +1243,18 @@ export async function roomPace(roomId: number) {
  */
 export async function repoChallenges(repoId: number) {
   const { rows } = await pool.query(
-    `SELECT qe.id AS entry_id, qe.repo_id, qe.challenge_id AS id, c.title, qe.status,
+    `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL}),
+     -- Repos sharing a member with this one, resolved once for the queried
+     -- repo before joining entries (H30 shared-member relation).
+     member_repos AS (
+       SELECT DISTINCT active.repo_id
+         FROM repo_members candidate
+         JOIN repo_members active ON active.user_id = candidate.user_id
+        WHERE candidate.repo_id = $1
+       UNION
+       SELECT $1::int
+     )
+     SELECT qe.id AS entry_id, qe.repo_id, qe.challenge_id AS id, c.title, qe.status,
             CASE WHEN qe.status = 'waiting' THEN (
               -- Teams ahead of entering the waiting room (ordering.ts): a
               -- rank over waiting entries only, deduped by repo, in this
@@ -1124,13 +1286,35 @@ export async function repoChallenges(repoId: number) {
                  JOIN rooms rm ON rm.id = rqg.room_id
                 WHERE self.challenge_id = qe.challenge_id),
               '[]'::jsonb
-            ) AS judging_rooms
+            ) AS judging_rooms,
+            busy.room_id AS busy_room_id, busy.room_name AS busy_room_name,
+            busy.status AS busy_status,
+            -- H30/H38: an ineligible project is never called (#931).
+            COALESCE(prs.eligible, true) AS eligible
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
        JOIN repos repo ON repo.id = qe.repo_id AND repo.is_test_account = false
        LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
        LEFT JOIN queue_groups qg ON qg.id = qgc.queue_group_id
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
+       LEFT JOIN project_reconciliation_state prs ON prs.id = qe.repo_id
+       -- H30/#931: where a member of this team is occupied elsewhere, using
+       -- the guard's shared-member relation and fixture filter. Evaluation
+       -- (in_room/presenting) blocks moves; a called team only blocks calls.
+       -- Finished entries take no further action, so they carry no warning.
+       LEFT JOIN LATERAL (
+         SELECT br.id AS room_id, br.name AS room_name, bqe.status
+           FROM queue_entries bqe
+           JOIN member_repos mr ON mr.repo_id = bqe.repo_id
+           JOIN rooms br ON br.id = bqe.assigned_room_id
+           JOIN repos brepo ON brepo.id = bqe.repo_id AND brepo.is_test_account = false
+           JOIN challenges bc ON bc.id = bqe.challenge_id AND bc.is_test_account = false
+          WHERE bqe.status IN ('called', 'in_room', 'presenting')
+            AND bqe.id <> qe.id
+            AND bqe.assigned_room_id IS DISTINCT FROM qe.assigned_room_id
+          ORDER BY (bqe.status = 'called'), bqe.id
+          LIMIT 1
+       ) busy ON qe.status NOT IN ('completed', 'disqualified')
       WHERE qe.repo_id = $1 AND qe.status != 'cancelled'
       ORDER BY qg.display_name ASC NULLS LAST, c.title ASC`,
     [repoId],

@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.liveupdates'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.liveupdates"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // NotificationCompat.ProgressStyle, setShortCriticalText and
+  // setRequestPromotedOngoing (#966) need core 1.17+; matches expo-notifications.
+  implementation 'androidx.core:core:1.17.0'
+  testImplementation 'junit:junit:4.13.2'
+}

@@ -1,8 +1,7 @@
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { AddressBookIcon } from "@phosphor-icons/react/dist/ssr/AddressBook";
 import { BooksIcon } from "@phosphor-icons/react/dist/ssr/Books";
-import { BowlFoodIcon } from "@phosphor-icons/react/dist/ssr/BowlFood";
-import { BuildingsIcon } from "@phosphor-icons/react/dist/ssr/Buildings";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/ssr/CalendarDots";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
@@ -12,12 +11,13 @@ import { GavelIcon } from "@phosphor-icons/react/dist/ssr/Gavel";
 import { GearIcon } from "@phosphor-icons/react/dist/ssr/Gear";
 import { HandshakeIcon } from "@phosphor-icons/react/dist/ssr/Handshake";
 import { ListNumbersIcon } from "@phosphor-icons/react/dist/ssr/ListNumbers";
+import { LogIcon } from "@phosphor-icons/react/dist/ssr/Log";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/ssr/Megaphone";
-import { PulseIcon } from "@phosphor-icons/react/dist/ssr/Pulse";
+import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package";
 import { QuestionIcon } from "@phosphor-icons/react/dist/ssr/Question";
-import { ScrollIcon } from "@phosphor-icons/react/dist/ssr/Scroll";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/ssr/SealCheck";
 import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { StorefrontIcon } from "@phosphor-icons/react/dist/ssr/Storefront";
 import { TelevisionSimpleIcon } from "@phosphor-icons/react/dist/ssr/TelevisionSimple";
 import { TrayIcon } from "@phosphor-icons/react/dist/ssr/Tray";
 import { TrophyIcon } from "@phosphor-icons/react/dist/ssr/Trophy";
@@ -155,6 +155,9 @@ export const PERSONAL_NAV: NavItem[] = [
   { title: "wallet", href: "/wallet", icon: WalletIcon, hideForPureApplicant: true },
   // Hidden for pure applicants — decision emails go out regardless (H50/H51).
   { title: "inbox", href: "/inbox", icon: TrayIcon, hideForPureApplicant: true },
+  // Event diary (#935): people saved by scanning their badge and sponsor
+  // stands. Like the API, it needs current event access only.
+  { title: "diary", href: "/people", icon: AddressBookIcon, hideForPureApplicant: true },
   { title: "myProfile", href: "/settings/profile", icon: UserIcon },
 ];
 
@@ -241,16 +244,6 @@ export const WORKSPACES: Workspace[] = [
         judgeVisible: true,
       },
       {
-        // Rooms and the judging window share one "Judging settings" surface
-        // (H39, H46): a sponsor rep routes their queues to their pooled
-        // rooms from Judging queues, but never assigns a room to an
-        // enterprise or edits the judging window in the first place.
-        title: "judgingSettingsTitle",
-        href: "/queue/rooms",
-        icon: BuildingsIcon,
-        anyCapability: [CAPABILITIES.QUEUE_ADMIN],
-      },
-      {
         title: "reviewsOverview",
         href: "/queue/reviews",
         icon: ClipboardTextIcon,
@@ -262,7 +255,7 @@ export const WORKSPACES: Workspace[] = [
   {
     id: "logistics",
     label: "workspaceLogistics",
-    icon: BowlFoodIcon,
+    icon: PackageIcon,
     items: [
       // Logistics is split per physical station (H22-H27); each entry shows
       // only for operators who hold that station's capability (H55).
@@ -279,7 +272,7 @@ export const WORKSPACES: Workspace[] = [
         // a meal/activity tab), so this single entry covers both (H22-H27).
         title: "mealsAndActivities",
         href: "/logistics/activities",
-        icon: PulseIcon,
+        icon: ClipboardTextIcon,
         capability: CAPABILITIES.ACTIVITY_SCAN,
       },
       {
@@ -336,6 +329,15 @@ export const WORKSPACES: Workspace[] = [
         sponsorVisible: true,
       },
       {
+        // #935: which companies attendees can collect by scanning, and the
+        // company tags (NFC tags or wristbands, QR codes) staff define for
+        // them. Staff only; reps see their company's tags on its Tags tab.
+        title: "companyTags",
+        href: "/company-tags",
+        icon: StorefrontIcon,
+        capability: CAPABILITIES.SPONSORS_MANAGE,
+      },
+      {
         title: "sponsorFaq",
         href: "/sponsor-faq",
         icon: QuestionIcon,
@@ -359,6 +361,7 @@ export const WORKSPACES: Workspace[] = [
           CAPABILITIES.WALLET_MANAGE,
           CAPABILITIES.PRESENCE_MANAGE,
           CAPABILITIES.INVITES_MANAGE,
+          CAPABILITIES.QUEUE_ADMIN,
         ],
       },
       {
@@ -389,7 +392,7 @@ export const WORKSPACES: Workspace[] = [
       {
         title: "auditLog",
         href: "/audit",
-        icon: ScrollIcon,
+        icon: LogIcon,
         capability: CAPABILITIES.AUDIT_READ,
       },
     ],

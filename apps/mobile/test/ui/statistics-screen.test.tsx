@@ -6,6 +6,7 @@ const mockFetchMyScanStats = jest.fn();
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush }),
   useScrollToTop: jest.fn(),
+  useFocusEffect: (effect: () => void) => require("react").useEffect(effect, [effect]),
 }));
 jest.mock("@/components/native-ui", () => {
   const ReactLib = require("react");

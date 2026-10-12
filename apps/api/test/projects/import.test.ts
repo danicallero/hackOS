@@ -199,7 +199,7 @@ describe("POST /api/devpost/imports/confirm (H16)", () => {
     ]);
   });
 
-  it("merges resolved export aliases and accepted planners without duplicating email matches (#854)", async () => {
+  it("links export aliases while preserving participant differences (#854)", async () => {
     const server = await getApp();
     const { aliceId, bobId } = await seedMatchableUsers();
     const extra = await createUser();
@@ -236,9 +236,7 @@ describe("POST /api/devpost/imports/confirm (H16)", () => {
         )
       ).rows,
     ).toEqual(
-      [aliceId, bobId, extra]
-        .sort((a, b) => a - b)
-        .map((user_id) => ({ user_id, status: "active" })),
+      [aliceId, bobId].sort((a, b) => a - b).map((user_id) => ({ user_id, status: "active" })),
     );
     expect(
       (await pool.query(`SELECT presentation_timing_preference FROM repos WHERE id=$1`, [repoId]))
@@ -253,7 +251,7 @@ describe("POST /api/devpost/imports/confirm (H16)", () => {
     expect(
       (await pool.query(`SELECT count(*)::int n FROM submissions WHERE repo_id=$1`, [repoId]))
         .rows[0].n,
-    ).toBe(3);
+    ).toBe(2);
   });
 
   it("links a URL-less planned group only for a complete roster and intended-challenge match (#854)", async () => {

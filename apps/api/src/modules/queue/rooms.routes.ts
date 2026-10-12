@@ -9,15 +9,20 @@ import {
   requireCapability,
   userHasCapability,
 } from "../../lib/capabilities.js";
-import { NotFoundError } from "../../lib/errors.js";
+import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { requestLiveActivitySync } from "../live-activities/kick.js";
 import {
   assertFixtureQueueScope,
   assertFixtureRoomEnterpriseScope,
 } from "../logistics/review-fixture-scope.js";
 import { requireAnyCapability } from "./access.js";
 import { actor } from "./actor.js";
-import { broadcastQueueEvent } from "./broadcast.js";
+import {
+  broadcastQueueEvent,
+  broadcastQueueEventWithMarker,
+  queueFixtureMarker,
+} from "./broadcast.js";
 import {
   accessibleRoomIds,
   requireRoomAccessOrCapability,
@@ -237,6 +242,77 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
         );
         return rows[0];
       });
+    },
+  );
+
+  // H29/H46: remove unused venue rooms without erasing judging history.
+  typed.delete(
+    "/api/queue/rooms/:roomId",
+    {
+      preHandler: [requireCapability(CAPABILITIES.QUEUE_ADMIN), idempotencyGuard],
+      config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
+      schema: {
+        params: roomIdParam,
+        summary: "Delete an unused judging room",
+        description:
+          "Permanently deletes a room and its enterprise, serving-queue, and control-state assignments. Refuses with 409 when queue entries or judging sessions reference the room, preserving operational and judging history. Requires queue administration; missing rooms return 404. Idempotency-Key replays a completed deletion.",
+      },
+    },
+    async (req) => {
+      const { roomId } = req.params;
+      const userId = actor(req.userId);
+      const result = await withTransaction(async (client) => {
+        const { rows: servingSnapshot } = await client.query<{ queue_group_id: number }>(
+          `SELECT queue_group_id FROM room_queue_groups WHERE room_id = $1`,
+          [roomId],
+        );
+        if (servingSnapshot.length) {
+          await client.query(
+            `SELECT id FROM queue_groups WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`,
+            [servingSnapshot.map((row) => row.queue_group_id)],
+          );
+        }
+        const room = (await client.query(`SELECT * FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]))
+          .rows[0];
+        if (!room) throw new NotFoundError("Room not found", { roomId });
+        await assertFixtureQueueScope(client, userId, "room", roomId);
+        const { rows } = await client.query(
+          `SELECT EXISTS(SELECT 1 FROM queue_entries WHERE assigned_room_id = $1)
+               OR EXISTS(SELECT 1 FROM judging_session WHERE room_id = $1) AS in_use`,
+          [roomId],
+        );
+        if (rows[0].in_use) {
+          throw new ConflictError(
+            "Rooms with assigned teams or judging history cannot be deleted",
+            { roomId },
+          );
+        }
+        const marker = await queueFixtureMarker(client, "room", roomId);
+        const serving = (
+          await client.query(`SELECT * FROM room_queue_groups WHERE room_id = $1`, [roomId])
+        ).rows[0];
+        const enterprise = (
+          await client.query(`SELECT * FROM room_enterprises WHERE room_id = $1`, [roomId])
+        ).rows[0];
+        const beforeTopology = await captureQueueTopology(client, [serving?.queue_group_id]);
+        await client.query(`DELETE FROM room_queue_groups WHERE room_id = $1`, [roomId]);
+        await client.query(`DELETE FROM rooms WHERE id = $1`, [roomId]);
+        await audit(client, {
+          actorId: userId,
+          entityType: "room",
+          entityId: roomId,
+          action: "delete",
+          before: { room, enterprise, queueGroup: serving },
+          ...auditRequest(req),
+        });
+        return { marker, beforeTopology };
+      });
+      await broadcastQueueEventWithMarker(result.marker, EVENTS.QUEUE_ROOM_CHANGED, { roomId });
+      await emitQueueTopologyChanged(result.beforeTopology, {
+        queueGroupIds: [],
+        challengeIds: [],
+      });
+      return { ok: true };
     },
   );
 
@@ -508,7 +584,13 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
       config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
-      schema: { params: roomIdParam, body: roomQueueStateBody },
+      schema: {
+        params: roomIdParam,
+        body: roomQueueStateBody,
+        summary: "Update room waiting quota or shared track target",
+        description:
+          "Compatibility API: desiredMinutesPerTeam updates the target of every track served by this room, shared across all of their rooms. New clients set the track target directly (H29/H39/H53).",
+      },
     },
     async (req) => {
       const userId = actor(req.userId);
@@ -536,6 +618,37 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
             req.params.roomId,
           ],
         );
+        if (req.body.desiredMinutesPerTeam !== undefined) {
+          const tracks = await client.query(
+            `SELECT c.id,c.target_seconds_per_team FROM room_queue_groups rqg JOIN queue_group_challenges qgc ON qgc.queue_group_id=rqg.queue_group_id JOIN challenges c ON c.id=qgc.challenge_id WHERE rqg.room_id=$1 ORDER BY c.id FOR UPDATE OF c`,
+            [req.params.roomId],
+          );
+          for (const track of tracks.rows) {
+            const targetSeconds = req.body.desiredMinutesPerTeam * 60;
+            await client.query(`UPDATE challenges SET target_seconds_per_team=$2 WHERE id=$1`, [
+              track.id,
+              targetSeconds,
+            ]);
+            await audit(client, {
+              actorId: userId,
+              entityType: "challenge",
+              entityId: track.id,
+              action: "judging_timing",
+              before: { targetSeconds: track.target_seconds_per_team },
+              after: { targetSeconds },
+              source: "admin",
+            });
+          }
+        }
+        await audit(client, {
+          actorId: userId,
+          entityType: "room",
+          entityId: req.params.roomId,
+          action: "queue_state",
+          before: existing,
+          after: rows[0],
+          source: "admin",
+        });
         return rows[0];
       });
     },
@@ -632,6 +745,8 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
           req.body.calledTooLongThresholdMinutes ?? existing.called_too_long_threshold_minutes,
         ],
       );
+      // #966 (H38): the judging window gates the queue Live Activity.
+      await requestLiveActivitySync();
       return rows[0];
     },
   );

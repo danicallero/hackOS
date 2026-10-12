@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #966: collapsed custom card (non-promoted path): the header and the
+     hero metric, like the iOS compact presentation. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent"
+  android:layout_height="wrap_content"
+  android:orientation="vertical">
+
+  <TextView
+    android:id="@+id/lu_header"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:ellipsize="end"
+    android:maxLines="1"
+    android:textColor="@color/hackos_lu_secondary"
+    android:textSize="13sp" />
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:baselineAligned="true"
+    android:gravity="bottom"
+    android:orientation="horizontal">
+
+    <TextView
+      android:id="@+id/lu_lead_value"
+      android:ellipsize="end"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:fontFamily="sans-serif"
+      android:maxLines="1"
+      android:textSize="22sp"
+      android:textStyle="bold" />
+
+    <Chronometer
+      android:id="@+id/lu_lead_timer"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:fontFamily="sans-serif"
+      android:textSize="22sp"
+      android:textStyle="bold"
+      android:visibility="gone" />
+
+    <TextView
+      android:id="@+id/lu_lead_caption"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_marginStart="6dp"
+      android:layout_weight="1"
+      android:ellipsize="end"
+      android:maxLines="1"
+      android:textColor="@color/hackos_lu_secondary"
+      android:textSize="13sp" />
+
+    <TextView
+      android:id="@+id/lu_trail_value"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_marginStart="8dp"
+      android:fontFamily="sans-serif"
+      android:maxLines="1"
+      android:textColor="@color/hackos_lu_primary"
+      android:textSize="20sp"
+      android:textStyle="bold" />
+
+    <Chronometer
+      android:id="@+id/lu_trail_timer"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_marginStart="8dp"
+      android:fontFamily="sans-serif"
+      android:textColor="@color/hackos_lu_primary"
+      android:textSize="20sp"
+      android:textStyle="bold"
+      android:visibility="gone" />
+  </LinearLayout>
+</LinearLayout>

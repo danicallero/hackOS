@@ -57,6 +57,14 @@ hide (`NavItem.hideForPureApplicant` in `nav.ts`) — Schedule, My applications,
 and My profile stay, since applying (or checking an application's status) is
 exactly what they still need.
 
+**Agenda** (es "Agenda", gl "Axenda", en "Contacts"; `/people`, #935,
+address-book icon) is the attendee's event diary:
+the people and sponsor stands they scanned, in People and Companies tabs.
+There is no people directory to browse. It needs only current event access,
+like Wallet and Inbox, and no capability. It sits just above My profile,
+where each person decides whether to share a public profile with the people
+who scan their badge. See [`diary.md`](./diary.md).
+
 There is deliberately no dashboard/home page: `/timetable` (Schedule) is the
 landing destination after sign-in and email verification
 (`apps/web/src/lib/invite-destination.ts`, `apps/web/src/lib/return-path.ts`),
@@ -78,16 +86,27 @@ workspace never over-grants access.
 | --- | --- | --- |
 | Applications | Applications | `applications:review`, `applications:decide`, or `applications:manage` |
 | Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
-| Live judging | Queue operations (tabs: Rooms · Queues), Judging, Judging settings (tabs: Rooms · Judging window), Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); Judging settings is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from Judging settings |
+| Live judging | Queue operations (tabs: All rooms overview · Judging queues · Room configuration), Judging, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); The Room configuration tab is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from room administration |
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | `schedule:manage`, `tv:control`, or `announcements:manage` |
-| Sponsors | Enterprises, Challenges, Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
-| Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage` (each tab within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
+| Sponsors | Enterprises, Challenges, Company tags (`/company-tags`), Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Company tags: `sponsors:manage` only — reps see their company's tags on its Tags tab, #935; Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
+| Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours) (each tab within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
 | Access and audit | Users, Permissions, Audit log | `users:read`, `permissions:manage`, `audit:read` |
 
+The web navigation uses Phosphor concept icons: `Package` for the Logistics
+workspace, `ClipboardText` for Activities, and `Log` for the Audit log.
+
 `/users/invites` is a focused child workspace reached from Users for holders of
-`invites:manage`; it deliberately does not add a second sidebar destination.
+`invites:manage`, and from an enterprise's header for holders of
+`sponsors:manage`, who see and create only sponsor links (#929); it
+deliberately does not add a second sidebar destination.
 The invitation list and its record inspector stay together on that route (#777).
+
+The enterprise detail page (`/enterprises/[id]`) has Profile (default), Challenges
+(for `sponsors:manage` and the enterprise's own reps), Judges, and Members for
+`sponsors:manage`. Overview and Invitations were removed (#928, #929): an old
+`?tab=overview` link renders Profile, and `?tab=invitations` sends sponsor
+managers to `/users/invites` (others see Profile).
 
 The admin wildcard (`*`) passes every capability check and therefore sees
 every workspace and every item (`apps/web/src/lib/session.tsx`).
@@ -125,7 +144,7 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
   appears alongside it whenever the feed spans more than one `ACTIVITY_KINDS`
   value, mirroring the mobile app's kind filter (open to everyone there too —
   `docs/mobile.md`'s Schedule/Horario section). The Manage Schedule table
-  (`app/(app)/schedule/schedule-dialogs.tsx`'s `KindFilterPopover`) offers the
+  (`app/(app)/schedule/schedule-dialogs.tsx`'s `useScheduleFilters`) offers the
   same filter over the full, unfiltered `ACTIVITY_KINDS` list rather than what
   happens to be present, since a staff editor also needs to find kinds with
   zero items scheduled yet.
@@ -148,24 +167,44 @@ directly on compact layouts; tablet-width layouts can fit up to six before the
 separate `Others` circle is needed. The full route registry remains mounted so
 hidden destinations stay routable:
 
-- **Non-operator account**: schedule, wallet, notifications, and **Account**
-  are direct. **My queue** is visible to participants even before their first
+- **Non-operator account**: schedule, **Diary** (#935,
+  [`diary.md`](./diary.md); People and Companies segments only, with no
+  directory to browse, opened directly with `?view=companies`; the direct tab is
+  `app/(tabs)/diary/`, its own Stack for the native header and search) and
+  **Account** are direct, with My queue added when eligible (five fit
+  directly). **My queue** is visible to participants even before their first
   queue entry so they can see the empty state and tutorial; mentors, sponsors,
   and other accounts only see it once they have an actual queue entry. Wallet
-  remains unconditional for every mobile account.
+  is not a tab: every account opens it from the wallet button in Account's
+  top-left corner, as an overlay whose close button is that same button (H28);
+  `others/wallet` stays routable for deep links. Alerts are not a tab either: the Schedule header bell (with an unread
+  badge) presents the inbox as a sheet, and every notification setting lives in
+  Account → Notifications (H51, H59); the sheet's gear dismisses it and
+  navigates to `/(tabs)/others/account?highlight=notifications`, so the tab bar
+  selection follows the pathname to Account.
 - **Operator** (any of `accredit:scan`, `presence:scan`, `activity:scan`, or
   the admin wildcard): the daily shift tools take the bar — schedule,
-  **Scanner**, Activities (`activity:scan` holders only), notifications —
+  **Scanner**, Activities (`activity:scan` holders only) —
   scanning must never sit behind an ellipsis. The separate
-  **"Others" overflow selector** holds eligible personal Queue, Wallet,
-  Account, and any queue operations destination as pseudo-tabs. Account's
+  **"Others" overflow selector** (only when more than five destinations)
+  holds eligible personal Queue, Diary, Account, and any queue operations destination as pseudo-tabs. Account's
   Statistics destination is the staff operations hub for the person finder,
-  scan history, and sync reconciliation.
+  scan history, and sync reconciliation. Holders of `sponsors:manage` (with or
+  without a scanner capability) also get Account → Staff → Company tags, to
+  link NFC tags and wristbands to companies (#935, `mobile.md`); it is not a
+  tab. Company-tag links `/s/<code>` (`app/s/[code].tsx`) open outside the
+  session guard and resume after sign-in.
 - **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
-  scanner capability): Queue operations is a direct tab alongside Schedule and
-  Alerts; an eligible personal Queue, Wallet, and Account move to Others. If
+  scanner capability): Queue operations is a direct tab alongside Schedule; an eligible personal Queue, Diary and Account move to Others when the set
+  exceeds five. If
   the person also has a scanner capability, Queue operations joins Others so
   Scanner stays directly reachable.
+
+Account is always the last overflow destination (`overflowTabs()` order:
+Queue, Diary, Queue operations, Account) and therefore the entry nearest the
+thumb. SwiftUI's bottom-anchored `Menu` lists its first action closest to the
+trigger, so iOS passes `nativeMenuOrder(overflowIds)` (reversed); Android's
+card menu renders the array top-to-bottom as is (H55).
 
 The "Others" slot is a **dropdown selector**, not a screen. It is a
 direct custom button in its own perfect circle; it does not need fake
@@ -199,6 +238,25 @@ behaviour stays sane. Direct tabs use the headless Expo Router tab state
 scroll-to-top/live-activity handlers; deeper screens inside a section still
 push normally on top of it. Pathname matching normalizes Expo Router route groups first
 (`/others/...` vs `/(tabs)/others/...`).
+
+Section classification covers the whole Others stack: `queue`, `diary` and
+`operations` own their route (plus `others/team/*`, opened from queue
+operations), and every other `others/*` page (Wallet, notification settings,
+reminders, announcements, Storage, Statistics, Company tags, Legal, Delete
+account, scan log, sync queue, people and person details) is an Account
+subpage. The Others circle therefore stays on Account — and navigating
+programmatically to `/(tabs)/others/account` selects it — for as long as the
+user is anywhere inside Account.
+A direct Account tab uses the same rule through `RouterTabItem.isActive` (an
+optional per-tab predicate overriding the default href prefix match, for both
+the selection lens and the selected state), so it is not highlighted on
+queue/diary/operations pages that share the `/others` prefix. The Others circle
+shows the account photo on every Account subpage.
+
+A saved person's profile (#935) is the root-level `app/people/[id].tsx`,
+pushed above the tabs from either diary placement (direct tab or Others), the
+same way `app/schedule/[id].tsx` sits above Schedule; its back action falls
+back to `/` when there is nothing to pop.
 
 The direct surface is one continuous scrub surface: on touch-down the Liquid
 Glass selection lens follows the finger in real time, including across several
@@ -241,6 +299,16 @@ and filter controls alongside the custom tab chrome. On compact devices those
 layouts retain their own Stack because overflow destinations are header-less
 pseudo-tabs and still need local navigation chrome.
 
+Every native Stack, including the root one that hosts `schedule/[id]` and
+`people/[id]`, spreads `nativeStackScreenOptions` from `lib/navigation.ts`
+(`headerBackButtonDisplayMode: "minimal"`). On iOS 26 a chevron-only back item
+is a circular Liquid Glass button; a back title widens it into a capsule.
+Pushed screens keep that native item. A route opened from a cold deep link has
+nothing to pop, so it hides the native item and sets `headerLeft` to
+`components/header-back-button.tsx`, which calls `safeBack`. UIKit pads a
+custom bar item horizontally: a 44 pt-wide view becomes a capsule, while the
+bare symbol with `hitSlop` becomes the same circle.
+
 ## Decision-only applications
 
 `applications:decide` is a first-class Applications workspace capability. A
@@ -273,10 +341,27 @@ despite a working API.
   `apps/web/src/app/(app)/enterprises/page.tsx` gate on `isSponsorRep`.
   `apps/web/src/app/(app)/queue/rooms/page.tsx` does not (0413): pooling a
   room into an enterprise is `queue:admin` only.
-- Queue operations (`/queue`) is one destination with two tabs (`?tab=rooms`
-  the default, `?tab=queues`), not two nav items: rooms working queues, and
-  the queues themselves (H46). The Queues tab is the only place a judging
+- Queue operations (`/queue`) is one destination with three tabs (`?tab=rooms`
+  the default, `?tab=queues`, and administrator-only `?tab=configuration`):
+  all rooms overview, the queues themselves, and room editing (H46). The Queues tab is the only place a judging
   queue that no room serves is reachable, and the only place a queue is named
   or merged into a shared one. Its scope is the caller's own —
   `GET /api/queue/groups` returns every queue for `queue:admin`/
   `sponsors:manage` and only their own enterprises' for a sponsor rep.
+
+Event settings (`/settings/event`) is a list of the sections the caller's
+capabilities allow, never a second sidebar (#932): `?tab=event|venue|wallet|presence|invites|judging|liveActivities|danger`
+opens one section with a back link (page header context slot) to the list. A
+lone visible section opens directly only when no `?tab=` is requested; a
+`?tab=` the caller cannot manage shows the list. The URL is the only state, so
+selecting writes nothing back. Dirtiness is tracked for the open section only;
+leaving it with unsaved edits — back link, sidebar, browser Back/swipe-back or
+unload — asks for confirmation (`useUnsavedChangesGuard`; browser Back is
+guarded only here, via the opt-in `guardBrowserBack`: a sentinel history entry
+is pushed once while dirty and consumed by the popstate confirm. Other users of
+the hook, e.g. the profile and application builder, guard links and unload only).
+
+Judging hours are in Event settings (`/settings/event?tab=judging`) and retain
+the `queue:admin` gate. `/queue/settings` preserves saved links by directing
+them there. `/queue/rooms` remains available as the room configuration page;
+it is embedded in Queue operations' Room configuration tab and has no sidebar entry of its own.

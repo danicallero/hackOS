@@ -51,7 +51,7 @@ export const queueGroupRoomsBody = z.object({
 
 export const roomQueueStateBody = z.object({
   maxInWaitingArea: z.coerce.number().int().min(1).optional(),
-  desiredMinutesPerTeam: z.coerce.number().int().min(1).optional(),
+  desiredMinutesPerTeam: z.coerce.number().int().min(1).max(120).optional(),
 });
 
 export const queueSettingsBody = z.object({

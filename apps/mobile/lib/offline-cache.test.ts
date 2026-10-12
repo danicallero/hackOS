@@ -16,8 +16,11 @@ jest.mock("expo-sqlite/kv-store", () => ({
   ),
 }));
 
+jest.mock("./api", () => ({ apiFetch: jest.fn() }));
+
 import Storage from "expo-sqlite/kv-store";
 import { clearCachedValues, writeCachedValue } from "./offline-cache";
+import { mealPlanCacheKey } from "./profile-tasks";
 
 const mockSetItem = Storage.setItem as jest.Mock;
 
@@ -60,5 +63,15 @@ describe("offline cache account cleanup", () => {
 
     expect(mockValues.has("hackos:offline:v1:user:1:notifications")).toBe(false);
     expect(mockValues.has("hackos:offline:v1:user:2:notifications")).toBe(true);
+  });
+
+  it("clears the sponsor meal plan with the account (#933)", async () => {
+    await writeCachedValue(mealPlanCacheKey(1), { meals: [] });
+    await writeCachedValue(mealPlanCacheKey(2), { meals: [] });
+
+    await clearCachedValues("user:1:");
+
+    expect(mockValues.has("hackos:offline:v1:user:1:meal-plan")).toBe(false);
+    expect(mockValues.has("hackos:offline:v1:user:2:meal-plan")).toBe(true);
   });
 });

@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
+import { TrackTiming } from "@/components/projects/track-timing";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -104,6 +105,11 @@ export default function ChallengeDetailPage() {
     <PageLayout width="reading">
       <PageHeader
         title={textForDisplay(challenge.title)}
+        secondaryActions={
+          (canAdmin || me?.isSponsorRep || me?.isEnterpriseJudge) && (
+            <TrackTiming challengeId={id} onSaved={() => void load()} />
+          )
+        }
         primaryAction={
           canAlert ? (
             <ChallengeAlertDialog challengeId={id} canTargetParticipants={canAdmin} />

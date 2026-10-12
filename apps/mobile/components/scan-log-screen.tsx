@@ -4,11 +4,11 @@ import {
   useNavigation,
   usePathname,
   useRouter,
-  useScrollToTop,
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
+import { HeaderBackButton } from "@/components/header-back-button";
 import { ActionButton, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
@@ -16,6 +16,7 @@ import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchScanLog, type ScanLogEntry } from "@/lib/scan-log";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
 const PAGE_SIZE = 30;
@@ -46,6 +47,7 @@ export function ScanLogScreen() {
   const navigation = useNavigation();
   const pathname = usePathname();
   const router = useRouter();
+  const [coldLink] = useState(() => !router.canGoBack());
   const { t } = useLocale();
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<ScanLogEntry[]>([]);
@@ -56,7 +58,7 @@ export function ScanLogScreen() {
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
 
-  useScrollToTop(scrollRef);
+  const trueTop = useTrueTopScroll(scrollRef);
 
   const origin = Array.isArray(from) ? from[0] : from;
   const fallbackRoute: Href =
@@ -73,26 +75,12 @@ export function ScanLogScreen() {
       headerLargeTitle: true,
       headerBackButtonDisplayMode: "minimal",
       // The history can also be opened from a notification or a restored
-      // deep link. Keep the native navigation bar, but make its back action
-      // safe when there is no stack entry to pop.
-      headerBackVisible: false,
-      headerLeft: () => (
-        <Pressable
-          accessibilityLabel={t("back")}
-          accessibilityRole="button"
-          hitSlop={12}
-          onPress={() => safeBack(router, fallbackRoute)}
-          style={{ alignItems: "center", justifyContent: "center", minHeight: 44, minWidth: 44 }}
-        >
-          <SymbolView
-            accessible={false}
-            name="chevron.left"
-            size={22}
-            tintColor={colors.accent}
-            weight="semibold"
-          />
-        </Pressable>
-      ),
+      // deep link. Keep the native circular back item when there is a stack
+      // entry to pop; otherwise use an equivalent safe back action.
+      headerBackVisible: !coldLink,
+      headerLeft: coldLink
+        ? () => <HeaderBackButton onPress={() => safeBack(router, fallbackRoute)} />
+        : undefined,
       headerSearchBarOptions: {
         placeholder: t("scanLogSearchPlaceholder"),
         autoCapitalize: "none",
@@ -104,7 +92,7 @@ export function ScanLogScreen() {
         onCancelButtonPress: () => setQuery(""),
       },
     });
-  }, [fallbackRoute, navigation, router, t]);
+  }, [coldLink, fallbackRoute, navigation, router, t]);
 
   const load = useCallback(async (offset: number) => {
     const page = await fetchScanLog(PAGE_SIZE, offset);
@@ -213,6 +201,7 @@ export function ScanLogScreen() {
   return (
     <ScrollView
       ref={scrollRef}
+      {...trueTop.scrollProps}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         gap: 20,

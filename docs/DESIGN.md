@@ -98,6 +98,12 @@ Each row: value → intent → boundary.
 | Overlays | 8 px radius; small shadow (menus/popovers), large shadow (modals) | Elevation communicates "floating above the page" and nothing else. |
 | Full radius | buttons, status pills, avatars | Not for fields or content surfaces. |
 
+Shared page and section title rows align icons and counters to the visible
+capital height (`heading-row`), rather than the different fonts’ line boxes.
+Section icons belong in the title row so descriptions never shift them.
+Schedule grid lines start after the hour-label gutter; labels use the shell
+background to keep the time axis clear in both themes.
+
 Uppercase/letter-spacing is not a hierarchy tool — use scale, weight, and
 colour; reserve uppercase for real codes (badge IDs, room codes).
 
@@ -189,6 +195,10 @@ shows every variant, all six states, all eight sizes, icon-only actions,
 link navigation, and working loading demonstrations in es/gl/en and both themes.
 Hover/focus/pressed specimens use `data-preview-state` only to display CSS;
 this attribute must not be used on product controls or to fake keyboard focus.
+
+Pills need more horizontal room than rectangles: text buttons pad 12/16/20/28 px
+(tiny/compact/default/prominent) per side, and a leading icon trims only the
+start side by 2-4 px so the icon does not crowd the curve.
 
 | Variant | Purpose | Default appearance |
 | --- | --- | --- |
@@ -363,8 +373,9 @@ elevated `Overlay` — replacing the overloaded generic "card".**
 sections use `Section`/`SectionCard` so their responsibility is explicit. In
 `app/(app)` the raw `Card`s that are deliberately *not* page sections are the
 centered confirmation/auth cards (`verify-secondary-email/page.tsx`) and the
-my-queue ticket stub. `schedule/page.tsx` groups its operational toolbar and grid in one bounded
-`Surface`; the toolbar is a `PageToolbar`, not a separately titled section.
+my-queue ticket stub. `schedule/page.tsx` uses the Users `ListToolbar` above its bounded editable
+grid. Search, filters and columns share a control row; active chips have their
+own row and do not push the filter control out of alignment.
 Every dashboard-style panel is a `SectionCard` (#300); a panel that re-builds
 title/description/action out of `CardHeader` also re-invents the spacing and
 re-introduces the description-restates-the-title pattern.
@@ -415,10 +426,13 @@ ordinary text, not status pills; reserve badges for meaningful changing state.
   In the collapsed icon rail the labels reduce to non-interactive separators
   and every destination remains directly reachable.
 - The footer is an account utility row: identity is text-first (name and email,
-  no fabricated initials or fallback avatar); the appearance control sits at
-  the row's trailing edge. The account menu contains Profile, the quick
-  language switcher, and Sign out. On the icon rail, text can hide but the
-  account action remains a labelled icon.
+  no fabricated initials or fallback avatar). When the person has uploaded an
+  account photo it leads the row as a small `UserAvatar`, and the account menu
+  header repeats it; without one the row stays text only. The appearance
+  control sits at the row's trailing edge. The account menu contains Profile,
+  the quick language switcher, and Sign out. On the icon rail, text can hide
+  but the account action remains a labelled control: the photo when there is
+  one, otherwise the user icon.
 
 ```tsx
 <SectionCard
@@ -451,9 +465,9 @@ id) → one `primaryAction` + optional `secondaryActions`.
   appearance controls stay together below navigation; language is a quick
   setting in the account menu. The top bar is reserved for orientation and the
   sidebar control.
-- **Don't add an in-page back navigator.** Browser history and the persistent
-  sidebar already provide return paths; record headers keep the title aligned
-  with their leading identity instead of placing a back control above it.
+- **Keep return navigation direct.** Project detail headers provide a labelled
+  back arrow to their project list. Do not hide this primary return path in an
+  overflow menu. Other records retain browser history and sidebar navigation.
 - **Descriptions are exceptional.** Add one only for a policy, risk,
   consequence, or unfamiliar state — never to restate the title or enumerate
   the content visible below.
@@ -487,7 +501,7 @@ shared implementations. Geometry lives in `styles/surfaces.css`.
 | Task / real web examples | Composition | Width / scroll |
 | --- | --- | --- |
 | Scan, filter, compare, select: Users, Applications, Audit, Projects, Challenges, Enterprises, Activities and Accreditation/Presence | Header → optional tabs → search/filter toolbar → count/selection feedback → one table or drill-down list → pagination | `PageLayout` (content), max 1280 px, matching Users. Use `workspace` only when columns require more space. Document scroll. Never constrain a table tab to the width of its sibling form. |
-| Read or edit one subject: challenge/project editors, event/profile settings, compact catalogues | Header → optional category tabs → open sections → one save owner per form | `PageLayout width="reading"`, max 896 px. Fields themselves stay in one or two readable columns; never stretch a single text field across a wide dashboard. Document scroll. |
+| Read or edit one subject: challenge editors, compact catalogues | Header → optional category tabs → open sections → one save owner per form | `PageLayout width="reading"`, max 896 px. Fields themselves stay in one or two readable columns; never stretch a single text field across a wide dashboard. Document scroll. |
 | Operate live data: queue operations, schedule grid, logistics analytics | Header → compact scope/data controls → operational surfaces | `width="workspace"`, available shell width. Document scroll unless simultaneous panes require a fixed workspace. |
 | Judge while watching queue and evaluation | Header/scope controls → sibling panes; queue and evaluation are separate bounded units | Existing judging desktop breakpoint (`xl`): fixed viewport, `min-h-0` throughout, scroll only pane bodies, fixed pane actions. Below it, normal document flow. No page-scroll trap on small/zoomed screens. |
 | A small amount of content | Same header and alignment, open content and useful next action | Do not center everything vertically, inflate cards or add filler descriptions. Empty space is acceptable. |
@@ -495,9 +509,12 @@ shared implementations. Geometry lives in `styles/surfaces.css`.
 Application management and user/enterprise detail use the same 1280 px content
 canvas as Users. A full route page does not mean unlimited
 width: user detail needs its own route, header and tabs, not a stretched canvas
-or a side editor. Event settings and Libraries use the 896 px reading canvas: related form
-fields and compact one-to-three-column catalogues do not need unlimited
-comparison space. Neither route name nor settings category chooses width.
+or a side editor. Libraries use the 896 px reading canvas. Profile, project details and event
+settings use the 1280 px content canvas: desktop columns group personal details
+and account utilities, project content and challenges, or category navigation
+and settings. Keep individual form fields and descriptions readable within
+that canvas. These contexts use bounded SectionCard surfaces with plain rows
+inside; avoid nested cards around each person, link or challenge. Neither route name nor settings category chooses width.
 Activities and Accreditation/Presence share this 1280 px canvas, including
 their tabs and control alignment. A scanner may be compact within that canvas;
 it does not give the destination a different outer width.
@@ -585,6 +602,9 @@ without context are not an adequate mobile adaptation.
 - No decorative page symbol by default. `leading` is a real record identity
   (logo/photo); section icons are optional scanning aids when several distinct
   domains appear together, not mandatory decoration. Never fabricate avatars.
+  When the reader may edit that image (user staff on a person's record), the
+  avatar itself opens a small change/remove menu, marked with a camera badge;
+  it never carries other page actions.
 - Status belongs next to the subject it describes. A count is neutral text
   with tabular numerals; email/date/ownership are metadata. A description only
   earns space when it explains policy, risk, consequence or an unfamiliar state.
@@ -603,9 +623,14 @@ without context are not an adequate mobile adaptation.
   Keep the page header above them. The selected tab already names the panel:
   do not repeat it as an immediate `h2`; give distinct subsections their own
   headings. Statistics phase uses `width="content"` in its control row. Use a route for a different subject/workflow.
-- Tabs stay on one scrollable line; never wrap or clip their last item. Use
-  meaningful labels and keyboard arrow navigation. Existing deep-linkable
-  settings retain their URL and dirty-category guard.
+- Tabs stay on one scrollable line; never wrap or clip their last item. Event
+  settings does not add a second vertical rail beside the app sidebar:
+  `/settings/event` is a plain list of the sections the caller may manage, and
+  `?tab=<section>` opens one section with a back link in the header context slot; a section's own views
+  stay horizontal tabs. The same layout serves desktop and mobile. Use
+  meaningful labels and keyboard arrow navigation. Deep links, per-category save
+  scope and the dirty-section guard (links, browser Back and unload) are
+  retained (#932).
 
 ### Creation, reading and editing
 
@@ -625,6 +650,12 @@ Keep actual multi-record objects independently bounded when ownership matters.
 
 ### Overlay geometry and content ownership
 
+- The live statistics activity chart can expand to the viewport minus 32 px,
+  using the shared modal focus and close controls. This is a focused read-only
+  chart view, not a record editor.
+- The CV viewer is the other read-only document view: up to 1152 px wide and
+  the viewport height minus 32 px on desktop, the whole screen below `sm`,
+  with the PDF as its only content.
 - Modal `sm`: 384 px, short confirmations/decisions; `md` (default): 512 px,
   compact forms. `lg`: 672 px, exceptional paired fields/review content; `xl`:
   896 px, existing specialized review tools only. Larger sizes are not a
@@ -742,7 +773,8 @@ dialog. Inventory: `apps/web/README.md`; representative live examples in
 `/design-system`.**
 
 Shared dialogs and sheets (H55) use the shadcn New York/Radix backdrop:
-`bg-black/50`, without backdrop blur. Both backdrop and content use
+`bg-black/50`, without backdrop blur. Dialog content uses the opaque `bg-popover`
+surface so underlying page text cannot interfere with the dialog. Both backdrop and content use
 `z-index: 50`; the portal renders the content after the backdrop.
 
 ### Is it a dialog at all?
@@ -838,6 +870,9 @@ Tables and lists:
   trailing edge, close to the side-panel origin.
 - User tables stay text-first when no profile image exists; do not synthesize
   initials into avatar circles, which adds height without adding identity.
+  A real account photo leads the name cell (`UserAvatar`, decorative beside
+  the visible name). Initials belong only where the photo itself is the
+  subject, such as the photo editor and the mobile Account header.
 - An inline-editable grid navigates like a spreadsheet: arrows move between
   cells, Tab/Enter commit and move, Escape reverts — and both the row-selection
   checkbox and the row actions are cells too, so nothing in a row needs a
@@ -952,6 +987,13 @@ product bug, not a styling choice.**
 - Announcements: critical form errors and sync failures are announced; busy
   states are programmatically exposed and prevent accidental repeat submits.
 - Never rely on colour alone for queue, decision, connection, or scan state.
+- Mobile text follows Dynamic Type at every size, including AX1–AX5: content
+  text wraps and its container grows (no fixed heights or truncation around
+  it). Only fixed chrome — the tab bar, React Native titles inside native
+  navigation-bar items, overlays on the live camera — uses the shared cap in
+  `apps/mobile/theme/dynamic-type.ts`, and capped single-line labels shrink to
+  fit rather than truncate. Side-by-side label/value rows (`InfoRow`) stack
+  the value under its label at accessibility sizes.
 - Charts expose exact values outside hover-only tooltips (table or text
   alternative for every chart).
 
@@ -1178,6 +1220,56 @@ architecture: [`mobile.md`](./mobile.md).**
   same `check-copy` enforcement.
 - Capability changes apply without reinstall: tabs recompute from a shared
   `/api/me` fetch that refetches on app foreground (H55).
+
+### Live Activities on iOS (#966)
+
+All five kinds share one visual grammar, following [Apple's Live Activities
+HIG](https://developer.apple.com/design/human-interface-guidelines/live-activities):
+
+- Lock Screen: 14 pt system margins, 10 pt between rows; icon + title and
+  optional state on the first row, secondary context leading and the primary
+  metric trailing on the second, then full-width progress. Scan sits beside
+  secondary context in the second row.
+- Expanded island: leading identity (or queue position, matching compact),
+  trailing primary metric; the bottom region contains title, context and
+  finally progress. Staff/desk put the circular Scan action in the leading
+  top slot to stay inside the expanded height budget (4 pt row gaps and bottom
+  inset); other
+  kinds use 8 pt row gaps and bottom inset. Keep controls clear of the curved
+  corners. Preserve the relative placement of changing values
+  across compact, expanded and Lock Screen presentations.
+- System typography: 17 pt semibold Lock Screen titles, 15 pt semibold
+  expanded titles, 28 pt primary metrics, 17 pt secondary values, 12 pt medium
+  captions and 13 pt medium context. Timer width fitting may reduce the hero
+  size; names truncate before primary values. Submitted deadlines demote the
+  remaining timer and promote the completed state.
+- Minimal island: a recognizable 20 pt category or phase symbol; live activity
+  adds a dot, and operational progress keeps its ring. Multi-unit countdowns
+  belong in compact trailing, expanded and Lock Screen presentations.
+- Icons are bare SF Symbols: 17 pt in Lock Screen headers, 24 pt in expanded
+  identity slots, 15 pt compact. No nested icon containers or decorative badges.
+- Scan is the only explicit action on staff/desk surfaces: a 44 pt circle
+  with a 20 pt NFC symbol and a localized accessibility label. Place it leading
+  beside secondary context on the Lock Screen and in the expanded leading slot;
+  progress always occupies its own full-width row. The opaque blue fill is
+  `#0066CC`, reduced to neutral `#3A3A3C` in Always-On.
+- Countdowns use `2h 34m` / `34m` normally; only the last five minutes show
+  seconds (`4m 59s`, then `48s` below a minute) on every countdown surface, including small.
+  Always-On removes the seconds field and its spacing, leaving `4m` or `<1m` below a minute;
+  waking restores seconds. Never render a seconds placeholder.
+- The submission window's elapsed bar remains visible after submission.
+- Keep semantic colour, dynamic light/dark Lock Screen accents and reduced
+  luminance handling. Colour never replaces a state label or symbol. Continuous
+  progress bars share a treatment; the queue retains its meaningful stage track.
+- Height follows content: upcoming sessions do not reserve space for absent
+  progress or actions. Do not make every kind equally tall or add filler copy.
+
+The small scale here is specific to system Live Activity surfaces; do not apply
+web heading fonts or page/container tokens to the Dynamic Island. Runtime layouts
+must remain self-contained inside each serialized `'widget'` function; see
+[`mobile.md`](./mobile.md#live-activities-and-live-updates-966) for rendering
+constraints and [`live-activities.md`](./live-activities.md#design-rationale-apple-hig)
+for per-kind content.
 
 ## 13. Definition of done for UI work
 

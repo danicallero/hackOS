@@ -82,6 +82,8 @@ export interface TemplateField {
   /** For kind "file": lets the applicant consent to sharing this upload with
    *  sponsors (H56); see sponsorShareKey for the response-key convention. */
   shareable_with_sponsors?: boolean;
+  /** #935: this file is the applicant's public-profile CV; at most one per form. */
+  profile_cv?: boolean;
   /** Groups this field under a `FormSection.key` (H11 form builder sections). */
   section_key?: string;
   /** Ungrouped question placed after this section (H11). */

@@ -157,7 +157,7 @@ export const scannerRoleStatsResponse = z.object({
       // H8 full-replacement: the role's own name ("Unassigned" for anyone
       // with no visible role) — no separate admin/judge/sponsor/staff bucket.
       role: z.string(),
-      /** At least one member of this role bucket is a real capability holder — the scanner's "staff" filter key. */
+      /** Every member of this role/capability bucket is a real capability holder — the scanner's "staff" filter key. */
       hasCapabilities: z.boolean(),
       /** Eligible to be accredited when at least one assigned active role grants event access. */
       eligible: z.number().int(),
@@ -330,6 +330,13 @@ export const scheduleBody = z.object({
   audiences: z.array(scheduleAudience).max(3).default([]),
   contactNote: z.string().max(300).nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
+  liveActivityAudience: z
+    .boolean()
+    .optional()
+    .describe(
+      "Opt-in (#966): the item's audience gets an attendee Live Activity (countdown from " +
+        "LIVE_ACTIVITY_LEAD_MINUTES before the start, then 'now, ends in'). Defaults to false.",
+    ),
 });
 
 /**
@@ -402,4 +409,33 @@ export const scheduleOwnerParams = z.object({
 export const scheduleOwnerCandidatesQuery = z.object({
   q: z.string().trim().min(2),
   limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+// #933 sponsor meal plans (logistics read side)
+export const mealPlanSummariesQuery = z.object({
+  activityId: z.coerce.number().int().positive().optional(),
+});
+
+export const mealPlanActivityParam = z.object({
+  activityId: z.coerce.number().int().positive(),
+});
+
+export const mealPlanExportQuery = z.object({ language: languageSchema.default("es") });
+
+export const mealPlanSummariesResponse = z.object({
+  meals: z.array(
+    z.object({
+      activityId: z.number(),
+      name: z.string(),
+      nameI18n: z.record(z.string(), z.string()),
+      startsAt: z.string(),
+      attending: z.number(),
+      notAttending: z.number(),
+      unanswered: z.number(),
+      intolerances: z.array(
+        z.object({ id: z.number(), label: z.record(z.string(), z.string()), n: z.number() }),
+      ),
+      withNotes: z.number(),
+    }),
+  ),
 });

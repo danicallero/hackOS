@@ -3,7 +3,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { queueFixtureMarker } from "./broadcast.js";
-import { isRepoBlockedByBusyMember } from "./guard.js";
+import { findBusyMemberEntry, isRepoIneligibleForJudging } from "./guard.js";
 import { notifyTeamPreCall } from "./notify.js";
 import { callNextForRoom } from "./service.js";
 
@@ -180,7 +180,11 @@ async function claimPreCall(queueGroupId: number, repoId: number): Promise<PreCa
     // This acquires H30's repo/member advisory locks and rechecks active
     // entries outside this group. A team that is already busy elsewhere must
     // not be warned as if it were approaching this queue.
-    if (await isRepoBlockedByBusyMember(client, repoId, { fixtureMarker: groupMarker })) {
+    // H30/H38: eligibility is checked on its own; the guard is occupancy only.
+    if (
+      (await isRepoIneligibleForJudging(client, repoId)) ||
+      (await findBusyMemberEntry(client, repoId, { fixtureMarker: groupMarker }))
+    ) {
       return null;
     }
 
@@ -253,7 +257,13 @@ async function claimPreCall(queueGroupId: number, repoId: number): Promise<PreCa
         WHERE rqg.queue_group_id = $1`,
       [queueGroupId],
     );
-    const averageMinutes = Number(paceRows[0]?.avg ?? 8);
+    const timing = await client.query(
+      `SELECT estimated_cycle_minutes FROM queue_group_timing($1)`,
+      [queueGroupId],
+    );
+    const averageMinutes = Number(
+      timing.rows[0]?.estimated_cycle_minutes ?? paceRows[0]?.avg ?? 10,
+    );
     const roomCount = Math.max(1, Number(paceRows[0]?.rooms ?? 0));
     const etaMinutes = canonical.rank * (averageMinutes / roomCount);
     const threshold = Number(settings.pre_call_notification_eta_minutes ?? 10);

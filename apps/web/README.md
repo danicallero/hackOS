@@ -247,13 +247,18 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `FullPageError`,
 `CapabilityGate`, `AccessDenied`, `Spinner`, `SubmitButton`, `PasswordInput`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
-`EntityCombobox`, `ActionGroup`, `IconButton`.
+`EntityCombobox`, `ActionGroup`, `IconButton`, `UserAvatar`.
+
+`UserAvatar` renders a person's account photo from the authenticated
+`/api/users/:id/photo` route (`Me.image`, `UserListItem.image`). Text-first
+surfaces (sidebar account row, user tables) render it only when a photo exists;
+`showInitials` is for the photo editor, where the picture is the subject.
 
 `PageLayout` is the authenticated page canvas: `content` (1280 px), `reading`
 (896 px) for focused form/text workflows, and `workspace` only for genuinely
 wide operational data. Users, application management and user/enterprise detail
-use the 1280 px content canvas. Event settings and compact Libraries catalogues
-use the 896 px reading canvas. A full route does not
+use the 1280 px content canvas. Event settings and profile use the 1280 px content canvas; compact Libraries
+catalogues use the 896 px reading canvas. A full route does not
 imply unlimited width. Mixed record pages keep their table tabs in this canvas;
 constrain only their text/form blocks when needed.
 Use one `PageHeader`, then optional `TabBar`, `PageToolbar`, and content.
@@ -273,14 +278,22 @@ are fixed outside their scroll body; short forms remain in normal flow.
 Shared geometry is in `styles/surfaces.css`; the full decisions and exceptions
 are in `docs/DESIGN.md` §4b, with interactive examples in `/design-system`.
 
+Shared page, section, modal and panel headers use `heading-row` to align
+visible title capitals with icons and `type-meta` counters. Section icons
+stay in the title row, independently of descriptions.
+
 `SectionCard variant="plain"` keeps the shared section heading/actions without
 card chrome. Use it when page spacing and columns explain the structure; reserve
-the default bordered surface for genuinely bounded groups. Event settings and My profile use open sections within a constrained reading
-width, with save status at the leading edge and secondary actions then Save
+the default bordered surface for genuinely bounded groups. Event settings use bounded category surfaces on the content canvas with a
+desktop category rail and narrow-screen tabs. Wallet separates Fields,
+Appearance, Images and Delivery by their distinct save/action owners. My profile
+uses the content canvas with bordered section surfaces (personal details beside
+roles, email and password on desktop; danger zone then terms/privacy links
+below), with save status at the leading edge and secondary actions then Save
 at the trailing edge of the owning form footer. Event settings omit
 headings already supplied by the active tab, pair save status with the submit
 action, and use the shared Sileo toast after saving. Inbox preferences
-use category rows with channel menus; mandatory queue delivery stays read-only.
+use category rows with channel menus; mandatory queue delivery stays read-only, with a lock in the menu-caret gutter.
 Password changes open a focused modal from the profile section. Static metadata is
 text, not a badge. See `docs/DESIGN.md` §3.
 
@@ -530,3 +543,30 @@ while retaining a dashed destination outline and the item's dimensions as
 siblings shift (issue #849). Use `useReducedDragMotion` to disable overlay drop
 animations, and `motion-reduce:transition-none!` on sortable wrappers. Keyboard
 sensors retain pickup, arrow movement, drop, and Escape cancellation.
+
+Project submission controls reuse `SectionCard`, `SidePanelEditor` and `AlertModal`; the latter accepts `confirmDisabled` for required decision reasons without displaying a pending spinner. See the [project lifecycle audit](../../docs/project-lifecycle-audit.md) for submission, reconciliation and track timing behavior.
+
+The project reconciliation workspace follows Users/Responses: `ListToolbar` + `FilterMenu` + `DataTable`, with mobile drill-down rows and one review overlay per project. Submission actions use `SectionCard.action`; do not place a SidePanelEditor trigger wrapper inside reading content, where its automatic right alignment creates a detached action.
+
+Controlled list review dialogs can pass `Modal.onCloseAutoFocus` to restore their opening row or search field. Keep persistent review utilities in `Modal.footer`, outside the scrolling body.
+
+Participant project detail pages use the content canvas with a direct back arrow and compact edit controls inline with the title. Desktop places project details and team in the main column and challenges/judging in the adjacent column; narrow screens stack the sections. Participant and staff details reuse ProjectDescriptionLinks for Devpost, demo and repository links. Project details, team, challenges/judging preference and a final submission section use separate SectionCard surfaces in that order; the submission section leads with Devpost (code and link status) and offers "Submit without Devpost" as a secondary action below an "or" divider; team/challenge members stay plain rows inside their section. Both planning and reconciled projects use the same Add challenge editor instead of separate inline selection controls. Ordinary event rule settings record audit metadata automatically without asking for a justification; explicit project exceptions retain their reason.
+
+## Invitation onboarding (H7/H9/H10)
+
+The claim-account form follows the active web language, including dietary
+restriction options and selected labels. Changing either the web language
+switcher or the form language selector updates both and saves that language
+as the new account preference. Dietary restrictions are submitted as dictionary
+IDs, so changing language preserves the selection and other entered data.
+
+## Personal profile layout (H6/H7/H8)
+
+The profile uses the content canvas with two equal columns from the `xl`
+breakpoint: personal details and their save footer beside email and password
+settings. Narrower viewports stack these sections. Assigned roles occupy a
+separate full-width section below the editable settings, so their count cannot
+change the account column's height. A full-width role card starts collapsed
+and shows the visible role. It reveals all assigned role names, marking the
+visible role with a badge. Effective capabilities are grouped by area; each
+group opens on demand and shows capability names without descriptions.

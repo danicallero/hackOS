@@ -1,10 +1,12 @@
 # Queue operator console
 
-The **Rooms** tab in Queue operations is the room-first console for queue
+The **All rooms overview** tab in Queue operations is the room-first console for queue
 operators. It shows only unpaused rooms, then answers the operational questions
 in order: which teams are in each waiting room, and which team is coming next?
 Sponsor queue configuration remains in the **Queues** tab and the queue detail
-route.
+route. Administrators edit room definitions and enterprise pooling in the
+**Room configuration** tab; `/queue/rooms` remains the standalone stable URL.
+Event-wide judging hours belong to Event settings → Judging window.
 
 Each room card contains the room name, its queue name, one numbered **Waiting
 room** list, and a single **Coming next** entry. Room state, location, waiting
@@ -36,6 +38,26 @@ waiting room is not offered another waiting-room call; a team being evaluated
 cannot be reordered; and queue actions are blocked while one of the team's
 members is actively being evaluated in another room. The API enforces the
 same guard inside the transaction, so a stale screen cannot bypass it.
+
+Each queue row shows where a member is occupied before any action is tried
+(#931): “Waiting at {room}” when a member is called to another room's door,
+which only blocks calling the team, and “Being judged in {room}” when a member
+is in a room or presenting, which also blocks moves. Occupancy is resolved
+through the same shared-member relation as the H30 guard, so a member shared
+with another team counts, and it clears as soon as that entry leaves
+`called`/`in_room`/`presenting`. Reordering (`move-top`, `move-to`, `skip`,
+`requeue`) never calls a team, so project eligibility does not block it; an
+ineligible project is still never called (a Devpost import is ineligible only
+by explicit organizer override, H21): the row says “Not eligible for
+judging”, Manual add is not offered, and a manual call answers “Project is
+not eligible for judging” instead of reporting it busy. Eligibility is a
+separate call-time check (`isRepoIneligibleForJudging`) that call-next, the
+pump and manual calls run before the occupancy guard (`findBusyMemberEntry`),
+and the judging panel's `crossRoomSkips` labels each skip with
+`reason: "ineligible"` or `reason: "busy_member"`. A member occupied in a room
+only blocks calling into other rooms, so Manual add keeps that room enabled.
+Completed and disqualified rows carry no occupancy warning. A blocked move
+names the room where the shared member is being evaluated (`Busy in {room}`).
 
 ## Data contract
 

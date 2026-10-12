@@ -2,6 +2,7 @@
 import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import { useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
+import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type PlannedWorkGroup, updateWorkGroup } from "@/lib/projects";
@@ -26,6 +28,7 @@ export function WorkGroupEditor({
   onSaved: () => Promise<void>;
 }) {
   const { t } = useLocale();
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,9 +64,13 @@ export function WorkGroupEditor({
       open={open}
       onOpenChange={setOpen}
       trigger={
-        <Button variant="outline">
+        <Button
+          variant="outline"
+          size={isMobile ? "icon" : "default"}
+          aria-label={t("editProject")}
+        >
           <PencilIcon aria-hidden="true" className="size-4" />
-          {t("editProject")}
+          {!isMobile && <span>{t("editProject")}</span>}
         </Button>
       }
       icon={PencilIcon}
@@ -74,71 +81,79 @@ export function WorkGroupEditor({
         </Button>
       }
     >
-      <div className="space-y-4">
-        <WorkGroupField
-          id="group-name"
-          label={t("projectNameLabel")}
-          value={name}
-          onChange={setName}
-        />
-        <div className="space-y-2">
-          <Label htmlFor="group-description">{t("descriptionLabel")}</Label>
-          <Textarea
-            id="group-description"
-            rows={4}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
+      <div className="space-y-6">
+        <SectionCard title={t("projectDetailsTitle")}>
+          <WorkGroupField
+            id="group-name"
+            label={t("projectNameLabel")}
+            value={name}
+            onChange={setName}
           />
-        </div>
-        <WorkGroupField
-          id="group-devpost"
-          label={t("workGroupDevpostUrl")}
-          value={devpost}
-          onChange={setDevpost}
-          type="url"
-        />
-        <WorkGroupField
-          id="group-github"
-          label={t("projectRepoUrlLabel")}
-          value={github}
-          onChange={setGithub}
-          type="url"
-        />
-        <WorkGroupField
-          id="group-demo"
-          label={t("projectDemoUrlLabel")}
-          value={demo}
-          onChange={setDemo}
-          type="url"
-        />
-        <div className="space-y-2">
-          <Label htmlFor="group-timing">{t("workGroupTiming")}</Label>
-          <Select
-            value={timing}
-            disabled={!group.presentation_timing_editable}
-            onValueChange={(value) => setTiming(value as typeof timing)}
-          >
-            <SelectTrigger
-              id="group-timing"
-              aria-describedby={
-                !group.presentation_timing_editable ? "group-timing-locked" : undefined
-              }
+          <div className="space-y-2">
+            <Label htmlFor="group-description">{t("descriptionLabel")}</Label>
+            <Textarea
+              id="group-description"
+              rows={4}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+        </SectionCard>
+        <SectionCard title={t("linksTitle")}>
+          <div className="grid items-start gap-4 sm:grid-cols-2">
+            <WorkGroupField
+              id="group-github"
+              label={t("projectRepoUrlLabel")}
+              value={github}
+              onChange={setGithub}
+              type="url"
+            />
+            <WorkGroupField
+              id="group-demo"
+              label={t("projectDemoUrlLabel")}
+              value={demo}
+              onChange={setDemo}
+              type="url"
+            />
+          </div>
+          <WorkGroupField
+            id="group-devpost"
+            label={t("workGroupDevpostUrl")}
+            value={devpost}
+            onChange={setDevpost}
+            type="url"
+          />
+        </SectionCard>
+        <SectionCard title={t("workGroupTiming")}>
+          <div className="space-y-2">
+            <Select
+              value={timing}
+              disabled={!group.presentation_timing_editable}
+              onValueChange={(value) => setTiming(value as typeof timing)}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="no_preference">{t("workGroupTimingNone")}</SelectItem>
-              <SelectItem value="early">{t("workGroupTimingEarly")}</SelectItem>
-              <SelectItem value="middle">{t("workGroupTimingMiddle")}</SelectItem>
-              <SelectItem value="late">{t("workGroupTimingLate")}</SelectItem>
-            </SelectContent>
-          </Select>
-          {!group.presentation_timing_editable && (
-            <p id="group-timing-locked" className="text-xs text-muted-foreground">
-              {t("projectTimingLocked")}
-            </p>
-          )}
-        </div>
+              <SelectTrigger
+                id="group-timing"
+                aria-label={t("workGroupTiming")}
+                aria-describedby={
+                  !group.presentation_timing_editable ? "group-timing-locked" : undefined
+                }
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="no_preference">{t("workGroupTimingNone")}</SelectItem>
+                <SelectItem value="early">{t("workGroupTimingEarly")}</SelectItem>
+                <SelectItem value="middle">{t("workGroupTimingMiddle")}</SelectItem>
+                <SelectItem value="late">{t("workGroupTimingLate")}</SelectItem>
+              </SelectContent>
+            </Select>
+            {!group.presentation_timing_editable && (
+              <p id="group-timing-locked" className="text-xs text-muted-foreground">
+                {t("projectTimingLocked")}
+              </p>
+            )}
+          </div>
+        </SectionCard>
       </div>
       {error && <ContextualError message={error} />}
     </SidePanelEditor>

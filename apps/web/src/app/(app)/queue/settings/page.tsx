@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
 
-// Judging window and rooms merged into one "Judging settings" surface
-// (H39, H46) — this route stays as a redirect for existing bookmarks/deep
-// links.
+// H39: preserve the published judging settings URL.
 export default function JudgingWindowSettingsPage() {
-  redirect("/queue/rooms?tab=window");
+  redirect("/settings/event?tab=judging");
 }

@@ -1,10 +1,11 @@
 "use client";
 
 // Focused room editor (H29, H46). The list owns quick edits; this panel owns
-// creation and the room-to-enterprise relationship.
+// creation, detailed assignment controls, and deletion.
 
 import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { useEffect, useState } from "react";
+import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -37,6 +38,7 @@ export function RoomFormPanel({
   onRetryDetails,
   onOpenChange,
   onSubmit,
+  onDelete,
   onSetEnterprise,
   onClearEnterprise,
 }: {
@@ -49,11 +51,15 @@ export function RoomFormPanel({
   onRetryDetails: () => void;
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: RoomFormValues) => Promise<void>;
+  onDelete: () => Promise<void>;
   onSetEnterprise: (enterpriseId: number) => Promise<void>;
   onClearEnterprise: () => Promise<void>;
 }) {
   const { t } = useLocale();
   const [values, setValues] = useState<RoomFormValues>(EMPTY_FORM);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [nameError, setNameError] = useState(false);
   const roomId = room?.id;
@@ -92,15 +98,61 @@ export function RoomFormPanel({
   return (
     <SidePanelEditor
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        if (!deleting) onOpenChange(next);
+      }}
       title={title}
       icon={BuildingsIcon}
       footer={
         <>
-          <Button variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>
+          {mode === "edit" && room && (
+            <AlertModal
+              open={deleteOpen}
+              onOpenChange={setDeleteOpen}
+              title={t("deleteRoom")}
+              description={t("deleteRoomDesc", { room: room.name })}
+              cancelLabel={t("cancel")}
+              confirmLabel={t("deleteRoom")}
+              destructive
+              pending={deleting}
+              trigger={
+                <Button
+                  className="mr-auto"
+                  variant="destructive"
+                  disabled={pending || deleting}
+                  onClick={() => setDeleteError(null)}
+                >
+                  {t("deleteRoom")}
+                </Button>
+              }
+              onConfirm={async () => {
+                setDeleting(true);
+                setDeleteError(null);
+                try {
+                  await onDelete();
+                  setDeleteOpen(false);
+                } catch (err) {
+                  setDeleteError(err instanceof ApiError ? err.message : t("couldNotDeleteRoom"));
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              {deleteError && (
+                <p role="alert" className="text-destructive text-sm">
+                  {deleteError}
+                </p>
+              )}
+            </AlertModal>
+          )}
+          <Button
+            variant="outline"
+            disabled={pending || deleting}
+            onClick={() => onOpenChange(false)}
+          >
             {t("cancel")}
           </Button>
-          <SubmitButton pending={pending} onClick={() => void submit()}>
+          <SubmitButton disabled={deleting} pending={pending} onClick={() => void submit()}>
             {mode === "create" ? t("createRoom") : t("saveRoom")}
           </SubmitButton>
         </>

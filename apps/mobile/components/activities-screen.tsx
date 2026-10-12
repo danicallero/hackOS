@@ -1,6 +1,6 @@
 import { MenuView } from "@expo/ui/community/menu";
 import { type ActivityKindSymbolName, isMealActivityKind } from "@hackos/shared/activity-kinds";
-import { useFocusEffect, useNavigation, useRouter, useScrollToTop } from "expo-router";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from "react-native";
@@ -9,8 +9,8 @@ import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   AndroidFilterMenu,
   EmptyState,
-  LegacyHeaderIconButton,
   LegacyScreenHeader,
+  MenuTriggerIcon,
   StatusPill,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -29,13 +29,15 @@ import { resolveActivityText, type ScannerActivity } from "@/lib/scanner-types";
 import { activityKindSymbol, scheduleTypeLabel } from "@/lib/schedule";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
 
 /** How often the "Now"/"Next" marker re-evaluates which row it belongs to. */
 const MARKER_TICK_MS = 60_000;
 
 export function ActivitiesScreen() {
-  useColorScheme();
+  const colorScheme = useColorScheme();
   const router = useRouter();
   const navigation = useNavigation();
   const { language, t } = useLocale();
@@ -63,7 +65,7 @@ export function ActivitiesScreen() {
     [directory],
   );
 
-  useScrollToTop(listRef);
+  const trueTop = useTrueTopScroll(listRef);
 
   const load = useCallback(async () => {
     try {
@@ -250,7 +252,18 @@ export function ActivitiesScreen() {
         <>
           <Stack.Toolbar placement="left">
             <Stack.Toolbar.View hidesSharedBackground>
-              <Text style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}>
+              <Text
+                accessibilityRole="header"
+                maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+                style={{
+                  // A fixed colour, not the dynamic label: iOS 26 flips a bar
+                  // item's light/dark appearance with what scrolls behind it,
+                  // which turned the title white for a moment.
+                  color: colorScheme === "dark" ? "#ffffff" : "#000000",
+                  fontSize: 28,
+                  fontWeight: "800",
+                }}
+              >
                 {t("tabActivities")}
               </Text>
             </Stack.Toolbar.View>
@@ -328,7 +341,7 @@ export function ActivitiesScreen() {
                     setKind(nativeEvent.event === "all" ? null : nativeEvent.event)
                   }
                 >
-                  <LegacyHeaderIconButton
+                  <MenuTriggerIcon
                     icon={
                       kind === null
                         ? "line.3.horizontal.decrease"
@@ -337,7 +350,6 @@ export function ActivitiesScreen() {
                     accessibilityLabel={t("scheduleFilter")}
                     accessibilityState={{ selected: kind !== null }}
                     tintColor={kind === null ? colors.label : colors.accent}
-                    onPress={() => undefined}
                   />
                 </MenuView>
               </GlassView>
@@ -360,6 +372,7 @@ export function ActivitiesScreen() {
       )}
       <FlatList
         ref={listRef}
+        {...trueTop.scrollProps}
         style={{ flex: 1 }}
         testID="activities-list"
         contentInsetAdjustmentBehavior="automatic"

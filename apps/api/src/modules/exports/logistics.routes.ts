@@ -1,11 +1,11 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
-import { recordsToCsv, toCsv } from "../../lib/csv.js";
+import { recordsToCsv, sendCsv, toCsv } from "../../lib/csv.js";
 import { BadRequestError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { activitiesExportBody, activitiesExportCatalogQuery } from "./schemas.js";
@@ -42,13 +42,6 @@ function localizedText(
     if (typeof value === "string" && value.trim()) return value;
   }
   return fallback;
-}
-
-function sendCsv(reply: FastifyReply, filename: string, csv: string) {
-  reply.header("content-type", "text/csv; charset=utf-8");
-  reply.header("content-disposition", `attachment; filename="${filename}"`);
-  reply.header("cache-control", "private, no-store");
-  return reply.send(csv);
 }
 
 const SCANNABLE_ACTIVITY_WHERE = "(a.category = ANY($1::text[]) OR a.requires_scan = true)";

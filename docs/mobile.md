@@ -5,13 +5,26 @@ capability-driven tabs, participant-facing screens, authenticated realtime,
 and offline SQLite scanners for accreditation, badge rotation, presence,
 meals, and registrable activities.
 
+**Build identification.** The installed-version footer in Account and Sign in reads
+`v<version> · <commit>`: `app.config.ts` embeds the short commit the binary was built
+from (`EAS_BUILD_GIT_COMMIT_HASH`, `GITHUB_SHA`, or the local checkout).
+
+The Account connection warning appears below the profile identity header, before
+the profile fields, so it stays outside the avatar’s cutout transition.
+
 **Developer API mode.** Seven taps on the understated installed-version footer in Account
 or Sign in reveals a confirmation that switches between production
 (`api.hackudc.com`) and development (`api.dani.md`). The choice is persisted
 in SecureStore. A switch clears the local session and all endpoint-specific
 caches, downloaded passes, roster data, and every pending scanner queue before
 enabling the new API. Revoking the old server session is best effort and never
-blocks a switch while offline. A fixed
+blocks a switch while offline. Android's bare SQLite default-directory path is
+converted to a `file://` URI before FileSystem reads the directory URI. That
+native getter validates the path even when no roster exists, so the switch
+could fail on a fresh installation before its first sign-in as well as during
+an older roster migration. Cleanup runs from Sign in too; it does not require
+a previous session or scanner use.
+A fixed
 red `DEV` badge overlays every screen while development is active. This is
 intentionally undiscoverable during ordinary use.
 
@@ -33,11 +46,14 @@ the hardware-free native screen suite.
 - [Navigation & tabs](#navigation--tabs)
 - [Auth flow](#auth-flow)
 - [Participant screens](#participant-screens)
+- [Event diary (#935)](#event-diary-935)
+- [Company tags (#935)](#company-tags-935)
 - [Operator screens](#operator-screens)
   - [Queue operations](#queue-operations)
   - [Scanner](#scanner)
   - [Activities](#activities)
 - [Scanner cache encryption & isolation](#scanner-cache-encryption--isolation)
+- [Live Activities and Live Updates (#966)](#live-activities-and-live-updates-966)
 - [Realtime & notifications infrastructure](#realtime--notifications-infrastructure)
 - [Other infrastructure](#other-infrastructure)
 - [UI testing](#ui-testing)
@@ -63,6 +79,7 @@ documented in full in its own section below.
 | H24 | Presence (door in/out) scanner, manual back-dated entries | [Scanner](#scanner) |
 | H25 | Meals scanner, repeat-serving confirmation | [Scanner](#scanner) |
 | H26 | Registrable-activity scanner | [Scanner](#scanner), [Activities](#activities) |
+| H38, H25/H26, H59, H19, H22 | Queue, staff-activity, attendee-activity, submission-deadline and accreditation-desk Live Activities / Live Updates (#966) | [Live Activities](#live-activities-and-live-updates-966) |
 
 ## Backend changes
 
@@ -142,7 +159,9 @@ through the rollout. `push_tokens` (already existed in
   ranking (web `/logistics/stats`, "Staff ranking" section), and `GET
   /api/exports/staff-scan-stats.csv` (`exports:run`) exports the same data.
 - `GET /api/scanner/role-stats` — Confirmed/Accredited/Inside counts for the
-  scanner home screen's stats tiles, broken down by the same role
+  scanner home screen's stats tiles, broken down by role and capability-holder
+  status (people sharing a role remain separate buckets when only some hold
+  capabilities), using the same role
   classification `/api/scanner/snapshot` uses (`apps/api/src/modules/logistics/stats.ts`).
   "Confirmed" means accreditation-eligible, not the raw application
   `confirmed` flag: it is the person's live role-derived `eventAccess` bit
@@ -156,16 +175,16 @@ through the rollout. `push_tokens` (already existed in
   (`lib/server-events.ts#startLogisticsEventStream`) and refetches on any
   `LOGISTICS_ACCREDITED`/`LOGISTICS_PRESENCE_SCAN`/`LOGISTICS_ACTIVITY_SCAN`/
   `LOGISTICS_MEAL_SCAN_BATCH` event, so one device's scan updates every other
-  device's tiles within about a second without polling. If the request fails
-  (offline), the screen falls back to computing the same three numbers from
-  the local SQLite roster — an approximation, since a stale snapshot's
+  device's tiles within about a second without polling. If the request fails,
+  the previous server counts are discarded and the screen falls back to
+  computing the same three numbers from the local SQLite roster — an approximation, since a stale snapshot's
   `lastPresenceKind` can lag the authoritative server-side occupancy
-  estimate. The screen also gained a persisted, multi-select role-group
-  filter (participants/mentors/staff incl. admins/sponsors — a custom
-  always-open-until-outside-tap panel next to the people-finder button, not
-  a native menu; see the component's doc comments for why) that scopes which
-  rows get summed into the tiles, saved via `expo-secure-store` so it
-  survives app restarts.
+  estimate. The scanner uses the same roster-derived role options and exact
+  role matching as the People directory, including custom roles. Its persisted
+  multi-select role filter stays open across taps, scrolls within the available
+  screen height, and scopes which rows get summed into the tiles. The selection
+  is saved via `expo-secure-store` so it
+  survives app restarts. Scanner and personal scan statistics refresh on focus.
 - `idempotencyGuard` (`apps/api/src/lib/idempotency.ts`) now reclaims a
   first-execution record whose `response_status` has been NULL for more
   than 30s, instead of 409ing "still in flight" forever. Mobile scanners
@@ -199,7 +218,7 @@ distributed to other Expo Router apps without importing hackOS code.
   solid surfaces. Five total destinations are shown directly on compact
   layouts; tablet-width layouts can place up to six before using `Others`,
   whose bar surface and circle become 56pt instead of 64pt. With no scan
-  capability, Schedule, Wallet, Notifications, and Account are direct; Queue
+  capability, Schedule, Diary, and Account are direct; Queue
   joins them for accounts with `queue:status` even before the first queue
   entry so the empty state and tutorial are available. Other accounts see
   Queue only when they have an actual queue entry. `queue:status` is assigned
@@ -207,11 +226,32 @@ distributed to other Expo Router apps without importing hackOS code.
   name. For
   `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the
   admin `*` wildcard) holders, the daily tools take the bar — Schedule,
-  Scanner, Activities (for `ACTIVITY_SCAN`), Notifications — and Queue,
-  Wallet, Account, and any secondary operations stay in Others. Queue-only
+  Scanner, Activities (for `ACTIVITY_SCAN`) — and Queue,
+  Diary, Account, and any secondary operations join them directly while five
+  fit, moving to Others only beyond that. Wallet is not a tab: a
+  back-button-sized glass circle at the top-left of Account's scrolling content
+  (it scrolls away with the content, on both platforms) opens it as an
+  overlay of Account (`components/account-wallet.tsx`, H28); the overlay
+  carries its own close button in the same corner, so from the rest position
+  the glyph morphs in place. Android's system back also closes it. The
+  overlay avoids a pushed or modal route, which would slide or cover the corner.
+  The wallet has no title: the Ticket/Badge control leads it.
+  `app/(tabs)/others/wallet.tsx` remains for deep links, with a title-less
+  back header. Queue-only
   operators instead get Queue operations in the primary bar; scanner
   operators with queue access find it in Others, preserving Scanner's direct
   placement.
+  When the signed-in person has an account photo (#934), the direct Account
+  tab shows it instead of the person symbol, with a ring in the tab tint when
+  selected, and the Account screen header shows it in place of the initials.
+  On a compact phone a participant's Account sits behind Others, so the Others
+  circle shows the same ringed photo while Account is open.
+  `components/user-avatar.tsx` fetches the private `/api/users/:id/photo` route
+  with the session (`loadApiImage`, shown from memory: Android's image pipeline
+  drops a `Cookie` header on an `Image` source) and keeps the initials until it
+  arrives or if it cannot load. The items inside the native `Others` dropdown
+  keep SF Symbols: UIMenu/Android menu items accept symbol names, not an
+  authenticated remote image.
   `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
   (`lib/me-context.tsx`, `lib/use-me.ts`) and keeps the custom RouterTabs shell
   mounted while the profile revalidates. Every route stays registered in the
@@ -227,13 +267,13 @@ distributed to other Expo Router apps without importing hackOS code.
   flashes Schedule over the selected tab.
 
   The entries inside the native `Others` dropdown (Account for participants;
-  eligible personal Queue, Wallet, Account, and Queue operations when a scanner
+  eligible personal Queue, Diary, Account, and Queue operations when a scanner
   operator has queue access — routes under `app/(tabs)/others/`) are intentionally
   pseudo-tabs (`lib/operations-navigation.ts`):
 
   - Selecting the pseudo-tab whose section is already on screen is a no-op.
   - Changing pseudo-tabs always uses `replace()`, never `push()`, so repeated
-    selections do not stack duplicate queue/wallet/account screens.
+    selections do not stack duplicate queue/diary/account screens.
   - Deeper screens inside a section (e.g. the person drill-downs) still push
     normally on top of that section's root.
   - Route matching must normalize Expo Router route groups first, because
@@ -249,6 +289,18 @@ distributed to other Expo Router apps without importing hackOS code.
   Do not re-implement these as plain `push()` calls or stack-style route
   launches. That regresses the back stack and duplicates overflow pages —
   earlier versions broke exactly this way.
+
+- **True top on iOS (#935).** Under `contentInsetAdjustmentBehavior="automatic"`
+  a page rests at a negative offset (the status bar, plus any native header),
+  but `useScrollToTop` scrolls to y 0, and iOS clamps programmatic and restored
+  offsets to the raw `contentInset` (0). A tab re-press or a return to the app
+  (e.g. back from the browser) therefore left the page that far below its top.
+  Scroll-to-top screens use `useTrueTopScroll(ref)` (`lib/use-true-top-scroll.ts`)
+  instead of `useScrollToTop(ref)` and spread its `scrollProps`: it learns the
+  true top from the offsets seen before the first drag, scrolls there on
+  re-press, sets `scrollToOverflowEnabled`, and moves a page iOS restored to
+  y 0 back to its true top. Android rests at 0 and is unchanged. A guard test
+  fails when a screen with the automatic inset calls `useScrollToTop` directly.
 
 ## Auth flow
 
@@ -328,18 +380,44 @@ distributed to other Expo Router apps without importing hackOS code.
 
 ## Participant screens
 
-- `app/(tabs)/schedule.tsx`, `queue.tsx`, `wallet.tsx`, `notifications.tsx`,
-  `account.tsx` — the five participant screens. API-backed screens expose
+- `app/(tabs)/schedule.tsx`, `queue.tsx`, `schedule/alerts.tsx` (inbox sheet),
+  `others/account.tsx`, and `components/wallet-screen.tsx` (an overlay of
+  Account, or `others/wallet` for deep links) — the five participant screens. API-backed screens expose
   loading, retryable error, and empty states without leaking rejected promises.
   The account screen displays the shared `/api/me` profile and keeps the
   participant-facing overview short. Pulling down refreshes `/api/me` and the
   food-intolerance labels; the label dictionary is also cached on device
   (`lib/offline-cache.ts`) so a device that goes offline before its first
   successful fetch still shows dietary labels instead of bare numeric ids.
+  The account photo uses the shared scroll-driven `ProfileAvatarCollapse`
+  overlay described below, so it remains clipped while it moves into the
+  device's top camera cutout.
+  Food intolerances opens `app/profile-tasks.tsx` to edit the dietary answer,
+  including an explicit "No restrictions" option (#933) that `PATCH /api/me`
+  records as a confirmed empty answer; the row is read-only offline or once the
+  H7 profile lock applies (the next-entry prompt then skips the dietary step).
+  Sponsor representatives (`isSponsorRep`) also
+  see a Meals section listing `GET /api/me/meal-plan`, reloaded on every focus
+  and cached under `user:<id>:meal-plan` so sign-out and 401 invalidation clear
+  it. Toggles only change a local draft; Save (shown while an open meal is
+  unanswered or edited) submits the whole plan with `PUT`, so an unticked meal
+  is an explicit "not attending", matching the web checklist. Locked meals are
+  disabled, and offline the last cached plan is shown read-only.
+  The same `app/profile-tasks.tsx` modal is the next-entry prompt: the root
+  `_layout.tsx` (`ProfileTasksPrompt`, `lib/profile-tasks.ts`) pushes it once per
+  signed-in session when a fresh `/api/me` lists `pendingProfileTasks`, never
+  while offline, before the initial session and the `/` redirect settle, or on a
+  scanner route (`/scan…`, `/activities/:id`, `/activities/person/…`,
+  `/others/person/…`), waiting until the operator leaves it. The sheet records
+  the presentation when it mounts; "Later" or dismissing it defers the prompt
+  until a sign-out or app restart. If the meal plan fails to load, the dietary
+  answer can still be saved and the plan retried; if only the meal-plan `PUT`
+  fails, the stored dietary answer is kept and a retry resends just the plan.
   Signing out while offline with a scanning capability warns first that
   re-authentication needs a live server. The overview is grouped into Profile, Contact, Event
   details, App, Account, and Session; staff with personal logistics-statistics
-  access also see a Staff section. Its Storage row opens
+  access or `sponsors:manage` also see a Staff section (Statistics and Company
+  tags respectively, [below](#company-tags-935)). Its Storage row opens
   `app/(tabs)/others/storage.tsx`, which contains storage controls only. Staff
   Statistics opens `app/(tabs)/others/statistics.tsx`, with personal scan
   counts and a link to scan history; Legal opens
@@ -382,15 +460,17 @@ distributed to other Expo Router apps without importing hackOS code.
   offline scan queue — the only record of not-yet-synced scans — or the auth
   session; see "Scanner cache encryption & isolation" below. Ordinary account
   caches are namespaced by user/session and are cleared on logout; late writes
-  that began before cleanup are serialized behind the cleanup. `wallet.tsx`
+  that began before cleanup are serialized behind the cleanup. `wallet-screen.tsx`
   renders ticket/badge QR codes. After an eligible session is restored, a
   best-effort startup warmup stores the `/api/me/ticket` payload under an
-  account-scoped cache key and discards a response if the session changes; the
-  screen still refreshes online and falls back to
-  that payload with a stale-data banner (`components/stale-data-banner.tsx`,
+  account-scoped cache key and discards a response if the session changes. The
+  screen reads with `useCachedApi`'s `cacheFirst` option: the stored payload
+  renders as soon as storage answers, without waiting for a slow or unreachable
+  server, while the request revalidates it; only a failed request adds the
+  stale-data banner (`components/stale-data-banner.tsx`,
   reused across schedule, queue, wallet, notifications, sponsor announcement
   management, queue operations, and the scanner's sync-queue/activities/people
-  screens for this offline pattern) when the connection fails. The banner has
+  screens for this offline pattern). The banner has
   no retry button — every screen that can show it also wires pull-to-refresh
   (`RefreshControl`) to the same reload, and `lib/format-date.ts` renders its
   "last update" timestamp as a bare time for today, "Yesterday, <time>" for
@@ -415,13 +495,22 @@ distributed to other Expo Router apps without importing hackOS code.
   the system share/save handoff, matching the web wallet's download behavior.
   Google Wallet still goes through
   the existing `saveUrl` endpoint via `Linking.openURL`. On Android, the `.pkpass` download first
-  hands its `expo-file-system` content URI to an `ACTION_VIEW` intent with
-  `application/vnd.apple.pkpass` and `FLAG_GRANT_READ_URI_PERMISSION`, then retries with the
-  legacy MIME aliases used by older importers such as PassAndroid; when no compatible handler
-  is installed, it falls back to the existing Expo share/save sheet.
+  hands its `expo-file-system` content URI to the local Android-only
+  `modules/wallet-handoff` module. One system chooser resolves `ACTION_VIEW`
+  across the canonical MIME type and every supported legacy alias using
+  `EXTRA_ALTERNATE_INTENTS`; a default Google Wallet handler no longer hides
+  an installed importer accepting a different alias. Each intent carries a
+  read grant and URI ClipData. Scoped manifest queries let Android discover
+  those handlers without broad package visibility. No handler (or an older dev
+  client missing this module) falls back to Expo's share/save sheet. The chooser
+  can only offer apps that declare `.pkpass` import support; it does not add
+  support to an OEM wallet. A new Android native build is required.
   `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
-  fallback. On the first visit to My queue for each account, the app shows a
+  fallback. Participant ranks exclude waiting sibling entries of teams already
+  called, in a room, presenting or completed in the same shared queue. My queue
+  refreshes when the tab regains focus. On the first visit to My queue for each
+  account, the app shows a
   persisted native tutorial explaining the three participant-facing stages:
   get ready (do not go to the room), wait outside the door, and enter only
   after the explicit entry notice or staff instruction. The tutorial shows one
@@ -434,9 +523,37 @@ distributed to other Expo Router apps without importing hackOS code.
   stage changes use a short directional fade, reduced to an opacity-only
   crossfade when Reduce Motion is enabled. Completion is stored in
   account-scoped SecureStore and does not change the queue state machine.
-  `notifications.tsx` pages past the initial 20 inbox messages on
-  demand, allows an expanded message to be deleted after native confirmation,
-  and mirrors the web activity/kind reminder preferences. On Android its
+  The inbox (`components/alerts-screen.tsx`, presented as a modal sheet from
+  the Schedule bell at `schedule/alerts`) pages past the initial 20 messages on
+  demand. A row swipes left to delete (after native confirmation) and right to
+  mark read/unread (`POST /api/me/notifications/:id/unread`). The sheet header
+  has an inline centered title (20pt bold) on the screen background with no
+  hairline, close (X) alone on the left and the unread-only envelope-badge filter next
+  to the gear on the right (`Stack.Toolbar` on Liquid Glass,
+  `headerLeft`/`headerRight` elsewhere). Settings are not in the sheet: the
+  gear dismisses it and opens `others/account?highlight=notifications&highlightAt=<nonce>` (fresh per tap, so every tap replays from the top), which
+  Account consumes once (shows the page at its true top — the resting offset
+  under the large-title inset, so the avatar starts expanded — then after the
+  transition settles animates the scroll to the Notifications row and flashes it
+  for about a second — no animation under Reduce Motion — then clears the
+  param). Account →
+  Notifications (`components/notification-settings-screen.tsx`,
+  `others/notification-settings/`) lists each notification type with its state;
+  a type opens its channel switches. Activity reminders
+  (`components/reminders-view.tsx`) continues with a bulk switch per activity
+  type (the label side, marked by a chevron, opens that type's activities)
+  and then "Coming up":
+  the next three reminders, "See all" when there are more (the same
+  `others/reminders/[kind]` route with `kind=all&subscribed=1`, where a row
+  switched off stays until the person leaves), and an "Add an activity"
+  picker (`kind=all`). Switch rows use `ToggleRow` from
+  `components/native-ui.tsx`; any other `Switch` placed in a row needs
+  `SWITCH_IN_ROW_STYLE`, because React Native's iOS Switch defaults to
+  `alignSelf: "flex-start"` and otherwise sits at the top of the row.
+  Reminder times use a leading column sized for the locale's longest time
+  (12-hour vs 24-hour), on one line.
+  Announcement management (`others/announcements`) sits under Notifications →
+  Send for `announcements:manage` holders. On Android the
   inbox mounts the same native scroll gesture boundary as Schedule, so
   vertical scrolling takes precedence over a row's horizontal delete reveal.
   A third "Manage"
@@ -454,11 +571,9 @@ distributed to other Expo Router apps without importing hackOS code.
   (`lib/announcements-admin.ts`'s `fetchAnnouncementRecipientCandidates`),
   scoped to `ANNOUNCEMENTS_MANAGE` rather than the broader `USERS_READ`,
   mirroring `/api/schedule/owner-candidates`.
-- `app/(tabs)/wallet.tsx` — the ticket/badge toggle is a `SegmentedControl`
+- `components/wallet-screen.tsx` — the ticket/badge toggle is a `SegmentedControl`
   plus a swipe over the QR card itself as an alternative. The swipe gesture is
-  nested *inside* the page's `ScrollView` (the reverse of
-  `ScheduleNotificationsSheet`'s back-swipe, whose `GestureDetector` wraps the
-  `ScrollView`), so it declares itself simultaneous with a `Gesture.Native()`
+  nested *inside* the page's `ScrollView`, so it declares itself simultaneous with a `Gesture.Native()`
   stand-in for the `ScrollView` — without that relationship the ancestor
   ScrollView's own gesture wins outright and the swipe never activates at all.
   Switching sides (by swipe or by tapping the control) plays a directional
@@ -509,7 +624,8 @@ distributed to other Expo Router apps without importing hackOS code.
   `isRealLiquidGlassAvailable()` (`components/glass-view.tsx`): on iOS 26+ it's
   a real native header (`app/(tabs)/schedule/_layout.tsx` gives this tab its
   own Stack so `navigation.setOptions` can drive one) with a compact
-  left-aligned title, `Stack.Toolbar.Button` pair for notifications/filter —
+  left-aligned title, `Stack.Toolbar.Button` pair for the Alerts bell (unread
+  count badge, `lib/use-unread-notifications.ts`) and the filter —
   real adjacent `UIBarButtonItem`s the OS groups into one Liquid Glass capsule
   on its own, no manual divider or shadow to get wrong — and Apple's own
   integrated search button (`headerSearchBarOptions`, which owns its
@@ -586,6 +702,412 @@ distributed to other Expo Router apps without importing hackOS code.
   list's swipe-to-edit. List cards visibly mark staff-only, sponsor-only, and
   mentor-only activities when their audience is restricted to exactly that
   group.
+
+### Event diary (#935)
+
+`components/diary-screen.tsx`, routed as `app/(tabs)/diary/index.tsx` (its own
+`Stack`, like Schedule, so the screen can drive a native header) when the tab
+is direct and `app/(tabs)/others/diary.tsx` inside Others (`diary` is an
+`OVERFLOW_TAB_KEYS` entry; see `docs/navigation.md` for placement). One
+segmented control splits it into **People** | **Companies**. There is no
+directory to browse: people get into the diary only by a badge scan. The
+`?view=people` / `?view=companies` route parameter opens a segment directly.
+Pull-to-refresh, focus and foregrounding refetch. Nothing is written to the
+offline cache, so a profile hidden later cannot reappear from device storage.
+
+The diary uses the system header, laid out like Activities. On iOS 26
+(`isRealLiquidGlassAvailable`) it is the transparent native bar: the list
+scrolls under it with the system scroll-edge effect. iOS has no left-aligned
+title on the bar row (`headerTitleAlign` is Android-only, and react-native-screens
+4.26 does not expose iOS 26's `inlineLarge` large-title mode), so the
+navigation title is empty and "Agenda" is a leading `Stack.Toolbar.View` with
+`hidesSharedBackground` (28pt heavy, `accessibilityRole="header"`). That title
+uses a fixed black or white from the app's colour scheme, not the dynamic
+label colour: iOS 26 flips a bar item's light/dark appearance with what
+scrolls behind it, which turned a dynamic-colour title white for a moment over
+the blue scan pill (Activities has the same fix). The native search
+(`headerSearchBarOptions`, `integratedButton` placement) and the favourites
+star, a native `Stack.Toolbar.Button` (`star` / `star.fill`) drawn as the same
+circle as the search button, sit on the right. Android and earlier iOS use
+`LegacyScreenHeader`: the title, a glass star toggle and the search button that
+expands into the field. Search and the star apply to People only, and only
+once it has someone to search; on Companies the native search and the star are
+removed (`LegacyScreenHeader`'s `searchEnabled` hides its search button, and a
+44pt spacer keeps the title row's height) and leaving People clears the query.
+Below the header, the scroll content starts with the shared scan pill
+(`BadgeLinkActions`, as on the scanner screens), then the People | Companies
+control, then the list.
+
+**People** lists the `kind: "person"` entries of `GET /api/me/diary` (favourites
+first, then newest) and a quiet unavailable row for a hidden profile. Saving
+and favouriting are separate: the star (`components/favourite-star.tsx`, drawn
+as a filled/outline path on Android, whose Material font only has the outline
+glyph) only marks a saved person and drives the Favourites filter; the row menu
+holds Note (500 characters; `components/diary-note-editor.tsx` is a native
+page sheet with circular Cancel and Save and a field above the keyboard, the
+same editor for people and stands) and an explicit "Remove from diary" with
+confirmation. Un-starring never removes anyone. Search filters saved cards
+locally by name, headline, project, challenges, location and the owner's note,
+ignoring accents and case; cards never carry an email, so contact details are
+not searchable. Rows (`components/diary-person-row.tsx`) are one full-width
+pressable that opens the profile; the trailing star and menu are separate
+siblings so they never also open it. A profile hidden after it was saved keeps
+only the menu (no star). The diary's header owns the status-bar area on both
+platforms; the profile keeps an Android status-bar scrim, so scrolled content
+never slides behind the clock.
+
+`app/people/[id].tsx` (`components/person-profile-screen.tsx`) is a saved
+person's full profile from `GET /api/directory/:userId` (the only directory
+route left; there is no list and no Save, since only a scan adds someone):
+large photo or initials, name, headline, Favourite / Note / CV tiles (the Note
+tile reads "Edit note" once a note exists, and the note section appears only
+then), bio, links, location (a `mappin`), project or work group, challenges and
+"Remove from diary", which then returns to the diary. iOS uses the transparent native detail
+header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
+no bar covers the centred avatar; Android floats its own glass back button.
+That public photo uses the same `ProfileAvatarCollapse` overlay as the signed-in
+account: Reanimated maps 120 pt of upward scroll to the shared mask and dark
+cover progress. An avatar that starts farther from the camera than the pose
+where Telegram's mask begins (its centre 234/300 of its size below the cutout's
+lower edge) first rides up with the content, unchanged and at the text's own
+speed, for that extra distance (`profileAvatarCarryDistance`); the in-content
+avatar stays visible through that carry and the mask takes over only as the
+morph starts, so a lower avatar (Account below the Wallet button, the person
+profile under its header) never shoots up ahead of the text. The 120 pt range
+then begins after the carry. The Android gooey view below already rises with
+the content, so it has no carry. A released drag never rests half-morphed: inside
+that range direction decides, from the last non-zero scroll delta (the release velocity only
+without one). Moving up, with the merge started, auto-collapses; moving down,
+with the droplet coming out, auto-expands; only a release with no movement
+takes the nearer rest. The expanded rest is where the morph starts, and a
+release during the carry is plain scrolling and stays put. A moving release decides when its momentum ends, by the
+momentum's own direction (instant under Reduce Motion); programmatic scrolls
+are never snapped. One medium haptic marks the photo touching the camera
+cutout on the way up (morph progress 0.2 after the carry, where the mask's
+lip joins the island) and the first pull out of the collapsed rest on the way down; a
+release never taps. Both rests are measured from the true
+top, which on iOS sits at a negative content offset under the automatic inset
+(at least the status-bar overlap, or the full native header height on a
+screen that shows one, such as the person profile's transparent header,
+seeded once the host is measured, then lowered by scroll events before the
+first drag), never from y 0, which is inside the morph. Both scroll views set `scrollToOverflowEnabled`: iOS otherwise clamps every
+programmatic scroll to the raw `contentInset` (0), so a snap or jump to the
+true top landed at y 0, mid-morph. A page too short to reach the collapsed
+rest snaps expanded instead, so the person profile floors its content at the
+viewport plus the carry and collapse distance past the true top (`contentMinHeight`):
+otherwise a short profile could only ever expand. Account's tab re-press and gear scroll go to that true top,
+and on focus it moves a scroll left inside the morph (such as a remount
+restoring y 0) to the nearer rest. A native `MaskedView` clips the original cubic keyframes from
+Telegram's `UserAvatarMask` (`lib/telegram-avatar-mask.json`), evaluated on the
+UI thread rather than approximating the connection with a circle/capsule union.
+The source asset is TelegramMessenger/Telegram-iOS's UserAvatarMask animation;
+its two path tracks retain their original 512-point coordinates, timing and
+layer lifetime. The canvas converges to the cutout's lower edge as in Swift's
+`PeerInfoHeaderNode`; it does not paint a replacement system island. A black
+backing follows mask progress, with the separate `-0.25 + progress * 1.55`
+fade curve and the radial gradient stops from `DynamicIslandBlurNode`.
+The React Native cover currently uses dark paint rather than UIKit's animated
+native blur. Static photos and initials share the mask; optional live avatar
+children remain inside it.
+On iOS, the target uses window-space safe-area geometry because UIKit does not
+expose the Dynamic Island frame to apps. The hardware island is 126 x 37.33 pt
+with its top at `safeAreaTop - 48` (11 pt on a 59 pt inset, 14 pt on a 62 pt
+inset; screens 393/402/430/440 wide). The target is that rectangle inset 1 pt on
+every side (124 x 35.33 pt, horizontally centred on the window) so the shrinking
+avatar and black backing hide inside the island instead of poking out. The
+avatar and target are both measured in the same `measureInWindow` coordinate
+space, and the host is re-measured about 450 and 900 ms after layout so a screen
+that is still sliding in (stack push, modal) does not leave a stale origin. A
+measurement waits until the scroll offset has held still for a frame and is
+retried if it moved meanwhile, because Fabric measures the committed shadow tree
+(whose scroll state trails the live offset); otherwise a programmatic scroll,
+such as the alerts gear's jump to notification preferences, would leave the
+mask drawn away from the avatar. The
+mask frame centre travels linearly from the avatar centre to the target centre,
+matching the Telegram path canvas, so the image, mask and backing stay on one
+centre line and end on the island centre. The Telegram blob rises and narrows
+faster than that linear frame, so while it exists the image is a square
+centred on the blob's real bounds (`profileAvatarContentFrame`), plus the neck
+above it, never exposing the backing at its top. The image also carries its
+own clip (`profileAvatarContentRadii`): until the neck forms (morph progress
+0.15) the mask is exactly the circle inscribed in that square, so the image is
+cut to the same circle (radius half its side, starting at the expanded size)
+and no frame shows it square while the native mask catches up; the top corners
+then straighten as the neck fills the top of the frame. The image never follows the
+linear frame: the mask reaches the island at a fixed progress whatever the
+start's distance, so on a lower avatar (the person profile under its header)
+the linear frame trails below the clip and would pull the photo off centre.
+Once the blob ends its last square eases into the island. The
+lower-lip track of the path (bezier handles included) is narrowed to the
+straight run of the island's lower edge (`width - height`; a circular hole
+punch gets the chord at the lip's depth), so it never reaches into the
+island's curved corners.
+The morph only runs where a real camera cutout exists:
+
+- **iPhone with Dynamic Island** (safe-area top >= 55 pt, portrait): the island
+  geometry above, unchanged.
+- **Android with a hole punch**: the target is the actual cutout, read at
+  runtime from `WindowInsets.getDisplayCutout().boundingRects` (API 28+) through
+  `CameraCapabilities.getDisplayCutoutRects()` in `modules/camera-capabilities`
+  (rects in dp, window coordinates, re-read on rotation/resize). On Android 12+
+  (API 31) each rect is tightened to the cutout's own shape
+  (`DisplayCutout.getCutoutPath()` clipped to that rect), because OEMs often pad
+  the reported rects. The target is a circle (a hole punch is round): the largest
+  circle centred in the measured rect, so its diameter sets the morph width. A rect is a hole
+  punch when both sides are <= 72 dp and it sits in the top 96 dp, so centered
+  and off-center punches (and small waterdrops) work; the topmost one wins. Wide
+  notches and side cutouts are ignored. **This needs a new native Android build**
+  (development client and store build); on an older build the module lacks the
+  function and Android uses the plain collapse. With a hole punch, Android does
+  not use the island mask above (its keyframes squeeze a small round target
+  into a thin vertical needle); it uses the native gooey view described below.
+- **No cutout, unknown, API < 28, iPhone notch / no Dynamic Island, landscape**
+  (`hasCutout: false`): no morph and no overlay (`simple`). The avatar stays in
+  the scroll content: it holds still and shrinks to 0.75 until the view right
+  below it (the name block, wired with `onNameLayout`) reaches its shrunken
+  bottom, then scrolls up and off screen with the page, so it never parks at
+  the top or covers the name. The release offset is the measured layout gap
+  plus half the shrink (`profileAvatarSimpleReleaseOffset`); the transform is
+  `profileAvatarSimpleTransform`. No snap, no haptics and no
+  `contentMinHeight` floor apply, since nothing is ever half-morphed.
+
+`cameraCutoutFrame` (a `useProfileAvatarCollapse` option) still overrides the
+target for OEM placements. Reduced Motion uses the same in-content path without
+the hold or shrink: the avatar simply scrolls with the page.
+
+#### Android hole-punch gooey morph
+
+`modules/profile-gooey` is a local Android-only Expo module exporting
+`ProfileGooeyView` (Kotlin `ExpoView`; `null` on iOS, web and on a binary
+built before the module existed). `ProfileAvatarCollapse` renders it only when
+`Platform.OS === "android"`, the target has a hole punch, Reduce Motion is off
+and the native view exists; every other case keeps the paths above unchanged
+(iOS never reaches it).
+
+- **Children**: one React child, the avatar circle (photo, initials or live
+  content), laid out once by Yoga at the expanded frame. The native view draws
+  its recorded display list scaled uniformly onto the animated circle and
+  clipped to that circle, so photo and initials alike behave as one raster and
+  are never re-laid out. `ExpoView` is a `LinearLayout`, so the view overrides
+  `onMeasure`/`onLayout`: otherwise an Android layout pass re-measures the child
+  at wrap-content (the whole canvas) and the avatar is drawn as a tall rounded
+  rectangle.
+- **Static props** (dp, view-local): `holeX`, `holeY`, `holeDiameter`.
+- **Animated props** from `useAnimatedProps` on the UI thread, no per-frame JS:
+  `avatarX`, `avatarY`, `avatarDiameter`, `darkness`, `blurRadius`,
+  `bridgeReach`, `pill`, `drip`, all computed by `profileGooeyFrame` in
+  `lib/profile-avatar-collapse.ts` from `profileGooeyProgress(scrollOffset, 120)`.
+- **Timeline** (`profileGooeyFrame`, a pure function of progress and the
+  scroll distance, so scrolling back retraces it exactly). The avatar never
+  stops rising: its bottom edge moves up with the content, keeping its gap to
+  the text below, or along an ease-in path to the lens centre when that is
+  higher, so it is in the lens by progress 1. It stays a circle and shrinks
+  uniformly towards its top to the lens diameter minus 1 dp per side by 0.55
+  (`PROFILE_GOOEY_SHRINK_END`; `profileGooeyEndDiameter` /
+  `profileGooeyEndScale`), gliding to the lens column; until then it also
+  keeps at least the staging gap (0.9 lens diameters) below the lens, so a
+  photo never touches it. It blurs (up to 6 dp) and darkens (`darkness`) from
+  55% of the shrink (`PROFILE_GOOEY_FADE_START`), is 85% black once fully
+  shrunk, and turns fully black exactly at the staging gap, where the black
+  metaball neck starts (two-circle tangent construction, emerging from a
+  point), fattens into a straight-sided pill (`pill`) that shortens into the
+  lens, and a short drip bulges from the lens and retracts.
+- **Rendering**: while `darkness < 1` the avatar is drawn clipped to its
+  circle (which also trims the blur, so nothing bleeds outside it) over a black
+  underlay that fills the rim the blur leaves translucent, with a black wash of
+  `darkness` on top; above it the ink draws only the lens. Once fully black,
+  the ink's own avatar disc, neck, pill and drip replace it at the same size
+  and position, so there is never a second blob or a coloured halo.
+  Android 12+ (API 31) records the ink into a reused `RenderNode`, blurs it with
+  `RenderEffect` and composites it through an alpha-threshold color matrix
+  (liquid edges); the avatar goes through a second reused node with the
+  progressive blur. Android 9–11 draws the same
+  shapes directly, anti-aliased, without blur. No bitmaps are allocated; both
+  nodes drop their display lists and effects on detach. The canvas is the
+  avatar/lens bounds plus a 24 dp margin (`PROFILE_GOOEY_MARGIN`).
+
+Differences from Telegram Android's profile header: Telegram reads the cutout
+from the private `config_mainBuiltInDisplayCutout` resource and drops
+non-centred cutouts, we use the public `DisplayCutout` API (off-centre punches
+work); Telegram ends the avatar at half the lens width and moves it in one
+straight line, we end at the lens size and stage it under the lens first so a
+large photo never stretches toward the camera; Telegram's goo is a
+blur-threshold of the whole avatar on every API level (a CPU stack blur below
+Android 12), ours is a geometric neck, only softened by a GPU blur on 12+;
+devices without a hole punch keep our plain collapse instead of Telegram's
+black status-bar target.
+
+**Testing on a Pixel (9a or any hole-punch device)**: build a development
+client (`pnpm --filter @hackos/mobile android`, or an EAS development build;
+a JS-only reload is not enough the first time), sign in, open Others ›
+Account and scroll up slowly: the photo (or initials) should stay a perfect
+circle, shrink as one picture while darkening and blurring into a black disc
+the size of the lens just below it, then rise with a liquid neck and disappear
+into the lens, with no second blob or coloured halo at any point. Scroll back down slowly to watch the droplet come out and
+regrow; release mid-way to check it snaps to a rest; repeat quickly with a
+fling. Repeat on a person profile (Diary › a person). Check dark mode, with
+a centred punch hole on an emulator (the system image's Pixel overlays carry
+the real cutout: `adb shell cmd overlay enable
+com.android.internal.emulation.pixel_9` plus `adb shell wm size 1080x2424`;
+the emulator reports the hole to apps but does not paint it black), and with Remove animations on (plain circle collapse, no
+neck). On a device without a cutout the plain collapse must be unchanged.
+The CV route needs the session, so it is
+downloaded with the session cookie (`expo-file-system`) into the cache and shown
+in the in-app viewer (`components/cv-viewer.tsx`): a page-sheet modal titled
+with the person's name, a circular close button, and pages that scroll with
+pinch and double-tap zoom, rendered by the native `react-native-pdf` (with its
+peer `react-native-blob-util`). Share stays in the viewer header for anyone who
+wants the file. The native reader is imported only when the CV viewer opens, so
+Expo Go or a development client missing the native module does not block profile
+screens; that viewer shows the normal CV error instead. A CV that is gone or no
+longer shared (404) shows "Profile not available"; any other failure offers
+Retry. **Native dependency:** adding `react-native-pdf` means the development
+client and store builds must be rebuilt; Jest mocks it in `jest.setup.js`. The
+app does not show the user's own
+CV anywhere yet, so the viewer has one caller. A hidden profile and a person the reader may not open both answer 404
+and show one "Profile not available" state. Photos are authenticated API
+routes: `lib/directory.ts` fetches them with the session and shows them from
+memory (Android's image pipeline drops a `Cookie` header), never from disk.
+
+**Companies** is a sticker album (`components/company-album.tsx`) from
+`GET /api/me/diary/sponsors`: a progress ring with collected / total, then a
+three-column grid in the API's order (sponsor priority, then name, as the public logo grid; collected and uncollected interleaved). Collected companies are full-colour logos on a white disc
+and open a company sheet (logo, collected date, Favourite / Note (or Edit
+note) / Web, the
+description, challenges, note and "Remove from collection"); companies still to
+find (every revealed scannable one, even before its tags are generated) are dashed slots with a silhouette of the logo, a lock and their name
+only (never opened; the sheet and its description, challenges and website
+exist only once collected).
+Stand favourites and notes use the same `PATCH`/`DELETE /api/me/diary/:entryId`.
+
+Scanning follows R008: the primary "Scan with NFC" control opens the existing
+reader immediately (`lib/nfc-reader.ts`, UID only, never writes or claims the
+tag; `lib/nfc-uid.ts` normalization), one tap from the list. "Scan QR code"
+(the gated `QrCamera`) and "Enter code" sit in the compact ellipsis menu.
+"Enter code" opens the shared `ScannerCodeEntry` with `appearance="system"`
+(the light/dark card of the note editor, not the dark camera card) and a title
+that fits badges and stand tags alike. On hardware without NFC the primary
+control becomes "Scan QR code". Cancelling any
+input sends nothing. Each scan is `POST /api/me/diary/scan` with a fresh
+`Idempotency-Key`. A saved person is pinned in a Saved section at the top of
+People; a collected stand switches to Companies, where its badge springs in
+with a fading halo and a success haptic. Every error code (`diary_code_unknown`,
+`badge_revoked`, `profile_not_shared`, `stand_unavailable`, `diary_self`, 403
+for an account without event access, 429) maps to its own localized alert
+(`lib/diary.ts`); none names a person. Badges, stand tags and the staff
+scanners share the NFC-A UID encoding, so a stand tag is never accepted as a
+badge (`diary.md`).
+
+`apiFetch` returns API timestamps as `Date` objects (Better Auth's client JSON
+parser revives ISO strings), so diary ordering goes through `timestampOf`
+rather than string comparison. Menus use `MenuTriggerIcon` (`native-ui.tsx`)
+as their visible trigger: a `Pressable` inside `MenuView` takes the touch
+before the menu on Android, so the menu never opened.
+
+Physical NFC and camera verification is still pending; tests mock both
+(`lib/diary.test.ts`, `lib/directory.test.ts`, `test/ui/diary-screen.test.tsx`,
+`test/ui/person-profile.test.tsx`).
+
+### Company tags (#935)
+
+Company tags are what attendees scan to collect a company in their Diary
+([`diary.md`](./diary.md#company-tags)): NFC tags or wristbands linked by
+serial number, and printed QR codes. Staff with `sponsors:manage`
+(`canManageStands` in `lib/tabs.ts`, the same gate as the web Company tags
+page) open Account → Staff → Company tags (`components/stands-screen.tsx`,
+routed as `app/(tabs)/others/stands.tsx`). The screen lists
+`GET /api/enterprises/stands` alphabetically with a name search (accent- and
+case-insensitive). Search is the native header search
+(`headerSearchBarOptions`, `integratedButton`) on iOS 26 Liquid Glass and the
+shared `LegacyScreenHeader` search on older iOS and Android, as on People.
+Each row shows the logo, the name, the NFC and QR counts (with "Not
+scannable" for a company attendees cannot collect yet), a round NFC button
+that links a tag directly and a chevron.
+
+Both Company tags screens keep the `ScrollView` (with
+`contentInsetAdjustmentBehavior="automatic"`) as the screen's root element so
+the native large title collapses into the inline title as it scrolls; a
+wrapping `View` hides the scroll view from the native header and the first
+card draws under the title. The NFC modal lives inside the scroll view, and
+only the legacy header (no Liquid Glass) wraps it.
+
+**Company detail.** Tapping a row pushes `app/(tabs)/others/stand/[id].tsx`
+(`components/stand-detail-screen.tsx`, titled with the company name). It
+reads the same staff list and shows:
+
+- a "Scannable" switch that turns the company's scanning on or off (`PUT
+  /api/enterprises/:id/stand-scannable` `{ scannable }`, the web Company tags
+  call, with a fresh `Idempotency-Key`); it flips at once and rolls back with
+  an alert if the request fails, and while off the section footer says
+  attendees can't collect the company;
+- a filled "Link tag" button, the same read as the list's NFC button;
+- the linked tags in "NFC tags" and "QR codes" sections (label above the
+  serial or token, monospaced). Swiping a row reveals Remove (also a
+  VoiceOver/TalkBack action); after a native destructive confirmation (a QR
+  warns that printed copies stop working) it calls `DELETE
+  /api/enterprises/:id/stand-tags/:tagId` with a fresh `Idempotency-Key`. A
+  failure keeps the row and shows the server's reason. The list reloads on
+  return, so its counts follow.
+
+**Provisioning a tag.** The row's NFC button and the detail's "Link tag"
+start reading at once (R008), through one shared hook
+(`useStandTagLink` in `components/stand-tag-link.tsx`, with the Android read
+sheet). It is the same tap as accrediting a badge, in the same order:
+
+1. `startNfcRead` with `claimBadge` (`lib/nfc-reader.ts`, serialized with the
+   other scanners) reads the UID (`lib/nfc-uid.ts`, the encoding every scanner
+   uses) and writes only the Android package claim of the badge flow
+   (`nfc-badge-claim.ts`: MifareUltralight pages on Android, the iOS
+   tag-reader session on iOS), so Android hands the tag to hackOS. No
+   `/s/<code>` link is written: the company is identified by the serial;
+2. after the NFC session ends, the screen links the serial:
+   `POST /api/enterprises/:id/stand-tags` `{ kind: "nfc", uid }` with a fresh
+   `Idempotency-Key`. The API call never runs while the tag is held: waiting
+   on the network inside the session lost the tag on real hardware. Writing
+   first is harmless because the claim is the record every badge already
+   carries. A 409 says whether the wristband is already someone's badge ("use
+   an unassigned one") or already a company tag (`standLinkErrorKey`, from
+   `usedBy`); any other failure shows the server's reason. A failed claim
+   write still links the serial and says so (`claimFailed()`).
+
+A company must also be scannable before its tags award the medal: a new
+company is not (its row says "Not scannable"), and scanning answers
+`stand_unavailable` until staff turn it on (the detail switch, or web Company
+tags).
+On the list, the result line offers "Link another" for the same company, so
+several tags or wristbands are linked in a row without leaving the screen; on
+the detail the new tag appears in "NFC tags" and the button stays in place. On hardware without NFC the actions stay
+disabled and one line points to serial-number entry on the web. QR codes are
+generated and printed from the web.
+
+**Opening the app from a QR code.** The printed link opens `app/s/[code].tsx`, which is
+outside the session guard: signed in, it sends the code to the Diary
+(`?view=companies&collect=<code>`, `collectCompanyTagHref`), which collects it
+through `POST /api/me/diary/scan` once and celebrates on the Companies album;
+signed out, it keeps the code (`lib/company-tag-link.ts`, in memory) and
+`RootLayout` resumes it after sign-in. Native wiring in `app.config.ts`:
+
+- iOS: the `react-native-nfc-manager` plugin with `includeNdefEntitlement:
+  false` (TAG reader format only; the claim is written through the tag-reader
+  session, never an NDEF reader session) and `applinks:<host>` next to
+  `webcredentials` in `associatedDomains`; the web serves the matching
+  `apple-app-site-association` (`applinks` for `/s/*`);
+- Android: `plugins/withAndroidCompanyTagLinks.js` adds a VIEW + BROWSABLE
+  `autoVerify` filter for `https://<host>/s/…` to the main activity; the
+  badge `TECH_DISCOVERED` filter (`withAndroidNfcTagClaim.js`) is unchanged
+  and is what opens the app from a linked NFC tag. App Link verification
+  needs `ANDROID_APP_CERT_SHA256` on the web
+  ([`deploy/README.md`](../deploy/README.md)).
+
+These native changes need a new build. The flow is covered by
+`lib/nfc-reader.test.ts` (claim writes, with `react-native-nfc-manager`
+mocked),
+`test/ui/stands-screen.test.tsx`, `test/ui/stand-detail-screen.test.tsx`,
+`test/ui/company-tag-link.test.tsx`,
+`lib/company-tag-link.test.ts`, `test/company-tag-links-plugin.test.tsx`, the
+Diary `collect` test and `lib/tabs.test.ts`. It has not been tested on NFC
+hardware, and the universal/app links have not been opened on a device or
+simulator build yet.
 
 ## Operator screens
 
@@ -854,8 +1376,49 @@ enters its auto-start flow.
 
 `lib/nfc-reader.ts` serializes native sessions and releases them on completion,
 cancellation, navigation, backgrounding and unmount. iOS uses `MifareIOS` and
-Android uses `NfcA` reader mode with NDEF checking skipped, so blank NTAG213s
-work. The iOS package patch avoids `connectToTag`, caches the detected UID, and
+Android uses NFC-A reader mode with NDEF checking skipped and takes the UID
+straight from `DiscoverTag`, without a technology connection or NDEF read.
+The discovery listener is installed before reader mode starts, so an already
+present tag is not lost between registration and a technology request. Cancel
+releases the discovery wait, removes the listener, and unregisters reader mode;
+subsequent reads wait for that cleanup. Blank NTAG213s work on both platforms.
+
+Android also claims NFC-A tags while the app is closed
+(`plugins/withAndroidNfcTagClaim.js`, H22–H26): the main activity declares an
+`android.nfc.action.TECH_DISCOVERED` filter with a single `NfcA` tech list.
+NTAG213 badges carry a factory NDEF Capability Container in page 3 (OTP,
+`E1 10 12 00`, not erasable) and no records, so without a claimant Pixel phones
+show the system "New tag / Tag empty" screen; with it Android starts hackOS
+instead. Tapping a badge therefore opens the app. Limits: another app claiming
+NfcA produces the chooser; Android 16+ lets the user disallow tag intents per
+app; apps targeting an SDK above Baklava need `DISPATCH_NFC_MESSAGE` on the
+activity. Pixel behavior still needs physical verification.
+
+While the app is in the foreground on Android, `setNfcShield(true)` (root
+layout) keeps NFC-A reader mode registered between scans with no listener, so
+tapping a badge outside a scan is swallowed by the app instead of reaching the
+system tag dispatch ("New tag" screen or another activity). A scan replaces
+that registration and `syncShield()` restores it when the scan finishes; the
+shield is released on unmount and is best effort (if NFC is off or unsupported
+Android falls back to the claim filter above). It never reads or writes tags.
+
+Linking a badge by NFC (`person-operations-screen`, H22/H23) additionally
+writes the tag: `startNfcRead(message, { claimBadge: true })` follows the UID
+read with an NDEF message holding one Android Application Record for the
+release package (`lib/nfc-badge-claim.ts`; debug builds drop their `.debug`
+suffix), so any Android phone with hackOS opens it directly and one without it
+is sent to the Play Store instead of the system "New tag" screen. It contains
+no attendee data and the tag is never locked. Writes use raw MIFARE Ultralight
+page commands on both platforms (`mifareUltralightWritePage` on Android,
+`sendMifareCommandIOS` on iOS), so the iOS entitlements stay `TAG` only. The
+header page is written last and every page is read back. The write
+is best effort: the badge is linked by its UID anyway and the screen shows
+`scannerNfcWriteFailed` after the link succeeds. Scans for
+activities, meals and check-in never write. The Capability Container (page 3)
+is OTP and cannot be erased, which is why a record is written instead.
+Physical OEM verification remains required, especially on Oppo Find N6 with
+ColorOS 16/17: pairing, consecutive reads, cancel/reopen, background and folded/
+unfolded states with the same tags used on another working Android device. The iOS package patch avoids `connectToTag`, caches the detected UID, and
 invalidates the native session immediately; it also skips the package's automatic
 NDEF payload read. Scanners use only the UID. Unsupported hardware, disabled NFC,
 malformed UIDs and reader errors produce localized feedback; cancellation does
@@ -937,6 +1500,321 @@ physical iOS/Android and EAS verification remains a release-gate task in
   or a device wipe; central tombstones prevent permanently retired credentials
   from being accepted or re-uploaded.
 
+## Live Activities and Live Updates (#966)
+
+System surfaces for time-bound moments: the participant's nearest judging
+queue (H38); for `activity:scan` holders, an upcoming or live meal /
+scannable activity (H25/H26); a schedule item organizers opted in for its
+audience (H59); the submission deadline (H19/H20); and the accreditation desk
+during the arrival rush (H22/H24). The API computes every state, sends background
+updates (APNs ActivityKit pushes on iOS, data-only Expo pushes on Android) and
+documents the contract in [`live-activities.md`](./live-activities.md); the
+app renders the pre-localized props of `@hackos/shared/live-activities`.
+
+At an upcoming staff or attendee activity's start the widget switches to its
+live layout by itself ("Live" in the compact island, "Ends in" in the
+expanded and Lock Screen views): the state's `staleDate` is the start, and
+the layouts read `environment.isStale` as live. See
+[live-activities.md](./live-activities.md) (`stale-date`).
+
+**Surfaces (iOS, `expo-widgets`).** `widgets/queue-activity.tsx`
+(`QueueActivity`), `widgets/staff-activity.tsx` (`StaffActivity`),
+`widgets/attendee-activity.tsx` (`AttendeeActivity`),
+`widgets/deadline-activity.tsx` (`DeadlineActivity`) and
+`widgets/accreditation-activity.tsx` (`AccreditationActivity`) are
+`'widget'` layouts serialized into the `ExpoWidgetsTarget` extension, so they
+use only `@expo/ui/swift-ui` and declare every helper and colour inside the
+function. The names must equal `LIVE_ACTIVITY_WIDGET_NAMES`. Each state
+answers one question with one hero value; everything else is secondary.
+Colours: waiting/upcoming = systemBlue, called = systemGreen (go), in room =
+neutral grey; Always-On drops the accent fills. Lock Screen colours are
+dynamic (`{ dynamic: { light, dark } }`, light green `#248A3D` for contrast)
+because the layout's `environment.colorScheme` does not reliably match the
+Lock Screen's appearance; the Dynamic Island is always dark. Following
+Apple's HIG:
+
+| Presentation | Queue | Staff activity |
+| --- | --- | --- |
+| Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: `42/180` (scanned / accredited, the denominator smaller and secondary; the bare count without one or past 7 characters) |
+| Minimal | ring of the climb to the front with the position inside; called/in room: the phase symbol | live: ring of the scanned share of accredited people (the count without a denominator); upcoming: category symbol (20 pt) |
+| Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: challenge · +N more queues, location · called count-up, stage track | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live: circular **Scan** / Scanned `42/180`, name + live state, ends-in, then scanned-share bar (elapsed time without a denominator) |
+| Lock Screen | challenge … +N more queues; position leading (17 pt), ETA trailing (28 pt, accent); called: count-up leading, "Go to" room (green) + location trailing; stage track with labels | symbol + name and optional live state; context/ends-in leading, 28 pt countdown/Scanned `42/180` trailing; live puts circular **Scan** beside ends-in, with a full-width bar below |
+| Watch Smart Stack / CarPlay (`bannerSmall`) | challenge + `#4 · ~12 min` or the room | name + countdown or `42/180`, no buttons |
+
+| Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
+| --- | --- | --- | --- |
+| Compact leading / trailing | category symbol / countdown to the start; live: "Live" (both blue) | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (grey once submitted) | `person.badge.key` / accredited count |
+| Minimal | category symbol (20 pt); live: symbol with a live dot | phase symbol (20 pt); submitted: the check | ring of accredited / eligible |
+| Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: name + live state, `hh:mm–hh:mm · place`, live elapsed-time bar | symbol / "Closes in" countdown (28 pt, hours long; small and grey once submitted); bottom: title + status, project, window bar | circular **Scan** / Accredited `412 /600`; bottom: title + closing time, secondary arrivals and inside, then share bar |
+| Lock Screen | symbol + name and optional live state; time · place leading, 28 pt countdown trailing; live adds the elapsed-time bar | symbol + title; project leading, "Closes in" countdown (28 pt) trailing; status in the header; window bar. Closing: red. Submitted: green "Submitted" trailing, project and small time left leading, window bar | symbol + title … closing time; Last 10 min · Inside secondary (17 pt) leading, Accredited hero (28 pt) trailing; circular **Scan** beside secondary stats; full-width share bar |
+| Watch / CarPlay | name + countdown, or "Live" + time left | title + countdown ("Not submitted" while closing) or "Submitted" | title + `412 /600` |
+
+The attendee activity has no buttons (the whole surface opens the schedule
+item). The deadline shows a status only when it is known: `submitted` is a
+green check, a `draft` reads `labels.notSubmitted` (amber, red while closing)
+and `null` (not in hackOS yet) shows nothing. The desk's end time is a clock
+symbol and the time, because the contract has no label for it.
+
+**Queue stage track.** Three nodes (In line → Called → In room) and two
+segments; completed parts take the phase colour and the current node is
+larger with a halo. Waiting is the long part of the journey, so the first
+segment takes two thirds of the width: with no GeometryReader (and
+`containerRelativeFrame` needing iOS 17), the row is built from three equally
+flexible units, the first segment being two ProgressViews overlapped by 4 pt
+and filled half by half. While waiting it fills with
+`(queueTotal − position + 1) / (queueTotal + 1)` (#1 of 10 → 10/11, #10 of
+10 → 1/11); once called the second segment fills with
+`2 / (calledAhead + 3)` (⅔ when no team called earlier to the room is still
+outside) and the room completes it. Without the counts (older server) only
+the stage shows. The node labels repeat the same
+units so each sits under its node. Staff meals/activities use `scanned / accredited` when a positive denominator
+is available, otherwise elapsed time between `startsAt` and `endsAt`. Attendee
+activities show elapsed time while live. Accreditation uses `accredited / eligible`.
+
+**Shared visual grammar.** All five kinds follow
+[`DESIGN.md`](./DESIGN.md#live-activities-on-ios-966): identity row, secondary
+context leading and a primary metric trailing, then optional progress/action.
+Expanded islands retain identity/position leading and the primary value trailing,
+with title/context before the footer. Titles are 17 pt semibold on the Lock Screen
+and 15 pt expanded; primary values are 28 pt, secondary values 17 pt, captions
+12 pt and context 13 pt. Upcoming sessions no longer compress the title beside
+the countdown. Accreditation gives arrivals/occupancy less visual weight.
+
+**Margins and shapes.** The Lock Screen uses one 14 pt margin on every edge
+and stays within the 160 pt height (the live header is a single line for
+that reason). The only filled control, **Scan**, is a 44 pt circle with a
+20 pt NFC symbol and localized VoiceOver label. It sits beside the secondary
+values on the Lock Screen and in the expanded leading slot, leaving a separate
+full-width progress row. There are no tiles or cards
+behind symbols. Fields and labels added after v1 (`calledAt`,
+`queueTotal`, `calledAhead`, `accredited`, `labels.estimating` …) are optional:
+an absent one hides its element; the widget never falls back to hardcoded
+copy.
+
+Numbers use `monospacedDigit` with numeric content transitions; countdowns,
+the count-up since the call and the elapsed-time bar are SwiftUI timers, so
+they tick without updates.
+
+**Fitting the Dynamic Island (#966).** Every widget wraps its compact
+leading, compact trailing and minimal views in hard width caps of 24, 56 and
+36 pt (the queue's compact leading is 40 pt, so a three-digit position fits) with a fixed Dynamic Type size (`dynamicTypeSize("large")`), so no
+value, locale or text size can widen the island; text scales down
+(`minimumScaleFactor(0.6)`) instead of truncating. The slots get a 3 pt
+leading / 7 pt trailing inset so the glyph and the time sit on the pill's
+concentric margin (HIG). Every countdown surface uses `2h 34m` / `34m`
+normally and adds seconds only in the last five minutes (`4m 59s`, then `48s`
+below a minute, including `bannerSmall`). Always-On uses the native `isLuminanceReduced`
+environment to remove both the seconds field and its spacing, leaving `4m`
+or `<1m` below a minute; waking restores seconds, with no placeholder. `Text`'s
+`compactCountdown` (the legacy form names share this precision policy;
+`patches/@expo__ui@57.0.22.patch`) draws each number from a live
+`Text(timerInterval:)`, clipped to its digits next to static `h`/`m`/`s`.
+Monospaced digits keep the fields aligned. `ViewThatFits` fits the fixed-width
+row at 100%, 88%, 76%, then 60%, without dropping relevant seconds.
+**Decision:** checked on the iOS 26.5 simulator over 90 s, a unit format
+over a live date source (`Duration.UnitsFormatStyle` over
+`.durationOffset`) renders nothing, `Date.ComponentsFormatStyle` renders
+once and freezes (19–29 s off the timer), `SystemFormatStyle.Timer`,
+`.offset` and `.reference` spell units out, and a custom format style is
+redacted; only timer text ticks. The form is chosen when the activity
+renders, and a stale date does not re-render it, so the props carry
+`countdownUnderHour`, `countdownLastFiveMinutes` and `countdownLastMinute`:
+they flip at the hour, five-minute and one-minute boundaries, sending one
+update each through the worker's normal hash path. The foreground app reconciles
+at all three boundaries (`nextPhaseBoundary`).
+At the hour, the timer can briefly read `h 59m` until that update; at five minutes,
+seconds appear on the next update. Taps open the props' `url` (passed as the
+activity's static URL); the API must send the same `attributes.url` on
+push-to-start. APNs props reach the layouts directly, so a props version
+other than `1` renders only the title. Room and activity names truncate;
+only numbers keep their full width. `test/live-activity-widgets.test.tsx`
+evaluates the serialized layouts with nothing but `@expo/ui/swift-ui` in
+scope and covers the track fill, the staff `scanned/accredited` ratio, the old-server
+(v1 labels) fallbacks and, for the newer kinds, every phase, missing labels,
+the deadline's unknown status and the desk's missing estimate.
+
+**Surfaces (Android).** `lib/live-activities/model.ts` `toLiveUpdateSpec`
+maps the same props to one `modules/live-updates` spec that carries both
+Android renderings (see Android Live Updates below for the hybrid): the
+promoted Live Update's title/text/chip/track and the custom card's layout.
+Each state has one hero, mirroring the iOS widgets; a label missing from an
+older server's props is omitted, never replaced with English. A kind this
+build does not know maps to `null` and is not posted. The props' `rank` (or
+the data push's, when the props carry none) becomes the notification's sort
+key, so the most important surface sorts first; `desiredActivities` keeps the
+device within `maxConcurrent` on both platforms. Android documents the sort
+key as ordering notifications of the same app and may ignore it when their
+priorities differ (an alerting post uses the alert channel), so on Android
+the order is a hint, not a guarantee.
+
+**Ordering (iOS).** ActivityKit orders an app's activities (Dynamic Island,
+Lock Screen) by each one's `relevanceScore`, and with equal scores by start
+time. Every local start and update replaces the activity's whole content, so
+`host.ios.ts` passes `relevanceForRank(rank)` (`100 − 10 × rank`, the same
+value the API sends as APNs `relevance-score`) on each of them, through the
+`patches/expo-widgets@57.0.23.patch` extra argument (expo-widgets 57 had no
+relevance parameter, so every app-side update used to reset the score to 0
+and the oldest activity led the island regardless of the Settings order). A
+rank change alone changes the props signature, so it re-applies the score.
+
+| State | Chip (≤ 7 chars) | Promoted: title / text · header | Card: lead · trail, track |
+| --- | --- | --- | --- |
+| Queue waiting | `#4·12m`; `#4` when the ETA is unknown or both overflow | **~12 min** · #4 (unknown: **Estimating…**) / +N more queues · challenge | Wait ~12 min (blue) · Position #4; stage track |
+| Queue called | room (truncated) | Go to **Room B** / location · "Called" + count-up from `calledAt`; heads-up only on the transition | Go to Room B (green) · Called + count-up; location; stage track |
+| Queue in room | room | In room · **Room B** / location · challenge | In room · Room B (grey); stage track at the end |
+| Staff upcoming | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown | Starts in + countdown (blue); time · location |
+| Staff live (H24/H25) | `142/180`; `scanned` when that overflows or without `accredited` | **142**/180 scanned / name · location | Scanned `142/180` (blue); location; scanned-share track (elapsed time without `accredited`) + **Scan**; "Ends in" countdown |
+| Attendee upcoming (H59) | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown; category glyph | Starts in + countdown (blue); time · location |
+| Attendee live | countdown to `endsAt` | **Now** · name / time · location · "Ends in" + countdown; elapsed-time track | Now · name; Ends in + countdown (blue); time · location; elapsed-time track |
+| Deadline open (H19) | countdown to `endsAt` | project (else the title) / status · "Closes in" + countdown; hourglass, blue; hacking-window track (none without `startsAt`) | Closes in + countdown (blue) · project over its status (amber "Not submitted", green "Submitted", none when unknown); window track |
+| Deadline closing | countdown | the same in red (`exclamationmark` glyph); heads-up only on the transition into `closing` | the same in red |
+| Deadline submitted | countdown (time left) | Submitted / project · "Closes in" + countdown; check, green; no track | Submitted (green) under the project · Closes in + a small countdown |
+| Accreditation (H22) | accredited count | **412**/600 accredited / +23 last 10 min · 380 inside · title; accredited-share track; **Scan** | Accredited `412/600` (blue) · Last 10 min · Inside; share track + **Scan** |
+
+**Tracks.** Like the iOS bars: each stage fills in its colour up to the
+current value and the rest of it stays grey, stages separated by the segment
+gaps, with a round tracker (white disc, glyph in the phase colour) at the
+current value (`trackSegments`). The queue has two stages,
+In line and Called, the first two thirds of the width as on iOS, filled in
+the phase colour (blue waiting, green called, grey in the room); the tracker sits at `queueStageFill` of the current stage, the iOS
+formulas: `(queueTotal − position + 1) / (queueTotal + 1)` of the first
+stage while waiting, `2 / (calledAhead + 3)` of the second once called (at
+the stage start without the counts), and at the end in the room, with the door as the end icon. Live staff activities track
+the scanned share `scanned / accredited` (the elapsed time when an older
+server sends no `accredited`); live attendee items the time elapsed between start and end,
+the deadline the hacking window's elapsed time (in its phase colour), and the
+desk the accredited share `accredited / eligible`, all as of the post.
+
+**Orchestration (`lib/live-activities/`).**
+
+- `store.ts` — the install id (`deviceId`, created once in SecureStore), the
+  opt-out flag and the reconcile memory, shared with Android's headless task.
+- `sync.ts` — `PUT /api/me/live-activities/device` after sign-in, on language
+  change and when iOS rotates the push-to-start token (iOS 17.2+); on Android
+  it sends the Expo push token instead (permission is still prompted by
+  `lib/push.ts`). `reconcileLiveActivities` reads `GET /api/me/live-activities`
+  (with `?deviceId=`, so the server applies this device's `maxConcurrent`
+  cut and rank hysteresis) and applies it; every running iOS activity, including ones APNs started,
+  is registered through `PUT …/sessions` right away and again with its per-activity token
+  once iOS has one. The early registration keeps the worker from push-starting a duplicate
+  of an activity the app just started. Local iOS starts and updates carry the server's
+  `stale-date` (queue: 30 min ahead; others: the item's end), so an activity the app can no
+  longer refresh shows as outdated. On launch and on every foreground (not on events or
+  timers), the reconcile first calls `POST …/dismissals/reopen` and then applies the read
+  without keeping, inferring or reporting dismissals: whatever the person swiped away comes
+  back while it is still relevant. If the API call fails, dismissals are kept. A failed device
+  registration (offline sign-in, opt-out) is retried before the next
+  reconcile. A read that was in flight across sign-out/sign-in, or that a
+  newer read overtook, is discarded instead of applied. A 404 (an API without
+  the module) silences the orchestration until the next sign-in or language
+  change.
+- `model.ts` `desiredActivities` — reads every kind (the newer fields are
+  optional for older servers), orders by `rank` (0 first, unranked last) and
+  never keeps more than `maxConcurrent` even if the server sent more.
+  `planReconcile` — one surface per (kind, subject): start missing
+  ones (the queue only while `judgingWindowOpen`), update changed props
+  (ignoring `updatedAt`), end duplicates and dropped subjects (iOS keeps the
+  final state 15 minutes). A dismissed surface is not restarted until its
+  phase changes (called, live), and `DELETE …/sessions` with the dismissed
+  phase stops remote restarts. On iOS, a surface that vanished while the
+  server still lists it counts as dismissed. On Android only the
+  notification's delete intent counts (see Android Live Updates below): one
+  that vanished for another reason (force-stop, reboot) is simply posted
+  again. Unreported dismissals stay in `store.ts` (`unreportedDismissals`)
+  until the API accepts the `DELETE`, so one recorded headlessly or offline
+  is reported on a later foreground sync. Android also remembers the rendering the
+  surfaces were posted with (`renderMode`: promoted or card); when it changes,
+  for example after the person turns Live updates back on, every surface is
+  posted again so it becomes a promoted Live Update without waiting for a
+  state change. iOS cannot
+  read a push-started activity's props, so an unidentified `StaffActivity` or
+  `AttendeeActivity` is adopted by an unmatched subject of its kind and
+  immediately updated (`host.ios.ts` remembers id → subject; the queue,
+  deadline and desk have a single subject each).
+- `use-live-activities.ts` (mounted in `app/_layout.tsx`) reconciles on sign-in and
+  foreground (both bring dismissed activities back), the personal queue events, the next start/end boundary (staff
+  and attendee activities, the deadline, the desk window) and every minute
+  while a staff counter or the accreditation desk is live. A received or
+  tapped queue or schedule push notification (`push-refresh.ts`,
+  `isLiveActivityPushCategory`: `queue`, `schedule:<id>`) also triggers a
+  reconcile, debounced together with the SSE events (a call sends both), so
+  the activity catches up even when its APNs update is late or cannot be
+  delivered yet (a push-started activity before the app reported its token).
+  Sign-out ends every surface and sends
+  `enabled: false` with the session that registered the device; `signOut()`
+  revokes that session only after this cleanup settles (or after 4 s), since
+  `notifySignOut()` returns a promise for asynchronous listeners. Sign-out
+  and opt-out also remove iOS activities that already ended but still show
+  their final state on the Lock Screen (`dismissEnded`), which
+  `getInstances()` no longer lists, so a previous account's "Go to Room B"
+  does not stay up for its 15-minute dismissal window.
+- `background-task.ts` — Android data pushes (`AndroidLiveUpdateMessage`) go
+  through an `expo-task-manager` notification task defined in the entry file
+  `index.ts` (before `expo-router/entry`), and through the foreground received
+  listener; both render through the same `applyAndroidLiveUpdate`. On iOS the
+  same task runs `reconcileLiveActivities` for a queue or schedule push
+  received while the app is in the background: the API sends those
+  `_contentAvailable` and the app declares the `remote-notification`
+  background mode (`expo-notifications` plugin,
+  `enableBackgroundRemoteNotifications`). iOS does not wake a force-quit app,
+  throttles background wakes, and does not let a backgrounded app start a new
+  activity (only update or end one); those cases wait for APNs or the next
+  foreground reconcile.
+- The activity scanner bumps the live counter right after a first-time scan.
+- Web is a no-op (`host.ts`).
+
+**Deep links.** `hackos://queue` resolves to the participant queue tab.
+`hackos://scan?activity=<id>` (activity tap and Scan) is rewritten by
+`app/+native-intent.tsx` to `/activities/<id>`, the activity scanner bound to
+that activity, so the camera starts without a chooser (R008).
+`hackos://schedule/<id>` (attendee activity) opens `app/schedule/[id].tsx`
+and `hackos://scan` (accreditation tap and Scan) the scanner tab, both
+unchanged. The app has no project screen, so `hackos://project` (deadline) is
+mapped to `/queue`, the participant's My queue tab, which lists the team's
+projects; the deadline goes to `queue:status` holders, who always have it.
+
+**Opt-out.** Notifications settings has a Live Activities (iOS) / Live
+updates (Android) switch: off ends every surface immediately and registers the
+device with `enabled: false`.
+
+**Per-kind choice and order.** The switch row's label side (detail
+"n of m on", chevron) opens Notifications → Live Activities
+(`app/(tabs)/others/notification-settings/live-activities.tsx`,
+`components/live-activity-kinds-screen.tsx`): one row per kind the account
+receives (`GET /api/me/live-activities/preferences`, in the person's order;
+kinds the account is not entitled to are not listed), labelled with the
+`liveActivityKind*` mobile copy keys, each with its switch and a drag handle.
+Dragging a handle (gesture-handler `Pan` + Reanimated, fixed-height slots,
+scroll disabled while dragging) sets the person's priority: the top kinds
+take the device's few slots first when several apply. VoiceOver users get
+Move up / Move down custom actions on the handle, whose value is the
+position ("2 of 3"). "Reset to default order" appears only for a customized
+order (`customOrder`) and sends `order: null`. Toggles and reorders are
+optimistic (`lib/live-activities/use-live-activity-kinds.ts`), send only the
+change (`PUT` with `kinds` or `order`), then run `reconcileLiveActivities()`
+so this device follows at once; a failed save restores the previous state.
+Both are per account, so the worker applies them on every device.
+**Decision:** the device switch stays the only master; the detail screen is
+reachable only while it is on, because nothing shows on this device then and
+the rows would be inert.
+
+**Development samples.** Debug builds only: opening
+`hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-submitted|accreditation|all|end>`
+(for example `xcrun simctl openurl booted …`; any scheme works, and
+`com.hackudc.os.debug://dev/…` avoids opening another installed hackOS build,
+which would overwrite the App Group's shared Live Activity layouts) renders sample states without a
+backend: waiting #4 of a start of 9 with a 12 min ETA, the same with an
+unknown ETA, called 2 minutes ago, in room, an upcoming meal, a live meal
+(142 of 180 accredited scanned), a live non-meal activity, an
+upcoming and a running workshop, the deadline open with a draft or an
+unknown status, closing and submitted, and the desk at 412 of 600. The
+`-long` samples are the layout worst cases (long names and places, two-digit
+hours, four-digit counts): `queue-waiting-long`, `queue-called-long`,
+`staff-upcoming-long`, `staff-live-long`, `attendee-upcoming-long`,
+`attendee-live-long`, `deadline-open-long`, `deadline-closing-long`,
+`deadline-submitted-long` and `accreditation-long`. The handler is required behind `__DEV__` in `+native-intent.tsx`, so
+release bundles drop it.
+
 ## Realtime & notifications infrastructure
 
 - `lib/push.ts` — best-effort Expo push token registration, called once per
@@ -949,7 +1827,8 @@ physical iOS/Android and EAS verification remains a release-gate task in
   focus — the default suppresses it), sets up the Android notification
   channel, and wires `addNotificationReceivedListener`/
   `addNotificationResponseReceivedListener`. Both re-emit the notification's
-  `category` on `lib/notification-events.ts` (a tiny in-process pub-sub); a
+  `category` on `lib/notification-events.ts` (a tiny in-process pub-sub) and
+  pass the data to the Live Activity push refresh (#966); a
   tapped `category: "queue"` notification also navigates to the queue tab.
   Wired once for the app's lifetime from `app/_layout.tsx`.
 - `lib/server-events.ts` — one authenticated transport per native instance,
@@ -973,11 +1852,124 @@ physical iOS/Android and EAS verification remains a release-gate task in
   Symbols on Android. For `bell.badge` and `bell.badge.fill`, where Material Symbols
   has no badge-dot equivalent (only `notifications_active` depicting ringing waves),
   it maps to `notifications_none`/`notifications` with an overlaid accent badge dot.
-  This gives Android a visible unread indicator on the bottom tab bar
-  (`OpaqueRouterTabs`) and notifications inbox filter button (`UnreadBellButton`)
+  This gives Android a visible unread indicator on the Schedule header bell
   that matches iOS SF Symbol badge behavior without altering geometry. (issue #625)
 
+### Android Live Updates (#966)
+
+`modules/live-updates` (Kotlin, Android-only; `null` on iOS/web) posts the
+Android counterpart of a Live Activity (H38 queue, H25/H26 staff activity,
+H59 attendee activity, H19 deadline, H22 accreditation desk):
+one ongoing notification per `spec.id`, tagged `hackos.live-update:<id>`.
+
+**Hybrid, and why.** Android 16 only promotes a notification to a Live
+Update (status-bar chip, lock screen, top of the shade) when it uses a
+standard, BigText, Call, Progress or Metric style, is ongoing, has a title,
+is not colorized and has **no custom RemoteViews**. An iOS-like layout needs
+custom views, so the poster picks one of two renderings per post
+(`LiveUpdatePoster.choosePath`, unit tested in `src/test`):
+
+| Device | Rendering |
+| --- | --- |
+| Android 16+ (API 36), `canPostPromotedNotifications()` and `hasPromotableCharacteristics()` | **Promoted Live Update** (default): hero datum as title with the number in bold, round badge as large icon (white glyph on the phase colour), segmented `ProgressStyle` track, chip text, single Scan action |
+| Android 16+ with promotion revoked (user/OEM) or a build the system would not promote; Android 8–15 (API 26–35) | **Custom card**: `DecoratedCustomViewStyle` with collapsed and expanded layouts (`res/layout/hackos_live_update_card_*.xml`): header, 34 sp metrics (one in the phase colour), meal stats row, the same track drawn as a bitmap with stage labels, a capsule Scan button inside the card, chronometers for countdowns/count-ups |
+| < 8 (API 24–25) | `isSupported()` is false; `show` posts nothing |
+
+**Lock screen (verified on the Android 16 emulator).** A promoted Live Update
+always shows as a full card on the lock screen (title, text, track, action),
+even after the person has seen it in the shade. A non-promoted notification
+is shown with its collapsed layout (`hackos_live_update_card_small`: header,
+hero value, trailing value; the chevron expands it). With Android 16's
+compact lock-screen notifications (`lock_screen_notification_minimalism`, on
+by default when unset), a non-promoted notification the person has already
+seen (opened the shade, or its heads-up such as "called") moves into the
+icon shelf under the clock. An app cannot override that user setting, which
+is one more reason the promoted path is the default and the card only the
+fallback.
+
+**Actions.** Card path: Scan is only the filled accent pill inside the
+expanded layout, trailing the bar on one row; no system action is added, so
+no text-button row duplicates it (the collapsed card has no button). Promoted
+path: SystemUI draws the single action as a text button under the content.
+Promoted notifications cannot be colorized, and Android 16 strips
+colour/background spans from action titles and does not draw action icons
+(tested), so a filled pill beside the track is impossible there; the label
+is bold, the only styling that survives. The same kind and phase therefore
+always looks the same within a path; the two looks differ only between the
+promoted and the card path.
+
+The card is never chosen on a device that can promote; each post logs
+`path`, `canPostPromoted`, `promotable` and the read-back
+`FLAG_PROMOTED_ONGOING` under the `LiveUpdates` tag (the read-back can lag on
+an id's first post).
+
+- Built with `NotificationCompat` (androidx.core 1.17: `ProgressStyle`,
+  `setShortCriticalText`, `setRequestPromotedOngoing`). `MetricStyle` is
+  Android 17-era and absent from compileSdk 36, so it is not used.
+- Colours: blue (waiting, upcoming, live, deadline open), green (called,
+  submitted), grey (in room), red (deadline closing), amber (a draft's "Not
+  submitted" on the card), a lighter grey for the unfilled rest of a track. Text colours are resources with
+  `values-night` variants, resolved by SystemUI (`RemoteViews.setColor` on
+  API 31+), so the card follows the shade's light/dark mode; bitmaps (badge,
+  tracker, card track) use the mode at post time.
+- Small icon: the kind's monochrome glyph (`people`, `door`, `meal`, `mic`,
+  `star`, `calendar`, `flag`, `sparkles` for schedule categories, `hourglass`
+  / `alert` / `check` for the deadline, `badge` for the desk; `scan` for the
+  action). Android 16 shows the app icon in the
+  notification header regardless; the glyph appears in the chip and the
+  status bar.
+- Chip and `when`: the chip shows `shortCriticalText` whenever it is set,
+  even with a running chronometer, so the called state counts up in the
+  header while the chip keeps the room. `countdownTo` (future) is shown as
+  the system's own short time delta (`5min`; `LiveUpdatePoster.whenStyle`),
+  not a chronometer, so the chip never shows `H:MM:SS`; the system shows it
+  from 2 minutes ahead. `countUpFrom` counts up as a chronometer, anything
+  else hides `when` (live staff updates), so a count is never displaced.
+  The custom card (the pre-Android 16 fallback) keeps its chronometers. Tapping the chip opens the notification as a
+  popup and the popup opens the deep link (`hackos://queue`, the scan link).
+  The chip is hidden while hackOS is in the foreground, and it shows the
+  icon alone while its own heads-up or popup is on screen and for a moment
+  after the app leaves the foreground (system behaviour, verified on the
+  Android 16 emulator).
+- Channels: `hackos_live_updates` (default importance, no sound/vibration)
+  for routine updates; `hackos_live_updates_alert` (high importance) only
+  when `spec.alert` is true: the team being called, or the deadline entering
+  `closing`. Names are
+  localized es/gl/en in the module's string resources. On the custom path,
+  Android may move an already-seen alert into the lock screen's icon shelf.
+- Taps, the Scan action and the card's Scan button fire `ACTION_VIEW` deep
+  links pinned to this package (`FLAG_IMMUTABLE`). Notification ids are the
+  subjects (`activity:12`, `schedule:21`, `deadline`, `accreditation`) and
+  `queue:judging`.
+- Without notification permission (`expo-notifications` asks for it), `show`
+  is a no-op.
+- Dismissals: every post carries a delete intent to the module's
+  non-exported `LiveUpdateDismissReceiver` with the spec's `phase`. The system
+  sends it only when the person swipes the notification away (Android 14+
+  allows that for ongoing ones), never for app cancels, force-stop or
+  reboot. The receiver stores `id → phase` in SharedPreferences
+  (`hackos.live-updates`), so a dismissal while no JS runs is kept;
+  `consumeDismissals()` returns and clears them, and `host.android.ts`
+  exposes them to the orchestration as `consumeDismissals()`.
+- Testing the card on Android 16: `adb shell appops set com.hackudc.os.debug POST_PROMOTED_NOTIFICATIONS deny`
+  (restore with `default`), or the per-app Live updates toggle in Settings.
+- Debug builds only: `LiveUpdatesDebugReceiver` (module `src/debug`) posts
+  samples without JS, e.g.
+  `adb shell am broadcast -f 32 -p com.hackudc.os.debug -a expo.modules.liveupdates.DEBUG_SHOW --es id queue:judging --es title Queue --es chip '#4' --es icon people`
+  (extras: `text`, `subText`, `countdownSeconds`/`countUpSeconds` int,
+  `progress`/`progressMax` int for a one-stage track, `tracker`, `tone`,
+  `actionLabel`, `actionUrl`, `url`, `phase`, `alert` bool; `DEBUG_DISMISS`
+  with `id`). The full states, including the card, come from the JS samples
+  (`hackos://dev/live-activity?sample=…`, above), which run the real mapping;
+  on Android, open them with `adb shell am start -a android.intent.action.VIEW -d '<link>' com.hackudc.os.debug`
+  while the app runs. Samples respect the in-app opt-out.
+
 ## Other infrastructure
+
+- `lib/app-version.ts` shows the installed binary's version and a seven-character
+  commit in Sign in and Account. `app.config.ts` captures EAS/CI commit metadata,
+  falling back to the checkout's HEAD when building locally; builds without Git
+  metadata retain the version alone.
 
 - `lib/i18n.tsx` — react-i18next wrapper (`useLocale()` keeps the original
   `{ language, setLanguage, t }` shape) reading `packages/shared/locales/
@@ -986,6 +1978,23 @@ physical iOS/Android and EAS verification remains a release-gate task in
   from `/api/me`. `mobile.json` is intentionally smaller than the web app's
   `web.json`: it covers scanner and participant controls, not the full web
   admin surface.
+- Account language row (`components/account-screen.tsx`) — on iOS the whole row
+  is the `MenuView` trigger. On Android, `@expo/ui`'s Material `DropdownMenu`
+  aligns its popup to the anchor's start edge, so a full-width trigger opened the
+  menu at the screen's left; the row is a `Pressable` calling `MenuView`'s
+  `ref.show()` and the menu is anchored to a 1dp strip at the row's trailing edge.
+- Dynamic Type. `patches/react-native@0.86.3.patch` makes every root `Text`
+  remount once when the system text size changes. Without it, Fabric
+  re-measured text only on its native branch: the next React commit (a tab
+  switch, returning from Settings) restored frames measured at the old size
+  while glyphs rendered at the new one, clipping every label. Fixed chrome
+  (tab labels, scanner counters, the Activities/Diary toolbar titles) uses
+  `CHROME_MAX_FONT_SIZE_MULTIPLIER` from `theme/dynamic-type.ts` and shrinks to
+  fit; all other text is uncapped. `test/dynamic-type.test.tsx` fails if the
+  patch is lost in a React Native upgrade. To check a screen, change the size
+  while the app runs (`xcrun simctl ui booted content_size
+  accessibility-extra-extra-extra-large`), then switch tabs: a cold start at
+  the large size does not exercise the re-measure path.
 - `lib/haptics.ts` — best-effort Expo Haptics feedback for custom controls and
   meaningful outcomes. Selection/light feedback is used for custom toggles,
   segmented choices, scanner capture and retry actions; success/warning/error

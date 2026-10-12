@@ -1,3 +1,4 @@
+let mockLegacyRosterExists = true;
 const mockExecStatements: string[] = [];
 const mockRunStatements: Array<{ sql: string; args: unknown[] }> = [];
 
@@ -71,21 +72,43 @@ const mockDatabase = new FakeDatabase();
 
 jest.mock("expo-file-system", () => ({
   Directory: class {
+    private path: string;
+    constructor(...parts: Array<string | { uri: string }>) {
+      this.path = parts.map((part) => (typeof part === "string" ? part : part.uri)).join("/");
+    }
+    get uri() {
+      // Android's Directory.uri getter constructs java.io.File(URI), even
+      // when the directory contains no database and nobody has signed in.
+      if (!this.path.startsWith("file://")) throw new Error("URI is not absolute");
+      return this.path;
+    }
     exists = true;
     create() {}
   },
   File: class {
-    exists = false;
+    uri: string;
+    constructor(...parts: Array<string | { uri: string }>) {
+      this.uri = parts.map((part) => (typeof part === "string" ? part : part.uri)).join("/");
+    }
+    get exists() {
+      if (!this.uri.startsWith("file://")) throw new Error("URI is not absolute");
+      return mockLegacyRosterExists && this.uri.endsWith("/cache/hackos-scanner-roster.db");
+    }
     lastModified = null;
     name = "file";
     async copy() {}
-    delete() {}
+    delete() {
+      mockLegacyRosterExists = false;
+    }
   },
-  Paths: { cache: { uri: "cache://" }, document: { uri: "document://" } },
+  Paths: {
+    cache: { uri: "file:///data/user/0/md.dani.hackos/cache" },
+    document: { uri: "file:///data/user/0/md.dani.hackos/files" },
+  },
 }));
 
 jest.mock("expo-sqlite", () => ({
-  defaultDatabaseDirectory: "database://",
+  defaultDatabaseDirectory: "/data/user/0/md.dani.hackos/files/SQLite",
   deleteDatabaseAsync: jest.fn(),
   openDatabaseAsync: jest.fn(async () => mockDatabase),
 }));
@@ -269,4 +292,21 @@ describe("native scanner roster generation fencing", () => {
     releaseEncryption();
     await write;
   });
+});
+
+it.each([
+  ["a fresh Android install before its first sign-in", false],
+  ["an older Android roster", true],
+])("clears both scanner stores during an environment switch with %s", async (_scenario, legacyRosterExists) => {
+  mockLegacyRosterExists = legacyRosterExists;
+  mockExecStatements.length = 0;
+  await jest.isolateModulesAsync(async () => {
+    const scanner = jest.requireActual<typeof import("./scanner-db.native")>("./scanner-db.native");
+    await expect(
+      Promise.all([scanner.wipeAttendanceRoster(), scanner.wipeAllOfflineScanQueues()]),
+    ).resolves.toEqual([undefined, undefined]);
+  });
+  expect(mockLegacyRosterExists).toBe(false);
+  expect(mockExecStatements.some((sql) => sql.includes("DELETE FROM scanner_people"))).toBe(true);
+  expect(mockExecStatements.some((sql) => sql.includes("DELETE FROM pending_scans"))).toBe(true);
 });

@@ -12,13 +12,13 @@
 // by reusing the same phase logic the public site and TV run.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
-import { useEffect, useId } from "react";
+import { useEffect, useId, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
+import { TabBar } from "@/components/common/tab-bar";
 import { TimezonePicker } from "@/components/common/timezone-picker";
 import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
 import {
@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -81,6 +82,11 @@ const createSchema = (t: Translate) =>
       }
     });
 
+// Once a value is set the time input gains right padding for the clear button,
+// skewing the date/time split against empty rows (R010); reserving it on both
+// inputs keeps every row identical.
+const EQUAL_SPLIT = "pr-9";
+
 type Values = z.infer<ReturnType<typeof createSchema>>;
 
 function fromConfig(cfg: EventConfig): Values {
@@ -112,7 +118,6 @@ function CountdownPreview({
   judgingStartsAt: string | null;
   judgingEndsAt: string | null;
 }) {
-  const { t } = useLocale();
   const phase = useEventPhase({
     name: null,
     tagline: null,
@@ -124,26 +129,20 @@ function CountdownPreview({
     judgingEndsAt,
   });
 
+  // No hacking window yet: nothing to preview, so no empty box.
+  if (phase.kind === "none") return null;
+
   return (
     <div className="rounded-lg border p-4">
-      {phase.kind === "none" ? (
-        <p className="text-muted-foreground text-sm">{t("countdownPreviewEmpty")}</p>
-      ) : (
-        <EventPhaseDisplay phase={phase} className="type-page-title tabular-nums" />
-      )}
+      <EventPhaseDisplay phase={phase} className="type-page-title tabular-nums" />
     </div>
   );
 }
 
-export function EventTab({
-  icon,
-  onDirtyChange,
-}: {
-  icon: PhosphorIcon;
-  onDirtyChange: (dirty: boolean) => void;
-}) {
+export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
   const { t } = useLocale();
   const reminderLabelId = useId();
+  const [view, setView] = useState("general");
   const { config, status, applyConfig } = useEventConfig();
   const form = useForm<Values>({
     resolver: zodResolver(createSchema(t)),
@@ -202,235 +201,287 @@ export function EventTab({
     }
   }
 
+  // A validation error on a hidden tab would otherwise block Save silently.
+  function revealInvalidTab(errors: Record<string, unknown>) {
+    const names = Object.keys(errors);
+    if (names.some((n) => ["name", "tagline", "timezone"].includes(n))) setView("general");
+    else if (names.some((n) => n.startsWith("participantSelfService"))) setView("participants");
+    else if (names.length > 0) setView("schedule");
+  }
+
   if (status !== "ready" || !config) {
-    return <EventConfigLoadState icon={icon} title={t("eventTitle")} />;
+    return <EventConfigLoadState />;
   }
   const timezone = values.timezone ?? config.timezone;
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)}>
-        <SectionCard
-          variant="plain"
-          footerClassName="justify-start"
-          stickyFooter
-          footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
-        >
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("name")}</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="tagline"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("taglineLabel")}</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="timezone"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("timezoneLabel")}</FormLabel>
-                <FormControl>
-                  <TimezonePicker value={field.value} onChange={field.onChange} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="participantsCanCreateProjects"
-            render={({ field }) => (
-              <FormItem>
-                <div className="flex items-center justify-between gap-4 py-3">
-                  <FormLabel className="font-normal">
-                    {t("participantsCanCreateProjectsLabel")}
-                  </FormLabel>
-                  <FormControl>
-                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <h3 className="border-t pt-4 text-balance text-sm font-semibold">
-            {t("scheduleSectionTitle")}
-          </h3>
-          <div className="grid items-start gap-4 sm:grid-cols-2">
-            {(
-              [
-                {
-                  name: "eventStartsAt",
-                  label: "eventStartsLabel",
-                  description: "eventStartsDesc",
-                },
-                { name: "eventEndsAt", label: "eventEndsLabel", description: "eventEndsDesc" },
-                { name: "hackingStartsAt", label: "hackingStartsLabel" },
-                { name: "hackingEndsAt", label: "hackingEndsLabel" },
-              ] as const
-            ).map((date) => (
+      <form onSubmit={form.handleSubmit(onSubmit, revealInvalidTab)}>
+        <Tabs value={view} onValueChange={setView}>
+          <TabBar className="[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] sm:[mask-image:none] flex-row! h-(--control-height-default)! [&_[data-slot=tabs-trigger]]:w-auto! [&_[data-slot=tabs-trigger]]:justify-center!">
+            <TabsTrigger value="general">{t("eventGeneralTab")}</TabsTrigger>
+            <TabsTrigger value="schedule">{t("scheduleSectionTitle")}</TabsTrigger>
+            <TabsTrigger value="participants">{t("eventParticipantsTab")}</TabsTrigger>
+          </TabBar>
+          <SectionCard
+            variant="plain"
+            footerClassName="justify-start"
+            stickyFooter
+            footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
+          >
+            <TabsContent
+              value="general"
+              forceMount
+              hidden={view !== "general"}
+              className="space-y-(--space-within-section)"
+            >
+              <div className="grid items-start gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("name")}</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="tagline"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("taglineLabel")}</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="timezone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("timezoneLabel")}</FormLabel>
+                      <FormControl>
+                        <TimezonePicker value={field.value} onChange={field.onChange} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </TabsContent>
+            <TabsContent
+              value="schedule"
+              forceMount
+              hidden={view !== "schedule"}
+              className="space-y-(--space-within-section)"
+            >
+              <div className="grid items-start gap-4 sm:grid-cols-2">
+                {(
+                  [
+                    {
+                      name: "eventStartsAt",
+                      label: "eventStartsLabel",
+                      description: "eventStartsDesc",
+                    },
+                    { name: "eventEndsAt", label: "eventEndsLabel", description: "eventEndsDesc" },
+                    { name: "hackingStartsAt", label: "hackingStartsLabel" },
+                    { name: "hackingEndsAt", label: "hackingEndsLabel" },
+                  ] as const
+                ).map((date) => (
+                  <FormField
+                    key={date.name}
+                    control={form.control}
+                    name={date.name}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t(date.label)}</FormLabel>
+                        <FormControl>
+                          <DateTimeInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            className={EQUAL_SPLIT}
+                          />
+                        </FormControl>
+                        <ZonedTimePreview value={field.value} timezone={timezone} />
+                        {"description" in date && (
+                          <FormDescription>{t(date.description)}</FormDescription>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ))}
+              </div>
               <FormField
-                key={date.name}
                 control={form.control}
-                name={date.name}
+                name="showStartCountdown"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t(date.label)}</FormLabel>
-                    <FormControl>
-                      <DateTimeInput value={field.value} onChange={field.onChange} />
-                    </FormControl>
-                    <ZonedTimePreview value={field.value} timezone={timezone} />
-                    {"description" in date && (
-                      <FormDescription>{t(date.description)}</FormDescription>
-                    )}
+                    <div className="flex items-center justify-between gap-4 py-3">
+                      <div>
+                        <FormLabel className="font-normal">{t("countdownToStartLabel")}</FormLabel>
+                        <FormDescription>{t("countdownDesc")}</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            ))}
-          </div>
-          <FormField
-            control={form.control}
-            name="showStartCountdown"
-            render={({ field }) => (
-              <FormItem>
-                <div className="flex items-center justify-between gap-4 py-3">
-                  <div>
-                    <FormLabel className="font-normal">{t("countdownToStartLabel")}</FormLabel>
-                    <FormDescription>{t("countdownDesc")}</FormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <CountdownPreview
-            values={{
-              hackingStartsAt: values.hackingStartsAt ?? "",
-              hackingEndsAt: values.hackingEndsAt ?? "",
-              showStartCountdown: values.showStartCountdown ?? false,
-            }}
-            judgingStartsAt={config.judgingStartsAt}
-            judgingEndsAt={config.judgingEndsAt}
-          />
-          <div className="border-t pt-4">
-            <h3 className="text-balance text-sm font-semibold">
-              {t("participantSelfServiceTitle")}
-            </h3>
-            <p className="text-muted-foreground mt-1 text-sm">{t("participantSelfServiceDesc")}</p>
-          </div>
-          <div className="grid items-start gap-4 sm:grid-cols-2">
-            <FormField
-              control={form.control}
-              name="participantSelfServiceStartsAt"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("participantSelfServiceStartsLabel")}</FormLabel>
-                  <FormControl>
-                    <DateTimeInput value={field.value} onChange={field.onChange} />
-                  </FormControl>
-                  <ZonedTimePreview value={field.value} timezone={timezone} />
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="participantSelfServiceEndsAt"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("participantSelfServiceEndsLabel")}</FormLabel>
-                  <FormControl>
-                    <DateTimeInput value={field.value} onChange={field.onChange} />
-                  </FormControl>
-                  <ZonedTimePreview value={field.value} timezone={timezone} />
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-          <div className="border-t pt-4 space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <h3 id={reminderLabelId} className="text-balance text-sm font-semibold">
-                {t("eventReminderTitle")}
-              </h3>
-              <Switch
-                aria-labelledby={reminderLabelId}
-                checked={!!values.eventReminderScheduledAt}
-                onCheckedChange={(checked) =>
-                  form.setValue(
-                    "eventReminderScheduledAt",
-                    checked
-                      ? toLocalInputValue(
-                          new Date(
-                            Math.max(
-                              Date.now() + 3600000,
-                              new Date(
-                                fromLocalInputValue(values.eventStartsAt ?? "") ?? Date.now(),
-                              ).getTime() - 86400000,
-                            ),
-                          ).toISOString(),
-                        )
-                      : "",
-                    { shouldDirty: true, shouldValidate: true },
-                  )
-                }
+              <CountdownPreview
+                values={{
+                  hackingStartsAt: values.hackingStartsAt ?? "",
+                  hackingEndsAt: values.hackingEndsAt ?? "",
+                  showStartCountdown: values.showStartCountdown ?? false,
+                }}
+                judgingStartsAt={config.judgingStartsAt}
+                judgingEndsAt={config.judgingEndsAt}
               />
-            </div>
-            <p className="text-muted-foreground text-sm">{t("eventReminderAudience")}</p>
-            {values.eventReminderScheduledAt && (
+              <div className="border-t pt-4 space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <h3 id={reminderLabelId} className="text-balance text-sm font-semibold">
+                    {t("eventReminderTitle")}
+                  </h3>
+                  <Switch
+                    aria-labelledby={reminderLabelId}
+                    checked={!!values.eventReminderScheduledAt}
+                    onCheckedChange={(checked) =>
+                      form.setValue(
+                        "eventReminderScheduledAt",
+                        checked
+                          ? toLocalInputValue(
+                              new Date(
+                                Math.max(
+                                  Date.now() + 3600000,
+                                  new Date(
+                                    fromLocalInputValue(values.eventStartsAt ?? "") ?? Date.now(),
+                                  ).getTime() - 86400000,
+                                ),
+                              ).toISOString(),
+                            )
+                          : "",
+                        { shouldDirty: true, shouldValidate: true },
+                      )
+                    }
+                  />
+                </div>
+                {values.eventReminderScheduledAt && (
+                  <>
+                    <p className="text-muted-foreground text-sm">{t("eventReminderAudience")}</p>
+                    <FormField
+                      control={form.control}
+                      name="eventReminderScheduledAt"
+                      render={({ field }) => (
+                        <FormItem className="max-w-md">
+                          <FormLabel>{t("eventReminderSendAt")}</FormLabel>
+                          <FormControl>
+                            <DateTimeInput
+                              value={field.value}
+                              onChange={field.onChange}
+                              max={values.eventStartsAt}
+                              className={EQUAL_SPLIT}
+                            />
+                          </FormControl>
+                          <ZonedTimePreview value={field.value} timezone={timezone} />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
+                )}
+                {config.eventReminder?.status === "queued" && (
+                  <p className="text-sm">
+                    {t("eventReminderQueued", { count: config.eventReminder.recipient_count })}
+                  </p>
+                )}
+                {config.eventReminder?.status === "expired" && (
+                  <p className="text-sm">{t("eventReminderExpired")}</p>
+                )}
+              </div>
+            </TabsContent>
+            <TabsContent
+              value="participants"
+              forceMount
+              hidden={view !== "participants"}
+              className="space-y-(--space-within-section)"
+            >
               <FormField
                 control={form.control}
-                name="eventReminderScheduledAt"
+                name="participantsCanCreateProjects"
                 render={({ field }) => (
-                  <FormItem className="max-w-md">
-                    <FormLabel>{t("eventReminderSendAt")}</FormLabel>
-                    <FormControl>
-                      <DateTimeInput
-                        value={field.value}
-                        onChange={field.onChange}
-                        max={values.eventStartsAt}
-                      />
-                    </FormControl>
-                    <ZonedTimePreview value={field.value} timezone={timezone} />
+                  <FormItem>
+                    <div className="flex items-center justify-between gap-4 py-3">
+                      <FormLabel className="font-normal">
+                        {t("participantsCanCreateProjectsLabel")}
+                      </FormLabel>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            )}
-            {config.eventReminder?.status === "queued" && (
-              <p className="text-sm">
-                {t("eventReminderQueued", { count: config.eventReminder.recipient_count })}
-              </p>
-            )}
-            {config.eventReminder?.status === "expired" && (
-              <p className="text-sm">{t("eventReminderExpired")}</p>
-            )}
-          </div>
-        </SectionCard>
+
+              <div>
+                <h3 className="text-balance text-sm font-semibold">
+                  {t("participantSelfServiceTitle")}
+                </h3>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  {t("participantSelfServiceDesc")}
+                </p>
+              </div>
+              <div className="grid items-start gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="participantSelfServiceStartsAt"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("participantSelfServiceStartsLabel")}</FormLabel>
+                      <FormControl>
+                        <DateTimeInput
+                          value={field.value}
+                          onChange={field.onChange}
+                          className={EQUAL_SPLIT}
+                        />
+                      </FormControl>
+                      <ZonedTimePreview value={field.value} timezone={timezone} />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="participantSelfServiceEndsAt"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("participantSelfServiceEndsLabel")}</FormLabel>
+                      <FormControl>
+                        <DateTimeInput
+                          value={field.value}
+                          onChange={field.onChange}
+                          className={EQUAL_SPLIT}
+                        />
+                      </FormControl>
+                      <ZonedTimePreview value={field.value} timezone={timezone} />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </TabsContent>
+          </SectionCard>
+        </Tabs>
       </form>
     </Form>
   );

@@ -5,10 +5,8 @@
 // own PUT (the API accepts partial bodies — fields it omits are left
 // unchanged, so one category's save can never clobber another's edits).
 
-import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
-import { SectionCard } from "@/components/common/section-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -25,7 +23,13 @@ interface EventConfigContextValue {
 
 const EventConfigContext = createContext<EventConfigContextValue | null>(null);
 
-export function EventConfigProvider({ children }: { children: React.ReactNode }) {
+export function EventConfigProvider({
+  children,
+  enabled = true,
+}: {
+  children: React.ReactNode;
+  enabled?: boolean;
+}) {
   const { t } = useLocale();
   const [config, setConfig] = useState<EventConfig | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -41,6 +45,7 @@ export function EventConfigProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const load = useCallback(async () => {
+    if (!enabled) return;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setStatus("loading");
@@ -55,7 +60,7 @@ export function EventConfigProvider({ children }: { children: React.ReactNode })
       setError(err instanceof ApiError ? err.message : t("couldNotLoadEventSettings"));
       setStatus("error");
     }
-  }, [t]);
+  }, [t, enabled]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching event config from API is a legitimate external-system sync on mount.
@@ -82,23 +87,20 @@ export function useEventConfig(): EventConfigContextValue {
  * Keeps H48 schedule and H28 wallet settings actionable while their shared
  * event snapshot is loading or unavailable instead of rendering blank tabs.
  */
-export function EventConfigLoadState({ icon, title }: { icon: PhosphorIcon; title: string }) {
+export function EventConfigLoadState() {
   const { t } = useLocale();
   const { status, error, retry } = useEventConfig();
 
   if (status === "ready") return null;
 
-  return (
-    <SectionCard variant="plain" footerClassName="justify-start" icon={icon} title={title}>
-      {status === "error" ? (
-        <ContextualError message={error ?? t("couldNotLoadEventSettings")} onRetry={retry} />
-      ) : (
-        <div className="space-y-4" role="status" aria-busy="true" aria-label={t("loading")}>
-          <Skeleton className="h-[var(--control-height-default)] w-full" />
-          <Skeleton className="h-[var(--control-height-default)] w-full" />
-          <Skeleton className="h-[var(--control-height-default)] w-2/3" />
-        </div>
-      )}
-    </SectionCard>
+  // No title: the page heading already names the open section (DESIGN.md).
+  return status === "error" ? (
+    <ContextualError message={error ?? t("couldNotLoadEventSettings")} onRetry={retry} />
+  ) : (
+    <div className="space-y-4" role="status" aria-busy="true" aria-label={t("loading")}>
+      <Skeleton className="h-[var(--control-height-default)] w-full" />
+      <Skeleton className="h-[var(--control-height-default)] w-full" />
+      <Skeleton className="h-[var(--control-height-default)] w-2/3" />
+    </div>
   );
 }

@@ -169,6 +169,34 @@ describe("collaborative review (H36)", () => {
     expect(versions.json()).toHaveLength(2);
   });
 
+  it("folds an open presentation timer pause into the total on review submit (#926)", async () => {
+    const { challengeId, entryId } = await setupEntry();
+    const roomId = await createRoom();
+    await assignChallengeToRoom(roomId, challengeId);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE queue_entries
+          SET status = 'presenting', assigned_room_id = $2, presentation_started_at = now(),
+              presentation_paused_at = now() - interval '30 seconds'
+        WHERE id = $1`,
+      [entryId, roomId],
+    );
+    const submitted = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/entries/${entryId}/review`,
+      headers: asUser(judgeA),
+      payload: { scores: { innovation: 7, execution: 6 }, submit: true },
+    });
+    expect(submitted.statusCode).toBe(200);
+    const { rows } = await pool.query(
+      `SELECT status, presentation_paused_at, presentation_paused_seconds FROM queue_entries WHERE id = $1`,
+      [entryId],
+    );
+    expect(rows[0].status).toBe("completed");
+    expect(rows[0].presentation_paused_at).toBeNull();
+    expect(rows[0].presentation_paused_seconds).toBeGreaterThanOrEqual(30);
+  });
+
   it("clears a stale pre-call marker when review submission completes a team", async () => {
     const { challengeId, entryId } = await setupEntry();
     const roomId = await createRoom();

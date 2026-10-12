@@ -10,6 +10,7 @@ import {
   NotFoundError,
   ServiceUnavailableError,
 } from "../../lib/errors.js";
+import { profilePrefix } from "../../lib/profile-files.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { deleteObject, deletePrefix, deleteSubjectUploadObjects } from "../../lib/storage.js";
 import type { TemplateField } from "../applications/schemas.js";
@@ -772,14 +773,29 @@ async function prepareAccountRemoval(
         await client.query(`DELETE FROM sessions WHERE user_id = $1`, [options.targetId]);
         await client.query(`DELETE FROM accounts WHERE user_id = $1`, [options.targetId]);
         await client.query(`DELETE FROM push_tokens WHERE user_id = $1`, [options.targetId]);
+        await client.query(`DELETE FROM live_activity_devices WHERE user_id = $1`, [
+          options.targetId,
+        ]);
+        await client.query(`DELETE FROM live_activity_kind_opt_outs WHERE user_id = $1`, [
+          options.targetId,
+        ]);
+        await client.query(`DELETE FROM live_activity_kind_orders WHERE user_id = $1`, [
+          options.targetId,
+        ]);
         await client.query(
           `UPDATE users
               SET food_intolerances = ARRAY[]::integer[],
                   food_intolerance_notes = NULL,
-                  dietary_data_state = 'not_provided'
+                  dietary_data_state = 'not_provided',
+                  dietary_confirmed_at = NULL,
+                  meal_plan_confirmed_at = NULL
             WHERE id = $1`,
           [options.targetId],
         );
+        // #933: meal plans are personal data; the row CASCADE covers final deletion.
+        await client.query(`DELETE FROM meal_attendance_plans WHERE user_id = $1`, [
+          options.targetId,
+        ]);
       }
       if (options.preserveIdempotency) {
         // Keep the marker in the identity-free completion scope selected by
@@ -865,6 +881,10 @@ async function deleteStorageArtifacts(
 ): Promise<void> {
   try {
     await deleteSubjectUploadObjects(preparation.targetId);
+    // #934/#935: account photo and directory CV, including any object a
+    // replaced upload left behind. The users/profile rows holding their keys
+    // are deleted or scrubbed by the same removal.
+    await deletePrefix(profilePrefix(preparation.targetId));
     for (const prefix of preparation.uploadPrefixes) await deletePrefix(prefix);
     for (const prefix of preparation.exportPrefixes) await deletePrefix(prefix);
     for (const key of preparation.storageKeys) await deleteObject(key);
@@ -1397,6 +1417,14 @@ async function scrubRelationships(
   const scheduleOwnerAuditEntityIds = scheduleOwnerRows.map(
     (row) => `${row.schedule_id}:${row.id}`,
   );
+  // #934: the opted-in public profile is identity-bearing; anonymized rows
+  // keep the users row, so the cascade alone would not remove it.
+  await client.query(`DELETE FROM user_public_profiles WHERE user_id = $1`, [userId]);
+  // #935: the subject's own event diary, and every entry in other attendees'
+  // diaries that points at them.
+  await client.query(`DELETE FROM diary_entries WHERE owner_id = $1 OR target_user_id = $1`, [
+    userId,
+  ]);
   await client.query(`DELETE FROM submissions WHERE user_id = $1`, [userId]);
   await client.query(
     `DELETE FROM devpost_participants
@@ -1714,6 +1742,9 @@ async function scrubRelationships(
   await client.query(`DELETE FROM sessions WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM accounts WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM push_tokens WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM live_activity_devices WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM live_activity_kind_opt_outs WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM live_activity_kind_orders WHERE user_id = $1`, [userId]);
 }
 
 /**
@@ -1795,11 +1826,14 @@ export async function resetReviewFixtureAccount(
   await scrubRelationships(client, user);
   await client.query(`DELETE FROM user_roles WHERE user_id = $1`, [user.id]);
   await client.query(`DELETE FROM user_email_history WHERE user_id = $1`, [user.id]);
+  await client.query(`DELETE FROM meal_attendance_plans WHERE user_id = $1`, [user.id]);
   await client.query(
     `UPDATE users
         SET email = $2,
             email_verified = true,
             image = NULL,
+            photo_key = NULL,
+            photo_updated_at = NULL,
             name = $3,
             surname = $4,
             dni = NULL,
@@ -1808,6 +1842,8 @@ export async function resetReviewFixtureAccount(
             food_intolerances = ARRAY[]::integer[],
             food_intolerance_notes = NULL,
             dietary_data_state = 'not_provided',
+            dietary_confirmed_at = NULL,
+            meal_plan_confirmed_at = NULL,
             university_id = NULL,
             shirt_size = NULL,
             language = 'en',

@@ -8,7 +8,6 @@
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
-import { ImageIcon } from "@phosphor-icons/react/dist/csr/Image";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import Link from "next/link";
@@ -52,6 +51,7 @@ import {
   textForDisplay,
 } from "../../challenges/shared";
 import { type Enterprise, initials, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "../shared";
+import { PublicationSummary } from "./publication-summary";
 
 const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
 const optionalPositiveInt = z
@@ -383,60 +383,58 @@ export function LogoCard({
   }
 
   return (
-    <SectionCard icon={ImageIcon} title={t("logoTitle")}>
-      <div className="flex items-center gap-4">
-        <Avatar size="lg" className="rounded-md">
-          {enterprise.logo_url ? (
-            <SponsorLogo
-              logoUrl={enterprise.logo_url}
-              logoNegativeUrl={enterprise.logo_negative_url}
-              alt={enterprise.name}
-              className="size-full object-contain"
-            />
-          ) : (
-            <AvatarFallback className="rounded-md">{initials(enterprise.name)}</AvatarFallback>
-          )}
-        </Avatar>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => defaultInputRef.current?.click()}
-            disabled={uploading}
-            loading={uploading}
-          >
-            {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
-            {enterprise.logo_url ? t("replaceLogo") : t("uploadLogo")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => negativeInputRef.current?.click()}
-            disabled={uploading}
-            loading={uploading}
-          >
-            {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
-            {enterprise.logo_negative_url === enterprise.logo_url
-              ? t("uploadDarkLogo")
-              : t("replaceDarkLogo")}
-          </Button>
-        </div>
-        <input
-          ref={defaultInputRef}
-          type="file"
-          accept={LOGO_ACCEPT}
-          className="hidden"
-          onChange={(e) => onFile(e, "default")}
-        />
-        <input
-          ref={negativeInputRef}
-          type="file"
-          accept={LOGO_ACCEPT}
-          className="hidden"
-          onChange={(e) => onFile(e, "negative")}
-        />
+    <div className="flex items-center gap-4">
+      <Avatar size="lg" className="rounded-md">
+        {enterprise.logo_url ? (
+          <SponsorLogo
+            logoUrl={enterprise.logo_url}
+            logoNegativeUrl={enterprise.logo_negative_url}
+            alt={enterprise.name}
+            className="size-full object-contain"
+          />
+        ) : (
+          <AvatarFallback className="rounded-md">{initials(enterprise.name)}</AvatarFallback>
+        )}
+      </Avatar>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => defaultInputRef.current?.click()}
+          disabled={uploading}
+          loading={uploading}
+        >
+          {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
+          {enterprise.logo_url ? t("replaceLogo") : t("uploadLogo")}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => negativeInputRef.current?.click()}
+          disabled={uploading}
+          loading={uploading}
+        >
+          {<UploadSimpleIcon aria-hidden="true" className="size-4" />}
+          {enterprise.logo_negative_url === enterprise.logo_url
+            ? t("uploadDarkLogo")
+            : t("replaceDarkLogo")}
+        </Button>
       </div>
-    </SectionCard>
+      <input
+        ref={defaultInputRef}
+        type="file"
+        accept={LOGO_ACCEPT}
+        className="hidden"
+        onChange={(e) => onFile(e, "default")}
+      />
+      <input
+        ref={negativeInputRef}
+        type="file"
+        accept={LOGO_ACCEPT}
+        className="hidden"
+        onChange={(e) => onFile(e, "negative")}
+      />
+    </div>
   );
 }
 
@@ -446,10 +444,13 @@ export function EditCard({
   enterprise,
   canManage,
   onSaved,
+  logoUploader,
 }: {
   enterprise: Enterprise;
   canManage: boolean;
   onSaved: () => Promise<void>;
+  /** Immediate-upload logo controls, shown with the logo URL fields. */
+  logoUploader: React.ReactNode;
 }) {
   const { t } = useLocale();
   const form = useForm<EditValues>({
@@ -504,132 +505,154 @@ export function EditCard({
     <Form {...form}>
       <form id="profile-edit" onSubmit={form.handleSubmit(onSubmit)} className="scroll-mt-6">
         <SectionCard
-          icon={BuildingsIcon}
-          title={t("profileTitle")}
+          variant="plain"
+          stickyFooter
+          footerClassName="justify-end"
           footer={
             <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
           }
         >
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("name")}</FormLabel>
-                <FormControl>
-                  <Input disabled={!canManage} {...field} />
-                </FormControl>
-                {!canManage && <FormDescription>{t("contactStaffToChangeName")}</FormDescription>}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="website"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("websiteLabel")}</FormLabel>
-                <FormControl>
-                  <Input type="url" placeholder="https://acme.com" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="logoUrl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("logoUrlLabel")}</FormLabel>
-                <FormControl>
-                  <Input type="url" placeholder="https://…/logo.png" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="logoNegativeUrl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("darkBackgroundLogoUrlLabel")}</FormLabel>
-                <FormControl>
-                  <Input type="url" placeholder="https://…/logo-negative.png" {...field} />
-                </FormControl>
-                <FormDescription>{t("optionalStandardLogoUsedDesc")}</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("descriptionLabel")}</FormLabel>
-                <FormControl>
-                  <Textarea rows={3} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          {canManage && (
-            <>
-              <div className="grid gap-5 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="priority"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("priorityLabel")}</FormLabel>
-                      <FormControl>
-                        <Input inputMode="numeric" {...field} />
-                      </FormControl>
-                      <FormDescription>{t("lowerShowsFirstDesc")}</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <PublicationControls
-                id="enterprise-publication"
-                visibility={visibility}
-                hiddenValue="hidden"
-                publishedValue="visible"
-                hiddenLabel={t("hiddenOption")}
-                publishedLabel={t("visibleLabel")}
-                visibilityLabel={t("colVisibility")}
-                scheduleLabel={t("schedulePublicationLabel")}
-                publishAtLabel={t("publishAtLabel")}
-                scheduled={scheduledPublish}
-                publishAt={form.watch("availableFrom")}
-                onVisibilityChange={(next) => {
-                  form.setValue("visibility", next, { shouldDirty: true });
-                  if (next === "visible") {
-                    setScheduledPublish(false);
-                    form.setValue("availableFrom", "", { shouldDirty: true });
-                  }
-                }}
-                onScheduledChange={(next) => {
-                  setScheduledPublish(next);
-                  form.setValue(
-                    "availableFrom",
-                    next ? toDatetimeLocal(new Date().toISOString()) : "",
-                    {
-                      shouldDirty: true,
-                    },
-                  );
-                }}
-                onPublishAtChange={(value) =>
-                  form.setValue("availableFrom", value, { shouldDirty: true })
-                }
+          <div className="space-y-6">
+            <section aria-labelledby="enterprise-details" className="space-y-5">
+              <h2 id="enterprise-details" className="type-section-title">
+                {t("enterpriseDetailsTab")}
+              </h2>
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("name")}</FormLabel>
+                    <FormControl>
+                      <Input disabled={!canManage} {...field} />
+                    </FormControl>
+                    {!canManage && (
+                      <FormDescription>{t("contactStaffToChangeName")}</FormDescription>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </>
-          )}
+              <FormField
+                control={form.control}
+                name="website"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("websiteLabel")}</FormLabel>
+                    <FormControl>
+                      <Input type="url" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("descriptionLabel")}</FormLabel>
+                    <FormControl>
+                      <Textarea rows={3} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {canManage && (
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="priority"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("priorityLabel")}</FormLabel>
+                        <FormControl>
+                          <Input inputMode="numeric" {...field} />
+                        </FormControl>
+                        <FormDescription>{t("lowerShowsFirstDesc")}</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+            </section>
+            <section aria-labelledby="enterprise-logos" className="space-y-5 border-t pt-6">
+              <h2 id="enterprise-logos" className="type-section-title">
+                {t("logoTitle")}
+              </h2>
+              {logoUploader}
+              <FormField
+                control={form.control}
+                name="logoUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("logoUrlLabel")}</FormLabel>
+                    <FormControl>
+                      <Input type="url" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="logoNegativeUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("darkBackgroundLogoUrlLabel")}</FormLabel>
+                    <FormControl>
+                      <Input type="url" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </section>
+            <section aria-labelledby="enterprise-publication" className="space-y-5 border-t pt-6">
+              <h2 id="enterprise-publication" className="type-section-title">
+                {t("publicationTitle")}
+              </h2>
+              {canManage ? (
+                <PublicationControls
+                  id="enterprise-publication"
+                  visibility={visibility}
+                  hiddenValue="hidden"
+                  publishedValue="visible"
+                  hiddenLabel={t("hiddenOption")}
+                  publishedLabel={t("visibleLabel")}
+                  visibilityLabel={t("colVisibility")}
+                  scheduleLabel={t("schedulePublicationLabel")}
+                  publishAtLabel={t("publishAtLabel")}
+                  scheduled={scheduledPublish}
+                  publishAt={form.watch("availableFrom")}
+                  onVisibilityChange={(next) => {
+                    form.setValue("visibility", next, { shouldDirty: true });
+                    if (next === "visible") {
+                      setScheduledPublish(false);
+                      form.setValue("availableFrom", "", { shouldDirty: true });
+                    }
+                  }}
+                  onScheduledChange={(next) => {
+                    setScheduledPublish(next);
+                    form.setValue(
+                      "availableFrom",
+                      next ? toDatetimeLocal(new Date().toISOString()) : "",
+                      {
+                        shouldDirty: true,
+                      },
+                    );
+                  }}
+                  onPublishAtChange={(value) =>
+                    form.setValue("availableFrom", value, { shouldDirty: true })
+                  }
+                />
+              ) : (
+                <PublicationSummary enterprise={enterprise} />
+              )}
+            </section>
+          </div>
         </SectionCard>
       </form>
     </Form>

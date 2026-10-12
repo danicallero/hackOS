@@ -58,6 +58,11 @@ Architecture & modules:
   outbox/object-storage and SSE boundaries.
 - [Challenges & Devpost projects](./challenges-devpost.md) — the `challenges`
   and `projects` modules and the Devpost intake pipeline.
+- [Public profile (#934)](./directory.md) — the opt-in profile shown to the
+  people who scan you, what they can see, access, moderation and
+  account-removal coverage.
+- [Event diary (#935)](./diary.md) — saving people and sponsor stands by
+  NFC/QR scan, privacy rules, stand tags and account-removal coverage.
 - [Planned work groups](./work-groups.md) — pre-event participant groups,
   explicit invitations, intended challenges, and staff/sponsor estimates.
 - [Queue groups (H46)](./queue-groups.md) — the enterprise-scoped grouping
@@ -79,6 +84,10 @@ Architecture & modules:
   screen-window distinction, audience/recipient targeting and per-announcement
   channel candidates, and the generic notify/outbox/dispatch pipeline (H50,
   H51, H52, H53) every other module plugs into.
+- [Live Activities / Live Updates (#966)](./live-activities.md) — the
+  participant queue (H38) and staff activity (H25, H26) Live Activities: state
+  builders, device/session registry, the push worker's state machine, APNs and
+  Android push formats, gating rules, HIG rationale, and APNs/EAS setup.
 - [Schedule categories (activity kinds)](./schedule-categories.md) — the one
   registry every schedule/activity category comes from, how to add or retire
   one, and the four guardrails (typed label keys, the web icon map, the mobile
@@ -166,3 +175,5 @@ this folder), [`apps/web/README.md`](../apps/web/README.md) for web frontend
 conventions and the component library, and
 [`deploy/README.md`](../deploy/README.md) for the full deployment story
 (networking, secrets, Caddy and rollout order).
+
+- [Project lifecycle audit and timing clarifications](./project-lifecycle-audit.md) — existing architecture, gaps, submission/reconciliation adaptation and track timing requirements.

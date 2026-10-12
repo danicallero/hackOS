@@ -57,10 +57,16 @@ for (const width of [1440, 393]) {
       await route.fulfill({ json: data });
     });
 
+    // The cookie notice mounts after hydration and, at 393 px, covers the save
+    // button; start with it dismissed instead of racing its appearance.
+    await page.addInitScript(() =>
+      window.localStorage.setItem("hackos.cookie-notice.dismissed", "true"),
+    );
     await page.goto("/applications/1?tab=builder");
-    const notice = page.locator('aside[aria-labelledby="cookie-notice-title"]');
-    if (await notice.isVisible()) await notice.locator("button").click();
+    // Wait for the loaded form: the builder remounts its rows when data arrives.
+    await expect(page.getByText("Alpha field", { exact: true })).toBeVisible();
     const handle = page.getByRole("button", { name: "Drag to reorder", exact: true });
+    await expect(handle).toBeVisible();
     await handle.scrollIntoViewIfNeeded();
     const source = (await handle.boundingBox())!;
     await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);

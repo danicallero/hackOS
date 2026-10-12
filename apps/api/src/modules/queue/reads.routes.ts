@@ -82,7 +82,12 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "repoId" },
         },
       },
-      schema: { params: repoIdParam },
+      schema: {
+        params: repoIdParam,
+        summary: "List a team's queue memberships",
+        description:
+          "Every non-cancelled queue entry of the team with its waiting rank, ETA, assigned room and the rooms serving its queue. `busy_room_id`/`busy_room_name`/`busy_status` report where a team member (shared-member relation of the H30 guard, test fixtures excluded) is `called`, `in_room` or `presenting` in another room; an evaluation blocks moves, any of them blocks calls to any other room (#931). Completed and disqualified rows never carry it. `eligible` is false when the project is excluded from judging (H38): it can be reordered but never called. A Devpost import is excluded only by an explicit organizer override (H21).",
+      },
     },
     async (req) => repoChallenges(req.params.repoId),
   );
@@ -102,7 +107,12 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "roomId" },
         },
       },
-      schema: { params: roomIdParam },
+      schema: {
+        params: roomIdParam,
+        summary: "Room queue view",
+        description:
+          'The room\'s active, called and waiting teams. `crossRoomSkips` explains, read-only, why call-next passes over a waiting team without moving it: `reason: "ineligible"` when the project is not eligible for judging (H38), or `reason: "busy_member"` with the blocking room, team and status when a team member is called or being evaluated in another room (H30, #931).',
+      },
     },
     async (req) => roomView(req.params.roomId, { includeCrossRoomSkips: true }),
   );
@@ -138,9 +148,15 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "roomId" },
         },
       },
-      schema: { params: roomIdParam },
+      schema: {
+        params: roomIdParam,
+        querystring: z.object({ challengeId: z.coerce.number().int().positive().optional() }),
+        summary: "Read track pacing in a room",
+        description:
+          "A track-wide target, learned presentation/preparation cycle, scheduled judging close and realistic finish. An optional challengeId selects a served track in a multi-track room; ETA is never clipped to the advisory judge goal (H38/H39).",
+      },
     },
-    async (req) => roomPace(req.params.roomId),
+    async (req) => roomPace(req.params.roomId, req.query.challengeId),
   );
 
   typed.get(
@@ -151,7 +167,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Participant queue status",
         description:
-          "Returns one current row per queue for each project the participant belongs to. Challenge entries in a shared queue are collapsed and named by the queue group.",
+          "Returns one current row per queue for each project the participant belongs to. Challenge entries in a shared queue are collapsed and named by the queue group. While waiting, queueTotal counts every team in that queue, judged or not; while called, calledAhead counts teams called earlier to the same room and not yet in it.",
       },
     },
     async (req) => myQueueStatus(req.userId!),

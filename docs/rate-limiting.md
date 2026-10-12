@@ -44,6 +44,7 @@ whether the route is Better Auth's own or this app's.
 | scan | `POST /api/accreditation/{check-in,check-in-user,rotate,remove}`, `POST /api/presence/scan` | 120/min (default) | staff user id | `RATE_LIMIT_SCAN_MAX`, `RATE_LIMIT_SCAN_WINDOW_SECONDS` |
 | meal-batch | `POST /api/activities/:id/meal-scans/batch` | 60/min (default), per **request** (each carries up to 100 scans) | staff user id | `RATE_LIMIT_MEAL_BATCH_MAX`, `RATE_LIMIT_MEAL_BATCH_WINDOW_SECONDS` |
 | snapshot | `GET /api/scanner/snapshot` | 20/min (default) | staff user id | `RATE_LIMIT_SNAPSHOT_MAX`, `RATE_LIMIT_SNAPSHOT_WINDOW_SECONDS` |
+| diary-scan | `POST /api/me/diary/scan` | 20/min | authenticated user id | fixed — caps badge UID enumeration through the attendee event diary (#935, [`diary.md`](./diary.md)) |
 
 **Auth limits are fixed in code, not env-configurable.** A change to the
 security posture of login/registration/reset throttling should go through

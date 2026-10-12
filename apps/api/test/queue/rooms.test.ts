@@ -46,6 +46,108 @@ afterAll(async () => {
 });
 
 describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
+  it("deletes an unused assigned room, audits once, and replays the deletion", async () => {
+    const roomId = await createRoom();
+    const challengeId = await createChallenge();
+    await assignChallengeToRoom(roomId, challengeId);
+    const request = {
+      method: "DELETE" as const,
+      url: `/api/queue/rooms/${roomId}`,
+      headers: { ...asUser(adminId), "idempotency-key": crypto.randomUUID() },
+    };
+    expect((await app.inject({ ...request, headers: asUser(operatorId) })).statusCode).toBe(403);
+    const deleted = await app.inject(request);
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json()).toEqual({ ok: true });
+    const replay = await app.inject(request);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual(deleted.json());
+    const { pool } = await import("../../src/db/pool.js");
+    for (const table of ["rooms", "room_enterprises", "room_queue_groups", "room_queue_state"]) {
+      const column = table === "rooms" ? "id" : "room_id";
+      expect(
+        (await pool.query(`SELECT * FROM ${table} WHERE ${column} = $1`, [roomId])).rows,
+      ).toHaveLength(0);
+    }
+    expect(
+      (await pool.query(`SELECT * FROM challenges WHERE id = $1`, [challengeId])).rows,
+    ).toHaveLength(1);
+    const auditRows = (
+      await pool.query(
+        `SELECT * FROM audit_log WHERE entity_type = 'room' AND entity_id = $1 AND action = 'delete'`,
+        [String(roomId)],
+      )
+    ).rows;
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0].before.room.id).toBe(roomId);
+    expect((await app.inject({ ...request, headers: asUser(adminId) })).statusCode).toBe(404);
+  });
+
+  it.each(["called", "completed"])("preserves rooms referenced by %s teams", async (status) => {
+    const roomId = await createRoom();
+    const challengeId = await createChallenge();
+    const { repoId } = await createRepoWithTeam();
+    await assignChallengeToRoom(roomId, challengeId);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, assigned_room_id, status, position) VALUES ($1, $2, $3, $4, 1)`,
+      [challengeId, repoId, roomId, status],
+    );
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/api/queue/rooms/${roomId}`,
+      headers: asUser(adminId),
+    });
+    expect(res.statusCode).toBe(409);
+    expect(
+      (await pool.query(`SELECT * FROM room_queue_groups WHERE room_id = $1`, [roomId])).rows,
+    ).toHaveLength(1);
+    expect(
+      (
+        await pool.query(
+          `SELECT * FROM audit_log WHERE entity_type = 'room' AND entity_id = $1 AND action = 'delete'`,
+          [String(roomId)],
+        )
+      ).rows,
+    ).toHaveLength(0);
+  });
+
+  it("preserves a room referenced only by a historical judging session", async () => {
+    const roomId = await createRoom();
+    const challengeId = await createChallenge();
+    const { repoId } = await createRepoWithTeam();
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position) VALUES ($1, $2, 'completed', 1) RETURNING id`,
+      [challengeId, repoId],
+    );
+    await pool.query(
+      `INSERT INTO judging_session (queue_entry_id, room_id, ended_at) VALUES ($1, $2, now())`,
+      [rows[0].id, roomId],
+    );
+    const res = await app.inject({
+      method: "DELETE",
+      url: `/api/queue/rooms/${roomId}`,
+      headers: asUser(adminId),
+    });
+    expect(res.statusCode).toBe(409);
+    expect((await pool.query(`SELECT * FROM rooms WHERE id = $1`, [roomId])).rows).toHaveLength(1);
+  });
+
+  it("allows exactly one concurrent room deletion", async () => {
+    const roomId = await createRoom();
+    const results = await Promise.all(
+      [1, 2].map(() =>
+        app.inject({
+          method: "DELETE",
+          url: `/api/queue/rooms/${roomId}`,
+          headers: asUser(adminId),
+        }),
+      ),
+    );
+    expect(results.map((res) => res.statusCode).sort()).toEqual([200, 404]);
+  });
+
   it("lets a global queue admin open the empty room list", async () => {
     const res = await app.inject({
       method: "GET",

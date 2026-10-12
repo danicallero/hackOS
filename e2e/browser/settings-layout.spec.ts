@@ -1,3 +1,4 @@
+import webEn from "../../packages/shared/locales/en/web.json" with { type: "json" };
 import { CAPABILITIES } from "../../packages/shared/src/capabilities";
 import { expect, shellUser, test } from "./fixtures";
 
@@ -131,12 +132,19 @@ test("changes optional channels while queue calls stay mandatory", async ({ page
   });
 });
 
+// #932: /settings/event is a plain list of sections; each opens with ?tab=<section>.
 test("event settings fit the viewport", async ({ page }) => {
   await page.goto("/settings/event");
   const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
   await expect(cookies).toBeVisible();
   await cookies.locator("button").first().click();
   await expect(cookies).toBeHidden();
+  await expect(page.getByRole("link", { name: "Venue", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.getByRole("link", { name: "Event", exact: true }).click();
+  await expect(page).toHaveURL(/[?&]tab=event\b/);
   await expect(page.getByRole("textbox").first()).toHaveValue("HackUDC");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -154,25 +162,26 @@ for (const tab of ["venue", "wallet", "presence", "invites", "danger"] as const)
     const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
     await expect(cookies).toBeVisible();
     await cookies.locator("button").first().click();
-    const panel = page.getByRole("tabpanel");
+    const panel = page.getByRole("main").last();
     if (tab === "danger") await expect(panel.getByRole("heading").first()).toBeVisible();
     else
       await expect(
         panel.getByRole("button", { name: "Save changes", exact: true }).first(),
       ).toBeVisible();
-    await expect
-      .poll(async () =>
-        page.getByRole("tab", { selected: true }).evaluate((element) => {
-          const selected = element.getBoundingClientRect();
-          const bar = element.closest('[role="tablist"]')?.getBoundingClientRect();
-          return !!bar && selected.left >= bar.left - 1 && selected.right <= bar.right + 1;
-        }),
-      )
-      .toBe(true);
+    // Only sections with their own views (e.g. Wallet) still show a tab bar.
+    const selectedTab = page.getByRole("tab", { selected: true });
+    if ((await selectedTab.count()) > 0)
+      await expect
+        .poll(async () =>
+          selectedTab.first().evaluate((element) => {
+            const selected = element.getBoundingClientRect();
+            const bar = element.closest('[role="tablist"]')?.getBoundingClientRect();
+            return !!bar && selected.left >= bar.left - 1 && selected.right <= bar.right + 1;
+          }),
+        )
+        .toBe(true);
     if (tab !== "danger") {
-      await expect(panel.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(
-        tab === "wallet" ? 2 : 1,
-      );
+      await expect(panel.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(1);
     }
     if (tab === "venue") {
       const ssid = await panel.getByLabel("Network name", { exact: true }).boundingBox();
@@ -198,11 +207,7 @@ for (const tab of ["venue", "wallet", "presence", "invites", "danger"] as const)
       );
     }
     if (tab === "presence") {
-      await expect(
-        panel.getByText(
-          "Without an exit or activity in this window, provisional time stops counting.",
-        ),
-      ).toBeVisible();
+      await expect(panel.getByText(webEn.certaintyWindowDesc)).toBeVisible();
     }
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -224,16 +229,25 @@ for (const [tab, inputLabel] of [
     const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
     await expect(cookies).toBeVisible();
     await cookies.locator("button").first().click();
-    const panel = page.getByRole("tabpanel");
+    const panel = page.getByRole("main").last();
     const input = panel.getByLabel(inputLabel, { exact: true }).first();
     await expect(input).toBeVisible();
     await input.fill("Edited caption");
     await expect(panel.getByRole("status").filter({ hasText: "Unsaved" })).toBeVisible();
+    const walletRequest =
+      tab === "wallet"
+        ? page.waitForRequest(
+            (request) =>
+              request.method() === "PUT" && new URL(request.url()).pathname === "/api/event/wallet",
+          )
+        : null;
     const request = page.waitForRequest(
       (request) => request.method() === "PUT" && new URL(request.url()).pathname === "/api/event",
     );
     await input.press("Enter");
     const body = (await request).postDataJSON();
+    if (walletRequest)
+      expect((await walletRequest).postDataJSON()).toHaveProperty("backgroundColor");
     if (tab === "event") expect(body.name).toBe("Edited caption");
     if (tab === "venue") expect(body.venueName).toBe("Edited caption");
     if (tab === "wallet") expect(body.passFieldLabels.participant).toBe("Edited caption");
@@ -241,6 +255,27 @@ for (const [tab, inputLabel] of [
     await expect(page.locator("[data-sileo-toast]")).toContainText("Saved");
   });
 }
+
+test("Wallet appearance saves both resources on Enter through its category owner", async ({
+  page,
+}) => {
+  await page.goto("/settings/event?tab=wallet");
+  await page.locator('aside[aria-labelledby="cookie-notice-title"] button').first().click();
+  await page.getByRole("tab", { name: "Appearance", exact: true }).click();
+  const input = page.getByLabel("Website link", { exact: true });
+  await input.fill("https://example.com/new");
+  const runtime = page.waitForRequest(
+    (request) =>
+      request.method() === "PUT" && new URL(request.url()).pathname === "/api/event/wallet",
+  );
+  const fields = page.waitForRequest(
+    (request) => request.method() === "PUT" && new URL(request.url()).pathname === "/api/event",
+  );
+  await input.press("Enter");
+  expect((await runtime).postDataJSON().websiteUrl).toBe("https://example.com/new");
+  expect((await fields).postDataJSON()).toHaveProperty("passFieldLabels");
+  await expect(page.getByRole("button", { name: "Save changes", exact: true })).toHaveCount(1);
+});
 
 test("searches activities and subscribes from the reminder dialog", async ({ page }) => {
   await page.route("**/api/public/activities", (route) =>
@@ -359,6 +394,64 @@ test("expands a message and keeps deletion behind confirmation", async ({ page }
     path: `artifacts/settings/message-open-${test.info().project.name}.png`,
     fullPage: true,
   });
-  await page.getByRole("button", { name: /Delete this message/i }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByRole("alertdialog")).toBeVisible();
+});
+
+test("queue administrator edits judging hours without reading private event settings", async ({
+  page,
+}) => {
+  let eventReads = 0;
+  await page.route("**/api/me", (route) =>
+    route.fulfill({ json: { ...shellUser, capabilities: [CAPABILITIES.QUEUE_ADMIN] } }),
+  );
+  await page.route("**/api/event", (route) => {
+    eventReads++;
+    return route.fulfill({ status: 403, json: { message: "Forbidden" } });
+  });
+  await page.route("**/api/queue/settings", (route) =>
+    route.fulfill({ json: { schedule_start_at: null, schedule_end_at: null } }),
+  );
+  await page.goto("/settings/event?tab=judging");
+  await page.locator('aside[aria-labelledby="cookie-notice-title"] button').first().click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Judging window", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeVisible();
+  expect(eventReads).toBe(0);
+  const write = page.waitForRequest(
+    (request) =>
+      request.method() === "PATCH" && new URL(request.url()).pathname === "/api/queue/settings",
+  );
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  expect((await write).postDataJSON()).toEqual({ scheduleStartAt: null, scheduleEndAt: null });
+  expect(eventReads).toBe(0);
+});
+
+test("Wallet keeps edits and shows a retry after a partial save failure", async ({ page }) => {
+  let fail = true;
+  await page.route("**/api/event", async (route) => {
+    if (route.request().method() !== "PUT" || !fail) return route.fallback();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return route.fulfill({
+      status: 500,
+      json: { error: { code: "internal_error", message: "Fields could not be saved" } },
+    });
+  });
+  await page.goto("/settings/event?tab=wallet");
+  await page.locator('aside[aria-labelledby="cookie-notice-title"] button').first().click();
+  const caption = page.getByLabel("Caption on the pass", { exact: true }).first();
+  await caption.fill("Unsaved attendee caption");
+  await page.getByRole("tab", { name: "Appearance", exact: true }).click();
+  const website = page.getByLabel("Website link", { exact: true });
+  await website.fill("https://example.com/changed");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(website).toBeDisabled();
+  await expect(page.getByRole("main").last().getByRole("alert")).toBeVisible();
+  await page.getByRole("tab", { name: "Fields", exact: true }).click();
+  await expect(caption).toHaveValue("Unsaved attendee caption");
+  fail = false;
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(page.getByRole("main").last().getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
 });

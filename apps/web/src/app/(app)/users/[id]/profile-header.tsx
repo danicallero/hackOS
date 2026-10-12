@@ -3,15 +3,25 @@
 // Profile identity header and the account-removal action it exposes (H10).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { IdentificationCardIcon } from "@phosphor-icons/react/dist/csr/IdentificationCard";
+import { UserMinusIcon } from "@phosphor-icons/react/dist/csr/UserMinus";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
+import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
@@ -22,49 +32,103 @@ import {
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { UserDetail } from "@/lib/types";
-import { fullName, initials, ROLE_TONE, roleDisplayName } from "./shared";
+import { fullName, ROLE_TONE, roleDisplayName } from "./shared";
+import { UserPhoto } from "./user-photo";
 
-export function ProfileHeader({ user }: { user: UserDetail }) {
+export function ProfileHeader({
+  user,
+  onPhotoChanged,
+}: {
+  user: UserDetail;
+  onPhotoChanged: () => unknown;
+}) {
   const { t } = useLocale();
-  return (
-    <PageHeader
-      leading={
-        <Avatar size="lg">
-          {user.image && <AvatarImage src={user.image} alt={fullName(user)} />}
-          <AvatarFallback>{initials(user)}</AvatarFallback>
-        </Avatar>
-      }
-      title={fullName(user)}
-      meta={
-        <>
-          <span className="text-muted-foreground truncate text-sm">{user.email}</span>
-          <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
-            {user.emailVerified ? t("verified") : t("unverified")}
-          </StatusBadge>
-          <StatusBadge tone={ROLE_TONE}>{roleDisplayName(user.visibleRoleName, t)}</StatusBadge>
-          {user.badgeId && (
-            <span className="text-muted-foreground font-mono text-xs">
-              {t("badgeIdInline", { id: user.badgeId })}
-            </span>
-          )}
-        </>
-      }
-      secondaryActions={
-        <>
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/logistics/accreditation?userId=${user.id}`}>
-              <IdentificationCardIcon aria-hidden="true" className="size-4" />
+  // R017: at narrow width the actions stay beside the title instead of
+  // wrapping onto a row of their own: one icon for Accredit alone, or a
+  // "More actions" menu once account removal joins it.
+  const isMobile = useIsMobile();
+  const removal = useAccountRemoval(user);
+  const accreditHref = `/logistics/accreditation?userId=${user.id}`;
+  const narrowActions = removal.canDelete ? (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <IconButton label={t("moreActions")} variant="outline">
+            <DotsThreeIcon aria-hidden="true" />
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <Link href={accreditHref}>
+              <IdentificationCardIcon aria-hidden="true" />
               {t("accredit")}
             </Link>
-          </Button>
-          <DeleteAccountButton user={user} />
-        </>
-      }
-    />
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={removal.loading || !removal.eligibility}
+            onSelect={() => removal.setOpen(true)}
+          >
+            <UserMinusIcon aria-hidden="true" />
+            {removal.label}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DeleteAccountButton user={user} removal={removal} dialogOnly />
+    </>
+  ) : (
+    <IconButton asChild label={t("accredit")} variant="outline">
+      <Link href={accreditHref}>
+        <IdentificationCardIcon aria-hidden="true" />
+      </Link>
+    </IconButton>
+  );
+  return (
+    <>
+      <PageHeader
+        className="flex-row items-start justify-between gap-2 [&>[data-slot=action-group]]:shrink-0"
+        leading={<UserPhoto user={user} onChanged={onPhotoChanged} />}
+        title={fullName(user)}
+        meta={
+          <>
+            <span className="text-muted-foreground truncate text-sm">{user.email}</span>
+            <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
+              {user.emailVerified ? t("verified") : t("unverified")}
+            </StatusBadge>
+            <StatusBadge tone={ROLE_TONE}>{roleDisplayName(user.visibleRoleName, t)}</StatusBadge>
+            {user.badgeId && (
+              <span className="text-muted-foreground font-mono text-xs">
+                {t("badgeIdInline", { id: user.badgeId })}
+              </span>
+            )}
+          </>
+        }
+        secondaryActions={
+          isMobile ? (
+            narrowActions
+          ) : (
+            <>
+              <Button asChild variant="outline" size="sm">
+                <Link href={accreditHref}>
+                  <IdentificationCardIcon aria-hidden="true" className="size-4" />
+                  {t("accredit")}
+                </Link>
+              </Button>
+              <DeleteAccountButton user={user} removal={removal} />
+            </>
+          )
+        }
+      />
+      {isMobile && <RemovalAlerts removal={removal} />}
+    </>
   );
 }
 
-export function DeleteAccountButton({ user }: { user: UserDetail }) {
+type AccountRemoval = ReturnType<typeof useAccountRemoval>;
+
+/** Removal eligibility and the confirmed request, for admin:all only (H10). */
+function useAccountRemoval(user: UserDetail) {
   const { t } = useLocale();
   const router = useRouter();
   const me = useMe();
@@ -96,8 +160,6 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
       active = false;
     };
   }, [canDelete, t, user.id]);
-
-  if (!canDelete) return null;
 
   async function remove() {
     if (!eligibility) return;
@@ -134,32 +196,88 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
     }
   }
 
+  const label = loading
+    ? t("checkingRemovalEligibility")
+    : eligibility?.action === "delete"
+      ? t("deleteAccount")
+      : eligibility?.action === "anonymize"
+        ? t("anonymizeAccount")
+        : t("removalUnavailableAction");
+
+  return {
+    canDelete,
+    open,
+    setOpen,
+    pending,
+    loading,
+    eligibility,
+    eligibilityError,
+    label,
+    remove,
+  };
+}
+
+function RemovalAlerts({ removal }: { removal: AccountRemoval }) {
+  const { t } = useLocale();
+  if (!removal.canDelete) return null;
   return (
-    <div className="space-y-2">
-      <Button
-        variant="outline"
-        size="sm"
-        className="text-destructive"
-        disabled={loading || !eligibility}
-        onClick={() => setOpen(true)}
-      >
-        {loading
-          ? t("checkingRemovalEligibility")
-          : eligibility?.action === "delete"
-            ? t("deleteAccount")
-            : eligibility?.action === "anonymize"
-              ? t("anonymizeAccount")
-              : t("removalUnavailableAction")}
-      </Button>
-      {eligibility?.requiresVenueExit && (
+    <>
+      {removal.eligibility?.requiresVenueExit && (
         <p role="alert" className="text-destructive max-w-md text-pretty text-sm">
           {t("accountAnonymizeExitRequired")}
         </p>
       )}
-      {eligibilityError && (
+      {removal.eligibilityError && (
         <p role="alert" className="text-destructive max-w-md text-pretty text-sm">
-          {eligibilityError}
+          {removal.eligibilityError}
         </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * `dialogOnly` (narrow headers) keeps just the confirmation: the trigger
+ * lives in the "More actions" menu and the alerts under the header.
+ */
+export function DeleteAccountButton({
+  user,
+  removal,
+  dialogOnly = false,
+}: {
+  user: UserDetail;
+  removal: AccountRemoval;
+  dialogOnly?: boolean;
+}) {
+  const { t } = useLocale();
+  const { canDelete, open, setOpen, pending, loading, eligibility, eligibilityError, remove } =
+    removal;
+  if (!canDelete) return null;
+
+  return (
+    <div className={dialogOnly ? "contents" : "space-y-2"}>
+      {!dialogOnly && (
+        <>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive"
+            disabled={loading || !eligibility}
+            onClick={() => setOpen(true)}
+          >
+            {removal.label}
+          </Button>
+          {eligibility?.requiresVenueExit && (
+            <p role="alert" className="text-destructive max-w-md text-pretty text-sm">
+              {t("accountAnonymizeExitRequired")}
+            </p>
+          )}
+          {eligibilityError && (
+            <p role="alert" className="text-destructive max-w-md text-pretty text-sm">
+              {eligibilityError}
+            </p>
+          )}
+        </>
       )}
       {eligibility && (
         <AlertModal

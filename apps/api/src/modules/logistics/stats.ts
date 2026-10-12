@@ -1,7 +1,7 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
 import { occupancyEstimate } from "./presence.js";
-import { isSyntheticOperator } from "./review-fixture-scope.js";
+import { isSyntheticOperator, scannerSubjectScope } from "./review-fixture-scope.js";
 
 export interface ActivityAggregate {
   activityId: number;
@@ -105,6 +105,43 @@ export async function accreditationCountsByRole() {
 }
 
 /**
+ * H27: hourly flow of accreditations, meal servings and activity scans, so
+ * organisers can see peaks (door staffing, kitchen load) while the event runs
+ * and justify the attendance curve afterwards. Buckets are UTC hour instants;
+ * the client localises them. Same account filters as the totals above.
+ */
+export async function hourlyFlow() {
+  const accreditations = await pool.query<{ bucket: Date; n: number }>(
+    `SELECT date_trunc('hour', badge_assigned_at) AS bucket, count(*)::int AS n
+       FROM users
+      WHERE badge_id IS NOT NULL AND account_state = 'active' AND anonymized_at IS NULL
+        AND is_test_account = false
+      GROUP BY 1 ORDER BY 1`,
+  );
+  const scans = await pool.query<{ bucket: Date; meal: boolean; n: number }>(
+    `SELECT date_trunc('hour', al.logged_at) AS bucket,
+            (a.category = ANY($1::text[])) AS meal,
+            count(*)::int AS n
+       FROM activity_logs al
+       JOIN activities a ON a.id = al.activity_id
+       JOIN users u ON u.id = al.user_id
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
+      WHERE a.category = ANY($1::text[]) OR a.requires_scan = true
+      GROUP BY 1, 2 ORDER BY 1`,
+    [[...MEAL_ACTIVITY_KINDS]],
+  );
+  const toRow = (row: { bucket: Date; n: number }) => ({
+    bucket: row.bucket.toISOString(),
+    n: row.n,
+  });
+  return {
+    accreditations: accreditations.rows.map(toRow),
+    meals: scans.rows.filter((row) => row.meal).map(toRow),
+    activities: scans.rows.filter((row) => !row.meal).map(toRow),
+  };
+}
+
+/**
  * H27 operational logistics panel (LOGISTICS_STATS): accredited count,
  * currently-present estimate, per-meal served/repeats, per-activity
  * attendance. The pre-event applications funnel belongs to the applications
@@ -120,17 +157,31 @@ export async function logisticsStats() {
   const meals = await scannableActivities("meal");
   const activities = await scannableActivities("activity");
   const accreditedByRole = await accreditationCountsByRole();
+  const hourly = await hourlyFlow();
+  // H24/H27: intersect attendees with the same presence estimate as the denominator.
+  const presentAttendance = await pool.query<{ activity_id: number; people: number }>(
+    `SELECT activity_id, count(DISTINCT user_id)::int AS people
+       FROM activity_logs
+      WHERE user_id = ANY($1::int[])
+      GROUP BY activity_id`,
+    [occ.present],
+  );
+  const presentByActivity = new Map(
+    presentAttendance.rows.map((row) => [row.activity_id, row.people]),
+  );
 
   return {
     accreditedCount: accredited.rows[0].n as number,
     currentlyPresent: occ.presentCount,
     accreditedByRole,
+    hourly,
     meals: meals.map((m) => ({
       activityId: m.activityId,
       name: m.name,
       served: m.count,
       distinctPeople: m.distinctPeople,
       repeats: m.repeats,
+      presentAttendees: presentByActivity.get(m.activityId) ?? 0,
     })),
     activities: activities.map((a) => ({
       activityId: a.activityId,
@@ -139,6 +190,7 @@ export async function logisticsStats() {
       scans: a.count,
       attendees: a.distinctPeople,
       repeats: a.repeats,
+      presentAttendees: presentByActivity.get(a.activityId) ?? 0,
     })),
   };
 }
@@ -146,8 +198,8 @@ export async function logisticsStats() {
 /**
  * Per-role scanner stats tile (mobile scanner home screen): eligible
  * (accreditable), accredited, and currently-inside counts, broken down by
- * role name (H8 full-replacement — no separate admin/judge/sponsor/staff
- * bucket; `Unassigned` covers anyone with no visible role), so the client
+ * role name and capability-holder status (H8: `Unassigned` covers anyone
+ * with no visible role), so the client
  * can sum whatever combination of role groups the operator has filtered to.
  * "Eligible" is the same role-derived `hasEventAccess` fact used by
  * session/app entry: any assigned, non-deleted role with `event_access = true` is eligible,
@@ -163,20 +215,13 @@ export async function scannerRoleStats(actorId?: number): Promise<
     eligible: number;
     accredited: number;
     inside: number;
-    /** H8: at least one member of this role bucket is a real capability
-     * holder — the mobile scanner's "staff" grouping key, since role names
-     * no longer have a fixed admin/staff spelling to match on. */
+    /** H8: uniform capability-holder status within this bucket, retained
+     * for installed clients that still offer the operational staff filter. */
     hasCapabilities: boolean;
   }>
 > {
   const fixtureOnly = actorId != null && (await isSyntheticOperator(pool, actorId));
-  const subjectScope = fixtureOnly
-    ? `AND u.is_test_account = true
-          AND EXISTS (
-            SELECT 1 FROM user_effective_role_name uern
-             WHERE uern.user_id = u.id AND uern.role_name = 'Participant'
-          )`
-    : "AND u.is_test_account = false";
+  const subjectScope = scannerSubjectScope(fixtureOnly);
   const { rows } = await pool.query<{
     role: ScannerRole;
     eligible: number;
@@ -199,10 +244,10 @@ export async function scannerRoleStats(actorId?: number): Promise<
             count(*) FILTER (WHERE has_event_access)::int AS eligible,
             count(*) FILTER (WHERE badge_id IS NOT NULL)::int AS accredited,
             array_agg(id) AS user_ids,
-            bool_or(has_capabilities) AS has_capabilities
+            has_capabilities
        FROM classified
-      GROUP BY role
-      ORDER BY role`,
+      GROUP BY role, has_capabilities
+      ORDER BY role, has_capabilities`,
   );
 
   const occ = await occupancyEstimate(undefined, actorId);

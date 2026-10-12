@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { I18nText } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
 
 export interface PersonCard {
@@ -213,6 +214,25 @@ export interface StaffScanRankingRow {
   total: number;
 }
 
+/** UTC-hour instant (ISO) and its count. */
+export interface HourlyBucket {
+  bucket: string;
+  n: number;
+}
+
+/** #933: planned sponsor headcount for one meal (GET /api/logistics/meal-plans). */
+export interface MealPlanSummary {
+  activityId: number;
+  name: string;
+  nameI18n: Record<string, string>;
+  startsAt: string;
+  attending: number;
+  notAttending: number;
+  unanswered: number;
+  intolerances: Array<{ id: number; label: I18nText; n: number }>;
+  withNotes: number;
+}
+
 export interface LogisticsStats {
   accreditedCount: number;
   currentlyPresent: number;
@@ -220,12 +240,18 @@ export interface LogisticsStats {
     role: string | null;
     count: number;
   }>;
+  hourly: {
+    accreditations: HourlyBucket[];
+    meals: HourlyBucket[];
+    activities: HourlyBucket[];
+  };
   meals: Array<{
     activityId: number;
     name: string;
     served: number;
     distinctPeople: number;
     repeats: number;
+    presentAttendees: number;
   }>;
   activities: Array<{
     activityId: number;
@@ -234,6 +260,7 @@ export interface LogisticsStats {
     scans: number;
     attendees: number;
     repeats: number;
+    presentAttendees: number;
   }>;
 }
 
@@ -278,6 +305,8 @@ export interface PublicScheduleItem {
   remindedAt?: string | null;
   /** Audience tags projected for this caller; non-staff feeds omit inaccessible tags. */
   audiences?: ScheduleAudience[];
+  /** #966: whether this activity shows a countdown Live Activity to its audience. */
+  liveActivityAudience?: boolean;
   contactNote?: string | null;
   /** Staff-only free-form notes — the run-of-show's "observations" column. */
   notes?: string | null;
@@ -315,6 +344,8 @@ export interface ScheduleInput {
   visibility: "shown" | "hidden";
   publishAt?: string | null;
   audiences?: ScheduleAudience[];
+  /** #966: whether this activity shows a countdown Live Activity to its audience. */
+  liveActivityAudience?: boolean;
   contactNote?: string | null;
   notes?: string | null;
 }
@@ -417,6 +448,7 @@ export const logisticsApi = {
   deletePresenceActivity: (id: number) =>
     api.delete<{ deleted: true }>(`/api/presence/activity-logs/${id}`),
   stats: () => api.get<LogisticsStats>("/api/logistics/stats"),
+  mealPlans: () => api.get<{ meals: MealPlanSummary[] }>("/api/logistics/meal-plans"),
   staffScanRanking: () =>
     api.get<{ items: StaffScanRankingRow[] }>("/api/logistics/stats/by-staff"),
   scannableActivities: (category?: "meal" | "activity") =>

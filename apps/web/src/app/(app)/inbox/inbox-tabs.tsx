@@ -18,6 +18,7 @@ import {
 import { EVENTS } from "@hackos/shared/events";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { CaretUpIcon } from "@phosphor-icons/react/dist/csr/CaretUp";
 import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
@@ -28,7 +29,6 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
-import { IconButton } from "@/components/common/icon-button";
 import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -243,7 +243,7 @@ export function MessagesTab() {
           title={unreadOnly ? t("noUnreadMessages") : t("noMessagesYet")}
         />
       ) : (
-        <ul className="border-y border-border/60 divide-y divide-border/60">
+        <ul className="space-y-3">
           {items.map((item) => {
             const unread = !item.read_at;
             const subject = payloadField(item.payload, "subject") ?? item.category;
@@ -251,13 +251,16 @@ export function MessagesTab() {
             const details = payloadDetails(item.payload);
             const isOpen = expanded.has(item.id);
             return (
-              <li key={item.id} className="even:bg-muted/20">
+              <li
+                key={item.id}
+                className={`overflow-hidden rounded-surface border ${unread ? "border-primary/40 bg-card" : "bg-card"}`}
+              >
                 <button
                   type="button"
                   onClick={() => toggleExpanded(item)}
                   aria-expanded={isOpen}
                   aria-controls={`message-${item.id}`}
-                  className="button-interaction flex w-full items-start gap-3 px-4 py-5 text-left transition-colors hover:bg-muted/30"
+                  className="button-interaction flex w-full items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:px-5"
                 >
                   <span
                     className={`mt-1.5 size-2 shrink-0 rounded-full ${unread ? "bg-primary" : "bg-transparent"}`}
@@ -281,16 +284,23 @@ export function MessagesTab() {
                       <p className="line-clamp-2 text-muted-foreground text-sm">{body}</p>
                     )}
                   </div>
-                  <CaretDownIcon
-                    className={`text-muted-foreground mt-1 size-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                    aria-hidden
-                  />
+                  {isOpen ? (
+                    <CaretUpIcon
+                      className="mt-1 size-4 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
+                  ) : (
+                    <CaretDownIcon
+                      className="mt-1 size-4 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
+                  )}
                 </button>
 
                 {isOpen && (
                   <div
                     id={`message-${item.id}`}
-                    className="mx-4 border-t border-border/50 pb-4 pt-4 ps-5 space-y-5"
+                    className="mx-4 space-y-5 border-t border-border/60 pb-4 pt-4 ps-5 sm:mx-5"
                   >
                     {body && (
                       <p className="whitespace-pre-line wrap-break-word text-sm leading-relaxed">
@@ -307,18 +317,18 @@ export function MessagesTab() {
                         ))}
                       </dl>
                     )}
-                    <IconButton
+                    <Button
                       variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground hover:text-destructive"
+                      size="sm"
+                      className="-ms-3 text-muted-foreground hover:text-destructive"
                       onClick={() => {
                         setDeleteError(null);
                         setDeleting(item);
                       }}
-                      label={t("deleteNotificationAria")}
                     >
                       <TrashIcon className="size-4" aria-hidden="true" />
-                    </IconButton>
+                      {t("deleteAction")}
+                    </Button>
                   </div>
                 )}
               </li>
@@ -599,18 +609,18 @@ export function PreferencesTab() {
                 key={row.category}
                 className="flex flex-wrap items-center justify-between gap-3 py-4"
               >
-                <div className="min-w-0 space-y-1">
+                <div className="min-w-0 flex flex-wrap items-baseline gap-x-2">
                   <p className="text-sm font-medium">{row.label}</p>
                   {row.mandatory && (
-                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                      <LockIcon className="size-3" aria-hidden="true" />
-                      {t("alwaysOn")}
-                    </span>
+                    <span className="text-xs text-muted-foreground">{t("alwaysOn")}</span>
                   )}
                 </div>
                 {row.mandatory ? (
-                  <span className="text-sm text-muted-foreground">
-                    {enabledChannels.map((channel) => channelLabels[channel]).join(", ")}
+                  <span className="inline-flex min-h-(--control-height-default) max-w-full items-center gap-2 px-4 text-sm text-muted-foreground">
+                    <span className="min-w-0 text-end">
+                      {enabledChannels.map((channel) => channelLabels[channel]).join(", ")}
+                    </span>
+                    <LockIcon className="size-4 shrink-0" aria-hidden="true" />
                   </span>
                 ) : (
                   <DropdownMenu>
@@ -653,7 +663,7 @@ export function PreferencesTab() {
       <SectionCard
         variant="plain"
         icon={CalendarDotsIcon}
-        title={t("activityReminders")}
+        title={t("activeReminders")}
         action={
           <Modal
             trigger={
@@ -732,54 +742,49 @@ export function PreferencesTab() {
               </span>
             </div>
           )}
-          <div>
-            <p className="mb-2 text-sm font-medium">{t("activeReminders")}</p>
-            {enabledReminderCategories.length === 0 ? (
-              <p className="text-muted-foreground text-sm">{t("noActiveReminders")}</p>
-            ) : (
-              <ul className="divide-border divide-y">
-                {enabledReminderCategories.map((category) => {
-                  const label = categoryLabel(category, scheduleItems, t);
-                  const removalState = removalStates[category];
-                  return (
-                    <li
-                      key={category}
-                      className="flex flex-wrap items-center justify-between gap-3 py-4 text-sm"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <span className="block wrap-break-word text-pretty">{label}</span>
-                        {removalState === "failed" && (
-                          <span className="text-destructive block text-xs" role="alert">
-                            {t("couldNotRemoveReminder")}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        {(removalState === "queued" || removalState === "removing") && (
-                          <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
-                            <Spinner className="size-3.5" />
-                            {t(removalState === "queued" ? "removalQueued" : "removingReminder")}
-                          </span>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={
-                            busy || removalState === "queued" || removalState === "removing"
-                          }
-                          onClick={() => enqueueReminderRemoval(category, prefs.channels)}
-                          aria-label={t("removeReminderAria", { label })}
-                          loading={busy}
-                        >
-                          {removalState === "failed" ? t("retry") : t("turnOff")}
-                        </Button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
+          {enabledReminderCategories.length === 0 ? (
+            <p className="text-muted-foreground text-sm">{t("noActiveReminders")}</p>
+          ) : (
+            <ul className="divide-border divide-y">
+              {enabledReminderCategories.map((category) => {
+                const label = categoryLabel(category, scheduleItems, t);
+                const removalState = removalStates[category];
+                return (
+                  <li
+                    key={category}
+                    className="flex flex-wrap items-center justify-between gap-3 py-4 text-sm"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <span className="block wrap-break-word text-pretty">{label}</span>
+                      {removalState === "failed" && (
+                        <span className="text-destructive block text-xs" role="alert">
+                          {t("couldNotRemoveReminder")}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {(removalState === "queued" || removalState === "removing") && (
+                        <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
+                          <Spinner className="size-3.5" />
+                          {t(removalState === "queued" ? "removalQueued" : "removingReminder")}
+                        </span>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy || removalState === "queued" || removalState === "removing"}
+                        onClick={() => enqueueReminderRemoval(category, prefs.channels)}
+                        aria-label={t("removeReminderAria", { label })}
+                        loading={busy}
+                      >
+                        {removalState === "failed" ? t("retry") : t("turnOff")}
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </SectionCard>
     </div>

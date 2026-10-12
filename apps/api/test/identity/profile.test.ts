@@ -2040,6 +2040,26 @@ describe("staff user routes (H7)", () => {
     expect(row.visibleRoleName).toBe("Organizer");
   });
 
+  it("GET /api/users returns each row's photo route, or null without a photo (#934)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const withPhoto = await createUser({ email: "with-photo@example.test" });
+    const withoutPhoto = await createUser({ email: "without-photo@example.test" });
+    await pool.query("UPDATE users SET photo_key = $2, photo_updated_at = now() WHERE id = $1", [
+      withPhoto,
+      `profiles/${withPhoto}/photo/0123456789abcdef0123456789abcdef.jpg`,
+    ]);
+
+    const res = await a.inject({ method: "GET", url: "/api/users", headers: asUser(reader) });
+    expect(res.statusCode).toBe(200);
+    const rows = res.json().users as { id: number; image: string | null }[];
+    expect(rows.find((u) => u.id === withPhoto)?.image).toBe(
+      `/api/users/${withPhoto}/photo?v=0123456789ab`,
+    );
+    expect(rows.find((u) => u.id === withoutPhoto)?.image).toBeNull();
+  });
+
   it("GET /api/users/:id includes visibleRoleName, capabilities and roles", async () => {
     const a = await getApp();
     const target = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);

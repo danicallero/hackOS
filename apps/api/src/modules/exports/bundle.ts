@@ -1,6 +1,7 @@
 import { pool, type Queryable } from "../../db/pool.js";
 import { createAuthorizationContext, getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
+import { photoContentType } from "../../lib/profile-files.js";
 
 /**
  * H54 personal-data export bundle. Every query is explicitly scoped to
@@ -129,6 +130,29 @@ export async function buildExportBundle(
       [subjectUserId],
     )
   ).rows;
+  // #934: the opt-in directory profile, including its consent timestamp.
+  const publicProfile =
+    (
+      await db.query(
+        `SELECT directory_visible, show_surname, show_photo, show_project, headline,
+                location_note, bio, socials, share_cv, cv_filename, cv_uploaded_at,
+                consented_at, created_at, updated_at
+           FROM user_public_profiles WHERE user_id = $1`,
+        [subjectUserId],
+      )
+    ).rows[0] ?? null;
+  // #935: the subject's own event diary. Saved people appear by user id only;
+  // their cards belong to them. Entries other attendees hold about the
+  // subject are those attendees' private data and are not listed.
+  const diary = (
+    await db.query(
+      `SELECT d.id, d.target_user_id, d.enterprise_id, e.name AS enterprise_name, d.starred,
+              d.note, d.created_at, d.updated_at
+         FROM diary_entries d LEFT JOIN enterprises e ON e.id = d.enterprise_id
+        WHERE d.owner_id = $1 ORDER BY d.created_at, d.id`,
+      [subjectUserId],
+    )
+  ).rows;
   const notificationOutbox = (
     await db.query(
       `SELECT id, category, channel, status, sent_at, read_at, created_at
@@ -144,6 +168,29 @@ export async function buildExportBundle(
       [subjectUserId],
     )
   ).rows;
+  // #966: Live Activity devices, metadata only for the same reason.
+  const liveActivityDevices = (
+    await db.query(
+      `SELECT platform, language, enabled, created_at FROM live_activity_devices
+        WHERE user_id = $1 ORDER BY created_at`,
+      [subjectUserId],
+    )
+  ).rows;
+  // #966: the Live Activity kinds the user turned off for their account.
+  const liveActivityKindOptOuts = (
+    await db.query(
+      `SELECT kind, created_at FROM live_activity_kind_opt_outs
+        WHERE user_id = $1 ORDER BY kind`,
+      [subjectUserId],
+    )
+  ).rows;
+  // #966: the user's own Live Activity kind order, when they set one.
+  const liveActivityKindOrder =
+    (
+      await db.query(`SELECT kinds, updated_at FROM live_activity_kind_orders WHERE user_id = $1`, [
+        subjectUserId,
+      ])
+    ).rows[0] ?? null;
   const announcementReads = (
     await db.query(
       `SELECT an.announcement_id, a.title, an.read_at
@@ -171,6 +218,11 @@ export async function buildExportBundle(
       surname: user.surname,
       dni: user.dni,
       image: user.image,
+      // #934: the private account photo; its bytes stay downloadable from
+      // GET /api/users/:id/photo, so the bundle records that one exists.
+      photo: user.photo_key
+        ? { contentType: photoContentType(user.photo_key), uploadedAt: user.photo_updated_at }
+        : null,
       badgeId: user.badge_id,
       badgeIdHistory: user.badge_id_history,
       foodIntolerances: user.food_intolerances,
@@ -187,6 +239,8 @@ export async function buildExportBundle(
     permissions: { roles, effectiveCapabilities: capabilities },
     applications,
     projects: { submissions, devpostParticipant },
+    publicProfile,
+    diary,
     judgingParticipation,
     presence: { activityLogs, checkInLogs, timeLogs },
     meals: { redemptions: mealRedemptions },
@@ -194,6 +248,9 @@ export async function buildExportBundle(
       preferences: notificationPreferences,
       outbox: notificationOutbox,
       pushTokens,
+      liveActivityDevices,
+      liveActivityKindOptOuts,
+      liveActivityKindOrder,
       announcementReads,
     },
     audit: auditLog,

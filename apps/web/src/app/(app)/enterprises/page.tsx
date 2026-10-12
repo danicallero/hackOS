@@ -489,7 +489,7 @@ function CreateEnterpriseModal({
               <FormItem>
                 <FormLabel>{t("name")}</FormLabel>
                 <FormControl>
-                  <Input placeholder={t("acmeCorpPlaceholder")} {...field} />
+                  <Input {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -502,84 +502,12 @@ function CreateEnterpriseModal({
               <FormItem>
                 <FormLabel>{t("websiteLabel")}</FormLabel>
                 <FormControl>
-                  <Input type="url" placeholder="https://acme.com" {...field} />
+                  <Input type="url" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="logoUrl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("logoUrlLabel")}</FormLabel>
-                <FormControl>
-                  <Input type="url" placeholder="https://…/logo.png" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="logoNegativeUrl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("darkBackgroundLogoUrlLabel")}</FormLabel>
-                <FormControl>
-                  <Input type="url" placeholder="https://…/logo-negative.png" {...field} />
-                </FormControl>
-                <FormDescription>{t("regularLogoUsedDesc")}</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <div className="space-y-2">
-            <p className="text-sm font-medium">{t("logoTitle")}</p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={form.formState.isSubmitting}
-                onClick={() => defaultLogoInputRef.current?.click()}
-              >
-                <UploadSimpleIcon aria-hidden="true" />
-                {defaultLogo ? defaultLogo.name : t("uploadLogo")}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={form.formState.isSubmitting}
-                onClick={() => darkLogoInputRef.current?.click()}
-              >
-                <UploadSimpleIcon aria-hidden="true" />
-                {darkLogo ? darkLogo.name : t("uploadDarkLogo")}
-              </Button>
-            </div>
-            <input
-              ref={defaultLogoInputRef}
-              type="file"
-              accept={LOGO_ACCEPT}
-              className="sr-only"
-              aria-label={t("uploadLogo")}
-              onChange={(event) => {
-                selectLogo(event.target.files?.[0], "default");
-                event.target.value = "";
-              }}
-            />
-            <input
-              ref={darkLogoInputRef}
-              type="file"
-              accept={LOGO_ACCEPT}
-              className="sr-only"
-              aria-label={t("uploadDarkLogo")}
-              onChange={(event) => {
-                selectLogo(event.target.files?.[0], "negative");
-                event.target.value = "";
-              }}
-            />
-          </div>
           <FormField
             control={form.control}
             name="description"
@@ -587,59 +515,133 @@ function CreateEnterpriseModal({
               <FormItem>
                 <FormLabel>{t("descriptionLabel")}</FormLabel>
                 <FormControl>
-                  <Textarea rows={3} placeholder={t("whatSponsorDoesPlaceholder")} {...field} />
+                  <Textarea rows={3} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="priority"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("priorityLabel")}</FormLabel>
-                <FormControl>
-                  <Input inputMode="numeric" placeholder="1 = first" {...field} />
-                </FormControl>
-                <FormDescription>{t("lowerShowsFirstDesc")}</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <PublicationControls
-            id="enterprise-publication"
-            visibility={visibility}
-            hiddenValue="hidden"
-            publishedValue="visible"
-            hiddenLabel={t("hiddenOption")}
-            publishedLabel={t("visibleLabel")}
-            visibilityLabel={t("colVisibility")}
-            scheduleLabel={t("schedulePublicationLabel")}
-            publishAtLabel={t("publishAtLabel")}
-            scheduled={scheduledPublish}
-            publishAt={form.watch("availableFrom")}
-            onVisibilityChange={(next) => {
-              form.setValue("visibility", next, { shouldDirty: true });
-              if (next === "visible") {
-                setScheduledPublish(false);
-                form.setValue("availableFrom", "", { shouldDirty: true });
+          <div className="space-y-5 border-t pt-5">
+            <FormField
+              control={form.control}
+              name="logoUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("logoUrlLabel")}</FormLabel>
+                  <FormControl>
+                    <Input type="url" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="logoNegativeUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("darkBackgroundLogoUrlLabel")}</FormLabel>
+                  <FormControl>
+                    <Input type="url" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={form.formState.isSubmitting}
+                  onClick={() => defaultLogoInputRef.current?.click()}
+                >
+                  <UploadSimpleIcon aria-hidden="true" />
+                  {defaultLogo ? defaultLogo.name : t("uploadLogo")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={form.formState.isSubmitting}
+                  onClick={() => darkLogoInputRef.current?.click()}
+                >
+                  <UploadSimpleIcon aria-hidden="true" />
+                  {darkLogo ? darkLogo.name : t("uploadDarkLogo")}
+                </Button>
+              </div>
+              <input
+                ref={defaultLogoInputRef}
+                type="file"
+                accept={LOGO_ACCEPT}
+                className="sr-only"
+                aria-label={t("uploadLogo")}
+                onChange={(event) => {
+                  selectLogo(event.target.files?.[0], "default");
+                  event.target.value = "";
+                }}
+              />
+              <input
+                ref={darkLogoInputRef}
+                type="file"
+                accept={LOGO_ACCEPT}
+                className="sr-only"
+                aria-label={t("uploadDarkLogo")}
+                onChange={(event) => {
+                  selectLogo(event.target.files?.[0], "negative");
+                  event.target.value = "";
+                }}
+              />
+            </div>
+          </div>
+          <div className="space-y-5 border-t pt-5">
+            <FormField
+              control={form.control}
+              name="priority"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("priorityLabel")}</FormLabel>
+                  <FormControl>
+                    <Input inputMode="numeric" {...field} />
+                  </FormControl>
+                  <FormDescription>{t("lowerShowsFirstDesc")}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <PublicationControls
+              id="enterprise-publication"
+              visibility={visibility}
+              hiddenValue="hidden"
+              publishedValue="visible"
+              hiddenLabel={t("hiddenOption")}
+              publishedLabel={t("visibleLabel")}
+              visibilityLabel={t("colVisibility")}
+              scheduleLabel={t("schedulePublicationLabel")}
+              publishAtLabel={t("publishAtLabel")}
+              scheduled={scheduledPublish}
+              publishAt={form.watch("availableFrom")}
+              onVisibilityChange={(next) => {
+                form.setValue("visibility", next, { shouldDirty: true });
+                if (next === "visible") {
+                  setScheduledPublish(false);
+                  form.setValue("availableFrom", "", { shouldDirty: true });
+                }
+              }}
+              onScheduledChange={(next) => {
+                setScheduledPublish(next);
+                form.setValue(
+                  "availableFrom",
+                  next ? toDatetimeLocal(new Date().toISOString()) : "",
+                  {
+                    shouldDirty: true,
+                  },
+                );
+              }}
+              onPublishAtChange={(value) =>
+                form.setValue("availableFrom", value, { shouldDirty: true })
               }
-            }}
-            onScheduledChange={(next) => {
-              setScheduledPublish(next);
-              form.setValue(
-                "availableFrom",
-                next ? toDatetimeLocal(new Date().toISOString()) : "",
-                {
-                  shouldDirty: true,
-                },
-              );
-            }}
-            onPublishAtChange={(value) =>
-              form.setValue("availableFrom", value, { shouldDirty: true })
-            }
-          />
+            />
+          </div>
         </form>
       </Form>
     </SidePanelEditor>

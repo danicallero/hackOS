@@ -3,6 +3,7 @@ import { StyleSheet } from "react-native";
 
 const mockPush = jest.fn();
 
+jest.mock("@/lib/use-unread-notifications", () => ({ useUnreadNotificationCount: () => 0 }));
 jest.mock("expo-router", () => ({
   useFocusEffect: () => {},
   useNavigation: () => ({

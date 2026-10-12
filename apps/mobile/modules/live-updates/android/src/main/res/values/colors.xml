@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #966: Live Update card colours (the iOS Live Activity palette). Night
+     variants in values-night; RemoteViews resolve them in the system's
+     configuration, so the card follows the shade's light/dark mode. -->
+<resources>
+  <color name="hackos_lu_primary">#FF1C1C1E</color>
+  <color name="hackos_lu_secondary">#FF6C6C70</color>
+  <color name="hackos_lu_accent">#FF007AFF</color>
+  <color name="hackos_lu_go">#FF248A3D</color>
+  <color name="hackos_lu_neutral">#FF8E8E93</color>
+  <color name="hackos_lu_warning">#FFC93400</color>
+  <color name="hackos_lu_alert">#FFD70015</color>
+  <!-- The unfilled rest of a track (filled part in the stage colour). -->
+  <color name="hackos_lu_rest">#FFC7C7CC</color>
+  <color name="hackos_lu_on_accent">#FFFFFFFF</color>
+</resources>

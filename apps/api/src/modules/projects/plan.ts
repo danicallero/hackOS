@@ -31,6 +31,7 @@ export interface PlannedMember {
 }
 
 export interface PlannedRepo {
+  projectCode: string | null;
   title: string;
   url: string | null;
   description: string;
@@ -174,7 +175,7 @@ export async function buildImportPlan(
   if (distinctEmails.length > 0) {
     const { rows } = await db.query(
       `SELECT id, lower(email) AS email, name, surname,
-              lower(secondary_email) AS secondary_email, secondary_email_verified_at
+              lower(secondary_email) AS secondary_email, secondary_email_verified_at, email_verified
        FROM users
        WHERE account_state = 'active' AND anonymized_at IS NULL
          AND is_test_account = false
@@ -189,8 +190,9 @@ export async function buildImportPlan(
       surname: string | null;
       secondary_email: string | null;
       secondary_email_verified_at: Date | null;
+      email_verified: boolean;
     }>) {
-      if (distinctEmails.includes(row.email)) {
+      if (row.email_verified && distinctEmails.includes(row.email)) {
         primaryMap.set(row.email, { id: row.id, name: row.name, surname: row.surname });
       }
       if (
@@ -210,8 +212,8 @@ export async function buildImportPlan(
   const existingByUrl = new Map<string, number>();
   if (urls.length > 0) {
     const { rows } = await db.query(
-      `SELECT id, devpost_url FROM repos
-        WHERE devpost_url = ANY($1::text[]) AND is_test_account = false`,
+      `SELECT id, devpost_import_url AS devpost_url FROM repos
+        WHERE devpost_import_url = ANY($1::text[]) AND is_test_account = false`,
       [urls],
     );
     for (const row of rows as Array<{ id: number; devpost_url: string }>) {
@@ -226,7 +228,7 @@ export async function buildImportPlan(
   if (namesWithoutUrl.length > 0) {
     const { rows } = await db.query(
       `SELECT id, name FROM repos
-        WHERE devpost_url IS NULL AND is_test_account = false AND name = ANY($1::text[])`,
+        WHERE source='devpost' AND devpost_url IS NULL AND is_test_account = false AND name = ANY($1::text[])`,
       [namesWithoutUrl],
     );
     for (const row of rows as Array<{ id: number; name: string }>) {
@@ -234,6 +236,17 @@ export async function buildImportPlan(
     }
   }
 
+  const byCode = new Map<string, number>();
+  const codes = projects.map((p) => p.projectCode).filter((c): c is string => Boolean(c));
+  if (codes.length) {
+    const { rows } = await db.query(
+      `SELECT id,reconciliation_code FROM repos WHERE reconciliation_code=ANY($1::text[]) AND devpost_import_url IS NULL AND is_test_account=false AND reconciled_into_repo_id IS NULL`,
+      [codes],
+    );
+    for (const r of rows)
+      if (projects.filter((p) => p.projectCode === r.reconciliation_code).length === 1)
+        byCode.set(r.reconciliation_code, r.id);
+  }
   const repos: PlannedRepo[] = projects.map((project, i) => {
     const members: PlannedMember[] = (perRepoMembers[i] ?? []).map((m) => {
       const primary = primaryMap.get(m.email);
@@ -257,9 +270,10 @@ export async function buildImportPlan(
       };
     });
     const existingRepoId = project.url
-      ? (existingByUrl.get(project.url) ?? null)
+      ? (existingByUrl.get(project.url) ?? byCode.get(project.projectCode ?? "") ?? null)
       : (existingByNullUrlName.get(project.title) ?? null);
     return {
+      projectCode: project.projectCode,
       title: project.title,
       url: project.url,
       description: project.description,

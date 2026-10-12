@@ -116,6 +116,20 @@ describe("accounts without current role-derived event access", () => {
   });
 });
 
+describe("event diary (#934, #935)", () => {
+  const hrefs = (ctx: NavVisibilityContext) =>
+    PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map((item) => item.href);
+
+  it("shows the diary to every attendee, with no capability", () => {
+    expect(hrefs(contextFor([]))).toContain("/people");
+  });
+
+  it("hides the diary without current event access", () => {
+    const ctx = contextFor([], { isPureApplicant: true });
+    expect(hrefs(ctx)).not.toContain("/people");
+  });
+});
+
 describe("personal projects (issue #424, #852)", () => {
   it("keeps My projects visible before either a project or queue exists", () => {
     const participant = contextFor([], { hasProject: false, hasQueueItems: false });
@@ -249,7 +263,6 @@ describe("route stability (deep links, issue #187)", () => {
       "/projects",
       "/queue",
       "/judging",
-      "/queue/rooms",
       // /my-queue, /logistics/accreditation and /logistics/meals are deliberately
       // gone from here: their content was merged into a single destination and the old hrefs now
       // redirect server-side (see their page.tsx files) instead of being

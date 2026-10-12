@@ -1,7 +1,8 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { requireCapability } from "../../lib/capabilities.js";
+import { sendCsv } from "../../lib/csv.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import {
   exportApplicationsCsv,
@@ -10,12 +11,6 @@ import {
   exportStaffScanStatsCsv,
 } from "./csv.js";
 import { applicationsCsvQuery } from "./schemas.js";
-
-function sendCsv(reply: FastifyReply, filename: string, csv: string) {
-  reply.header("content-type", "text/csv; charset=utf-8");
-  reply.header("content-disposition", `attachment; filename="${filename}"`);
-  return reply.send(csv);
-}
 
 /** H54: operational CSV exports, gated by exports:run (previously declared but unused). */
 export function registerOperationalRoutes(app: FastifyInstance): void {

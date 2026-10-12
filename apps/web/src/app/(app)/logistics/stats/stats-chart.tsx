@@ -72,14 +72,17 @@ export function StatsChart({
   data,
   type,
   title,
+  height,
 }: {
   data: StatsChartDatum[];
   type: StatsChartType;
   title: string;
+  height?: number | string;
 }) {
   const chartElement = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<EChartsType | null>(null);
-  const chartHeight = type === "bar" ? Math.max(184, Math.min(512, data.length * 40 + 88)) : 312;
+  const chartHeight =
+    height ?? (type === "bar" ? Math.max(184, Math.min(512, data.length * 40 + 88)) : 312);
 
   useEffect(() => {
     const element = chartElement.current;
@@ -149,7 +152,13 @@ export function StatsChart({
 
   return (
     <div className="@container min-w-0">
-      <div className={type === "bar" ? "max-h-[32rem] min-w-0 overflow-y-auto" : "min-w-0"}>
+      <div
+        className={
+          type === "bar" && height === undefined
+            ? "max-h-[32rem] min-w-0 overflow-y-auto"
+            : "min-w-0"
+        }
+      >
         <div
           ref={chartElement}
           role="img"

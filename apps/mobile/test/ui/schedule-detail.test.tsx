@@ -150,34 +150,37 @@ describe("schedule detail staff fields (H59)", () => {
     );
   });
 
-  it("uses a visible safe back action in the native header", async () => {
+  it("keeps the native circular back item when there is history", async () => {
     await renderMobile(<ScheduleDetailScreen />);
 
     const screenOptions = mockStackScreen.mock.calls.at(-1)?.[0] as {
-      options: {
-        headerBackVisible?: boolean;
-        headerLeft?: () => unknown;
-      };
+      options: { headerBackVisible?: boolean; headerLeft?: () => unknown };
     };
 
-    expect(screenOptions.options.headerBackVisible).toBe(false);
-    expect(screenOptions.options.headerLeft).toEqual(expect.any(Function));
+    expect(screenOptions.options.headerBackVisible).toBe(true);
+    expect(screenOptions.options.headerLeft).toBeUndefined();
+  });
 
-    const backButton = screenOptions.options.headerLeft?.() as unknown as {
-      props: {
-        accessibilityLabel: string;
-        icon: string;
-        onPress: () => void;
+  it("gives a cold deep link a safe back action in the native header", async () => {
+    mockRouter.canGoBack.mockReturnValue(false);
+    try {
+      await renderMobile(<ScheduleDetailScreen />);
+
+      const screenOptions = mockStackScreen.mock.calls.at(-1)?.[0] as {
+        options: { headerBackVisible?: boolean; headerLeft?: () => unknown };
       };
-    };
-    expect(backButton.props).toEqual(
-      expect.objectContaining({ accessibilityLabel: "back", icon: "chevron.left" }),
-    );
+      expect(screenOptions.options.headerBackVisible).toBe(false);
 
-    backButton.props.onPress();
+      const backButton = screenOptions.options.headerLeft?.() as unknown as {
+        props: { onPress: () => void };
+      };
+      backButton.props.onPress();
 
-    expect(mockRouter.back).toHaveBeenCalledTimes(1);
-    expect(mockRouter.replace).not.toHaveBeenCalled();
+      expect(mockRouter.back).not.toHaveBeenCalled();
+      expect(mockRouter.replace).toHaveBeenCalledWith("/(tabs)/schedule");
+    } finally {
+      mockRouter.canGoBack.mockReturnValue(true);
+    }
   });
 
   it("hides scan, visibility, and publish fields for staff-only items", async () => {

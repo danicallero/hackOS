@@ -4,30 +4,22 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
+import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
+import { ListToolbar } from "@/components/common/list-toolbar";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { PageToolbar } from "@/components/common/page-toolbar";
-import { TabBar } from "@/components/common/tab-bar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
   assignRoomEnterprise,
   createRoom,
+  deleteRoom,
   getRoomAssignments,
   listEnterprises,
   listRooms,
@@ -39,22 +31,20 @@ import {
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { EnterpriseSummary } from "@/lib/types";
-import { useUrlTab } from "@/lib/url-tab";
-import { JudgingWindowTab } from "./judging-window-tab";
 import { RoomFormPanel, type RoomFormValues } from "./room-form-panel";
 import { type RoomPatch, RoomsTable } from "./rooms-table";
 
-const JUDGING_SETTINGS_TABS = ["rooms", "window"] as const;
-type JudgingSettingsTab = (typeof JUDGING_SETTINGS_TABS)[number];
-
-export default function QueueRoomsPage() {
+export default function QueueRoomsPage({ embedded = false }: { embedded?: boolean }) {
   const { t } = useLocale();
+  const router = useRouter();
+  useEffect(() => {
+    if (!embedded && new URLSearchParams(window.location.search).get("tab") === "window") {
+      router.replace("/settings/event?tab=judging");
+    }
+  }, [embedded, router]);
   const { can } = useSessionContext();
   const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
-  const { tab, setTab } = useUrlTab<JudgingSettingsTab>({
-    values: JUDGING_SETTINGS_TABS,
-    defaultValue: "rooms",
-  });
+  const tab = "rooms";
   const [rooms, setRooms] = useState<Room[]>([]);
   const [assignments, setAssignments] = useState<Record<number, RoomAssignments | null>>({});
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
@@ -238,31 +228,40 @@ export default function QueueRoomsPage() {
     closePanel();
   };
 
-  const setRoomEnterprise = async (enterpriseId: number) => {
-    if (!selectedRoom) return;
-    await assignRoomEnterprise(selectedRoom.id, enterpriseId, crypto.randomUUID());
+  const assignEnterprise = async (room: Room, enterpriseId: number | null) => {
+    if (enterpriseId === null) await removeRoomEnterprise(room.id);
+    else await assignRoomEnterprise(room.id, enterpriseId, crypto.randomUUID());
     const enterprise = enterprises.find((item) => item.id === enterpriseId);
     setRooms((current) =>
-      current.map((room) =>
-        room.id === selectedRoom.id
-          ? { ...room, enterprise_id: enterpriseId, enterprise_name: enterprise?.name ?? null }
-          : room,
+      current.map((item) =>
+        item.id === room.id
+          ? { ...item, enterprise_id: enterpriseId, enterprise_name: enterprise?.name ?? null }
+          : item,
       ),
     );
-    await loadRoomDetails(selectedRoom.id);
+    setAssignments((current) => ({ ...current, [room.id]: null }));
+    if (selectedRoomId === room.id) await loadRoomDetails(room.id);
+  };
+
+  const setRoomEnterprise = async (enterpriseId: number) => {
+    if (selectedRoom) await assignEnterprise(selectedRoom, enterpriseId);
   };
 
   const clearRoomEnterprise = async () => {
+    if (selectedRoom) await assignEnterprise(selectedRoom, null);
+  };
+
+  const removeSelectedRoom = async () => {
     if (!selectedRoom) return;
-    await removeRoomEnterprise(selectedRoom.id);
-    setRooms((current) =>
-      current.map((room) =>
-        room.id === selectedRoom.id
-          ? { ...room, enterprise_id: null, enterprise_name: null }
-          : room,
-      ),
-    );
-    await loadRoomDetails(selectedRoom.id);
+    await deleteRoom(selectedRoom.id);
+    setRooms((current) => current.filter((room) => room.id !== selectedRoom.id));
+    setAssignments((current) => {
+      const next = { ...current };
+      delete next[selectedRoom.id];
+      return next;
+    });
+    closePanel();
+    toast.success(t("roomDeleted"), { compactTitle: t("deleteRoom") });
   };
 
   const filteredRooms = useMemo(() => {
@@ -291,70 +290,54 @@ export default function QueueRoomsPage() {
       {t("clearFilters")}
     </Button>
   ) : (
-    <div className="flex flex-wrap justify-center gap-2">
-      <Button variant="outline" size="sm" onClick={() => setDraftOpen(true)}>
-        <PlusIcon className="size-4" aria-hidden="true" />
-        {t("addRoomHere")}
-      </Button>
-      <Button size="sm" onClick={openCreatePanel}>
-        <PlusIcon className="size-4" aria-hidden="true" />
-        {t("createRoom")}
-      </Button>
-    </div>
+    <Button size="sm" onClick={openCreatePanel}>
+      <PlusIcon className="size-4" aria-hidden="true" />
+      {t("createRoom")}
+    </Button>
   );
 
   if (!canAdmin) return <AccessDenied ask={t("roomAdminDeniedDesc")} />;
 
   return (
-    <PageLayout>
-      <PageHeader title={t("judgingSettingsTitle")} />
-
-      <Tabs value={tab} onValueChange={(value) => setTab(value)}>
-        <TabBar aria-label={t("judgingSettingsTitle")}>
-          <TabsTrigger value="rooms">{t("rooms")}</TabsTrigger>
-          <TabsTrigger value="window">{t("judgingWindowTitle")}</TabsTrigger>
-        </TabBar>
-      </Tabs>
+    <PageLayout width="workspace">
+      {!embedded && <PageHeader title={t("roomConfigurationTitle")} />}
 
       {tab === "rooms" && (
         <div className="space-y-4">
-          <PageToolbar
-            label={t("pageDataControls")}
-            className="flex flex-wrap items-center justify-end gap-2"
-          >
-            <div className="relative w-full max-w-md">
-              <MagnifyingGlassIcon
-                className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-                aria-hidden="true"
-              />
-              <Input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t("filterRoomsPlaceholder")}
-                aria-label={t("filterRooms")}
-                className="pl-9"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40" aria-label={t("statusColumn")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("allRoomStatuses")}</SelectItem>
-                <SelectItem value="active">{t("roomStatusActive")}</SelectItem>
-                <SelectItem value="paused">{t("roomStatusPaused")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </PageToolbar>
+          <ListToolbar
+            search={{
+              id: "room-search",
+              label: t("filterRooms"),
+              placeholder: t("filterRoomsPlaceholder"),
+              value: query,
+              onValueChange: setQuery,
+            }}
+            filters={[
+              {
+                id: "status",
+                label: t("statusColumn"),
+                icon: PauseIcon,
+                type: "single",
+                value: statusFilter,
+                resetValue: "all",
+                onChange: setStatusFilter,
+                options: [
+                  { value: "all", label: t("allRoomStatuses") },
+                  { value: "active", label: t("roomStatusActive") },
+                  { value: "paused", label: t("roomStatusPaused") },
+                ],
+              },
+            ]}
+          />
 
           <RoomsTable
             rooms={filteredRooms}
+            enterprises={enterprises}
+            onAssignEnterprise={assignEnterprise}
             loading={loading && !hasLoadedRef.current}
             error={loadError}
             onRetry={() => void load()}
             emptyTitle={hasFilters ? t("noMatchingRooms") : t("noRoomsConfigured")}
-            emptyDescription={hasFilters ? undefined : t("noRoomsConfiguredDesc")}
             emptyAction={emptyAction}
             draftOpen={draftOpen}
             draftSaving={draftSaving}
@@ -367,9 +350,7 @@ export default function QueueRoomsPage() {
         </div>
       )}
 
-      {tab === "window" && <JudgingWindowTab />}
-
-      {tab === "rooms" && (
+      {tab === "rooms" && (loading || loadError || rooms.length > 0) && (
         <div className="pointer-events-none sticky bottom-6 z-20 flex h-0 items-end justify-end">
           <Button className="pointer-events-auto shadow-floating" onClick={openCreatePanel}>
             <PlusIcon className="size-4" aria-hidden="true" />
@@ -393,6 +374,7 @@ export default function QueueRoomsPage() {
             if (!open) closePanel();
           }}
           onSubmit={submitRoomPanel}
+          onDelete={removeSelectedRoom}
           onSetEnterprise={setRoomEnterprise}
           onClearEnterprise={clearRoomEnterprise}
         />

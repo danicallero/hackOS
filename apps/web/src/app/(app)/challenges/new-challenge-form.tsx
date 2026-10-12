@@ -12,6 +12,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
 import { EntityCombobox } from "@/components/common/entity-combobox";
+import { PublicationControls } from "@/components/common/publication-controls";
 import {
   JudgingPanelBuilder,
   MultilingualInput,
@@ -34,8 +35,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { type DevpostPrize, listDevpostPrizes } from "@/lib/projects";
 import { toast } from "@/lib/toast";
@@ -52,6 +55,9 @@ const createSchema = z.object({
   enterpriseId: z.string().min(1, "Required"),
   maxPresentationSeconds: optionalPositiveInt,
   maxInWaitingArea: optionalPositiveInt,
+  visibility: z.enum(["visible", "hidden"]),
+  availableFrom: z.string(),
+  mandatory: z.boolean(),
 });
 type CreateValues = z.infer<typeof createSchema>;
 
@@ -77,8 +83,13 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
       enterpriseId: "",
       maxPresentationSeconds: "",
       maxInWaitingArea: "",
+      visibility: "hidden",
+      availableFrom: "",
+      mandatory: false,
     },
   });
+  const [scheduledPublish, setScheduledPublish] = useState(false);
+  const visibility = form.watch("visibility");
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: retryNonce intentionally retriggers this safe authoring-data load.
   useEffect(() => {
@@ -134,7 +145,20 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
           ? Number(values.maxPresentationSeconds)
           : null,
         maxInWaitingArea: values.maxInWaitingArea ? Number(values.maxInWaitingArea) : null,
+        mandatory: values.mandatory,
+        availableFrom:
+          values.visibility === "hidden" ? fromDatetimeLocal(values.availableFrom) : null,
       });
+      if (values.visibility === "visible") {
+        try {
+          await api.post(`/api/challenges/${created.id}/publish`, {});
+        } catch (error) {
+          toast.error(
+            error instanceof ApiError ? error.message : t("checkBuilderFields"),
+            t("toastCreateChallenge"),
+          );
+        }
+      }
       toast.success(t("challengeCreated"), { compactTitle: t("toastCreateChallenge") });
       onCreated(created);
     } catch (error) {
@@ -222,6 +246,18 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
                   value={criteriaI18n}
                   onChange={setCriteriaI18n}
                 />
+                <FormField
+                  control={form.control}
+                  name="mandatory"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-4">
+                      <FormLabel>{t("mandatoryChallengeLabel")}</FormLabel>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
               </div>
             </SectionCard>
           </TabsContent>
@@ -283,10 +319,39 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
             </SectionCard>
           </TabsContent>
 
-          <TabsContent value="publish" className="pt-4">
+          <TabsContent value="publish" className="space-y-6 pt-4">
             <SectionCard variant="plain" title={t("publicationTitle")}>
-              <p className="text-sm font-medium">{t("draftStateDesc")}</p>
-              <p className="text-muted-foreground mt-4 text-sm">{t("challengeDraftSaveHint")}</p>
+              <PublicationControls
+                id="challenge-publication"
+                visibility={visibility}
+                hiddenValue="hidden"
+                publishedValue="visible"
+                hiddenLabel={t("hiddenOption")}
+                publishedLabel={t("visibleLabel")}
+                visibilityLabel={t("colVisibility")}
+                scheduleLabel={t("schedulePublicationLabel")}
+                publishAtLabel={t("publishAtLabel")}
+                scheduled={scheduledPublish}
+                publishAt={form.watch("availableFrom")}
+                onVisibilityChange={(next) => {
+                  form.setValue("visibility", next, { shouldDirty: true });
+                  if (next === "visible") {
+                    setScheduledPublish(false);
+                    form.setValue("availableFrom", "", { shouldDirty: true });
+                  }
+                }}
+                onScheduledChange={(next) => {
+                  setScheduledPublish(next);
+                  form.setValue(
+                    "availableFrom",
+                    next ? toDatetimeLocal(new Date().toISOString()) : "",
+                    { shouldDirty: true },
+                  );
+                }}
+                onPublishAtChange={(value) =>
+                  form.setValue("availableFrom", value, { shouldDirty: true })
+                }
+              />
             </SectionCard>
           </TabsContent>
         </Tabs>
@@ -322,7 +387,7 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
               </Button>
             ) : (
               <SubmitButton pending={form.formState.isSubmitting}>
-                {t("saveChallengeDraft")}
+                {t("createChallenge")}
               </SubmitButton>
             )}
           </div>

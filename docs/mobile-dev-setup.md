@@ -25,6 +25,11 @@ again when upgrading the SDK.
 NFC accreditation reads require a rebuilt development/production client and
 physical NFC hardware; Expo Go and Simulator cannot read NTAG213 badges.
 The config plugin supplies iOS TAG entitlements and Android NFC permission.
+Android's `.pkpass` chooser also requires a new native build after changes to
+`modules/wallet-handoff`; reloading JavaScript alone keeps the older client's
+share/save fallback. Confirm multiple installed importers appear, including
+an importer supporting only a legacy MIME alias.
+
 Enable NFC Tag Reading on the Apple App ID and regenerate signing profiles
 before a device/EAS build. See [NFC accreditations](./mobile.md#nfc-accreditations-h22h26).
 
@@ -110,6 +115,14 @@ public client-side variables:
 EXPO_PUBLIC_API_URL=http://127.0.0.1:3000
 EXPO_PUBLIC_EVENT_WEBSITE_URL=https://os.hackudc.com
 ```
+
+Setting `EXPO_PUBLIC_API_URL` to anything other than the production API selects
+the development API at app startup, even if SecureStore previously retained
+production mode. The production URL (what the EAS production environment bakes
+into release builds) is not an override: those builds start in production and
+the hidden switch still reaches `https://api.dani.md`. This lets the root
+`EXPO_PUBLIC_API_URL=http://localhost:3000 pnpm start` command reliably target
+the local API.
 
 Choose the URL for the device running the app:
 

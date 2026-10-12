@@ -16,13 +16,13 @@ export function ZonedTimePreview({ value, timezone }: { value: string; timezone:
 
   const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const eventReading = formatInZone(date, timezone, LOCALE_CODES[language]);
-  const sameZone = browserZone === timezone;
+  // Same zone: the reading would just restate the Timezone field and repeat
+  // under every date; only a differing zone needs the converted instant.
+  if (browserZone === timezone) return null;
 
   return (
     <p className="text-muted-foreground text-xs">
-      {sameZone
-        ? t("zonedTimeSameZone", { zone: timezone })
-        : t("zonedTimePreview", { zone: timezone, reading: eventReading })}
+      {t("zonedTimePreview", { zone: timezone, reading: eventReading })}
     </p>
   );
 }

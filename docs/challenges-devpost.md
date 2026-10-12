@@ -16,7 +16,7 @@ document and the stories disagree, the stories win.
 
 ## 1. Module overview
 
-### 1.1 Domain model (pre-existing tables — no new migrations)
+### 1.1 Domain model (existing projects and additive submission lifecycle)
 
 The relationships already exist in `0001_initial.sql` and `0300_projects_devpost.sql`.
 This code adapts to them; it does not reshape them.
@@ -48,13 +48,13 @@ Key facts that drive every design decision below:
   it lets the import land before any prize→challenge mapping exists, and lets a
   single challenge absorb several Devpost prize spellings.
 - **`challenges` has no `is_active` column.** Publication is governed by
-  `status` (`draft` / `published`) and `visibility` (`hidden` / `visible`) plus
-  `available_from` for the scheduled reveal (H45). Public reads filter on those
-  three, never on a boolean "active" flag.
+  `visibility` (`hidden` / `visible`) and `available_from` for the scheduled
+  reveal (H45). There is no challenge `status` column; public reads use the
+  reveal and visibility fields, never a boolean "active" flag.
 - **`devpost_participants` is a staging/reconciliation table**, distinct from the
   authoritative `submissions`. A participant is `unmatched`, `auto_matched`, or
   `manually_linked`; only matched participants get a `submissions` row.
-- **Identity matching and roster correction are separate.** A primary-email
+- **Identity matching and roster correction are separate.** A verified primary-email
   match is automatic. A secondary-email match becomes automatic only after the
   address is verified, and replacing/removing that address revokes only links
   that depended on it. Operators do not mutate either identity when correcting
@@ -87,7 +87,7 @@ challenge content and judging panel under the H44/H45 rules below.
 | Method & path | Capability | Story | Behaviour |
 |---|---|---|---|
 | `GET /api/challenges` | contextual `challenge-directory` | H44/H46 | global challenge admins see all; sponsor representatives and assigned judges see their scoped challenges |
-| `POST /api/challenges` | `sponsors:manage` OR `queue:admin` | H43/H44 | create hidden draft template bound to an enterprise |
+| `POST /api/challenges` | `sponsors:manage` OR `queue:admin` | H43/H44 | create hidden draft template bound to an enterprise; the creation form's Publication step sets it hidden, scheduled (`availableFrom`) or visible (follow-up `publish`) |
 | `GET /api/challenges/mine` | authenticated + sponsor row | H44/H46 | challenges owned by the caller's enterprise |
 | `GET /api/challenges/:id` | contextual `challenge-access` | H44/H46 | global admins, `JUDGE_PANEL`/`QUEUE_OPERATE`, the owning sponsor enterprise, or an assigned judge |
 | `PATCH /api/challenges/:id` | contextual `challenge-edit` | H44 | global admins or the owning sponsor enterprise may edit within the panel/public-field locks; every edit gets a version snapshot + audit |
@@ -137,7 +137,7 @@ sponsor; no implicit cross-challenge win is created.
 
 | Method & path | Capability | Story | Behaviour |
 |---|---|---|---|
-| `GET /api/public/challenges` | public | H49 | published + visible + revealed challenges w/ prizes |
+| `GET /api/public/challenges` | public | H49 | visible + revealed challenges w/ prizes |
 | `POST /api/devpost/imports/preview` | `projects:import` | H16 | pure read-only import plan, including detected tags and internal challenge choices |
 | `POST /api/devpost/imports/confirm` | `projects:import` + idempotency | H16 | transactional upsert and selected preview-tag persistence |
 | `GET /api/devpost/imports/unmatched` | `projects:import` | H17 | participants no email matched |
@@ -147,7 +147,7 @@ sponsor; no implicit cross-challenge win is created.
 | `POST /api/devpost/prizes/:prizeName/map` | `projects:import` | H16 | append prize to a challenge's `devpost_tags` |
 | `GET /api/repos` | contextual `repository-list` | H20/queue | repos + members + prizes + mapped challenges within global or relationship-derived scope |
 | `GET /api/repos/:id` | contextual `repository-access` | H20/queue | one repo, same shape, after the exact repository scope check |
-| `GET /api/projects/member-candidates` | `projects:edit` | H21 | minimal account search for team editors |
+| `GET /api/projects/member-candidates` | `projects:edit` or `projects:import` | H17/H21 | minimal accent-insensitive account search for team editors and identity resolution |
 | `POST /api/repos` | `projects:edit` + idempotency | H18 | native creation: metadata + members + challenge lineup in one transaction |
 | `PATCH /api/repos/:id` | `projects:edit` | H18 | metadata edit (name, description, links), audited before/after |
 | `DELETE /api/repos/:id` | `projects:edit` + idempotency | H18/H21 | administrator deletion of any project; cascades roster, queue and judging rows transactionally, then invalidates affected queue reads |
@@ -256,7 +256,7 @@ Planning (`plan.ts::buildImportPlan`) is **pure and read-only** so `preview` and
    `ON CONFLICT (devpost_url)` upsert always agree on the same row.
    Before confirmation opens its transaction, Devpost-only redirects resolve
    event `/submissions/` URLs to public `/software/` identities for planning-group
-   linkage. The original export URL remains the import deduplication key.
+   linkage. The original export URL remains the immutable `devpost_import_url` deduplication key, independent of edits to the display URL.
    Successful identities are cached; failures leave matching best-effort.
 5. For each distinct prize name, look up challenges whose `devpost_tags`
    contains it (`devpost_tags ?| $1::text[]`) and attach the mapped challenge to
@@ -410,7 +410,138 @@ implemented:
    this decision actually call for, not an extra lock/limit the brief invented.
 2. **Generic challenge Delete CRUD.** Challenges are created and owned through
    the sponsor lifecycle (H43/H44), and publication is an admin-controlled
-   status/visibility transition. There is still no delete endpoint; the "prevent
+   visibility transition. There is still no delete endpoint; the "prevent
    delete when linked" rule is moot because deletion isn't a story.
-3. **`is_active` filter.** No such column exists. Activation is `status` +
+3. **`is_active` filter.** No such column exists. Activation is
    `visibility` + `available_from` (H45). Public/list reads filter on those.
+
+
+## Project submission lifecycle (H6, H16–H21, H30, H53)
+
+See [the implementation audit](./project-lifecycle-audit.md) for the original
+behavior, gap classification and the user's timing clarifications. Migration
+`0304_project_submission_lifecycle.sql` is the single additive migration for
+this change. It retains existing repo/group/member IDs and adds immutable random
+codes, explicit submission and lock fields, submitted snapshots, edit requests,
+optional team-size rules and organizer decisions. Existing operational projects
+remain submitted judging entrants without being retroactively locked; existing
+planning groups remain drafts. Historical automatic matches to unverified
+addresses are revoked, while manually confirmed identities are retained.
+
+A native participant submission converts an existing planning group into a
+repo in one transaction. It copies accepted membership, intended challenges,
+metadata, the code and judging preference, records a submission timestamp,
+saves a snapshot and locks participant mutations. It requires a configured
+hacking end (the submission deadline), a name, active members and the optional
+team-size rule; it does not invent required URLs or require Devpost. Staff's
+existing direct native creation remains an operational administrative entry.
+The older participant repo-create API creates a draft that must be submitted.
+
+`POST /api/me/{work-groups|projects}/:id/submit` is the native transition.
+`GET /api/me/projects/:id/submission` exposes state and source differences with
+other participants' email addresses redacted. Locked members use
+`POST /api/me/projects/:id/edit-requests`. Organizers decide via
+`POST /api/projects/:id/unlock`, with `approve`, `deny` or direct `unlock` and a
+required reason. Reopening retains submission snapshots/timestamps and makes
+judging ineligible until resubmission (a Devpost import stays eligible, see
+below). This is a per-project editing exception,
+including after the ordinary editing/submission deadline. Completed or active
+judging must be reset/finished before reopening. Participants cannot delete a
+previously submitted project to erase its history.
+
+Devpost imports first preserve known exported identities and confirmed links;
+then explicit project codes identify native repos or planning groups. The old
+conservative URL/exact-roster-plus-challenge matcher remains for uncoded exports.
+One shared email or title is never a project-link signal. Duplicate codes within
+one export do not arbitrarily pick a project. Imported-only projects remain
+repos, with recognized verified identities attached. Primary and verified
+secondary emails resolve to stable users.id; two aliases count once.
+Unknown identities are explicit issues, never guessed. Similar names suggest
+possible duplicates for review, without merging accounts.
+
+Before the deadline an import leaves participant editing open. A final import
+at/after hacking end snapshots and locks Devpost-backed entries with
+`devpost_deadline_import`; native submissions keep their own lock and snapshot.
+Previously reopened native submissions require resubmission and are not silently
+relocked by imports. Unsubmitted native drafts are retained as `not_submitted`;
+unlinked planning groups expose that effective state after the deadline.
+
+Planning and external participant sets stay separate. Linking no longer unions
+them. `project_reconciliation_state` computes distinct resolved people,
+unresolved addresses, roster differences, size violations and eligibility.
+Native-only membership is internal; imported-only membership is external;
+meaningful hybrid differences block judging of a non-imported project until an
+organizer selects a source or grants an explicit override. A project carrying a
+Devpost import identity (`devpost_import_url`) is always eligible (H21, H38):
+unresolved addresses, roster differences, size violations and a reopened draft
+stay visible as organizer review items but never exclude it from queues. Only
+an explicit organizer `eligibility_override=false` does; a reconciled-away
+source loses its import identity and keeps that override, so it stays
+ineligible while the target that received the import becomes eligible. The event maximum is configured by
+`PATCH /api/projects/submission-rules` with `maxTeamSize` (positive integer or
+null for no limit). Ordinary rule changes record actor/time and before/after
+values without a required reason. `POST /api/projects/:id/resolve` audits source
+selection, team-size exceptions and eligibility overrides with a reason. An
+eligibility grant snapshots and locks the administrative entry. Pending identity
+issues do not become harmless merely because a size exception is granted.
+Queue calls reuse H30 advisory locks and resolved identity membership, plus this
+eligibility guard; an unsubmitted/blocked project keeps its records and positions
+but cannot be called.
+
+The Projects list opens `/projects`; its secondary menu opens
+`/projects/reconciliation`, which prioritizes identity/membership/size/edit-request
+decisions and can display all projects,
+including native-only and unsubmitted planning records. The existing Unmatched
+screen remains the exact-email identity correction/invitation tool.
+`/api/projects/reconciliation` uses project-edit scope rather than leaking this
+administrative roster to sponsors. `/api/{me/}projects/:id/link-candidates` shows
+planning and native project targets with source participants; claims and links
+require a recognized Devpost identity plus membership in the selected internal
+project. Conflicts require organizer review. Confirmed consolidation preserves
+the old repo as an ineligible reconciled record and retains snapshots, moving
+the external identity to the existing target ID. Reimports preserve that choice,
+including after title or display-URL edits. A disputed claim is audited and
+surfaced to organizers without removing the imported record or silently altering
+its source roster.
+
+Limitations inherited deliberately: one event per deployment, one verified
+secondary address per account, coarse early/middle/late project preferences,
+and title-based deduplication for exports with no project URL. URL-less renamed
+submissions cannot be identified reliably without another stable external key.
+Judging is a dynamic collision-safe queue, not a fixed-slot appointment scheduler.
+
+Organizer `POST /api/projects/:id/unlink` corrects a mistaken relationship with a required audited reason, retains native snapshots and external records, and prevents automatic restoration on a later import. Existing judged records require correction through organizer tools rather than relinking.
+
+### Project web presentation (H17, H20, H38)
+
+Participant and management details use the content-width canvas with description
+and external links above team rows in the leading column, and challenges in the
+other column. The same bounded sections stack on narrow screens. Project lists
+retain their table surface with concise challenge/state rows, reserving full
+ETA/room details for project detail; the participant back arrow opens the
+complete list directly. Presentation rows align status, queue position and ETA; longer estimates
+use hours and minutes, and the row adapts to its available column width.
+
+The participant submission section leads with the submission state. Submitted
+entries additionally show authoritative judging eligibility or a review state
+from the submission read model, with concrete identity/team review notices below.
+Submission remains visible independently of participant-difference rendering.
+An unlocked, submitted Devpost entry is submitted, not reopened; reopening is a
+draft with a prior submission timestamp. Drafts retain the Devpost-first path, with
+native submission grouped as the secondary alternative beneath it. Metadata,
+demo, repository and Devpost links remain available. Linked imports retain the
+compact project code/copy action without instructions to link them again.
+
+Unmatched people are searchable by name, email, project or username and paginated
+in groups of ten. For an unmatched participant or an imported project roster
+member, opening the account picker loads suggestions from two bounded queries
+(the complete profile name and the email handle, 50 results each), ranked by
+exact email, accent-insensitive complete name and email handle. It preselects
+the top suggestion only when it is a complete-name or exact-email match with no
+tie at the top score and neither query hit its limit; once the operator types or
+chooses, nothing is preselected. Every link still needs the operator's explicit
+action. Manual name/email search (20 results) remains available. The minimal
+`GET /api/projects/member-candidates` read is authorized for either project editing
+or Devpost importing, rather than requiring general user-management access.
+Direct linking, secondary-email confirmation and account-claim mail remain
+separate explicit actions with their existing mutation authorization and audit.

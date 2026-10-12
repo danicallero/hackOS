@@ -20,3 +20,6 @@ example-csvs/
 *.ipa
 *.aab
 *.apk
+
+# Local Valkey persistence snapshot
+/dump.rdb

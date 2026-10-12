@@ -6,7 +6,7 @@ import { act } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LocaleProvider, useLocale } from "./i18n";
+import { LocaleProvider, translateMessage, useLocale } from "./i18n";
 import { useMe } from "./session";
 import type { Language } from "./types";
 
@@ -162,6 +162,37 @@ describe("LocaleProvider hydration", () => {
     "es",
     "gl",
     "en",
+  ] as const)("interpolates project codes and judging estimates in %s", async (language) => {
+    window.__hackosInitialLanguage = language;
+    const container = document.createElement("div");
+    document.body.append(container);
+    function LifecycleCopy() {
+      const { t } = useLocale();
+      return (
+        <div>
+          {t("projectDevpostCode", { code: "K7M4Q" })} {t("judgingClosesAt", { time: "18:00" })}{" "}
+          {t("judgingEstimatedCycle", { minutes: "12", count: "3" })}
+        </div>
+      );
+    }
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <LocaleProvider>
+          <LifecycleCopy />
+        </LocaleProvider>,
+      );
+    });
+    expect(container.textContent).toContain("K7M4Q");
+    expect(container.textContent).toContain("18:00");
+    expect(container.textContent).toContain("12");
+    expect(container.textContent).not.toMatch(/[{}]/);
+  });
+
+  it.each([
+    "es",
+    "gl",
+    "en",
   ] as const)("hydrates the static Spanish shell, clears the visibility gate, then transitions to %s", async (language) => {
     const browserWindow = globalThis.window;
     Object.defineProperty(globalThis, "window", { configurable: true, value: undefined });
@@ -240,5 +271,35 @@ describe("LocaleProvider kiosk guard", () => {
     const container = await renderLocalized();
 
     expect(container.textContent).toBe(welcome.en);
+  });
+});
+
+// H28: Wallet values must be interpolated rather than exposing template braces.
+describe("Wallet setting interpolation", () => {
+  it.each(["es", "gl", "en"] as const)("renders artwork dimensions in %s", (language) => {
+    expect(
+      translateMessage(language, "walletArtworkScale", { scale: 2, width: 640, height: 240 }),
+    ).toBe("2× · 640 × 240 px");
+    const delivery = translateMessage(language, "walletDeliveryCounts", {
+      sent: 3,
+      total: 8,
+      queued: 2,
+      failed: 1,
+      skipped: 2,
+    });
+    expect(delivery).not.toMatch(/[{}]/);
+    expect(delivery).toContain("3");
+    expect(delivery).toContain("8");
+  });
+});
+
+describe("result count grammar", () => {
+  it.each(["es", "gl", "en"] as const)("distinguishes one result in %s", (language) => {
+    expect(translateMessage(language, "tableResultCount", { count: 1 })).toBe(
+      language === "en" ? "1 result" : "1 resultado",
+    );
+    expect(translateMessage(language, "tableResultCount", { count: 2 })).toBe(
+      language === "en" ? "2 results" : "2 resultados",
+    );
   });
 });

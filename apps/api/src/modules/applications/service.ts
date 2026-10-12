@@ -681,10 +681,12 @@ export async function submitResponse(
              THEN 'present'
              ELSE 'not_provided'
            END,
+           -- #933: a form that asks for dietary data records an explicit answer.
+           dietary_confirmed_at = CASE WHEN $6 THEN now() ELSE dietary_confirmed_at END,
            shirt_size = COALESCE($4, shirt_size),
            dni = COALESCE($5, dni)
        WHERE id = $1`,
-      [userId, foodIntolerances, foodNotes, shirtSize ?? null, dni],
+      [userId, foodIntolerances, foodNotes, shirtSize ?? null, dni, app.ask_food_intolerances],
     );
 
     const autoAccept = !invited && existing.auto_accept_on_resubmit;

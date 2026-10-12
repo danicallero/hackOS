@@ -34,6 +34,7 @@ import {
   remindWaitingRoom,
   requeue,
   sendBackToWaiting,
+  setPresentationPaused,
   skipToEnd,
   startPresentation,
 } from "./service.js";
@@ -191,6 +192,33 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
     },
     async (req) => startPresentation(req.params.entryId, actor(req.userId)),
   );
+
+  // #926: same contextual judge authorization and replay contract as start.
+  for (const [action, paused] of [
+    ["pause-timer", true],
+    ["resume-timer", false],
+  ] as const) {
+    typed.post(
+      `/api/queue/entries/:entryId/${action}`,
+      {
+        preHandler: [judge, idempotencyGuard],
+        config: {
+          routeAccessPolicy: {
+            kind: "contextual",
+            policy: "queue-entry-judge",
+            resource: { source: "params", field: "entryId" },
+          },
+        },
+        schema: {
+          params: entryIdParam,
+          summary: paused ? "Pause presentation timer" : "Resume presentation timer",
+          description:
+            "Updates the authoritative presentation clock without changing queue status or room pause. Requires an active presentation; retries with the same idempotency key replay the original result.",
+        },
+      },
+      async (req) => setPresentationPaused(req.params.entryId, actor(req.userId), paused),
+    );
+  }
 
   typed.post(
     "/api/queue/entries/:entryId/complete",

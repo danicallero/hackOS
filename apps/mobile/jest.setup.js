@@ -1,6 +1,15 @@
 require("react-native-gesture-handler/jestSetup");
 
 jest.mock("react-native-worklets", () => require("react-native-worklets/src/mock"));
+// Native PDF renderer (#935 CV viewer): a plain view that keeps its props, so
+// tests can read the rendered source without the native module.
+jest.mock("react-native-pdf", () => {
+  const { View } = require("react-native");
+  return {
+    __esModule: true,
+    default: (props) => require("react").createElement(View, { ...props, testID: "cv-viewer-pdf" }),
+  };
+});
 jest.mock("react-native-reanimated", () => ({
   ...require("react-native-reanimated/mock"),
   useReducedMotion: () => false,
@@ -66,3 +75,19 @@ jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => {
       ),
   };
 });
+
+// #966: ActivityKit has no jest runtime. Live Activity factories behave like
+// a device where none are running and starting one is refused.
+jest.mock("expo-widgets", () => ({
+  createLiveActivity: () => ({
+    start: () => {
+      throw new Error("Live Activities are unavailable in tests");
+    },
+    getInstances: () => [],
+  }),
+  createWidget: () => ({ reload() {}, updateTimeline() {}, updateSnapshot() {} }),
+  addPushToStartTokenListener: () => ({ remove() {} }),
+  addUserInteractionListener: () => ({ remove() {} }),
+  after: (date) => ({ after: date }),
+  widgetsDirectory: "",
+}));

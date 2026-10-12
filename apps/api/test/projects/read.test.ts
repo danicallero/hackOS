@@ -136,7 +136,7 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
     expect(result.statusCode).toBe(200);
     expect(result.json().challenges[0]).toMatchObject({
       position: 2,
-      etaMinutes: 6,
+      etaMinutes: 10,
       rooms: [{ name: "Room A" }, { name: "Room B" }],
     });
   });

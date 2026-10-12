@@ -1,1 +1,1 @@
-export { default } from "../wallet";
+export { default } from "@/components/wallet-screen";

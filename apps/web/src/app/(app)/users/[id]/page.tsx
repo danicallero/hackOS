@@ -24,10 +24,12 @@ import { PhysicalActivity } from "./physical-activity";
 import { PresenceSection } from "./presence-tab";
 import { ProfileHeader } from "./profile-header";
 import { ProjectsTab } from "./projects-tab";
+import { PublicProfileTab } from "./public-profile-tab";
 import { QrTab } from "./qr-tab";
 
 const USER_TABS = [
   "overview",
+  "public-profile",
   "access",
   "attendance",
   "activity",
@@ -102,11 +104,12 @@ export default function UserProfilePage() {
 
   return (
     <PageLayout>
-      <ProfileHeader user={user} />
+      <ProfileHeader user={user} onPhotoChanged={load} />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar aria-label={t("profileSections")}>
           <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
+          <TabsTrigger value="public-profile">{t("publicProfileTitle")}</TabsTrigger>
           <TabsTrigger value="access">{t("accessTab")}</TabsTrigger>
           <TabsTrigger value="attendance">{t("attendanceTab")}</TabsTrigger>
           <TabsTrigger value="activity">{t("tabLogs")}</TabsTrigger>
@@ -116,6 +119,9 @@ export default function UserProfilePage() {
 
         <TabsContent value="overview" className="pt-2">
           <OverviewTab user={user} intolerances={intolerances} onUpdated={load} />
+        </TabsContent>
+        <TabsContent value="public-profile" className="pt-2">
+          <PublicProfileTab key={user.id} user={user} onUpdated={load} />
         </TabsContent>
         <TabsContent value="access" className="grid gap-6 pt-2 xl:grid-cols-2">
           <QrTab user={user} />

@@ -28,6 +28,7 @@ const SIZES = {
 export function Modal({
   open,
   onOpenChange,
+  onCloseAutoFocus,
   trigger,
   title,
   description,
@@ -42,6 +43,7 @@ export function Modal({
 }: {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  onCloseAutoFocus?: React.ComponentProps<typeof DialogContent>["onCloseAutoFocus"];
   trigger?: React.ReactNode;
   title: string;
   description?: string;
@@ -64,15 +66,16 @@ export function Modal({
     <Dialog open={open} onOpenChange={onOpenChange} modal={!(floatingContent && floatingFocus)}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent
+        onCloseAutoFocus={onCloseAutoFocus}
         className={cn(SIZES[size], className)}
         floatingContent={floatingContent}
         floatingFocus={floatingFocus}
       >
         <DialogHeader className={cn("shrink-0 pr-10", headerActions && "sm:pr-48 text-left")}>
           <div className="min-w-0 space-y-1.5">
-            <DialogTitle className="flex min-w-0 items-center gap-2">
-              {Icon && <Icon className="text-muted-foreground size-5" />}
-              <span className="min-w-0 break-words">{title}</span>
+            <DialogTitle className="heading-row flex min-w-0 items-center gap-2">
+              {Icon && <Icon className="text-muted-foreground size-5 shrink-0" />}
+              <span className="heading-label min-w-0 break-words">{title}</span>
             </DialogTitle>
             {description && (
               <DialogDescription className={cn("break-words", headerActions && "text-left")}>

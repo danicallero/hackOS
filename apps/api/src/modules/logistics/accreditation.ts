@@ -5,6 +5,7 @@ import { audit } from "../../lib/audit.js";
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assignAttendeeRole, hasEventAccess } from "../identity/role.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
+import { assertNotStandTag } from "../sponsors/stands.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
 import { loadPersonCard } from "./cards.js";
 import { scannerCredentialDigest } from "./credential-tombstones.js";
@@ -226,6 +227,7 @@ export async function checkInUser(
     }
 
     await assertNotTicketToken(client, input.badgeId);
+    await assertNotStandTag(client, input.badgeId);
     await assertBadgeNotRevoked(client, input.badgeId);
 
     const owner = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [input.badgeId]);
@@ -346,6 +348,7 @@ export async function rotateBadge(
     await assertFixtureSubjectScope(client, actorId, userId);
 
     await assertNotTicketToken(client, input.newBadgeId);
+    await assertNotStandTag(client, input.newBadgeId);
     await assertBadgeNotRevoked(client, input.newBadgeId);
 
     const owner = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [

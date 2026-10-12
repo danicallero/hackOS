@@ -45,6 +45,7 @@ queue no matter how many times scheduling runs (idempotent scheduling).
 | `presence-event-end-closer` | `logistics/presence-closer.ts` | **60 s** | once `event_config.event_ends_at` passes, force-closes every still-open door session with an audited `out` at that instant (`scanned_by NULL` = system actor, migration 0710), and finalizes pending account removals after that valid event-end exit or after the latest accrued H24 certainty window expires. An `out` outside the certainty window credits no hours; it restores the in/out invariant while the expiry path preserves only already-guaranteed minutes. |
 | `event-email-reminders` | `event/reminders.ts` | **15 s** | claims the pending pre-event email schedule, fans out to active real event-access holders, then records its queued recipient count; expired events are skipped |
 | `schedule-reminders` | `notifications/schedule-reminders.ts` | **15 s** | finds opted-in recipients for activities starting within the reminder lead time and records `reminded_at` after processing each due item, even when no channel is currently enabled |
+| `live-activities` | `live-activities/worker.ts` | **20 s** (+ a debounced early run 2 s after a queue change or call, a judging-window, schedule, event-timing or Live Activity settings edit; see [latency](./live-activities.md#latency)) | diffs each enabled device's desired Live Activities (organizer-configured kinds: H38 queue during the judging window, H25/H26 scannable activities for `activity:scan` holders, H59 opted-in schedule items for their audience, the H19 submission deadline, the H22 accreditation desk; ranked by kind priority and cut to `maxConcurrent` per device) against `live_activity_sessions` and sends APNs Live Activity / Android data pushes: start, update on change (counters throttled to 30 s; queue changes, phase changes and rescheduling immediate), end; iOS activities replaced before ActivityKit's 8-hour limit; one tick at a time via an advisory lock, every send behind an atomic row claim. See [Live Activities](./live-activities.md) |
 | `scheduled-visibility-publisher` | `challenges/visibility-publisher.ts` | **15 s** | reveals challenge visibility whose scheduled time has passed |
 | `schedule-visibility-publisher` | `logistics/schedule-publisher.ts` | **15 s** | reveals audience-tagged schedule items whose publish time has passed |
 
@@ -201,3 +202,52 @@ endpoints remain available for installed clients. Physical connection budgets
 and gauges count the shared response once; logical attachments and access-check
 load remain separate. See [realtime transport](./realtime-transport.md) for the
 scope/authorization table, lifecycle, revocation, metrics and 600-client results.
+
+
+## Shared track timing and ETA (H32/H38/H39)
+
+Track targets are stored on `challenges.target_seconds_per_team`, not per room.
+The migration backfills the strictest historical serving-room goal into each track.
+All rooms serving a challenge use one target; admins and assigned judges edit it
+before or during judging via `/api/queue/challenges/:challengeId/timing`.
+The legacy room target column remains for old clients, but is not the owner of
+new track pacing. A compatibility room-target PATCH updates the served tracks,
+so all of their rooms share the change rather than retaining independent goals. `preparation_seconds` is the initial setup allowance. Actual
+setup is Start presentation minus bring-in, falling back to call time for legacy
+entries. Bring-in stamps `queue_entries.room_entered_at`; reset transitions clear
+it. Completed presentation duration and setup averages are pooled across the
+shared queue's rooms, with at most 20 recent clean samples and a five-team prior.
+Merged challenges use the strictest target and largest setup allowance.
+
+`queue_group_timing()` owns the learned cycle estimate consumed by project,
+participant queue, pump notification and operator ETA paths. Active parallel
+rooms divide throughput. A shortened advisory judge goal due to closing-time
+pressure does not shorten this estimate. The judge sees the actual estimated
+finish, scheduled judging close and an overrun warning. Nothing automatically
+ends a presentation when its target expires. No new worker or cadence is added.
+The complete product clarifications live in the
+[project lifecycle audit](./project-lifecycle-audit.md).
+
+Presentation clocks (#926/#927) are entry-owned, independent of H35 room pause.
+Start captures the current effective room goal in `presentation_total_seconds`;
+the browser no longer freezes a goal that can change on reload. The goal is
+computed before the entry lock and no longer charges the starting team's own
+setup; if the room changed or its pace cannot be read, start falls back to the
+group's capped track target instead of failing. Pause/resume
+routes keep `presenting` and room occupancy, lock the entry, and persist
+`presentation_paused_at` plus accumulated `presentation_paused_seconds`.
+Elapsed presentation time is pause timestamp (or current time) minus the
+original start minus accumulated pauses. Each action writes one history row
+and a transactional audit, then broadcasts one queue invalidation. Duplicate
+state transitions conflict; the same idempotency key replays its response.
+Room pause still lets the current presentation finish and never stops its clock.
+The panel counts setup from `room_entered_at` while in-room and freezes that
+value at the original start, including after timer resumes. Unknown legacy
+entry times are omitted. Reset transitions, including project re-enqueue and challenge removal, clear
+the clock and setup fields. Completion (manual or by review submit) folds an
+open timer pause into `presentation_paused_seconds`.
+Learned cycle durations retain wall time, including interruptions, because
+those interruptions consume room throughput; active presentation estimates
+subtract paused duration. Migration 0407 initializes presentations still in `presenting`
+with the current capped track target, since their former browser-only goal
+cannot be recovered. No timer automatically ends a presentation.

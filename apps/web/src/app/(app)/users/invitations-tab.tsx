@@ -84,7 +84,7 @@ function statusLabel(status: InviteStatus, t: Translate): string {
 }
 
 /** The persistent invitation workspace (#777): one composer, one list, one inspector. */
-export function InvitationsScreen() {
+export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boolean }) {
   const { t } = useLocale();
   const copy = useCopyToClipboard();
   const [emails, setEmails] = useState<InviteListItem[]>([]);
@@ -103,7 +103,9 @@ export function InvitationsScreen() {
     setError(null);
     try {
       const [nextEmails, nextLinks, nextEnterpriseLinks] = await Promise.all([
-        api.get<InviteListItem[]>("/api/invites", { query: { status: "all" } }),
+        sponsorOnly
+          ? Promise.resolve([])
+          : api.get<InviteListItem[]>("/api/invites", { query: { status: "all" } }),
         api.get<UserInviteLink[]>("/api/invites/user-links"),
         api.get<EnterpriseInviteLink[]>("/api/invites/enterprise-links"),
       ]);
@@ -115,14 +117,15 @@ export function InvitationsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [sponsorOnly, t]);
   useEffect(() => void load(), [load]);
   useEffect(() => {
+    if (sponsorOnly) return;
     void api
       .get<RoleSummary[]>("/api/roles")
       .then(setRoles)
       .catch(() => setRoles([]));
-  }, []);
+  }, [sponsorOnly]);
 
   const roleNames = useMemo(
     () => new Map(roles.map((role) => [role.id, role.name] as const)),
@@ -323,7 +326,7 @@ export function InvitationsScreen() {
     <div className="space-y-6">
       <PageHeader
         title={t("invitationManagement")}
-        actions={<InviteUserDialog onChanged={load} />}
+        actions={<InviteUserDialog onChanged={load} sponsorOnly={sponsorOnly} />}
       />
       <Select
         value={statusFilter}

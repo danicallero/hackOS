@@ -9,12 +9,13 @@ import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { SectionCard } from "@/components/common/section-card";
+import { PAIRED_HEADER_CLASS, SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
 import { PresentationStatus } from "@/components/projects/presentation-status";
 import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
+import { ProjectLifecycle } from "@/components/projects/project-submission";
 import { WorkGroupEditor } from "@/components/projects/work-group-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,26 +89,13 @@ export default function MyProjectDetailPage() {
   if (loadError) return <ContextualError message={loadError} onRetry={load} />;
   if (!project) return <EmptyState icon={FolderSimpleIcon} title={t("projectNotFoundTitle")} />;
   return (
-    <PageLayout width="reading">
+    <PageLayout>
       <PageHeader
+        className="flex-row items-center justify-between gap-2 md:items-center [&>[data-slot=action-group]]:shrink-0 [&>[data-slot=action-group]]:flex-nowrap"
         title={project.name}
-        meta={
-          project.presentation_timing_preference && (
-            <span className="text-sm text-muted-foreground">
-              {t("workGroupTiming")}:{" "}
-              {project.presentation_timing_preference === "early"
-                ? t("workGroupTimingEarly")
-                : project.presentation_timing_preference === "middle"
-                  ? t("workGroupTimingMiddle")
-                  : project.presentation_timing_preference === "late"
-                    ? t("workGroupTimingLate")
-                    : t("workGroupTimingNone")}
-            </span>
-          )
-        }
         secondaryActions={<ProjectNavigation />}
         primaryAction={
-          group ? (
+          project.locked_at ? undefined : group ? (
             <WorkGroupEditor
               key={JSON.stringify([
                 project.name,
@@ -131,94 +119,137 @@ export default function MyProjectDetailPage() {
           )
         }
       />
-      <ProjectDescriptionLinks
-        description={project.description}
-        links={{
-          devpostUrl: project.devpost_url,
-          demoUrl: project.demo_url,
-          githubUrl: project.github_url,
-        }}
-      />
-      <div className="grid gap-8 xl:grid-cols-3 xl:gap-12">
-        <SectionCard
-          variant="plain"
-          title={t("teamSectionTitle")}
-          action={<InviteMember projectId={project.id} onInvited={load} />}
-        >
-          <ul className="divide-y divide-border/60">
-            {project.members.map((member, index) => (
-              <li
-                className="py-2 text-sm font-medium"
-                key={`${member.userId ?? "devpost"}:${member.email ?? index}`}
-              >
-                {memberName(member) || t("unnamedTeamMember")}
-              </li>
-            ))}
-          </ul>
-        </SectionCard>
-        <SectionCard
-          variant="plain"
-          className="xl:col-span-2"
-          title={t("challenges")}
-          action={<AddChallenge project={project} challenges={challenges} onAdded={load} />}
-        >
-          <ul className="divide-y divide-border/60">
-            {project.challenges.map((challenge) => (
-              <li
-                className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0"
-                key={challenge.id}
-              >
-                <div className="min-w-0 space-y-2">
-                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <h3 className="text-base font-medium text-balance">
-                      {challengeTitleText(challenge.title)}
-                    </h3>
-                    {challenge.mandatory && (
-                      <span className="text-xs text-muted-foreground">
-                        {t("mandatoryChallengeLabel")}
-                      </span>
-                    )}
-                  </div>
-                  {challenge.status ? (
-                    <PresentationStatus {...challenge} />
-                  ) : (
-                    <p className="text-sm text-muted-foreground">{t("plannedChallenge")}</p>
-                  )}
-                </div>
-                {challenge.mandatory ? null : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={removingChallenge !== null}
-                    onClick={async () => {
-                      setRemovingChallenge(challenge.id);
-                      setChangeError(null);
-                      try {
-                        await removeMyProjectChallenge(
-                          project.id,
-                          challenge.id,
-                          crypto.randomUUID(),
-                        );
-                        await load();
-                      } catch (error) {
-                        setChangeError(
-                          error instanceof ApiError ? error.message : t("couldNotRemoveChallenge"),
-                        );
-                      } finally {
-                        setRemovingChallenge(null);
-                      }
-                    }}
-                    loading={removingChallenge === challenge.id}
+      <ProjectLifecycle
+        key={JSON.stringify([project.locked_at, project.submission_status])}
+        id={project.id}
+        name={project.name}
+        stage="projects"
+        code={project.reconciliation_code}
+        onChanged={load}
+      >
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="min-w-0 space-y-4">
+            <SectionCard title={t("projectDetailsTitle")}>
+              <ProjectDescriptionLinks
+                description={project.description}
+                links={{
+                  devpostUrl: project.devpost_url,
+                  demoUrl: project.demo_url,
+                  githubUrl: project.github_url,
+                }}
+              />
+            </SectionCard>
+
+            <SectionCard
+              title={t("teamSectionTitle")}
+              headerClassName={PAIRED_HEADER_CLASS}
+              action={
+                !project.locked_at ? (
+                  <InviteMember projectId={project.id} onInvited={load} />
+                ) : undefined
+              }
+            >
+              <ul className="divide-y divide-border/60">
+                {project.members.map((member, index) => (
+                  <li
+                    className="py-2 text-sm font-medium"
+                    key={`${member.userId ?? "devpost"}:${member.email ?? index}`}
                   >
-                    {t("remove")}
-                  </Button>
+                    {memberName(member) || t("unnamedTeamMember")}
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          </div>
+          <SectionCard
+            title={t("challenges")}
+            headerClassName={PAIRED_HEADER_CLASS}
+            action={
+              !project.locked_at ? (
+                <AddChallenge project={project} challenges={challenges} onAdded={load} />
+              ) : undefined
+            }
+          >
+            {project.challenges.length === 0 && (
+              <p className="text-sm text-muted-foreground">{t("noChallenges")}</p>
+            )}
+            <ul className="divide-y divide-border/60">
+              {project.challenges.map((challenge) => (
+                <li
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-2 py-4 first:pt-0 last:pb-0"
+                  key={challenge.id}
+                >
+                  <div className="contents">
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <h3 className="text-base font-medium text-balance">
+                        {challengeTitleText(challenge.title)}
+                      </h3>
+                      {challenge.mandatory && (
+                        <span className="text-xs text-muted-foreground">
+                          {t("mandatoryChallengeLabel")}
+                        </span>
+                      )}
+                    </div>
+                    <div className="col-span-full row-start-2 min-w-0">
+                      {challenge.status ? (
+                        <PresentationStatus {...challenge} />
+                      ) : (
+                        <p className="text-sm text-muted-foreground">{t("plannedChallenge")}</p>
+                      )}
+                    </div>
+                  </div>
+                  {challenge.mandatory || project.locked_at ? null : (
+                    <Button
+                      className="col-start-2 row-start-1"
+                      size="sm"
+                      variant="outline"
+                      disabled={removingChallenge !== null}
+                      onClick={async () => {
+                        setRemovingChallenge(challenge.id);
+                        setChangeError(null);
+                        try {
+                          await removeMyProjectChallenge(
+                            project.id,
+                            challenge.id,
+                            crypto.randomUUID(),
+                          );
+                          await load();
+                        } catch (error) {
+                          setChangeError(
+                            error instanceof ApiError
+                              ? error.message
+                              : t("couldNotRemoveChallenge"),
+                          );
+                        } finally {
+                          setRemovingChallenge(null);
+                        }
+                      }}
+                      loading={removingChallenge === challenge.id}
+                    >
+                      {t("remove")}
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <dl className="flex flex-wrap justify-between gap-2 border-t border-border pt-4 text-sm">
+              <dt className="text-muted-foreground">{t("workGroupTiming")}</dt>
+              <dd className="font-medium">
+                {t(
+                  project.presentation_timing_preference === "early"
+                    ? "workGroupTimingEarly"
+                    : project.presentation_timing_preference === "middle"
+                      ? "workGroupTimingMiddle"
+                      : project.presentation_timing_preference === "late"
+                        ? "workGroupTimingLate"
+                        : "workGroupTimingNone",
                 )}
-              </li>
-            ))}
-          </ul>
-          {changeError && <ContextualError message={changeError} />}
-        </SectionCard>
-      </div>
+              </dd>
+            </dl>
+            {changeError && <ContextualError message={changeError} />}
+          </SectionCard>
+        </div>
+      </ProjectLifecycle>
     </PageLayout>
   );
 }
@@ -234,6 +265,7 @@ function AddChallenge({
 }) {
   const { t } = useLocale();
   const [selected, setSelected] = useState("");
+  const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const available = challenges.filter(
     (challenge) => !project.challenges.some((item) => item.id === challenge.id),
@@ -244,6 +276,7 @@ function AddChallenge({
     try {
       await addMyProjectChallenge(project.id, Number(selected), crypto.randomUUID());
       setSelected("");
+      setOpen(false);
       await onAdded();
     } catch (error) {
       toast.error(
@@ -256,6 +289,8 @@ function AddChallenge({
   }
   return (
     <SidePanelEditor
+      open={open}
+      onOpenChange={setOpen}
       trigger={
         <Button size="sm" variant="outline">
           {t("addChallenge")}

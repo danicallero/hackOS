@@ -16,6 +16,7 @@ import {
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { idempotencyGuard, replayCompletedIdempotency } from "../../../lib/idempotency.js";
+import { photoUrl } from "../../../lib/profile-files.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { assertFixtureSubjectScope } from "../../logistics/review-fixture-scope.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
@@ -24,6 +25,7 @@ import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliati
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
 import { getBetterAuthSessionToken } from "../auth.js";
+import { hasPendingMealPlan } from "../meal-plan.js";
 import {
   cancelPendingAccountRemoval,
   getAccountRemovalEligibility,
@@ -70,7 +72,6 @@ const selfPatchSchema = z
     name: z.string().min(1).max(200).optional(),
     surname: z.string().min(1).max(200).optional(),
     language: z.enum(LANGUAGES).optional(),
-    image: z.string().max(2000).nullable().optional(),
     universityId: z.number().int().nullable().optional(),
     // Logistics data a participant owns and manages on their own settings page.
     foodIntolerances: z.array(z.number().int()).optional(),
@@ -93,7 +94,6 @@ const COLUMN_BY_FIELD: Record<string, string> = {
   name: "name",
   surname: "surname",
   language: "language",
-  image: "image",
   foodIntolerances: "food_intolerances",
   foodIntoleranceNotes: "food_intolerance_notes",
   shirtSize: "shirt_size",
@@ -171,6 +171,7 @@ const userResponseSchema = z.object({
   emailVerified: z.boolean(),
   name: z.string().nullable(),
   surname: z.string().nullable(),
+  // #934: the authenticated photo route, never a storage or public bucket URL.
   image: z.string().nullable(),
   dni: z.string().nullable(),
   badgeId: z.string().nullable(),
@@ -180,6 +181,8 @@ const userResponseSchema = z.object({
   foodIntolerances: z.array(z.number()),
   foodIntoleranceNotes: z.string().nullable(),
   dietaryDataState: z.enum(DIETARY_DATA_STATES),
+  // #933: last explicit dietary answer, including "no restrictions".
+  dietaryConfirmedAt: z.string().nullable(),
   shirtSize: z.string().nullable(),
   universityId: z.number().nullable(),
   notes: z.string().nullable(),
@@ -188,6 +191,8 @@ const userResponseSchema = z.object({
   removal: accountRemovalProfileStateSchema.nullable(),
   createdAt: z.string(),
 });
+
+const PENDING_PROFILE_TASKS = ["dietary", "meal_plan"] as const;
 
 const userProjectSchema = z.object({
   id: z.number(),
@@ -211,7 +216,7 @@ interface UserRow {
   email_verified: boolean;
   name: string | null;
   surname: string | null;
-  image: string | null;
+  photo_key: string | null;
   dni: string | null;
   badge_id: string | null;
   language: string;
@@ -220,6 +225,7 @@ interface UserRow {
   food_intolerances: number[];
   food_intolerance_notes: string | null;
   dietary_data_state: (typeof DIETARY_DATA_STATES)[number];
+  dietary_confirmed_at: Date | null;
   shirt_size: string | null;
   university_id: number | null;
   notes: string | null;
@@ -256,7 +262,7 @@ function serializeUser(row: UserRow, removalStatus?: PendingAccountRemovalStatus
     emailVerified: row.email_verified,
     name: row.name,
     surname: row.surname,
-    image: row.image,
+    image: photoUrl(row.id, row.photo_key),
     dni: row.dni,
     badgeId: row.badge_id,
     language: row.language,
@@ -265,6 +271,7 @@ function serializeUser(row: UserRow, removalStatus?: PendingAccountRemovalStatus
     foodIntolerances: row.food_intolerances,
     foodIntoleranceNotes: row.food_intolerance_notes,
     dietaryDataState: row.dietary_data_state,
+    dietaryConfirmedAt: row.dietary_confirmed_at?.toISOString() ?? null,
     shirtSize: row.shirt_size,
     universityId: row.university_id,
     notes: row.notes,
@@ -363,10 +370,13 @@ async function applyUserPatch(
                     OR NULLIF(BTRIM(food_intolerance_notes), '') IS NOT NULL
                   THEN 'present'
                   ELSE 'not_provided'
-                END
+                END,
+                -- #933: the person's own dietary save is an answer, even an empty
+                -- one; a staff edit is not their confirmation.
+                dietary_confirmed_at = CASE WHEN $2 THEN now() ELSE dietary_confirmed_at END
           WHERE id = $1
           RETURNING *`,
-        [targetId],
+        [targetId, actorId === targetId],
       ));
     }
     const after = afterRows[0] as UserRow;
@@ -459,7 +469,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "accounts (H55), whether they currently hold role-derived event access, whether they have a project/queue entry of their own " +
           "(drives hiding the My project/My queue nav items, issue #424), mobile " +
           "entry eligibility, and the caller's complete assigned-role set (H8) alongside " +
-          "the single highest-visible `visibleRoleName` shown elsewhere. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
+          "the single highest-visible `visibleRoleName` shown elsewhere. `pendingProfileTasks` " +
+          "(#933) lists what to ask for on next entry: `dietary` when the caller has event access " +
+          "but never gave an explicit dietary answer and the profile is not locked (H7), `meal_plan` when a sponsor representative " +
+          "has an open offered meal without an answer. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
@@ -501,6 +514,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // form greys them out and points the participant at staff.
             profileLocked: z.boolean(),
             hasStatisticsPanels: z.boolean(),
+            // #933: profile data the client should ask for on next entry.
+            pendingProfileTasks: z.array(z.enum(PENDING_PROFILE_TASKS)),
           }),
         },
       },
@@ -555,6 +570,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           getAssignedRoles(client, userId),
           hasEventAccess(client, userId),
         ]);
+        const pendingProfileTasks: (typeof PENDING_PROFILE_TASKS)[number][] = [];
+        // H7: a locked profile cannot change its dietary data, so don't ask for it.
+        if (eventAccess && !profileLocked && row.dietary_confirmed_at === null) {
+          pendingProfileTasks.push("dietary");
+        }
+        if (membership.isSponsorRep && (await hasPendingMealPlan(client, userId))) {
+          pendingProfileTasks.push("meal_plan");
+        }
         return {
           ...serializeUser(row, removalStatus),
           visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
@@ -567,6 +590,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           canCreateProject,
           profileLocked,
           hasStatisticsPanels,
+          pendingProfileTasks,
         };
       });
       return profile;
@@ -581,6 +605,13 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       // verification; event transactions are guarded by the shared default.
       config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
+        summary: "Update my profile",
+        description:
+          "Self-service profile edit. H7: once an application has been accepted, changing name, " +
+          "surname, shirt size or dietary data is 409 `profile_locked` (resubmitting unchanged " +
+          "values is allowed). Sending `foodIntolerances` or `foodIntoleranceNotes` records an " +
+          "explicit dietary answer (#933) — an empty list counts — and clears the `dietary` " +
+          "pending profile task.",
         body: selfPatchSchema,
         response: { 200: userResponseSchema },
       },
@@ -815,7 +846,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List and search users",
         description:
-          '`q` matches name, surname, "name surname"/"surname name", email, badge id, or DNI as a case-insensitive, accent-insensitive substring.',
+          '`q` matches name, surname, "name surname"/"surname name", email, badge id, or DNI as a case-insensitive, accent-insensitive substring. `image` is the authenticated account-photo route (#934), or null without a photo.',
         querystring: z.object({
           q: z.string().optional(),
           limit: z.coerce.number().int().min(1).max(200).default(50),
@@ -830,6 +861,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 emailVerified: z.boolean(),
                 name: z.string().nullable(),
                 surname: z.string().nullable(),
+                image: z.string().nullable(),
                 badgeId: z.string().nullable(),
                 visibleRoleName: z.string().nullable(),
                 language: z.string(),
@@ -872,7 +904,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       // getHighestVisibleRoleName() calls), the same view logistics/stats.ts
       // and scanner-sync.ts use.
       const { rows } = await pool.query<UserRow & { role: string | null }>(
-        `SELECT u.id, u.email, u.email_verified, u.name, u.surname, u.badge_id, u.language,
+        `SELECT u.id, u.email, u.email_verified, u.name, u.surname, u.photo_key, u.badge_id, u.language,
                 u.shirt_size, u.food_intolerances, u.food_intolerance_notes,
                 u.is_test_account, u.created_at,
                 uern.role_name AS role
@@ -919,6 +951,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         emailVerified: r.email_verified,
         name: r.name,
         surname: r.surname,
+        image: photoUrl(r.id, r.photo_key),
         badgeId: r.badge_id,
         visibleRoleName: r.role,
         language: r.language,

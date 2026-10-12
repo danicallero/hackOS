@@ -78,9 +78,8 @@ export function ApplicationStatusActions({
 
       {status === "confirmed" && (
         <SectionCard icon={CheckCircleIcon} title={t("placeConfirmed")}>
-          <p className="text-muted-foreground text-sm">{t("canReleaseAnytime")}</p>
           <div className="flex flex-wrap gap-2">
-            <Button asChild>
+            <Button asChild className="w-full sm:w-auto">
               <Link href="/wallet">
                 <WalletIcon aria-hidden="true" />
                 {t("viewTicket")}

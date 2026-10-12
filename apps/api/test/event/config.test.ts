@@ -396,6 +396,34 @@ describe("event config (H45/H47)", () => {
     expect(pub.json().shirtSizes).toEqual(["S", "M", "L", "3XL"]);
   });
 
+  it("reorders shirt sizes without touching assigned values, but refuses to drop one in use (H12)", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.INTOLERANCES_MANAGE]);
+    const holder = await createUser();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET shirt_size = 'XL' WHERE id = $1`, [holder]);
+    const put = (shirtSizes: string[]) =>
+      a.inject({
+        method: "PUT",
+        url: "/api/event",
+        headers: { ...asUser(manager), "idempotency-key": crypto.randomUUID() },
+        payload: { shirtSizes },
+      });
+
+    const reordered = await put(["XXL", "XL", "L", "M", "S", "XS"]);
+    expect(reordered.statusCode).toBe(200);
+    expect(reordered.json().shirtSizes).toEqual(["XXL", "XL", "L", "M", "S", "XS"]);
+    const { rows } = await pool.query(`SELECT shirt_size FROM users WHERE id = $1`, [holder]);
+    expect(rows[0].shirt_size).toBe("XL");
+
+    const dropped = await put(["XXL", "L", "M", "S", "XS"]);
+    expect(dropped.statusCode).toBe(409);
+    expect(dropped.json().error.details.shirtSizesInUse).toEqual([{ value: "XL", count: 1 }]);
+
+    // Unused sizes can still be removed.
+    expect((await put(["XXL", "XL", "L"])).statusCode).toBe(200);
+  });
+
   it("round-trips the sponsor/staff invite-claim requirements via INVITES_MANAGE (H10)", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.INVITES_MANAGE]);

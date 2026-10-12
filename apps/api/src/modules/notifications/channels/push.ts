@@ -1,3 +1,4 @@
+import { isLiveActivityPushCategory } from "@hackos/shared/live-activities";
 import { config } from "../../../config.js";
 import type { Queryable } from "../../../db/pool.js";
 import { QUEUE_CATEGORY, QUEUE_STAFF_CATEGORY } from "../service.js";
@@ -6,10 +7,11 @@ import { normalizeLanguage, renderPushTemplate } from "../templates.js";
 import { assertOkResponse } from "./http.js";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+const EXPO_REQUEST_TIMEOUT_MS = 15_000;
 const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
 const EXPO_RECEIPT_POLL_DELAYS_MS = [0, 1_000, 3_000] as const;
 
-interface ExpoTicket {
+export interface ExpoTicket {
   status: "ok" | "error";
   id?: string;
   message?: string;
@@ -38,6 +40,93 @@ function stringifyUnsafe(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+/**
+ * One Expo push message. Data-only messages (no title/body) reach the app's
+ * background notification task instead of the system tray — the Android
+ * Live Update channel (#966) relies on that.
+ */
+export interface ExpoPushMessage {
+  to: string;
+  title?: string;
+  body?: string;
+  data?: Record<string, unknown>;
+  channelId?: string;
+  priority?: "default" | "normal" | "high";
+  interruptionLevel?: "active" | "critical" | "passive" | "time-sensitive";
+  sound?: "default";
+  _contentAvailable?: boolean;
+}
+
+/**
+ * POSTs one batch to Expo's push API and returns its tickets, index-aligned
+ * with `messages`. Shared by the notification channel (H51, H55) and the
+ * Android Live Update sender (#966) so both get the same failure handling:
+ * network errors become a fixed message (never the token, URL or body) and
+ * non-2xx responses throw via assertOkResponse.
+ */
+export async function postExpoPushMessages(
+  messages: ExpoPushMessage[],
+  log: { userId?: number; category?: string; payload?: unknown } = {},
+): Promise<ExpoTicket[]> {
+  const { userId, category, payload } = log;
+  if (config.logExpoPushUnsafeDebug) {
+    console.warn(
+      "Expo push request (unsafe debug)",
+      stringifyUnsafe({ userId, category, payload, messages }),
+    );
+  }
+
+  // undici surfaces network/DNS failures as a bare `TypeError: fetch failed`
+  // whose real reason (EAI_AGAIN, ECONNRESET, timeout, …) lives on `.cause`.
+  // Unwrap it so the outbox `last_error` names the actual failure instead of
+  // an opaque "fetch failed" that hides e.g. a container DNS misconfiguration.
+  const res = await fetch(EXPO_PUSH_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(messages),
+    // A hung request must fail, not stall its caller: the Live Activity tick
+    // (#966) holds its single-runner lock until every send returns.
+    signal: AbortSignal.timeout(EXPO_REQUEST_TIMEOUT_MS),
+  }).catch((err: unknown) => {
+    if (config.logExpoPushUnsafeDebug) {
+      console.error(
+        "Expo push request failed (unsafe debug)",
+        stringifyUnsafe({
+          userId,
+          category,
+          error:
+            err instanceof Error ? { name: err.name, message: err.message, cause: err.cause } : err,
+        }),
+      );
+    }
+    // The error is persisted by the outbox dispatcher. Do not copy a provider
+    // exception, token, URL, or request body into that durable history.
+    void err;
+    throw new Error("Expo push request failed");
+  });
+  if (!res.ok && config.logExpoPushUnsafeDebug) {
+    console.error("Expo push HTTP response (unsafe debug)", {
+      userId,
+      category,
+      status: res.status,
+      body: await res
+        .clone()
+        .text()
+        .catch(() => "<unreadable response body>"),
+    });
+  }
+  await assertOkResponse(res, "Expo push");
+
+  const json = (await res.json()) as { data?: ExpoTicket[] };
+  if (config.logExpoPushUnsafeDebug) {
+    console.warn(
+      "Expo push response (unsafe debug)",
+      stringifyUnsafe({ userId, category, response: json }),
+    );
+  }
+  return json.data ?? [];
 }
 
 async function fetchExpoReceipts(
@@ -207,61 +296,12 @@ export async function dispatchPush(
     data,
     channelId: "default",
     ...timeSensitive,
+    // #966: wakes a backgrounded iOS app so it refreshes its Live
+    // Activities itself when their APNs update is late. Ignored on Android.
+    ...(isLiveActivityPushCategory(category) ? { _contentAvailable: true } : {}),
   }));
 
-  if (config.logExpoPushUnsafeDebug) {
-    console.warn(
-      "Expo push request (unsafe debug)",
-      stringifyUnsafe({ userId, category, payload, messages }),
-    );
-  }
-
-  // undici surfaces network/DNS failures as a bare `TypeError: fetch failed`
-  // whose real reason (EAI_AGAIN, ECONNRESET, timeout, …) lives on `.cause`.
-  // Unwrap it so the outbox `last_error` names the actual failure instead of
-  // an opaque "fetch failed" that hides e.g. a container DNS misconfiguration.
-  const res = await fetch(EXPO_PUSH_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify(messages),
-  }).catch((err: unknown) => {
-    if (config.logExpoPushUnsafeDebug) {
-      console.error(
-        "Expo push request failed (unsafe debug)",
-        stringifyUnsafe({
-          userId,
-          category,
-          error:
-            err instanceof Error ? { name: err.name, message: err.message, cause: err.cause } : err,
-        }),
-      );
-    }
-    // The error is persisted by the outbox dispatcher. Do not copy a provider
-    // exception, token, URL, or request body into that durable history.
-    void err;
-    throw new Error("Expo push request failed");
-  });
-  if (!res.ok && config.logExpoPushUnsafeDebug) {
-    console.error("Expo push HTTP response (unsafe debug)", {
-      userId,
-      category,
-      status: res.status,
-      body: await res
-        .clone()
-        .text()
-        .catch(() => "<unreadable response body>"),
-    });
-  }
-  await assertOkResponse(res, "Expo push");
-
-  const json = (await res.json()) as { data?: ExpoTicket[] };
-  if (config.logExpoPushUnsafeDebug) {
-    console.warn(
-      "Expo push response (unsafe debug)",
-      stringifyUnsafe({ userId, category, response: json }),
-    );
-  }
-  const tickets = json.data ?? [];
+  const tickets = await postExpoPushMessages(messages, { userId, category, payload });
 
   let firstError: string | undefined;
   let delivered = 0;

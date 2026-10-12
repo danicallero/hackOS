@@ -19,6 +19,8 @@ export interface Enterprise {
   visibility: Visibility;
   available_from: string | null;
   director_id: number | null;
+  /** #935: attendees can collect this stand by scanning it (staff-controlled). */
+  stand_scannable: boolean;
   created_at: string;
 }
 
@@ -44,24 +46,33 @@ export function isScheduled(availableFrom: string | null): boolean {
   return !Number.isNaN(at.getTime()) && at.getTime() > Date.now();
 }
 
-export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-}
+export { initials } from "@/lib/initials";
+
+export type EnterpriseTab = "profile" | "challenges" | "judges" | "members" | "stand";
+
+/** Removed tabs keep old deep links working (#928, #929). */
+export const ENTERPRISE_TAB_ALIASES: Partial<Record<string, EnterpriseTab>> = {
+  overview: "profile",
+  invitations: "profile",
+};
 
 /**
- * The next missing action for a company profile, in priority order (H44).
- * One direct next step, not an enumeration of every filled field — audit §4.3.
+ * Challenges list only what a manager or the enterprise's own rep can load;
+ * anyone else would get an empty tab (H43, H44). Reps also generate their own
+ * stand tags (#935); the page itself only loads for their own enterprise.
  */
-export type EnterpriseNextAction = "addLogo" | "addWebsite" | "addDescription" | null;
-
-export function enterpriseNextAction(
-  enterprise: Pick<Enterprise, "logo_url" | "website" | "description">,
-): EnterpriseNextAction {
-  if (!enterprise.logo_url) return "addLogo";
-  if (!enterprise.website) return "addWebsite";
-  if (!enterprise.description?.trim()) return "addDescription";
-  return null;
+export function enterpriseTabs({
+  canManage,
+  isSponsorRep,
+}: {
+  canManage: boolean;
+  isSponsorRep: boolean;
+}): EnterpriseTab[] {
+  return [
+    "profile",
+    ...(canManage || isSponsorRep ? (["challenges"] as const) : []),
+    "judges",
+    ...(canManage ? (["members"] as const) : []),
+    ...(canManage || isSponsorRep ? (["stand"] as const) : []),
+  ];
 }

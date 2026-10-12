@@ -8,6 +8,7 @@ import { TranslateIcon } from "@phosphor-icons/react/dist/csr/Translate";
 import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import Link from "next/link";
 import { useTheme } from "next-themes";
+import { UserAvatar } from "@/components/common/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -36,6 +37,7 @@ export function UserMenu({ className }: { className?: string }) {
   const { setTheme, theme } = useTheme();
   const { state: sidebarState } = useSidebar();
   if (!me) return null;
+  const displayName = [me.name, me.surname].filter(Boolean).join(" ") || me.email;
 
   async function handleSignOut() {
     await signOut();
@@ -50,15 +52,25 @@ export function UserMenu({ className }: { className?: string }) {
         <Button
           variant="ghost"
           size="sm"
+          aria-label={me.name ? `${me.name} ${me.email}` : me.email}
           className={cn(
             "h-auto min-h-[var(--control-height-default)] flex-1 justify-start gap-2 px-2 py-1 text-left group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0!",
             className,
           )}
         >
-          <UserIcon
-            aria-hidden="true"
-            className="hidden size-4 group-data-[collapsible=icon]:block"
-          />
+          {me.image ? (
+            <UserAvatar
+              decorative
+              name={displayName}
+              image={me.image}
+              className="size-7 group-data-[collapsible=icon]:size-6"
+            />
+          ) : (
+            <UserIcon
+              aria-hidden="true"
+              className="hidden size-4 group-data-[collapsible=icon]:block"
+            />
+          )}
           <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
             <span className="block truncate text-sm font-medium">{me.name ?? me.email}</span>
             <span className="text-muted-foreground block truncate text-xs">{me.email}</span>
@@ -66,13 +78,16 @@ export function UserMenu({ className }: { className?: string }) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={8} className="ml-2 w-56">
-        <DropdownMenuLabel className="flex flex-col">
-          <span className="truncate">
-            {me.name} {me.surname}
-          </span>
-          <span className="text-muted-foreground truncate text-xs font-normal">{me.email}</span>
-          <span className="text-muted-foreground mt-1 text-xs font-normal capitalize">
-            {me.visibleRoleName}
+        <DropdownMenuLabel className="flex items-center gap-3">
+          {me.image ? (
+            <UserAvatar decorative name={displayName} image={me.image} className="size-10" />
+          ) : null}
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate">{displayName}</span>
+            <span className="text-muted-foreground truncate text-xs font-normal">{me.email}</span>
+            <span className="text-muted-foreground mt-1 text-xs font-normal capitalize">
+              {me.visibleRoleName}
+            </span>
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />

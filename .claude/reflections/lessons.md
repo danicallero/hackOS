@@ -142,7 +142,7 @@ action may intentionally change scroll position.
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-09-15
+Date: 2026-10-09
 
 ### Trigger
 When the user asks for delegated subagents with a named Codex model.
@@ -156,8 +156,13 @@ Delegation is part of the requested workflow: use the named model and launch
 mode exactly, while keeping each delegated task narrowly scoped.
 
 ### Action
-Launch delegated Luna work with `codex --yolo -m gpt-5.6-luna` and verify the
-session reports that model before relying on its result.
+Match the user’s requested model and effort and verify the effective launch
+receipt before relying on the worker. Sol workers must use `low` effort: higher
+effort exhausts the shared token budget. Choose a current lightweight model for
+reading and inventory tasks. Do not carry an old model generation forward
+when the user asks for the latest available generation. For an already running
+Codex worker, interrupt and use `/model` to change model or effort in place;
+do not kill and relaunch the session just to change these settings.
 
 ### Validation
 Inspect the spawned session header or command output for the requested model,
@@ -199,8 +204,10 @@ Inspect real desktop and narrow screenshots, including a single record,
 multiple records, and independent simultaneous states.
 
 ### Exceptions
-Dense operational tables, overlays and truly selectable/bounded objects still
-justify surfaces; meaningful changing states still justify status badges.
+Distinct participant contexts (project details, team, judging and delivery)
+justify section surfaces when open sections fail to communicate ownership.
+Keep their contents as rows rather than nested cards. Dense operational tables,
+overlays and truly selectable/bounded objects still justify surfaces; meaningful changing states still justify status badges.
 
 ## [R007] Review feedback copy at its call sites
 
@@ -346,7 +353,10 @@ in status copy.
 
 ### Action
 Use the existing category form and save transaction. Match adjacent sections'
-heading hierarchy and control spacing. Keep audience copy brief.
+heading hierarchy and control spacing. Keep audience copy brief. Auditing ordinary
+configuration must not create a mandatory justification field: record actor,
+time and changed values automatically. Reserve requested reasons for actual
+exceptions or decisions whose policy requires them.
 
 ### Validation
 Capture the section with the common Save changes footer and test that an
@@ -521,7 +531,7 @@ Controls deliberately lacking hover behavior, including touch-only surfaces.
 Status: active
 Scope: module:web
 Source: user-correction
-Date: 2026-10-05
+Date: 2026-10-08
 
 ### Trigger
 Building or applying a shared page/surface pattern across web routes.
@@ -536,7 +546,9 @@ Choose width by the content being shown, not by whether the route is called a
 detail page. Shared patterns need representative content and rendered review.
 
 ### Action
-Use the audited Users layout as the dense-list reference. Keep mixed record
+Use the audited Users and application Responses layouts as the dense-list references.
+Reuse their actual ListToolbar, FilterMenu and DataTable compositions rather
+than reproducing them with loosely aligned buttons and repeated detail blocks. Keep mixed record
 pages wide enough for their table tabs, constrain only text/form groups, and
 verify the last column. Preview meaningful groups instead of filler fields.
 Put save state at the leading edge, secondary actions then Save at the trailing
@@ -553,6 +565,10 @@ ownership, question boundaries and an explicit drop destination.
 
 ### Validation
 Inspect actual desktop/narrow screenshots before claiming visual quality.
+Compare new screens directly with those maintained references; passing flows
+and having screenshots are not evidence that hierarchy or alignment is good.
+Also compare the narrow header action row with Users; preserve its inline
+layout, reducing labelled edit actions to accessible icons when necessary.
 Check table geometry, useful field hierarchy, action order, pending feedback
 and panel widths. Recheck each route after a shared pattern changes.
 
@@ -620,3 +636,165 @@ Wallet requests still use the scoped token owner.
 ### Exceptions
 Token endpoints that explicitly require fresh authentication follow their own
 published session contract.
+
+## [R020] Cover fresh installs when diagnosing native storage failures
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-10-08
+
+### Trigger
+Diagnosing a mobile failure attributed to cached data, migration, or cleanup.
+
+### Mistake
+Attributed an Android environment-switch failure only to an older roster,
+although it also occurred before the first sign-in. The test double treated a
+native directory URI getter as an inert string, hiding its path validation.
+
+### Lesson
+Storage initialization and native property getters can fail before any stored
+data exists. A migration-shaped call path does not prove a migration-only bug.
+
+### Action
+Inspect the native adapter behind the failing operation and model the relevant
+getter behavior in regression tests. Cover both a fresh install without prior
+sign-in and an upgrade with existing data before narrowing the diagnosis.
+
+### Validation
+Verify that both cases fail against the previous implementation and pass with
+the correction. Keep physical-device confirmation separate from mocked tests.
+
+### Exceptions
+A failure explicitly requiring an existing record may use that prerequisite,
+provided the fresh-install path has been checked and does not access it.
+
+## [R021] Attach PR screenshots with the GitHub CLI
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-10-08
+
+### Trigger
+Posting screenshots or video on a pull request or issue comment.
+
+### Mistake
+The agent stopped at "gh cannot upload images" and left screenshots in a local
+folder, following stale repository docs that described a branch-hosting
+workaround.
+
+### Lesson
+`gh` 2.101+ uploads images and video itself. Do not host files on a throwaway
+branch or ask the user to drag them in.
+
+### Action
+Run `gh pr comment <n> --body … --attach '<abs path>#<alt text>'`, repeating the
+flag for each file. Describe in the text what each image shows. Fix any doc
+that claims otherwise.
+
+### Validation
+Open the returned comment URL's content and confirm the images render.
+
+### Exceptions
+If `gh --version` is older than 2.101, report that blocker.
+
+## [R022] Let a section's layout explain its primary path and alternatives
+
+Status: active
+Scope: module:web
+Source: user-correction
+Date: 2026-10-08
+
+### Trigger
+Designing a card that offers a main workflow plus an optional alternative
+(for example Devpost submission versus native submission).
+
+### Mistake
+A secondary-styled alternative sat in the card header, away from the main path,
+so the relationship between the two was not visible and prose had to cover it.
+
+### Lesson
+Order and grouping should show which path is primary and which is the optional
+side route. Explain consequences only where they apply, with no restating text.
+
+### Action
+Lead with the primary path's content, then a quiet "or" divider, then the
+alternative's action beside its consequence. Keep the header for post-state
+actions (such as Request edits). After any reorder, update specs that index
+sections by position.
+
+### Validation
+Check desktop and mobile screenshots of every state (draft, linked, submitted)
+and confirm a reader can tell the primary path without reading helper copy.
+
+### Exceptions
+Two equal-weight choices may share a chooser instead.
+
+## [R023] Act on a reported defect instead of confirming it
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-10-11
+
+### Trigger
+When the user reports that something is wrong (a screenshot, "esto está mal",
+"fatal", a crash), especially while background agents are working on it.
+
+### Mistake
+The agent answered several defect reports by agreeing ("tienes razón, está
+mal"), explaining the likely cause and relaying the report to a running
+agent, without taking any corrective action itself. The user had to repeat
+the report and pay for replies that changed nothing.
+
+### Lesson
+A defect report is an instruction to fix it. Agreement and explanation are
+not progress.
+
+### Action
+In the same turn: take the immediate corrective step available (e.g. restore
+a setting, revert a bad state, rerun a broken step), then launch or redirect
+an agent with a concrete fix brief and acceptance criteria. Report only what
+was fixed or is now being fixed, with the evidence that will prove it; skip
+"you're right" preambles and cause narration unless the user asks.
+
+### Validation
+Each reply to a defect report names an action already taken (command run,
+agent launched or redirected, commit pushed), not just an assessment.
+
+### Exceptions
+A genuine product decision the user must make (e.g. a platform trade-off)
+may be asked, but only alongside the fixes that don't depend on it.
+
+## [R024] Keep minimal Live Activities readable at their actual size
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-10-12
+
+### Trigger
+Choosing content for the minimal Dynamic Island presentation.
+
+### Mistake
+Fit an hours-and-minutes countdown into the minimal slot by reducing it to
+10 pt and allowing further scaling. It technically fit but was unreadable.
+
+### Lesson
+Fitting inside a width cap does not establish legibility. Minimal presentation
+should identify the activity or phase with a recognizable symbol; detailed
+timers belong on surfaces with room to read them.
+
+### Action
+Use category or phase symbols for minimal countdown activities. Preserve
+meaningful operational rings and short counts. Review alongside another Live
+Activity, where iOS switches to the minimal presentation.
+
+### Validation
+Inspect a native screenshot at actual device size with two activities active;
+check long countdowns and urgent/completed phases. Unit tests alone cannot
+establish visual readability.
+
+### Exceptions
+A short operational count can remain when readable at the actual slot size.

@@ -46,7 +46,9 @@ The audit has been implemented incrementally in these slices:
   recovery and added saved/unsaved/error feedback to the challenge editor
   (`H24`, `H44`).
 - Follow-up — expanded the enterprise overview with live visibility, challenge,
-  profile, member, and metadata summaries; localized derived user-detail labels,
+  profile, member, and metadata summaries (the Overview tab was later removed;
+  sponsor reps see visibility and reveal date under Profile → Publication,
+  #928); localized derived user-detail labels,
   application states, project links, and profile dates (`H8`, `H43-H46`).
 
 ### Requirement coverage

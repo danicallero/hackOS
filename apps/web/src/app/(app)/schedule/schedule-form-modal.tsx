@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
 import { toDatetimeLocal } from "@/lib/datetime";
@@ -63,6 +64,7 @@ export const EMPTY_SCHEDULE_FORM: ScheduleInput = {
   publishAt: null,
   // Unchecked/empty is a valid state and means staff-only (H59) — no default audience.
   audiences: [],
+  liveActivityAudience: false,
   contactNote: "",
   notes: "",
 };
@@ -97,6 +99,7 @@ export function scheduleItemToForm(
     visibility: item.visibility ?? "hidden",
     publishAt: toDatetimeLocal(item.publishAt),
     audiences: item.audiences ?? [],
+    liveActivityAudience: item.liveActivityAudience ?? false,
     contactNote: item.contactNote ?? "",
     notes: item.notes ?? "",
   };
@@ -149,6 +152,8 @@ export function cleanScheduleForm(form: ScheduleInput): ScheduleInput {
     visibility: form.visibility,
     publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : null,
     audiences: form.audiences ?? [],
+    // #966: only an item with an audience can show it a Live Activity.
+    liveActivityAudience: (form.audiences ?? []).length > 0 && form.liveActivityAudience === true,
     contactNote: form.contactNote?.trim() || null,
     notes: form.notes?.trim() || null,
   };
@@ -403,6 +408,21 @@ export function ScheduleFormModal({
               {t("registrableByScanner")}
               {isMeal ? t("mealsAlwaysRegistrable") : ""}
             </Label>
+          </div>
+        )}
+
+        {hasAudience && (
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="live-activity-audience" className="font-normal">
+              {t("liveActivityAudienceLabel")}
+            </Label>
+            <Switch
+              id="live-activity-audience"
+              checked={values.liveActivityAudience === true}
+              onCheckedChange={(checked) =>
+                setValues((v) => ({ ...v, liveActivityAudience: checked }))
+              }
+            />
           </div>
         )}
 

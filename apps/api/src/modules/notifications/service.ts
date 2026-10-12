@@ -249,6 +249,23 @@ export async function markNotificationRead(
   return rows[0];
 }
 
+/** H51: clears the read marker so an inbox item counts as unread again (idempotent). */
+export async function markNotificationUnread(
+  db: Queryable,
+  userId: number,
+  notificationId: number,
+): Promise<{ id: number; read_at: null }> {
+  const { rows } = await db.query(
+    `UPDATE notification_outbox
+     SET read_at = NULL
+     WHERE id = $1 AND user_id = $2 AND channel = 'in_app'
+     RETURNING id, read_at`,
+    [notificationId, userId],
+  );
+  if (!rows[0]) throw new NotFoundError("Notification not found");
+  return rows[0];
+}
+
 export async function deleteInboxNotification(
   db: Queryable,
   userId: number,

@@ -59,6 +59,7 @@ siguiente especifica cada variable individualmente.
 | `API_IMAGE_TAG`, `WEB_IMAGE_TAG` | derivadas por el despliegue | no | Tags inmutables independientes para la imagen API y web. `incus-deploy.sh` los exporta para un release parcial y conserva el tag de la unidad que no cambió; no hace falta añadirlos al fichero del host. |
 | `API_DOMAIN` | configuración | sí | Hostname público del API, sin esquema. Se convierte en `https://...` para Better Auth y el runtime web. |
 | `WEB_DOMAIN` | configuración | sí | Hostname público del frontend, sin esquema. |
+| `ANDROID_APP_CERT_SHA256` | configuración | no | Huellas SHA-256 (separadas por comas, formato `AA:BB:…`) de los certificados de firma de la app Android (subida y firma de Play). `web` las publica en `/.well-known/assetlinks.json` para que los enlaces de etiquetas de empresa `https://${WEB_DOMAIN}/s/<código>` abran la app (#935). Vacía: el fichero no lista apps y el enlace abre la web. |
 | `CORS_ORIGINS` | configuración | sí | Lista separada por comas; debe incluir `https://${WEB_DOMAIN}`. |
 | `PUBLISH_BIND_ADDRESS` | configuración | no | Dirección de publicación HTTP; `0.0.0.0` para el proxy de otro LXC y `127.0.0.1` si comparte host. |
 | `API_PUBLISH_PORT`, `WEB_PUBLISH_PORT` | configuración | no | Puertos del host para API y web; por defecto `3000` y `3001`. |
@@ -123,9 +124,9 @@ variables agrupadas se detallan en las secciones siguientes.
 | `minio` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BROWSER=off` |
 | `minio-init` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` |
 | `migrate` | `NODE_ENV=production`, `DATABASE_URL`, `BETTER_AUTH_SECRET` |
-| `api` | `NODE_ENV`, `WORKERS_INLINE`, `DATABASE_URL`, `VALKEY_URL`, auth, URLs públicas, almacenamiento, Wallet, traducción, observabilidad, límites operativos y fixtures API-only |
-| `worker` | `NODE_ENV`, `WORKERS_INLINE`, `DATABASE_URL`, `VALKEY_URL`, auth/URLs para enlaces, almacenamiento, Wallet, correo y tuning del worker |
-| `web` | `API_DOMAIN`, `WEB_DOMAIN` |
+| `api` | `NODE_ENV`, `WORKERS_INLINE`, `DATABASE_URL`, `VALKEY_URL`, auth, URLs públicas, almacenamiento, Wallet, Live Activities, traducción, observabilidad, límites operativos y fixtures API-only |
+| `worker` | `NODE_ENV`, `WORKERS_INLINE`, `DATABASE_URL`, `VALKEY_URL`, auth/URLs para enlaces, almacenamiento, Wallet, Live Activities, correo y tuning del worker |
+| `web` | `API_DOMAIN`, `WEB_DOMAIN`, `ANDROID_APP_CERT_SHA256` |
 
 `DATABASE_URL` y `VALKEY_URL` se ensamblan dentro de Compose a partir de las
 credenciales del fichero de secretos. El puerto del API (`3000`) y el del web
@@ -159,8 +160,8 @@ https://s3.hackudc.com/hackos/enterprises/42/logo-default.png
 ```
 
 `minio-init` permite lectura anónima sólo bajo `enterprises/`, que contiene
-logos públicos. `uploads/` permanece privado y sólo se descarga mediante el
-API autorizado. No se debe convertir todo el bucket en anónimo porque eso
+logos públicos. `uploads/` y `profiles/` (fotos de cuenta y CV del
+directorio) permanecen privados y sólo se descargan mediante el API autorizado. No se debe convertir todo el bucket en anónimo porque eso
 expondría ficheros de solicitudes.
 
 El ingress externo debe publicar únicamente la API S3 de MinIO para
@@ -203,6 +204,7 @@ Además de las variables de las dependencias anteriores, `api` recibe:
 | Push | `LOG_EXPO_PUSH_TICKETS`, `LOG_EXPO_PUSH_TOKENS`, `LOG_EXPO_PUSH_UNSAFE_DEBUG` |
 | Traducción | `TRANSLATE_PROVIDER`, `GOOGLE_TRANSLATE_API_KEY`, `LIBRETRANSLATE_URL`, `LIBRETRANSLATE_API_KEY` |
 | Wallet | `APPLE_PASS_TYPE_IDENTIFIER`, `APPLE_TEAM_IDENTIFIER`, `APPLE_PASS_ORGANIZATION`, `APPLE_PASS_CERTIFICATE_PEM`, `APPLE_PASS_KEY_PEM`, `APPLE_PASS_KEY_PASSPHRASE`, `APPLE_WWDR_CERTIFICATE_PEM`, `APPLE_APNS_ENVIRONMENT`, `APPLE_PASS_APP_STORE_ID`, `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_EVENT_TICKET_CLASS_ID`, `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY_PEM`, `GOOGLE_WALLET_LOGO_URL`, `GOOGLE_WALLET_HERO_IMAGE_URL`, `GOOGLE_WALLET_WIDE_LOGO_URL`, `GOOGLE_WALLET_BACKGROUND_COLOR`, `WALLET_FOREGROUND_COLOR`, `WALLET_LABEL_COLOR`, `WALLET_WEBSITE_URL`, `WALLET_SHOW_DIRECTIONS`, `WALLET_SHOW_SCHEDULE`, `WALLET_SCHEDULE_URL`, `WALLET_ANDROID_PACKAGE_NAME`, `WALLET_ANDROID_STORE_URL`, `WALLET_APPLE_OPTIONS_JSON`, `WALLET_GOOGLE_CLASS_OPTIONS_JSON`, `WALLET_GOOGLE_OBJECT_OPTIONS_JSON` |
+| Live Activities | `APNS_KEY_ID`, `APNS_AUTH_KEY_P8`, `APNS_BUNDLE_ID` (por defecto `com.hackudc.os`), `LIVE_ACTIVITY_LEAD_MINUTES` (por defecto `15`), `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` (por defecto `180`; solo sin `hacking_starts_at`, si no la cuenta atrás dura todo el hacking), `LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES` (por defecto `60`), `LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES` (por defecto `60`). Opcionales; `APNS_KEY_ID` y `APNS_AUTH_KEY_P8` (base64 del `.p8`, secreto) van juntos y requieren `APPLE_TEAM_IDENTIFIER`; el gateway es `APPLE_APNS_ENVIRONMENT`. Ver [Live Activities](./live-activities.md). |
 | Fixtures | `REVIEW_FIXTURE_PASSWORD`, `REVIEW_FIXTURE_DELETION_PIN` |
 
 El API no recibe variables de correo ni la cuenta root de MinIO.
@@ -217,6 +219,7 @@ El API no recibe variables de correo ni la cuenta root de MinIO.
 | Pool y outbox | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECTION_TIMEOUT_MS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `NOTIFICATION_OUTBOX_BATCH_SIZE` |
 | Correo | `MAIL_PROVIDER`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `SMTP_HOST`, `SMTP_TLS_SERVERNAME`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `SMTP_REQUIRE_TLS` |
 | Wallet | El mismo bloque de Wallet que usa API, porque el worker empuja sincronizaciones de pases. |
+| Live Activities | El mismo bloque que API: el worker `live-activities` envía los pushes de APNs y Android. |
 
 El worker recibe `SSE_NAMESPACE` para publicar en el mismo entorno que el API.
 El worker no recibe `CORS_ORIGINS`, límites SSE, rate limits de scanner,
@@ -248,8 +251,9 @@ mantenimiento, administración y superusuario.
 compatibilidad. No recibe Valkey, S3, correo, Wallet ni configuración web.
 
 `web` sólo recibe `API_DOMAIN` y `WEB_DOMAIN`, que el servidor Next.js expone
-en `/runtime-config.js`. No recibe ninguna variable secreta ni dependencias de
-datos.
+en `/runtime-config.js`, y la configuración pública `ANDROID_APP_CERT_SHA256`
+para `/.well-known/assetlinks.json` (#935). No recibe ninguna variable secreta
+ni dependencias de datos.
 
 ## Secretos opcionales del relay SMTP
 

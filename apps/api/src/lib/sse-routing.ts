@@ -1,5 +1,13 @@
 import { SSE_TOPICS } from "@hackos/shared/events";
 
+declare module "fastify" {
+  interface FastifyRequest {
+    /** Set by a handler whose successful mutation changed nothing, so no
+     * domain refresh is broadcast (#934). */
+    domainUnchanged?: boolean;
+  }
+}
+
 /**
  * Map mutation routes to the narrow read-model topic they can affect.
  * Payload-free refresh signals keep unrelated browser surfaces asleep while
@@ -32,6 +40,15 @@ export function mutationDomainForPath(url: string): string | null {
     return SSE_TOPICS.PROJECTS;
   }
 
+  // Public-profile writes, including staff moderation, only change the
+  // public profile cards (#934).
+  if (
+    matches("/api/me/public-profile") ||
+    /^\/api\/users\/[^/]+\/public-profile(?:\/cv)?$/.test(path)
+  ) {
+    return SSE_TOPICS.DIRECTORY;
+  }
+
   // Sponsor-owned enterprises and challenges have their own authenticated
   // workspace topic; public-facing writes are mirrored separately below.
   if (
@@ -52,11 +69,17 @@ export function mutationDomainForPath(url: string): string | null {
     return SSE_TOPICS.LOGISTICS;
   }
 
+  // The event diary is private to its owner and wakes no shared read model;
+  // without this, `/api/me` below would refresh every identity view (#935).
+  if (matches("/api/me/diary")) return null;
+
   // Device-token registration changes delivery plumbing only. It does not
   // change any identity read model, so invalidating `identity` here makes a
   // mobile profile refresh register the same token again and forms a request
   // loop (#732). Keep the generic audit broadcast, but never wake clients.
   if (matches("/api/me/push-tokens")) return null;
+  // Same for the Live Activity device/session registry (#966).
+  if (matches("/api/me/live-activities")) return null;
 
   // Identity mutations affect users, invitations, and the capability graph
   // (H7-H10). Application-specific /api/me paths were handled above.
@@ -100,5 +123,24 @@ export function publicContentMutationForPath(url: string): boolean {
     singleResource("/api/challenges") ||
     /^\/api\/challenges\/[^/]+\/(?:publish|unpublish)$/.test(path) ||
     /^\/api\/devpost\/prizes\/[^/]+\/map$/.test(path)
+  );
+}
+
+/**
+ * Writes owned by other domains that still change a public profile card: the
+ * person's name, surname or photo, account removal, project and work-group
+ * membership, and challenge publication or titles. They also wake the
+ * payload-free `directory` topic (#934). Event-access and queue-status
+ * changes are rarer; open profile views pick those up when refocused.
+ */
+export function directoryMutationForPath(url: string): boolean {
+  const path = url.split("?", 1)[0] ?? url;
+  return (
+    path === "/api/me" ||
+    path === "/api/me/photo" ||
+    /^\/api\/users\/[^/]+$/.test(path) ||
+    mutationDomainForPath(path) === SSE_TOPICS.PROJECTS ||
+    path === "/api/challenges/visibility" ||
+    /^\/api\/challenges\/[^/]+(?:\/(?:publish|unpublish))?$/.test(path)
   );
 }

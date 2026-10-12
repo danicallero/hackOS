@@ -1,0 +1,72 @@
+diff --git a/Libraries/Text/Text.js b/Libraries/Text/Text.js
+index 8e7b29c..d7818b4 100644
+--- a/Libraries/Text/Text.js
++++ b/Libraries/Text/Text.js
+@@ -20,6 +20,7 @@ import usePressability from '../Pressability/usePressability';
+ import flattenStyle from '../StyleSheet/flattenStyle';
+ import processColor from '../StyleSheet/processColor';
+ import StyleSheet from '../StyleSheet/StyleSheet';
++import Dimensions from '../Utilities/Dimensions';
+ import Platform from '../Utilities/Platform';
+ import TextAncestorContext from './TextAncestorContext';
+ import {
+@@ -28,7 +29,41 @@ import {
+   NativeVirtualText,
+ } from './TextNativeComponent';
+ import * as React from 'react';
+-import {useContext, useMemo, useState} from 'react';
++import {useContext, useMemo, useState, useSyncExternalStore} from 'react';
++
++// Fabric caches each paragraph's Yoga measurement on the shadow nodes React
++// retains. When the system text size changes, only the native branch is
++// re-measured, so the next React commit restores frames measured at the old
++// font scale while the glyphs render at the new one, clipping every label.
++// Keying root paragraphs by the current font scale remounts them once per
++// change, so they are measured afresh at the scale they are drawn with.
++let currentFontScale: ?number = null;
++let fontScaleSubscription: ?{remove: () => void} = null;
++const fontScaleListeners: Set<() => void> = new Set();
++
++function getFontScale(): number {
++  if (currentFontScale == null || fontScaleSubscription == null) {
++    currentFontScale = Dimensions.get('window').fontScale;
++  }
++  return currentFontScale;
++}
++
++function subscribeToFontScale(listener: () => void): () => void {
++  fontScaleListeners.add(listener);
++  if (fontScaleSubscription == null) {
++    currentFontScale = Dimensions.get('window').fontScale;
++    fontScaleSubscription = Dimensions.addEventListener('change', ({window}) => {
++      if (window.fontScale === currentFontScale) {
++        return;
++      }
++      currentFontScale = window.fontScale;
++      fontScaleListeners.forEach(notify => notify());
++    });
++  }
++  return () => {
++    fontScaleListeners.delete(listener);
++  };
++}
+ 
+ export type {TextProps} from './TextProps';
+ 
+@@ -267,6 +302,7 @@ const TextImpl: component(
+     };
+   }
+ 
++  const fontScale = useSyncExternalStore(subscribeToFontScale, getFontScale);
+   const hasTextAncestor = useContext(TextAncestorContext);
+   if (hasTextAncestor) {
+     processedProps.disabled = disabled;
+@@ -309,6 +345,8 @@ const TextImpl: component(
+       );
+   }
+ 
++  nativeText = <React.Fragment key={fontScale}>{nativeText}</React.Fragment>;
++
+   if (children == null) {
+     return nativeText;
+   }

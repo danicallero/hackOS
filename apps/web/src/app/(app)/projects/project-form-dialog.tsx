@@ -9,12 +9,14 @@ import { FolderPlusIcon } from "@phosphor-icons/react/dist/csr/FolderPlus";
 import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import { useEffect, useState } from "react";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/multi-select";
+import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { createMyProject, createRepo, updateMyProject, updateRepo } from "@/lib/projects";
@@ -35,6 +37,7 @@ export function ProjectFormDialog({
   onSaved: (repoId: number) => void | Promise<void>;
 }) {
   const { t } = useLocale();
+  const compactTrigger = useIsMobile() && (mode.kind === "self-edit" || mode.kind === "create");
   const isEdit = mode.kind === "edit" || mode.kind === "self-edit";
   const initial = isEdit ? mode.repo : null;
   const [open, setOpen] = useState(false);
@@ -129,8 +132,13 @@ export function ProjectFormDialog({
         if (!o) resetToInitial();
       }}
       trigger={
-        <Button variant={isEdit ? "outline" : "default"}>
-          <TriggerIcon className="size-4" /> {triggerLabel}
+        <Button
+          variant={isEdit ? "outline" : "default"}
+          size={compactTrigger ? "icon" : "default"}
+          aria-label={triggerLabel}
+        >
+          <TriggerIcon aria-hidden="true" className="size-4" />
+          {!compactTrigger && <span>{triggerLabel}</span>}
         </Button>
       }
       icon={TriggerIcon}
@@ -141,60 +149,66 @@ export function ProjectFormDialog({
         </SubmitButton>
       }
     >
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="project-name">{t("projectNameLabel")}</Label>
-          <Input
-            id="project-name"
-            value={name}
-            maxLength={200}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="project-description">{t("descriptionLabel")}</Label>
-          <Textarea
-            id="project-description"
-            value={description}
-            rows={4}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-6">
+        <SectionCard title={t("projectDetailsTitle")}>
           <div className="space-y-2">
-            <Label htmlFor="project-github">{t("projectRepoUrlLabel")}</Label>
+            <Label htmlFor="project-name">{t("projectNameLabel")}</Label>
             <Input
-              id="project-github"
-              type="url"
-              value={githubUrl}
-              placeholder="https://github.com/…"
-              onChange={(e) => setGithubUrl(e.target.value)}
+              id="project-name"
+              value={name}
+              maxLength={200}
+              onChange={(e) => setName(e.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="project-demo">{t("projectDemoUrlLabel")}</Label>
-            <Input
-              id="project-demo"
-              type="url"
-              value={demoUrl}
-              placeholder="https://…"
-              onChange={(e) => setDemoUrl(e.target.value)}
+            <Label htmlFor="project-description">{t("descriptionLabel")}</Label>
+            <Textarea
+              id="project-description"
+              value={description}
+              rows={4}
+              onChange={(e) => setDescription(e.target.value)}
             />
           </div>
-        </div>
+        </SectionCard>
+        <SectionCard title={t("linksTitle")}>
+          <div className="grid items-start gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="project-github">{t("projectRepoUrlLabel")}</Label>
+              <Input
+                id="project-github"
+                type="url"
+                value={githubUrl}
+                placeholder="https://github.com/…"
+                onChange={(e) => setGithubUrl(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-demo">{t("projectDemoUrlLabel")}</Label>
+              <Input
+                id="project-demo"
+                type="url"
+                value={demoUrl}
+                placeholder="https://…"
+                onChange={(e) => setDemoUrl(e.target.value)}
+              />
+            </div>
+          </div>
+        </SectionCard>
         {!isEdit && (
-          <div className="space-y-2">
-            <Label htmlFor="project-challenges">{t("challenges")}</Label>
-            <MultiSelect
-              inDialog
-              id="project-challenges"
-              options={challengeOptions}
-              value={challengeIds}
-              onChange={setChallengeIds}
-              placeholder={t("selectChallengePlaceholder")}
-            />
-            <p className="text-muted-foreground text-xs">{t("projectChallengesHint")}</p>
-          </div>
+          <SectionCard title={t("challenges")}>
+            <div className="space-y-2">
+              <MultiSelect
+                inDialog
+                id="project-challenges"
+                aria-label={t("challenges")}
+                options={challengeOptions}
+                value={challengeIds}
+                onChange={setChallengeIds}
+                placeholder={t("selectChallengePlaceholder")}
+              />
+              <p className="text-muted-foreground text-xs">{t("projectChallengesHint")}</p>
+            </div>
+          </SectionCard>
         )}
       </div>
     </SidePanelEditor>

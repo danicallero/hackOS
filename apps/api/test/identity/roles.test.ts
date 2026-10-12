@@ -1303,6 +1303,8 @@ describe("H8 default seeded role set (0805)", () => {
         CAPABILITIES.ACTIVITY_SCAN,
         CAPABILITIES.LOGISTICS_STATS,
         CAPABILITIES.INTOLERANCES_MANAGE,
+        CAPABILITIES.MEAL_PLANS_EXPORT,
+        CAPABILITIES.MEAL_PLANS_MANAGE,
         CAPABILITIES.VENUE_MANAGE,
         CAPABILITIES.PRESENCE_MANAGE,
       ],
@@ -1335,6 +1337,7 @@ describe("H8 default seeded role set (0805)", () => {
       Mentor: [],
       Participant: [CAPABILITIES.QUEUE_STATUS],
     };
+    // #935: 0801 retires 0101's directory:read grants, so no role keeps one.
     for (const [name, caps] of Object.entries(expected)) {
       const { rows: roleRows } = await pool.query(
         `SELECT id, is_protected, deleted_at FROM roles WHERE name = $1`,
@@ -1553,8 +1556,7 @@ describe("H8 default seeded role set (0805)", () => {
       Object.keys(eventDirector[0].capabilities).map(() => "allow"),
     );
 
-    // A capability-less seeded role (Mentor/Sponsor) still gets a snapshot
-    // row — an empty object, not a missing row.
+    // Mentor has no seeded grant once 0801 retired #934's directory:read (#935).
     const { rows: mentor } = await pool.query(
       `SELECT rsd.capabilities
          FROM roles r

@@ -31,6 +31,7 @@ import { BadRequestError } from "../../lib/errors.js";
  */
 
 export interface DevpostProjectRow {
+  projectCode: string | null;
   title: string;
   url: string | null;
   description: string;
@@ -49,6 +50,7 @@ export interface DevpostParticipantRow {
 }
 
 const PROJECT_FIELD_ALIASES: Record<string, string[]> = {
+  projectCode: ["eventprojectcode", "projectcode", "reconciliationcode"],
   title: ["projecttitle", "title", "name"],
   url: ["projecturl", "submissionurl", "devposturl", "url"],
   description: ["description", "abouttheproject", "elevatorpitch", "tagline", "summary"],
@@ -242,6 +244,7 @@ export function parseProjectsCsv(csvText: string): DevpostProjectRow[] {
     }
     const tryItOutLinks = row.demoUrl?.trim() || null;
     out.push({
+      projectCode: row.projectCode?.trim().toUpperCase() || null,
       title,
       url,
       description: row.description?.trim() ?? "",

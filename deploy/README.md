@@ -69,10 +69,28 @@ La tercera ruta sólo puede apuntar a la API S3 de MinIO, nunca a la consola
 (9001), y debe permitir únicamente `/hackos/enterprises/`. `S3_PUBLIC_URL` no
 crea el registro DNS ni la ruta en Caddy.
 El acceso anónimo se limita al prefijo `enterprises/`; las subidas bajo
-`uploads/` siguen siendo privadas y pasan por el API.
+`uploads/` y `profiles/` (fotos de cuenta y CV del directorio) siguen siendo
+privadas y pasan por el API.
 
 Los valores de `API_DOMAIN`, `WEB_DOMAIN` y `CORS_ORIGINS` deben corresponder
 con esos hosts. `API_DOMAIN` y `WEB_DOMAIN` son nombres sin `https://`.
+
+### App links de etiquetas de empresa (#935)
+
+Las etiquetas NFC y los QR de empresa llevan `https://${WEB_DOMAIN}/s/<código>`.
+`web` sirve los dos ficheros que permiten abrir ese enlace en la app:
+
+- `/.well-known/apple-app-site-association` es estático
+  (`apps/web/public/.well-known/`, equipo `P88YRBYY9T`, `applinks` para `/s/*`
+  y `webcredentials`). Un cambio de dominio, equipo o bundle ID exige editarlo
+  y una nueva build nativa (`EXPO_PUBLIC_EVENT_WEBSITE_URL`).
+- `/.well-known/assetlinks.json` se genera con `ANDROID_APP_CERT_SHA256`:
+  las huellas SHA-256 de la clave de subida y de la clave de firma de Play
+  (Play Console → Integridad de la app). Sin ellas el fichero no lista apps y
+  Android abre la página web `/s/<código>`, que también recoge la empresa.
+
+El dominio de la web (`WEB_DOMAIN`, que el API usa como `WEB_URL`) debe ser el
+mismo que `EXPO_PUBLIC_EVENT_WEBSITE_URL` de la app.
 
 ### Optional shared ingress network
 
@@ -156,6 +174,18 @@ requiere autenticación. Las
 claves de firma de Apple/Google son opcionales, pero cada bloque configurado
 debe estar completo. `check-env.sh` no imprime valores secretos.
 
+Las Live Activities (#966) son opcionales: `APNS_KEY_ID` y `APNS_AUTH_KEY_P8`
+(base64 del fichero `.p8`, secreto; en staging va en `hackos.secrets`) se
+configuran juntas y requieren `APPLE_TEAM_IDENTIFIER`. `APNS_BUNDLE_ID`
+(por defecto `com.hackudc.os`), `LIVE_ACTIVITY_LEAD_MINUTES` (por defecto
+`15`), `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` (por defecto `180`; solo se
+aplica si no hay inicio del hacking),
+`LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES` (por defecto `60`) y
+`LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES` (por defecto `60`) son
+configuración no secreta. Sin clave, el worker sigue enviando las
+Live Updates de Android y omite iOS con un aviso. Alta de la clave y
+credenciales EAS: [docs/live-activities.md](../docs/live-activities.md).
+
 Los backups opcionales de Cloudflare R2 usan `R2_ENDPOINT`, `R2_BUCKET` y
 `R2_PREFIX`, y `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` en el fichero
 combinado. El helper exige
@@ -220,9 +250,9 @@ contenedor.
 | `minio` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BROWSER=off` |
 | `minio-init` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` |
 | `migrate` | `NODE_ENV`, `DATABASE_URL`, `BETTER_AUTH_SECRET` |
-| `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, traducción, SSE, rate limits y fixtures API-only |
-| `worker` | base de datos, Valkey, `SSE_NAMESPACE`, auth/URLs necesarias para enlaces, almacenamiento, correo, Wallet y tuning del worker |
-| `web` | sólo `API_DOMAIN` y `WEB_DOMAIN` |
+| `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, Live Activities (APNs), traducción, SSE, rate limits y fixtures API-only |
+| `worker` | base de datos, Valkey, `SSE_NAMESPACE`, auth/URLs necesarias para enlaces, almacenamiento, correo, Wallet, Live Activities (APNs) y tuning del worker |
+| `web` | sólo `API_DOMAIN`, `WEB_DOMAIN` y la configuración pública `ANDROID_APP_CERT_SHA256` |
 
 En particular, `web` nunca recibe secretos; `api` no recibe credenciales de
 correo; y `migrate` no recibe Valkey, S3, correo ni Wallet.

@@ -1,15 +1,31 @@
-import { type MenuAction, MenuView } from "@expo/ui/community/menu";
-import { useRouter, useScrollToTop } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type MenuAction, type MenuComponentRef, MenuView } from "@expo/ui/community/menu";
+import { useFocusEffect, useLocalSearchParams, useRouter, useScrollToTop } from "expo-router";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
+  type LayoutChangeEvent,
+  Platform,
   Pressable,
   RefreshControl,
-  ScrollView,
+  type ScrollView,
   Text,
   useColorScheme,
   View,
 } from "react-native";
+import Animated, {
+  type SharedValue,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
+import {
+  AccountWalletButton,
+  AccountWalletOverlay,
+  useAccountWallet,
+} from "@/components/account-wallet";
 import {
   ActionButton,
   AndroidStatusBarScrim,
@@ -17,9 +33,16 @@ import {
   Section,
   Separator,
   StatusPill,
+  ToggleRow,
 } from "@/components/native-ui";
+import {
+  ProfileAvatarCollapse,
+  ProfileAvatarCollapseAnchor,
+  useProfileAvatarCollapse,
+} from "@/components/profile-avatar-collapse";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
+import { UserAvatar } from "@/components/user-avatar";
 import { apiFetch } from "@/lib/api";
 import { useApiMode } from "@/lib/api-mode";
 import { appVersionLabel } from "@/lib/app-version";
@@ -27,21 +50,28 @@ import { forceLocalSignOut, signOut } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
-import { readCachedValue, writeCachedValue } from "@/lib/offline-cache";
+import {
+  fetchMealPlan,
+  mealLabel,
+  mealPlanCacheKey,
+  PROFILE_TASKS_PATH,
+  saveMealPlan,
+} from "@/lib/profile-tasks";
 import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
-import { canViewStaffStatistics } from "@/lib/tabs";
+import { canManageStands, canViewStaffStatistics } from "@/lib/tabs";
+import type { MealPlan } from "@/lib/types";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
+import { useCachedApi } from "@/lib/use-cached-api";
+import { useFoodIntolerances } from "@/lib/use-food-intolerances";
 import { colors } from "@/theme/colors";
 
-interface Intolerance {
-  id: number;
-  label: { en: string; es: string; gl: string };
-}
-
 const LANGUAGES: Lang[] = ["en", "es", "gl"];
-const INTOLERANCES_CACHE_KEY = "food-intolerances";
+/** H51: wait for the sheet dismissal + push transition before the visible scroll. */
+const TRANSITION_SETTLE_MS = 450;
+/** H51: time the animated scroll takes before the Preferences row flashes. */
+const SCROLL_SETTLE_MS = 450;
 
 /** Account overview with the same participant-owned profile fields exposed on web. */
 export default function AccountScreen() {
@@ -51,10 +81,28 @@ export default function AccountScreen() {
   const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
-  useScrollToTop(scrollRef);
+  const wallet = useAccountWallet();
+  const avatarCollapse = useProfileAvatarCollapse(scrollRef);
+  useScrollToTop(avatarCollapse.scrollToTopRef);
+  useFocusEffect(avatarCollapse.settleAtRest);
   const { me, loading, error, offline, staleSince, refetch } = useMeContext();
   const { mode, setMode } = useApiMode();
-  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
+  const { intolerances, reload: loadSupportingData } = useFoodIntolerances(Boolean(me));
+  const isSponsorRep = Boolean(me?.isSponsorRep);
+  const mealPlanKey = me ? mealPlanCacheKey(me.id) : "meal-plan:none";
+  const mealPlan = useCachedApi<MealPlan>(mealPlanKey, fetchMealPlan, { enabled: isSponsorRep });
+  // Local answers until Save; a toggle alone never submits the plan.
+  const [mealAnswers, setMealAnswers] = useState<Record<number, boolean>>({});
+  const [savingMeals, setSavingMeals] = useState(false);
+  const [mealPlanError, setMealPlanError] = useState<Error | null>(null);
+  const loadMealPlan = mealPlan.load;
+
+  // Load on every focus, so a plan answered from the next-entry sheet shows here.
+  useFocusEffect(
+    useCallback(() => {
+      if (isSponsorRep) void loadMealPlan();
+    }, [isSponsorRep, loadMealPlan]),
+  );
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState<Error | null>(null);
   const [languageRetry, setLanguageRetry] = useState<Lang | null>(null);
@@ -63,38 +111,22 @@ export default function AccountScreen() {
   const [signOutError, setSignOutError] = useState<Error | null>(null);
   const developerTapCount = useRef(0);
   const developerTapTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlight = useNotificationsHighlight(scrollRef, avatarCollapse.restingOffset);
 
   function returnToSignIn() {
     forceLocalSignOut();
     router.replace("/(auth)/sign-in");
   }
 
-  const loadSupportingData = useCallback(async () => {
-    if (!me) return;
-    try {
-      const { intolerances: list } = await apiFetch<{ intolerances: Intolerance[] }>(
-        "/api/public/food-intolerances",
-      );
-      setIntolerances(list);
-      void writeCachedValue(INTOLERANCES_CACHE_KEY, list);
-    } catch {
-      // The rest of the profile remains usable without intolerance labels —
-      // fall back to whatever was cached from the last successful fetch so
-      // an offline first launch shows labels instead of raw numeric ids.
-      const cached = await readCachedValue<Intolerance[]>(INTOLERANCES_CACHE_KEY);
-      if (cached) setIntolerances(cached.data);
-    }
-  }, [me]);
-
-  useEffect(() => {
-    void loadSupportingData();
-  }, [loadSupportingData]);
-
   async function refreshAccount() {
     if (refreshingAccount) return;
     setRefreshingAccount(true);
     try {
-      await Promise.all([refetch(), loadSupportingData()]);
+      await Promise.all([
+        refetch(),
+        loadSupportingData(),
+        isSponsorRep ? mealPlan.load() : Promise.resolve(),
+      ]);
     } finally {
       setRefreshingAccount(false);
     }
@@ -118,6 +150,26 @@ export default function AccountScreen() {
       setLanguageError(cause instanceof Error ? cause : new Error(t("accountLanguageError")));
     } finally {
       setSavingLanguage(false);
+    }
+  }
+
+  // #933: Save submits the whole plan as shown (PUT replace semantics), the
+  // same explicit-submit model as the web checklist.
+  async function saveMeals() {
+    const plan = mealPlan.data;
+    if (!plan || offline || savingMeals) return;
+    setSavingMeals(true);
+    setMealPlanError(null);
+    try {
+      mealPlan.setData(await saveMealPlan(plan, mealAnswers));
+      setMealAnswers({});
+      void refetch();
+    } catch (cause) {
+      setMealPlanError(cause instanceof Error ? cause : new Error(t("mealPlanSaveError")));
+      // A meal may have locked since the list loaded; show the server's state.
+      void mealPlan.load();
+    } finally {
+      setSavingMeals(false);
     }
   }
 
@@ -183,8 +235,11 @@ export default function AccountScreen() {
         {
           text: t("apiModeSwitch"),
           onPress: () => {
-            void setMode(mode === "development" ? "production" : "development").catch(() => {
-              Alert.alert(t("apiModeTitle"), t("apiModeSwitchError"));
+            void setMode(mode === "development" ? "production" : "development").catch((error) => {
+              Alert.alert(
+                t("apiModeTitle"),
+                `${t("apiModeSwitchError")}\n${error instanceof Error ? error.message : String(error)}`,
+              );
             });
           },
         },
@@ -196,24 +251,37 @@ export default function AccountScreen() {
   if (!me) return <RequestFeedback error={error} onRetry={() => void refetch()} />;
 
   const fullName = [me.name, me.surname].filter(Boolean).join(" ") || me.email;
-  const initials =
-    [me.name, me.surname]
-      .filter(Boolean)
-      .map((part) => part?.[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || me.email[0].toUpperCase();
+  const canEditDietary = !offline && !me.profileLocked;
   const dietaryLabels = me.foodIntolerances
     .map((id) => intolerances.find((item) => item.id === id)?.label[language] ?? String(id))
     .join(", ");
+  // An open meal without an answer still needs a submit, even with nothing ticked.
+  const mealsUnsaved = Boolean(
+    mealPlan.data?.meals.some(
+      (meal) =>
+        !meal.locked &&
+        (meal.attending === null ||
+          (mealAnswers[meal.activityId] ?? meal.attending) !== meal.attending),
+    ),
+  );
+  const dietaryValue =
+    dietaryLabels || (me.dietaryConfirmedAt ? t("noRestrictions") : t("accountNoneDeclared"));
 
   return (
-    <View style={{ flex: 1 }}>
-      <ScrollView
+    <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
+      <Animated.ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
         testID="account-scroll"
+        onLayout={highlight.onScrollLayout}
+        onScroll={avatarCollapse.onScroll}
+        onTouchStart={avatarCollapse.onScrollBeginDrag}
+        onContentSizeChange={avatarCollapse.onContentSizeChange}
+        scrollEventThrottle={16}
         contentInsetAdjustmentBehavior="automatic"
+        // iOS clamps programmatic scrolls to the raw inset (0), not the
+        // automatic one, so the avatar's true top would land mid-morph (#935).
+        scrollToOverflowEnabled
         contentContainerStyle={{
           gap: 20,
           padding: 16,
@@ -224,11 +292,8 @@ export default function AccountScreen() {
           <RefreshControl refreshing={refreshingAccount} onRefresh={() => void refreshAccount()} />
         }
       >
-        {offline ? (
-          <StaleDataBanner updatedAt={staleSince} />
-        ) : error ? (
-          <RequestFeedback error={error} onRetry={() => void refetch()} />
-        ) : null}
+        {/* H28: scrolls away with the content instead of staying pinned. */}
+        <AccountWalletButton wallet={wallet} />
         {languageError ? (
           <RequestFeedback
             error={languageError}
@@ -238,22 +303,11 @@ export default function AccountScreen() {
           />
         ) : null}
 
-        <View style={{ alignItems: "center", gap: 10, paddingVertical: 10 }}>
-          <View
-            style={{
-              alignItems: "center",
-              backgroundColor: colors.accent,
-              borderRadius: 42,
-              height: 84,
-              justifyContent: "center",
-              width: 84,
-            }}
-          >
-            <Text selectable style={{ color: colors.accentText, fontSize: 30, fontWeight: "700" }}>
-              {initials}
-            </Text>
-          </View>
-          <View style={{ alignItems: "center", gap: 5 }}>
+        <View style={{ alignItems: "center", gap: 12, paddingVertical: 10 }}>
+          <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={96}>
+            <UserAvatar testID="account-avatar" name={fullName} image={me.image} size={96} />
+          </ProfileAvatarCollapseAnchor>
+          <View onLayout={avatarCollapse.onNameLayout} style={{ alignItems: "center", gap: 5 }}>
             <Text
               selectable
               style={{ color: colors.label, fontSize: 23, fontWeight: "700", textAlign: "center" }}
@@ -269,34 +323,20 @@ export default function AccountScreen() {
           </View>
         </View>
 
+        {offline ? (
+          <StaleDataBanner updatedAt={staleSince} />
+        ) : error ? (
+          <RequestFeedback error={error} onRetry={() => void refetch()} />
+        ) : null}
+
         <Section title={t("accountProfile")}>
           <InfoRow label={t("accountName")} value={fullName} icon="person" />
           <Separator inset={48} />
-          <MenuView
-            actions={LANGUAGES.map(
-              (lang): MenuAction => ({
-                id: lang,
-                title: languageName(lang),
-                state: lang === me.language ? "on" : "off",
-                attributes: savingLanguage ? { disabled: true } : undefined,
-              }),
-            )}
-            onPressAction={({ nativeEvent }) => void changeLanguage(nativeEvent.event as Lang)}
-          >
-            <View
-              accessible
-              accessibilityLabel={t("accountLanguage")}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: savingLanguage, busy: savingLanguage }}
-            >
-              <InfoRow
-                label={t("accountLanguage")}
-                value={languageName(me.language)}
-                icon="globe"
-                accessoryIcon="chevron.down"
-              />
-            </View>
-          </MenuView>
+          <LanguageRow
+            language={me.language}
+            saving={savingLanguage}
+            onChange={(next) => void changeLanguage(next)}
+          />
         </Section>
 
         <Section title={t("accountContact")}>
@@ -352,11 +392,28 @@ export default function AccountScreen() {
             icon="tshirt"
           />
           <Separator inset={48} />
-          <InfoRow
-            label={t("accountFoodIntolerances")}
-            value={dietaryLabels || t("accountNoneDeclared")}
-            icon="fork.knife"
-          />
+          {canEditDietary ? (
+            <Pressable
+              accessibilityLabel={t("accountFoodIntolerances")}
+              accessibilityRole="button"
+              onPress={() =>
+                router.push({
+                  pathname: PROFILE_TASKS_PATH,
+                  params: { tasks: "dietary", edit: "1" },
+                })
+              }
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <InfoRow
+                label={t("accountFoodIntolerances")}
+                value={dietaryValue}
+                icon="fork.knife"
+                accessoryIcon="chevron.right"
+              />
+            </Pressable>
+          ) : (
+            <InfoRow label={t("accountFoodIntolerances")} value={dietaryValue} icon="fork.knife" />
+          )}
           {me.foodIntoleranceNotes ? (
             <>
               <Separator inset={48} />
@@ -372,13 +429,85 @@ export default function AccountScreen() {
           ) : null}
         </Section>
 
-        {canViewStaffStatistics(me.capabilities) ? (
+        {/* H51: every notification setting lives here; the Schedule bell only shows the inbox. */}
+        <View testID="account-notifications" onLayout={highlight.onRowLayout}>
+          <Section title={t("alertsNotifications")}>
+            <View>
+              <AccountSubpageRow
+                label={t("notificationsPreferences")}
+                icon="bell"
+                onPress={() => router.push("/(tabs)/others/notification-settings")}
+              />
+              <Animated.View
+                pointerEvents="none"
+                testID="account-notifications-highlight"
+                style={[
+                  {
+                    backgroundColor: colors.accent,
+                    bottom: 0,
+                    left: 0,
+                    position: "absolute",
+                    right: 0,
+                    top: 0,
+                  },
+                  highlight.style,
+                ]}
+              />
+            </View>
+          </Section>
+        </View>
+
+        {isSponsorRep && mealPlan.data && mealPlan.data.meals.length > 0 ? (
+          <Section title={t("mealsTitle")} footer={t("mealsLockNote")}>
+            {mealPlanError ? (
+              <RequestFeedback error={mealPlanError} message={t("mealPlanSaveError")} />
+            ) : null}
+            {mealPlan.data.meals.map((meal, index) => (
+              <View key={meal.activityId}>
+                {index > 0 ? <Separator /> : null}
+                <ToggleRow
+                  label={mealLabel(meal, language)}
+                  value={mealAnswers[meal.activityId] ?? meal.attending ?? false}
+                  // Offline the cached plan stays visible but read-only.
+                  disabled={offline || meal.locked || savingMeals}
+                  onChange={(on) =>
+                    setMealAnswers((current) => ({ ...current, [meal.activityId]: on }))
+                  }
+                />
+              </View>
+            ))}
+            {offline || !mealsUnsaved ? null : (
+              <>
+                <Separator />
+                <ActionButton
+                  label={t("save")}
+                  busy={savingMeals}
+                  onPress={() => void saveMeals()}
+                />
+              </>
+            )}
+          </Section>
+        ) : null}
+
+        {canViewStaffStatistics(me.capabilities) || canManageStands(me.capabilities) ? (
           <Section title={t("accountStaff")}>
-            <AccountSubpageRow
-              label={t("accountStatistics")}
-              icon="chart.bar.xaxis"
-              onPress={() => router.push("/(tabs)/others/statistics")}
-            />
+            {canViewStaffStatistics(me.capabilities) ? (
+              <AccountSubpageRow
+                label={t("accountStatistics")}
+                icon="chart.bar.xaxis"
+                onPress={() => router.push("/(tabs)/others/statistics")}
+              />
+            ) : null}
+            {canViewStaffStatistics(me.capabilities) && canManageStands(me.capabilities) ? (
+              <Separator inset={48} />
+            ) : null}
+            {canManageStands(me.capabilities) ? (
+              <AccountSubpageRow
+                label={t("accountStands")}
+                icon="wave.3.right"
+                onPress={() => router.push("/(tabs)/others/stands")}
+              />
+            ) : null}
           </Section>
         ) : null}
 
@@ -453,10 +582,112 @@ export default function AccountScreen() {
         >
           <Text style={{ color: colors.tertiaryLabel, fontSize: 12 }}>{appVersionLabel}</Text>
         </Pressable>
-      </ScrollView>
+      </Animated.ScrollView>
       <AndroidStatusBarScrim />
+      <ProfileAvatarCollapse
+        controller={avatarCollapse}
+        image={me.image}
+        name={fullName}
+        size={96}
+        variant="account"
+      />
+      <AccountWalletOverlay wallet={wallet} />
     </View>
   );
+}
+
+/**
+ * H51: the alerts gear opens Account with `?highlight=notifications`. The
+ * param is consumed once: scroll the Notifications section into view, flash
+ * the Preferences row, then clear the param so a re-render or refocus does
+ * not replay it.
+ */
+function useNotificationsHighlight(
+  scrollRef: RefObject<ScrollView | null>,
+  topOffset: SharedValue<number>,
+) {
+  const router = useRouter();
+  const { highlight, highlightAt } = useLocalSearchParams<{
+    highlight?: string;
+    highlightAt?: string;
+  }>();
+  const reduceMotion = useReducedMotion();
+  const opacity = useSharedValue(0);
+  const [rowY, setRowY] = useState<number | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const handled = useRef(false);
+  const lastNonce = useRef<string | undefined>(undefined);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef({ rowY, viewportHeight, reduceMotion });
+  latest.current = { rowY, viewportHeight, reduceMotion };
+  const requested = highlight === "notifications";
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!requested) {
+      handled.current = false;
+      return;
+    }
+    // A new nonce (another gear tap) re-arms the handler.
+    if (handled.current && lastNonce.current !== highlightAt) handled.current = false;
+    lastNonce.current = highlightAt;
+    // Wait for both layouts; children can report before the scroll view.
+    if (handled.current || rowY === null || viewportHeight === 0) return;
+    handled.current = true;
+    router.setParams({ highlight: undefined, highlightAt: undefined });
+    // Always start from the top, then scroll only once the sheet dismissal and
+    // navigation transition have finished, so the user sees the page move.
+    // Under the automatic inset the true top is negative; y 0 would start
+    // with the avatar already part-way into the island.
+    if (timer.current) clearTimeout(timer.current);
+    opacity.value = 0;
+    scrollRef.current?.scrollTo({ animated: false, y: topOffset.value });
+    timer.current = setTimeout(
+      () => {
+        const { rowY: y, viewportHeight: height, reduceMotion: reduced } = latest.current;
+        // Leave the row a third of the way down so the section header shows too.
+        scrollRef.current?.scrollTo({
+          animated: !reduced,
+          y: Math.max(0, (y ?? 0) - height / 3),
+        });
+        // Flash after the scroll animation has settled.
+        opacity.value = reduced
+          ? withSequence(
+              withTiming(0.18, { duration: 0 }),
+              withDelay(1000, withTiming(0, { duration: 0 })),
+            )
+          : withSequence(
+              withDelay(SCROLL_SETTLE_MS, withTiming(0.18, { duration: 200 })),
+              withDelay(400, withTiming(0, { duration: 450 })),
+            );
+      },
+      reduceMotion ? 0 : TRANSITION_SETTLE_MS,
+    );
+  }, [
+    opacity,
+    reduceMotion,
+    requested,
+    highlightAt,
+    router,
+    rowY,
+    scrollRef,
+    topOffset,
+    viewportHeight,
+  ]);
+
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return {
+    style,
+    onRowLayout: ({ nativeEvent }: LayoutChangeEvent) => setRowY(nativeEvent.layout.y),
+    onScrollLayout: ({ nativeEvent }: LayoutChangeEvent) =>
+      setViewportHeight(nativeEvent.layout.height),
+  };
 }
 
 function AccountSubpageRow({
@@ -477,6 +708,86 @@ function AccountSubpageRow({
     >
       <InfoRow accessoryIcon="chevron.right" icon={icon} label={label} value="" />
     </Pressable>
+  );
+}
+
+function LanguageRow({
+  language,
+  saving,
+  onChange,
+}: {
+  language: string;
+  saving: boolean;
+  onChange: (language: Lang) => void;
+}) {
+  const { t } = useLocale();
+  const menuRef = useRef<MenuComponentRef>(null);
+  // The iOS MenuView hosts its trigger at intrinsic size, so the row needs an
+  // explicit width to span the section and keep its value right-aligned.
+  const [rowWidth, setRowWidth] = useState<number>();
+  const actions = LANGUAGES.map(
+    (lang): MenuAction => ({
+      id: lang,
+      title: languageName(lang),
+      state: lang === language ? "on" : "off",
+      attributes: saving ? { disabled: true } : undefined,
+    }),
+  );
+  const row = (
+    <InfoRow
+      label={t("accountLanguage")}
+      value={languageName(language)}
+      icon="globe"
+      accessoryIcon="chevron.down"
+    />
+  );
+  const accessibility = {
+    accessible: true,
+    accessibilityLabel: t("accountLanguage"),
+    accessibilityRole: "button",
+    accessibilityState: { disabled: saving, busy: saving },
+  } as const;
+
+  if (Platform.OS !== "android") {
+    return (
+      <View onLayout={({ nativeEvent }) => setRowWidth(nativeEvent.layout.width)}>
+        {rowWidth === undefined ? (
+          row
+        ) : (
+          // Mount the SwiftUI host only once the row is measured and pin its
+          // width: a host sized from an earlier intrinsic width keeps a narrow
+          // frame, centring the row off to the left and swallowing taps.
+          <MenuView
+            actions={actions}
+            onPressAction={({ nativeEvent }) => onChange(nativeEvent.event as Lang)}
+            style={{ width: rowWidth }}
+          >
+            <View {...accessibility} style={{ width: rowWidth }}>
+              {row}
+            </View>
+          </MenuView>
+        )}
+      </View>
+    );
+  }
+
+  // Material's DropdownMenu aligns its popup to the start edge of the anchor, so a
+  // full-width trigger opens it at the screen's left edge. Keep the whole row
+  // tappable but anchor the menu to a 1dp strip at the row's trailing edge.
+  return (
+    <View>
+      <Pressable {...accessibility} onPress={() => menuRef.current?.show()}>
+        {row}
+      </Pressable>
+      <MenuView
+        ref={menuRef}
+        actions={actions}
+        onPressAction={({ nativeEvent }) => onChange(nativeEvent.event as Lang)}
+        style={{ position: "absolute", top: 0, bottom: 0, right: 16, width: 1 }}
+      >
+        <View style={{ width: 1, height: 1 }} />
+      </MenuView>
+    </View>
   );
 }
 

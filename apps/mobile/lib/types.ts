@@ -42,6 +42,31 @@ export interface Me {
   hasEventAccess: boolean;
   hasQueueItems: boolean;
   capabilities: string[];
+  // Optional: an offline profile cached by an older build lacks these (#933).
+  /** #933: last explicit dietary answer, including "no restrictions". */
+  dietaryConfirmedAt?: string | null;
+  /** H7: dietary fields are no longer self-editable after an accepted application. */
+  profileLocked?: boolean;
+  isSponsorRep?: boolean;
+  /** #933: profile data to ask for on next entry. */
+  pendingProfileTasks?: ProfileTask[];
+}
+
+export type ProfileTask = "dietary" | "meal_plan";
+
+/** GET/PUT /api/me/meal-plan (#933). */
+export interface MealPlan {
+  confirmedAt: string | null;
+  meals: {
+    activityId: number;
+    name: string;
+    nameI18n: Record<string, string> | null;
+    startsAt: string;
+    endsAt: string;
+    location: string | null;
+    attending: boolean | null;
+    locked: boolean;
+  }[];
 }
 
 /** Anonymous event details shown before sign-in. */

@@ -4,6 +4,10 @@ import { ActionGroup } from "@/components/common/action-group";
 import { Section } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 
+/** Header for side-by-side sections so one without an action still aligns with its neighbour. */
+export const PAIRED_HEADER_CLASS =
+  "flex-row items-center justify-between gap-2 sm:items-center [&>div:first-child]:min-h-(--control-height-compact) [&>div:first-child]:items-center";
+
 /**
  * Semantic, border-only domain section with an optional state, action, or
  * exceptional description. It intentionally has no inline elevation.
@@ -82,10 +86,16 @@ export function SectionCard({
               variant === "plain" && "min-h-(--control-height-compact) items-center",
             )}
           >
-            {leading ?? (Icon && <Icon className="text-muted-foreground mt-0.5 size-5 shrink-0" />)}
+            {leading && <div className="shrink-0">{leading}</div>}
+            {title === undefined && Icon && !leading && (
+              <Icon className="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
+            )}
             <div className="min-w-0 space-y-1">
               {title !== undefined && (
-                <div className="flex flex-wrap items-center gap-(--space-related)">
+                <div className="heading-row flex flex-wrap items-center gap-(--space-related)">
+                  {Icon && !leading && (
+                    <Icon className="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
+                  )}
                   <h2 id={titleId} className="type-section-title wrap-break-word text-balance">
                     {title}
                   </h2>

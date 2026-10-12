@@ -1,5 +1,5 @@
-import { useRouter, useScrollToTop } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -18,6 +18,7 @@ import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
 import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
 import { canViewStaffStatistics } from "@/lib/tabs";
 import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
 /** Personal scan statistics and staff operations (H22-H27). */
@@ -32,7 +33,7 @@ export default function StatisticsScreen() {
   const [statsError, setStatsError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  useScrollToTop(scrollRef);
+  const trueTop = useTrueTopScroll(scrollRef);
 
   const canViewStats = canViewStaffStatistics(me?.capabilities ?? []);
 
@@ -50,9 +51,11 @@ export default function StatisticsScreen() {
     }
   }, [canViewStats]);
 
-  useEffect(() => {
-    void loadStats();
-  }, [loadStats]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadStats();
+    }, [loadStats]),
+  );
 
   // No connection yet when this screen first loaded — keep checking instead
   // of leaving the error on screen until the user manually retries.
@@ -99,6 +102,7 @@ export default function StatisticsScreen() {
   return (
     <ScrollView
       ref={scrollRef}
+      {...trueTop.scrollProps}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         gap: 22,

@@ -8,7 +8,6 @@ import { useLocale } from "@/lib/i18n";
 import type { DataPhase, StatisticsScope } from "./model";
 
 export function StatisticsToolbar({
-  activePhase,
   canGeneralStats,
   scopes,
   selectedScopeKeys,
@@ -27,7 +26,7 @@ export function StatisticsToolbar({
   onParticipantStatusesChange: (scopeKey: string, statuses: StatisticsParticipantStatus[]) => void;
 }) {
   const { t } = useLocale();
-  const visibleScopes = activePhase === "before" ? scopes : [];
+  const visibleScopes = scopes;
   const hasVisibleScopes = visibleScopes.length > 0;
 
   return (

@@ -8,7 +8,9 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
-import { useParams } from "next/navigation";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -17,28 +19,39 @@ import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { TabBar } from "@/components/common/tab-bar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { useCan } from "@/lib/session";
+import { useCan, useSessionContext } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
-import { type Enterprise, initials } from "../shared";
+import { ENTERPRISE_TAB_ALIASES, type Enterprise, enterpriseTabs, initials } from "../shared";
 
 import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterprise-cards";
-import { InviteLinksCard } from "./invite-links-card";
 import { JudgesCard } from "./judges-card";
-import { EnterpriseOverviewCard } from "./overview-card";
+import { StandTagsCard } from "./stand-tags-card";
 
 export default function EnterpriseDetailPage() {
   const { t } = useLocale();
+  const isMobile = useIsMobile();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
+  const router = useRouter();
+  const { me } = useSessionContext();
   const canManage = useCan(CAPABILITIES.SPONSORS_MANAGE);
-  const enterpriseTabs = canManage
-    ? (["overview", "profile", "challenges", "judges", "members", "invitations"] as const)
-    : (["overview", "profile", "challenges", "judges"] as const);
-  const { tab, setTab } = useUrlTab({ values: enterpriseTabs, defaultValue: "overview" });
+  const tabs = enterpriseTabs({ canManage, isSponsorRep: Boolean(me?.isSponsorRep) });
+  const { tab, setTab, requested } = useUrlTab({
+    values: tabs,
+    defaultValue: "profile",
+    aliases: ENTERPRISE_TAB_ALIASES,
+  });
+
+  // Sponsor invite links moved to the shared invitations screen (#929).
+  useEffect(() => {
+    if (canManage && requested === "invitations") router.replace("/users/invites");
+  }, [canManage, requested, router]);
 
   const [enterprise, setEnterprise] = useState<Enterprise | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -108,31 +121,46 @@ export default function EnterpriseDetailPage() {
           </Avatar>
         }
         title={enterprise.name}
+        className="flex-row items-center justify-between gap-2 md:items-center"
+        actions={
+          canManage && (
+            <Button
+              asChild
+              variant="outline"
+              size={isMobile ? "icon" : "default"}
+              aria-label={isMobile ? t("invitationManagement") : undefined}
+            >
+              <Link href="/users/invites">
+                {isMobile ? <EnvelopeSimpleIcon aria-hidden="true" /> : t("invitationManagement")}
+              </Link>
+            </Button>
+          )
+        }
       />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar aria-label={t("enterpriseSections")}>
-          <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
-          <TabsTrigger value="profile">{t("enterpriseProfileTab")}</TabsTrigger>
-          <TabsTrigger value="challenges">{t("challenges")}</TabsTrigger>
+          <TabsTrigger value="profile">{t("profileTitle")}</TabsTrigger>
+          {tabs.includes("challenges") && (
+            <TabsTrigger value="challenges">{t("challenges")}</TabsTrigger>
+          )}
           <TabsTrigger value="judges">{t("judges")}</TabsTrigger>
           {canManage && <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>}
-          {canManage && <TabsTrigger value="invitations">{t("invitationManagement")}</TabsTrigger>}
+          {tabs.includes("stand") && <TabsTrigger value="stand">{t("standTags")}</TabsTrigger>}
         </TabBar>
-        <TabsContent value="overview" className="space-y-6 pt-2">
-          <EnterpriseOverviewCard
+        <TabsContent value="profile" className="space-y-6 pt-2">
+          <EditCard
             enterprise={enterprise}
             canManage={canManage}
-            onOpenProfile={() => setTab("profile")}
+            onSaved={load}
+            logoUploader={<LogoCard enterprise={enterprise} onChanged={load} />}
           />
         </TabsContent>
-        <TabsContent value="profile" className="space-y-6 pt-2">
-          <LogoCard enterprise={enterprise} onChanged={load} />
-          <EditCard enterprise={enterprise} canManage={canManage} onSaved={load} />
-        </TabsContent>
-        <TabsContent value="challenges" className="pt-2">
-          <ChallengesSummaryCard enterprise={enterprise} canManage={canManage} />
-        </TabsContent>
+        {tabs.includes("challenges") && (
+          <TabsContent value="challenges" className="pt-2">
+            <ChallengesSummaryCard enterprise={enterprise} canManage={canManage} />
+          </TabsContent>
+        )}
         <TabsContent value="judges" className="pt-2">
           <JudgesCard enterpriseId={enterprise.id} />
         </TabsContent>
@@ -141,9 +169,19 @@ export default function EnterpriseDetailPage() {
             <MembersCard enterpriseId={enterprise.id} />
           </TabsContent>
         )}
-        {canManage && (
-          <TabsContent value="invitations" className="pt-2">
-            <InviteLinksCard enterpriseId={enterprise.id} />
+        {tabs.includes("stand") && (
+          <TabsContent value="stand" className="pt-2">
+            <StandTagsCard
+              enterpriseId={enterprise.id}
+              enterpriseName={enterprise.name}
+              scannable={enterprise.stand_scannable}
+              canManage={canManage}
+              onScannableChange={(scannable) =>
+                setEnterprise((current) =>
+                  current ? { ...current, stand_scannable: scannable } : current,
+                )
+              }
+            />
           </TabsContent>
         )}
       </Tabs>

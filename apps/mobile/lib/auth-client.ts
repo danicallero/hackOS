@@ -119,7 +119,7 @@ export function forceLocalSignOut(): void {
   void clearStoredSession();
   clearSessionAtom();
   try {
-    notifySignOut();
+    void notifySignOut();
   } catch {
     // A listener failure must not prevent the caller from replacing the route.
   }
@@ -164,7 +164,14 @@ export async function signOut(): Promise<Awaited<ReturnType<typeof authClient.si
     // Swallowed — see deleteStoredKey.
   }
   await clearLocalSession();
-  notifySignOut();
-  if (sessionCookie) void revokeServerSession(sessionCookie);
+  // Listener cleanup that still needs this session (#966: switching off the
+  // device's Live Activity delivery) goes out before the revocation, which
+  // would otherwise reject it as unauthenticated.
+  const cleanup = notifySignOut();
+  if (sessionCookie) {
+    const revoke = () => revokeServerSession(sessionCookie);
+    if (cleanup) void cleanup.then(revoke, revoke);
+    else void revoke();
+  }
   return { data: { success: true }, error: null };
 }

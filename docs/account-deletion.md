@@ -99,8 +99,9 @@ implementation is now the shared lifecycle in `removal.ts`.
    re-evaluates the boundary, and commits `account_state = 'removal_pending'`
    with the selected action. A live open session produces `pending_exit`, not
    a rejected privacy request.
-3. For a finalizable request, sessions, Better Auth accounts, push tokens and
-   dietary values are removed in preparation. For `pending_exit`, those
+3. For a finalizable request, sessions, Better Auth accounts, push tokens,
+   dietary values, dietary/meal-plan confirmation timestamps and sponsor meal
+   plans (`meal_attendance_plans`, #933) are removed in preparation. For `pending_exit`, those
    identity and catering rows remain only for the fixed recovery window so the
    participant can cancel or staff can record the exit; `account_state` blocks
    normal participant activity. Wallet rows are marked `voided` during removal
@@ -267,8 +268,10 @@ provider copies, backups and logs are separate controls (A07–A09, A17).
 ## 6. Operational retention and dietary data
 
 During the event, `users.food_intolerances`,
-`users.food_intolerance_notes`, and the derived `dietary_data_state` are
-available to authorized logistics paths. Native scanner snapshots include only
+`users.food_intolerance_notes`, the derived `dietary_data_state`, and sponsor
+meal plans (`meal_attendance_plans`, #933) are available to authorized
+logistics paths. Meal plans are personal (not special-category) data; they are
+deleted with the account and never copied to anonymous audit data. Native scanner snapshots include only
 what a staff scanner needs at the point of service; meal inbox rows use the
 badge only as a transient retry credential. Terminal meal results retain
 counts/status and clear `badge_id`; they do not retain dietary fields.
@@ -360,7 +363,7 @@ correct it.
 | Authentication | Active-user guard rejects `removal_pending`/deleted users from ordinary participant services; the profile guard allows only pending recovery/status/cancel. Verified-primary-email self-service requests also require a short-lived one-time PIN. Recovery sessions may be inserted or expiry-refreshed only for the same pending identity and only inside its fixed deadline; direct session ownership reassignment is rejected. Sessions, Better Auth accounts and push tokens are removed during preparation for finalizable paths and during pending-exit finalization. |
 | Authorization | `/me` avoids caller-supplied target IDs; admin routes use capability guards and self-protection. |
 | Idempotency | Clients send keys; self completion is moved to an identity-free scope before deleting `users`; pending-exit scanner responses omit target identity; completion writes cannot be regressed by a late `202`; stale in-flight records can be reclaimed. |
-| Storage | Exact subject upload path, response-derived upload prefixes, DSR export prefixes and known storage keys are deleted; S3 deletion errors are surfaced and retried. |
+| Storage | Exact subject upload path, response-derived upload prefixes, the subject's `profiles/<id>/` prefix (account photo and directory CV, #934/#935), DSR export prefixes and known storage keys are deleted; S3 deletion errors are surfaced and retried. |
 | External identity | Google Wallet objects are expired where configured; Apple Wallet push invalidation is attempted; unregistered passes are already gone. |
 | Writers | `0730` installs active-user reference triggers for every final direct FK to `users`; domain writers also use active filters and row locks. |
 | Audit | Removal deletes identity-bearing subject/actor audit rows rather than preserving a hidden identity bridge. The final anonymous event has no IP/user-agent. |
@@ -551,9 +554,10 @@ synthetic identity-shaped `users` row.
 
 | Data / table and participant fields | Before check-in | During event | After anonymization | Permanent anonymous audit record | Reason |
 | --- | --- | --- | --- | --- | --- |
-| `users`: id, email, verification, image, name, surname, DNI, secondary email, language, UI prefs, timestamps | Full account data | Active profile/service identity | Delete | No | Direct identity/auth profile. |
+| `users`: id, email, verification, image, photo key, name, surname, DNI, secondary email, language, UI prefs, timestamps | Full account data | Active profile/service identity | Delete | No | Direct identity/auth profile. |
 | `users`: badge_id, badge_id_history | Credential before use | Active badge operations | Delete; permanent unlinked keyed-digest non-reuse tombstone | No | Credential is not audit data; the digest tombstone exists only to reject arbitrarily late offline replay. |
 | `users`: food_intolerances, food_intolerance_notes, dietary_data_state, shirt_size | May be edited | Operational catering/badge data | Keep dietary values only during reversible `pending_exit`; clear them during finalization, then delete the remaining user row | No | Dietary data supports active/in-flight catering only and is never part of the permanent anonymous audit dataset. |
+| `users`: dietary_confirmed_at, meal_plan_confirmed_at; `meal_attendance_plans` (#933) | May be edited | Sponsor meal planning and the dietary re-ask | Clear the timestamps and delete plan rows with the dietary values; the user FK cascades at final deletion | No | Planned attendance supports catering headcounts only; aggregates never identify the person. |
 | `users.university_id` / `universities.name` | Profile dimension | May support services | Detach/delete the subject link; catalog survives | Only an application field explicitly configured for anonymous audit may retain a university value | Profile data is not copied merely because the shared university catalog exists. |
 | `accounts`: provider/account IDs, access/refresh/ID tokens, password | Auth credential | Auth credential | Delete | No | Credentials and provider identifiers must not survive. |
 | `sessions`: token, IP, user agent, expiry | Login session | Login/session | Delete during preparation for finalizable paths; keep existing rows while reversible `pending_exit` is active, with new/refresh sessions capped at the fixed recovery deadline, then delete at finalization | No | Pending recovery needs authenticated status/cancel/exit guidance; session metadata is never anonymous audit data. |
@@ -561,6 +565,9 @@ synthetic identity-shaped `users` row.
 | `verifications`: identifier/value | Temporary email/reset state | Temporary auth state | Preserve only rows that match a current active user's email/secondary email/ID; delete detached rows | No | No user FK; an orphan identifier can be a hidden identity copy left by the old anonymizer. |
 | `email_verification_tokens`: token, email, user_id, groups | Claim/confirmation | Acceptance/account claim | Delete | No | Token and email are direct credentials/identity. |
 | `push_tokens`: token, platform, user_id | Device delivery | Push delivery | Delete during preparation for finalizable paths; delete at pending-exit finalization | No | Delivery credential/device identifier; no new participant notifications are permitted after pending begins. |
+| `live_activity_devices` (+ cascaded `live_activity_sessions`): install id, platform, push-to-start/Expo/per-activity tokens, language, opt-out (#966) | Device delivery | Live Activity / Live Update pushes | Deleted with `push_tokens` in the same steps | No | Delivery credentials/device identifiers; export bundle lists device metadata only. |
+| `live_activity_kind_opt_outs`: user_id, kind (#966) | Personal preference | Live Activity kinds the user turned off | Deleted with `live_activity_devices` in the same steps | No | Not required for audit; listed in the export bundle. |
+| `live_activity_kind_orders`: user_id, kinds (#966) | Personal preference | The user's own Live Activity kind order | Deleted with `live_activity_devices` in the same steps | No | Not required for audit; listed in the export bundle. |
 | `notification_preferences`: category/channel/enabled | Personal preference | Service preference | Delete | No | Not required for audit. |
 | `notification_outbox`: payload, recipient FK, status/errors | Pending welcome/service message | Operational delivery | Delete subject rows; active filters prevent new rows | No | Payload may contain identifying notification data. |
 | `announcement_reads` / `announcement_recipients`: user FK, timestamps | Personal delivery/read state | Personal delivery/read state | Delete | No | Not an audit requirement. |
@@ -602,6 +609,8 @@ synthetic identity-shaped `users` row.
 | `enterprise_invite_links` / `user_invite_links`: creator/token | Shared invite config | Provisioning | Null subject creator; expire/revoke shared token as normal | No | Shared link survives; subject authorship does not. |
 | `devpost_participants`: repo/email/name/surname/username/user/linker | Imported project identity | Project reconciliation | Delete subject match by FK/email; capture FK-linked Devpost-only roots before deletion; shared repo may survive | No | External project snapshot is identity-bearing. |
 | `repos`: creator/name/description/URLs | Project/team | Judging/project service | Null creator; delete solo orphan; preserve shared repo for remaining members | No | Shared project is not anonymous demographic audit. |
+| `user_public_profiles`: visibility/headline/location note/bio/links/CV key | Public profile | Public profile (#934) | Delete in the removal transaction; cascades on user delete; H54 trigger rejects pending writes | No | Opt-in public profile is identity-bearing; included in the personal export bundle as `publicProfile`. |
+| `diary_entries`: owner/target/note | Event diary | People diary (#935) | Delete rows owned by or pointing at the subject in the removal transaction; both FKs cascade on user delete; H54 trigger rejects pending writes | No | Private social graph and notes; the owner's own entries are exported as `diary` (saved people by user id only). Other attendees' entries about the subject are their private data and are not exported. |
 | `submissions`: repo/user/inviter/external ID | Team/project relation | Judging | Delete subject membership; null subject inviter | No | No individual submission relationship needed. |
 | `repo_devpost_prizes` / `devpost_prizes`: project/prize | Shared project result | Judging/result | Survive for surviving shared repo; delete with solo orphan | No | No direct identity after member link removal. |
 | `challenges`: sponsor author anchor | Shared challenge | Judging | Survive; sponsor user link is severed | No | Organization-owned challenge needs FK anchor. |
@@ -654,6 +663,11 @@ suite alone.
 - `apps/api/src/modules/identity/removal.ts`: eligibility, pending state,
   external cleanup, demographic extraction, presence aggregation, relation
   scrubbing, anonymous UUID creation, retry worker.
+- `apps/api/src/modules/directory/`: opt-in public profile; the removal
+  transaction deletes it (#934, [`directory.md`](./directory.md)).
+- `apps/api/src/modules/diary/`: event diary; the removal transaction deletes
+  the subject's diary and every entry pointing at them (#935,
+  [`diary.md`](./diary.md)).
 - `apps/api/src/modules/identity/routes/profile.ts`: `/me` and admin
   eligibility/removal routes, schemas, auth/idempotency prehandlers.
 - `apps/api/src/lib/capabilities.ts`, `idempotency.ts`, `storage.ts`,

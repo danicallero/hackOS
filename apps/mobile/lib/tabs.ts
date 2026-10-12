@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { Platform } from "react-native";
 import type { OverflowTabKey } from "./overflow-tabs";
 
-export type TabKey = "schedule" | "notifications" | "scan" | "activities" | OverflowTabKey;
+export type TabKey = "schedule" | "scan" | "activities" | OverflowTabKey;
 
 export interface PersonalTabContext {
   hasQueueItems: boolean;
@@ -31,6 +31,14 @@ export function isOperator(capabilities: string[]): boolean {
 /** Staff members with access to their personal logistics statistics. */
 export function canViewStaffStatistics(capabilities: string[]): boolean {
   return isOperator(capabilities) || has(capabilities, CAPABILITIES.LOGISTICS_STATS);
+}
+
+/**
+ * #935: global sponsor administrators link NFC tags to sponsor stands by
+ * tapping them. The same `sponsors:manage` gate as the web Stands page.
+ */
+export function canManageStands(capabilities: string[]): boolean {
+  return has(capabilities, CAPABILITIES.SPONSORS_MANAGE);
 }
 
 export function canScanActivities(capabilities: string[]): boolean {
@@ -75,22 +83,16 @@ export function primaryTabs(
   context: PersonalTabContext = NO_PERSONAL_QUEUE,
 ): TabKey[] {
   if (queueOperationsInPrimaryBar(capabilities)) {
-    return ["schedule", "operations", "notifications"];
+    return ["schedule", "operations"];
   }
   if (!isOperator(capabilities)) {
-    return [
-      "schedule",
-      ...(canSeeMyQueue(capabilities, context) ? (["queue"] as const) : []),
-      "wallet",
-      "notifications",
-    ];
+    return ["schedule", ...(canSeeMyQueue(capabilities, context) ? (["queue"] as const) : [])];
   }
 
   return [
     "schedule",
     "scan",
     ...(canScanActivities(capabilities) ? (["activities"] as const) : []),
-    "notifications",
   ];
 }
 
@@ -99,14 +101,17 @@ export function overflowTabs(
   capabilities: string[],
   context: PersonalTabContext = NO_PERSONAL_QUEUE,
 ): OverflowTabKey[] {
-  if (!isOperator(capabilities) && !canOperateQueues(capabilities)) return ["account"];
+  // #935: every signed-in attendee keeps an event diary (the tab shell
+  // already requires event access).
+  if (!isOperator(capabilities) && !canOperateQueues(capabilities)) return ["diary", "account"];
   return [
     ...(canSeeMyQueue(capabilities, context) ? (["queue"] as const) : []),
-    "wallet",
-    "account",
+    "diary",
     ...(isOperator(capabilities) && canOperateQueues(capabilities)
       ? (["operations"] as const)
       : []),
+    // H55: Account is always the last destination, nearest the thumb.
+    "account",
   ];
 }
 

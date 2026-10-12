@@ -4,6 +4,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
+import { audit } from "../../lib/audit.js";
 import {
   getRequestAuthorizationContext,
   requireAnyCapability,
@@ -11,6 +12,7 @@ import {
   requireCapability,
   userHasCapability,
 } from "../../lib/capabilities.js";
+import { sendCsv } from "../../lib/csv.js";
 import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { keyByUser, rateLimitGuard } from "../../lib/rate-limit.js";
@@ -31,6 +33,7 @@ import {
 import { logisticsTopicForFixture } from "./active-broadcast.js";
 import { activityScan } from "./activities.js";
 import { buildGoogleSaveUrl } from "./google-wallet.js";
+import { exportMealPlanCsv, mealPlanSummaries } from "./meal-plans.js";
 import { enqueueMealScanBatch } from "./offline-meals.js";
 import { listPeople, searchPeople } from "./people.js";
 import {
@@ -82,6 +85,10 @@ import {
   languageSchema,
   lookupBody,
   lookupUserBody,
+  mealPlanActivityParam,
+  mealPlanExportQuery,
+  mealPlanSummariesQuery,
+  mealPlanSummariesResponse,
   mealScanBatchBody,
   personSearchBody,
   presenceActivityPatchBody,
@@ -281,7 +288,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Scanner stats by role",
         description:
-          "Per-role counts of accreditation-eligible, already-accredited, and currently-inside people, broken down by the same role classification the scanner roster uses. Eligible means the person currently holds at least one assigned active role with eventAccess enabled. The client sums whatever role groups it has filtered to.",
+          "Per-role counts of accreditation-eligible, already-accredited, and currently-inside people, broken down by role and individual capability-holder status so staff filters do not include non-staff people sharing a role. Eligible means the person currently holds at least one assigned active role with eventAccess enabled. The client sums whatever role groups it has filtered to.",
         response: { 200: scannerRoleStatsResponse },
       },
     },
@@ -383,7 +390,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: checkInBody,
         description:
-          "Assign a badge to the ticket's owner and log the check-in (H22). Idempotency-key replays are safe; 409 if the badge belongs to someone else, the badge id is actually a ticket token, or the person is already accredited (use /api/accreditation/rotate to replace a badge); 403 if the ticket's owner no longer holds event access (H43) — the tickets row is permanent, so a stale/captured QR does not itself expire, but check-in still checks live event access. Rate limited per staff user (#538, docs/rate-limiting.md).",
+          "Assign a badge to the ticket's owner and log the check-in (H22). Idempotency-key replays are safe; 409 if the badge belongs to someone else, the badge id is actually a ticket token or a sponsor stand tag (#935), or the person is already accredited (use /api/accreditation/rotate to replace a badge); 403 if the ticket's owner no longer holds event access (H43) — the tickets row is permanent, so a stale/captured QR does not itself expire, but check-in still checks live event access. Rate limited per staff user (#538, docs/rate-limiting.md).",
       },
     },
     async (req) =>
@@ -424,7 +431,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: rotateBody,
         description:
-          "Replace someone's badge (H23): identify the person by userId (preferred) or by their current badge id. The old badge is revoked everywhere, wallet badge passes are voided, and the change is audited with the given reason. 409 if the new badge is already assigned or is actually a ticket token. Rate limited per staff user (#538, docs/rate-limiting.md).",
+          "Replace someone's badge (H23): identify the person by userId (preferred) or by their current badge id. The old badge is revoked everywhere, wallet badge passes are voided, and the change is audited with the given reason. 409 if the new badge is already assigned or is actually a ticket token or a sponsor stand tag (#935). Rate limited per staff user (#538, docs/rate-limiting.md).",
       },
     },
     async (req) =>
@@ -717,8 +724,62 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   // ── H27 stats ────────────────────────────────────────────────────────────
 
-  typed.get("/api/logistics/stats", { ...routeAccess(access.stats), preHandler: stats }, async () =>
-    logisticsStats(),
+  typed.get(
+    "/api/logistics/stats",
+    {
+      ...routeAccess(access.stats),
+      preHandler: stats,
+      schema: {
+        summary: "Live event statistics",
+        description:
+          "H27 aggregate accreditation, estimated current presence, meal servings and activity attendance, plus `hourly` (UTC-hour buckets of accreditations, meal servings and activity scans) for peak-load and attendance-curve charts. Each activity includes presentAttendees: distinct attendees intersected with the current presence estimate, so coverage charts use the same population for numerator and denominator. Requires logistics statistics access; excludes synthetic and inactive accounts.",
+      },
+    },
+    async () => logisticsStats(),
+  );
+
+  // ── #933 sponsor meal plans: planned headcounts and catering export ─────
+
+  typed.get(
+    "/api/logistics/meal-plans",
+    {
+      ...routeAccess(access.stats),
+      preHandler: stats,
+      schema: {
+        querystring: mealPlanSummariesQuery,
+        summary: "Planned sponsor meal headcounts",
+        description:
+          "Per meal offered to sponsors (meal-kind activity whose schedule entry includes the `sponsor` audience, ended meals included): how many sponsor representatives plan to attend, declined, or have not answered, plus the intolerance breakdown and the number with dietary notes among those attending. Aggregates only; excludes inactive and anonymized accounts, and counts only test accounts for a synthetic review operator (real ones otherwise). Hidden schedule entries are not offered. `activityId` narrows to one meal. Requires logistics statistics access.",
+        response: { 200: mealPlanSummariesResponse },
+      },
+    },
+    async (req) => ({ meals: await mealPlanSummaries(actor(req.userId), req.query.activityId) }),
+  );
+
+  typed.get(
+    "/api/logistics/meal-plans/:activityId/export.csv",
+    {
+      ...routeAccess({ kind: "capability", capability: CAPABILITIES.MEAL_PLANS_EXPORT }),
+      preHandler: requireCapability(CAPABILITIES.MEAL_PLANS_EXPORT),
+      schema: {
+        params: mealPlanActivityParam,
+        querystring: mealPlanExportQuery,
+        summary: "Export a meal's attendees for catering",
+        description:
+          "One row per sponsor representative planning to attend the meal: name, surname, enterprise, intolerances (labels in `language`, default es) and dietary notes. Carries per-person dietary data, so it requires the meal-plans:export capability and every download writes an `export` audit row. A synthetic review operator only sees test accounts. 404 when the activity is not a meal offered to sponsors.",
+      },
+    },
+    async (req, reply) => {
+      const actorId = actor(req.userId);
+      const csv = await exportMealPlanCsv(actorId, req.params.activityId, req.query.language);
+      await audit(pool, {
+        actorId,
+        entityType: "meal_plan_export",
+        entityId: req.params.activityId,
+        action: "export",
+      });
+      return sendCsv(reply, `meal-plan-${req.params.activityId}.csv`, csv);
+    },
   );
 
   typed.get(
@@ -795,7 +856,17 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/schedule",
-    { ...routeAccess(access.scheduleManage), preHandler: scheduleManage },
+    {
+      ...routeAccess(access.scheduleManage),
+      preHandler: scheduleManage,
+      schema: {
+        summary: "Manage the schedule",
+        description:
+          "Every schedule item, drafts included, with owners, for the staff run-of-show " +
+          "(H48, H59). `liveActivityAudience` says whether the item's audience gets an " +
+          "attendee Live Activity (#966).",
+      },
+    },
     async () => listSchedule(),
   );
 
@@ -804,7 +875,14 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(access.scheduleManage),
       preHandler: scheduleManage,
-      schema: { body: scheduleBody },
+      schema: {
+        body: scheduleBody,
+        summary: "Create a schedule item",
+        description:
+          "Creates a schedule item and its linked scanner activity (H48, H25, H26). " +
+          "`audiences` decides who sees it once shown (H59); `liveActivityAudience` " +
+          "(default false) also gives that audience an attendee Live Activity (#966).",
+      },
     },
     async (req, reply) =>
       reply.code(201).send(
@@ -821,6 +899,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           audiences: req.body.audiences,
           contactNote: req.body.contactNote ?? null,
           notes: req.body.notes ?? null,
+          liveActivityAudience: req.body.liveActivityAudience,
         }),
       ),
   );
@@ -830,7 +909,14 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(access.scheduleManage),
       preHandler: scheduleManage,
-      schema: { params: scheduleIdParam, body: schedulePatchBody },
+      schema: {
+        params: scheduleIdParam,
+        body: schedulePatchBody,
+        summary: "Edit a schedule item",
+        description:
+          "Partial edit: only the fields sent change (H48, H59). `liveActivityAudience` " +
+          "turns the attendee Live Activity for the item's audience on or off (#966). Audited.",
+      },
     },
     async (req) =>
       updateScheduleItem(actor(req.userId), req.params.id, {
@@ -846,6 +932,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         audiences: req.body.audiences,
         contactNote: req.body.contactNote,
         notes: req.body.notes,
+        liveActivityAudience: req.body.liveActivityAudience,
       }),
   );
 

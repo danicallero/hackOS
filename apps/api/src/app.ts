@@ -30,7 +30,11 @@ import { findReviewFixtureByUserId } from "./lib/review-fixture-log.js";
 import { openApiSecurityForPolicy, registerRoutePolicyInfrastructure } from "./lib/route-policy.js";
 import { registerSessionInvalidations } from "./lib/session-invalidation.js";
 import { broadcast } from "./lib/sse.js";
-import { mutationDomainForPath, publicContentMutationForPath } from "./lib/sse-routing.js";
+import {
+  directoryMutationForPath,
+  mutationDomainForPath,
+  publicContentMutationForPath,
+} from "./lib/sse-routing.js";
 import { valkey } from "./lib/valkey.js";
 import { registerModules } from "./modules/index.js";
 import { authContextPlugin } from "./plugins/auth-context.js";
@@ -281,9 +285,15 @@ export async function buildApp(): Promise<App> {
     // Custom request headers the app sends (idempotency on critical mutations).
     allowedHeaders: ["content-type", "idempotency-key"],
     // Response headers the browser must be able to read cross-origin: rate
-    // limit backoff (H3), idempotent-replay signalling, and per-file export
-    // failures (H56) the web client surfaces so staff can act on them.
-    exposedHeaders: ["retry-after", "idempotency-replayed", "x-export-file-failures"],
+    // limit backoff (H3), idempotent-replay signalling, per-file export
+    // failures (H56) the web client surfaces so staff can act on them, and the
+    // original file name of a CV the web viewer downloads from a blob (#935).
+    exposedHeaders: [
+      "retry-after",
+      "idempotency-replayed",
+      "x-export-file-failures",
+      "content-disposition",
+    ],
   };
   await app.register(cors, {
     delegator: (req, done) => {
@@ -440,7 +450,8 @@ export async function buildApp(): Promise<App> {
     if (
       !["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ||
       reply.statusCode >= 300 ||
-      req.idempotency?.replayed
+      req.idempotency?.replayed ||
+      req.domainUnchanged
     )
       return;
 
@@ -450,6 +461,7 @@ export async function buildApp(): Promise<App> {
     const topics = new Set<string>([SSE_TOPICS.AUDIT]);
     const domain = mutationDomainForPath(req.url);
     if (domain) topics.add(domain);
+    if (directoryMutationForPath(req.url)) topics.add(SSE_TOPICS.DIRECTORY);
     const broadcasts = [...topics].map((topic) => broadcast(topic, EVENTS.DOMAIN_CHANGED, {}));
     if (publicContentMutationForPath(req.url)) {
       broadcasts.push(broadcast(SSE_TOPICS.PUBLIC_CONTENT, EVENTS.DATA_CHANGED, {}));

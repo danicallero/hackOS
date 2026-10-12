@@ -12,10 +12,7 @@ import type { ScannerPerson } from "@/lib/scanner-types";
  * custom role names that nobody on the current roster actually holds, which
  * would offer filter rows that match nobody. Deriving from the roster instead
  * guarantees every option is always a value someone can actually be filtered
- * by. (The scanner's own "staff"/"sponsor" operational grouping, which used
- * to ride on this same role value, now uses the real
- * `hasCapabilities`/`isEnterpriseJudge` fields instead — see
- * scanner-group-filter.ts.)
+ * by. The scanner counter filter uses this same catalogue and exact role values.
  */
 export type RoleFilterValue = string | null;
 

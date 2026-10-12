@@ -1,9 +1,18 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { act, screen, userEvent, waitFor } from "@testing-library/react-native";
-import { Alert } from "react-native";
+import { act, fireEvent, screen, userEvent, waitFor, within } from "@testing-library/react-native";
+import { Alert, BackHandler, ScrollView } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+
+const testMetrics = {
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+  insets: { top: 47, left: 0, right: 0, bottom: 34 },
+};
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+const mockSetParams = jest.fn();
+let mockSearchParams: Record<string, string | undefined> = {};
 const mockFocusEffect = jest.fn();
 const mockApiFetch = jest.fn();
 const mockDeleteOwnAccount = jest.fn();
@@ -49,7 +58,8 @@ jest.mock("expo-router", () => ({
     const ReactLib = require("react");
     ReactLib.useEffect(callback, []);
   },
-  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useLocalSearchParams: () => mockSearchParams,
+  useRouter: () => ({ push: mockPush, replace: mockReplace, setParams: mockSetParams }),
   useScrollToTop: jest.fn(),
 }));
 jest.mock("expo-router/stack", () => ({ Stack: { Screen: () => null } }));
@@ -247,8 +257,16 @@ jest.mock("@/lib/i18n", () => {
       backToSignIn: "Back to sign in",
       storageTitle: "Storage",
       storageDataTitle: "App storage",
+      tabWallet: "Wallet",
+      close: "Close",
     })[key] ?? key;
   return { useLocale: () => ({ language: "en", t: translate }) };
+});
+jest.mock("@/components/wallet-screen", () => {
+  const ReactLib = require("react");
+  const Native = require("react-native");
+  return ({ contentTopInset }: { contentTopInset: number }) =>
+    ReactLib.createElement(Native.Text, { testID: "wallet-screen" }, String(contentTopInset));
 });
 jest.mock("@/lib/me-context", () => ({ useMeContext: () => mockMeContext }));
 jest.mock("@/lib/removal-progress", () => ({
@@ -299,6 +317,7 @@ describe("account removal UI flow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockMeContext.me.capabilities = [];
+    mockSearchParams = {};
     mockApiFetch.mockResolvedValue({ intolerances: [] });
     mockFetchAccountRemovalEligibility.mockResolvedValue({
       action: "delete",
@@ -393,6 +412,191 @@ describe("account removal UI flow", () => {
     expect(mockPush).toHaveBeenCalledWith("/(tabs)/others/legal");
     await user.press(screen.getByRole("button", { name: "Delete account" }));
     expect(mockPush).toHaveBeenCalledWith("/(tabs)/others/delete-account");
+  });
+
+  it("opens the wallet from the header button, which becomes its close button (H28)", async () => {
+    const user = userEvent.setup();
+    await renderMobile(<AccountScreen />);
+
+    expect(screen.queryByText("View tickets")).toBeNull();
+    expect(screen.queryByTestId("wallet-screen")).toBeNull();
+
+    await user.press(screen.getByRole("button", { name: "Wallet" }));
+    // Below the 44 pt button and its 8 pt gap; iOS adds the status bar itself.
+    expect(screen.getByTestId("wallet-screen")).toHaveTextContent("52");
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(close).toBe(screen.getByTestId("account-wallet-close"));
+    expect(close.props.accessibilityState).toEqual({ expanded: true });
+    expect(mockPush).not.toHaveBeenCalled();
+
+    await user.press(close);
+    await waitFor(() => expect(screen.queryByTestId("wallet-screen")).toBeNull());
+    expect(screen.getByRole("button", { name: "Wallet" })).toBeTruthy();
+  });
+
+  it("keeps the wallet button in the scrolling content, not pinned (H28)", async () => {
+    await renderMobile(<AccountScreen />);
+    const scroll = screen.getByTestId("account-scroll");
+    expect(within(scroll).getByTestId("account-wallet-button")).toBeTruthy();
+  });
+
+  it("closes the wallet on Android system back before leaving Account (H28)", async () => {
+    const backHandler = jest.spyOn(BackHandler, "addEventListener");
+    const user = userEvent.setup();
+    await renderMobile(<AccountScreen />);
+    expect(backHandler).not.toHaveBeenCalled();
+
+    await user.press(screen.getByRole("button", { name: "Wallet" }));
+    const onBack = backHandler.mock.calls.at(-1)?.[1] as () => boolean;
+    let handled = false;
+    await act(async () => {
+      handled = onBack();
+    });
+    expect(handled).toBe(true);
+    await waitFor(() => expect(screen.queryByTestId("wallet-screen")).toBeNull());
+    backHandler.mockRestore();
+  });
+
+  it("consumes the alerts highlight param once: scroll to Notifications, flash, clear", async () => {
+    // The jest ScrollView has no native view behind it; observe its ref method.
+    jest.useFakeTimers();
+    const scrollTo = jest.spyOn(ScrollView.prototype, "scrollTo").mockImplementation(() => {});
+    mockSearchParams = { highlight: "notifications", highlightAt: "1" };
+    await renderMobile(<AccountScreen />);
+    const scroll = screen.getByTestId("account-scroll");
+
+    await act(async () => {
+      fireEvent(scroll, "layout", { nativeEvent: { layout: { height: 600 } } });
+      fireEvent(screen.getByTestId("account-notifications"), "layout", {
+        nativeEvent: { layout: { y: 900 } },
+      });
+    });
+
+    expect(mockSetParams).toHaveBeenCalledTimes(1);
+    expect(mockSetParams).toHaveBeenCalledWith({
+      highlight: undefined,
+      highlightAt: undefined,
+    });
+    // Account jumps to the top first; no animated scroll before the transition settles.
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: false, y: 0 });
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      jest.advanceTimersByTime(200);
+    });
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: true, y: 700 });
+    expect(screen.getByTestId("account-notifications-highlight")).toBeTruthy();
+
+    // Later layout passes before the router drops the param must not replay it.
+    await act(async () => {
+      fireEvent(scroll, "layout", { nativeEvent: { layout: { height: 640 } } });
+      fireEvent(screen.getByTestId("account-notifications"), "layout", {
+        nativeEvent: { layout: { y: 920 } },
+      });
+    });
+    expect(mockSetParams).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+    });
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    scrollTo.mockRestore();
+    jest.useRealTimers();
+  });
+
+  it("starts the highlight scroll and tab re-press from the true top under an automatic inset", async () => {
+    jest.useFakeTimers();
+    const scrollTo = jest.spyOn(ScrollView.prototype, "scrollTo").mockImplementation(() => {});
+    // iOS reports the large-title inset as a negative resting offset; the
+    // jest ScrollView emits no UI-thread scroll events to capture it from.
+    const collapse = require("@/components/profile-avatar-collapse");
+    const realHook = collapse.useProfileAvatarCollapse;
+    const hook = jest
+      .spyOn(collapse, "useProfileAvatarCollapse")
+      .mockImplementation((...args: unknown[]) => {
+        const controller = realHook(...args);
+        controller.restingOffset.value = -150;
+        return controller;
+      });
+    mockSearchParams = { highlight: "notifications", highlightAt: "1" };
+    await renderMobile(<AccountScreen />);
+    const scroll = screen.getByTestId("account-scroll");
+
+    await act(async () => {
+      fireEvent(scroll, "layout", { nativeEvent: { layout: { height: 600 } } });
+      fireEvent(screen.getByTestId("account-notifications"), "layout", {
+        nativeEvent: { layout: { y: 900 } },
+      });
+    });
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: false, y: -150 });
+    // Without it iOS clamps a negative target to the raw inset, i.e. y 0.
+    expect(scroll.props.scrollToOverflowEnabled).toBe(true);
+    // Tab re-press scrolls to the same true top, not y 0.
+    const { useScrollToTop } = require("expo-router");
+    const topRef = (useScrollToTop as jest.Mock).mock.calls.at(-1)[0];
+    topRef.current.scrollToTop();
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: true, y: -150 });
+    hook.mockRestore();
+    scrollTo.mockRestore();
+    jest.useRealTimers();
+  });
+
+  it("replays the scroll from the top on every gear tap (new nonce)", async () => {
+    jest.useFakeTimers();
+    const scrollTo = jest.spyOn(ScrollView.prototype, "scrollTo").mockImplementation(() => {});
+    mockSearchParams = { highlight: "notifications", highlightAt: "1" };
+    const view = await renderMobile(<AccountScreen />);
+    await act(async () => {
+      fireEvent(screen.getByTestId("account-scroll"), "layout", {
+        nativeEvent: { layout: { height: 600 } },
+      });
+      fireEvent(screen.getByTestId("account-notifications"), "layout", {
+        nativeEvent: { layout: { y: 900 } },
+      });
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(500);
+    });
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+
+    // The router cleared the params; a later tap arrives with a fresh nonce.
+    const rerender = () =>
+      view.rerender(
+        <GestureHandlerRootView>
+          <SafeAreaProvider initialMetrics={testMetrics}>
+            <AccountScreen />
+          </SafeAreaProvider>
+        </GestureHandlerRootView>,
+      );
+    mockSearchParams = {};
+    await act(async () => rerender());
+    mockSearchParams = { highlight: "notifications", highlightAt: "2" };
+    scrollTo.mockClear();
+    await act(async () => rerender());
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: false, y: 0 });
+    await act(async () => {
+      jest.advanceTimersByTime(500);
+    });
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenLastCalledWith({ animated: true, y: 700 });
+    expect(mockSetParams).toHaveBeenCalledTimes(2);
+    scrollTo.mockRestore();
+    jest.useRealTimers();
+  });
+
+  it("leaves scroll position alone without a highlight param", async () => {
+    await renderMobile(<AccountScreen />);
+    await act(async () => {
+      fireEvent(screen.getByTestId("account-notifications"), "layout", {
+        nativeEvent: { layout: { y: 900 } },
+      });
+    });
+    expect(mockSetParams).not.toHaveBeenCalled();
   });
 
   it("shows Statistics only with staff statistics access", async () => {

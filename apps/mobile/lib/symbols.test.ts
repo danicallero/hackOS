@@ -22,6 +22,12 @@ describe("Android symbol aliases (H55)", () => {
     expect(androidSymbolName("person.crop.circle")).toBe("account_circle");
     expect(androidSymbolName("rectangle.3.group")).toBe("dashboard");
     expect(androidSymbolName("wallet.pass")).toBe("account_balance_wallet");
+    expect(androidSymbolName("person.2.crop.square.stack")).toBe("contacts");
+  });
+
+  it("covers the diary favourite toggle", () => {
+    expect(androidSymbolName("star")).toBe("star_border");
+    expect(androidSymbolName("star.fill")).toBe("star");
   });
 
   it("maps bell.badge and bell.badge.fill to notifications icons", () => {

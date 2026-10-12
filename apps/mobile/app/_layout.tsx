@@ -1,6 +1,6 @@
 import { EVENTS } from "@hackos/shared/events";
 import { useFonts } from "expo-font";
-import { type Href, useRootNavigationState, useRouter } from "expo-router";
+import { type Href, usePathname, useRootNavigationState, useRouter } from "expo-router";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
 import { Stack } from "expo-router/stack";
 import * as SplashScreen from "expo-splash-screen";
@@ -15,10 +15,19 @@ import { SessionState } from "@/components/session-state";
 import { useColorScheme } from "@/components/useColorScheme";
 import { ApiModeProvider, useApiMode } from "@/lib/api-mode";
 import { signOut } from "@/lib/auth-client";
+import { collectCompanyTagHref, takePendingCompanyTag } from "@/lib/company-tag-link";
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
+import { useLiveActivities } from "@/lib/live-activities/use-live-activities";
 import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
+import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
+import { setNfcShield } from "@/lib/nfc-reader";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
+import {
+  PROFILE_TASKS_PATH,
+  promptableProfileTasks,
+  shouldPresentProfileTasks,
+} from "@/lib/profile-tasks";
 import { registerForPushNotifications } from "@/lib/push";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { isOperator } from "@/lib/tabs";
@@ -41,6 +50,12 @@ export default function RootLayout() {
   useEffect(() => {
     if (error) throw error;
   }, [error]);
+
+  // H22–H26: Android only; keeps system tag dispatch off while the app is open.
+  useEffect(() => {
+    setNfcShield(true);
+    return () => setNfcShield(false);
+  }, []);
 
   useEffect(() => {
     if (loaded) {
@@ -80,10 +95,13 @@ function RootLayoutSessionContents() {
     <View style={{ flex: 1 }}>
       <LanguageSync />
       <PushRegistration authenticated={authenticated} />
+      <LiveActivities authenticated={authenticated} />
       <WalletCacheWarmup authenticated={authenticated} />
       <NotificationListeners />
       <MobileAccessGate authenticated={authenticated} />
       <PersonalEventStream authenticated={authenticated} />
+      <ProfileTasksPrompt authenticated={authenticated} sessionPending={initialSessionPending} />
+      <PendingCompanyTagResume authenticated={authenticated} />
       <RootLayoutNav
         authenticated={authenticated}
         pending={initialSessionPending}
@@ -193,6 +211,18 @@ function PushRegistration({ authenticated }: { authenticated: boolean }) {
   return null;
 }
 
+/** #966: Live Activities (iOS) / Live Updates (Android) for H38 and H25/H26. */
+function LiveActivities({ authenticated }: { authenticated: boolean }) {
+  const { me } = useMeContext();
+  const { language } = useLocale();
+  useLiveActivities({
+    signedIn: authenticated && Boolean(me?.hasEventAccess),
+    userId: me?.id ?? null,
+    language,
+  });
+  return null;
+}
+
 /** Persist participant ticket details before a later connection outage (H28). */
 function WalletCacheWarmup({ authenticated }: { authenticated: boolean }) {
   const { me } = useMeContext();
@@ -234,6 +264,68 @@ function NotificationListeners() {
       }),
     [router],
   );
+
+  return null;
+}
+
+/**
+ * #933: opens the pending-profile-tasks sheet once per session after a fresh
+ * /api/me, deferring while a scanner is open so it never interrupts a scan.
+ * The sheet itself records the presentation when it mounts.
+ */
+function ProfileTasksPrompt({
+  authenticated,
+  sessionPending,
+}: {
+  authenticated: boolean;
+  sessionPending: boolean;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { me, offline } = useMeContext();
+  const navigationState = useRootNavigationState();
+  const present =
+    authenticated &&
+    shouldPresentProfileTasks({
+      me,
+      offline,
+      navigationReady: Boolean(navigationState?.key),
+      sessionPending,
+      pathname,
+    });
+  const tasks = me ? promptableProfileTasks(me).join(",") : "";
+  // Only guards the frames between push and the route change, not the session.
+  const requestedFrom = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!present || requestedFrom.current === pathname) return;
+    requestedFrom.current = pathname;
+    router.push({ pathname: PROFILE_TASKS_PATH, params: { tasks } });
+  }, [pathname, present, router, tasks]);
+
+  useEffect(() => {
+    if (requestedFrom.current !== pathname) requestedFrom.current = null;
+  }, [pathname]);
+
+  return null;
+}
+
+/**
+ * #935: a company-tag link opened while signed out (`app/s/[code].tsx`) is
+ * collected once the account may enter the app.
+ */
+function PendingCompanyTagResume({ authenticated }: { authenticated: boolean }) {
+  const router = useRouter();
+  const { me } = useMeContext();
+  const navigationState = useRootNavigationState();
+  const canEnter = canEnterMobileApp(authenticated, me?.hasEventAccess);
+  const ready = Boolean(navigationState?.key);
+
+  useEffect(() => {
+    if (!canEnter || !ready || !me) return;
+    const code = takePendingCompanyTag();
+    if (code) router.replace(collectCompanyTagHref(code, me.capabilities));
+  }, [canEnter, ready, me, router]);
 
   return null;
 }
@@ -330,7 +422,7 @@ function RootLayoutNav({
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack>
+      <Stack screenOptions={nativeStackScreenOptions}>
         <Stack.Protected guard={!authenticated}>
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         </Stack.Protected>
@@ -347,7 +439,23 @@ function RootLayoutNav({
               headerLargeTitle: process.env.EXPO_OS === "ios",
             }}
           />
+          <Stack.Screen
+            name="people/[id]"
+            options={{
+              // #935 directory profile: Android draws its own back button;
+              // iOS uses the transparent native header of the other detail
+              // screens, so no band ever covers the centred avatar.
+              ...transparentDetailHeaderOptions,
+              headerShown: process.env.EXPO_OS === "ios",
+            }}
+          />
+          <Stack.Screen
+            name="profile-tasks"
+            options={{ headerShown: false, presentation: "modal" }}
+          />
         </Stack.Protected>
+        {/* #935 company-tag links resolve for any session state. */}
+        <Stack.Screen name="s/[code]" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );

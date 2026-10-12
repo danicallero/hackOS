@@ -73,15 +73,10 @@ export function PasswordCard() {
   }
 
   return (
-    <SectionCard
-      variant="plain"
-      title={t("changePassword")}
-      action={
-        <Button variant="outline" onClick={() => setOpen(true)}>
-          {t("updatePassword")}
-        </Button>
-      }
-    >
+    <SectionCard title={t("changePassword")}>
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        {t("updatePassword")}
+      </Button>
       <Modal
         open={open}
         onOpenChange={(next) => {

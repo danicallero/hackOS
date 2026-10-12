@@ -43,7 +43,7 @@ sending `null` clears a nullable field.
 | `pass_field_visibility` | jsonb map of show/hide toggles for the pass's auto-filled front fields (`PASS_FIELD_VISIBILITY_KEYS`: participant, role, passType, university, email). Missing keys default to **visible**. |
 | `presence_auto_entry_at`, `presence_certainty_window_minutes` | H24 automatic-presence policy: an optional common entry instant for people accredited earlier, and the estimator's certainty window. `PRESENCE_MANAGE`. |
 | `require_sponsor_shirt_size`, `require_sponsor_dietary`, `require_staff_shirt_size`, `require_staff_dietary` | H10: whether an invited sponsor/staff account must supply a shirt size, and whether their claim form shows dietary-restriction fields at all. Off by default. `INVITES_MANAGE`, edited from Settings → Event → Invited accounts. |
-| `shirt_sizes` | H12: the options offered by every shirt-size picker in the app (applications, invite claim, profile self-edit, staff user-edit) — a single event-wide catalogue instead of a hardcoded list per screen. `INTOLERANCES_MANAGE`, edited from Settings → Libraries alongside food intolerances and universities. |
+| `shirt_sizes` | H12: the options offered by every shirt-size picker in the app (applications, invite claim, profile self-edit, staff user-edit) — a single event-wide catalogue instead of a hardcoded list per screen. `INTOLERANCES_MANAGE`, edited from Settings → Libraries alongside food intolerances and universities. Array order is the dropdown order (drag to reorder; people's stored `users.shirt_size` text is untouched). Saved sizes can't be renamed in place, and `PUT` answers 409 (`error.details.shirtSizesInUse`) when it would drop a size some user still holds. |
 
 Three distinct time windows, deliberately not one:
 
@@ -228,7 +228,7 @@ returns only that device’s registered Apple serials.
 
 Six capability-gated tabs: Event, Venue, Apple Wallet pass, Presence, Invited
 accounts, and Danger zone. Editable categories use open sections and save only
-their own fields through `PUT /api/event`; changing tabs with unsaved edits
+their own fields through `PUT /api/event`; leaving a section with unsaved edits
 requires confirmation. The active tab names its panel without a repeated section
 header. A shared save footer pairs the submit button with the persistent save
 state; successful saves also use the app's Sileo toast. Forms retain native Enter
@@ -237,8 +237,11 @@ move neighboring labels or controls. The danger zone keeps the three-stage event
 confirmation (H16–H40/H53). Judging timing lives in Queue → Rooms, on the separate
 `/api/queue/settings` resource (`QUEUE_ADMIN`).
 
-Event groups identity, paired event/hacking dates, the countdown preview, and
-participant editing dates in that order. Every populated date shows the event
+Event is split into General (identity), Schedule (paired event/hacking dates,
+countdown preview, email reminder) and Participants (project creation and
+editing dates) views that share one save; a validation error on a hidden view
+reveals it. A form inside a settings card sets `--form-footer-bg` so its sticky
+footer matches the card instead of the shell. Every populated date shows the event
 timezone; previews follow the draft timezone before saving. Venue and Wi-Fi
 share one save action at the end. Presence-policy consequences stay beside the
 two controls, rather than behind a disclosure. Invite toggles distinguish a
@@ -443,3 +446,16 @@ Primary provider references:
 - [Google app links](https://developers.google.com/wallet/reference/rest/v1/AppLinkData)
 - [Apple featured actions](https://developer.apple.com/videos/play/wwdc2026/209/)
 - [Apple pass fields and change messages](https://developer.apple.com/documentation/walletpasses/passfieldcontent)
+
+## Web category ownership
+
+Event settings is a list of capability-gated categories (`/settings/event`) and
+opens one bounded category at a time (`?tab=`) with a back link; leaving a category with unsaved edits (back link, browser Back, sidebar) asks for confirmation. Judging hours live at `?tab=judging`, require `queue:admin`,
+and save the separate queue settings resource. Wallet has one Save changes
+action shared by its Fields and Appearance views. Images and delivery are
+separate views; `?tab=wallet&wallet=appearance|artwork|delivery` preserves
+shareable subview links and browser history. It saves the two
+existing resources in sequence; failures remain visible for retry, rather than
+claiming an atomic cross-resource update. Artwork upload/reset and pass delivery
+are immediate operations with their own lifecycle. Nullable runtime overrides
+and deployment fallback resolution remain unchanged.

@@ -61,9 +61,9 @@ export function SidePanelEditor({
         )}
       >
         <SheetHeader className="shrink-0 border-b px-5 py-4 pr-12">
-          <SheetTitle className="type-section-title flex items-center gap-2">
-            {Icon && <Icon className="size-4 text-muted-foreground" />}
-            {title}
+          <SheetTitle className="type-section-title heading-row flex items-center gap-2">
+            {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
+            <span className="heading-label min-w-0 break-words">{title}</span>
           </SheetTitle>
           {description && <SheetDescription>{description}</SheetDescription>}
         </SheetHeader>

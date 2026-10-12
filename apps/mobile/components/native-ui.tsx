@@ -9,6 +9,8 @@ import {
   Text,
   TextInput,
   type TextStyle,
+  useColorScheme,
+  useWindowDimensions,
   View,
   type ViewStyle,
 } from "react-native";
@@ -28,6 +30,7 @@ import { type HapticIntent, haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 export function Section({
   title,
@@ -100,17 +103,46 @@ export function Separator({
   );
 }
 
+/**
+ * React Native's iOS Switch defaults to `alignSelf: "flex-start"`, which
+ * overrides a row's `alignItems: "center"` and pins the toggle to the top of
+ * any row taller than the switch. Every switch inside a row needs this.
+ */
+export const SWITCH_IN_ROW_STYLE: ViewStyle = { alignSelf: "center" };
+
+/**
+ * A settings row with a trailing switch. `detail` adds a secondary line;
+ * `onPress` makes the label side open a detail screen (with a disclosure
+ * chevron), set apart from the switch by a hairline (two targets in one row). `busy` blocks the switch
+ * while a write is in flight without dimming the label; `disabled` dims both.
+ */
 export function ToggleRow({
   label,
   value,
   onChange,
   disabled = false,
+  busy = false,
+  detail,
+  accessibilityLabel,
+  onPress,
 }: {
   label: string;
   value: boolean;
   onChange: (value: boolean) => void;
   disabled?: boolean;
+  busy?: boolean;
+  detail?: string;
+  accessibilityLabel?: string;
+  onPress?: () => void;
 }) {
+  const text = (
+    <View style={{ flex: 1, gap: 2, justifyContent: "center", paddingVertical: 10 }}>
+      <Text style={{ color: disabled ? colors.tertiaryLabel : colors.label, fontSize: 16 }}>
+        {label}
+      </Text>
+      {detail ? <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>{detail}</Text> : null}
+    </View>
+  );
   return (
     <View
       style={{
@@ -119,15 +151,50 @@ export function ToggleRow({
         gap: 12,
         minHeight: 50,
         paddingHorizontal: 16,
-        paddingVertical: 10,
       }}
     >
-      <Text
-        style={{ color: disabled ? colors.tertiaryLabel : colors.label, flex: 1, fontSize: 16 }}
-      >
-        {label}
-      </Text>
-      <Switch disabled={disabled} onValueChange={onChange} value={value} />
+      {onPress ? (
+        <Pressable
+          accessibilityLabel={detail ? `${label}, ${detail}` : label}
+          accessibilityRole="button"
+          onPress={onPress}
+          style={({ pressed }) => ({
+            alignSelf: "stretch",
+            flex: 1,
+            flexDirection: "row",
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          {text}
+          <SymbolView
+            name="chevron.right"
+            tintColor={colors.tertiaryLabel}
+            size={12}
+            weight="semibold"
+            accessible={false}
+            style={{ alignSelf: "center", marginLeft: 8 }}
+          />
+        </Pressable>
+      ) : (
+        text
+      )}
+      {onPress ? (
+        <View
+          style={{
+            alignSelf: "stretch",
+            backgroundColor: colors.separator,
+            marginVertical: 12,
+            width: 0.5,
+          }}
+        />
+      ) : null}
+      <Switch
+        accessibilityLabel={accessibilityLabel ?? label}
+        disabled={disabled || busy}
+        onValueChange={onChange}
+        style={SWITCH_IN_ROW_STYLE}
+        value={value}
+      />
     </View>
   );
 }
@@ -155,6 +222,10 @@ export function InfoRow({
   accessoryLabel?: string;
   valueStyle?: TextStyle;
 }) {
+  // At accessibility text sizes the value moves under its label, as in
+  // UIKit's value cells: side by side, a fixed-width label squeezed the value
+  // to a letter per line.
+  const stacked = isAccessibilityTextSize(useWindowDimensions().fontScale);
   return (
     <View
       style={{
@@ -169,18 +240,31 @@ export function InfoRow({
       {icon ? (
         <SymbolView name={icon} tintColor={colors.accent} size={20} accessible={false} />
       ) : null}
-      <Text selectable style={{ color: colors.label, flex: 1, fontSize: 16 }}>
-        {label}
-      </Text>
-      <Text
-        selectable
-        style={[
-          { color: colors.secondaryLabel, flexShrink: 1, fontSize: 16, textAlign: "right" },
-          valueStyle,
-        ]}
+      <View
+        style={
+          stacked
+            ? { flex: 1, gap: 2 }
+            : { alignItems: "center", flex: 1, flexDirection: "row", gap: 12 }
+        }
       >
-        {value}
-      </Text>
+        {/* The label keeps its width; long values (emails, badge ids) wrap instead. */}
+        <Text selectable style={{ color: colors.label, flexShrink: 0, fontSize: 16 }}>
+          {label}
+        </Text>
+        {stacked && !value ? null : (
+          <Text
+            selectable
+            style={[
+              stacked
+                ? { color: colors.secondaryLabel, fontSize: 16 }
+                : { color: colors.secondaryLabel, flex: 1, fontSize: 16, textAlign: "right" },
+              valueStyle,
+            ]}
+          >
+            {value}
+          </Text>
+        )}
+      </View>
       {accessoryIcon ? (
         <SymbolView
           name={accessoryIcon}
@@ -362,6 +446,7 @@ export function LegacyScreenHeader({
   cancelLabel,
   leading,
   actions,
+  searchEnabled = true,
 }: {
   topInset: number;
   title: string;
@@ -375,6 +460,8 @@ export function LegacyScreenHeader({
   cancelLabel: string;
   leading?: ReactNode;
   actions: ReactNode;
+  /** False hides the search button, for a segment the search does not apply to. */
+  searchEnabled?: boolean;
 }) {
   const reducedMotion = useReducedMotion();
   const headerTransition = reducedMotion ? undefined : LinearTransition.duration(180);
@@ -382,12 +469,12 @@ export function LegacyScreenHeader({
   return (
     <View style={{ gap: 8, paddingHorizontal: 16, paddingTop: topInset, zIndex: 10 }}>
       <Animated.View
-        key={searchOpen ? "search" : "actions"}
+        key={searchOpen && searchEnabled ? "search" : "actions"}
         entering={reducedMotion ? undefined : FadeIn.duration(180)}
         exiting={reducedMotion ? undefined : FadeOut.duration(120)}
         layout={headerTransition}
       >
-        {searchOpen ? (
+        {searchOpen && searchEnabled ? (
           <View
             style={{
               alignItems: "center",
@@ -456,18 +543,20 @@ export function LegacyScreenHeader({
             </View>
             <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
               {actions}
-              <GlassView
-                colorScheme="auto"
-                glassEffectStyle="regular"
-                isInteractive
-                style={{ borderRadius: 22, height: 44, width: 44 }}
-              >
-                <LegacyHeaderIconButton
-                  icon="magnifyingglass"
-                  accessibilityLabel={searchLabel}
-                  onPress={onOpenSearch}
-                />
-              </GlassView>
+              {searchEnabled ? (
+                <GlassView
+                  colorScheme="auto"
+                  glassEffectStyle="regular"
+                  isInteractive
+                  style={{ borderRadius: 22, height: 44, width: 44 }}
+                >
+                  <LegacyHeaderIconButton
+                    icon="magnifyingglass"
+                    accessibilityLabel={searchLabel}
+                    onPress={onOpenSearch}
+                  />
+                </GlassView>
+              ) : null}
             </View>
           </View>
         )}
@@ -515,6 +604,56 @@ export function LegacyHeaderIconButton({
         weight="semibold"
       />
     </Pressable>
+  );
+}
+
+/**
+ * The visible trigger inside a `MenuView`. The menu owns the press: on
+ * Android it wraps its child in its own Pressable, and on iOS a SwiftUI Menu
+ * hosts it, so a Pressable child takes the touch first and the menu never
+ * opens. Keep this a plain accessible view (#935).
+ */
+export function MenuTriggerIcon({
+  icon,
+  accessibilityLabel,
+  accessibilityState,
+  tintColor,
+  disabled = false,
+  size = 44,
+  iconSize = 19,
+  weight = "semibold",
+}: {
+  icon: SymbolViewProps["name"];
+  accessibilityLabel: string;
+  accessibilityState?: { expanded?: boolean; selected?: boolean };
+  tintColor?: ColorValue;
+  disabled?: boolean;
+  size?: number;
+  iconSize?: number;
+  weight?: SymbolViewProps["weight"];
+}) {
+  return (
+    <View
+      accessible
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      accessibilityState={{ ...accessibilityState, disabled }}
+      style={{
+        alignItems: "center",
+        height: size,
+        justifyContent: "center",
+        opacity: disabled ? 0.45 : 1,
+        width: size,
+      }}
+    >
+      <SymbolView
+        accessible={false}
+        name={icon}
+        tintColor={tintColor ?? colors.label}
+        size={iconSize}
+        weight={weight}
+      />
+    </View>
   );
 }
 
@@ -727,6 +866,20 @@ export function FloatingGlassButton({
 }
 
 /**
+ * Fill colours for a small input dialog (note, code entry) over a dimmed
+ * page. Light mode keeps the grouped page tone with white fields; in dark
+ * mode the grouped page is black, so the card steps up to the surface tone
+ * and its field to the elevated one, or the card vanishes into the dim.
+ */
+export function useDialogCardColors(): { card: ColorValue; field: ColorValue } {
+  const dark = useColorScheme() === "dark";
+  return {
+    card: dark ? colors.surface : colors.background,
+    field: dark ? colors.elevatedSurface : colors.surface,
+  };
+}
+
+/**
  * Android draws edge-to-edge with a transparent status bar, and these
  * header-less tab screens have no native bar to blur their content under —
  * so scrolled rows slide behind the clock. An opaque band of exactly the
@@ -784,7 +937,7 @@ export function EmptyState({
 }: {
   icon: SymbolViewProps["name"];
   title: string;
-  description: string;
+  description?: string;
   action?: ReactNode;
 }) {
   return (
@@ -809,12 +962,19 @@ export function EmptyState({
       >
         {title}
       </Text>
-      <Text
-        selectable
-        style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21, textAlign: "center" }}
-      >
-        {description}
-      </Text>
+      {description ? (
+        <Text
+          selectable
+          style={{
+            color: colors.secondaryLabel,
+            fontSize: 15,
+            lineHeight: 21,
+            textAlign: "center",
+          }}
+        >
+          {description}
+        </Text>
+      ) : null}
       {action}
     </View>
   );

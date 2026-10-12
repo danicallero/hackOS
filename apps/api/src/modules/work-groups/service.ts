@@ -12,6 +12,8 @@ import { notify } from "../notifications/service.js";
 import { resolveDevpostUrls } from "../projects/devpost-url.js";
 import { updateLinkedWorkGroupProject } from "../projects/service.js";
 
+import { assertGroupEditable, assertGroupParticipantWindow } from "../projects/submission-state.js";
+
 async function assertParticipant(db: Queryable, userId: number) {
   const { rows } = await db.query(
     `SELECT id FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL FOR UPDATE`,
@@ -42,7 +44,8 @@ async function assertJudgingHasNotStarted(db: Queryable) {
 }
 export async function listMine(userId: number) {
   const { rows } = await pool.query(
-    `SELECT g.id, g.name, g.description, g.github_url, g.demo_url, g.devpost_url, COALESCE(r.presentation_timing_preference,g.presentation_timing_preference) AS presentation_timing_preference, g.linked_repo_id, g.created_by, g.created_at, g.updated_at,
+    `SELECT g.id, g.reconciliation_code, g.name, g.description, g.github_url, g.demo_url, g.devpost_url, COALESCE(r.presentation_timing_preference,g.presentation_timing_preference) AS presentation_timing_preference, g.linked_repo_id, g.created_by, g.created_at, g.updated_at,
+    COALESCE((SELECT hacking_ends_at>now() FROM event_config WHERE id=1),false) AS can_submit,
     CASE WHEN r.id IS NULL THEN NULL ELSE jsonb_build_object('id', r.id, 'name', r.name, 'devpostUrl', r.devpost_url) END AS "linkedProject",
     coalesce(json_agg(DISTINCT jsonb_build_object('userId', m.user_id, 'name', u.name, 'surname', u.surname, 'status', m.status, 'invitedBy', m.invited_by, 'respondedAt', m.responded_at)) FILTER (WHERE m.user_id IS NOT NULL), '[]') members,
     coalesce(json_agg(DISTINCT jsonb_build_object('id', c.id, 'title', c.title, 'mandatory', c.mandatory)) FILTER (WHERE c.id IS NOT NULL), '[]') challenges,
@@ -59,7 +62,7 @@ export async function listMine(userId: number) {
     GROUP BY g.id, r.id ORDER BY g.updated_at DESC`,
     [userId],
   );
-  return rows;
+  return rows.map((row) => ({ ...row, id: Number(row.id) }));
 }
 export async function getMine(userId: number, groupId: number) {
   const groups = await listMine(userId);
@@ -101,7 +104,7 @@ export async function createGroup(userId: number, name: string, challengeIds: nu
       `INSERT INTO planned_work_groups (name,created_by) VALUES ($1,$2) RETURNING id,name,description,github_url,demo_url,devpost_url,presentation_timing_preference,linked_repo_id`,
       [name, userId],
     );
-    const group = rows[0];
+    const group = { ...rows[0], id: Number(rows[0].id) };
     await db.query(
       `INSERT INTO planned_work_group_members (group_id,user_id,status,responded_at) VALUES ($1,$2,'active',now())`,
       [group.id, userId],
@@ -156,7 +159,8 @@ export async function updateGroup(
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
-    await assertWithinParticipantSelfServiceWindow(db);
+    await assertGroupEditable(db, id);
+    await assertGroupParticipantWindow(db, id);
     const { rows: before } = await db.query(
       `SELECT name,description,github_url,demo_url,devpost_url,
        COALESCE((SELECT r.presentation_timing_preference FROM repos r WHERE r.id = linked_repo_id),presentation_timing_preference) AS presentation_timing_preference,
@@ -237,7 +241,8 @@ export async function removeMember(userId: number, id: number, memberId: number)
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
-    await assertWithinParticipantSelfServiceWindow(db);
+    await assertGroupEditable(db, id);
+    await assertGroupParticipantWindow(db, id);
     if (memberId === userId)
       throw new ConflictError(
         "Leave a work group by deleting it or asking another active member to remove you",
@@ -247,6 +252,10 @@ export async function removeMember(userId: number, id: number, memberId: number)
       [id, memberId],
     );
     if (!removed.rows[0]) throw new NotFoundError("Work-group member not found");
+    await db.query(
+      `DELETE FROM submissions s USING planned_work_groups g,repos r WHERE g.id=$1 AND r.id=g.linked_repo_id AND r.source='native' AND s.repo_id=r.id AND s.user_id=$2 AND s.imported_from<>'devpost'`,
+      [id, memberId],
+    );
     await audit(db, {
       actorId: userId,
       entityType: "planned_work_group",
@@ -262,7 +271,8 @@ export async function deleteGroup(userId: number, id: number) {
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
-    await assertWithinParticipantSelfServiceWindow(db);
+    await assertGroupEditable(db, id);
+    await assertGroupParticipantWindow(db, id);
     await assertJudgingHasNotStarted(db);
     const group = await db.query(
       `SELECT name,linked_repo_id FROM planned_work_groups WHERE id=$1 FOR UPDATE`,
@@ -296,11 +306,35 @@ export async function linkDevpostImports(
   actorId: number,
   repoIds: number[],
   groupId?: number,
+  sourceOverride?: "admin" | "participant",
 ) {
   if (!repoIds.length) return;
-  const source = groupId === undefined ? "admin" : "participant";
+  const source = sourceOverride ?? (groupId === undefined ? "admin" : "participant");
   const validDevpostUrl =
     "^https?://([a-z0-9-]+\\.)?devpost\\.com/(software|submissions)/[^/?#]+/?(?:[?#].*)?$";
+  const codes = await db.query(
+    `WITH candidates AS (
+      SELECT g.id group_id,r.id repo_id,count(*) OVER (PARTITION BY g.id) n
+      FROM planned_work_groups g JOIN repos r ON r.imported_project_code=g.reconciliation_code
+      WHERE r.id=ANY($1::int[]) AND g.linked_repo_id IS NULL AND r.is_test_account=false
+      AND NOT EXISTS(SELECT 1 FROM audit_log a WHERE a.entity_type='planned_work_group' AND a.entity_id=g.id::text AND a.action='unlink_project')
+      AND NOT EXISTS (SELECT 1 FROM planned_work_groups x WHERE x.linked_repo_id=r.id)
+    ) UPDATE planned_work_groups g SET linked_repo_id=c.repo_id FROM candidates c
+      WHERE g.id=c.group_id AND c.n=1 AND ($2::bigint IS NULL OR g.id=$2)
+      RETURNING g.id,c.repo_id`,
+    [repoIds, groupId ?? null],
+  );
+  for (const row of codes.rows) {
+    await audit(db, {
+      actorId,
+      entityType: "planned_work_group",
+      entityId: row.id,
+      action: "link_project_code",
+      after: { repoId: row.repo_id },
+      source,
+    });
+    await mergeLinkedWorkGroup(db, actorId, Number(row.id), Number(row.repo_id), source);
+  }
   const exact = await db.query(
     `WITH candidates AS (
        SELECT g.id AS group_id, r.id AS repo_id
@@ -310,6 +344,7 @@ export async function linkDevpostImports(
          OR lower(regexp_replace(split_part(split_part(g.devpost_url, '?', 1), '#', 1), '/+$', '')) = lower(regexp_replace(split_part(split_part(r.devpost_url, '?', 1), '#', 1), '/+$', ''))
        )
        WHERE g.linked_repo_id IS NULL
+         AND NOT EXISTS(SELECT 1 FROM audit_log a WHERE a.entity_type='planned_work_group' AND a.entity_id=g.id::text AND a.action='unlink_project')
          AND r.id = ANY($1::int[])
          AND g.devpost_url ~* $2
          AND r.devpost_url ~* $2
@@ -350,6 +385,7 @@ export async function linkDevpostImports(
        FROM planned_work_groups g
        JOIN repos r ON r.id = ANY($1::int[])
        WHERE g.linked_repo_id IS NULL
+         AND NOT EXISTS(SELECT 1 FROM audit_log a WHERE a.entity_type='planned_work_group' AND a.entity_id=g.id::text AND a.action='unlink_project')
          AND r.is_test_account = false
          -- A supplied valid Devpost URL is authoritative; never fall back to inference.
          AND (g.devpost_url IS NULL OR g.devpost_url !~* $2)
@@ -457,28 +493,6 @@ async function mergeLinkedWorkGroup(
     FROM repos r WHERE g.id=$1 AND r.id=$2`,
     [groupId, repoId],
   );
-  const inserted = await db.query<{ user_id: number }>(
-    `INSERT INTO submissions (repo_id, user_id, imported_from, status, invited_by, responded_at)
-     SELECT $1, m.user_id, 'manual', 'active', $2, COALESCE(m.responded_at,now())
-       FROM planned_work_group_members m
-       JOIN users u ON u.id = m.user_id
-      WHERE m.group_id = $3 AND m.status = 'active'
-        AND u.account_state = 'active' AND u.anonymized_at IS NULL
-     ON CONFLICT (repo_id, user_id) DO UPDATE SET status='active', responded_at=EXCLUDED.responded_at
-       WHERE submissions.status='invited'
-     RETURNING user_id`,
-    [repoId, actorId, groupId],
-  );
-  for (const row of inserted.rows) {
-    await audit(db, {
-      actorId,
-      entityType: "repo",
-      entityId: repoId,
-      action: "member.add_from_work_group",
-      after: { userId: Number(row.user_id), source: "linked_work_group", groupId },
-      source,
-    });
-  }
 }
 export async function invite(userId: number, id: number, email: string) {
   const candidate = await pool.query<{ id: number }>(
@@ -489,7 +503,8 @@ export async function invite(userId: number, id: number, email: string) {
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
-    await assertWithinParticipantSelfServiceWindow(db);
+    await assertGroupEditable(db, id);
+    await assertGroupParticipantWindow(db, id);
     const invitee = await db.query(
       `SELECT id FROM users WHERE lower(email)=lower($1) AND account_state='active' AND anonymized_at IS NULL FOR UPDATE`,
       [email],
@@ -530,12 +545,20 @@ export async function invite(userId: number, id: number, email: string) {
 export async function respond(userId: number, id: number, status: "active" | "declined") {
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
-    await assertWithinParticipantSelfServiceWindow(db);
+    await assertGroupParticipantWindow(db, id);
+    await assertGroupEditable(db, id);
     const result = await db.query(
       `UPDATE planned_work_group_members SET status=$3,responded_at=now() WHERE group_id=$1 AND user_id=$2 AND status='invited' RETURNING user_id`,
       [id, userId, status],
     );
     if (!result.rows[0]) throw new NotFoundError("No pending work-group invitation");
+    if (status === "active")
+      await db.query(
+        `INSERT INTO submissions(repo_id,user_id,imported_from,status,responded_at)
+      SELECT r.id,$2,'manual','active',now() FROM planned_work_groups g JOIN repos r ON r.id=g.linked_repo_id AND r.source='native' WHERE g.id=$1
+      ON CONFLICT(repo_id,user_id) DO UPDATE SET status='active',responded_at=now()`,
+        [id, userId],
+      );
     await audit(db, {
       actorId: userId,
       entityType: "planned_work_group",
@@ -551,7 +574,8 @@ export async function addChallenge(userId: number, id: number, challengeId: numb
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
-    await assertWithinParticipantSelfServiceWindow(db);
+    await assertGroupEditable(db, id);
+    await assertGroupParticipantWindow(db, id);
     await assertJudgingHasNotStarted(db);
     const c = await db.query(`SELECT id FROM challenges WHERE id=$1`, [challengeId]);
     if (!c.rows[0]) throw new NotFoundError("Challenge not found");
@@ -574,7 +598,8 @@ export async function removeChallenge(userId: number, id: number, challengeId: n
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
-    await assertWithinParticipantSelfServiceWindow(db);
+    await assertGroupEditable(db, id);
+    await assertGroupParticipantWindow(db, id);
     await assertJudgingHasNotStarted(db);
     const challenge = await db.query<{ mandatory: boolean }>(
       `SELECT mandatory FROM challenges WHERE id = $1 FOR UPDATE`,

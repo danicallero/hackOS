@@ -1,6 +1,8 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
 import { z } from "zod";
+import { pool } from "../db/pool.js";
+import { hasEventAccess } from "../modules/identity/role.js";
 import { type AuthorizationContext, userHasCapability } from "./capabilities.js";
 import { ForbiddenError, UnauthorizedError } from "./errors.js";
 
@@ -12,6 +14,7 @@ export const scopedRefreshTopic = z.enum([
   SSE_TOPICS.LOGISTICS,
   SSE_TOPICS.AUDIT,
   SSE_TOPICS.TV,
+  SSE_TOPICS.DIRECTORY,
 ]);
 
 const logisticsRefreshCapabilities = [
@@ -42,6 +45,15 @@ export async function requireScopedRefreshAccess(
       throw new ForbiddenError(`Missing capability: ${CAPABILITIES.TV_CONTROL}`, {
         capability: CAPABILITIES.TV_CONTROL,
       });
+    }
+    return;
+  }
+  if (topic === SSE_TOPICS.DIRECTORY) {
+    // The signal is payload-free. Every event attendee owns a public profile
+    // preview and a diary of saved profiles (#934, #935), so event access is
+    // what subscribing requires.
+    if (!(await hasEventAccess(pool, userId))) {
+      throw new ForbiddenError("Public profiles are only available to event attendees");
     }
     return;
   }

@@ -7,6 +7,7 @@ import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowC
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
+import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useEffect, useState } from "react";
@@ -18,13 +19,16 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
 import { useLocale } from "@/lib/i18n";
-import { freezeTotalMinutes, presentationTimerState } from "@/lib/judging-workspace";
+import {
+  canTransition,
+  preparationElapsedSeconds,
+  presentationTimerState,
+} from "@/lib/judging-workspace";
 import {
   collapseRepoQueueMemberships,
   getRepoChallenges,
   type QueueEntry,
   type RepoChallenge,
-  type RoomPace,
 } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
@@ -34,7 +38,6 @@ import { JudgingEmptyState } from "./judging-empty-state";
 export function PresentationPanel({
   entry,
   challenge,
-  pace,
   waitingRoomCount,
   firstCalledEntry,
   canJudge,
@@ -44,7 +47,6 @@ export function PresentationPanel({
 }: {
   entry: QueueEntry | null;
   challenge: Challenge | null;
-  pace: RoomPace | null;
   waitingRoomCount: number;
   /** Front of the waiting room (status `called`) — powers the "bring in next" shortcut. */
   firstCalledEntry: QueueEntry | null;
@@ -53,7 +55,14 @@ export function PresentationPanel({
   busy: string | null;
   onEntryAction: (
     entry: QueueEntry,
-    action: "start" | "complete" | "send-back" | "bring-in" | "notify-enter",
+    action:
+      | "pause-timer"
+      | "resume-timer"
+      | "start"
+      | "complete"
+      | "send-back"
+      | "bring-in"
+      | "notify-enter",
     body: Record<string, unknown> | undefined,
     label: string,
   ) => void;
@@ -65,6 +74,12 @@ export function PresentationPanel({
   // back to the top of the waiting room. This is a judging decision, so it only
   // lives here in the Judging Panel — never in the Queue Operations view.
   const canSendBack = isPresenting || isReady;
+  // #926: one derivation of the clock action, gated by the shared state machine.
+  const nextTimerAction = entry?.presentation_paused_at ? "resume-timer" : "pause-timer";
+  const timerAction =
+    entry && canTransition(entry.status, nextTimerAction) ? nextTimerAction : null;
+  const timerLabel =
+    timerAction === "resume-timer" ? "resumePresentationTimer" : "pausePresentationTimer";
 
   return (
     <Surface
@@ -145,22 +160,51 @@ export function PresentationPanel({
           <>
             <ProjectInfo entry={entry} challenge={challenge} />
 
+            {(isReady || isPresenting) && (
+              <PreparationTimer
+                enteredAt={entry.room_entered_at ?? null}
+                startedAt={entry.presentation_started_at}
+              />
+            )}
+
             {isPresenting && (
               <PresentationTimer
                 startedAt={entry.presentation_started_at}
-                totalMinutes={pace?.effectiveMinutesPerTeam ?? null}
+                totalMinutes={
+                  entry.presentation_total_seconds != null
+                    ? entry.presentation_total_seconds / 60
+                    : null
+                }
+                pausedAt={entry.presentation_paused_at ?? null}
+                pausedSeconds={entry.presentation_paused_seconds ?? 0}
               />
             )}
 
             <div className="grid gap-2 sm:grid-cols-2">
-              <Button
-                disabled={!canJudge || !isReady || busy != null}
-                loading={busy === `start-${entry.id}`}
-                onClick={() => onEntryAction(entry, "start", undefined, t("presentationStarted"))}
-              >
-                <PlayIcon aria-hidden="true" className="size-4" />
-                {t("start")}
-              </Button>
+              {timerAction ? (
+                <Button
+                  variant="outline"
+                  disabled={!canJudge || busy != null}
+                  loading={busy === `${timerAction}-${entry.id}`}
+                  onClick={() => onEntryAction(entry, timerAction, undefined, t(timerLabel))}
+                >
+                  {timerAction === "resume-timer" ? (
+                    <PlayIcon aria-hidden="true" className="size-4" />
+                  ) : (
+                    <PauseIcon aria-hidden="true" className="size-4" />
+                  )}
+                  {t(timerLabel)}
+                </Button>
+              ) : (
+                <Button
+                  disabled={!canJudge || !isReady || busy != null}
+                  loading={busy === `start-${entry.id}`}
+                  onClick={() => onEntryAction(entry, "start", undefined, t("presentationStarted"))}
+                >
+                  <PlayIcon aria-hidden="true" className="size-4" />
+                  {t("start")}
+                </Button>
+              )}
               {canSendBack && (
                 <AlertModal
                   title={t("confirmSendBackTitle")}
@@ -310,7 +354,11 @@ export function ProjectInfo({
 export function PresentationTimer({
   startedAt,
   totalMinutes,
+  pausedAt = null,
+  pausedSeconds = 0,
 }: {
+  pausedAt?: string | null;
+  pausedSeconds?: number;
   startedAt: string | null;
   /** Already capped by the challenge's max and squeezed for remaining time (H39). */
   totalMinutes: number | null;
@@ -318,33 +366,16 @@ export function PresentationTimer({
   const { t } = useLocale();
   const [now, setNow] = useState(() => Date.now());
 
-  // H39: the total is frozen per presentation so a mid-presentation pace refetch
-  // can't shift it; the rule itself lives (and is tested) in judging-workspace.ts.
-  // freezeTotalMinutes also adopts totalMinutes if it arrives after startedAt
-  // (pace can load late), so both inputs — not just startedAt — must be
-  // watched. Using the "adjusting state during render" pattern to derive the
-  // frozen value synchronously without violating React purity constraints.
-  const [prevInputs, setPrevInputs] = useState({ startedAt, totalMinutes });
-  const [frozenState, setFrozenState] = useState<{ key: string | null; minutes: number | null }>(
-    () => freezeTotalMinutes({ key: null, minutes: null }, startedAt, totalMinutes),
-  );
-
-  if (prevInputs.startedAt !== startedAt || prevInputs.totalMinutes !== totalMinutes) {
-    setPrevInputs({ startedAt, totalMinutes });
-    setFrozenState(freezeTotalMinutes(frozenState, startedAt, totalMinutes));
-  }
-
-  // Pure arithmetic (elapsed/remaining/progress/tone) lives in
-  // judging-workspace.ts so the threshold boundaries are unit-testable; only
-  // the per-presentation freeze above and the ticking clock stay here.
+  // #926: every judge and reload uses the persisted goal and pause state.
   const {
     elapsedSeconds,
     totalSeconds,
     progressValue,
     tone: timerTone,
-  } = presentationTimerState(startedAt, frozenState.minutes, now);
-  const cueText =
-    timerTone === "danger"
+  } = presentationTimerState(startedAt, totalMinutes, now, pausedAt, pausedSeconds);
+  const cueText = pausedAt
+    ? t("presentationTimerPaused")
+    : timerTone === "danger"
       ? t("timeLimitExceeded")
       : timerTone === "warning"
         ? t("wrapUp")
@@ -388,5 +419,29 @@ export function PresentationTimer({
         {cueText}
       </span>
     </div>
+  );
+}
+
+function PreparationTimer({
+  enteredAt,
+  startedAt,
+}: {
+  enteredAt: string | null;
+  startedAt: string | null;
+}) {
+  const { t } = useLocale();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (startedAt) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [startedAt]);
+  const seconds = preparationElapsedSeconds(enteredAt, startedAt, now);
+  if (seconds == null) return null;
+  return (
+    <p className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+      <span>{t("presentationPreparationTime")}</span>
+      <span className="font-mono tabular-nums">{secondsLabel(seconds)}</span>
+    </p>
   );
 }

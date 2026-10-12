@@ -14,6 +14,7 @@ export function AlertModal({
   confirmLabel,
   pending = false,
   destructive = false,
+  confirmDisabled = false,
   onOpenChange,
   onConfirm,
   children,
@@ -28,6 +29,7 @@ export function AlertModal({
   confirmLabel: string;
   pending?: boolean;
   destructive?: boolean;
+  confirmDisabled?: boolean;
   onOpenChange?: (open: boolean) => void;
   onConfirm: () => void;
   children?: React.ReactNode;
@@ -55,7 +57,7 @@ export function AlertModal({
     <AlertDialog.Action asChild>
       <Button
         variant={destructive ? "destructive" : "default"}
-        disabled={pending}
+        disabled={pending || confirmDisabled}
         onClick={(event) => {
           if (!autoClose || pending) event.preventDefault();
           onConfirm();
@@ -96,7 +98,7 @@ export function AlertModal({
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             {reverseActions && confirmButton}
             <AlertDialog.Cancel asChild>
-              <Button variant="outline" disabled={pending}>
+              <Button variant="outline" disabled={pending || confirmDisabled}>
                 {cancelLabel}
               </Button>
             </AlertDialog.Cancel>

@@ -5,7 +5,6 @@
 // is caught before saving instead of at the venue.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { WifiHighIcon } from "@phosphor-icons/react/dist/csr/WifiHigh";
@@ -97,13 +96,7 @@ function VenuePreview({
   );
 }
 
-export function VenueTab({
-  icon,
-  onDirtyChange,
-}: {
-  icon: PhosphorIcon;
-  onDirtyChange: (dirty: boolean) => void;
-}) {
+export function VenueTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
   const { t } = useLocale();
   const { config, status, applyConfig } = useEventConfig();
   const form = useForm<Values>({
@@ -181,7 +174,7 @@ export function VenueTab({
   }
 
   if (status !== "ready" || !config) {
-    return <EventConfigLoadState icon={icon} title={t("venueSectionTitle")} />;
+    return <EventConfigLoadState />;
   }
   const venueLatitude = values.venueLatitude ?? "";
   const venueLongitude = values.venueLongitude ?? "";

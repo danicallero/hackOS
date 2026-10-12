@@ -1,4 +1,3 @@
-import { useScrollToTop } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -43,6 +42,7 @@ import type {
 } from "@/lib/scanner-types";
 import { canViewStaffStatistics, isOperator } from "@/lib/tabs";
 import { useScannerSync } from "@/lib/use-scanner";
+import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
 type QueueFilter = "all" | "errors" | "waiting" | "confirmed";
@@ -59,7 +59,7 @@ export default function SyncQueueScreen() {
   const [activities, setActivities] = useState<ScannerActivity[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  useScrollToTop(scrollRef);
+  const trueTop = useTrueTopScroll(scrollRef);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -157,6 +157,7 @@ export default function SyncQueueScreen() {
   return (
     <ScrollView
       ref={scrollRef}
+      {...trueTop.scrollProps}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         gap: 22,

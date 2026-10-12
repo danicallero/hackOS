@@ -72,6 +72,28 @@ describe("push channel", () => {
     expect(info).not.toHaveBeenCalled();
   });
 
+  it("bounds the Expo request with a timeout so a hung provider cannot stall the caller", async () => {
+    const { postExpoPushMessages } = await import(
+      "../../src/modules/notifications/channels/push.js"
+    );
+    // Honors the signal like real fetch: never answers, rejects once aborted.
+    const fetchMock = vi.fn(
+      (_url: string, init: { signal?: AbortSignal }) =>
+        new Promise<Response>((_resolve, reject) => {
+          if (init.signal?.aborted) reject(init.signal.reason);
+          init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => AbortSignal.abort());
+
+    await expect(postExpoPushMessages([{ to: "ExponentPushToken[x]", data: {} }])).rejects.toThrow(
+      "Expo push request failed",
+    );
+    expect(timeout).toHaveBeenCalledWith(15_000);
+    timeout.mockRestore();
+  });
+
   it("puts the enter-now action and room in the notification header", async () => {
     const userId = await createUser();
     await addPushToken(userId, "ExponentPushToken[enter]");
@@ -178,6 +200,42 @@ describe("push channel", () => {
       priority: "high",
       interruptionLevel: "time-sensitive",
       sound: "default",
+      // #966: wakes a backgrounded iOS app to refresh its Live Activity.
+      _contentAvailable: true,
+    });
+  });
+
+  it("marks only Live Activity categories content-available (#966)", async () => {
+    const userId = await createUser();
+    await addPushToken(userId, "ExponentPushToken[ddd]");
+    const categories = ["schedule:12", "queue.staff", "application"];
+    for (const category of categories) {
+      await enqueueOutbox(userId, "push", { subject: "s", body: "b" }, category);
+    }
+
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ data: [{ status: "ok" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await drainOutboxOnce();
+
+    const sent = new Map<unknown, unknown>();
+    for (const [, init] of fetchMock.mock.calls as unknown as [string, { body: string }][]) {
+      const [message] = JSON.parse(init.body) as {
+        data: { category?: string };
+        _contentAvailable?: boolean;
+      }[];
+      sent.set(message!.data.category, message!._contentAvailable);
+    }
+    expect(Object.fromEntries(sent)).toEqual({
+      "schedule:12": true,
+      "queue.staff": undefined,
+      application: undefined,
     });
   });
 

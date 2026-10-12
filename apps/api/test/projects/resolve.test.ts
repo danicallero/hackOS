@@ -83,7 +83,27 @@ describe("GET /api/devpost/imports/unmatched (H17)", () => {
   });
 });
 
-describe("GET /api/projects/member-candidates (H21)", () => {
+describe("GET /api/projects/member-candidates (H17, H21)", () => {
+  it("lets import-only operators search full names without user-management access", async () => {
+    const server = await getApp();
+    const candidate = await createUser({ email: "maria@example.com", name: "Maria" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query("UPDATE users SET surname=$1 WHERE id=$2", ["Lopez", candidate]);
+    const importer = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    const result = await server.inject({
+      method: "GET",
+      url: "/api/projects/member-candidates?q=Mar%C3%ADa%20L%C3%B3pez",
+      headers: asUser(importer),
+    });
+    expect(result.statusCode).toBe(200);
+    expect(result.json().users).toEqual([expect.objectContaining({ email: "maria@example.com" })]);
+    const invalid = await server.inject({
+      method: "GET",
+      url: "/api/projects/member-candidates?q=M",
+      headers: asUser(importer),
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
   it("returns only minimal searchable identity fields to project editors", async () => {
     const server = await getApp();
     await createUser({ email: "candidate@example.com", name: "Candidate" });

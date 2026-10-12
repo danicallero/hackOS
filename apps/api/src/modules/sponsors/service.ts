@@ -18,7 +18,7 @@ import type { CreateEnterpriseBody, FaqItem, UpdateEnterpriseBody } from "./sche
 
 const COLUMNS = `id, name, website, logo_url,
   COALESCE(logo_negative_url, logo_url) AS logo_negative_url, description, priority,
-  visibility, available_from, director_id, created_at`;
+  visibility, available_from, director_id, stand_scannable, created_at`;
 
 const COLUMN_FOR: Record<string, string> = {
   name: "name",
@@ -35,7 +35,7 @@ const COLUMN_FOR: Record<string, string> = {
 // their sponsor users or authored challenges; mixed graphs fail closed in
 // assertFixtureEnterpriseScope. Keep the list/public queries on the same
 // boundary so a global operator cannot discover a fixture by id or visibility.
-const ENTERPRISE_HAS_SYNTHETIC = `(
+export const ENTERPRISE_HAS_SYNTHETIC = `(
   EXISTS (
     SELECT 1 FROM sponsors marker_sponsor
     JOIN users marker_user ON marker_user.id = marker_sponsor.user_id
@@ -48,7 +48,7 @@ const ENTERPRISE_HAS_SYNTHETIC = `(
   )
 )`;
 
-const ENTERPRISE_HAS_REAL = `(
+export const ENTERPRISE_HAS_REAL = `(
   EXISTS (
     SELECT 1 FROM sponsors marker_sponsor
     JOIN users marker_user ON marker_user.id = marker_sponsor.user_id

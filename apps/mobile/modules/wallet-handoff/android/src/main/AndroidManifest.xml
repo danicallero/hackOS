@@ -1,0 +1,20 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:scheme="content" android:mimeType="application/vnd.apple.pkpass" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:scheme="content" android:mimeType="application/pkpass" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:scheme="content" android:mimeType="application/vndapplepkpass" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:scheme="content" android:mimeType="application/vnd-com.apple.pkpass" />
+    </intent>
+  </queries>
+</manifest>

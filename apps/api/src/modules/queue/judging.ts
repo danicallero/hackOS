@@ -12,6 +12,7 @@ import { GROUP_SIBLING_CHALLENGE_IDS_SQL } from "./groups.js";
 import { writeQueueHistory } from "./history.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 import { notifyChallengeQueueChanged } from "./notify.js";
+import { CLOSE_PRESENTATION_PAUSE_SQL } from "./presentation-clock.js";
 import {
   assertTextFieldLeases,
   releaseReviewFieldLeases,
@@ -237,7 +238,8 @@ export async function upsertAttemptReview(
     if (justSubmitted && (entryStatus === "presenting" || entryStatus === "in_room")) {
       const done = await client.query(
         `UPDATE queue_entries
-            SET status = 'completed', completed_at = now(), precalled_at = NULL
+            SET status = 'completed', completed_at = now(), precalled_at = NULL,
+                ${CLOSE_PRESENTATION_PAUSE_SQL}
           WHERE id = $1 AND status IN ('presenting', 'in_room')
           RETURNING *`,
         [entryId],

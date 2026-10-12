@@ -11,6 +11,8 @@ import { setUserIdResolver } from "../../plugins/auth-context.js";
 import { auth, getBetterAuthSessionToken } from "./auth.js";
 import { recordReviewFixtureAuthentication } from "./review-fixture-usage.js";
 import { registerInviteRoutes } from "./routes/invites.js";
+import { registerMealPlanRoutes } from "./routes/meal-plan.js";
+import { registerPhotoRoutes } from "./routes/photo.js";
 import { registerProfileRoutes } from "./routes/profile.js";
 import { registerResendVerificationRoutes } from "./routes/resend-verification.js";
 import { registerReviewFixtureRoutes } from "./routes/review-fixtures.js";
@@ -110,6 +112,8 @@ export async function registerIdentityModule(app: FastifyInstance): Promise<void
 
   registerResendVerificationRoutes(app);
   registerProfileRoutes(app);
+  registerPhotoRoutes(app);
+  registerMealPlanRoutes(app);
   registerReviewFixtureRoutes(app);
   registerSecondaryEmailRoutes(app);
   registerRoleRoutes(app);

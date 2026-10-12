@@ -40,6 +40,7 @@ import { isLanguage, LANGS, languageName, pickText, useLocale } from "@/lib/i18n
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { Intolerance, Language, UserDetail } from "@/lib/types";
+import { MealPlanSection } from "./meal-plan-section";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const editSchema = z.object({
@@ -72,6 +73,7 @@ export function OverviewTab({
       ) : (
         <ReadOnlyOverview user={user} intolerances={intolerances} />
       )}
+      <MealPlanSection userId={user.id} />
     </div>
   );
 }

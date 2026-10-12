@@ -51,6 +51,7 @@ registerModules(app)
 ├─ event          (WS-G  · H45, H47)
 ├─ exports        (WS-F  · H54, H56)
 ├─ identity       (WS-A1 · H1-H10)
+├─ live-activities (#966 · H38, H25, H26, H59, H19, H22)
 ├─ logistics      (WS-C  · H22-H27)
 ├─ notifications  (WS-F  · H50-H53)
 ├─ projects       (WS-B1 · H16-H17)
@@ -108,6 +109,35 @@ from one repeatable-read database snapshot, so the bootstrap response cannot
 mix values from different authorization moments. Ticket QR/wallet exposure, scanner
 eligibility, and physical check-in use the same live query; role transitions
 reconcile wallet passes and retain the historical ticket row.
+
+`/api/me` also returns `pendingProfileTasks` (#933): `dietary` until an
+event-access account gives an explicit dietary answer (its own `PATCH /api/me`
+with `foodIntolerances`/`foodIntoleranceNotes`, an empty list included; an
+invite claim whose kind shows the dietary fields; or an application form that
+asks for dietary data — staff edits through `PATCH /api/users/:id` do not
+count; never for a locked profile, H7, which cannot change it), and
+`meal_plan` while a sponsor representative has an open offered
+meal without an answer. Sponsors read and replace their plan through `GET`/`PUT
+/api/me/meal-plan`; a meal is offered when its activity kind has meal semantics
+and its shown schedule entry includes the `sponsor` audience (an entry without
+audiences is staff-only), and it locks `event_config.meal_plan_cutoff_hours`
+(24 by default, set through `PUT /api/event` `mealPlanCutoffHours`) before it
+starts; responses carry it as `cutoffHours`. `PUT` ignores meals that ended or stopped being offered since the list
+was loaded, and locked meals that were never answered. Staff read a sponsor's plan through `GET
+/api/users/:id/meal-plan` (`users:read`) and correct it through `PUT
+/api/users/:id/meal-plan` (`meal-plans:manage`, same rules but partial: meals left out stay
+unanswered and the sponsor's `confirmedAt` is not set; always audited as
+`meal_plan.updated`); logistics reads aggregate headcounts and the catering
+CSV under `/api/logistics/meal-plans` (see `docs/statistics-dashboard.md`).
+
+On the web, the `(app)` layout shows a dismissable dialog with one step per
+pending task ("Later" hides it for the browser session via `sessionStorage`),
+and My profile shows a sponsor-only Meals section plus an explicit "No
+restrictions" option; the profile form only sends dietary fields when they were
+edited, so saving a name never records an empty dietary answer, and both
+refuse an empty answer unless "No restrictions" is ticked. Both surfaces share
+one copy of the meal plan; a save refused because the plan changed
+(`meal_plan_incomplete`, `meal_plan_locked`, `meal_not_offered`) reloads it.
 
 Primary-email verification is deliberately not required by Better Auth at sign
 in: H1 allows an unverified account to establish a session and use read-only
@@ -183,6 +213,22 @@ emails without ever silently merging identities. Challenge↔project linkage is
 indirect, through `repo_devpost_prizes.prize` matching a challenge's
 `devpost_tags`. Full detail: [`challenges-devpost.md`](./challenges-devpost.md).
 
+### diary (#935)
+The caller's private event diary under `/api/me/diary`: people saved by
+scanning a badge/ticket (the only way to add a person), and companies collected by
+scanning one of their company tags (NFC tag or wristband, QR, or the tag link
+`/s/<code>`). Cards are projected live from `directory` and the
+public sponsor profile. Full detail: [`diary.md`](./diary.md).
+
+### directory (#934)
+Opt-in public profile: the caller's profile (bio, links and a shareable CV)
+under `/api/me/public-profile`, the profile and shared-CV reads of people the
+caller saved in their diary (there is no listing), and `users:write`
+moderation. The account photo (`/api/me/photo`, staff edits through
+`POST`/`DELETE /api/users/:id/photo`, read through `GET /api/users/:id/photo`)
+lives in identity but follows the profile's photo switch. Full detail:
+[`directory.md`](./directory.md).
+
 ### challenges (H44)
 Sponsor-owned challenge templates bound to an enterprise: draft/published
 status, hidden/visible visibility, a scheduled `available_from` reveal,
@@ -220,6 +266,20 @@ lease owner before changing a text field, so the browser's read-only state is
 not the concurrency boundary. Numeric and choice answers retain the existing
 field-level merge behavior.
 
+### live-activities (#966 · H38, H25, H26, H59, H19, H22)
+The device/session registry (`PUT /api/me/live-activities/device`,
+`PUT`/`DELETE /api/me/live-activities/sessions`), the read model
+`GET /api/me/live-activities`, the organizer configuration
+(`GET`/`PUT /api/live-activities/settings`, `event:manage`, audited), and the
+`live-activities` worker that pushes iOS ActivityKit updates over APNs (token
+auth) and Android Live Updates as data-only Expo pushes. `candidates.ts`
+gates and ranks the kinds (queue, staff activity, attendee activity,
+deadline, accreditation desk) for both the read endpoint and
+the pushes; the queue state reuses `myQueueStatus`. The registry routes are
+the caller's own delivery plumbing, so they follow the push-token posture
+(authenticated, no capability, no audit row). See
+[Live Activities](./live-activities.md).
+
 ### logistics (H22–H27, H59)
 Accreditation (badge issuance, rotation, revocation), presence (door in/out
 with certainty-window derivation and conflict detection), meal/activity
@@ -249,7 +309,8 @@ any staff-only item in their batch rather than fail it. A DB constraint,
 is served exactly the `participant` slice. Items also carry an optional
 staff-only `notes`
 free-text field (the run-of-show's "observations" column), an optional
-`contactNote`, and responsible-person assignment via `schedule_owners`
+`contactNote`, the `liveActivityAudience` opt-in (#966: the item's audience
+gets an attendee Live Activity), and responsible-person assignment via `schedule_owners`
 (`GET/POST /api/schedule/:id/owners`, `DELETE /api/schedule/:id/owners/:ownerId`,
 `SCHEDULE_MANAGE`-gated, modeled on the `sponsors` enterprise-member join
 table). Each owner row is either a real hackOS account (`userId`) or a

@@ -8,6 +8,7 @@ import {
   deleteInboxNotification,
   listInboxNotifications,
   markNotificationRead,
+  markNotificationUnread,
 } from "../service.js";
 
 /** H50/H51 in-app inbox: the outbox row itself is the inbox item, read_at is the read marker. */
@@ -50,6 +51,23 @@ export function registerInboxRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       return markNotificationRead(pool, req.userId as number, req.params.id);
+    },
+  );
+
+  typedApp.post(
+    "/api/me/notifications/:id/unread",
+    {
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "Mark notification as unread",
+        description:
+          "Clears the read_at timestamp on a single H50/H51 in-app inbox item belonging to the caller, so it counts as unread again (idempotent).",
+        params: notificationIdParamsSchema,
+      },
+    },
+    async (req) => {
+      return markNotificationUnread(pool, req.userId as number, req.params.id);
     },
   );
 

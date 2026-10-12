@@ -1,0 +1,13 @@
+<!-- Scan action (#966, H22/H25): radio waves for the NFC badge, like SF Symbol wave.3.right. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="18dp"
+  android:height="18dp"
+  android:viewportWidth="24"
+  android:viewportHeight="24">
+  <path
+    android:fillColor="#00000000"
+    android:strokeColor="#FFFFFFFF"
+    android:strokeWidth="2"
+    android:strokeLineCap="round"
+    android:pathData="M6.54,8.46A5,5 0 0,1 6.54,15.54M10.07,4.93A10,10 0 0,1 10.07,19.07M13.61,1.39A15,15 0 0,1 13.61,22.61" />
+</vector>

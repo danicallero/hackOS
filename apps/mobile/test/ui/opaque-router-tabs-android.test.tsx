@@ -1,12 +1,7 @@
 /**
- * Tests for the Android unread notification indicator on the notifications tab.
- * (issue #625, H51/H55/H489)
- *
- * The acceptance criteria require:
- * - A visible Android badge/dot that cannot be confused with the ordinary bell.
- * - The indicator is absent when there are no unread notifications.
- * - Selected/unselected icon contrast is preserved.
- * - Tab-bar geometry is not altered unexpectedly.
+ * Android tab-bar behavior: scanner system bars and the account photo
+ * (H55, #934). The unread indicator moved from a tab to the Schedule bell
+ * (H51), so there is no notifications tab here anymore.
  */
 
 import type React from "react";
@@ -123,12 +118,15 @@ jest.mock("react-native-safe-area-context", () => ({
   SafeAreaProvider: ({ children }: { children: unknown }) => children,
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
 }));
+const mockMenuActions: { current: string[] } = { current: [] };
 jest.mock("@expo/ui/community/menu", () => {
   const ReactLib = require("react");
   const Native = jest.requireActual("react-native");
   return {
-    MenuView: ({ children }: { children: unknown }) =>
-      ReactLib.createElement(Native.View, null, children),
+    MenuView: ({ children, actions }: { children: unknown; actions?: { id: string }[] }) => {
+      mockMenuActions.current = (actions ?? []).map(({ id }) => id);
+      return ReactLib.createElement(Native.View, null, children);
+    },
   };
 });
 jest.mock("expo-symbols", () => ({
@@ -140,12 +138,17 @@ jest.mock("expo-symbols", () => ({
   },
 }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
+jest.mock("@/lib/api", () => ({ getCurrentSessionCookie: () => "session=abc" }));
+jest.mock("@/lib/directory", () => ({
+  loadApiImage: (path: string) => Promise.resolve(`data:image/jpeg;base64,${path.length}`),
+}));
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({
     language: "en",
     t: (key: string) =>
       ({
         tabAccount: "Account",
+        tabDiary: "Diary",
         tabActivities: "Activities",
         tabNotifications: "Notifications",
         tabOthers: "Others",
@@ -153,18 +156,12 @@ jest.mock("@/lib/i18n", () => ({
         tabQueueOperations: "Operations",
         tabScan: "Scan",
         tabSchedule: "Schedule",
-        tabWallet: "Wallet",
       })[key] ?? key,
   }),
 }));
 jest.mock("@/lib/operations-navigation", () => ({
-  operationsSectionFromPathname: () => "external",
+  ...jest.requireActual("@/lib/operations-navigation"),
   resolveOperationsNavigationAction: () => "replace",
-}));
-jest.mock("@/lib/overflow-tabs", () => ({
-  OVERFLOW_TAB_ICON: {},
-  OVERFLOW_TAB_LABEL_KEY: {},
-  OVERFLOW_TAB_ROUTE: {},
 }));
 jest.mock("@/lib/router-tabs-inset", () => ({
   RouterTabBarInsetsProvider: ({ children }: { children: unknown }) => children,
@@ -179,9 +176,11 @@ jest.mock("@/lib/router-tabs-inset", () => ({
     contentBottomInset: 98,
   }),
 }));
+const mockPrimaryTabs = jest.fn(() => ["schedule", "queue", "diary", "account"]);
+const mockOverflowTabs = jest.fn((): string[] => []);
 jest.mock("@/lib/tabs", () => ({
-  primaryTabs: () => ["schedule", "notifications", "wallet", "account"],
-  overflowTabs: () => [],
+  primaryTabs: () => mockPrimaryTabs(),
+  overflowTabs: () => mockOverflowTabs(),
 }));
 jest.mock("@/theme/colors", () => ({
   colors: {
@@ -194,22 +193,20 @@ jest.mock("@/theme/colors", () => ({
   },
 }));
 
-import { act, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import * as Native from "react-native";
 import { OpaqueRouterTabs } from "@/components/opaque-router-tabs";
 
 const DEFAULT_PROPS = {
   capabilities: [],
   hasQueueItems: false,
-  hasUnreadNotifications: false,
 };
 
-async function renderTabs(hasUnreadNotifications: boolean) {
-  return render(
-    <OpaqueRouterTabs {...DEFAULT_PROPS} hasUnreadNotifications={hasUnreadNotifications} />,
-  );
+async function renderTabs() {
+  return render(<OpaqueRouterTabs {...DEFAULT_PROPS} />);
 }
 
-describe("OpaqueRouterTabs — Android unread notification indicator (issue #625)", () => {
+describe("OpaqueRouterTabs — Android system bars", () => {
   beforeEach(() => {
     Object.defineProperty(Platform, "OS", { configurable: true, value: "android" });
     mockUsePathname.mockReturnValue("/(tabs)/schedule");
@@ -219,68 +216,190 @@ describe("OpaqueRouterTabs — Android unread notification indicator (issue #625
     jest.clearAllMocks();
   });
 
-  it("renders no badge dot on the notifications tab when there are no unread notifications", async () => {
-    await renderTabs(false);
-    // The badge dot has no testID; absence is verified by checking that no
-    // styled View with the accent dot colour is rendered on the notifications tab.
-    // The plain bell symbol is rendered instead.
-    expect(screen.queryByTestId("android-notification-badge-dot")).toBeNull();
-  });
-
-  it("renders a badge dot on the notifications tab when there are unread notifications", async () => {
-    await renderTabs(true);
-    // The AndroidNotificationIcon renders a dot View with testID for test visibility.
-    expect(screen.getAllByTestId("android-notification-badge-dot").length).toBeGreaterThanOrEqual(
-      1,
-    );
-  });
-
-  it("renders a badge dot in the icon slot when the tab is not focused", async () => {
-    await renderTabs(true);
-    // RouterTabButton only renders `selectedIcon` when the tab isFocused is true.
-    // In the test harness the tab is unfocused, so only the inactive icon slot is
-    // rendered and exactly one badge dot is visible.
-    const dots = screen.getAllByTestId("android-notification-badge-dot");
-    expect(dots.length).toBe(1);
-  });
-
-  it("does not alter tab bar geometry: notifications tab container style is the same with and without unread", async () => {
-    const { unmount: unmount1 } = await render(
-      <OpaqueRouterTabs {...DEFAULT_PROPS} hasUnreadNotifications={false} />,
-    );
-    const styleBefore = screen.getByTestId("opaque-tab-notifications").props.style;
-    await unmount1();
-
-    await render(<OpaqueRouterTabs {...DEFAULT_PROPS} hasUnreadNotifications={true} />);
-    const styleAfter = screen.getByTestId("opaque-tab-notifications").props.style;
-
-    // Geometry (flex: 1, etc.) must be identical; only icon content changes.
-    expect(styleAfter).toEqual(styleBefore);
-  });
-
   it("uses dark scanner system bars only on scanner routes and restores automatic styling", async () => {
-    const rendered = await renderTabs(false);
+    const rendered = await renderTabs();
     expect(screen.getByTestId("scanner-status-bar").props.style).toBe("auto");
     expect(screen.getByTestId("scanner-navigation-bar").props.style).toBe("auto");
 
     await act(async () => {
       mockUsePathname.mockReturnValue("/(tabs)/scan");
-      rendered.rerender(<OpaqueRouterTabs {...DEFAULT_PROPS} hasUnreadNotifications={false} />);
+      rendered.rerender(<OpaqueRouterTabs {...DEFAULT_PROPS} />);
     });
     expect(screen.getByTestId("scanner-status-bar").props.style).toBe("light");
     expect(screen.getByTestId("scanner-navigation-bar").props.style).toBe("light");
 
     await act(async () => {
       mockUsePathname.mockReturnValue("/(tabs)/activities/42");
-      rendered.rerender(<OpaqueRouterTabs {...DEFAULT_PROPS} hasUnreadNotifications={false} />);
+      rendered.rerender(<OpaqueRouterTabs {...DEFAULT_PROPS} />);
     });
     expect(screen.getByTestId("scanner-status-bar").props.style).toBe("light");
 
     await act(async () => {
       mockUsePathname.mockReturnValue("/(tabs)/activities/people");
-      rendered.rerender(<OpaqueRouterTabs {...DEFAULT_PROPS} hasUnreadNotifications={false} />);
+      rendered.rerender(<OpaqueRouterTabs {...DEFAULT_PROPS} />);
     });
     expect(screen.getByTestId("scanner-status-bar").props.style).toBe("auto");
     expect(screen.getByTestId("scanner-navigation-bar").props.style).toBe("auto");
+  });
+});
+
+describe("OpaqueRouterTabs — account photo (#934)", () => {
+  beforeEach(() => {
+    Object.defineProperty(Platform, "OS", { configurable: true, value: "android" });
+    mockUsePathname.mockReturnValue("/(tabs)/schedule");
+  });
+
+  it("shows the signed-in person's photo instead of the Account symbol", async () => {
+    await render(
+      <OpaqueRouterTabs
+        {...DEFAULT_PROPS}
+        account={{ name: "Ada Lovelace", image: "/api/users/7/photo?v=abc" }}
+      />,
+    );
+    const tab = screen.getByTestId("opaque-tab-account");
+    expect(tab).toBeTruthy();
+    expect(screen.queryByTestId("symbol-account_circle")).toBeNull();
+    // Loaded with the session and shown from memory: Android drops a Cookie
+    // header on an Image source.
+    const photo = await screen.findByTestId("account-tab-avatar-photo", {
+      includeHiddenElements: true,
+    });
+    expect(photo.props.source.uri).toMatch(/^data:image\/jpeg;base64,/);
+  });
+
+  it("keeps the Account symbol without a photo", async () => {
+    await render(<OpaqueRouterTabs {...DEFAULT_PROPS} account={{ name: "Ada", image: null }} />);
+    expect(screen.getByTestId("symbol-account_circle")).toBeTruthy();
+  });
+
+  describe("when Account sits behind Others", () => {
+    beforeEach(() => {
+      mockPrimaryTabs.mockReturnValue(["schedule", "queue", "activities", "scan"]);
+      mockOverflowTabs.mockReturnValue(["diary", "account"]);
+    });
+    afterEach(() => {
+      mockPrimaryTabs.mockReturnValue(["schedule", "queue", "diary", "account"]);
+      mockOverflowTabs.mockReturnValue([]);
+    });
+
+    it.each([
+      "/(tabs)/others/account",
+      "/(tabs)/others/wallet",
+      "/(tabs)/others/notification-settings",
+      "/(tabs)/others/notification-settings/reminders",
+      "/(tabs)/others/stands",
+    ])("shows the account photo in the Others circle on %s", async (path) => {
+      mockUsePathname.mockReturnValue(path);
+      await render(
+        <OpaqueRouterTabs
+          {...DEFAULT_PROPS}
+          account={{ name: "Ada Lovelace", image: "/api/users/7/photo?v=abc" }}
+        />,
+      );
+      expect(
+        await screen.findByTestId("account-tab-avatar-photo", { includeHiddenElements: true }),
+      ).toBeTruthy();
+    });
+
+    it("keeps the Others symbol while another destination is open", async () => {
+      await render(
+        <OpaqueRouterTabs
+          {...DEFAULT_PROPS}
+          account={{ name: "Ada Lovelace", image: "/api/users/7/photo?v=abc" }}
+        />,
+      );
+      expect(
+        screen.queryByTestId("account-tab-avatar", { includeHiddenElements: true }),
+      ).toBeNull();
+    });
+  });
+});
+
+describe("OpaqueRouterTabs — direct Account tab selection", () => {
+  beforeEach(() => {
+    Object.defineProperty(Platform, "OS", { configurable: true, value: "android" });
+    mockPrimaryTabs.mockReturnValue(["schedule", "account"]);
+    mockOverflowTabs.mockReturnValue(["queue"]);
+  });
+  afterEach(() => {
+    mockPrimaryTabs.mockReturnValue(["schedule", "queue", "diary", "account"]);
+    mockOverflowTabs.mockReturnValue([]);
+  });
+
+  it.each([
+    ["/(tabs)/others/account", true],
+    ["/(tabs)/others/wallet", true],
+    ["/(tabs)/others/notification-settings", true],
+    ["/(tabs)/others/queue", false],
+    ["/(tabs)/schedule", false],
+  ])("on %s the Account tab selected = %s", async (path, selected) => {
+    mockUsePathname.mockReturnValue(path);
+    await renderTabs();
+    expect(screen.getByTestId("opaque-tab-account").props.accessibilityState.selected).toBe(
+      selected,
+    );
+  });
+});
+
+describe("OpaqueRouterTabs — Account is the bottom-most Others entry (H55)", () => {
+  const SETS: [string, string[]][] = [
+    ["operator", ["diary", "operations", "account"]],
+    ["queue operator", ["queue", "diary", "account"]],
+    ["participant with queue", ["queue", "diary", "account"]],
+  ];
+  beforeEach(() => {
+    mockPrimaryTabs.mockReturnValue(["schedule", "scan", "activities"]);
+    mockUsePathname.mockReturnValue("/(tabs)/schedule");
+    // The trigger's anchor comes from measureInWindow, absent in the host mock.
+    (Native.View.prototype as unknown as Record<string, unknown>).measureInWindow = (
+      cb: (x: number, y: number, w: number) => void,
+    ) => cb(300, 700, 64);
+  });
+  afterEach(() => {
+    delete (Native.View.prototype as unknown as Record<string, unknown>).measureInWindow;
+    mockPrimaryTabs.mockReturnValue(["schedule", "queue", "diary", "account"]);
+    mockOverflowTabs.mockReturnValue([]);
+  });
+
+  it.each(SETS)("Android lists Account last for %s", async (_n, overflow) => {
+    Object.defineProperty(Platform, "OS", { configurable: true, value: "android" });
+    mockOverflowTabs.mockReturnValue(overflow);
+    await renderTabs();
+    await fireEvent.press(screen.getByTestId("opaque-others-menu"));
+    const names = ["Queue", "Diary", "Operations", "Account"];
+    const texts = screen
+      .getAllByText(/^(Queue|Diary|Operations|Account)$/, { includeHiddenElements: true })
+      .map((n) => n.props.children as string)
+      .filter((t) => names.includes(t));
+    expect(texts.at(-1)).toBe("Account");
+  });
+
+  it.each(
+    SETS,
+  )("iOS passes Account first (rendered at the bottom) for %s", async (_n, overflow) => {
+    Object.defineProperty(Platform, "OS", { configurable: true, value: "ios" });
+    mockOverflowTabs.mockReturnValue(overflow);
+    await renderTabs();
+    expect(mockMenuActions.current[0]).toBe("account");
+    // The first overflow destination takes the fourth direct cell.
+    expect([...mockMenuActions.current].reverse()).toEqual(overflow.slice(1));
+  });
+});
+
+describe("OpaqueRouterTabs — Dynamic Type", () => {
+  beforeEach(() => {
+    mockUsePathname.mockReturnValue("/(tabs)/schedule");
+  });
+
+  it("caps tab labels and shrinks them to fit instead of clipping the fixed bar", async () => {
+    const { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } =
+      require("@/theme/dynamic-type") as typeof import("@/theme/dynamic-type");
+    await renderTabs();
+
+    const label = screen.getByText("Schedule");
+    expect(label.props.maxFontSizeMultiplier).toBe(CHROME_MAX_FONT_SIZE_MULTIPLIER);
+    expect(label.props.adjustsFontSizeToFit).toBe(true);
+    expect(label.props.minimumFontScale).toBe(CHROME_MIN_FONT_SCALE);
+    expect(label.props.numberOfLines).toBe(1);
   });
 });

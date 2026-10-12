@@ -19,21 +19,18 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
-import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { ListToolbar } from "@/components/common/list-toolbar";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { PageToolbar } from "@/components/common/page-toolbar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Surface } from "@/components/ui/surface";
 import {
   Table,
   TableBody,
@@ -48,7 +45,7 @@ import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { ActivityRow } from "./schedule-activity-row";
-import { BulkSchedulePopover, MoveToDateModal, ScheduleFilterMenu } from "./schedule-dialogs";
+import { BulkSchedulePopover, MoveToDateModal, useScheduleFilters } from "./schedule-dialogs";
 import {
   cleanScheduleForm,
   EMPTY_SCHEDULE_FORM,
@@ -350,6 +347,17 @@ export default function SchedulePage() {
     }
   }
 
+  const filters = useScheduleFilters({
+    audiences: audienceFilter,
+    kinds: kindFilter,
+    staffOnly: staffOnlyFilter,
+    onKindChange: setKindFilter,
+    onAudienceChange: (selected, staffOnly) => {
+      setAudienceFilter(selected);
+      setStaffOnlyFilter(staffOnly);
+    },
+  });
+
   if (!canEdit) return <AccessDenied ask={t("manageSchedule")} />;
 
   const allSelected = filtered.length > 0 && filtered.every((item) => selectedIds.has(item.id));
@@ -358,66 +366,49 @@ export default function SchedulePage() {
     <PageLayout width="workspace">
       <PageHeader title={t("manageSchedule")} />
 
-      <Surface padding="none" className="overflow-hidden">
-        <PageToolbar label={t("pageDataControls")} className="p-4">
-          <div className="relative w-full max-w-xs">
-            <MagnifyingGlassIcon
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-              aria-hidden="true"
-            />
-            <Input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("searchSchedulePlaceholder")}
-              className="pl-9"
-              aria-label={t("searchSchedulePlaceholder")}
-            />
-          </div>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            {canEdit && selectedIds.size > 0 && (
-              <>
-                <span className="text-muted-foreground text-sm">
-                  {t("selectedCount", { count: selectedIds.size })}
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => bulkVisibility("shown")}
-                  loading={busy}
-                >
-                  <EyeIcon aria-hidden="true" className="size-4" />
-                  {t("show")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => bulkVisibility("hidden")}
-                  loading={busy}
-                >
-                  <EyeSlashIcon aria-hidden="true" className="size-4" />
-                  {t("hide")}
-                </Button>
-                <BulkSchedulePopover disabled={busy} onApply={bulkSchedule} />
-              </>
-            )}
-            {canEdit && (
-              <ScheduleFilterMenu
-                audiences={audienceFilter}
-                kinds={kindFilter}
-                onKindChange={setKindFilter}
-                staffOnly={staffOnlyFilter}
-                onAudienceChange={(selected, staffOnly) => {
-                  setAudienceFilter(selected);
-                  setStaffOnlyFilter(staffOnly);
-                }}
-              />
-            )}
-            <ColumnConfigPopover config={tableConfig} onChange={setTableConfig} />
-          </div>
-        </PageToolbar>
+      <div className="space-y-4">
+        <ListToolbar
+          search={{
+            id: "schedule-search",
+            label: t("searchSchedulePlaceholder"),
+            value: query,
+            onValueChange: setQuery,
+          }}
+          filters={filters}
+          actions={
+            <div className="flex items-center gap-2">
+              {canEdit && selectedIds.size > 0 && (
+                <>
+                  <span className="text-muted-foreground text-sm">
+                    {t("selectedCount", { count: selectedIds.size })}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => bulkVisibility("shown")}
+                    loading={busy}
+                  >
+                    <EyeIcon aria-hidden="true" className="size-4" />
+                    {t("show")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => bulkVisibility("hidden")}
+                    loading={busy}
+                  >
+                    <EyeSlashIcon aria-hidden="true" className="size-4" />
+                    {t("hide")}
+                  </Button>
+                  <BulkSchedulePopover disabled={busy} onApply={bulkSchedule} />
+                </>
+              )}
+              <ColumnConfigPopover config={tableConfig} onChange={setTableConfig} />
+            </div>
+          }
+        />
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-lg border bg-card">
           <DndContext
             sensors={rowDragSensors}
             collisionDetection={closestCenter}
@@ -482,7 +473,9 @@ export default function SchedulePage() {
                 ) : groups.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
                     <TableCell colSpan={visibleColumns.length + 2} className="p-0">
-                      <EmptyState icon={CalendarDotsIcon} title={t("noScheduleItemsYet")} />
+                      <div className="sticky left-0 w-full max-w-[calc(100vw-2rem)]">
+                        <EmptyState icon={CalendarDotsIcon} title={t("noScheduleItemsYet")} />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -557,7 +550,7 @@ export default function SchedulePage() {
             </Table>
           </DndContext>
         </div>
-      </Surface>
+      </div>
 
       <ScheduleFormModal
         open={createOpen}

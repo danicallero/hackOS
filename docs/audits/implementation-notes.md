@@ -55,11 +55,13 @@ to `RESERVED_FIELD_KEYS` — see the doc comment on that constant.
   Staff can still fix names via `PATCH /api/users/:id`.
 - `POST /api/invites/accept` already accepted `foodIntoleranceNotes` (optional);
   the onboarding form now sends it.
-- `GET/POST /api/invites/enterprise-links` lets administrators list or create
-  reusable enterprise account links with a redemption limit and minute-based
-  expiry; `null` expiry means no automatic expiry.
+- `GET /api/invites/enterprise-links` lists the older reusable enterprise
+  account links; their creation route was removed so sponsor links have one
+  creation path through user links (#929).
 - `GET/POST /api/invites/user-links` lets invitation managers create reusable
-  account links for staff, sponsors, or participants. Each claimant supplies
+  account links for staff, sponsors, or participants. Holders of
+  `sponsors:manage` without `invites:manage` list, create, edit and withdraw
+  only sponsor links without roles (#929). Each claimant supplies
   their own email; staff links must carry at least one capability-backed group,
   and all links support redemption limits, expiry, audit, and withdrawal via
   `POST /api/invites/user-links/:id/withdraw`.
@@ -90,9 +92,6 @@ to `RESERVED_FIELD_KEYS` — see the doc comment on that constant.
 - `(auth)/login/page.tsx` — honours a **same-origin** `?next=` param
   (open-redirect guarded via `safeNext`), so the invited participant lands on
   the application form right after signing in.
-- `(app)/enterprises/[id]/invite-links-card.tsx` — creates copyable reusable
-  links and shows their status, limit, expiry, and account redemption history;
-  withdrawal uses an accessible destructive confirmation.
 - `(app)/users/active-invitations-modal.tsx` and
   `(app)/users/user-invite-links-section.tsx` — unified invitation management
   for email-bound invites, enterprise links, and reusable account links,
