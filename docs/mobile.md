@@ -1602,10 +1602,10 @@ value, locale or text size can widen the island; text scales down
 (`minimumScaleFactor(0.6)`) instead of truncating. The slots get a 3 pt
 leading / 7 pt trailing inset so the glyph and the time sit on the pill's
 concentric margin (HIG). Every countdown surface uses `2h 34m` / `34m`
-normally and adds seconds only in the last five minutes (`4m 59s`, including
-minimal and `bannerSmall`). Always-On uses the native `isLuminanceReduced`
+normally and adds seconds only in the last five minutes (`4m 59s`, then `48s`
+below a minute, including minimal and `bannerSmall`). Always-On uses the native `isLuminanceReduced`
 environment to remove both the seconds field and its spacing, leaving `4m`
-or `0m`; waking restores seconds, with no placeholder. `Text`'s
+or `<1m` below a minute; waking restores seconds, with no placeholder. `Text`'s
 `compactCountdown` (the legacy form names share this precision policy;
 `patches/@expo__ui@57.0.22.patch`) draws each number from a live
 `Text(timerInterval:)`, clipped to its digits next to static `h`/`m`/`s`.
@@ -1618,9 +1618,10 @@ once and freezes (19–29 s off the timer), `SystemFormatStyle.Timer`,
 `.offset` and `.reference` spell units out, and a custom format style is
 redacted; only timer text ticks. The form is chosen when the activity
 renders, and a stale date does not re-render it, so the props carry
-`countdownUnderHour` and `countdownLastFiveMinutes`: they flip at the hour
-and five-minute boundaries, sending one update each through the worker's normal
-hash path. The foreground app reconciles at both boundaries (`nextPhaseBoundary`).
+`countdownUnderHour`, `countdownLastFiveMinutes` and `countdownLastMinute`:
+they flip at the hour, five-minute and one-minute boundaries, sending one
+update each through the worker's normal hash path. The foreground app reconciles
+at all three boundaries (`nextPhaseBoundary`).
 At the hour, the timer can briefly read `h 59m` until that update; at five minutes,
 seconds appear on the next update. Taps open the props' `url` (passed as the
 activity's static URL); the API must send the same `attributes.url` on

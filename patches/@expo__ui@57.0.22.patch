@@ -1,5 +1,5 @@
 diff --git a/build/swift-ui/Text/index.d.ts b/build/swift-ui/Text/index.d.ts
-index a8843b7..f7ac1b8 100644
+index a8843b7..5369090 100644
 --- a/build/swift-ui/Text/index.d.ts
 +++ b/build/swift-ui/Text/index.d.ts
 @@ -41,6 +41,15 @@ export interface TextProps extends CommonViewModifierProps {
@@ -8,7 +8,7 @@ index a8843b7..f7ac1b8 100644
      pauseTime?: Date;
 +    /**
 +     * Live unit countdown: `2h 34m`, then `34m`, with seconds only in the
-+     * last five minutes (`4m 59s`). Always-On removes seconds and their space.
++     * last five minutes (`4m 59s`). Under a minute: `48s` / `<1m` in Always-On.
 +     * All legacy forms share this precision policy. Size defaults to 12;
 +     * weight defaults to semibold. (hackOS patch, #966)
 +     */
@@ -20,7 +20,7 @@ index a8843b7..f7ac1b8 100644
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/ios/TextView.swift b/ios/TextView.swift
-index 7dfe0a9..e564e15 100644
+index 7dfe0a9..6b7caa1 100644
 --- a/ios/TextView.swift
 +++ b/ios/TextView.swift
 @@ -25,6 +25,10 @@ public final class TextViewProps: UIBaseViewProps {
@@ -55,7 +55,7 @@ index 7dfe0a9..e564e15 100644
    }
  
    internal func buildText(applyModifiers: Bool = true) -> Text {
-@@ -73,3 +87,84 @@ public struct TextView: ExpoSwiftUI.View {
+@@ -73,3 +87,89 @@ public struct TextView: ExpoSwiftUI.View {
      return result
    }
  }
@@ -126,9 +126,14 @@ index 7dfe0a9..e564e15 100644
 +        unit("h ")
 +        field(skip: colon + 2 * digit, digits: 2)
 +        unit("m")
++      } else if left < 60 {
++        if reduced {
++          unit("<1m")
++        } else {
++          field(skip: 0, digits: 2)
++          unit("s")
++        }
 +      } else {
-+        // Always keep minutes, including `0m` under a minute. This avoids
-+        // switching structure again at 60s and leaves a real value in Always-On.
 +        field(skip: colon + 2 * digit, digits: left >= 600 ? 2 : 1)
 +        unit(seconds ? "m " : "m")
 +        if seconds {
@@ -141,7 +146,7 @@ index 7dfe0a9..e564e15 100644
 +  }
 +}
 diff --git a/src/swift-ui/Text/index.tsx b/src/swift-ui/Text/index.tsx
-index 2351ee8..71b70f4 100644
+index 2351ee8..00432b5 100644
 --- a/src/swift-ui/Text/index.tsx
 +++ b/src/swift-ui/Text/index.tsx
 @@ -52,6 +52,15 @@ export interface TextProps extends CommonViewModifierProps {
@@ -150,7 +155,7 @@ index 2351ee8..71b70f4 100644
    pauseTime?: Date;
 +  /**
 +   * Live unit countdown: `2h 34m`, then `34m`, with seconds only in the
-+   * last five minutes (`4m 59s`). Always-On removes seconds and their space.
++   * last five minutes (`4m 59s`). Under a minute: `48s` / `<1m` in Always-On.
 +   * All legacy forms share this precision policy. Size defaults to 12;
 +   * weight defaults to semibold. (hackOS patch, #966)
 +   */

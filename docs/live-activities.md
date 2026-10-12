@@ -635,14 +635,16 @@ because they have no progress/action footer.
   deep-links to the related screen.
 - **Live timers tick on the device.** Countdowns and the pitch timer travel
   as instants, never as per-second pushes. Countdowns read `2h 34m` /
-  `34m`, with seconds only in the last five minutes on every countdown surface;
-  Always-On removes seconds and their spacing without a placeholder (rendering
+  `34m`, with seconds only in the last five minutes (`4m 59s`, then `48s` below
+  a minute) on every countdown surface;
+  Always-On removes seconds and their spacing, using `<1m` below a minute
+  without a placeholder (rendering
   in [mobile.md](./mobile.md#live-activities-and-live-updates-966)).
   The widget picks the form when it renders, so the staff activity,
-  attendee activity and deadline props carry `countdownUnderHour` and
-  `countdownLastFiveMinutes`
-  (`countdownUnderHour()` / `countdownLastFiveMinutes()`, shared; optional, older
-  apps ignore them). They flip at one hour and five minutes before the target
+  attendee activity and deadline props carry `countdownUnderHour`,
+  `countdownLastFiveMinutes` and `countdownLastMinute`
+  (matching shared helpers; optional, older apps ignore them). They flip at one
+  hour, five minutes and below one minute before the target
   (the start while upcoming, else the end), which changes the state hash and
   sends one routine update per boundary.
 - **Few at once.** A device shows at most `maxConcurrent` (default 2), the

@@ -4,6 +4,7 @@ import {
   type ActivityLiveProps,
   activityLiveLabels,
   countdownLastFiveMinutes,
+  countdownLastMinute,
   countdownUnderHour,
   LIVE_ACTIVITY_PROPS_VERSION,
   type LiveActivityProps,
@@ -251,8 +252,9 @@ export function buildActivityLiveProps(
     scanUrl: link,
     url: link,
     labels: activityLiveLabels(language),
-    // #966: precision flags trigger one re-render at the hour and five minutes.
+    // #966: precision flags trigger one re-render at each native timer format boundary.
     countdownUnderHour: countdownUnderHour(live ? activity.endsAt : activity.startsAt, now),
+    countdownLastMinute: countdownLastMinute(live ? activity.endsAt : activity.startsAt, now),
     countdownLastFiveMinutes: countdownLastFiveMinutes(
       live ? activity.endsAt : activity.startsAt,
       now,

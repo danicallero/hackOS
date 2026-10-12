@@ -4,6 +4,7 @@ import {
   accreditationLiveLabels,
   attendeeActivityLiveLabels,
   countdownLastFiveMinutes,
+  countdownLastMinute,
   countdownUnderHour,
   type DeadlineLiveProps,
   deadlineLiveLabels,
@@ -100,8 +101,12 @@ export function buildAttendeeActivityLiveProps(
     endsAt: item.endsAt.toISOString(),
     url: scheduleDeepLink(item.id),
     labels: attendeeActivityLiveLabels(language),
-    // #966: precision flags trigger one re-render at the hour and five minutes.
+    // #966: precision flags trigger one re-render at each native timer format boundary.
     countdownUnderHour: countdownUnderHour(now < item.startsAt ? item.startsAt : item.endsAt, now),
+    countdownLastMinute: countdownLastMinute(
+      now < item.startsAt ? item.startsAt : item.endsAt,
+      now,
+    ),
     countdownLastFiveMinutes: countdownLastFiveMinutes(
       now < item.startsAt ? item.startsAt : item.endsAt,
       now,
@@ -228,6 +233,7 @@ export function buildDeadlineLiveProps(
     url: projectDeepLink(),
     labels: deadlineLiveLabels(language),
     countdownUnderHour: countdownUnderHour(window.endsAt, now),
+    countdownLastMinute: countdownLastMinute(window.endsAt, now),
     countdownLastFiveMinutes: countdownLastFiveMinutes(window.endsAt, now),
     updatedAt: now.toISOString(),
   };

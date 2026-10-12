@@ -242,7 +242,7 @@ export function withScannedIncrement(props: ActivityLiveProps, by = 1): Activity
  * Next instant a surface changes phase or ends on its own (an activity or
  * schedule item starting or ending, the deadline, the accreditation window),
  * or a countdown drops under an hour (#966: the widget then switches from
- * `2h 34m` to `34m`), or enters the last five minutes (seconds become visible),
+ * `2h 34m` to `34m`), enters the last five minutes (seconds appear), or the last minute (seconds alone),
  * so the foreground app can refresh exactly then instead of polling.
  */
 export function nextPhaseBoundary(desired: DesiredActivity[], now: number): number | null {
@@ -259,7 +259,9 @@ export function nextPhaseBoundary(desired: DesiredActivity[], now: number): numb
     const countdown = props.kind !== "accreditation";
     for (const iso of instants) {
       const end = Date.parse(iso);
-      const marks = countdown ? [end - LIVE_COUNTDOWN_HOUR_MS + 1_000, end - 300_000, end] : [end];
+      const marks = countdown
+        ? [end - LIVE_COUNTDOWN_HOUR_MS + 1_000, end - 300_000, end - 60_000 + 1_000, end]
+        : [end];
       for (const at of marks) {
         if (Number.isFinite(at) && at > now && (next === null || at < next)) next = at;
       }

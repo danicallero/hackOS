@@ -188,6 +188,13 @@ export function countdownLastFiveMinutes(target: string | Date, now: Date | numb
   return at - from <= 300_000;
 }
 
+/** #966: re-render below a minute; active shows `48s`, Always-On shows `<1m`. */
+export function countdownLastMinute(target: string | Date, now: Date | number): boolean {
+  const at = typeof target === "string" ? Date.parse(target) : target.getTime();
+  const from = typeof now === "number" ? now : now.getTime();
+  return at - from < 60_000;
+}
+
 export interface ActivityLiveLabels {
   /** "Starts in" */
   startsIn: string;
@@ -233,6 +240,8 @@ export interface ActivityLiveProps {
   countdownUnderHour?: boolean;
   /** Re-render at five minutes remaining; seconds hide again in Always-On. */
   countdownLastFiveMinutes?: boolean;
+  /** Re-render below a minute, with seconds alone or `<1m` in Always-On. */
+  countdownLastMinute?: boolean;
   /** Device rank among the Live Activities it shows (0 = most important). Optional (post-v1). */
   rank?: number;
   updatedAt: string;
@@ -288,6 +297,8 @@ export interface AttendeeActivityLiveProps {
   countdownUnderHour?: boolean;
   /** Re-render at five minutes remaining; seconds hide again in Always-On. */
   countdownLastFiveMinutes?: boolean;
+  /** Re-render below a minute, with seconds alone or `<1m` in Always-On. */
+  countdownLastMinute?: boolean;
   /** Device rank among the Live Activities it shows (0 = most important). */
   rank?: number;
   updatedAt: string;
@@ -339,6 +350,8 @@ export interface DeadlineLiveProps {
   countdownUnderHour?: boolean;
   /** Re-render at five minutes remaining; seconds hide again in Always-On. */
   countdownLastFiveMinutes?: boolean;
+  /** Re-render below a minute, with seconds alone or `<1m` in Always-On. */
+  countdownLastMinute?: boolean;
   rank?: number;
   updatedAt: string;
 }

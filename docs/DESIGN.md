@@ -1251,8 +1251,8 @@ HIG](https://developer.apple.com/design/human-interface-guidelines/live-activiti
   progress always occupies its own full-width row. The opaque blue fill is
   `#0066CC`, reduced to neutral `#3A3A3C` in Always-On.
 - Countdowns use `2h 34m` / `34m` normally; only the last five minutes show
-  seconds (`4m 59s`) on every countdown surface, including minimal and small.
-  Always-On removes the seconds field and its spacing, leaving `4m` / `0m`;
+  seconds (`4m 59s`, then `48s` below a minute) on every countdown surface, including minimal and small.
+  Always-On removes the seconds field and its spacing, leaving `4m` or `<1m` below a minute;
   waking restores seconds. Never render a seconds placeholder.
 - The submission window's elapsed bar remains visible after submission.
 - Keep semantic colour, dynamic light/dark Lock Screen accents and reduced
