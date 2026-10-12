@@ -7,7 +7,6 @@ import {
   type AccessibilityActionEvent,
   RefreshControl,
   ScrollView,
-  Switch,
   Text,
   useWindowDimensions,
   View,
@@ -22,7 +21,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { ActionButton, Section, SWITCH_IN_ROW_STYLE } from "@/components/native-ui";
+import { ActionButton, AppSwitch, Section, SWITCH_IN_ROW_STYLE } from "@/components/native-ui";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -290,7 +289,7 @@ function KindRow({
         <Text numberOfLines={2} style={{ color: colors.label, flex: 1, fontSize: 16 }}>
           {label}
         </Text>
-        <Switch
+        <AppSwitch
           accessibilityLabel={label}
           disabled={busy}
           onValueChange={onToggle}

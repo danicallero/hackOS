@@ -4,8 +4,10 @@ import {
   ActivityIndicator,
   type ColorValue,
   Modal,
+  Platform,
   Pressable,
   Switch,
+  type SwitchProps,
   Text,
   TextInput,
   type TextStyle,
@@ -111,6 +113,23 @@ export function Separator({
 export const SWITCH_IN_ROW_STYLE: ViewStyle = { alignSelf: "center" };
 
 /**
+ * The app's one Switch. iOS keeps the native control; Android's Material
+ * default is teal/green, so it is recoloured with the accent token (white
+ * thumb on an accent track when on, neutral track when off, both themes).
+ * Use this instead of react-native's Switch.
+ */
+export function AppSwitch(props: SwitchProps) {
+  if (Platform.OS !== "android") return <Switch {...props} />;
+  return (
+    <Switch
+      thumbColor={colors.accentText}
+      trackColor={{ false: colors.tertiaryLabel, true: colors.accent }}
+      {...props}
+    />
+  );
+}
+
+/**
  * A settings row with a trailing switch. `detail` adds a secondary line;
  * `onPress` makes the label side open a detail screen (with a disclosure
  * chevron), set apart from the switch by a hairline (two targets in one row). `busy` blocks the switch
@@ -188,7 +207,7 @@ export function ToggleRow({
           }}
         />
       ) : null}
-      <Switch
+      <AppSwitch
         accessibilityLabel={accessibilityLabel ?? label}
         disabled={disabled || busy}
         onValueChange={onChange}

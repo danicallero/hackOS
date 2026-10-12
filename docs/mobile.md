@@ -396,6 +396,11 @@ distributed to other Expo Router apps without importing hackOS code.
   including an explicit "No restrictions" option (#933) that `PATCH /api/me`
   records as a confirmed empty answer; the row is read-only offline or once the
   H7 profile lock applies (the next-entry prompt then skips the dietary step).
+  The screen follows the other form modals: grouped sections (No restrictions,
+  intolerances, a dedicated Dietary notes section matching the web
+  `foodIntoleranceNotes` field, read-only while No restrictions is on), a
+  centred title, and floating close/confirm glass buttons instead of bottom
+  action buttons.
   Sponsor representatives (`isSponsorRep`) also
   see a Meals section listing `GET /api/me/meal-plan`, reloaded on every focus
   and cached under `user:<id>:meal-plan` so sign-out and 401 invalidation clear
@@ -2057,3 +2062,10 @@ participants without a badge. Offline activity payloads preserve the original
 credential and the API revalidates tickets on replay, with the same repeat
 confirmation and idempotency as badge scans. Scanner lookup errors appear
 centered below the statistics on both screens and dismiss after six seconds.
+
+## Switches
+
+Every on/off control uses `AppSwitch` (`components/native-ui.tsx`, also behind
+`ToggleRow`) rather than react-native's `Switch`. iOS keeps the native control;
+Android, whose Material default is teal, gets the `accent` token as the on
+track with a white thumb and a neutral off track, in both themes.
