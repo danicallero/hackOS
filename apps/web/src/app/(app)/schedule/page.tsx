@@ -83,6 +83,9 @@ import {
 export default function SchedulePage() {
   const { t, language } = useLocale();
   const canEdit = useCan(CAPABILITIES.SCHEDULE_MANAGE);
+  // schedule:manage implies read; a read-only holder gets the staff table
+  // without any edit, create, delete or reorder controls.
+  const canRead = useCan(CAPABILITIES.SCHEDULE_READ) || canEdit;
 
   const [items, setItems] = useState<PublicScheduleItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +128,7 @@ export default function SchedulePage() {
 
   const load = useCallback(() => {
     setError(null);
-    // SCHEDULE_MANAGE is the only capability that may load this management
+    // SCHEDULE_READ and SCHEDULE_MANAGE may load this management
     // listing. Participants use /timetable, which owns the public feed.
     logisticsApi
       .schedule()
@@ -140,8 +143,8 @@ export default function SchedulePage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (canEdit) load(); // Data fetch when capability becomes available; load() callback is stable.
-  }, [canEdit, load]);
+    if (canRead) load(); // Data fetch when capability becomes available; load() callback is stable.
+  }, [canRead, load]);
 
   const updateItem = useCallback((id: number, patch: Partial<PublicScheduleItem>) => {
     setItems((prev) => prev?.map((it) => (it.id === id ? { ...it, ...patch } : it)) ?? prev);
@@ -358,7 +361,7 @@ export default function SchedulePage() {
     },
   });
 
-  if (!canEdit) return <AccessDenied ask={t("manageSchedule")} />;
+  if (!canRead) return <AccessDenied ask={t("manageSchedule")} />;
 
   const allSelected = filtered.length > 0 && filtered.every((item) => selectedIds.has(item.id));
 

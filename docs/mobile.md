@@ -642,7 +642,7 @@ distributed to other Expo Router apps without importing hackOS code.
   `ScheduleFilterPanel` (also in
   schedule-filter-button.tsx) is the dropdown for both paths, rendered as a
   `Modal` so it isn't clipped by either header's bounds — kind filter open to
-  everyone, audience filter only to `schedule:manage` holders. The custom tab
+  everyone, audience filter only to `schedule:read` / `schedule:manage` holders (edit, delete and the + button stay `schedule:manage`-only). The custom tab
   bar is an absolute overlay, so the screen keeps its full-height content and
   the list can pass behind the translucent Liquid Glass surface (opaque on
   Android and earlier iOS). In light mode the hackOS adapter uses the native

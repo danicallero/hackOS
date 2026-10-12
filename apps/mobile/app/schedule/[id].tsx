@@ -1,4 +1,3 @@
-import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useEffect, useState } from "react";
@@ -32,7 +31,7 @@ import {
   updateScheduleItem,
   upsertScheduleItem,
 } from "@/lib/schedule";
-import { has } from "@/lib/tabs";
+import { canManageSchedule, canReadFullSchedule } from "@/lib/tabs";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
 import { colors } from "@/theme/colors";
@@ -60,7 +59,8 @@ export default function ScheduleDetailScreen() {
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const insets = useSafeAreaInsets();
-  const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
+  const canManage = canManageSchedule(me?.capabilities ?? []);
+  const canReadFull = canReadFullSchedule(me?.capabilities ?? []);
   const { data, loading, error, staleSince, load, setData } = useCachedApi(
     "schedule",
     fetchPublicSchedule,
@@ -75,7 +75,7 @@ export default function ScheduleDetailScreen() {
   }, [load, notifications.load]);
 
   useEffect(() => {
-    if (!canManage) {
+    if (!canReadFull) {
       setAdminItem(null);
       return;
     }
@@ -88,7 +88,7 @@ export default function ScheduleDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [canManage, id]);
+  }, [canReadFull, id]);
 
   const rawItem = data?.find((candidate) => String(candidate.id) === id) ?? null;
   // H50 extension: resolve into the viewer's language here so the rest of

@@ -162,7 +162,7 @@ export async function fetchPublicSchedule(): Promise<ScheduleItem[]> {
   return response.items;
 }
 
-/** Full run-of-show, `SCHEDULE_MANAGE` only — includes drafts and staff-only fields. */
+/** Full run-of-show, `SCHEDULE_READ` or `SCHEDULE_MANAGE` — includes drafts and staff-only fields. */
 export async function fetchAdminSchedule(): Promise<AdminScheduleItem[]> {
   const response = await apiFetch<{ items: AdminScheduleItem[] }>("/api/schedule");
   return response.items;

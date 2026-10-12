@@ -293,7 +293,7 @@ export const WORKSPACES: Workspace[] = [
         title: "manageSchedule",
         href: "/schedule",
         icon: ListNumbersIcon,
-        capability: CAPABILITIES.SCHEDULE_MANAGE,
+        anyCapability: [CAPABILITIES.SCHEDULE_READ, CAPABILITIES.SCHEDULE_MANAGE],
       },
       {
         title: "announcements",

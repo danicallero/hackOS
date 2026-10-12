@@ -6,7 +6,9 @@ import {
   OVERFLOW_TAB_ROUTE,
 } from "./overflow-tabs";
 import {
+  canManageSchedule,
   canManageStands,
+  canReadFullSchedule,
   isPadIdiomForPlatform,
   overflowTabs,
   primaryTabs,
@@ -165,5 +167,27 @@ describe("canManageStands (#935)", () => {
     expect(canManageStands([CAPABILITIES.ADMIN_ALL])).toBe(true);
     expect(canManageStands([CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.QUEUE_ADMIN])).toBe(false);
     expect(canManageStands([])).toBe(false);
+  });
+});
+
+describe("schedule read/manage split (H48, H59)", () => {
+  it("lets schedule:read see the full schedule without managing it", () => {
+    expect(canReadFullSchedule([CAPABILITIES.SCHEDULE_READ])).toBe(true);
+    expect(canManageSchedule([CAPABILITIES.SCHEDULE_READ])).toBe(false);
+  });
+
+  it("keeps schedule:manage implying read", () => {
+    expect(canReadFullSchedule([CAPABILITIES.SCHEDULE_MANAGE])).toBe(true);
+    expect(canManageSchedule([CAPABILITIES.SCHEDULE_MANAGE])).toBe(true);
+    expect(canReadFullSchedule([CAPABILITIES.ADMIN_ALL])).toBe(true);
+  });
+
+  it("denies unrelated capabilities", () => {
+    expect(canReadFullSchedule([CAPABILITIES.ACCREDIT_SCAN])).toBe(false);
+    expect(canReadFullSchedule([])).toBe(false);
+  });
+
+  it("does not add a tab for a read-only holder; the schedule tab is already public", () => {
+    expect(visibleTabs([CAPABILITIES.SCHEDULE_READ])).toEqual(visibleTabs([]));
   });
 });
