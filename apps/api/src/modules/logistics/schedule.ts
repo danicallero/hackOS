@@ -71,6 +71,8 @@ export interface ScheduleInput {
   notes?: string | null;
   /** #966: the item's audience gets an attendee Live Activity. */
   liveActivityAudience?: boolean;
+  /** Language `title`/`description` are written in; defaults to the author's account language. */
+  titleLanguage?: Language;
 }
 
 export interface SchedulePatch {
@@ -87,6 +89,8 @@ export interface SchedulePatch {
   contactNote?: string | null;
   notes?: string | null;
   liveActivityAudience?: boolean;
+  /** Language `title`/`description` are written in; defaults to the editor's account language. */
+  titleLanguage?: Language;
 }
 
 function serialize(row: Record<string, unknown>) {
@@ -260,7 +264,8 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
   );
   // The author's own account language, not a picker — see the module doc
   // comment above ScheduleTranslation.
-  const primaryLanguage = actorId == null ? "es" : await getUserLanguage(actorId);
+  const primaryLanguage =
+    input.titleLanguage ?? (actorId == null ? "es" : await getUserLanguage(actorId));
   const item = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO schedule
@@ -366,7 +371,10 @@ function reanchorPrimaryLanguage(
 }
 
 export async function updateScheduleItem(actorId: number | null, id: number, patch: SchedulePatch) {
-  const actorLanguage = actorId == null ? null : await getUserLanguage(actorId);
+  // A single-language entry may be written in a language other than the
+  // editor's own (the editor filled only that one), so the client names it.
+  const actorLanguage =
+    patch.titleLanguage ?? (actorId == null ? null : await getUserLanguage(actorId));
   const item = await withTransaction(async (client) => {
     const current = await client.query(
       `SELECT ${SCHEDULE_COLUMNS}

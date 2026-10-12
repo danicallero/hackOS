@@ -44,7 +44,12 @@ import {
 import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { SCHEDULE_AUDIENCES, scheduleAudienceLabel, scheduleTypeLabel } from "./schedule-model";
+import {
+  prepareScheduleSubmission,
+  SCHEDULE_AUDIENCES,
+  scheduleAudienceLabel,
+  scheduleTypeLabel,
+} from "./schedule-model";
 
 const LANGUAGES = ["es", "gl", "en"] as const;
 
@@ -143,6 +148,7 @@ export function scheduleDuplicateForm(
 export function cleanScheduleForm(form: ScheduleInput): ScheduleInput {
   return {
     title: form.title.trim(),
+    ...(form.titleLanguage ? { titleLanguage: form.titleLanguage } : {}),
     description: form.description?.trim() || null,
     location: form.location?.trim() || null,
     type: form.type?.trim() || null,
@@ -263,11 +269,13 @@ export function ScheduleFormModal({
   }
 
   async function submit() {
+    const prepared = prepareScheduleSubmission(values, translations);
+    if (!prepared) return;
     setPending(true);
     try {
-      const result = await onSubmit(values, pendingOwners);
-      if (Object.keys(translations).length > 0) {
-        await logisticsApi.saveScheduleTranslations(result.id, translations);
+      const result = await onSubmit(prepared.values, pendingOwners);
+      if (Object.keys(prepared.translations).length > 0) {
+        await logisticsApi.saveScheduleTranslations(result.id, prepared.translations);
       }
     } catch (err) {
       toast.error(
@@ -279,6 +287,10 @@ export function ScheduleFormModal({
     }
   }
 
+  // One language is enough: the title may live in any of the three.
+  const hasAnyTitle =
+    values.title.trim() !== "" ||
+    Object.values(translations).some((translation) => translation?.title?.trim());
   const isParticipant = (values.audiences ?? []).includes("participant");
   const isMeal = isMealActivityKind(values.type);
   // An item with no audience tag is staff-only, full stop — visibility/publishAt
@@ -320,7 +332,7 @@ export function ScheduleFormModal({
           <SubmitButton
             pending={pending}
             onClick={submit}
-            disabled={!values.title || !values.startsAt || !values.endsAt}
+            disabled={!hasAnyTitle || !values.startsAt || !values.endsAt}
           >
             {t("save")}
           </SubmitButton>

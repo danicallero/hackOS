@@ -900,6 +900,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           contactNote: req.body.contactNote ?? null,
           notes: req.body.notes ?? null,
           liveActivityAudience: req.body.liveActivityAudience,
+          titleLanguage: req.body.titleLanguage,
         }),
       ),
   );
@@ -933,6 +934,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         contactNote: req.body.contactNote,
         notes: req.body.notes,
         liveActivityAudience: req.body.liveActivityAudience,
+        titleLanguage: req.body.titleLanguage,
       }),
   );
 

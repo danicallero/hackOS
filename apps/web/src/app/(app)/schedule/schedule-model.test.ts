@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PublicScheduleItem } from "@/lib/logistics";
+import type { PublicScheduleItem, ScheduleInput } from "@/lib/logistics";
 import {
   compareScheduleItems,
   DRAFT_DEFAULT_MINUTES,
@@ -10,6 +10,7 @@ import {
   MAX_INLINE_ROLLED_HOURS,
   ownerNames,
   parseTimeOfDay,
+  prepareScheduleSubmission,
   scheduleDayKey,
   scheduleDuration,
   scheduleNavigationDirection,
@@ -478,5 +479,37 @@ describe("filterScheduleItems", () => {
         kindFilter: new Set(["talk"]),
       }).map((i) => i.id),
     ).toEqual([2]);
+  });
+});
+
+describe("prepareScheduleSubmission", () => {
+  const base: ScheduleInput = {
+    title: "",
+    startsAt: "2026-10-12T10:00:00.000Z",
+    endsAt: "2026-10-12T11:00:00.000Z",
+    visibility: "hidden",
+  };
+
+  it("accepts the editor's own language alone", () => {
+    expect(prepareScheduleSubmission({ ...base, title: "Apertura" }, {})?.values.title).toBe(
+      "Apertura",
+    );
+  });
+
+  it("promotes a single filled translation when the editor's language is blank", () => {
+    const result = prepareScheduleSubmission(base, {
+      gl: { title: "Abertura", description: "Benvida" },
+      en: { title: "" },
+    });
+    expect(result?.values).toMatchObject({
+      title: "Abertura",
+      description: "Benvida",
+      titleLanguage: "gl",
+    });
+    expect(result?.translations).toEqual({});
+  });
+
+  it("rejects an entry with no title in any language", () => {
+    expect(prepareScheduleSubmission(base, { es: { description: "Solo texto" } })).toBeNull();
   });
 });
