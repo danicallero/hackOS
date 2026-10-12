@@ -1535,7 +1535,7 @@ Apple's HIG:
 
 | Presentation | Queue | Staff activity |
 | --- | --- | --- |
-| Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: `42/180` (scanned / accredited, the denominator smaller and secondary; the bare count without one) |
+| Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: `42/180` (scanned / accredited, the denominator smaller and secondary; the bare count without one or past 7 characters) |
 | Minimal | ring of the climb to the front with the position inside; called/in room: the phase symbol | live: ring of the scanned share of accredited people (the count without a denominator); upcoming: countdown |
 | Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: stage track, location · called count-up, challenge · +N more queues | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live: symbol / Scanned `42/180`, scanned-share bar (elapsed time without a denominator), name, ends-in, **Scan** |
 | Lock Screen | challenge … +N more queues; hero ETA (34 pt, accent) and position; called: "Go to" room (green) + location and the count-up since the call; stage track with labels | upcoming: symbol, name, time · location … starts-in countdown; live: symbol, name … ends-in; Scanned `42/180`; bar with **Scan** in the bottom trailing corner |
@@ -1600,6 +1600,11 @@ that form at 12 pt, the minimal view the leading unit only (`2h`, `34m`) at
 is one field cut out of a live `Text(timerInterval:)` (trailing-aligned,
 shifted by the width of what follows it, clipped to its digits; monospaced
 digits keep each field at a fixed offset) next to static `h`/`m`/`s`.
+Each field has a fixed width, so `minimumScaleFactor` cannot shrink the
+row: the countdown fits the width it is offered instead (`ViewThatFits`),
+stepping down to 88% and 76%, then dropping the seconds of `long`
+(`22h 45m`), then to 60%. A two-digit-hour `long` countdown at full size
+beside the deadline's status pushed the Lock Screen row past both edges.
 **Decision:** checked on the iOS 26.5 simulator over 90 s, a unit format
 over a live date source (`Duration.UnitsFormatStyle` over
 `.durationOffset`) renders nothing, `Date.ComponentsFormatStyle` renders
@@ -1787,12 +1792,19 @@ the rows would be inert.
 
 **Development samples.** Debug builds only: opening
 `hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-submitted|accreditation|all|end>`
-(for example `xcrun simctl openurl booted …`) renders sample states without a
+(for example `xcrun simctl openurl booted …`; any scheme works, and
+`com.hackudc.os.debug://dev/…` avoids opening another installed hackOS build,
+which would overwrite the App Group's shared Live Activity layouts) renders sample states without a
 backend: waiting #4 of a start of 9 with a 12 min ETA, the same with an
 unknown ETA, called 2 minutes ago, in room, an upcoming meal, a live meal
 (142 of 180 accredited scanned), a live non-meal activity, an
 upcoming and a running workshop, the deadline open with a draft or an
-unknown status, closing and submitted, and the desk at 412 of 600. The handler is required behind `__DEV__` in `+native-intent.tsx`, so
+unknown status, closing and submitted, and the desk at 412 of 600. The
+`-long` samples are the layout worst cases (long names and places, two-digit
+hours, four-digit counts): `queue-waiting-long`, `queue-called-long`,
+`staff-upcoming-long`, `staff-live-long`, `attendee-upcoming-long`,
+`attendee-live-long`, `deadline-open-long`, `deadline-closing-long`,
+`deadline-submitted-long` and `accreditation-long`. The handler is required behind `__DEV__` in `+native-intent.tsx`, so
 release bundles drop it.
 
 ## Realtime & notifications infrastructure

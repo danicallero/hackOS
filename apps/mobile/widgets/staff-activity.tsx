@@ -338,10 +338,14 @@ export const StaffActivityLayout = (
       {liveLabel}
     </Text>
   ) : null;
+  // Past `142/180` the ratio no longer fits the 56 pt slot (`1142/1380`
+  // clipped its denominator), so four-digit counts show the scanned count alone.
   const compactTrailing = !live
     ? countdown(12, islandAccent, 56)
     : accredited || !liveText
-      ? ratio(15, 11, null, "semibold")
+      ? `${scanned}/${accredited ?? ""}`.length > 7
+        ? counter(scanned, 15, null, "semibold")
+        : ratio(15, 11, null, "semibold")
       : liveText;
 
   // Minimal: the scanned share as a ring; live without it, the symbol with a

@@ -654,7 +654,7 @@ Meal / activity (staff):
 | Presentation | Upcoming | Live |
 |---|---|---|
 | Compact leading | category symbol (fork.knife / person.3) | same |
-| Compact trailing | countdown to start (`1h 05m` / `34m 21s`) | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`); "Live" from the start until the live update brings the counts |
+| Compact trailing | countdown to start (`1h 05m` / `34m 21s`) | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`, or when the ratio is longer than 7 characters, e.g. `1142/1380`, which no longer fits the slot); "Live" from the start until the live update brings the counts |
 | Minimal | countdown | progress ring `scanned / accredited` (the count without `accredited`) |
 | Expanded | name, location, `hh:mm–hh:mm`, countdown | symbol, Scanned `42/180`, scanned-share bar, name, ends in, **Scan** button |
 | Lock Screen | as expanded | as expanded |
@@ -682,7 +682,7 @@ Submission deadline:
 | Compact trailing | countdown timer | countdown timer | countdown timer (muted) |
 | Minimal | countdown | countdown (tinted) | checkmark |
 | Expanded | title, countdown, project name; status only when known | "Not submitted · project", countdown | "Submitted ✓ · project", countdown |
-| Lock Screen | as expanded, with a progress bar from `startsAt` to `endsAt` | as expanded | as expanded |
+| Lock Screen | title with the status opposite; countdown with the project opposite; a progress bar from `startsAt` to `endsAt` | as open | "Submitted" with the project above, the countdown opposite |
 | Watch | countdown | countdown + "Not submitted" | "Submitted" |
 
 Accreditation desk:

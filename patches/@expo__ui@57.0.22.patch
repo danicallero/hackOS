@@ -22,7 +22,7 @@ index a8843b7..d7c394d 100644
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/ios/TextView.swift b/ios/TextView.swift
-index 7dfe0a9..0e8ec04 100644
+index 7dfe0a9..4fcbd41 100644
 --- a/ios/TextView.swift
 +++ b/ios/TextView.swift
 @@ -25,6 +25,10 @@ public final class TextViewProps: UIBaseViewProps {
@@ -59,7 +59,7 @@ index 7dfe0a9..0e8ec04 100644
    }
  
    internal func buildText(applyModifiers: Bool = true) -> Text {
-@@ -73,3 +89,80 @@ public struct TextView: ExpoSwiftUI.View {
+@@ -73,3 +89,109 @@ public struct TextView: ExpoSwiftUI.View {
      return result
    }
  }
@@ -76,7 +76,36 @@ index 7dfe0a9..0e8ec04 100644
 +/// keep every field at a fixed offset from the trailing edge. The units are
 +/// static text. The form is chosen when the Live Activity renders; the API
 +/// updates it when the hour boundary passes.
++///
++/// The row has a fixed width per size, so `minimumScaleFactor` cannot reach
++/// it: it fits the width it is offered instead, scaling down to 76%, then
++/// dropping the seconds of the `long` form (`22h 45m`), then to 60%, so a
++/// long countdown never pushes its row past the Live Activity's edges.
 +struct CompactCountdown: View {
++  let end: Date
++  let short: Bool
++  var long = false
++  let size: Double
++  let bold: Bool
++
++  private func row(_ scale: Double, long: Bool) -> some View {
++    CompactCountdownRow(end: end, short: short, long: long, size: size * scale, bold: bold)
++  }
++
++  var body: some View {
++    ViewThatFits(in: .horizontal) {
++      row(1, long: long)
++      row(0.88, long: long)
++      row(0.76, long: long)
++      if long {
++        row(0.76, long: false)
++      }
++      row(0.6, long: false)
++    }
++  }
++}
++
++struct CompactCountdownRow: View {
 +  let end: Date
 +  let short: Bool
 +  var long = false

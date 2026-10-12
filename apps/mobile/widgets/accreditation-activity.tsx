@@ -279,27 +279,18 @@ export const AccreditationActivityLayout = (
       {closesAt(13)}
     </HStack>
   );
+  // Each stat is as wide as its value with the free space between them, so
+  // four-digit counts (`1412/1600`, `+123`) keep a gap instead of running
+  // into the next third of the row.
   const stats = (
-    <HStack alignment="top" spacing={8}>
-      <VStack alignment="leading" modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}>
-        {stat(labels.accredited, accreditedValue(28, bannerAccent), "leading")}
-      </VStack>
-      <VStack
-        alignment={inside !== null ? "leading" : "trailing"}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: inside !== null ? "leading" : "trailing" }),
-        ]}
-      >
-        {stat(labels.lastTenMinutes, recentValue(28), inside !== null ? "leading" : "trailing")}
-      </VStack>
-      {inside !== null ? (
-        <VStack
-          alignment="trailing"
-          modifiers={[frame({ maxWidth: 10000, alignment: "trailing" })]}
-        >
-          {stat(labels.inside, number(String(inside), 28, null, "semibold"), "trailing")}
-        </VStack>
-      ) : null}
+    <HStack alignment="top" spacing={12}>
+      {stat(labels.accredited, accreditedValue(28, bannerAccent), "leading")}
+      <Spacer />
+      {stat(labels.lastTenMinutes, recentValue(28), inside !== null ? "leading" : "trailing")}
+      {inside !== null ? <Spacer /> : null}
+      {inside !== null
+        ? stat(labels.inside, number(String(inside), 28, null, "semibold"), "trailing")
+        : null}
     </HStack>
   );
   const banner = (

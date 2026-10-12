@@ -6,6 +6,7 @@ import {
   foregroundStyle,
   frame,
   labelsHidden,
+  layoutPriority,
   lineLimit,
   minimumScaleFactor,
   multilineTextAlignment,
@@ -300,14 +301,18 @@ export const DeadlineActivityLayout = (
     </VStack>
   );
 
-  // Lock Screen: one 14 pt margin on every edge. Header: symbol and title.
-  // Hero row: the countdown (or "Submitted") with the project and its status
-  // opposite; then the window bar.
+  // Lock Screen: one 14 pt margin on every edge. Header: symbol and title,
+  // with the team's status opposite. Hero row: the countdown (or
+  // "Submitted") with the project opposite; then the window bar. The status
+  // never truncates and the countdown keeps its row first, so only the title
+  // and the project name give way (#966: a two-digit-hour countdown beside
+  // the status overflowed both edges).
   const header = (
     <HStack alignment="center" spacing={8}>
       {glyph(bannerColor, 17)}
       <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>{labels.title}</Text>
       <Spacer />
+      {submitted ? null : status(15, false)}
     </HStack>
   );
   const hero = submitted ? (
@@ -326,25 +331,20 @@ export const DeadlineActivityLayout = (
         </Text>
       </VStack>
       <Spacer />
-      <VStack alignment="trailing" spacing={0}>
+      <VStack alignment="trailing" spacing={0} modifiers={[layoutPriority(1)]}>
         {caption(labels.closesIn, "trailing")}
         {countdown(17, null, 140, "semibold", "trailing", "long")}
       </VStack>
     </HStack>
   ) : (
     <HStack alignment="bottom" spacing={12}>
-      <VStack alignment="leading" spacing={0}>
+      <VStack alignment="leading" spacing={0} modifiers={[layoutPriority(1)]}>
         {caption(labels.closesIn)}
-        {countdown(34, bannerColor, 220, "bold", "leading", "long")}
+        {countdown(34, bannerColor, 240, "bold", "leading", "long")}
       </VStack>
       <Spacer />
-      {statusText ? (
-        <VStack alignment="trailing" spacing={2} modifiers={[padding({ bottom: 4 })]}>
-          {caption(props.projectName, "trailing")}
-          {status(15, false)}
-        </VStack>
-      ) : props.projectName ? (
-        <VStack alignment="trailing" modifiers={[padding({ bottom: 4 })]}>
+      {props.projectName ? (
+        <VStack alignment="trailing" modifiers={[padding({ bottom: 6 })]}>
           {caption(props.projectName, "trailing")}
         </VStack>
       ) : null}
