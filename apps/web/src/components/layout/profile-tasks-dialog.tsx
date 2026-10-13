@@ -175,7 +175,7 @@ function DietaryStep({
   onSubmit: StepSubmit;
 }) {
   const { t, language } = useLocale();
-  const intolerances = useFoodIntolerances();
+  const { intolerances, error: dictionaryError, reload: reloadDictionary } = useFoodIntolerances();
   const [selected, setSelected] = useState<string[]>(me.foodIntolerances.map(String));
   const originalNotes = me.foodIntoleranceNotes ?? "";
   const [notes, setNotes] = useState(originalNotes);
@@ -211,6 +211,9 @@ function DietaryStep({
     >
       <div className="space-y-2">
         <Label>{t("foodIntolerances")}</Label>
+        {dictionaryError ? (
+          <ContextualError message={t("couldNotLoadDictionary")} onRetry={reloadDictionary} />
+        ) : null}
         <MultiSelect
           options={options}
           value={selected}

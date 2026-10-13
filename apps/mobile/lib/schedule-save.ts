@@ -1,5 +1,7 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { Language } from "@hackos/shared/locale";
 import { ApiError } from "./api";
+import { apiErrorReason } from "./api-error-reason";
 import type { MessageKey } from "./i18n";
 import type { ScheduleInput, ScheduleTranslations } from "./schedule";
 
@@ -47,9 +49,9 @@ export function prepareScheduleSubmission(
 }
 
 const BUSINESS_ERROR_KEYS: Record<string, MessageKey> = {
-  "endsAt must be after startsAt": "scheduleErrorEndBeforeStart",
-  "Only a participant-visible item can require scanning": "scheduleErrorScanNeedsParticipants",
-  "Schedule item not found": "scheduleErrorNotFound",
+  [ERROR_REASONS.SCHEDULE_ENDS_BEFORE_STARTS]: "scheduleErrorEndBeforeStart",
+  [ERROR_REASONS.SCHEDULE_SCAN_NEEDS_PARTICIPANTS]: "scheduleErrorScanNeedsParticipants",
+  [ERROR_REASONS.SCHEDULE_ITEM_NOT_FOUND]: "scheduleErrorNotFound",
 };
 
 /**
@@ -62,7 +64,8 @@ export function scheduleSaveError(
   t: (key: MessageKey, values?: Record<string, string>) => string,
 ): string {
   if (!(error instanceof ApiError)) return t("scheduleSaveError");
-  const known = BUSINESS_ERROR_KEYS[error.message];
+  const reason = apiErrorReason(error);
+  const known = reason ? BUSINESS_ERROR_KEYS[reason] : undefined;
   if (known) return t(known);
   if (error.status === 401) return t("requestSessionExpired");
   if (error.status === 403) return t("scheduleErrorForbidden");

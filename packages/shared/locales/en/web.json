@@ -232,6 +232,8 @@
   "paginationSummary": "{start}–{end} of {total}. Page {page} of {pages}.",
   "selectionCount": "{count} rows selected",
   "retry": "Retry",
+  "staleDataNotice": "Showing the last loaded data. Refresh failed.",
+  "couldNotLoadEnterprise": "Could not load this enterprise.",
   "nothingToShow": "Nothing to show",
   "anyMoment": "any moment now",
   "yourRoom": "your room",
