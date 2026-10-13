@@ -22,11 +22,11 @@ export function activityKinds(items: ScannerActivity[]): string[] {
 
 export function filterActivities(
   items: ScannerActivity[],
-  { query, kind }: { query: string; kind: string | null },
+  { query, kinds }: { query: string; kinds: readonly string[] },
 ): ScannerActivity[] {
   const needle = query.trim().toLocaleLowerCase();
   return items.filter((item) => {
-    if (kind && item.category !== kind) return false;
+    if (kinds.length > 0 && !kinds.includes(item.category)) return false;
     if (!needle) return true;
     return item.name.toLocaleLowerCase().includes(needle);
   });

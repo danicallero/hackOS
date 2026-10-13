@@ -1,3 +1,7 @@
+jest.mock("@/components/scanner-code-entry-actions", () =>
+  jest.requireActual("@/components/scanner-code-entry-actions.tsx"),
+);
+
 let mockNfcSupported = true;
 jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupported: () => mockNfcSupported }));
 
@@ -62,6 +66,7 @@ jest.mock("expo-router", () => ({
 jest.mock("expo-router/stack", () => {
   const { Pressable } = require("react-native");
   const Toolbar = Object.assign(({ children }: { children?: unknown }) => children ?? null, {
+    Spacer: () => null,
     View: ({ children }: { children?: unknown }) => children ?? null,
     Button: ({
       accessibilityLabel,
@@ -271,7 +276,11 @@ function calls(path: string) {
 
 type NativeOptions = {
   headerRight?: () => React.ReactElement;
-  headerSearchBarOptions?: { onChangeText: (e: { nativeEvent: { text: string } }) => void };
+  headerSearchBarOptions?: {
+    onChangeText: (e: { nativeEvent: { text: string } }) => void;
+    onBlur: () => void;
+    onCancelButtonPress: () => void;
+  };
 };
 
 /** The options the last `setOptions` call left in place. */
@@ -552,10 +561,16 @@ describe("People", () => {
       expect.objectContaining({ headerLargeTitle: false, title: "" }),
     );
     expect(screen.getByRole("header", { name: "tabDiary" })).toBeTruthy();
+    expect(screen.queryByLabelText("scheduleSearch")).toBeNull();
+    expect(nativeSearch()).toEqual(
+      expect.objectContaining({ placement: "integratedButton", allowToolbarIntegration: false }),
+    );
     await act(async () => nativeSearch()?.onChangeText({ nativeEvent: { text: "bea" } }));
     expect(screen.getByText("Bea R.")).toBeTruthy();
     expect(screen.queryByText("José P.")).toBeNull();
-    await act(async () => nativeSearch()?.onChangeText({ nativeEvent: { text: "" } }));
+    await act(async () => nativeSearch()?.onCancelButtonPress());
+    expect(nativeSearch()).toEqual(expect.objectContaining({ placement: "integratedButton" }));
+    expect(screen.getByText("José P.")).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("diaryShowFavourites"));
     expect(screen.getByText("José P.")).toBeTruthy();
     expect(screen.queryByText("Bea R.")).toBeNull();
@@ -681,3 +696,6 @@ describe("Companies", () => {
     expect(screen.queryByTestId("connection-celebration")).toBeNull();
   });
 });
+jest.mock("@/components/scanner-action-button", () =>
+  jest.requireActual("@/components/scanner-action-button.tsx"),
+);

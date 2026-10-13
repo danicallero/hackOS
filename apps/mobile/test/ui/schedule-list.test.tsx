@@ -20,6 +20,7 @@ jest.mock("expo-router", () => ({
 jest.mock("expo-router/stack", () => {
   const Toolbar = Object.assign(({ children }: { children?: unknown }) => children ?? null, {
     Button: () => null,
+    View: ({ children }: { children?: unknown }) => children ?? null,
   });
   return { __esModule: true, default: { Screen: () => null, Toolbar } };
 });

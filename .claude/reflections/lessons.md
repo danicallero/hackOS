@@ -177,7 +177,7 @@ silently substituting the default model.
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-10-01
+Date: 2026-10-13
 
 ### Trigger
 Composing detail pages, lists, or participant workflows.
@@ -196,7 +196,10 @@ Use open sections for related page content, with quiet hairlines where spacing
 alone leaves row ownership ambiguous. Removing cards does not mean removing
 all boundaries. Repeated inbox/list rows still need clear ownership: use quiet
 hairlines, restrained neutral washes and distinct subject/meta/body hierarchy.
-Validate with several adjacent records, not just one isolated item. Keep static metadata as text and secondary multi-record
+For operational screens, distinguish the main count from supporting metrics instead
+of giving every number an identical card. Group scanner actions into visible,
+bounded controls; replacing a camera must also reconsider how the freed space
+serves the operator. Validate with several adjacent records, not just one isolated item. Keep static metadata as text and secondary multi-record
 navigation available without making it the default.
 
 ### Validation
@@ -798,3 +801,28 @@ establish visual readability.
 
 ### Exceptions
 A short operational count can remain when readable at the actual slot size.
+
+## [R025] Reuse a working native interaction before changing its lifecycle
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-10-13
+
+### Trigger
+Fixing native navigation controls when another screen already provides the requested interaction.
+
+### Mistake
+Combined a manual search button with native integrated search, then changed placement and mounting instead of copying the working Schedule configuration. This duplicated the button and later left a permanent field.
+
+### Lesson
+Native controls own their expansion, focus and restoration lifecycle. Match an existing working screen before introducing manual buttons or mounting state.
+
+### Action
+Read the working screen's options and toolbar together. Reuse its native configuration, remove redundant triggers and focus loops, and leave expansion and restoration to the native control.
+
+### Validation
+On a device, open and cancel search repeatedly, including edge taps. Confirm one collapsed trigger, the expected replacement of neighboring actions, keyboard focus and restoration on cancel. Component tests alone do not prove native toolbar behavior.
+
+### Exceptions
+Use a custom lifecycle only when the product requires behavior the native control cannot provide.

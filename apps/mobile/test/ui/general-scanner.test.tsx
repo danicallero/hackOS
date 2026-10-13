@@ -1,7 +1,16 @@
-import { act, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { act, screen, waitFor } from "@testing-library/react-native";
 
+const mockMenuProps = jest.fn();
+const mockSaveFilter = jest.fn();
+jest.mock("@/components/filter-menu", () => ({
+  FilterMenu: (props: unknown) => {
+    mockMenuProps(props);
+    return null;
+  },
+}));
 const mockApiFetch = jest.fn();
 let mockRefresh: () => void;
+const mockCameraProps = jest.fn();
 const mockPeople = [
   { userId: 1, role: "Day Staff", eventAccess: true, badgeId: "A", lastPresenceKind: "in" },
   { userId: 2, role: "Participant", eventAccess: true, badgeId: null, lastPresenceKind: null },
@@ -17,7 +26,12 @@ jest.mock("@/components/glass-view", () => ({
   GlassView: require("react-native").View,
   isRealLiquidGlassAvailable: () => false,
 }));
-jest.mock("@/components/QrCamera", () => ({ QrCamera: () => null }));
+jest.mock("@/components/QrCamera", () => ({
+  QrCamera: (props: unknown) => {
+    mockCameraProps(props);
+    return null;
+  },
+}));
 jest.mock("@/components/scanner-transaction-status", () => ({ ScannerQueueStatus: () => null }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
 jest.mock("@/lib/api", () => ({ apiFetch: (...args: unknown[]) => mockApiFetch(...args) }));
@@ -27,7 +41,7 @@ jest.mock("@/lib/me-context", () => ({ useMeContext: () => ({ me: { id: 1 } }) }
 jest.mock("@/lib/scanner-db", () => ({ listScannerPeople: async () => mockPeople }));
 jest.mock("expo-secure-store", () => ({
   getItemAsync: async () => null,
-  setItemAsync: async () => {},
+  setItemAsync: (...args: unknown[]) => mockSaveFilter(...args),
 }));
 jest.mock("@/lib/server-events", () => ({
   startLogisticsEventStream: () => () => {},
@@ -46,6 +60,13 @@ import { GeneralScannerScreen } from "@/components/general-scanner-screen";
 import { renderMobile } from "./render";
 
 describe("scanner role counters (H8, H27)", () => {
+  it("opens the general scanner with NFC first and no automatic session", async () => {
+    mockApiFetch.mockResolvedValue({ byRole: [] });
+    await renderMobile(<GeneralScannerScreen />);
+    expect(mockCameraProps).toHaveBeenLastCalledWith(expect.objectContaining({ nfcFirst: true }));
+    expect(mockCameraProps.mock.calls.at(-1)?.[0].autoStartNfc).toBeUndefined();
+  });
+
   it("discards stale server totals after a failed refresh and uses the roster", async () => {
     mockApiFetch.mockResolvedValueOnce({
       byRole: [
@@ -71,17 +92,28 @@ describe("scanner role counters (H8, H27)", () => {
         { role: "Participant", hasCapabilities: true, eligible: 1, accredited: 1, inside: 1 },
       ],
     });
-    const user = userEvent.setup();
     await renderMobile(<GeneralScannerScreen />);
     await waitFor(() => expect(screen.getByText("24")).toBeTruthy());
-    await user.press(screen.getByRole("button", { name: "scannerFilterGroups" }));
-    expect(screen.getByText("Day Staff")).toBeTruthy();
-    expect(screen.getByText("Participant")).toBeTruthy();
-    await user.press(screen.getByText("Participant"));
+    const menu = () => mockMenuProps.mock.calls.at(-1)?.[0];
+    expect(menu().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "role:Day Staff", label: "Day Staff", selected: false }),
+        expect.objectContaining({ id: "role:Participant", label: "Participant", selected: false }),
+        expect.objectContaining({ id: "all", selected: true }),
+      ]),
+    );
+    await act(async () => menu().onSelect("role:Participant"));
     await waitFor(() => expect(screen.getByText("21")).toBeTruthy());
     expect(screen.getByText("11")).toBeTruthy();
     expect(screen.getByText("6")).toBeTruthy();
-    await user.press(screen.getByText("Day Staff"));
+    await act(async () => menu().onSelect("role:Day Staff"));
     await waitFor(() => expect(screen.getByText("24")).toBeTruthy());
+    expect(menu().items.filter((row: { selected: boolean }) => row.selected)).toHaveLength(2);
+    await act(async () => menu().onSelect("role:Participant"));
+    await waitFor(() => expect(screen.getByText("3")).toBeTruthy());
+    await act(async () => menu().onSelect("all"));
+    await waitFor(() => expect(screen.getByText("24")).toBeTruthy());
+    expect(menu().items.find((row: { id: string }) => row.id === "all").selected).toBe(true);
+    expect(mockSaveFilter).toHaveBeenLastCalledWith(expect.any(String), "[]");
   });
 });

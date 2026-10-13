@@ -184,7 +184,7 @@ hidden destinations stay routable:
   selection follows the pathname to Account.
 - **Operator** (any of `accredit:scan`, `presence:scan`, `activity:scan`, or
   the admin wildcard): the daily shift tools take the bar — schedule,
-  **Scanner**, Activities (`activity:scan` holders only) —
+  **Scanner** (NFC waves icon, with explicit camera fallback), Activities (`activity:scan` holders only) —
   scanning must never sit behind an ellipsis. The separate
   **"Others" overflow selector** (only when more than five destinations)
   holds eligible personal Queue, Diary, Account, and any queue operations destination as pseudo-tabs. Account's

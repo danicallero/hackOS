@@ -216,7 +216,7 @@ describe("OpaqueRouterTabs — Android system bars", () => {
     jest.clearAllMocks();
   });
 
-  it("uses dark scanner system bars only on scanner routes and restores automatic styling", async () => {
+  it("uses automatic system bars on scanner and activity routes", async () => {
     const rendered = await renderTabs();
     expect(screen.getByTestId("scanner-status-bar").props.style).toBe("auto");
     expect(screen.getByTestId("scanner-navigation-bar").props.style).toBe("auto");
@@ -225,14 +225,14 @@ describe("OpaqueRouterTabs — Android system bars", () => {
       mockUsePathname.mockReturnValue("/(tabs)/scan");
       rendered.rerender(<OpaqueRouterTabs {...DEFAULT_PROPS} />);
     });
-    expect(screen.getByTestId("scanner-status-bar").props.style).toBe("light");
-    expect(screen.getByTestId("scanner-navigation-bar").props.style).toBe("light");
+    expect(screen.getByTestId("scanner-status-bar").props.style).toBe("auto");
+    expect(screen.getByTestId("scanner-navigation-bar").props.style).toBe("auto");
 
     await act(async () => {
       mockUsePathname.mockReturnValue("/(tabs)/activities/42");
       rendered.rerender(<OpaqueRouterTabs {...DEFAULT_PROPS} />);
     });
-    expect(screen.getByTestId("scanner-status-bar").props.style).toBe("light");
+    expect(screen.getByTestId("scanner-status-bar").props.style).toBe("auto");
 
     await act(async () => {
       mockUsePathname.mockReturnValue("/(tabs)/activities/people");

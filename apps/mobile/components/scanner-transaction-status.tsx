@@ -1,5 +1,6 @@
 import { useRouter } from "expo-router";
-import { type ReactNode, useEffect, useState } from "react";
+import { Stack } from "expo-router/stack";
+import { type ReactElement, type ReactNode, useEffect, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
@@ -535,7 +536,7 @@ export function ScannerTransactionStatus({
   const { t } = useLocale();
   const state = scannerTransactionState(scan);
   const presentation = {
-    ready: { icon: "qrcode.viewfinder", label: t("scannerStateReady"), tone: colors.accent },
+    ready: { icon: "wave.3.right", label: t("scannerStateReady"), tone: colors.accent },
     saved: {
       icon: "internaldrive.fill",
       label: t("scannerStateSaved"),
@@ -618,6 +619,8 @@ export function ScannerQueueStatus({
   onDelete,
   clockSkewMs = null,
   fillWidth = false,
+  nativeToolbar = false,
+  toolbarAccessory,
 }: {
   queue: PendingScan[];
   syncing: boolean;
@@ -627,6 +630,8 @@ export function ScannerQueueStatus({
   onRetryOne: (id: string) => void;
   onDelete: (id: string) => void;
   fillWidth?: boolean;
+  nativeToolbar?: boolean;
+  toolbarAccessory?: ReactElement;
 }) {
   const { t } = useLocale();
   const router = useRouter();
@@ -645,49 +650,56 @@ export function ScannerQueueStatus({
     void listScannerActivities().then(setActivities);
   }, [open]);
   const hasAttention = health.attention > 0;
-  const label = hasAttention
-    ? t("scannerQueueAttentionCount", { count: String(health.attention) })
-    : health.saved > 0
-      ? t("scannerQueueSavedCount", { count: String(health.saved) })
-      : t("scannerStateReady");
+  const label = hasAttention ? t("scannerStateAttention") : t("scannerStateReady");
+  const trigger = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={() => setOpen(true)}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 8,
+        justifyContent: "center",
+        minHeight: 44,
+        opacity: pressed ? 0.65 : 1,
+        paddingHorizontal: 14,
+      })}
+    >
+      <SymbolView
+        accessible={false}
+        name={hasAttention ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath"}
+        size={16}
+        tintColor={hasAttention ? colors.destructive : colors.label}
+      />
+      <Text style={{ color: colors.label, fontSize: 14, fontWeight: "700" }}>{label}</Text>
+    </Pressable>
+  );
   return (
     <>
-      <GlassView
-        colorScheme="dark"
-        glassEffectStyle="regular"
-        isInteractive
-        style={{
-          alignSelf: fillWidth ? "stretch" : "center",
-          borderRadius: 999,
-          minHeight: 44,
-          overflow: "hidden",
-        }}
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={label}
-          onPress={() => setOpen(true)}
-          style={({ pressed }) => ({
-            alignItems: "center",
-            flexDirection: "row",
-            gap: 8,
-            justifyContent: "center",
+      {nativeToolbar ? (
+        <Stack.Toolbar placement="right">
+          {toolbarAccessory ? (
+            <Stack.Toolbar.View hidesSharedBackground>{toolbarAccessory}</Stack.Toolbar.View>
+          ) : null}
+          {toolbarAccessory ? <Stack.Toolbar.Spacer width={8} /> : null}
+          <Stack.Toolbar.View>{trigger}</Stack.Toolbar.View>
+        </Stack.Toolbar>
+      ) : (
+        <GlassView
+          colorScheme="auto"
+          glassEffectStyle="regular"
+          isInteractive
+          style={{
+            alignSelf: fillWidth ? "stretch" : "center",
+            borderRadius: 999,
             minHeight: 44,
-            opacity: pressed ? 0.65 : 1,
-            paddingHorizontal: 14,
-          })}
+            overflow: "hidden",
+          }}
         >
-          <SymbolView
-            accessible={false}
-            name={hasAttention ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath"}
-            size={16}
-            tintColor={
-              hasAttention ? colors.destructive : health.saved > 0 ? colors.warning : "white"
-            }
-          />
-          <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>{label}</Text>
-        </Pressable>
-      </GlassView>
+          {trigger}
+        </GlassView>
+      )}
       <Modal
         animationType="slide"
         onRequestClose={() => setOpen(false)}

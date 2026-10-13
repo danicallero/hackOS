@@ -1,3 +1,7 @@
+jest.mock("@/components/scanner-code-entry-actions", () =>
+  jest.requireActual("@/components/scanner-code-entry-actions.tsx"),
+);
+
 jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupported: () => true }));
 
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
@@ -381,3 +385,6 @@ it("preserves the secondary movement's date and time editor", async () => {
     params: { id: "21", draftKind: "out", draftAt: expect.any(String) },
   });
 });
+jest.mock("@/components/scanner-action-button", () =>
+  jest.requireActual("@/components/scanner-action-button.tsx"),
+);

@@ -457,13 +457,6 @@ export function DiaryScreen() {
     }
   }
 
-  const headerItems = (
-    <>
-      <FavouritesToggle visible={searchable} on={favouritesOnly} onToggle={toggleFavourites} />
-      <WalletToggle onToggle={wallet.toggle} />
-    </>
-  );
-
   useLayoutEffect(() => {
     if (!glassAvailable) {
       navigation.setOptions({ headerShown: false });
@@ -490,7 +483,9 @@ export function DiaryScreen() {
             placement: "integratedButton",
             onChangeText: (event: { nativeEvent: { text: string } }) =>
               setQuery(event.nativeEvent.text),
-            onCancelButtonPress: () => setQuery(""),
+            onCancelButtonPress: () => {
+              setQuery("");
+            },
           }
         : undefined,
     });
@@ -623,7 +618,6 @@ export function DiaryScreen() {
       />
       <ScannerCodeEntry
         visible={input === "manual"}
-        appearance="system"
         title={t("personEnterBadgeCode")}
         placeholder={null}
         submitLabel={t("save")}
@@ -692,6 +686,12 @@ export function DiaryScreen() {
         </Stack.Toolbar>
         {/* Native SF Symbol bar items, so the system draws the same circles as its search button. */}
         <Stack.Toolbar placement="right">
+          <Stack.Toolbar.Button
+            icon="wallet.pass"
+            separateBackground
+            accessibilityLabel={t("tabWallet")}
+            onPress={wallet.toggle}
+          />
           {searchable ? (
             <Stack.Toolbar.Button
               icon={favouritesOnly ? "star.fill" : "star"}
@@ -701,11 +701,6 @@ export function DiaryScreen() {
               onPress={toggleFavourites}
             />
           ) : null}
-          <Stack.Toolbar.Button
-            icon="wallet.pass"
-            accessibilityLabel={t("tabWallet")}
-            onPress={wallet.toggle}
-          />
         </Stack.Toolbar>
         {overlays}
       </>
@@ -715,15 +710,41 @@ export function DiaryScreen() {
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       <LegacyScreenHeader
         actions={
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            isInteractive
-            style={{ borderRadius: 22, flexDirection: "row", height: 44 }}
-          >
-            {headerItems}
-          </GlassView>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <GlassView
+              colorScheme="auto"
+              glassEffectStyle="regular"
+              isInteractive
+              style={{ borderRadius: 22, height: 44, width: 44 }}
+            >
+              <WalletToggle onToggle={wallet.toggle} />
+            </GlassView>
+            {searchable ? (
+              <GlassView
+                colorScheme="auto"
+                glassEffectStyle="regular"
+                isInteractive
+                style={{ borderRadius: 22, flexDirection: "row", height: 44 }}
+              >
+                <FavouritesToggle visible on={favouritesOnly} onToggle={toggleFavourites} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("scheduleSearch")}
+                  onPress={() => setSearchOpen(true)}
+                  style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+                >
+                  <SymbolView
+                    accessible={false}
+                    name="magnifyingglass"
+                    size={19}
+                    tintColor={colors.label}
+                  />
+                </Pressable>
+              </GlassView>
+            ) : null}
+          </View>
         }
+        showSearchButton={false}
         cancelLabel={t("cancel")}
         onCloseSearch={() => {
           setSearchOpen(false);

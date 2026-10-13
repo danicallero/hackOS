@@ -34,7 +34,10 @@ import {
   StatusPill,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { type AudienceFilterValue, ScheduleFilterPanel } from "@/components/schedule-filter-button";
+import {
+  type AudienceFilterValue,
+  ScheduleFilterButton,
+} from "@/components/schedule-filter-button";
 import {
   ScheduleFormModal,
   scheduleItemToForm,
@@ -182,7 +185,6 @@ export default function ScheduleScreen() {
 
   const [selectedKinds, setSelectedKinds] = useState<string[]>([]);
   const [selectedAudiences, setSelectedAudiences] = useState<AudienceFilterValue[]>([]);
-  const [filterOpen, setFilterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [legacySearchOpen, setLegacySearchOpen] = useState(false);
   const unreadCount = useUnreadNotificationCount();
@@ -191,7 +193,6 @@ export default function ScheduleScreen() {
     unreadCount > 0 ? t("alertsOpenUnread", { count: String(unreadCount) }) : t("tabNotifications");
   const [formTarget, setFormTarget] = useState<"create" | ScheduleItem | null>(null);
 
-  const filterActive = selectedKinds.length > 0 || selectedAudiences.length > 0;
   // Real Liquid Glass (iOS 26+) gets the native header below: the OS owns the
   // toolbar grouping and integrated search behavior. Earlier iOS and Android
   // keep the original hand-rolled header because it supports the shared
@@ -199,9 +200,6 @@ export default function ScheduleScreen() {
   const glassAvailable = isRealLiquidGlassAvailable();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
-  const filterAnchor = glassAvailable
-    ? { top: insets.top + 52, right: 16 }
-    : { top: legacyTopInset + 60, right: 16 };
 
   // Keep the native search on the glass path. The custom header below is the
   // fallback for platforms where the native header cannot express the old
@@ -471,6 +469,21 @@ export default function ScheduleScreen() {
     setFormTarget(null);
   }
 
+  const scheduleFilter = (
+    <ScheduleFilterButton
+      kinds={kinds}
+      selectedKinds={selectedKinds}
+      onToggleKind={toggleKind}
+      showAudience={canReadFull}
+      selectedAudiences={selectedAudiences}
+      onToggleAudience={toggleAudience}
+      onClear={() => {
+        setSelectedKinds([]);
+        setSelectedAudiences([]);
+      }}
+    />
+  );
+
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       {glassAvailable ? (
@@ -482,46 +495,27 @@ export default function ScheduleScreen() {
               </Stack.Toolbar.Badge>
             ) : null}
           </Stack.Toolbar.Button>
-          <Stack.Toolbar.Button
-            icon={
-              filterActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease"
-            }
-            accessibilityLabel={t("scheduleFilter")}
-            selected={filterOpen}
-            tintColor={filterActive ? colors.accent : undefined}
-            onPress={() => setFilterOpen((current) => !current)}
-          />
+          <Stack.Toolbar.View hidesSharedBackground>{scheduleFilter}</Stack.Toolbar.View>
         </Stack.Toolbar>
       ) : (
         <LegacyScreenHeader
           actions={
-            <GlassView
-              colorScheme="auto"
-              glassEffectStyle="regular"
-              isInteractive
-              style={{ alignItems: "center", borderRadius: 22, flexDirection: "row", height: 44 }}
-            >
-              <LegacyHeaderIconButton
-                icon={bellIcon}
-                accessibilityLabel={bellLabel}
-                tintColor={unreadCount > 0 ? colors.accent : colors.label}
-                onPress={openAlerts}
-              />
-              <View
-                style={{ backgroundColor: colors.separator, height: 20, opacity: 0.6, width: 1 }}
-              />
-              <LegacyHeaderIconButton
-                icon={
-                  filterActive
-                    ? "line.3.horizontal.decrease.circle.fill"
-                    : "line.3.horizontal.decrease"
-                }
-                accessibilityLabel={t("scheduleFilter")}
-                accessibilityState={{ expanded: filterOpen, selected: filterActive }}
-                tintColor={filterActive ? colors.accent : colors.label}
-                onPress={() => setFilterOpen((current) => !current)}
-              />
-            </GlassView>
+            <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+              <GlassView
+                colorScheme="auto"
+                glassEffectStyle="regular"
+                isInteractive
+                style={{ alignItems: "center", borderRadius: 22, flexDirection: "row", height: 44 }}
+              >
+                <LegacyHeaderIconButton
+                  icon={bellIcon}
+                  accessibilityLabel={bellLabel}
+                  tintColor={unreadCount > 0 ? colors.accent : colors.label}
+                  onPress={openAlerts}
+                />
+              </GlassView>
+              {scheduleFilter}
+            </View>
           }
           cancelLabel={t("cancel")}
           onCloseSearch={() => {
@@ -696,22 +690,6 @@ export default function ScheduleScreen() {
           onSubmit={submitForm}
         />
       ) : null}
-
-      <ScheduleFilterPanel
-        open={filterOpen}
-        anchor={filterAnchor}
-        onClose={() => setFilterOpen(false)}
-        kinds={kinds}
-        selectedKinds={selectedKinds}
-        onToggleKind={toggleKind}
-        showAudience={canReadFull}
-        selectedAudiences={selectedAudiences}
-        onToggleAudience={toggleAudience}
-        onClear={() => {
-          setSelectedKinds([]);
-          setSelectedAudiences([]);
-        }}
-      />
     </View>
   );
 }

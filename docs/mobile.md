@@ -392,6 +392,8 @@ distributed to other Expo Router apps without importing hackOS code.
   cache. A persistent recovery error still shows retry and one local
   `Back to sign in` action.
 
+Mobile filter triggers draw one background: standalone `FilterMenu` owns its circular glass surface; native `Stack.Toolbar.View` callers hide the shared toolbar background, while Queue Operations uses `embedded` to let its native header item own the background.
+
 ## Participant screens
 
 - `app/(tabs)/schedule.tsx`, `queue.tsx`, `schedule/alerts.tsx` (inbox sheet),
@@ -805,7 +807,7 @@ badge/ticket wallet in a full-screen modal (`WalletModal` in
 Account's overlay, H28), opened on the badge (`initialPurpose="badge"`), the
 card someone you meet scans; Account opens on the ticket. The ticket and badge
 cards keep fixed sides (ticket left, badge right): a swipe left goes to the
-badge, and each card's slide follows from its own index. The wallet button stays on Companies. Android and earlier iOS use
+badge, and each card's slide follows from its own index. The wallet button stays on Companies. On iOS 26, search uses the same native `integratedButton` as Schedule: expanding it replaces the toolbar actions, and cancelling restores them. Android and earlier iOS use
 `LegacyScreenHeader`: the title, a glass star toggle, the wallet button and the search button that
 expands into the field. Search and the star apply to People only, and only
 once it has someone to search; on Companies the native search and the star are
@@ -1282,22 +1284,19 @@ gets a device notification. The layout is one column on phones, two from
 ### Scanner
 
 `app/(tabs)/scan/index.tsx` — thin wrapper around the shared
-`GeneralScannerScreen` (camera/manual scanners selected by capability:
+`GeneralScannerScreen` (NFC-first scanners with camera/manual fallback selected by capability:
 accreditation, badge replacement, door presence, meals, and activities),
 a dedicated primary tab for operators (see `docs/navigation.md`). Its
 person/people drill-down routes live under `app/(tabs)/scan/*`. Screen-level
-scanner routes own dark system-bar chrome as well: iOS 26+ uses an explicit
-dark native header interface style with a transparent header, while Android
-sets light system-button content on the dark camera surface. Both are scoped
-to `/scan` and `/activities/:id` and return to automatic system styling on
-light routes.
+scanner routes follow the system light/dark appearance: backgrounds, native
+headers, glass controls, status/navigation bars and tab icons all use the same
+scheme. Only the explicit camera preview retains its dark surface.
 actions use `AdaptiveToolbarButton`: real Liquid Glass runtimes promote
 navigation actions into UIKit's top toolbar; iOS <26 and Android use the same
 44-point opaque glass buttons inline on the camera surface. The camera preview
 is non-interactive so it cannot steal those hit targets on older iOS. Activity
-scanning uses a balanced second row with equal-width glass and queue-sync
-containers, followed by the statistics; the general scanner's queue-sync
-capsule sits directly below the adaptive tab bar. Scanner and activity
+scanning keeps queue status and statistics above the input actions; the general
+scanner's queue-sync capsule uses the same native toolbar as the activity scanner, with a separate circular filter and an 8-point gap. Both screens reserve the same header height above the statistics. Scanner and activity
 people-directory actions use the same person-with-magnifier symbol. On iOS
 26+, People Finder keeps the native large-title contract: its title starts
 left-aligned, collapses to the centred compact title while scrolling, and uses
@@ -1455,37 +1454,92 @@ still described in `plan/historias-hackos.md`, following the product decision
 for NFC badges; the normative plan remains unchanged pending human revision.
 Existing ticket and Wallet QR codes remain readable by the camera.
 
-The general and activity cameras expose a Liquid Glass NFC button above the
-right-hand flashlight control (an opaque fallback on Android/older iOS). Activities and meals
-open the NFC reader once after loading. Dismissing an activity result (Continue
-or Cancel) opens the next NFC session; registering another keeps the result
-open until it is dismissed. The activity result panel sits centered above the
-floating scanner controls, keeps its actions fixed, and scrolls long dietary
-details. On iOS, UID-only scans skip tag connection and NDEF reading; the native
-reader invalidates as soon as the tag is detected. The next Core NFC session
-waits for the native session-closed event so fast consecutive scans do not race
-teardown. Canceling the NFC reader restores camera scanning without immediately
-reopening it; the NFC button can reopen it manually. NFC also works without
-camera permission. Camera decoding pauses while NFC is open and while an activity
-result awaits operator action. Reads reuse the same identity lookup,
-repeat-confirmation, revocation and encrypted offline-queue paths as camera
-scans.
+Mobile list filters share `components/filter-menu` across Schedule, Activities,
+People Finder, Queue operations, scanner roles and the offline sync queue. The
+48-point circular trigger keeps the same horizontal-lines symbol, tinted blue
+when active. iOS uses SwiftUI Menu/Toggle with action dismissal disabled; Android
+uses an anchored scrollable panel that stays open between choices. Schedule kind
+and audience groups retain their AND semantics and permission gates. Within each
+role, kind or status group, selected values match by OR; All clears the group.
 
-NFC controls and automatic sessions stay hidden until hardware support is confirmed.
-Devices without NFC retain QR and manual entry, including badge linking and replacement.
+The general scanner and activity/meal scanners lead with NFC on a dark,
+camera-free surface. The scanner tab uses the NFC waves symbol. iOS scanner actions use real SwiftUI
+buttons (Liquid Glass on iOS 26+, bordered system buttons on earlier versions),
+with equivalent glass controls on Android. Both operational scanners use the same reading area and bottom camera/manual
+controls. Checked-in is the general scanner's primary count; confirmed and inside
+remain secondary. Activity/meal scanners lead with total scans/servings, then
+unique people and repeat scans/extra servings. Building occupancy is a separate
+context metric. Both operational surfaces are fixed, non-scrolling layouts: statistics
+stay at the top, the NFC symbol occupies the center of the remaining space, and
+People Finder sits immediately above camera and manual entry at the bottom. Queue
+status is at the top right. The general scanner's role-filter trigger is a
+48 × 48 circular icon beside queue status, with the same symbol tinted blue when
+active. Its native iOS SwiftUI menu disables action dismissal so operators can
+select multiple roles without reopening it; Android keeps its anchored filter
+panel open until dismissed. All clears the multi-selection.
+The camera is a secondary explicit action for tickets, Wallet QR codes and
+other QR badges. Until that action is chosen, no camera preview is mounted and
+no camera permission is requested. The fallback uses the same full-screen modal camera as badge linking in the
+person details. A single QR read closes the modal and releases the camera;
+canceling returns to NFC without recording a scan. Manual entry remains available without camera permission.
+All manual code inputs use `ScannerCodeEntry`: one opaque system-themed card
+above the keyboard, with a labeled code field and adjacent Cancel/submit actions.
+Manual-dialog actions use the regular control size with a 48-point minimum touch
+target; bottom scanner actions retain the large size. On iOS the shared actions use native Liquid Glass buttons (opaque native buttons
+on older versions); Android uses the same shared action geometry.
+The manual card has a 32-point outer radius and 16-point content inset, matching
+the 16-point field curves. Both iOS actions share one 48-point native HStack/Host
+with safe-area adjustment disabled: the dialog owns keyboard displacement,
+and a measured React Native wrapper supplies explicit native width and height.
+The native row is positioned inside that 48-point wrapper, with equal-width
+actions and an 8-point gap; it does not participate in sizing the card.
+NFC-first and camera scans default to Register scan; Diary, badge linking and
+replacement supply their own action labels. There is no camera-only dark variant.
+
+On iOS, the general scanner opens one Core NFC session per tap. Activities and
+meals never open an iOS session on entry: tapping the central NFC symbol begins a loop;
+tapping it again or canceling the system reader ends it. On Android, both operational surfaces enter
+with NFC enabled once hardware support and the activity are available. They show
+only the tappable NFC symbol, without a session button or reader overlay. A gray
+symbol means disabled; blue means enabled. The symbol toggles reading on both
+platforms; there is no separate NFC session button. Android's general reader stays
+enabled across reads until toggled off or navigation; the activity reader pauses
+for results and operator decisions. Other badge/contact workflows retain the
+Android instructional overlay. Subsequent sessions wait for native session teardown
+and operator decisions, including repeat-serving confirmation. Leaving the screen
+or backgrounding the app stops the loop. Activity counters include servings or
+passes, distinct people, repeats and the number currently inside the building;
+server counts are preferred, with the synced roster as the offline fallback.
+Activities sums the same `/api/scanner/role-stats` occupancy buckets as Scanner,
+without the Scanner role filter, and refreshes on focus, sync and logistics events.
+A failed refresh clears the server count and uses the roster fallback.
+On iOS 26+, both scanners' queue status lives in a native trailing
+toolbar view, aligned with the native Back button. Its pressable icon and text
+show only Ready or Needs attention (a rejected scan); background sync and pending
+scans do not change the header label. Tapping it opens the Device queue sheet,
+where the detailed queue state remains visible. The NFC symbol is centered between
+the statistics and camera/manual actions. The idle instruction is Tap to scan
+(es/gl: Toca para escanear); the three bottom actions sit just above the tab bar,
+using its published inset once plus 4 points. Earlier iOS and Android place both controls at
+the same safe-area offset in the floating header.
+The activity result panel is centered with equal top/bottom padding and uses an opaque semantic content surface with open,
+scrollable dietary details and separate tinted restriction tags. The per-person
+count has no visible caption (its meaning remains in the accessibility label).
+The count is orange for a repeat awaiting a decision and green only after server confirmation.
+Decision actions sit side by side, stacking for narrow screens or larger text. Liquid
+Glass remains on scanner controls/navigation, following Apple's
+[Adopting Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass)
+guidance to reserve it for the functional layer and avoid overuse.
+Reads reuse the identity lookup, repeat-confirmation, revocation and encrypted
+offline-queue paths used by camera scans.
+
+NFC controls stay hidden until hardware support is confirmed. Devices without NFC
+retain explicit camera and manual entry, including badge linking and replacement.
 The iOS usage description explains reading badge serial numbers for attendee
-identification at check-in, meals, and activities.
-
-The first active QR camera use opens the native camera permission alert directly;
-hidden scanner routes and person profiles do not request it. The profile's QR
-camera is mounted only after QR is chosen. Activity scanners defer camera access
-while their NFC reader is active, and after NFC is canceled they wait for an
-explicit QR choice before requesting camera access. After a denial, the app
-shows the available alternative inputs; it retries permission only after an
-explicit retry action where the platform permits it.
-NFC support checks only inspect hardware availability. A native NFC reader
-session starts when NFC is selected, or when the existing activity scanner
-enters its auto-start flow.
+identification at check-in, meals, and activities. After a camera denial, the app
+shows the available alternative inputs and retries permission only after an
+explicit retry action where the platform permits it. NFC support checks inspect
+hardware availability without starting a reader session.
 
 `lib/nfc-reader.ts` serializes native sessions and releases them on completion,
 cancellation, navigation, backgrounding and unmount. iOS uses `MifareIOS` and
@@ -1895,7 +1949,7 @@ desk the accredited share `accredited / eligible`, all as of the post.
 **Deep links.** `hackos://queue` resolves to the participant queue tab.
 `hackos://scan?activity=<id>` (activity tap and Scan) is rewritten by
 `app/+native-intent.tsx` to `/activities/<id>`, the activity scanner bound to
-that activity, so the camera starts without a chooser (R008).
+that activity, ready for an explicit NFC start or camera fallback (R008).
 `hackos://schedule/<id>` (attendee activity) opens `app/schedule/[id].tsx`
 and `hackos://scan` (accreditation tap and Scan) the scanner tab, both
 unchanged. The app has no project screen, so `hackos://project` (deadline) is
@@ -2185,3 +2239,14 @@ Every on/off control uses `AppSwitch` (`components/native-ui.tsx`, also behind
 `ToggleRow`) rather than react-native's `Switch`. iOS keeps the native control;
 Android, whose Material default is teal, gets the `accent` token as the on
 track with a white thumb and a neutral off track, in both themes.
+
+### Contacts toolbar grouping
+
+Contacts orders the actions Ticket, Favourites, Search from left to right,
+groups Favourites and Search together, and keeps the wallet/ticket button
+on a separate native background (`separateBackground`). Search still opens the
+native iOS search controller, kept mounted in stacked placement and focused on
+demand from the grouped search action. All toolbar actions stay mounted while
+searching; blur or cancel ends search without rebuilding the toolbar. Legacy headers use the same
+grouping with their existing search field. People/Companies switching, saved
+contacts, favourites and wallet actions retain their existing behavior.

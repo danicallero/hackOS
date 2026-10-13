@@ -1,16 +1,15 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Modal, Platform, Pressable, Text, TextInput, View } from "react-native";
-import { GlassView } from "@/components/glass-view";
-import { ActionButton, useDialogCardColors } from "@/components/native-ui";
+import { useDialogCardColors } from "@/components/native-ui";
+import { ScannerCodeEntryActions } from "@/components/scanner-code-entry-actions";
 import { useLocale } from "@/lib/i18n";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { colors } from "@/theme/colors";
 
 /**
  * H22–H26: shared manual entry for camera scans and badge assignment/replacement.
- * The dark glass card belongs over the camera; `appearance="system"` follows
- * the light/dark page it opens from (the event diary, #935).
+ * One opaque, system-themed dialog for every caller, including camera and diary (#935).
  */
 export function ScannerCodeEntry({
   visible,
@@ -19,7 +18,6 @@ export function ScannerCodeEntry({
   submitLabel,
   title,
   placeholder,
-  appearance = "dark",
 }: {
   visible: boolean;
   onValue: (value: string) => void;
@@ -29,13 +27,11 @@ export function ScannerCodeEntry({
   title?: string;
   /** `null` leaves the field empty when the title already names it. */
   placeholder?: string | null;
-  appearance?: "dark" | "system";
 }) {
   const { t } = useLocale();
-  const system = appearance === "system";
   const fill = useDialogCardColors();
   const heading = title ?? t("scannerManualEntryTitle");
-  const hint = placeholder === undefined ? t("scannerManualEntryPlaceholder") : placeholder;
+  const hint = placeholder ?? null;
   const bottomInset = useRouterTabBarBottomInset();
   const [code, setCode] = useState("");
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -72,16 +68,17 @@ export function ScannerCodeEntry({
   }
   const cardStyle = {
     borderCurve: "continuous" as const,
-    borderRadius: 28,
+    // H22–H26: 16-point field curves plus the 16-point content inset.
+    borderRadius: 32,
     maxWidth: 390,
     overflow: "hidden" as const,
     width: "100%" as const,
   };
   const body = (
-    <View accessibilityViewIsModal style={{ padding: 20, gap: 14 }}>
+    <View accessibilityViewIsModal style={{ padding: 16, gap: 16 }}>
       <Text
         accessibilityRole="header"
-        style={{ color: system ? colors.label : "white", fontSize: 18, fontWeight: "700" }}
+        style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}
       >
         {heading}
       </Text>
@@ -95,25 +92,27 @@ export function ScannerCodeEntry({
         onChangeText={setCode}
         onSubmitEditing={submit}
         placeholder={hint ?? undefined}
-        placeholderTextColor={system ? colors.tertiaryLabel : "rgba(255,255,255,0.5)"}
+        placeholderTextColor={colors.tertiaryLabel}
         returnKeyType="done"
         style={{
-          backgroundColor: system ? fill.field : "rgba(255,255,255,0.12)",
+          backgroundColor: fill.field,
           borderCurve: "continuous",
-          borderRadius: 12,
-          color: system ? colors.label : "white",
+          borderRadius: 16,
+          color: colors.label,
           fontSize: 17,
-          padding: 14,
+          minHeight: 48,
+          paddingHorizontal: 16,
+          paddingVertical: 12,
         }}
       />
-      <ActionButton
-        testID={UI_TEST_IDS.scanner.manualSubmit}
-        variant="filled"
+      <ScannerCodeEntryActions
+        cancelLabel={t("cancel")}
+        submitLabel={submitLabel ?? t("scannerRegister")}
         disabled={!code.trim()}
-        label={submitLabel ?? t("scannerManualEntrySubmit")}
-        onPress={submit}
+        testID={UI_TEST_IDS.scanner.manualSubmit}
+        onCancel={onClose}
+        onSubmit={submit}
       />
-      <ActionButton label={t("cancel")} onPress={onClose} />
     </View>
   );
   return (
@@ -135,14 +134,7 @@ export function ScannerCodeEntry({
           bottom: keyboardHeight > 0 ? keyboardHeight + 24 : bottomInset + 40,
         }}
       >
-        {system ? (
-          // Same opaque card as the diary's note editor.
-          <View style={[cardStyle, { backgroundColor: fill.card }]}>{body}</View>
-        ) : (
-          <GlassView colorScheme="dark" glassEffectStyle="regular" style={cardStyle}>
-            {body}
-          </GlassView>
-        )}
+        <View style={[cardStyle, { backgroundColor: fill.card }]}>{body}</View>
       </View>
     </Modal>
   );

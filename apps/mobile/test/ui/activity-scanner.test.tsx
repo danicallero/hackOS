@@ -1,7 +1,39 @@
+jest.mock("@/components/scanner-action-button", () =>
+  jest.requireActual("@/components/scanner-action-button.tsx"),
+);
+
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { useState } from "react";
+import { AppState, type AppStateStatus, Platform } from "react-native";
+
+let mockParams: { id: string; manualBadge?: string; manualNonce?: string } = {
+  id: "7",
+  manualBadge: "BADGE-1",
+  manualNonce: "1",
+};
+let mockFocused = true;
+let mockNfcSupport = "supported";
+let mockReaderProps: {
+  showAndroidOverlay: boolean;
+  visible: boolean;
+  onValue: (value: string) => void;
+  onClose: () => void;
+};
+const mockCamera = jest.fn((_props: unknown) =>
+  require("react").createElement(require("react-native").View, { testID: "qr-fallback" }),
+);
+let mockRefreshOccupancy: () => void;
+jest.mock("@/lib/server-events", () => ({
+  startLogisticsEventStream: ({ onResync }: { onResync: () => void }) => {
+    mockRefreshOccupancy = onResync;
+    return () => {};
+  },
+  subscribeToServerEvent: () => () => {},
+}));
 
 jest.mock("expo-router", () => ({
-  useLocalSearchParams: () => ({ id: "7", manualBadge: "BADGE-1", manualNonce: "1" }),
+  useLocalSearchParams: () => mockParams,
+  useIsFocused: () => mockFocused,
   useRouter: () => ({ back: jest.fn() }),
 }));
 jest.mock("expo-router/stack", () => ({ Stack: { Screen: () => null } }));
@@ -13,10 +45,19 @@ jest.mock("@/components/native-ui", () => ({
   AdaptiveBackButton: () => null,
   AdaptiveToolbarButton: () => null,
 }));
-jest.mock("@/components/QrCamera", () => ({ QrCamera: () => null }));
+jest.mock("@/components/QrCamera", () => ({ QrCamera: (props: unknown) => mockCamera(props) }));
+jest.mock("@/components/scanner-code-entry", () => ({ ScannerCodeEntry: () => null }));
+jest.mock("@/components/nfc-reader", () => ({
+  NfcReader: (props: typeof mockReaderProps) => {
+    mockReaderProps = props;
+    return null;
+  },
+}));
+jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupportStatus: () => mockNfcSupport }));
 jest.mock("@/components/scanner-transaction-status", () => ({ ScannerQueueStatus: () => null }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn().mockResolvedValue({ items: [] }) }));
+jest.mock("@/lib/live-activities/sync", () => ({ bumpActivityScanned: jest.fn() }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({
@@ -70,6 +111,9 @@ jest.mock("@/lib/scanner-db", () => ({
     revoked: false,
   }),
   getActivityState: jest.fn().mockResolvedValue({ count: 0 }),
+  listScannerPeople: jest
+    .fn()
+    .mockResolvedValue([{ lastPresenceKind: "in" }, { lastPresenceKind: "out" }]),
   listScannerActivities: jest.fn().mockResolvedValue([
     {
       id: 7,
@@ -107,13 +151,45 @@ jest.mock("@/theme/colors", () => ({
 }));
 
 import { ActivityScannerScreen } from "@/components/activity-scanner-screen";
+import { apiFetch } from "@/lib/api";
 import {
   enqueueLocalScan,
   findPersonByBadge,
   findPersonByTicket,
   getActivityState,
+  listScannerActivities,
+  pendingScans,
 } from "@/lib/scanner-db";
 import { renderMobile } from "./render";
+
+beforeEach(() => {
+  jest.spyOn(AppState, "addEventListener").mockImplementation(() => ({ remove: jest.fn() }));
+});
+afterEach(() => jest.restoreAllMocks());
+
+it("uses server occupancy across roles and falls back to the roster after a failed refresh (H24)", async () => {
+  const originalParams = mockParams;
+  mockParams = { id: "7" };
+  let offline = false;
+  jest.mocked(apiFetch).mockImplementation(async (path) => {
+    if (path === "/api/scanner/role-stats") {
+      if (offline) throw new Error("offline");
+      return { byRole: [{ inside: 5 }, { inside: 14 }] } as never;
+    }
+    return { items: [] } as never;
+  });
+  try {
+    await renderMobile(<ActivityScannerScreen />);
+    expect(await screen.findByText("19")).toBeTruthy();
+    offline = true;
+    await act(() => mockRefreshOccupancy());
+    await waitFor(() => expect(screen.queryByText("19")).toBeNull());
+    expect(screen.getByText("1")).toBeTruthy();
+  } finally {
+    mockParams = originalParams;
+    jest.mocked(apiFetch).mockResolvedValue({ items: [] });
+  }
+});
 
 describe("activity scanner result (H26)", () => {
   it("offers Close after a first scan", async () => {
@@ -122,7 +198,7 @@ describe("activity scanner result (H26)", () => {
     const close = await screen.findByRole("button", { name: "Close" });
     expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
 
-    fireEvent.press(close);
+    await fireEvent.press(close);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Close" })).toBeNull());
   });
 
@@ -134,7 +210,7 @@ describe("activity scanner result (H26)", () => {
 
     expect(await screen.findByRole("button", { name: "Add another" })).toBeTruthy();
     expect(enqueueLocalScan).not.toHaveBeenCalled();
-    fireEvent.press(screen.getByRole("button", { name: "Add another" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Add another" }));
     await waitFor(() =>
       expect(enqueueLocalScan).toHaveBeenCalledWith(
         expect.objectContaining({ allowRepeat: true, kind: "activity" }),
@@ -142,6 +218,30 @@ describe("activity scanner result (H26)", () => {
       ),
     );
   });
+});
+
+it("keeps an offline meal scan saved and asks before another serving", async () => {
+  const activities = await listScannerActivities();
+  jest
+    .mocked(listScannerActivities)
+    .mockResolvedValueOnce([{ ...activities[0]!, category: "meal" }]);
+  jest.mocked(pendingScans).mockResolvedValueOnce([]);
+  await renderMobile(<ActivityScannerScreen />);
+  expect(await screen.findByText("Saved")).toBeTruthy();
+  expect(screen.queryByText("Confirmed")).toBeNull();
+  await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+  jest.mocked(getActivityState).mockResolvedValueOnce({ userId: 21, activityId: 7, count: 1 });
+  jest.mocked(enqueueLocalScan).mockClear();
+  await act(() => mockReaderProps.onValue("BADGE-1"));
+  expect(await screen.findByRole("button", { name: "Add another" })).toBeTruthy();
+  expect(enqueueLocalScan).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByRole("button", { name: "Add another" }));
+  await waitFor(() =>
+    expect(enqueueLocalScan).toHaveBeenCalledWith(
+      expect.objectContaining({ allowRepeat: true }),
+      11,
+    ),
+  );
 });
 
 it("accepts a ticket QR and preserves it in the offline activity payload", async () => {
@@ -168,5 +268,162 @@ it("automatically dismisses lookup errors after six seconds", async () => {
     expect(screen.queryByRole("button", { name: "scannerBadgeUnknown" })).toBeNull();
   } finally {
     jest.useRealTimers();
+  }
+});
+
+describe("manual activity NFC sessions (H25/H26)", () => {
+  beforeEach(() => {
+    mockParams = { id: "7" };
+    mockFocused = true;
+    mockNfcSupport = "supported";
+    mockCamera.mockClear();
+  });
+  afterEach(() => {
+    mockParams = { id: "7", manualBadge: "BADGE-1", manualNonce: "1" };
+    mockFocused = true;
+    mockNfcSupport = "supported";
+    jest.useRealTimers();
+  });
+
+  it("arrives idle without mounting the camera or opening NFC", async () => {
+    await renderMobile(<ActivityScannerScreen />);
+    await screen.findByText("Workshop");
+    expect(mockReaderProps.visible).toBe(false);
+    expect(screen.getAllByRole("button", { name: "scannerNfcStart" })).toHaveLength(1);
+    expect(screen.queryByText("scannerNfcStart")).toBeNull();
+    expect(screen.getByText("scannerNfcIdle")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "scannerViewPeople" })).toBeTruthy();
+    expect(mockCamera).not.toHaveBeenCalled();
+    expect(screen.getByText("1")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "scannerCamera" }));
+    expect(mockCamera).toHaveBeenCalledWith(
+      expect.objectContaining({ hideNfc: true, requestCameraOnFocus: true, autoStartNfc: false }),
+    );
+  });
+
+  it("shows NFC unavailable on unsupported hardware with accessible alternatives", async () => {
+    mockNfcSupport = "unsupported";
+    await renderMobile(<ActivityScannerScreen />);
+    await screen.findByText("Workshop");
+    expect(screen.getByText("scannerNfcUnavailable")).toBeTruthy();
+    expect(screen.queryByText("scannerNfcIdle")).toBeNull();
+    expect(screen.queryByRole("button", { name: "scannerNfcStart" })).toBeNull();
+    expect(screen.getByRole("button", { name: "scannerCamera" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "scannerEnterManually" })).toBeTruthy();
+  });
+
+  it("closes the full-screen camera after one code and returns to the activity", async () => {
+    await renderMobile(<ActivityScannerScreen />);
+    await screen.findByText("Workshop");
+    await fireEvent.press(screen.getByRole("button", { name: "scannerCamera" }));
+    expect(screen.getByTestId("qr-fallback")).toBeTruthy();
+    const props = mockCamera.mock.calls.at(-1)?.[0] as unknown as {
+      onValue: (value: string) => void;
+    };
+    await act(() => props.onValue("BADGE-1"));
+    await screen.findByRole("button", { name: "Close" });
+    expect(screen.queryByTestId("qr-fallback")).toBeNull();
+  });
+
+  it("starts explicitly, reopens after a successful read, and stays stopped", async () => {
+    jest.mocked(findPersonByBadge).mockResolvedValueOnce({ person: null, revoked: false });
+    jest.useFakeTimers();
+    await renderMobile(<ActivityScannerScreen />);
+    await screen.findByText("Workshop");
+    await fireEvent.press(screen.getAllByRole("button", { name: "scannerNfcStart" })[0]!);
+    expect(mockReaderProps.visible).toBe(true);
+    await act(async () => {
+      mockReaderProps.onValue("UNKNOWN");
+      mockReaderProps.onClose();
+    });
+    expect(mockReaderProps.visible).toBe(false);
+    await act(() => jest.advanceTimersByTime(500));
+    expect(mockReaderProps.visible).toBe(true);
+    await fireEvent.press(screen.getAllByRole("button", { name: "scannerNfcStop" })[0]!);
+    await act(() => jest.advanceTimersByTime(1000));
+    expect(mockReaderProps.visible).toBe(false);
+    expect(mockCamera).not.toHaveBeenCalled();
+  });
+
+  it("stops when the NFC reader is cancelled", async () => {
+    await renderMobile(<ActivityScannerScreen />);
+    await screen.findByText("Workshop");
+    await fireEvent.press(screen.getAllByRole("button", { name: "scannerNfcStart" })[0]!);
+    await act(() => mockReaderProps.onClose());
+    expect(mockReaderProps.visible).toBe(false);
+    expect(screen.getAllByRole("button", { name: "scannerNfcStart" })[0]!).toBeTruthy();
+  });
+
+  it("pauses for repeated scans and resumes after the operator closes the result", async () => {
+    jest.mocked(getActivityState).mockResolvedValueOnce({ userId: 21, activityId: 7, count: 1 });
+    jest.mocked(enqueueLocalScan).mockClear();
+    await renderMobile(<ActivityScannerScreen />);
+    await screen.findByText("Workshop");
+    await fireEvent.press(screen.getAllByRole("button", { name: "scannerNfcStart" })[0]!);
+    await act(() => mockReaderProps.onValue("BADGE-1"));
+    await screen.findByRole("button", { name: "Do not add" });
+    expect(mockReaderProps.visible).toBe(false);
+    expect(enqueueLocalScan).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByRole("button", { name: "Do not add" }));
+    await waitFor(() => expect(mockReaderProps.visible).toBe(true));
+  });
+
+  it("stops on background without reopening", async () => {
+    let onState: (state: AppStateStatus) => void = () => {};
+    const spy = jest.spyOn(AppState, "addEventListener").mockImplementation((_event, callback) => {
+      onState = callback;
+      return { remove: jest.fn() };
+    });
+    try {
+      await renderMobile(<ActivityScannerScreen />);
+      await screen.findByText("Workshop");
+      await fireEvent.press(screen.getAllByRole("button", { name: "scannerNfcStart" })[0]!);
+      await act(() => onState("background"));
+      expect(mockReaderProps.visible).toBe(false);
+      await act(() => onState("active"));
+      expect(mockReaderProps.visible).toBe(false);
+      expect(screen.getAllByRole("button", { name: "scannerNfcStart" })[0]!).toBeTruthy();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("stops on navigation and requires a fresh start when focus returns", async () => {
+    let rerender = () => {};
+    function Screen() {
+      const [, update] = useState(0);
+      rerender = () => update((value) => value + 1);
+      return <ActivityScannerScreen />;
+    }
+    await renderMobile(<Screen />);
+    await screen.findByText("Workshop");
+    await fireEvent.press(screen.getAllByRole("button", { name: "scannerNfcStart" })[0]!);
+    mockFocused = false;
+    await act(rerender);
+    expect(mockReaderProps.visible).toBe(false);
+    mockFocused = true;
+    await act(rerender);
+    expect(mockReaderProps.visible).toBe(false);
+    expect(screen.getAllByRole("button", { name: "scannerNfcStart" })[0]!).toBeTruthy();
+  });
+});
+
+it("starts Android activity NFC on entry without a session button or overlay", async () => {
+  const originalOS = Platform.OS;
+  Platform.OS = "android";
+  mockParams = { id: "7" };
+  try {
+    await renderMobile(<ActivityScannerScreen />);
+    await screen.findByText("Workshop");
+    await waitFor(() => expect(mockReaderProps.visible).toBe(true));
+    expect(mockReaderProps.showAndroidOverlay).toBe(false);
+    expect(screen.getAllByRole("button", { name: "scannerNfcStop" })).toHaveLength(1);
+    expect(screen.queryByText("scannerNfcStop")).toBeNull();
+    await fireEvent.press(screen.getByTestId("scanner-nfc-toggle"));
+    expect(mockReaderProps.visible).toBe(false);
+    await fireEvent.press(screen.getByTestId("scanner-nfc-toggle"));
+    expect(mockReaderProps.visible).toBe(true);
+  } finally {
+    Platform.OS = originalOS;
   }
 });

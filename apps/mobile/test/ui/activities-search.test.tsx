@@ -133,7 +133,7 @@ async function chooseKind(id: string) {
   const options = mockSetOptions.mock.calls.at(-1)?.[0];
   const menu = options.headerRight();
   await act(async () => {
-    menu.props.onPressAction({ nativeEvent: { event: id } });
+    menu.props.onSelect(id);
   });
 }
 
@@ -171,13 +171,27 @@ describe("activities list search, filter and now marker (H25, H26)", () => {
       mockSetOptions.mock.calls
         .at(-1)?.[0]
         .headerRight()
-        .props.actions.map((a: { id: string }) => a.id),
+        .props.items.map((a: { id: string }) => a.id),
     ).toEqual(["all", "meal", "talk"]);
 
     await chooseKind("talk");
 
     expect(screen.getByText("Charla Grafana")).toBeTruthy();
     expect(screen.queryByText("Comida Domingo")).toBeNull();
+  });
+
+  it("adds and removes kinds independently, and All clears them", async () => {
+    await renderMobile(<ActivitiesScreen />);
+    await waitFor(() => expect(screen.getByText("Charla Grafana")).toBeTruthy());
+    await chooseKind("talk");
+    await chooseKind("meal");
+    expect(screen.getByText("Cena Sábado")).toBeTruthy();
+    expect(screen.getByText("Charla Grafana")).toBeTruthy();
+    await chooseKind("talk");
+    expect(screen.queryByText("Charla Grafana")).toBeNull();
+    await chooseKind("all");
+    expect(screen.getByText("Charla Grafana")).toBeTruthy();
+    expect(mockSetOptions.mock.calls.at(-1)?.[0].headerRight().props.active).toBe(false);
   });
 
   it("falls back to a search-specific empty state", async () => {

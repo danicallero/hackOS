@@ -42,16 +42,23 @@ describe("filterActivities", () => {
   ];
 
   it("returns everything with no query and no kind", () => {
-    expect(filterActivities(items, { query: "  ", kind: null })).toEqual(items);
+    expect(filterActivities(items, { query: "  ", kinds: [] })).toEqual(items);
   });
 
   it("matches the name case-insensitively", () => {
-    expect(filterActivities(items, { query: "grafana", kind: null })).toEqual([items[1]]);
+    expect(filterActivities(items, { query: "grafana", kinds: [] })).toEqual([items[1]]);
+  });
+
+  it("includes any selected kind", () => {
+    expect(filterActivities(items, { query: "", kinds: ["meal", "talk"] })).toEqual(items);
+    expect(filterActivities(items, { query: "grafana", kinds: ["meal", "talk"] })).toEqual([
+      items[1],
+    ]);
   });
 
   it("ANDs the kind filter with the query", () => {
-    expect(filterActivities(items, { query: "a", kind: "meal" })).toEqual([items[0]]);
-    expect(filterActivities(items, { query: "grafana", kind: "meal" })).toEqual([]);
+    expect(filterActivities(items, { query: "a", kinds: ["meal"] })).toEqual([items[0]]);
+    expect(filterActivities(items, { query: "grafana", kinds: ["meal"] })).toEqual([]);
   });
 });
 
