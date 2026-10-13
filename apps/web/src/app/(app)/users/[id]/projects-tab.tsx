@@ -61,16 +61,14 @@ export function buildProjectColumns(t: Translate): Column<RepoWithExtras>[] {
       id: "links",
       header: t("colLinks"),
       cell: (project) => {
-        const devpostUrl = typeof project.devpost_url === "string" ? project.devpost_url : null;
         const demoUrl = typeof project.demo_url === "string" ? project.demo_url : null;
         const githubUrl = typeof project.github_url === "string" ? project.github_url : null;
 
         return (
           <div className="flex flex-wrap gap-2">
-            {devpostUrl && <ProjectLink href={devpostUrl} label={t("projectLinkDevpost")} />}
             {demoUrl && <ProjectLink href={demoUrl} label={t("projectLinkDemo")} />}
             {githubUrl && <ProjectLink href={githubUrl} label={t("projectLinkRepository")} />}
-            {!devpostUrl && !demoUrl && !githubUrl && (
+            {!demoUrl && !githubUrl && (
               <span className="text-muted-foreground text-sm">{t("none")}</span>
             )}
           </div>

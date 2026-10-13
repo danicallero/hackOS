@@ -335,7 +335,7 @@ describe("workspace resolution for the top bar (issue #297)", () => {
   });
 
   it("resolves a child route to the workspace of its longest matching parent", () => {
-    expect(workspaceForPath("/projects/import")?.id).toBe("projects");
+    expect(workspaceForPath("/projects/submissions")?.id).toBe("projects");
     expect(workspaceForPath("/challenges/12")?.id).toBe("sponsors");
   });
 

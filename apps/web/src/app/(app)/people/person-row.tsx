@@ -20,7 +20,7 @@ export interface DirectoryEntry {
   photoUrl: string | null;
   headline: string | null;
   locationNote: string | null;
-  projects: { kind: "project" | "workGroup"; id: number; name: string }[];
+  projects: { kind: "project"; id: number; name: string }[];
   challenges: { id: number; name: string }[];
 }
 

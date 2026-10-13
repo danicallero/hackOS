@@ -1,6 +1,6 @@
 "use client";
 
-// Project detail with hot-edit membership and challenge assignment (H20-H21).
+// Project detail with hot-edit membership and challenge entries (H21).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
@@ -19,39 +19,24 @@ import { PageLayout } from "@/components/common/page-layout";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { StatusBadge } from "@/components/common/status-badge";
 import { PresentationStatus } from "@/components/projects/presentation-status";
 import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import {
-  addRepoChallenge,
-  addRepoMember,
-  getRepoById,
-  removeRepoChallenge,
-  removeRepoPrize,
-} from "@/lib/projects";
+import { addRepoChallenge, addRepoMember, getRepoById, removeRepoChallenge } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { ProjectFormDialog } from "../project-form-dialog";
 import {
   type ChallengeOption,
   challengeTitleText,
-  memberMatchLabel,
   memberName,
-  mergeStatusTone,
   type ProjectRepo,
   toProjectRepo,
-  toUnifiedEntries,
 } from "../shared";
-import {
-  DevpostParticipantActions,
-  MemberRemoveButton,
-  ProjectChallengeAdder,
-  ProjectMemberAdder,
-} from "./project-actions";
+import { MemberRemoveButton, ProjectChallengeAdder, ProjectMemberAdder } from "./project-actions";
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
@@ -63,7 +48,6 @@ export default function ProjectDetailPage() {
   const canRead =
     can(CAPABILITIES.PROJECTS_READ) || Boolean(me?.isEnterpriseJudge) || Boolean(me?.isSponsorRep);
   const canEdit = can(CAPABILITIES.PROJECTS_EDIT);
-  const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
   const id = Number(params.id);
   const [repo, setRepo] = useState<ProjectRepo | null>(null);
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
@@ -84,21 +68,11 @@ export default function ProjectDetailPage() {
       setRepo(toProjectRepo(repoRes));
       hasLoadedRef.current = true;
 
-      if (canEdit || canImport) {
-        const [challengeResult] = await Promise.allSettled([
-          canEdit
-            ? api.get<{ challenges: ChallengeOption[] }>("/api/challenges")
-            : api.get<{ items: ChallengeOption[] }>("/api/public/challenges"),
-        ]);
-        if (challengeResult.status === "fulfilled") {
-          setChallenges(
-            "challenges" in challengeResult.value
-              ? challengeResult.value.challenges
-              : challengeResult.value.items,
-          );
-        } else {
-          setChallenges([]);
-        }
+      if (canEdit) {
+        const challengeResult = await api
+          .get<{ challenges: ChallengeOption[] }>("/api/challenges")
+          .catch(() => ({ challenges: [] }));
+        setChallenges(challengeResult.challenges);
       }
     } catch (err) {
       toast.error(
@@ -109,7 +83,7 @@ export default function ProjectDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [canEdit, canImport, canRead, id, t]);
+  }, [canEdit, canRead, id, t]);
 
   // Soft, in-place refresh instead of a hard reload when this project
   // changes elsewhere.
@@ -122,19 +96,12 @@ export default function ProjectDetailPage() {
     void load();
   }, [load, liveRefresh, queueRefresh]);
 
-  const queueChallengeIds = useMemo(
-    () =>
-      new Set(
-        repo?.challenges
-          .filter((challenge) => challenge.status !== null)
-          .map((challenge) => challenge.id) ?? [],
-      ),
-    [repo],
-  );
-  const unifiedEntries = useMemo(() => (repo ? toUnifiedEntries(repo) : []), [repo]);
   const availableChallenges = useMemo(
-    () => challenges.filter((challenge) => !queueChallengeIds.has(challenge.id)),
-    [challenges, queueChallengeIds],
+    () =>
+      challenges.filter(
+        (challenge) => !repo?.challenges.some((entered) => entered.id === challenge.id),
+      ),
+    [challenges, repo],
   );
 
   if (!canRead) {
@@ -180,10 +147,10 @@ export default function ProjectDetailPage() {
           </IconButton>
         }
         primaryAction={
-          /* H18: metadata edit (name, description, links). */
+          /* H21: metadata edit (name, description, links, judging preference). */
           canEdit ? (
             <ProjectFormDialog
-              key={`${repo.id}-${repo.name}`}
+              key={`${repo.id}-${repo.name}-${repo.presentation_timing_preference}`}
               mode={{ kind: "edit", repo }}
               onSaved={load}
             />
@@ -197,7 +164,6 @@ export default function ProjectDetailPage() {
             <ProjectDescriptionLinks
               description={repo.description}
               links={{
-                devpostUrl: repo.devpost_url,
                 demoUrl: repo.demo_url,
                 githubUrl: repo.github_url,
               }}
@@ -213,47 +179,19 @@ export default function ProjectDetailPage() {
             ) : (
               <ul className="divide-y divide-border/60">
                 {repo.members.map((member) => (
-                  <li key={`${member.userId ?? "devpost"}:${member.email}`} className="py-2">
+                  <li key={member.userId} className="py-2">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate font-medium">{memberName(member)}</p>
                         <p className="text-muted-foreground truncate text-sm">{member.email}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {member.mergeStatus === "manual"
-                            ? t("addedManually")
-                            : member.devpostUsername
-                              ? `@${member.devpostUsername}`
-                              : memberMatchLabel(member, t)}
-                        </p>
                       </div>
-                      <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-                        <StatusBadge tone={mergeStatusTone(member.mergeStatus)}>
-                          {memberMatchLabel(member, t)}
-                        </StatusBadge>
-                        {canEdit && member.userId !== null && (
-                          <MemberRemoveButton
-                            repoId={repo.id}
-                            userId={member.userId}
-                            email={member.email}
-                            imported={member.mergeStatus !== "manual"}
-                            secondaryLinked={member.matchType === "secondary_email"}
-                            onRemoved={load}
-                          />
-                        )}
-                        {member.userId === null &&
-                          member.email !== null &&
-                          (canEdit || canImport) && (
-                            <DevpostParticipantActions
-                              repoId={repo.id}
-                              email={member.email}
-                              name={member.name}
-                              surname={member.surname}
-                              canDelete={canEdit}
-                              canLink={canImport}
-                              onChanged={load}
-                            />
-                          )}
-                      </div>
+                      {canEdit && (
+                        <MemberRemoveButton
+                          repoId={repo.id}
+                          userId={member.userId}
+                          onRemoved={load}
+                        />
+                      )}
                     </div>
                   </li>
                 ))}
@@ -273,7 +211,7 @@ export default function ProjectDetailPage() {
           </SectionCard>
         </div>
         <SectionCard title={t("challenges")} bodyClassName="space-y-4">
-          {unifiedEntries.length === 0 ? (
+          {repo.challenges.length === 0 ? (
             <EmptyState
               icon={TrophyIcon}
               title={t("noChallengesAssignedTitle")}
@@ -281,110 +219,59 @@ export default function ProjectDetailPage() {
             />
           ) : (
             <ul className="divide-y divide-border/60">
-              {unifiedEntries.map((entry) =>
-                entry.kind === "challenge" ? (
-                  <li
-                    key={`challenge-${entry.challenge.id}`}
-                    className="space-y-2 py-4 first:pt-0 last:pb-0"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="text-base font-medium text-balance">
-                          {challengeTitleText(entry.challenge.title)}
-                        </h3>
-                        {!entry.challenge.status && (
-                          <p className="text-muted-foreground text-xs">
-                            {entry.challenge.mappedPrizes.length === 1
-                              ? t("linkedByPrizeOne", {
-                                  count: entry.challenge.mappedPrizes.length,
-                                })
-                              : t("linkedByPrizeOther", {
-                                  count: entry.challenge.mappedPrizes.length,
-                                })}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {entry.challenge.status && entry.challenge.reviewStatus === null && (
-                          <span className="text-xs text-muted-foreground">
-                            {t("challengeReviewNotStarted")}
-                          </span>
-                        )}
-                        {entry.challenge.status && entry.challenge.reviewStatus !== null && (
-                          <ReviewStatusBadge
-                            status={entry.challenge.reviewStatus}
-                            score={entry.challenge.nota}
-                          />
-                        )}
-                        {entry.challenge.mandatory && (
-                          <span className="text-xs text-muted-foreground">
-                            {t("mandatoryChallengeLabel")}
-                          </span>
-                        )}
-                        {canEdit && entry.challenge.status && !entry.challenge.mandatory && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={async () => {
-                              try {
-                                await removeRepoChallenge(repo.id, entry.challenge.id);
-                                toast.success(t("challengeRemoved"), {
-                                  compactTitle: t("toastWithdrawChallenge"),
-                                });
-                                await load();
-                              } catch (err) {
-                                toast.error(
-                                  err instanceof ApiError
-                                    ? err.message
-                                    : t("couldNotRemoveChallenge"),
-                                  t("toastWithdrawChallenge"),
-                                );
-                              }
-                            }}
-                          >
-                            {t("remove")}
-                          </Button>
-                        )}
-                      </div>
+              {repo.challenges.map((challenge) => (
+                <li key={challenge.id} className="space-y-2 py-4 first:pt-0 last:pb-0">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <h3 className="min-w-0 text-base font-medium text-balance">
+                      {challengeTitleText(challenge.title)}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      {challenge.status && challenge.reviewStatus === null && (
+                        <span className="text-xs text-muted-foreground">
+                          {t("challengeReviewNotStarted")}
+                        </span>
+                      )}
+                      {challenge.status && challenge.reviewStatus !== null && (
+                        <ReviewStatusBadge status={challenge.reviewStatus} score={challenge.nota} />
+                      )}
+                      {challenge.mandatory && (
+                        <span className="text-xs text-muted-foreground">
+                          {t("mandatoryChallengeLabel")}
+                        </span>
+                      )}
+                      {canEdit && !challenge.mandatory && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await removeRepoChallenge(repo.id, challenge.id);
+                              toast.success(t("challengeRemoved"), {
+                                compactTitle: t("toastWithdrawChallenge"),
+                              });
+                              await load();
+                            } catch (err) {
+                              toast.error(
+                                err instanceof ApiError
+                                  ? err.message
+                                  : t("couldNotRemoveChallenge"),
+                                t("toastWithdrawChallenge"),
+                              );
+                            }
+                          }}
+                        >
+                          {t("remove")}
+                        </Button>
+                      )}
                     </div>
-                    {entry.challenge.status && <PresentationStatus {...entry.challenge} />}
-                  </li>
-                ) : (
-                  <li key={`prize-${entry.prize}`} className="py-2">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{entry.prize}</p>
-                        <p className="text-muted-foreground text-xs">{t("noLinkedChallenge")}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <StatusBadge tone="warning">{t("unlinkedBadge")}</StatusBadge>
-                        {canEdit && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={async () => {
-                              try {
-                                await removeRepoPrize(repo.id, entry.prize);
-                                toast.success(t("prizeRemoved"), {
-                                  compactTitle: t("toastRemovePrize"),
-                                });
-                                await load();
-                              } catch (err) {
-                                toast.error(
-                                  err instanceof ApiError ? err.message : t("couldNotRemovePrize"),
-                                  t("toastRemovePrize"),
-                                );
-                              }
-                            }}
-                          >
-                            {t("remove")}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </li>
-                ),
-              )}
+                  </div>
+                  {challenge.status ? (
+                    <PresentationStatus {...challenge} />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t("plannedChallenge")}</p>
+                  )}
+                </li>
+              ))}
             </ul>
           )}
 

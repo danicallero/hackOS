@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { apiAssetUrl, type DirectoryEntry } from "@/lib/directory";
-import { type MessageKey, useLocale } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
 import { type ChallengeOption, challengeTitleText } from "../../projects/shared";
 
@@ -27,12 +27,6 @@ type State =
   | { status: "ready"; entry: DirectoryEntry }
   | { status: "missing" }
   | { status: "error"; message: string };
-
-/** Singular and plural row labels per project kind. */
-const PROJECT_KIND: Record<"project" | "workGroup", [MessageKey, MessageKey]> = {
-  project: ["publicProfileProject", "publicProfileProjects"],
-  workGroup: ["publicProfileWorkGroup", "publicProfileWorkGroups"],
-};
 
 /**
  * One opted-in person from `GET /api/directory/:userId` (#934, #935): only
@@ -158,17 +152,14 @@ function PersonReader({ userId }: { userId: number }) {
       value: <p className="wrap-anywhere">{entry.locationNote}</p>,
     });
   }
-  // Every project and work group the person is in, one row per kind (#935).
-  for (const kind of ["project", "workGroup"] as const) {
-    const projects = entry.projects.filter((project) => project.kind === kind);
-    if (projects.length === 0) continue;
-    const [one, many] = PROJECT_KIND[kind];
+  // Every project the person is in (#935).
+  if (entry.projects.length > 0) {
     rows.push({
-      id: kind,
-      label: t(projects.length === 1 ? one : many),
+      id: "project",
+      label: t(entry.projects.length === 1 ? "publicProfileProject" : "publicProfileProjects"),
       value: (
         <ul className="space-y-1">
-          {projects.map((project) => (
+          {entry.projects.map((project) => (
             <li key={project.id} className="wrap-anywhere">
               {project.name}
             </li>

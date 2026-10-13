@@ -42,11 +42,9 @@ export interface QueueEntry {
   repo_name?: string;
   repo_description?: string | null;
   repo_github_url?: string | null;
-  repo_devpost_url?: string | null;
   repo_demo_url?: string | null;
   repo_members?: Array<{
-    /** Null when the Devpost participant never matched a system account. */
-    userId: number | null;
+    userId: number;
     email: string;
     name: string | null;
     surname: string | null;
@@ -716,9 +714,8 @@ export interface ReviewDetail {
     name: string;
     description: string;
     githubUrl: string | null;
-    devpostUrl: string | null;
     demoUrl: string | null;
-    members: Array<{ id: number | null; name: string; email: string | null }>;
+    members: Array<{ id: number; name: string; email: string }>;
   };
   review: {
     status: "draft" | "submitted" | null;

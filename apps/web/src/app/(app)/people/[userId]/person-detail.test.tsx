@@ -126,23 +126,17 @@ describe("PersonDetail (#934, #935)", () => {
     ]);
   });
 
-  it("lists every project and work group the person is in", async () => {
+  it("lists every project the person is in", async () => {
     person = entry({
       projects: [
         { kind: "project", id: 3, name: "Rías Baixas Tracker" },
         { kind: "project", id: 4, name: "Rover" },
-        { kind: "workGroup", id: 5, name: "Side quest" },
+        { kind: "project", id: 5, name: "Side quest" },
       ],
     });
     await render();
     const text = container.textContent ?? "";
-    for (const name of [
-      "Rías Baixas Tracker",
-      "Rover",
-      "Side quest",
-      "publicProfileProjects",
-      "publicProfileWorkGroup",
-    ]) {
+    for (const name of ["Rías Baixas Tracker", "Rover", "Side quest", "publicProfileProjects"]) {
       expect(text).toContain(name);
     }
   });

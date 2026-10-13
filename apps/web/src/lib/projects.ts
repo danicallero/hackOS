@@ -1,91 +1,30 @@
 /**
- * Typed client for the Devpost intake + projects read/edit API (H16-H17, H20-H21).
- * Shapes mirror `apps/api/src/modules/projects/{plan,service,schemas}.ts`.
+ * Typed client for the projects API: one project entity from draft to
+ * submission (H19-H21, #1006). Shapes mirror
+ * `apps/api/src/modules/projects/{service,lifecycle,schemas}.ts`.
  */
 import { api } from "./api";
 
-export type MemberMatchType = "primary_email" | "secondary_email" | "unmatched";
+export type PresentationTimingPreference = "no_preference" | "early" | "middle" | "late";
 
-export interface PlannedMember {
-  email: string;
-  name?: string;
-  matchType: MemberMatchType;
-  userId?: number | null;
-  [k: string]: unknown;
-}
-
-export interface PlannedRepo {
-  title: string;
-  url?: string | null;
-  action?: "create" | "update";
-  members: PlannedMember[];
-  prizes?: string[];
-  [k: string]: unknown;
-}
-
-export interface PlannedPrize {
-  name: string;
-  lastBatch?: string | null;
-  repoCount?: number;
-  mappedChallengeId?: number | null;
-  mappedChallengeTitle?: string | null;
-  [k: string]: unknown;
-}
-
-export interface PlannedChallenge {
-  id: number;
-  title: string;
-}
-
-export interface DevpostPrize {
-  name: string;
-  lastBatch: string | null;
-  repoCount: number;
-  mappedChallengeId: number | null;
-  mappedChallengeTitle: string | null;
-}
-
-/** POST /api/devpost/imports/preview | /confirm response (H16). */
-export interface ImportPlan {
-  repos: PlannedRepo[];
-  prizes: PlannedPrize[];
-  challenges: PlannedChallenge[];
-  unassignedParticipants: Array<Record<string, unknown>>;
-  totals: {
-    repos: number;
-    reposToCreate: number;
-    reposToUpdate: number;
-    members: number;
-    membersMatched: number;
-    membersUnmatched: number;
-    prizes: number;
-  };
-}
-
-export const listDevpostPrizes = () => api.get<{ prizes: DevpostPrize[] }>("/api/devpost/prizes");
-
-export interface UnmatchedParticipant {
-  repoId: number;
-  email: string;
-  name?: string;
-  [k: string]: unknown;
-}
-
-/** GET /api/repos | /api/repos/:id (PROJECTS_READ). */
+/** GET /api/repos | /api/repos/:id (PROJECTS_READ) and the participant self-view. */
 export interface RepoWithExtras {
   id: number;
   name: string;
-  url?: string | null;
+  description?: string | null;
+  github_url?: string | null;
+  demo_url?: string | null;
+  presentation_timing_preference?: PresentationTimingPreference;
+  submission_status?: "draft" | "submitted";
+  submitted_at?: string | null;
+  submitted_via?: "participant" | "admin" | null;
+  locked_at?: string | null;
+  lock_reason?: "organizer_lock" | null;
   members?: Array<{
-    userId: number | null;
-    email: string;
+    userId: number;
+    email: string | null;
     name: string | null;
     surname: string | null;
-    importedFrom: string;
-    externalId: string | null;
-    mergeStatus: string;
-    matchType: "primary_email" | "secondary_email" | "manual" | "unmatched";
-    devpostUsername: string | null;
   }>;
   challenges?: Array<{
     id: number;
@@ -97,42 +36,11 @@ export interface RepoWithExtras {
     assignedRoomName: string | null;
     etaMinutes: number | null;
     rooms: { id: number; name: string; location: string | null }[];
-    mappedPrizes: string[];
-    source: "queue" | "prize" | "queue_and_prize";
     reviewStatus: "draft" | "submitted" | null;
     nota: number | null;
   }>;
-  unmappedPrizes?: string[];
   [k: string]: unknown;
 }
-
-// ── import (H16) ────────────────────────────────────────────────────────────
-export const previewImport = (projectsCsv: string, participantsCsv: string) =>
-  api.post<ImportPlan>("/api/devpost/imports/preview", { projectsCsv, participantsCsv });
-
-export const confirmImport = (
-  projectsCsv: string,
-  participantsCsv: string,
-  tagMappings: Array<{ tag: string; challengeId: number }>,
-  idempotencyKey?: string,
-) =>
-  api.post<ImportPlan & { created?: unknown }>(
-    "/api/devpost/imports/confirm",
-    { projectsCsv, participantsCsv, tagMappings },
-    idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined,
-  );
-
-// ── resolve unmatched (H17) ─────────────────────────────────────────────────
-export const listUnmatched = () =>
-  api.get<{ participants: UnmatchedParticipant[] }>("/api/devpost/imports/unmatched");
-export const linkParticipant = (repoId: number, email: string, userId: number) =>
-  api.post("/api/devpost/imports/link", { repoId, email, userId });
-export const linkSecondaryEmail = (repoId: number, email: string, userId: number) =>
-  api.post("/api/devpost/imports/link-secondary", { repoId, email, userId });
-export const sendClaimEmail = (repoId: number, email: string) =>
-  api.post("/api/devpost/imports/claim-email", { repoId, email });
-export const mapPrize = (prizeName: string, challengeId: number) =>
-  api.post(`/api/devpost/prizes/${encodeURIComponent(prizeName)}/map`, { challengeId });
 
 // ── read views ──────────────────────────────────────────────────────────────
 export const listRepos = () => api.get<{ repos: RepoWithExtras[] }>("/api/repos");
@@ -143,7 +51,7 @@ export const myProjects = () =>
 export const userProjects = (userId: number) =>
   api.get<{ projects: RepoWithExtras[] }>(`/api/users/${userId}/projects`);
 
-// ── native lifecycle (H18-H19) ─────────────────────────────────────────────
+// ── creation (H19, H21) ────────────────────────────────────────────────────
 export interface NativeProjectInput {
   name: string;
   description?: string;
@@ -160,28 +68,28 @@ export interface CreatedProject {
 // ── hot edit (H21) ─────────────────────────────────────────────────────────
 const idem = (key?: string) => (key ? { headers: { "Idempotency-Key": key } } : undefined);
 
-/** POST /api/repos (H18, PROJECTS_EDIT): native creation, no Devpost. */
+/** POST /api/repos (H21, PROJECTS_EDIT): staff create a project on a team's behalf. */
 export const createRepo = (
   input: NativeProjectInput & { memberUserIds?: number[] },
   idempotencyKey?: string,
 ) => api.post<CreatedProject>("/api/repos", { ...input }, idem(idempotencyKey));
 
-/** PATCH /api/repos/:id (H18): metadata only. */
-export const updateRepo = (
-  repoId: number,
-  patch: Partial<Pick<NativeProjectInput, "name" | "description" | "githubUrl" | "demoUrl">>,
-) => api.patch<RepoWithExtras>(`/api/repos/${repoId}`, patch);
+export type ProjectPatch = Partial<
+  Pick<NativeProjectInput, "name" | "description" | "githubUrl" | "demoUrl">
+> & { presentationTimingPreference?: PresentationTimingPreference };
 
-/** POST /api/me/projects (H19): participant self-creation, policy-gated. */
+/** PATCH /api/repos/:id (H21): metadata and judging preference. */
+export const updateRepo = (repoId: number, patch: ProjectPatch) =>
+  api.patch<RepoWithExtras>(`/api/repos/${repoId}`, patch);
+
+/** POST /api/me/projects (H19): a participant creates a draft, policy-gated. */
 export const createMyProject = (input: NativeProjectInput, idempotencyKey?: string) =>
   api.post<CreatedProject>("/api/me/projects", { ...input }, idem(idempotencyKey));
 
 // ── H19/H20 participant self-service: edit, invite, leave, delete ──────────
-/** PATCH /api/me/projects/:id — active members only, hacking-window gated. */
-export const updateMyProject = (
-  repoId: number,
-  patch: Partial<Pick<NativeProjectInput, "name" | "description" | "githubUrl" | "demoUrl">>,
-) => api.patch<RepoWithExtras>(`/api/me/projects/${repoId}`, patch);
+/** PATCH /api/me/projects/:id — active members only, participant-window gated. */
+export const updateMyProject = (repoId: number, patch: ProjectPatch) =>
+  api.patch<RepoWithExtras>(`/api/me/projects/${repoId}`, patch);
 
 /** Participant enrollment stays available only until judging starts. */
 export const addMyProjectChallenge = (
@@ -220,120 +128,31 @@ export const leaveMyProject = (repoId: number, idempotencyKey?: string) =>
 export const deleteMyProject = (repoId: number, idempotencyKey?: string) =>
   api.delete(`/api/me/projects/${repoId}`, idem(idempotencyKey));
 
-export interface PlannedWorkGroup {
-  reconciliation_code?: string;
-  can_submit?: boolean;
-  id: number;
-  name: string;
-  description: string;
-  github_url: string | null;
-  demo_url: string | null;
-  devpost_url: string | null;
-  presentation_timing_preference: "no_preference" | "early" | "middle" | "late";
-  presentation_timing_editable: boolean;
-  linked_repo_id: number | null;
-  linkedProject: { id: number; name: string; devpostUrl: string | null } | null;
-  members: Array<{
-    userId: number;
-    name: string | null;
-    surname: string | null;
-    status: "active" | "invited" | "declined";
-  }>;
-  challenges: Array<{ id: number; title: string; mandatory: boolean }>;
-}
-export const myWorkGroups = () =>
-  api.get<{ groups: PlannedWorkGroup[]; canCreate: boolean }>("/api/me/work-groups");
-
-export const getMyWorkGroup = (id: number) =>
-  api.get<PlannedWorkGroup>(`/api/me/work-groups/${id}`);
-export const createWorkGroup = (
-  name: string,
-  challengeIds: number[] = [],
-  idempotencyKey?: string,
-) =>
-  api.post<PlannedWorkGroup>("/api/me/work-groups", { name, challengeIds }, idem(idempotencyKey));
-export const updateWorkGroup = (
-  id: number,
-  patch: Partial<
-    Pick<
-      PlannedWorkGroup,
-      | "name"
-      | "description"
-      | "github_url"
-      | "demo_url"
-      | "devpost_url"
-      | "presentation_timing_preference"
-    >
-  >,
-) =>
-  api.patch<PlannedWorkGroup>(`/api/me/work-groups/${id}`, {
-    name: patch.name,
-    description: patch.description,
-    githubUrl: patch.github_url,
-    demoUrl: patch.demo_url,
-    devpostUrl: patch.devpost_url,
-    presentationTimingPreference: patch.presentation_timing_preference,
-  });
-export const inviteWorkGroupMember = (id: number, email: string, idempotencyKey?: string) =>
-  api.post(`/api/me/work-groups/${id}/invites`, { email }, idem(idempotencyKey));
-export const respondWorkGroupInvite = (
-  id: number,
-  action: "accept" | "decline",
-  idempotencyKey?: string,
-) => api.post(`/api/me/work-groups/${id}/invites/${action}`, {}, idem(idempotencyKey));
-export const removeWorkGroupMember = (id: number, userId: number, idempotencyKey?: string) =>
-  api.delete(`/api/me/work-groups/${id}/members/${userId}`, idem(idempotencyKey));
-export const addWorkGroupChallenge = (id: number, challengeId: number, idempotencyKey?: string) =>
-  api.post(`/api/me/work-groups/${id}/challenges`, { challengeId }, idem(idempotencyKey));
-export const removeWorkGroupChallenge = (
-  id: number,
-  challengeId: number,
-  idempotencyKey?: string,
-) => api.delete(`/api/me/work-groups/${id}/challenges/${challengeId}`, idem(idempotencyKey));
-export const deleteWorkGroup = (id: number, idempotencyKey?: string) =>
-  api.delete(`/api/me/work-groups/${id}`, idem(idempotencyKey));
-
 export const addRepoMember = (repoId: number, userId: number, idempotencyKey?: string) =>
   api.post(`/api/repos/${repoId}/members`, { userId }, idem(idempotencyKey));
 export const removeRepoMember = (repoId: number, userId: number) =>
   api.delete(`/api/repos/${repoId}/members/${userId}`);
-export const removeDevpostParticipant = (repoId: number, email: string) =>
-  api.delete(`/api/repos/${repoId}/devpost-participants/${encodeURIComponent(email)}`);
 export const addRepoChallenge = (repoId: number, challengeId: number, idempotencyKey?: string) =>
   api.post(`/api/repos/${repoId}/challenges`, { challengeId }, idem(idempotencyKey));
 export const removeRepoChallenge = (repoId: number, challengeId: number) =>
   api.delete(`/api/repos/${repoId}/challenges/${challengeId}`);
-export const removeRepoPrize = (repoId: number, prizeName: string) =>
-  api.delete(`/api/repos/${repoId}/prizes/${encodeURIComponent(prizeName)}`);
 
-export interface SubmissionParticipant {
-  key?: string;
-  userId: number | null;
-  name: string | null;
-  surname: string | null;
-  email?: string | null;
-}
+/** GET /api/me/projects/:id/submission and each row of GET /api/projects/submissions. */
 export interface ProjectSubmission {
   id: number;
   name: string;
-  code: string;
-  status: "draft" | "submitted" | "not_submitted";
-  submittedVia: "native" | "devpost" | "admin" | null;
+  status: "draft" | "submitted";
+  submittedVia: "participant" | "admin" | null;
   submittedAt: string | null;
+  changedSinceSubmit: boolean;
   lockedAt: string | null;
-  lockReason: string | null;
-  devpostUrl: string | null;
+  lockReason: "organizer_lock" | null;
   eligible: boolean;
-  membershipDiffers: boolean;
-  membershipResolution: "internal" | "devpost" | null;
-  unresolvedCount: number;
   participantCount: number;
   maxTeamSize: number | null;
   teamSizeViolation: boolean;
   teamSizeException: boolean;
   eligibilityOverride: boolean | null;
-  internal: SubmissionParticipant[];
-  external: SubmissionParticipant[];
   requests: Array<{
     id: number;
     reason: string;
@@ -342,50 +161,18 @@ export interface ProjectSubmission {
     decision_reason: string | null;
   }>;
   canSubmit: boolean;
-  claimStatus?: "confirmed" | "rejected" | null;
-  rejectedClaims?: number;
-  possibleDuplicates?: Array<{
-    externalKey: string;
-    candidateUserId: number;
-    name: string | null;
-    surname: string | null;
-  }>;
 }
 export const projectSubmission = (id: number) =>
   api.get<ProjectSubmission>(`/api/me/projects/${id}/submission`);
-export const submitProject = (id: number, stage: "projects" | "work-groups") =>
-  api.post<{ repoId: number }>(`/api/me/${stage}/${id}/submit`, {}, idem(crypto.randomUUID()));
+export const submitProject = (id: number) =>
+  api.post<{ repoId: number }>(`/api/me/projects/${id}/submit`, {}, idem(crypto.randomUUID()));
 export const requestProjectEdits = (id: number, reason: string) =>
   api.post(`/api/me/projects/${id}/edit-requests`, { reason }, idem(crypto.randomUUID()));
-export const claimProject = (
-  id: number,
-  groupId?: number,
-  admin = false,
-  kind: "group" | "repo" = "group",
-) =>
-  api.post<{ confirmed: boolean; repoId?: number }>(
-    `${admin ? "/api/projects" : "/api/me/projects"}/${id}/claim`,
-    kind === "repo" ? { targetRepoId: groupId } : { groupId },
-    idem(crypto.randomUUID()),
-  );
-export interface LinkCandidate {
-  kind?: "group" | "repo";
-  id: number;
-  name: string;
-  code: string;
-  members: SubmissionParticipant[];
-  overlap: number;
-}
-export const projectLinkCandidates = (id: number, admin = false) =>
-  api.get<{ groups: LinkCandidate[] }>(
-    `${admin ? "/api/projects" : "/api/me/projects"}/${id}/link-candidates`,
-  );
-export const projectReconciliation = () =>
+export const projectSubmissions = () =>
   api.get<{
     projects: ProjectSubmission[];
-    planned: Array<{ id: number; name: string; code: string; status: string }>;
     config: { maxTeamSize: number | null; deadline: string | null };
-  }>("/api/projects/reconciliation");
+  }>("/api/projects/submissions");
 export const decideProjectEdits = (
   id: number,
   decision: "approve" | "deny" | "unlock",
@@ -395,11 +182,7 @@ export const resolveProjectException = (
   id: number,
   body: {
     reason: string;
-    membership?: "internal" | "devpost";
     teamSizeException?: boolean;
     eligibilityOverride?: boolean | null;
   },
 ) => api.post(`/api/projects/${id}/resolve`, body, idem(crypto.randomUUID()));
-
-export const unlinkDevpostProject = (id: number, reason: string) =>
-  api.post(`/api/projects/${id}/unlink`, { reason });

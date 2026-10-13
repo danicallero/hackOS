@@ -135,11 +135,7 @@ export function registerProjectLifecycleRoutes(app: FastifyInstance) {
             teamSizeException: z.boolean().optional(),
             eligibilityOverride: z.boolean().nullable().optional(),
           })
-          .refine(
-            (b) =>
-              b.teamSizeException !== undefined ||
-              b.eligibilityOverride !== undefined,
-          ),
+          .refine((b) => b.teamSizeException !== undefined || b.eligibilityOverride !== undefined),
         summary: "Resolve project exception",
         description:
           "Grants or revokes a team-size exception, or overrides/resets judging eligibility. An override to eligible also submits and locks the project. All decisions require an audited reason (H21/H53).",

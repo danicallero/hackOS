@@ -29,7 +29,7 @@ import {
   type SocialKind,
   type SocialLink,
 } from "@/lib/directory";
-import { type MessageKey, useLocale } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
 
 /**
@@ -272,11 +272,6 @@ function nextKind(links: EditableLink[]): SocialKind {
   return SOCIAL_KINDS.find((kind) => !used.has(kind)) ?? "other";
 }
 
-const PROJECT_KIND: Record<"project" | "workGroup", MessageKey> = {
-  project: "publicProfileProject",
-  workGroup: "publicProfileWorkGroup",
-};
-
 /** The card as the people who scanned the owner see it. */
 export function DirectoryCard({ entry }: { entry: DirectoryEntry }) {
   const { t } = useLocale();
@@ -294,7 +289,7 @@ export function DirectoryCard({ entry }: { entry: DirectoryEntry }) {
             key={`${project.kind}-${project.id}`}
             className="text-muted-foreground text-sm wrap-anywhere"
           >
-            <span className="sr-only">{t(PROJECT_KIND[project.kind])}: </span>
+            <span className="sr-only">{t("publicProfileProject")}: </span>
             {project.name}
           </p>
         ))}

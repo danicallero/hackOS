@@ -4,7 +4,6 @@ import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/csr/WarningCircle";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -18,7 +17,6 @@ import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { StatusBadge } from "@/components/common/status-badge";
-import { ParticipantDifference } from "@/components/projects/project-submission";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -30,38 +28,28 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { type ProjectSubmission, projectReconciliation } from "@/lib/projects";
+import { type ProjectSubmission, projectSubmissions } from "@/lib/projects";
 import { useCan } from "@/lib/session";
-import {
-  filterReconciliationRows,
-  type ReconciliationRow,
-  reconciliationRows,
-} from "./reconciliation-list";
-import { ReconciliationActions, ReconciliationReview } from "./reconciliation-review";
+import { SubmissionActions, SubmissionReview } from "./submission-review";
+import { filterSubmissions, submissionIssues } from "./submissions-list";
 
 type Decision = {
   title: string;
   run: (reason: string) => Promise<unknown>;
   project: ProjectSubmission;
 };
-const SOURCE_LABELS = {
-  planning: "projectDraft",
-  native: "projectNativeSource",
-  devpost: "projectDevpostSource",
-  hybrid: "projectHybridSource",
-} as const;
-export default function ReconciliationPage() {
+/** H21: organizer review of every project's submission state and pending decisions. */
+export default function SubmissionsPage() {
   const { t } = useLocale();
   const allowed = useCan(CAPABILITIES.PROJECTS_EDIT);
   const canManageRules = useCan(CAPABILITIES.EVENT_MANAGE);
-  const [data, setData] = useState<Awaited<ReturnType<typeof projectReconciliation>> | null>(null);
+  const [data, setData] = useState<Awaited<ReturnType<typeof projectSubmissions>> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState("issues");
-  const [sources, setSources] = useState<string[]>([]);
   const [issues, setIssues] = useState<string[]>([]);
   const reviewTrigger = useRef<HTMLElement | null>(null);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [decision, setDecision] = useState<Decision | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -70,7 +58,7 @@ export default function ReconciliationPage() {
   const load = useCallback(async () => {
     if (!allowed) return;
     try {
-      const next = await projectReconciliation();
+      const next = await projectSubmissions();
       setData(next);
       setMax(next.config.maxTeamSize?.toString() ?? "");
       setError(null);
@@ -81,22 +69,21 @@ export default function ReconciliationPage() {
   useEffect(() => {
     void load();
   }, [load]);
-  const rows = useMemo(() => (data ? reconciliationRows(data) : []), [data]);
+  const rows = useMemo(() => data?.projects ?? [], [data]);
   const filtered = useMemo(
-    () => filterReconciliationRows(rows, query, scope, sources, issues),
-    [rows, query, scope, sources, issues],
+    () => filterSubmissions(rows, query, scope, issues),
+    [rows, query, scope, issues],
   );
-  const selected = rows.find((row) => row.key === selectedKey);
-  const hasFilters = Boolean(query.trim() || scope !== "all" || sources.length || issues.length);
-  function openReview(row: ReconciliationRow) {
+  const selected = rows.find((row) => row.id === selectedId);
+  const hasFilters = Boolean(query.trim() || scope !== "all" || issues.length);
+  function openReview(row: ProjectSubmission) {
     reviewTrigger.current =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setSelectedKey(row.key);
+    setSelectedId(row.id);
   }
   function clearFilters() {
     setQuery("");
     setScope("all");
-    setSources([]);
     setIssues([]);
   }
   function choose(project: ProjectSubmission, title: string, run: Decision["run"]) {
@@ -119,15 +106,6 @@ export default function ReconciliationPage() {
       ],
     },
     {
-      id: "source",
-      label: t("projectSubmissionSource"),
-      icon: FolderSimpleIcon,
-      type: "multiple",
-      value: sources,
-      onChange: setSources,
-      options: Object.entries(SOURCE_LABELS).map(([value, key]) => ({ value, label: t(key) })),
-    },
-    {
       id: "issues",
       label: t("projectReviewIssue"),
       icon: WarningCircleIcon,
@@ -137,76 +115,56 @@ export default function ReconciliationPage() {
       options: (
         [
           "projectEditsRequested",
-          "projectParticipantsDiffer",
-          "projectUnknownIdentity",
           "projectTeamSizeViolation",
-          "projectPossibleTeamSize",
-          "projectRejectedClaim",
-          "projectNotSubmitted",
+          "projectDraft",
           "projectReopened",
         ] as const
       ).map((key) => ({ value: key, label: t(key) })),
     },
   ];
-  const columns: Column<ReconciliationRow>[] = [
+  const columns: Column<ProjectSubmission>[] = [
     {
       id: "project",
       className: "whitespace-normal",
       header: t("projectLabel"),
       sortValue: (row) => row.name.toLocaleLowerCase(),
       cell: (row) => (
-        <div className="min-w-0 max-w-64 space-y-1">
-          <span className="font-medium wrap-break-word">{row.name}</span>
-          <div className="type-meta font-mono">{row.code}</div>
-        </div>
-      ),
-    },
-    {
-      id: "source",
-      className: "whitespace-normal",
-      header: t("projectSubmissionSource"),
-      sortValue: (row) => row.source,
-      cell: (row) => (
-        <span className="text-muted-foreground text-sm">{t(SOURCE_LABELS[row.source])}</span>
+        <span className="block min-w-0 max-w-64 font-medium wrap-break-word">{row.name}</span>
       ),
     },
     {
       id: "team",
       header: t("teamMembers"),
       align: "right",
-      sortValue: (row) => row.project?.participantCount ?? 0,
+      sortValue: (row) => row.participantCount,
       cell: (row) => (
         <span className="tabular-nums">
-          {row.project
-            ? `${row.project.participantCount}${row.project.maxTeamSize ? ` / ${row.project.maxTeamSize}` : ""}`
-            : "—"}
+          {`${row.participantCount}${row.maxTeamSize ? ` / ${row.maxTeamSize}` : ""}`}
         </span>
       ),
     },
     {
       id: "eligibility",
       header: t("projectJudgingEligibility"),
-      sortValue: (row) => (row.project?.eligible ? 1 : 0),
+      sortValue: (row) => (row.eligible ? 1 : 0),
       cell: (row) =>
-        row.project?.status === "submitted" ? (
-          <StatusBadge tone={row.project.eligible ? "success" : "warning"}>
-            {t(row.project.eligible ? "projectEligible" : "projectIneligible")}
+        row.status === "submitted" ? (
+          <StatusBadge tone={row.eligible ? "success" : "warning"}>
+            {t(row.eligible ? "projectEligible" : "projectIneligible")}
           </StatusBadge>
         ) : (
-          <span className="type-meta">
-            {t(row.status === "not_submitted" ? "projectNotSubmitted" : "projectDraft")}
-          </span>
+          <span className="type-meta">{t("projectDraft")}</span>
         ),
     },
     {
       id: "review",
       className: "whitespace-normal",
       header: t("projectReviewIssue"),
-      sortValue: (row) => row.issues.length,
+      sortValue: (row) => submissionIssues(row).length,
       cell: (row) => (
         <div className="max-w-64 space-y-1 text-sm">
-          {row.issues.length ? (
-            row.issues.map((issue) => (
+          {submissionIssues(row).length ? (
+            submissionIssues(row).map((issue) => (
               <p key={issue} className="wrap-break-word text-pretty">
                 {t(issue)}
               </p>
@@ -223,19 +181,16 @@ export default function ReconciliationPage() {
     <PageLayout>
       <PageHeader
         className="flex-row items-center justify-between gap-2 md:items-center"
-        title={t("projectReconciliation")}
+        title={t("projectSubmissions")}
         secondaryActions={
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <IconButton variant="outline" label={t("moreActions")}>
-                <DotsThreeIcon aria-hidden="true" />
-              </IconButton>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link href="/projects/unmatched">{t("projectResolveIdentities")}</Link>
-              </DropdownMenuItem>
-              {canManageRules && (
+          canManageRules ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton variant="outline" label={t("moreActions")}>
+                  <DotsThreeIcon aria-hidden="true" />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
                 <DropdownMenuItem
                   onSelect={() => {
                     setError(null);
@@ -244,15 +199,15 @@ export default function ReconciliationPage() {
                 >
                   {t("projectSubmissionRules")}
                 </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : undefined
         }
       />
       <div className="space-y-4">
         <ListToolbar
           search={{
-            id: "reconciliation-search",
+            id: "submissions-search",
             label: t("searchProjectsPlaceholder"),
             value: query,
             onValueChange: setQuery,
@@ -265,7 +220,7 @@ export default function ReconciliationPage() {
         <DataTable
           columns={columns}
           data={filtered}
-          getRowId={(row) => row.key}
+          getRowId={(row) => String(row.id)}
           onRowClick={openReview}
           getRowLabel={(row) => row.name}
           pageSize={15}
@@ -279,7 +234,7 @@ export default function ReconciliationPage() {
             active: hasFilters,
             onClear: clearFilters,
             title:
-              scope === "issues" && !query && !sources.length && !issues.length
+              scope === "issues" && !query && !issues.length
                 ? t("projectNoReviewIssues")
                 : undefined,
           }}
@@ -292,18 +247,16 @@ export default function ReconciliationPage() {
             >
               <div className="min-w-0 flex-1 space-y-2">
                 <div className="font-medium wrap-break-word">{row.name}</div>
-                <div className="type-meta flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span className="font-mono">{row.code}</span>
-                  <span>{t(SOURCE_LABELS[row.source])}</span>
-                </div>
-                {row.issues.length > 0 && (
+                {submissionIssues(row).length > 0 && (
                   <p className="text-sm wrap-break-word text-pretty">
-                    {row.issues.map((issue) => t(issue)).join(" · ")}
+                    {submissionIssues(row)
+                      .map((issue) => t(issue))
+                      .join(" · ")}
                   </p>
                 )}
-                {row.project && (
-                  <StatusBadge tone={row.project.eligible ? "success" : "warning"}>
-                    {t(row.project.eligible ? "projectEligible" : "projectIneligible")}
+                {row.status === "submitted" && (
+                  <StatusBadge tone={row.eligible ? "success" : "warning"}>
+                    {t(row.eligible ? "projectEligible" : "projectIneligible")}
                   </StatusBadge>
                 )}
               </div>
@@ -318,31 +271,18 @@ export default function ReconciliationPage() {
       <Modal
         open={Boolean(selected)}
         onOpenChange={(open) => {
-          if (!open) setSelectedKey(null);
+          if (!open) setSelectedId(null);
         }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           if (reviewTrigger.current?.isConnected) reviewTrigger.current.focus();
-          else document.getElementById("reconciliation-search")?.focus();
+          else document.getElementById("submissions-search")?.focus();
         }}
-        title={selected?.name ?? t("projectReconciliation")}
+        title={selected?.name ?? t("projectSubmissions")}
         size="lg"
-        footer={
-          selected?.project && <ReconciliationActions project={selected.project} choose={choose} />
-        }
+        footer={selected && <SubmissionActions project={selected} choose={choose} />}
       >
-        {selected?.project ? (
-          <ReconciliationReview project={selected.project} choose={choose} load={load} />
-        ) : (
-          selected && (
-            <div className="space-y-4">
-              <code className="font-mono type-meta">{selected.code}</code>
-              <p className="text-sm">
-                {t(selected.status === "not_submitted" ? "projectNotSubmitted" : "projectDraft")}
-              </p>
-            </div>
-          )
-        )}
+        {selected && <SubmissionReview project={selected} choose={choose} />}
       </Modal>
       <SidePanelEditor
         open={rulesOpen}
@@ -396,10 +336,8 @@ export default function ReconciliationPage() {
         onOpenChange={(open) => {
           if (!open) setDecision(null);
         }}
-        title={decision?.title ?? t("projectReconciliation")}
-        description={t(
-          decision?.title === t("projectUnlink") ? "projectUnlinkImpact" : "projectResolveImpact",
-        )}
+        title={decision?.title ?? t("projectSubmissions")}
+        description={t("projectResolveImpact")}
         confirmLabel={decision?.title ?? t("save")}
         cancelLabel={t("cancel")}
         pending={busy}
@@ -420,9 +358,6 @@ export default function ReconciliationPage() {
       >
         <div className="space-y-4">
           <p className="font-medium">{decision?.project.name}</p>
-          {decision?.project.membershipDiffers && (
-            <ParticipantDifference state={decision.project} />
-          )}
           <div className="space-y-2">
             <label htmlFor="decision-reason" className="type-label">
               {t("projectReason")}

@@ -151,9 +151,7 @@ function VerifySecondaryInner() {
                 <CheckCircleIcon aria-hidden="true" className="size-6" />
               </div>
               <CardTitle>{t("secondaryEmailVerified")}</CardTitle>
-              <CardDescription>
-                {state.already ? t("alreadyVerifiedAddress") : t("willUseToMatchDevpost")}
-              </CardDescription>
+              {state.already && <CardDescription>{t("alreadyVerifiedAddress")}</CardDescription>}
             </CardHeader>
             <CardContent className="text-center">
               <Button asChild>

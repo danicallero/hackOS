@@ -194,7 +194,6 @@ export default function ReviewDetailPage() {
           <ProjectDescriptionLinks
             description={project.description}
             links={{
-              devpostUrl: project.devpostUrl,
               demoUrl: project.demoUrl,
               githubUrl: project.githubUrl,
             }}

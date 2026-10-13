@@ -29,10 +29,7 @@ beforeEach(async () => {
   if (!app) app = await buildTestApp();
   owner = await createUser({ email: "alice@school.test" });
   await admitParticipant(owner);
-  admin = await createUserWithCapabilities([
-    CAPABILITIES.PROJECTS_EDIT,
-    CAPABILITIES.QUEUE_ADMIN,
-  ]);
+  admin = await createUserWithCapabilities([CAPABILITIES.PROJECTS_EDIT, CAPABILITIES.QUEUE_ADMIN]);
   await setHackingWindow(true);
   await pool.query(`UPDATE event_config SET participants_can_create_projects=true WHERE id=1`);
 });
@@ -184,7 +181,13 @@ describe("project lifecycle and authorization (H19-H21, H53, #1006)", () => {
         ])
       ).rows.map((r) => r.action),
     ).toEqual(
-      expect.arrayContaining(["submit", "resolve_exception", "request_edits", "deny_edits", "unlock"]),
+      expect.arrayContaining([
+        "submit",
+        "resolve_exception",
+        "request_edits",
+        "deny_edits",
+        "unlock",
+      ]),
     );
   });
 

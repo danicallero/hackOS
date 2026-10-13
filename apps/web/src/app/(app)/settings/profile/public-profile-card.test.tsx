@@ -499,7 +499,7 @@ describe("DirectoryCard", () => {
         <DirectoryCard
           entry={{
             ...entry,
-            projects: [{ kind: "workGroup", id: 2, name: "Group" }],
+            projects: [{ kind: "project", id: 2, name: "Group" }],
             challenges: many,
           }}
         />,

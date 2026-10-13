@@ -1,14 +1,12 @@
 "use client";
 
-// Projects list (H20 read-only view). Repos imported from Devpost with team
-// size, mapped challenges / prizes and a matched-vs-unmatched indicator.
+// Projects list (H21): team size, submission state and challenge entries.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
-import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,7 +18,6 @@ import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { StatusBadge } from "@/components/common/status-badge";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,10 +32,6 @@ import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { ProjectFormDialog } from "./project-form-dialog";
 import { type ProjectRepo, toProjectRepo } from "./shared";
-
-function unmatchedCount(repo: ProjectRepo): number {
-  return repo.members.filter((m) => m.userId === null).length;
-}
 
 function buildColumns(t: Translate): Column<ProjectRepo>[] {
   return [
@@ -79,37 +72,14 @@ function buildColumns(t: Translate): Column<ProjectRepo>[] {
         ),
     },
     {
-      id: "prizes",
-      header: t("colPrizes"),
-      sortValue: (r) => r.prizes.length,
-      cell: (r) =>
-        r.prizes.length === 0 ? (
-          <span className="text-muted-foreground text-sm">—</span>
-        ) : (
-          <span className="text-muted-foreground text-sm">
-            {r.prizes.length === 1
-              ? t("prizeCountOne", { count: r.prizes.length })
-              : t("prizeCountOther", { count: r.prizes.length })}
-          </span>
-        ),
-    },
-    {
-      // Whether imported Devpost members resolved to hackOS accounts — not the
-      // team size next to it, which is why it needs its own header (#299).
-      id: "matched",
-      header: t("colLinking"),
-      align: "center",
-      sortValue: (r) => unmatchedCount(r),
-      cell: (r) => {
-        const unmatched = unmatchedCount(r);
-        if (r.members.length === 0)
-          return <span className="text-muted-foreground text-sm">{t("noMembers")}</span>;
-        return unmatched === 0 ? (
-          <StatusBadge tone="success">{t("allLinked")}</StatusBadge>
-        ) : (
-          <StatusBadge tone="warning">{t("unmatchedCount", { count: unmatched })}</StatusBadge>
-        );
-      },
+      id: "submission",
+      header: t("projectSubmission"),
+      sortValue: (r) => (r.submission_status === "submitted" ? 1 : 0),
+      cell: (r) => (
+        <StatusBadge tone={r.submission_status === "submitted" ? "success" : "neutral"}>
+          {t(r.submission_status === "submitted" ? "projectSubmittedStatus" : "projectDraft")}
+        </StatusBadge>
+      ),
     },
   ];
 }
@@ -118,17 +88,16 @@ export default function ProjectsPage() {
   const router = useRouter();
   const { t } = useLocale();
   const { can, canAny, me } = useSessionContext();
-  const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
   const canEdit = can(CAPABILITIES.PROJECTS_EDIT);
   const columns = useMemo(() => buildColumns(t), [t]);
   // H8/H40/H46/H55: judges + sponsor reps get a scoped list from the backend
   // (GET /api/repos, association-aware via enterprise_judges/sponsors — see
   // resolveRepoScope), independent of capabilities; full access via
-  // projects:read / projects:import. isEnterpriseJudge/isSponsorRep (not the
+  // projects:read. isEnterpriseJudge/isSponsorRep (not the
   // single-priority `role`, which collapses a sponsor-rep-who-also-judges to
   // "judge") are what those associations actually are.
   const canView =
-    canAny(CAPABILITIES.PROJECTS_READ, CAPABILITIES.PROJECTS_IMPORT, CAPABILITIES.JUDGE_PANEL) ||
+    canAny(CAPABILITIES.PROJECTS_READ, CAPABILITIES.JUDGE_PANEL) ||
     Boolean(me?.isEnterpriseJudge) ||
     Boolean(me?.isSponsorRep);
   const [repos, setRepos] = useState<ProjectRepo[]>([]);
@@ -181,7 +150,7 @@ export default function ProjectsPage() {
         className="flex-row items-center justify-between gap-2 md:items-center [&>[data-slot=action-group]]:shrink-0 [&>[data-slot=action-group]]:flex-nowrap"
         title={t("projects")}
         secondaryActions={
-          canImport || canEdit ? (
+          canEdit ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <IconButton label={t("moreActions")} variant="outline">
@@ -189,19 +158,9 @@ export default function ProjectsPage() {
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {canEdit && (
-                  <DropdownMenuItem asChild>
-                    <Link href="/projects/reconciliation">{t("projectReconciliation")}</Link>
-                  </DropdownMenuItem>
-                )}
-                {canImport && (
-                  <DropdownMenuItem asChild>
-                    <Link href="/projects/import">
-                      <UploadSimpleIcon aria-hidden="true" />
-                      {t("importFromDevpost")}
-                    </Link>
-                  </DropdownMenuItem>
-                )}
+                <DropdownMenuItem asChild>
+                  <Link href="/projects/submissions">{t("projectSubmissions")}</Link>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : undefined
@@ -225,7 +184,7 @@ export default function ProjectsPage() {
         getRowHref={(r) => `/projects/${r.id}`}
         getRowLabel={(r) => r.name}
         searchable={(r) =>
-          `${r.name} ${r.prizes.join(" ")} ${r.challenges.map((c) => c.title).join(" ")} ${r.members
+          `${r.name} ${r.challenges.map((c) => c.title).join(" ")} ${r.members
             .map((m) => `${m.name ?? ""} ${m.surname ?? ""} ${m.email ?? ""}`)
             .join(" ")}`
         }
@@ -242,13 +201,15 @@ export default function ProjectsPage() {
               <p className="font-medium wrap-break-word">{repo.name}</p>
               <div className="flex flex-wrap items-center gap-3">
                 <p className="text-sm text-muted-foreground">
-                  {t("workGroupMembers", { count: repo.members.length })}
+                  {t("teamMemberCount", { count: repo.members.length })}
                 </p>
-                {unmatchedCount(repo) > 0 && (
-                  <StatusBadge tone="warning">
-                    {t("unmatchedCount", { count: unmatchedCount(repo) })}
-                  </StatusBadge>
-                )}
+                <StatusBadge tone={repo.submission_status === "submitted" ? "success" : "neutral"}>
+                  {t(
+                    repo.submission_status === "submitted"
+                      ? "projectSubmittedStatus"
+                      : "projectDraft",
+                  )}
+                </StatusBadge>
               </div>
               <div className="space-y-2">
                 {repo.challenges.map((challenge) => (
@@ -265,17 +226,7 @@ export default function ProjectsPage() {
             />
           </Link>
         )}
-        empty={{
-          icon: FolderSimpleIcon,
-          title: t("noProjectsYet"),
-          description: canImport ? t("importDevpostToStart") : t("projectsAppearAfterImport"),
-          action: canImport ? (
-            <Button type="button" onClick={() => router.push("/projects/import")}>
-              <UploadSimpleIcon aria-hidden="true" />
-              {t("importFromDevpost")}
-            </Button>
-          ) : undefined,
-        }}
+        empty={{ icon: FolderSimpleIcon, title: t("noProjectsYet") }}
       />
     </PageLayout>
   );

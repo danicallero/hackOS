@@ -1,8 +1,8 @@
 "use client";
 
-// Native project create/edit form (H18) shared with participant
-// self-creation (H19). Metadata + optional challenge lineup on create;
-// team membership stays on the detail page (H21 surfaces).
+// Project create/edit form shared by staff (H21) and participants (H19/H20).
+// Metadata + optional challenge lineup on create, judging preference on edit;
+// team membership stays on the detail page.
 
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { FolderPlusIcon } from "@phosphor-icons/react/dist/csr/FolderPlus";
@@ -15,19 +15,37 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { createMyProject, createRepo, updateMyProject, updateRepo } from "@/lib/projects";
+import {
+  createMyProject,
+  createRepo,
+  type PresentationTimingPreference,
+  updateMyProject,
+  updateRepo,
+} from "@/lib/projects";
 import { toast } from "@/lib/toast";
-import { type ChallengeOption, challengeTitleText, type ProjectRepo } from "./shared";
+import {
+  type ChallengeOption,
+  challengeTitleText,
+  type ProjectRepo,
+  timingEditable,
+} from "./shared";
 
 export type ProjectFormMode =
-  | { kind: "create" } // org-side (PROJECTS_EDIT), full challenge catalogue
+  | { kind: "create" } // staff (PROJECTS_EDIT), full challenge catalogue
   | { kind: "self" } // participant (H19), public challenges only
-  | { kind: "edit"; repo: ProjectRepo } // org-side metadata edit (PROJECTS_EDIT)
-  | { kind: "self-edit"; repo: ProjectRepo }; // participant self-edit (H19/H20)
+  | { kind: "edit"; repo: ProjectRepo } // staff metadata edit (PROJECTS_EDIT)
+  | { kind: "self-edit"; repo: ProjectRepo }; // participant self-edit (H20)
 
 export function ProjectFormDialog({
   mode,
@@ -45,6 +63,10 @@ export function ProjectFormDialog({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [githubUrl, setGithubUrl] = useState(initial?.github_url ?? "");
   const [demoUrl, setDemoUrl] = useState(initial?.demo_url ?? "");
+  const [timing, setTiming] = useState<PresentationTimingPreference>(
+    initial?.presentation_timing_preference ?? "no_preference",
+  );
+  const canEditTiming = initial ? timingEditable(initial) : false;
   const [challengeIds, setChallengeIds] = useState<string[]>([]);
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
   const [pending, setPending] = useState(false);
@@ -63,6 +85,7 @@ export function ProjectFormDialog({
     setDescription(initial?.description ?? "");
     setGithubUrl(initial?.github_url ?? "");
     setDemoUrl(initial?.demo_url ?? "");
+    setTiming(initial?.presentation_timing_preference ?? "no_preference");
     setChallengeIds([]);
   }
 
@@ -78,6 +101,7 @@ export function ProjectFormDialog({
           name: name.trim(),
           description: description.trim(),
           ...urls,
+          ...(canEditTiming ? { presentationTimingPreference: timing } : {}),
         };
         const updated =
           mode.kind === "edit"
@@ -194,6 +218,36 @@ export function ProjectFormDialog({
             </div>
           </div>
         </SectionCard>
+        {initial && (
+          <SectionCard title={t("judgingPreference")}>
+            <div className="space-y-2">
+              <Select
+                value={timing}
+                disabled={!canEditTiming}
+                onValueChange={(value) => setTiming(value as PresentationTimingPreference)}
+              >
+                <SelectTrigger
+                  id="project-timing"
+                  aria-label={t("judgingPreference")}
+                  aria-describedby={!canEditTiming ? "project-timing-locked" : undefined}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="no_preference">{t("judgingPreferenceNone")}</SelectItem>
+                  <SelectItem value="early">{t("judgingPreferenceEarly")}</SelectItem>
+                  <SelectItem value="middle">{t("judgingPreferenceMiddle")}</SelectItem>
+                  <SelectItem value="late">{t("judgingPreferenceLate")}</SelectItem>
+                </SelectContent>
+              </Select>
+              {!canEditTiming && (
+                <p id="project-timing-locked" className="text-xs text-muted-foreground">
+                  {t("projectTimingLocked")}
+                </p>
+              )}
+            </div>
+          </SectionCard>
+        )}
         {!isEdit && (
           <SectionCard title={t("challenges")}>
             <div className="space-y-2">

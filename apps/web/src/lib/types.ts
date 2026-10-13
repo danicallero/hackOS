@@ -46,7 +46,7 @@ export interface Me {
   isSponsorRep: boolean;
   /** Current role-derived event entitlement — drives ticket/wallet exposure and participant-only nav. */
   hasEventAccess: boolean;
-  /** Has a project of their own (submission or Devpost participant) — drives My project nav visibility (issue #424). */
+  /** Has a project of their own (active team membership) — drives My project nav visibility (issue #424). */
   hasProject: boolean;
   /** Has at least one active queue entry — drives My queue nav visibility (issue #424). */
   hasQueueItems: boolean;

@@ -1,15 +1,7 @@
 "use client";
-import { LinkIcon } from "@phosphor-icons/react/dist/csr/Link";
-import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
-import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useEffect, useMemo, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
-import { UserPicker } from "@/components/common/user-picker";
-import {
-  fetchMemberCandidates,
-  IdentityAccountPicker,
-} from "@/components/projects/identity-account-picker";
-import { MANUAL_SEARCH_LIMIT } from "@/components/projects/identity-matches";
+import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,60 +11,50 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ApiError } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { linkSecondaryEmail, removeDevpostParticipant, removeRepoMember } from "@/lib/projects";
+import { removeRepoMember } from "@/lib/projects";
 import { toast } from "@/lib/toast";
 import { type ChallengeOption, challengeTitleText, type ProjectRepo } from "../shared";
 
-function searchMemberCandidates(query: string) {
-  return fetchMemberCandidates(query, MANUAL_SEARCH_LIMIT);
+const MEMBER_SEARCH_LIMIT = 20;
+
+async function searchMemberCandidates(q: string) {
+  return (
+    await api.get<{ users: UserOption[] }>("/api/projects/member-candidates", {
+      query: { q, limit: MEMBER_SEARCH_LIMIT },
+    })
+  ).users;
 }
 
 export function MemberRemoveButton({
   repoId,
   userId,
-  email,
-  imported,
-  secondaryLinked = false,
   onRemoved,
 }: {
   repoId: number;
   userId: number;
-  email: string | null;
-  imported: boolean;
-  secondaryLinked?: boolean;
   onRemoved: () => Promise<void>;
 }) {
   const { t } = useLocale();
   const [busy, setBusy] = useState(false);
-  const title = secondaryLinked
-    ? t("unlinkSecondaryProjectAccountTitle")
-    : t("removeProjectMemberTitle");
-  const description = secondaryLinked
-    ? t("unlinkSecondaryProjectAccountDesc")
-    : imported
-      ? t("removeImportedParticipantDesc")
-      : t("removeProjectMemberDesc");
-  const confirmLabel = secondaryLinked ? t("unlinkSecondaryProjectAccountAction") : t("remove");
   return (
     <AlertModal
-      title={title}
-      description={description}
+      title={t("removeProjectMemberTitle")}
+      description={t("removeProjectMemberDesc")}
       cancelLabel={t("cancel")}
-      confirmLabel={confirmLabel}
+      confirmLabel={t("remove")}
       destructive
       pending={busy}
       trigger={
         <Button variant="outline" size="sm">
-          {confirmLabel}
+          {t("remove")}
         </Button>
       }
       onConfirm={async () => {
         setBusy(true);
         try {
-          if (imported && email) await removeDevpostParticipant(repoId, email);
-          else await removeRepoMember(repoId, userId);
+          await removeRepoMember(repoId, userId);
           toast.success(t("memberRemoved"), { compactTitle: t("toastRemoveMember") });
           await onRemoved();
         } catch (err) {
@@ -85,125 +67,6 @@ export function MemberRemoveButton({
         }
       }}
     />
-  );
-}
-
-export function DevpostParticipantActions({
-  repoId,
-  email,
-  name,
-  surname,
-  canDelete,
-  canLink,
-  onChanged,
-}: {
-  repoId: number;
-  email: string;
-  name: string | null;
-  surname: string | null;
-  canDelete: boolean;
-  canLink: boolean;
-  onChanged: () => Promise<void>;
-}) {
-  const { t } = useLocale();
-  const [open, setOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState("");
-  const [busy, setBusy] = useState<"delete" | "link" | null>(null);
-  const dialogId = `devpost-link-${repoId}-${email}`;
-
-  async function deleteParticipant() {
-    setBusy("delete");
-    try {
-      await removeDevpostParticipant(repoId, email);
-      toast.success(t("participantDeleted"), { compactTitle: t("toastDeleteParticipant") });
-      await onChanged();
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotDeleteParticipant"),
-        t("toastDeleteParticipant"),
-      );
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function linkParticipant() {
-    if (!selectedUserId) return;
-    setBusy("link");
-    try {
-      await linkSecondaryEmail(repoId, email, Number(selectedUserId));
-      toast.success(t("verificationEmailSentLinked"), { compactTitle: t("toastLinkParticipant") });
-      setOpen(false);
-      setSelectedUserId("");
-      await onChanged();
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLinkParticipant"),
-        t("toastLinkParticipant"),
-      );
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      {canLink && (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-expanded={open}
-            aria-controls={dialogId}
-            onClick={() => setOpen((current) => !current)}
-          >
-            <UserPlusIcon aria-hidden="true" className="size-4" />
-            {t("linkParticipantToUser")}
-          </Button>
-          {open && (
-            <div id={dialogId} className="grid w-full gap-2">
-              <Label htmlFor={`${dialogId}-user`} className="sr-only">
-                {t("userForEmail", { email })}
-              </Label>
-              <IdentityAccountPicker
-                id={`${dialogId}-user`}
-                person={{ name, surname, email }}
-                value={selectedUserId}
-                onChange={setSelectedUserId}
-              />
-              <Button
-                type="button"
-                size="sm"
-                disabled={!selectedUserId || busy === "link"}
-                onClick={linkParticipant}
-                loading={busy === "link"}
-              >
-                <LinkIcon aria-hidden="true" className="size-4" />
-                {t("link")}
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-      {canDelete && (
-        <AlertModal
-          title={t("removeImportedParticipantTitle")}
-          description={t("removeImportedParticipantDesc")}
-          cancelLabel={t("cancel")}
-          confirmLabel={t("deleteAction")}
-          destructive
-          pending={busy === "delete"}
-          trigger={
-            <Button type="button" variant="outline" size="sm" disabled={busy !== null}>
-              <TrashIcon aria-hidden="true" className="size-4" />
-              {t("deleteAction")}
-            </Button>
-          }
-          onConfirm={deleteParticipant}
-        />
-      )}
-    </div>
   );
 }
 
@@ -221,8 +84,7 @@ export function ProjectMemberAdder({
   const [busy, setBusy] = useState(false);
 
   const memberUserIds = useMemo(
-    () =>
-      new Set(currentMembers.flatMap((member) => (member.userId === null ? [] : [member.userId]))),
+    () => new Set(currentMembers.map((member) => member.userId)),
     [currentMembers],
   );
   const searchAvailableMembers = useMemo(

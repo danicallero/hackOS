@@ -21,9 +21,9 @@ import {
   queueFixtureMarker,
 } from "../queue/broadcast.js";
 import { assertQueueChallengeScope, assertQueueRepoScope } from "../queue/fixture-scope.js";
+import { GROUP_SIBLING_CHALLENGE_IDS_SQL } from "../queue/groups.js";
 import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged, repoMemberIds } from "../queue/notify.js";
-import { GROUP_SIBLING_CHALLENGE_IDS_SQL } from "../queue/groups.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
 import { RESET_PRESENTATION_CLOCK_SQL } from "../queue/presentation-clock.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
@@ -675,7 +675,13 @@ export async function enterChallenge(
 
 async function announceEntered(result: { entry: EnqueueOutcome["entry"] | null }) {
   if (!result.entry) return;
-  await broadcastQueueEvent(pool, "entry", result.entry.id, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
+  await broadcastQueueEvent(
+    pool,
+    "entry",
+    result.entry.id,
+    EVENTS.QUEUE_ENTRY_CHANGED,
+    result.entry,
+  );
   await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
 }
 
@@ -1131,7 +1137,15 @@ async function insertRepo(
              CASE WHEN $7 = 'submitted' THEN 'admin' END,
              CASE WHEN $7 = 'submitted' THEN now() END)
      RETURNING ${REPO_COLUMNS}`,
-    [input.name, input.description, input.githubUrl, input.demoUrl, createdBy, fixtureMarker, status],
+    [
+      input.name,
+      input.description,
+      input.githubUrl,
+      input.demoUrl,
+      createdBy,
+      fixtureMarker,
+      status,
+    ],
   );
   return rows[0];
 }

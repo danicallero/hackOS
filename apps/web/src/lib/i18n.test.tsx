@@ -162,7 +162,7 @@ describe("LocaleProvider hydration", () => {
     "es",
     "gl",
     "en",
-  ] as const)("interpolates project codes and judging estimates in %s", async (language) => {
+  ] as const)("interpolates judging times and estimates in %s", async (language) => {
     window.__hackosInitialLanguage = language;
     const container = document.createElement("div");
     document.body.append(container);
@@ -170,7 +170,7 @@ describe("LocaleProvider hydration", () => {
       const { t } = useLocale();
       return (
         <div>
-          {t("projectDevpostCode", { code: "K7M4Q" })} {t("judgingClosesAt", { time: "18:00" })}{" "}
+          {t("judgingClosesAt", { time: "18:00" })}{" "}
           {t("judgingEstimatedCycle", { minutes: "12", count: "3" })}
         </div>
       );
@@ -183,7 +183,6 @@ describe("LocaleProvider hydration", () => {
         </LocaleProvider>,
       );
     });
-    expect(container.textContent).toContain("K7M4Q");
     expect(container.textContent).toContain("18:00");
     expect(container.textContent).toContain("12");
     expect(container.textContent).not.toMatch(/[{}]/);

@@ -14,17 +14,8 @@ import { TrackTiming } from "@/components/projects/track-timing";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { listDevpostPrizes } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
 import { type Challenge, isScheduled, textForDisplay, visibilityTone } from "../shared";
-
-type DevpostPrize = {
-  name: string;
-  lastBatch: string | null;
-  repoCount: number;
-  mappedChallengeId: number | null;
-  mappedChallengeTitle: string | null;
-};
 
 import { ChallengeAlertDialog } from "./challenge-alert-dialog";
 import { EditCard } from "./challenge-cards";
@@ -33,16 +24,14 @@ export default function ChallengeDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const { t } = useLocale();
-  const { can, canAny, me } = useSessionContext();
+  const { canAny, me } = useSessionContext();
   const canAdmin = canAny(
     CAPABILITIES.SPONSORS_MANAGE,
     CAPABILITIES.QUEUE_ADMIN,
     CAPABILITIES.CHALLENGES_MANAGE,
   );
   const canAlert = canAdmin || Boolean(me?.isSponsorRep);
-  const canMapPrizes = can(CAPABILITIES.QUEUE_ADMIN);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
-  const [devpostPrizes, setDevpostPrizes] = useState<DevpostPrize[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -53,18 +42,12 @@ export default function ChallengeDetailPage() {
     try {
       const data = await api.get<Challenge>(`/api/challenges/${id}`);
       setChallenge(data);
-      if (canMapPrizes) {
-        const prizes = await listDevpostPrizes();
-        setDevpostPrizes(prizes.prizes);
-      } else {
-        setDevpostPrizes([]);
-      }
       setStatus("ready");
     } catch (err) {
       setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadChallenge"));
       setStatus("error");
     }
-  }, [canMapPrizes, id, t]);
+  }, [id, t]);
 
   // Soft, in-place refresh instead of a hard reload when another admin edits
   // this challenge elsewhere.
@@ -127,13 +110,7 @@ export default function ChallengeDetailPage() {
         }
       />
 
-      <EditCard
-        challenge={challenge}
-        canAdmin={canAdmin}
-        canMapPrizes={canMapPrizes}
-        devpostPrizes={devpostPrizes}
-        onSaved={load}
-      />
+      <EditCard challenge={challenge} canAdmin={canAdmin} onSaved={load} />
     </PageLayout>
   );
 }

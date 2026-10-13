@@ -885,10 +885,10 @@ describe("self-service account removal (H54)", () => {
     ).toBe(1);
     expect(
       (
-        await pool.query(
-          `SELECT user_id FROM submissions WHERE repo_id = $1 AND user_id = $2`,
-          [repoId, surviving],
-        )
+        await pool.query(`SELECT user_id FROM submissions WHERE repo_id = $1 AND user_id = $2`, [
+          repoId,
+          surviving,
+        ])
       ).rows,
     ).toEqual([{ user_id: surviving }]);
   });

@@ -2,8 +2,9 @@
 import { EVENTS } from "@hackos/shared/events";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
@@ -16,7 +17,6 @@ import { PresentationStatus } from "@/components/projects/presentation-status";
 import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
 import { ProjectLifecycle } from "@/components/projects/project-submission";
-import { WorkGroupEditor } from "@/components/projects/work-group-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -24,27 +24,29 @@ import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
   addMyProjectChallenge,
+  deleteMyProject,
   inviteProjectMember,
+  leaveMyProject,
   myProjects,
-  myWorkGroups,
-  type PlannedWorkGroup,
   removeMyProjectChallenge,
 } from "@/lib/projects";
 import { showErrorToast, toast } from "@/lib/toast";
-import { ProjectFormDialog } from "../../../projects/project-form-dialog";
+import { ProjectFormDialog } from "../../projects/project-form-dialog";
 import {
   type ChallengeOption,
   challengeTitleText,
   memberName,
   type ProjectRepo,
   toProjectRepo,
-} from "../../../projects/shared";
+} from "../../projects/shared";
 
 export default function MyProjectDetailPage() {
   const { t } = useLocale();
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const [exit, setExit] = useState<"leave" | "delete" | null>(null);
+  const [exiting, setExiting] = useState(false);
   const [project, setProject] = useState<ProjectRepo | null>(null);
-  const [group, setGroup] = useState<PlannedWorkGroup | null>(null);
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -53,14 +55,12 @@ export default function MyProjectDetailPage() {
   const load = useCallback(async () => {
     setLoadError(null);
     try {
-      const [result, catalogue, planned] = await Promise.all([
+      const [result, catalogue] = await Promise.all([
         myProjects(),
         api.get<{ items: ChallengeOption[] }>("/api/public/challenges"),
-        myWorkGroups(),
       ]);
       setProject(result.projects.map(toProjectRepo).find((item) => item.id === Number(id)) ?? null);
       setChallenges(catalogue.items);
-      setGroup(planned.groups.find((item) => item.linked_repo_id === Number(id)) ?? null);
     } catch (error) {
       toast.error(
         error instanceof ApiError ? error.message : t("couldNotLoadProject"),
@@ -93,29 +93,31 @@ export default function MyProjectDetailPage() {
       <PageHeader
         className="flex-row items-center justify-between gap-2 md:items-center [&>[data-slot=action-group]]:shrink-0 [&>[data-slot=action-group]]:flex-nowrap"
         title={project.name}
-        secondaryActions={<ProjectNavigation />}
+        secondaryActions={
+          <ProjectNavigation
+            onLeave={
+              !project.locked_at && project.members.length > 1 ? () => setExit("leave") : undefined
+            }
+            onDelete={
+              !project.locked_at && project.members.length === 1 && !project.submitted_at
+                ? () => setExit("delete")
+                : undefined
+            }
+          />
+        }
         primaryAction={
-          project.locked_at ? undefined : group ? (
-            <WorkGroupEditor
+          project.locked_at ? undefined : (
+            <ProjectFormDialog
               key={JSON.stringify([
                 project.name,
-                group.presentation_timing_preference,
                 project.description,
                 project.github_url,
                 project.demo_url,
+                project.presentation_timing_preference,
               ])}
-              group={{
-                ...group,
-                name: project.name,
-                description: project.description ?? "",
-                github_url: project.github_url,
-                demo_url: project.demo_url,
-                devpost_url: project.devpost_url,
-              }}
+              mode={{ kind: "self-edit", repo: project }}
               onSaved={load}
             />
-          ) : (
-            <ProjectFormDialog mode={{ kind: "self-edit", repo: project }} onSaved={load} />
           )
         }
       />
@@ -123,8 +125,6 @@ export default function MyProjectDetailPage() {
         key={JSON.stringify([project.locked_at, project.submission_status])}
         id={project.id}
         name={project.name}
-        stage="projects"
-        code={project.reconciliation_code}
         onChanged={load}
       >
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
@@ -133,7 +133,6 @@ export default function MyProjectDetailPage() {
               <ProjectDescriptionLinks
                 description={project.description}
                 links={{
-                  devpostUrl: project.devpost_url,
                   demoUrl: project.demo_url,
                   githubUrl: project.github_url,
                 }}
@@ -150,11 +149,8 @@ export default function MyProjectDetailPage() {
               }
             >
               <ul className="divide-y divide-border/60">
-                {project.members.map((member, index) => (
-                  <li
-                    className="py-2 text-sm font-medium"
-                    key={`${member.userId ?? "devpost"}:${member.email ?? index}`}
-                  >
+                {project.members.map((member) => (
+                  <li className="py-2 text-sm font-medium" key={member.userId}>
                     {memberName(member) || t("unnamedTeamMember")}
                   </li>
                 ))}
@@ -233,16 +229,16 @@ export default function MyProjectDetailPage() {
               ))}
             </ul>
             <dl className="flex flex-wrap justify-between gap-2 border-t border-border pt-4 text-sm">
-              <dt className="text-muted-foreground">{t("workGroupTiming")}</dt>
+              <dt className="text-muted-foreground">{t("judgingPreference")}</dt>
               <dd className="font-medium">
                 {t(
                   project.presentation_timing_preference === "early"
-                    ? "workGroupTimingEarly"
+                    ? "judgingPreferenceEarly"
                     : project.presentation_timing_preference === "middle"
-                      ? "workGroupTimingMiddle"
+                      ? "judgingPreferenceMiddle"
                       : project.presentation_timing_preference === "late"
-                        ? "workGroupTimingLate"
-                        : "workGroupTimingNone",
+                        ? "judgingPreferenceLate"
+                        : "judgingPreferenceNone",
                 )}
               </dd>
             </dl>
@@ -250,6 +246,33 @@ export default function MyProjectDetailPage() {
           </SectionCard>
         </div>
       </ProjectLifecycle>
+      <AlertModal
+        open={exit !== null}
+        onOpenChange={(open) => {
+          if (!open) setExit(null);
+        }}
+        title={t(exit === "delete" ? "deleteProjectTitle" : "leaveProjectTitle")}
+        description={t(exit === "delete" ? "deleteProjectDesc" : "leaveProjectDesc")}
+        confirmLabel={t(exit === "delete" ? "deleteProjectCta" : "leaveProjectCta")}
+        cancelLabel={t("cancel")}
+        destructive
+        pending={exiting}
+        onConfirm={async () => {
+          setExiting(true);
+          try {
+            if (exit === "delete") await deleteMyProject(project.id, crypto.randomUUID());
+            else await leaveMyProject(project.id, crypto.randomUUID());
+            router.replace("/my-project?view=all");
+          } catch (error) {
+            toast.error(
+              error instanceof ApiError ? error.message : t("couldNotDeleteProject"),
+              t(exit === "delete" ? "deleteProjectCta" : "leaveProjectCta"),
+            );
+          } finally {
+            setExiting(false);
+          }
+        }}
+      />
     </PageLayout>
   );
 }

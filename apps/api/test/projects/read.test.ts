@@ -366,10 +366,7 @@ describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
   }
 
   /** Enterprise + sponsor(user) + challenge authored by that sponsor. */
-  async function createSponsorChallenge(
-    sponsorUserId: number,
-    title: string,
-  ): Promise<number> {
+  async function createSponsorChallenge(sponsorUserId: number, title: string): Promise<number> {
     const { pool } = await import("../../src/db/pool.js");
     const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
       `Ent ${crypto.randomUUID().slice(0, 8)}`,
@@ -626,9 +623,9 @@ describe("GET /api/me/projects (participant self-view)", () => {
       url: `/api/repos/${beans}`,
       headers: asUser(operator),
     });
-    expect(
-      (roster.json().members as { userId: number }[]).some((m) => m.userId === aliceId),
-    ).toBe(false);
+    expect((roster.json().members as { userId: number }[]).some((m) => m.userId === aliceId)).toBe(
+      false,
+    );
 
     const queue = await server.inject({
       method: "GET",

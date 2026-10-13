@@ -27,7 +27,7 @@ export interface DirectoryEntry {
   socials: SocialLink[];
   /** Authenticated API path, only while the person shares their CV. */
   cvUrl: string | null;
-  projects: { kind: "project" | "workGroup"; id: number; name: string }[];
+  projects: { kind: "project"; id: number; name: string }[];
   challenges: { id: number; name: string }[];
 }
 

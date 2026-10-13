@@ -1,8 +1,8 @@
 "use client";
 
-// A participant sees a team preparing (or presenting) to challenges. Projects,
-// planned work groups and their queue status are one model, not destinations to
-// reconcile mentally (H19, H20, H38, #852).
+// A participant sees each project they are on — draft or submitted — with its
+// challenges and queue status: one model from draft to judging (H19, H20,
+// H38, #1006).
 import { EVENTS } from "@hackos/shared/events";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
@@ -10,42 +10,32 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
-import { MultiSelect, type MultiSelectOption } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
-import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
+import { StatusBadge } from "@/components/common/status-badge";
 import { PresentationStatus } from "@/components/projects/presentation-status";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
   acceptProjectInvite,
-  createWorkGroup,
   declineProjectInvite,
   myPendingInvites,
   myProjects,
-  myWorkGroups,
   type PendingInvite,
-  type PlannedWorkGroup,
 } from "@/lib/projects";
 import { getMyQueue, type MyQueueEntry } from "@/lib/queue";
 import { toast } from "@/lib/toast";
-import {
-  type ChallengeOption,
-  challengeTitleText,
-  type ProjectRepo,
-  toProjectRepo,
-} from "../projects/shared";
+import { ProjectFormDialog } from "../projects/project-form-dialog";
+import { challengeTitleText, type ProjectRepo, toProjectRepo } from "../projects/shared";
 
 export default function MyProjectPage() {
   const { t } = useLocale();
   const router = useRouter();
   const [projects, setProjects] = useState<ProjectRepo[]>([]);
-  const [groups, setGroups] = useState<PlannedWorkGroup[]>([]);
   const [queue, setQueue] = useState<MyQueueEntry[]>([]);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [canCreate, setCanCreate] = useState(false);
@@ -54,31 +44,24 @@ export default function MyProjectPage() {
 
   const load = useCallback(async () => {
     try {
-      const [projectsRes, groupsRes, invitesRes, queueRes] = await Promise.all([
+      const [projectsRes, invitesRes, queueRes] = await Promise.all([
         myProjects(),
-        myWorkGroups(),
         myPendingInvites(),
         getMyQueue(),
       ]);
       setProjects(projectsRes.projects.map(toProjectRepo));
-      setGroups(groupsRes.groups);
       setInvites(invitesRes.invites);
-      setCanCreate(groupsRes.canCreate);
+      setCanCreate(projectsRes.canCreate);
       setQueue(queueRes);
-      const unlinkedGroups = groupsRes.groups.filter(
-        (group) => !projectsRes.projects.some((project) => project.id === group.linked_repo_id),
-      );
+      const [only] = projectsRes.projects;
       if (
         new URLSearchParams(window.location.search).get("view") !== "all" &&
         invitesRes.invites.length === 0 &&
-        projectsRes.projects.length + unlinkedGroups.length === 1
+        projectsRes.projects.length === 1 &&
+        only
       ) {
         setRedirecting(true);
-        router.replace(
-          projectsRes.projects.length === 1
-            ? `/my-project/projects/${projectsRes.projects[0].id}`
-            : `/my-project/work-groups/${unlinkedGroups[0].id}`,
-        );
+        router.replace(`/my-project/${only.id}`);
       }
     } catch (error) {
       toast.error(
@@ -118,10 +101,17 @@ export default function MyProjectPage() {
     <PageLayout>
       <PageHeader
         title={t("myProjects")}
-        primaryAction={canCreate ? <CreateWorkGroup onCreated={load} /> : undefined}
+        primaryAction={
+          canCreate ? (
+            <ProjectFormDialog
+              mode={{ kind: "self" }}
+              onSaved={(repoId) => router.push(`/my-project/${repoId}`)}
+            />
+          ) : undefined
+        }
       />
       {invites.length > 0 && <PendingInvitesCard invites={invites} onChanged={load} />}
-      {projects.length === 0 && groups.length === 0 ? (
+      {projects.length === 0 ? (
         <EmptyState
           icon={FolderSimpleIcon}
           title={t("myProjectsEmptyTitle")}
@@ -136,96 +126,9 @@ export default function MyProjectPage() {
               project={project}
             />
           ))}
-          {groups
-            // Once an exact Devpost match turns a planned group into one of the
-            // caller's projects, show its operational card once rather than
-            // making participants choose between two representations.
-            .filter(
-              (group) =>
-                group.linked_repo_id == null ||
-                !projects.some((project) => project.id === group.linked_repo_id),
-            )
-            .map((group) => (
-              <WorkGroupCard group={group} key={group.id} />
-            ))}
         </div>
       )}
     </PageLayout>
-  );
-}
-
-function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
-  const { t } = useLocale();
-  const [name, setName] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [challengeIds, setChallengeIds] = useState<string[]>([]);
-  const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
-  useEffect(() => {
-    if (!open) return;
-    api
-      .get<{ items: ChallengeOption[] }>("/api/public/challenges")
-      .then((result) => setChallenges(result.items))
-      .catch(() => setChallenges([]));
-  }, [open]);
-  async function create() {
-    setSaving(true);
-    try {
-      await createWorkGroup(name.trim(), challengeIds.map(Number), crypto.randomUUID());
-      setName("");
-      setChallengeIds([]);
-      setOpen(false);
-      await onCreated();
-    } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotCreateWorkGroup"),
-        t("toastCreateProject"),
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-  return (
-    <SidePanelEditor
-      open={open}
-      onOpenChange={setOpen}
-      trigger={<Button>{t("createMyProjectCta")}</Button>}
-      title={t("createMyProjectCta")}
-      footer={
-        <Button disabled={saving || !name.trim()} onClick={create} loading={saving}>
-          {t("createMyProjectCta")}
-        </Button>
-      }
-    >
-      <div className="space-y-2">
-        <label className="text-sm font-medium" htmlFor="work-group-name">
-          {t("projectNameLabel")}
-        </label>
-        <Input
-          id="work-group-name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-      </div>
-      <div className="mt-4 space-y-2">
-        <label className="text-sm font-medium" htmlFor="work-group-challenges">
-          {t("challenges")}
-        </label>
-        <MultiSelect
-          inDialog
-          id="work-group-challenges"
-          options={challenges.map(
-            (challenge): MultiSelectOption => ({
-              value: String(challenge.id),
-              label: challengeTitleText(challenge.title),
-            }),
-          )}
-          value={challengeIds}
-          onChange={setChallengeIds}
-          placeholder={t("selectChallengePlaceholder")}
-        />
-      </div>
-    </SidePanelEditor>
   );
 }
 
@@ -235,9 +138,14 @@ function ProjectCard({ project, entries }: { project: ProjectRepo; entries: MyQu
   return (
     <SectionCard
       title={project.name}
+      state={
+        <StatusBadge tone={project.submission_status === "submitted" ? "success" : "neutral"}>
+          {t(project.submission_status === "submitted" ? "projectSubmittedStatus" : "projectDraft")}
+        </StatusBadge>
+      }
       action={
         <Button asChild size="sm" variant="outline">
-          <Link href={`/my-project/projects/${project.id}`}>{t("openProject")}</Link>
+          <Link href={`/my-project/${project.id}`}>{t("openProject")}</Link>
         </Button>
       }
     >
@@ -255,31 +163,6 @@ function ProjectCard({ project, entries }: { project: ProjectRepo; entries: MyQu
             />
           ))}
         {project.challenges.length === 0 && entries.length === 0 && (
-          <p className="text-sm text-muted-foreground">{t("noChallenges")}</p>
-        )}
-      </div>
-    </SectionCard>
-  );
-}
-
-function WorkGroupCard({ group }: { group: PlannedWorkGroup }) {
-  const { t } = useLocale();
-  const members = group.members.filter((member) => member.status === "active").length;
-  return (
-    <SectionCard
-      title={group.name}
-      action={
-        <Button asChild size="sm" variant="outline">
-          <Link href={`/my-project/work-groups/${group.id}`}>{t("openProject")}</Link>
-        </Button>
-      }
-    >
-      <p className="text-sm text-muted-foreground">{t("workGroupMembers", { count: members })}</p>
-      <div className="mt-3 divide-y divide-border/60">
-        {group.challenges.map((challenge) => (
-          <ChallengeRow key={challenge.id} title={challengeTitleText(challenge.title)} />
-        ))}
-        {group.challenges.length === 0 && (
           <p className="text-sm text-muted-foreground">{t("noChallenges")}</p>
         )}
       </div>

@@ -158,8 +158,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
       config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         summary: "Remove my secondary email",
-        description:
-          "Removes the account's secondary identity (H6).",
+        description: "Removes the account's secondary identity (H6).",
         response: { 200: z.object({ status: z.literal(true) }) },
       },
     },
@@ -386,8 +385,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
       schema: {
         params: z.object({ userId: z.coerce.number().int() }),
         summary: "Remove a user's secondary email",
-        description:
-          "Removes a secondary identity (H6).",
+        description: "Removes a secondary identity (H6).",
         response: { 200: z.object({ status: z.literal(true) }) },
       },
     },

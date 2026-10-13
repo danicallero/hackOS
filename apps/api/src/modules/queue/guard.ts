@@ -34,10 +34,9 @@ export async function isRepoIneligibleForJudging(
   client: Queryable,
   repoId: number,
 ): Promise<boolean> {
-  const { rows } = await client.query(
-    `SELECT eligible FROM project_eligibility WHERE id=$1`,
-    [repoId],
-  );
+  const { rows } = await client.query(`SELECT eligible FROM project_eligibility WHERE id=$1`, [
+    repoId,
+  ]);
   return rows[0]?.eligible === false;
 }
 

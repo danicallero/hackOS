@@ -36,10 +36,7 @@ async function targets(req: FastifyRequest): Promise<number[]> {
     /^\/api\/(?:repos|me\/projects)\/([1-9]\d*)(?:$|\/)/.exec(path) ??
     /^\/api\/me\/projects\/invites\/([1-9]\d*)(?:$|\/)/.exec(path);
   if (repo) {
-    await query(
-      `SELECT user_id FROM submissions WHERE repo_id = $1`,
-      [repo[1]],
-    );
+    await query(`SELECT user_id FROM submissions WHERE repo_id = $1`, [repo[1]]);
   }
   if (path === "/api/repos" || /^\/api\/repos\/\d+\/members$/.test(path)) {
     add(body.userId);

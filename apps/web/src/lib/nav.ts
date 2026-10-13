@@ -65,7 +65,7 @@ export interface Workspace {
 
 /**
  * Workspace containing the route, resolved by longest matching item href so a
- * child route (`/projects/import`) lands in its parent's workspace (issue
+ * child route (`/projects/submissions`) lands in its parent's workspace (issue
  * #297). Personal-area routes belong to no workspace and resolve to null.
  */
 export function workspaceForPath(pathname: string): Workspace | null {
@@ -142,8 +142,8 @@ export const PERSONAL_NAV: NavItem[] = [
   { title: "schedule", href: "/timetable", icon: CalendarDotsIcon },
   // Participant-facing: everyone can apply (H12-H15). No capability gate.
   { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
-  // Project and pre-event work-group planning are available to every admitted
-  // participant; a planned group deliberately exists before any project (#852).
+  // Projects, from draft to submission, are available to every admitted
+  // participant (H19, #1006).
   {
     title: "myProject",
     href: "/my-project",
@@ -195,23 +195,16 @@ export const WORKSPACES: Workspace[] = [
         title: "projects",
         href: "/projects",
         icon: FolderSimpleIcon,
-        anyCapability: [
-          CAPABILITIES.PROJECTS_READ,
-          CAPABILITIES.PROJECTS_IMPORT,
-          CAPABILITIES.JUDGE_PANEL,
-        ],
+        anyCapability: [CAPABILITIES.PROJECTS_READ, CAPABILITIES.JUDGE_PANEL],
         sponsorVisible: true,
         judgeVisible: true,
       },
       {
-        // H17: persistent entry point to the import conflict resolution screen —
-        // previously only reachable via a conditional link right after a fresh
-        // import, so unresolved conflicts from an earlier import (or one with
-        // only unmapped prizes) had no way back in.
-        title: "resolveImports",
-        href: "/projects/unmatched",
-        icon: UsersIcon,
-        capability: CAPABILITIES.PROJECTS_IMPORT,
+        // H21: submission state, edit requests, team-size and eligibility decisions.
+        title: "projectSubmissions",
+        href: "/projects/submissions",
+        icon: ClipboardTextIcon,
+        capability: CAPABILITIES.PROJECTS_EDIT,
       },
     ],
   },
