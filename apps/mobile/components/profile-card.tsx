@@ -9,9 +9,8 @@ import { colors } from "@/theme/colors";
 const ROW_ICON_INSET = 52;
 
 /** Singular and plural row labels per project kind. */
-const PROJECT_KINDS: { kind: "project" | "workGroup"; one: MessageKey; many: MessageKey }[] = [
+const PROJECT_KINDS: { kind: "project"; one: MessageKey; many: MessageKey }[] = [
   { kind: "project", one: "directoryProject", many: "directoryProjects" },
-  { kind: "workGroup", one: "directoryWorkGroup", many: "directoryWorkGroups" },
 ];
 
 export type ProfileCardData = Pick<
@@ -102,7 +101,7 @@ export function ProfileCard({
       />,
     );
   }
-  // Every project and work group, one row per kind (#935). The first row
+  // Every project (#935). The first row
   // carries the owner's eye.
   let eyeUsed = false;
   for (const { kind, one, many } of PROJECT_KINDS) {

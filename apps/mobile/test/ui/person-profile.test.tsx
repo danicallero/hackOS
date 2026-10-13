@@ -154,20 +154,18 @@ it("does not pad a short profile without a camera cutout to collapse into (#935)
   expect(await layoutProfile()).toBeUndefined();
 });
 
-it("lists every project and work group the person is in (#935)", async () => {
+it("lists every project the person is in (#935)", async () => {
   personResult = {
     ...profile,
     projects: [
       { kind: "project", id: 1, name: "Rover" },
       { kind: "project", id: 3, name: "Lander" },
-      { kind: "workGroup", id: 4, name: "Side quest" },
+      { kind: "project", id: 4, name: "Side quest" },
     ],
   };
   await renderMobile(<PersonProfileScreen />);
-  expect(await screen.findByText("Rover\nLander")).toBeTruthy();
+  expect(await screen.findByText("Rover\nLander\nSide quest")).toBeTruthy();
   expect(screen.getByText("directoryProjects")).toBeTruthy();
-  expect(screen.getByText("Side quest")).toBeTruthy();
-  expect(screen.getByText("directoryWorkGroup")).toBeTruthy();
 });
 
 it("opens the CV in the in-app viewer after downloading it with the session", async () => {

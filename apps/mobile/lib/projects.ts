@@ -1,0 +1,98 @@
+import type { FormSection, TemplateField } from "@hackos/shared/forms";
+import { apiFetch } from "./api";
+
+export interface NativeProject {
+  id: number;
+  name: string;
+  submissionStatus: "draft" | "submitted";
+  responses: Record<string, unknown>;
+  revision: number;
+  template: TemplateField[];
+  sections: FormSection[];
+  members: {
+    userId: number;
+    name: string | null;
+    status: "active" | "invited" | "declined";
+    photoUrl?: string | null;
+  }[];
+  challenges: { id: number; title: string; mandatory?: boolean }[];
+  presentations: {
+    id: number;
+    title: string;
+    status: string;
+    position?: number | null;
+  }[];
+  winners?: { challengeId: number; rank: number; challengeTitle?: string }[];
+  canEdit?: boolean;
+  canSubmit?: boolean;
+  canInvite?: boolean;
+  files?: {
+    objectKey: string;
+    url: string;
+    thumbnailUrl?: string | null;
+    fileName: string;
+    mimeType: string;
+  }[];
+}
+export interface GalleryPage {
+  items: NativeProject[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export function projectMutation<T>(path: string, method: string, body?: unknown) {
+  return apiFetch<T>(path, {
+    method,
+    ...(body === undefined
+      ? {}
+      : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  });
+}
+
+/** H20: serialize saves so newer answers survive older request completion. */
+export class ProjectDraftWriter {
+  private responses: Record<string, unknown>;
+  private savedGeneration = 0;
+  private generation = 0;
+  private inFlight: Promise<void> | null = null;
+  private disposed = false;
+  constructor(
+    private revision: number,
+    responses: Record<string, unknown>,
+    private save: (
+      responses: Record<string, unknown>,
+      revision: number,
+    ) => Promise<{ revision: number }>,
+  ) {
+    this.responses = responses;
+  }
+  change(responses: Record<string, unknown>) {
+    this.responses = responses;
+    this.generation += 1;
+  }
+  get dirty() {
+    return this.savedGeneration !== this.generation;
+  }
+  resume() {
+    this.disposed = false;
+  }
+  dispose() {
+    this.disposed = true;
+  }
+  flush(): Promise<void> {
+    if (this.inFlight) return this.inFlight;
+    this.inFlight = this.drain().finally(() => {
+      this.inFlight = null;
+    });
+    return this.inFlight;
+  }
+  private async drain() {
+    while (this.dirty && !this.disposed) {
+      const generation = this.generation;
+      const result = await this.save(this.responses, this.revision);
+      this.revision = result.revision;
+      this.savedGeneration = generation;
+    }
+  }
+}

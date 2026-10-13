@@ -24,7 +24,7 @@ import { createLiveActivity, type LiveActivityEnvironment } from "expo-widgets";
  * draft — marks only the symbol and "Not submitted" red (never the
  * countdown or bar); submitted is the
  * calm state: a green "Submitted" hero, the time left kept small. A `null`
- * submission is unknown (e.g. a Devpost team not imported yet) and shows no
+ * submission is unknown (e.g. a project submission team not imported yet) and shows no
  * status at all, never "not submitted".
  *
  * See `queue-activity.tsx` for the `'widget'` runtime constraints: everything

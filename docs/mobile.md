@@ -396,6 +396,46 @@ Mobile filter triggers draw one background: standalone `FilterMenu` owns its cir
 
 ## Participant screens
 
+### My Projects (H16–H20, H38, H60; #1011)
+
+The existing personal `queue` tab and overflow route now open **My Projects**.
+The live queue view is retained at `/projects/queue`, with its tutorial,
+pre-call notifications, SSE updates and polling. My Projects shows native
+projects and pending invitations; creation is shown only when the server's
+`canCreate` permits it. `/projects/:id` owns the project's organizer-defined
+answers, team, challenges, submission and queue context. No planning-record
+conversion or external submission path remains in the native client.
+
+The reusable `DynamicForm` consumes `TemplateField` and `FormSection` from
+`@hackos/shared/forms`, the application/project schema. File and image fields
+use the system document picker and project-scoped multipart uploads. Required
+answers are validated by the server on submission, without blocking drafts.
+`ProjectDraftWriter` serializes autosaves with optimistic revisions; newer
+edits survive an older save completing. A failed save retains answers for retry,
+and a conflict requires explicitly reloading the project. Navigation waits for
+pending draft answers to save instead of dropping them on back.
+
+Gallery list/detail (`/projects/gallery`, `/projects/:id?gallery=1`) use the
+server's phase/audience projection, never a persisted mobile gallery cache.
+Search and challenge filters are paginated; outdated responses cannot replace
+a newer filter result. Foreground gallery polling rechecks publication every
+15 seconds. Only returned member photos and published winner fields
+are rendered. Public gallery photo consent is separately editable in My Projects,
+with explicit notice that the gallery may be public and indexable. Members
+appear by name per H18; only their public photo is optional.
+
+Several projects list as one grouped row section (name, draft/submitted,
+chevron); challenge choices are checkmark rows, locked when the server closes
+editing or marks them mandatory. A 403 from the project or gallery reads shows
+the permission message without a retry action (retrying cannot change the
+audience), 404/403 on gallery detail likewise. A failed invitation read does not
+hide the participant's projects, and a failed accept/decline refreshes the
+invitation list. Uploads surface server rejections (413 uses the too-large copy).
+
+Native UI fixtures exercise the screen contract and autosave concurrency;
+they are not device screenshots or proof of native toolbar behavior.
+
+
 - `app/(tabs)/schedule.tsx`, `queue.tsx`, `schedule/alerts.tsx` (inbox sheet),
   `others/account.tsx`, and `components/wallet-screen.tsx` (an overlay of
   Account, or `others/wallet` for deep links) — the five participant screens. API-backed screens expose
@@ -839,7 +879,7 @@ person's full profile from `GET /api/directory/:userId` (the only directory
 route left; there is no list and no Save, since only a scan adds someone):
 large photo or initials, name, headline, Favourite / Note / CV tiles (the Note
 tile reads "Edit note" once a note exists, and the note section appears only
-then), bio, links, location (a `mappin`), project or work group, challenges and
+then), bio, links, location (a `mappin`), project, challenges and
 "Remove from diary", which then returns to the diary. iOS uses the transparent native detail
 header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
 no bar covers the centred avatar; Android floats its own glass back button.
@@ -1252,18 +1292,12 @@ rooms as chips, the same way the participant's My Queue card does. Tapping a res
 shown on a room card — pushes `components/team-operations-screen.tsx`
 (`/(tabs)/others/team/[entryId]`), a detail view built on the same layout as
 the participant's own queue card but with the extra context only an
-operator needs: full member emails, their membership origin (automatic
-primary-email match, verified secondary-email match, staff link, unmatched,
-or staff-added), repo/Devpost/demo links, and the entry's `queue_history`
-timeline. A caller with `projects:edit` (or `*`) can search the
-project-edit candidate directory (live typeahead), add a selected account,
-and remove a member after native confirmation. Team rows now also support
-swipe-to-reveal destructive actions (notification center style): "Remove
-member" for manual links and "Unlink secondary account" when the match came
-from a verified secondary email. Queue access alone never exposes those
-controls. Imported Devpost participants are removed through the Devpost
-participant endpoint; staff-added members use the repository-member
-endpoint, so a correction preserves the imported-record audit trail.
+operator needs: full member emails, repository/demo links and the entry's
+`queue_history` timeline. A caller with `projects:edit` (or `*`) can search
+the project-edit candidate directory, add a selected account, and remove a
+member after native confirmation. Team rows support swipe-to-reveal removal
+through the single repository-member endpoint. Queue access alone never
+exposes those controls.
 Re-notification uses the existing
 idempotent `notify-enter` transition with a React Native-safe generated
 key. On top of the existing 10s poll, the screen opens

@@ -435,6 +435,7 @@ function RootLayoutNav({
         <Stack.Protected guard={canEnterApp}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="projects" options={{ headerShown: false }} />
           <Stack.Screen
             name="schedule/[id]"
             options={{
