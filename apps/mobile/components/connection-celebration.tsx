@@ -20,7 +20,6 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import { SymbolView } from "@/components/symbol";
 import { UserAvatar } from "@/components/user-avatar";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -57,14 +56,17 @@ const MergeCanvas: typeof import("./connection-celebration-skia").ConnectionMerg
 const AVATAR = 92;
 const OVERLAP = AVATAR * 0.3;
 const PARTICLES = 10;
-const MERGE_MS = 650;
-const MOTION_MS = 2800;
+/** Lets the overlay and the Skia canvas paint before the photos move. */
+const ENTER_DELAY_MS = 220;
+const ENTER_MS = 700;
+const MERGE_MS = ENTER_DELAY_MS + ENTER_MS;
+const MOTION_MS = 3000;
 const REDUCED_MS = 1600;
 
 /**
  * #935: the moment two people connect. A full-screen overlay where both photos
  * fly in, fuse like metaballs with an elastic spring (Skia blur + alpha
- * threshold), and burst into a ring, particles and a link glyph (about 2.8 s).
+ * threshold), and burst into a ring, and particles (about 3 s).
  * Everything is a shared-value driven, so the frames run on the UI thread. If
  * Skia is unavailable or throws, the same beats play as Reanimated transforms
  * with a squash instead of the goo. Under reduced motion it is a short
@@ -124,7 +126,6 @@ function Celebration({
   const approach = useSharedValue(reduceMotion ? 1 : 0);
   const pop = useSharedValue(1);
   const burst = useSharedValue(0);
-  const glyph = useSharedValue(reduceMotion ? 1 : 0);
 
   const finished = useRef(false);
   const onDoneRef = useRef(onDone);
@@ -146,7 +147,12 @@ function Celebration({
     if (reduceMotion) {
       void haptic("success");
     } else {
-      approach.value = withSpring(1, { damping: 13, stiffness: 70, mass: 1.1 });
+      // A timed slide, so the entry from both edges reads; the bounce is
+      // saved for the merge (pop).
+      approach.value = withDelay(
+        ENTER_DELAY_MS,
+        withTiming(1, { duration: ENTER_MS, easing: Easing.out(Easing.cubic) }),
+      );
       pop.value = withDelay(
         MERGE_MS,
         withSequence(
@@ -154,13 +160,12 @@ function Celebration({
           withSpring(1, { damping: 15, stiffness: 160 }),
         ),
       );
-      glyph.value = withDelay(MERGE_MS, withSpring(1, { damping: 14, stiffness: 140 }));
       burst.value = withDelay(
         MERGE_MS,
         withTiming(1, { duration: 1300, easing: Easing.out(Easing.cubic) }),
       );
-      timers.push(setTimeout(() => void haptic("light"), 200));
-      timers.push(setTimeout(() => void haptic("medium"), 450));
+      timers.push(setTimeout(() => void haptic("light"), ENTER_DELAY_MS));
+      timers.push(setTimeout(() => void haptic("medium"), ENTER_DELAY_MS + ENTER_MS * 0.6));
       timers.push(setTimeout(() => void haptic("success"), MERGE_MS));
     }
     timers.push(setTimeout(finish, total));
@@ -182,10 +187,6 @@ function Celebration({
   const ring = useAnimatedStyle(() => ({
     opacity: (1 - burst.value) * 0.7,
     transform: [{ scale: 0.5 + burst.value * 2.4 }],
-  }));
-  const link = useAnimatedStyle(() => ({
-    opacity: Math.min(glyph.value, 1),
-    transform: [{ scale: glyph.value }],
   }));
 
   return (
@@ -248,24 +249,6 @@ function Celebration({
               stage={{ left, right, ring, burst }}
             />
           )}
-          <Animated.View
-            style={[
-              {
-                alignItems: "center",
-                backgroundColor: colors.accent,
-                borderColor: colors.background,
-                borderRadius: 20,
-                borderWidth: 3,
-                height: 40,
-                justifyContent: "center",
-                position: "absolute",
-                width: 40,
-              },
-              link,
-            ]}
-          >
-            <SymbolView name="link" size={20} tintColor={colors.accentText} />
-          </Animated.View>
         </View>
         <Text
           accessible={false}
