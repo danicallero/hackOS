@@ -480,7 +480,7 @@ export function ReviewForm({
               role="alert"
               className="border-destructive/40 bg-destructive/5 text-destructive flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm"
             >
-              {saveError}
+              <span>{saveError}</span>
               {dirty && canJudge && (
                 <Button
                   size="sm"
