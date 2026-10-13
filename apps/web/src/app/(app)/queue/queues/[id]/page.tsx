@@ -7,7 +7,7 @@
 // and come back to.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import type { Question } from "@hackos/shared/questions";
 import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
@@ -98,7 +98,7 @@ export default function QueueDetailPage() {
     }
   }, [queueGroupId]);
 
-  const liveRefresh = useAutoRefresh("/api/queue/stream", [
+  const liveRefresh = useAutoRefresh(REALTIME_SCOPES.QUEUE, [
     EVENTS.QUEUE_ENTRY_CHANGED,
     EVENTS.QUEUE_ROOM_CHANGED,
   ]);

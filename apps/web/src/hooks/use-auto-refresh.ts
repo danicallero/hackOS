@@ -11,11 +11,11 @@ import { useEventSource } from "./use-event-source";
  * to an existing data-loading effect's dependency array to make that effect
  * refetch live, without needing to extract it into a standalone callback.
  */
-export function useAutoRefresh(stream: string, events: string[]): number {
+export function useAutoRefresh(scope: string, events: string[]): number {
   const [nonce, setNonce] = useState(0);
   const timer = useRef<number | null>(null);
 
-  useEventSource(stream, {
+  useEventSource(scope, {
     events,
     onEvent: () => {
       if (timer.current) return;

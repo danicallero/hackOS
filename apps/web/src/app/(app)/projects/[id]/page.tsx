@@ -3,7 +3,7 @@
 // Project detail with hot-edit membership and challenge assignment (H20-H21).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
@@ -111,8 +111,8 @@ export default function ProjectDetailPage() {
 
   // Soft, in-place refresh instead of a hard reload when this project
   // changes elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
-  const queueRefresh = useAutoRefresh("/api/tv/stream", [EVENTS.DATA_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
+  const queueRefresh = useAutoRefresh(REALTIME_SCOPES.PUBLIC_TV, [EVENTS.DATA_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

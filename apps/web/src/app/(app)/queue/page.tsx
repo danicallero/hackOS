@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -102,7 +102,7 @@ export default function QueueOperationsPage() {
 
   const roomViews = useLiveQuery<RoomView[]>(
     () => getAllRoomViews(),
-    "/api/queue/stream",
+    REALTIME_SCOPES.QUEUE,
     [
       EVENTS.QUEUE_ENTRY_CHANGED,
       EVENTS.QUEUE_ROOM_CHANGED,

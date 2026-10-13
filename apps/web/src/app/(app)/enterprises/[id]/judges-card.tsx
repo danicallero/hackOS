@@ -5,7 +5,7 @@
 // of the enterprise's challenges. The candidate pool is every account —
 // enterprises may bring outside judges — and adding one is silent.
 
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
@@ -49,7 +49,7 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
     }
   }, [enterpriseId, t]);
 
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

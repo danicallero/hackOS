@@ -1,5 +1,5 @@
 "use client";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useParams, useRouter } from "next/navigation";
@@ -79,8 +79,8 @@ export default function WorkGroupDetailPage() {
       setLoading(false);
     }
   }, [id, router, t, succeeded, failed]);
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
-  const challengeRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
+  const challengeRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [
     EVENTS.DOMAIN_CHANGED,
   ]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: project mutations may establish the import link (#854).

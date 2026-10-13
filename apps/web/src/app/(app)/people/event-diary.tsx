@@ -1,6 +1,6 @@
 "use client";
 
-import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { AddressBookIcon } from "@phosphor-icons/react/dist/csr/AddressBook";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -118,9 +118,7 @@ function DiaryPage() {
   const [focusNonce, setFocusNonce] = useState(0);
   const loadedAt = useRef(0);
   const hasEntries = useRef(false);
-  const liveRefresh = useAutoRefresh(`/api/events/stream?topic=${SSE_TOPICS.DIRECTORY}`, [
-    EVENTS.DOMAIN_CHANGED,
-  ]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.DIRECTORY), [EVENTS.DOMAIN_CHANGED]);
 
   useEffect(() => {
     function onFocus() {

@@ -15,7 +15,7 @@ import {
   activityKindPluralKey,
   toActivityKind,
 } from "@hackos/shared/activity-kinds";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { CaretUpIcon } from "@phosphor-icons/react/dist/csr/CaretUp";
@@ -58,7 +58,7 @@ import {
 import { toast } from "@/lib/toast";
 
 const LIMIT = 20;
-const PERSONAL_STREAM = "/api/queue/me/stream";
+const PERSONAL_STREAM = REALTIME_SCOPES.PERSONAL;
 
 function categoryLabelMap(t: Translate): Record<string, string> {
   return {

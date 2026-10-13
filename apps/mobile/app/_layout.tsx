@@ -12,6 +12,7 @@ import "react-native-reanimated";
 
 import { PendingRemovalScreen } from "@/components/pending-removal-screen";
 import { SessionState } from "@/components/session-state";
+import { UpgradeRequiredScreen } from "@/components/upgrade-required-screen";
 import { useColorScheme } from "@/components/useColorScheme";
 import { ApiModeProvider, useApiMode } from "@/lib/api-mode";
 import { signOut } from "@/lib/auth-client";
@@ -31,6 +32,7 @@ import {
 import { registerForPushNotifications } from "@/lib/push";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { isOperator } from "@/lib/tabs";
+import { useUpgradeRequired } from "@/lib/upgrade-required";
 import { warmWalletCache } from "@/lib/wallet-cache";
 import { colors } from "@/theme/colors";
 
@@ -90,6 +92,10 @@ function RootLayoutSessionContents() {
   const { me, authenticated, loading, error, offlineEntryAvailable, enterOffline } = useMeContext();
   const { mode } = useApiMode();
   const initialSessionPending = useInitialSessionPending(loading);
+  const upgradeRequired = useUpgradeRequired();
+
+  // The API refuses every request from this build (#999); nothing else can work.
+  if (upgradeRequired) return <UpgradeRequiredScreen />;
 
   return (
     <View style={{ flex: 1 }}>

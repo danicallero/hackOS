@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -52,7 +52,7 @@ export function PublicProfileTab({
       const startedAt = generation.current;
       return { generation: startedAt, profile: await api.get<PublicProfile>(path) };
     },
-    "/api/events/stream?topic=identity",
+    domainScope(SSE_TOPICS.IDENTITY),
     [EVENTS.DOMAIN_CHANGED],
     {
       queryKey: [user.id, user.image],

@@ -5,7 +5,7 @@
 // number, QR codes) and print them. `sponsors:manage` only.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { ContactlessPaymentIcon } from "@phosphor-icons/react/dist/csr/ContactlessPayment";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
@@ -300,7 +300,7 @@ export default function CompanyTagsPage() {
     }
   }, [t]);
 
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

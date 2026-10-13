@@ -110,27 +110,8 @@ export const REALTIME_LIMITS = {
   SUBSCRIPTION_DEBOUNCE_MS: 100,
 } as const;
 
-/** Translate legacy reader paths into logical scopes during installed-client migration. */
-export function realtimeScopeForPath(path: string): string | null {
-  const url = new URL(path, "http://realtime.invalid");
-  switch (url.pathname) {
-    case "/api/queue/me/stream":
-      return REALTIME_SCOPES.PERSONAL;
-    case "/api/queue/stream":
-      return REALTIME_SCOPES.QUEUE;
-    case "/api/logistics/stream":
-      return REALTIME_SCOPES.LOGISTICS;
-    case "/api/exports/stream":
-      return REALTIME_SCOPES.EXPORTS;
-    case "/api/tv/stream":
-      return REALTIME_SCOPES.PUBLIC_TV;
-    case "/api/content/stream":
-      return REALTIME_SCOPES.PUBLIC_CONTENT;
-    case "/api/events/stream":
-      return `${REALTIME_SCOPES.DOMAIN_PREFIX}${url.searchParams.get("topic") ?? ""}`;
-    default: {
-      const entry = /^\/api\/queue\/entries\/([1-9]\d*)\/stream$/.exec(url.pathname);
-      return entry ? `${REALTIME_SCOPES.REVIEW_PREFIX}${entry[1]}` : null;
-    }
-  }
-}
+/** Scope for one generic domain topic (`SSE_TOPICS`). */
+export const domainScope = (topic: string): string => `${REALTIME_SCOPES.DOMAIN_PREFIX}${topic}`;
+/** Scope for one queue entry's review stream. */
+export const reviewScope = (entryId: number | string): string =>
+  `${REALTIME_SCOPES.REVIEW_PREFIX}${entryId}`;

@@ -1,6 +1,6 @@
 "use client";
 
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { AddressBookIcon } from "@phosphor-icons/react/dist/csr/AddressBook";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
@@ -121,7 +121,7 @@ export function PublicProfileCard() {
         profile: await api.get<PublicProfile>("/api/me/public-profile"),
       };
     },
-    "/api/queue/me/stream",
+    REALTIME_SCOPES.PERSONAL,
     [EVENTS.USER_SESSION_CHANGED],
     {
       queryKey: [me?.name, me?.surname, me?.image],

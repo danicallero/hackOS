@@ -2149,6 +2149,11 @@ an id's first post).
 
 ## Other infrastructure
 
+- `lib/client-build.ts` sends the native build number as `X-HackOS-Build` on API
+  and realtime requests. When the API answers `426 upgrade_required`
+  (`lib/upgrade-required.ts`), the root layout replaces the app with
+  `UpgradeRequiredScreen`, which opens the store (#999). See
+  [mobile-release](./mobile-release.md#minimum-supported-build).
 - `lib/app-version.ts` shows the installed binary's version and a seven-character
   commit in Sign in and Account. `app.config.ts` captures EAS/CI commit metadata,
   falling back to the checkout's HEAD when building locally; builds without Git

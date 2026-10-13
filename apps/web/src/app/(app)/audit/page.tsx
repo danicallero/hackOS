@@ -6,7 +6,7 @@
 // page is the full, unscoped query surface referenced there.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { LogIcon } from "@phosphor-icons/react/dist/csr/Log";
 import Link from "next/link";
@@ -151,7 +151,7 @@ export default function AuditPage() {
   // Soft, in-place refresh instead of a hard reload — audit entries are
   // created by every sensitive mutation in the app (H53), so this stays on
   // the audit-scoped stream.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=audit", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.AUDIT), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

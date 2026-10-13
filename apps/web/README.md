@@ -25,8 +25,9 @@ backend, one workstream at a time.
 
 Realtime readers share one authenticated fetch/SSE transport per tab through
 `lib/sse-broker.ts`, with canonical identity owned by `SessionProvider` and
-100 ms scope-union coalescing. Existing reader paths map to authorized logical
-scopes; recovery and sequence gaps stay scope-specific. Public TV uses one
+100 ms scope-union coalescing. `useEventSource`, `useAutoRefresh` and `useLiveQuery` take a
+`REALTIME_SCOPES` value (`domainScope(topic)` / `reviewScope(id)` for the
+parameterized ones), never a stream URL; recovery and sequence gaps stay scope-specific. Public TV uses one
 payload-free stream. See [realtime transport](../../docs/realtime-transport.md)
 for the contract, bounds, revocation and migration behavior.
 
