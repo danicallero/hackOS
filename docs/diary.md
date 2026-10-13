@@ -34,8 +34,22 @@ live in `apps/api/src/modules/sponsors/stands.ts` (printable QR SVGs in
   owner can still remove such an entry.
 - **Private to the owner.** Entries are only ever read or changed by their
   owner; other users get 404. Staff have no route to read diaries.
-- **No notification.** The scanned person is not told, and no realtime event
-  carries diary data.
+- **Mutual scan.** Scanning a person also puts the scanner in that person's
+  diary, in the same transaction, locking both accounts in ascending id order
+  (two people scanning each other at once cannot deadlock) and inserting with
+  the same `ON CONFLICT DO NOTHING` partial unique indexes, so repeats and
+  races converge on one row per side. **Rule:** the reciprocal entry exists
+  only while the scanner's own public profile is shared (visible) at that
+  moment, because the scanned person would otherwise see a card the scanner
+  never opted in to; no plan or story requires sharing in order to scan, so a
+  scanner without a shared profile still saves the person, one-way, as before.
+  It is also skipped when the scanned account is being removed or has no event
+  access. Company/stand scans stay one-way. Removing an entry never removes
+  the other side's; a later scan from either person re-adds it.
+- **No notification.** The scanned person is not pushed anything and no
+  realtime event carries diary data; the new entry appears on their next
+  refetch (mobile and web refetch on focus, the web diary also on the
+  `directory` topic's `domain.changed`).
 - **Every attendee may save people.** Scanning and reading saved people only
   needs event access, including Sponsor and Judging Team attendees (owner
   decision on #935). No capability, not even `*`, lets anyone read a profile
@@ -128,7 +142,8 @@ in order:
 4. otherwise `diary_code_unknown` (404).
 
 People then need a currently visible profile (`profile_not_shared`); the
-caller's own badge answers `diary_self` (409). A
+caller's own badge answers `diary_self` (409). A person scan is mutual (see
+[Privacy rules](#privacy-rules)). A
 new entry answers 201, an existing one 200 with the stored favourite and note.
 
 ## Access

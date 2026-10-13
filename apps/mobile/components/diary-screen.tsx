@@ -16,6 +16,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAccountWallet, WalletModal } from "@/components/account-wallet";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
 import { CompanyAlbum, CompanySheet } from "@/components/company-album";
+import {
+  ConnectionCelebration,
+  type ConnectionCelebrationTarget,
+} from "@/components/connection-celebration";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { DiaryPersonRow, PERSON_ROW_TEXT_INSET } from "@/components/diary-person-row";
 import { FavouriteStar } from "@/components/favourite-star";
@@ -38,6 +42,7 @@ import { filterDiaryEntries } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
+import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -121,6 +126,11 @@ export function DiaryScreen() {
   const [input, setInput] = useState<ScanInput | null>(null);
   const [scanning, setScanning] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(null);
+  const [celebration, setCelebration] = useState<ConnectionCelebrationTarget | null>(null);
+  // The person met, held back from the list until the celebration ends.
+  const metEntry = useRef<DiaryEntry | null>(null);
+  const celebrations = useRef(0);
+  const { me } = useMeContext();
   const [highlightId, setHighlightId] = useState<number | null>(null);
   const [busyKeys, setBusyKeys] = useState<ReadonlySet<string>>(new Set());
   const [noteTarget, setNoteTarget] = useState<NoteTarget | null>(null);
@@ -226,9 +236,15 @@ export function DiaryScreen() {
     void submitScan(collect);
   }, [collect]);
 
-  async function submitScan(code: string) {
+  /**
+   * `fromQr`: the scanner modal stays up until the result is known, so a new
+   * connection celebrates over the camera at once instead of after the modal
+   * slides away.
+   */
+  async function submitScan(code: string, fromQr = false) {
     const value = code.trim();
-    if (!value || scanInFlight.current) return;
+    // The camera keeps reading under the celebration; ignore it until it ends.
+    if (!value || scanInFlight.current || metEntry.current) return;
     scanInFlight.current = true;
     setScanning(true);
     try {
@@ -238,6 +254,24 @@ export function DiaryScreen() {
         body: JSON.stringify({ code: value }),
       });
       void haptic("success");
+      const isNew =
+        entry.kind === "person" &&
+        entry.person !== null &&
+        entries !== null &&
+        !entries.some((current) => current.id === entry.id);
+      if (isNew && entry.person) {
+        // #935: a new connection plays the celebration first; the list and
+        // the person's profile follow when it ends (finishCelebration).
+        metEntry.current = entry;
+        celebrations.current += 1;
+        setCelebration({
+          key: celebrations.current,
+          name: entry.person.displayName,
+          photoUrl: entry.person.photoUrl,
+        });
+        return;
+      }
+      if (fromQr) setInput(null);
       if (entry.kind === "sponsor") {
         // A collected stand: show its badge celebrating at the top of the
         // album, once the album has the new order.
@@ -252,12 +286,33 @@ export function DiaryScreen() {
         setSection("people");
       }
     } catch (error) {
+      if (fromQr) setInput(null);
       void haptic("error");
       Alert.alert(t("tabDiary"), t(diaryScanErrorKey(error)));
     } finally {
       scanInFlight.current = false;
       setScanning(false);
     }
+  }
+
+  /**
+   * While the celebration covers the screen, the person joins the list and
+   * their profile opens underneath, so it is already there when it fades.
+   */
+  function revealMet() {
+    const entry = metEntry.current;
+    if (!entry) return;
+    scrollToTop();
+    applyEntry(entry);
+    setSavedId(entry.id);
+    setSection("people");
+    if (entry.person) openPerson(entry.person.userId);
+  }
+
+  function finishCelebration() {
+    metEntry.current = null;
+    setCelebration(null);
+    setInput(null);
   }
 
   async function mutate(key: string, action: () => Promise<void>) {
@@ -543,8 +598,18 @@ export function DiaryScreen() {
       )}
     </ScrollView>
   );
+  const celebrationSelf = {
+    name: [me?.name, me?.surname].filter(Boolean).join(" ") || (me?.email ?? ""),
+    image: me?.image ?? null,
+  };
   const overlays = (
     <>
+      <ConnectionCelebration
+        target={input === "qr" ? null : celebration}
+        self={celebrationSelf}
+        onCovered={revealMet}
+        onDone={finishCelebration}
+      />
       <WalletModal wallet={wallet} />
       <NfcReader
         visible={input === "nfc"}
@@ -564,12 +629,16 @@ export function DiaryScreen() {
         {input === "qr" ? (
           <QrCamera
             onClose={() => setInput(null)}
-            onValue={(code) => {
-              setInput(null);
-              void submitScan(code);
-            }}
+            onValue={(code) => void submitScan(code, true)}
           />
         ) : null}
+        <ConnectionCelebration
+          inline
+          target={input === "qr" ? celebration : null}
+          self={celebrationSelf}
+          onCovered={revealMet}
+          onDone={finishCelebration}
+        />
       </Modal>
       <CompanySheet
         item={openCompany}

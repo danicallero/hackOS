@@ -275,7 +275,8 @@ field-level merge behavior.
 The device/session registry (`PUT /api/me/live-activities/device`,
 `PUT`/`DELETE /api/me/live-activities/sessions`), the read model
 `GET /api/me/live-activities`, the organizer configuration
-(`GET`/`PUT /api/live-activities/settings`, `event:manage`, audited), and the
+(`GET`/`PUT /api/live-activities/settings`, `event:manage`, audited; it also carries the lead, deadline and accreditation timings), the automatic notification
+switch and lead (`GET`/`PUT /api/notifications/automation`, `event:manage`, audited), and the
 `live-activities` worker that pushes iOS ActivityKit updates over APNs (token
 auth) and Android Live Updates as data-only Expo pushes. `candidates.ts`
 gates and ranks the kinds (queue, staff activity, attendee activity,

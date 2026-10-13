@@ -3,6 +3,7 @@ import { scheduleAnnouncementsPublisher } from "./announcements-publisher.js";
 import { scheduleOutboxDispatcher } from "./dispatcher.js";
 import { registerAnnouncementRoutes } from "./routes/announcements.js";
 import { registerAuditRoutes } from "./routes/audit.js";
+import { registerAutomationRoutes } from "./routes/automation.js";
 import { registerInboxRoutes } from "./routes/inbox.js";
 import { registerPreferenceRoutes } from "./routes/preferences.js";
 import { registerPushTokenRoutes } from "./routes/push-tokens.js";
@@ -21,6 +22,7 @@ export async function registerNotificationsModule(app: FastifyInstance): Promise
   registerInboxRoutes(app);
   registerAnnouncementRoutes(app);
   registerAuditRoutes(app);
+  registerAutomationRoutes(app);
 
   await scheduleOutboxDispatcher();
   await scheduleAnnouncementsPublisher();

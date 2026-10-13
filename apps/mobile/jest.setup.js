@@ -10,6 +10,30 @@ jest.mock("react-native-pdf", () => {
     default: (props) => require("react").createElement(View, { ...props, testID: "cv-viewer-pdf" }),
   };
 });
+// Skia has no native runtime under jest (#935 gooey merge): the canvas is a
+// plain view that keeps its props, and the drawing primitives render nothing.
+jest.mock("@shopify/react-native-skia", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  const nothing = () => null;
+  const path = { addCircle: () => path };
+  return {
+    Canvas: (props) => React.createElement(View, props),
+    Group: nothing,
+    Circle: nothing,
+    Image: nothing,
+    Text: nothing,
+    Paint: nothing,
+    Blur: nothing,
+    ColorMatrix: nothing,
+    matchFont: () => null,
+    Skia: {
+      Path: { Make: () => path },
+      Data: { fromBase64: () => ({}), fromURI: async () => ({}) },
+      Image: { MakeImageFromEncoded: () => null },
+    },
+  };
+});
 jest.mock("react-native-reanimated", () => ({
   ...require("react-native-reanimated/mock"),
   useReducedMotion: () => false,

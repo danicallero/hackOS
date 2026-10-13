@@ -1,6 +1,7 @@
 import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
+import { readNotificationAutomationSettings } from "./automation-settings.js";
 import { DEFAULT_CHANNELS, notify, REMINDER_CHANNEL_CATEGORY, resolveChannels } from "./service.js";
 
 /**
@@ -19,7 +20,6 @@ import { DEFAULT_CHANNELS, notify, REMINDER_CHANNEL_CATEGORY, resolveChannels } 
  */
 
 const QUEUE_NAME = "schedule-reminders";
-const LEAD_MINUTES = 15;
 
 interface DueScheduleRow {
   id: number;
@@ -51,6 +51,9 @@ function formatStartsAt(startsAt: Date, timezone: string): string {
 
 export async function runScheduleRemindersOnce(): Promise<{ reminded: number; notified: number }> {
   return withTransaction(async (client) => {
+    // Event setting (H45, H51): the organizer switch and the lead time.
+    const automation = await readNotificationAutomationSettings(client);
+    if (!automation.scheduleRemindersEnabled) return { reminded: 0, notified: 0 };
     const { rows } = await client.query(
       `SELECT id, title, location, starts_at, type FROM schedule
         WHERE visibility = 'shown'
@@ -59,7 +62,7 @@ export async function runScheduleRemindersOnce(): Promise<{ reminded: number; no
           AND starts_at <= now() + make_interval(mins => $1)
         ORDER BY id
         FOR UPDATE SKIP LOCKED`,
-      [LEAD_MINUTES],
+      [automation.scheduleReminderLeadMinutes],
     );
 
     let notified = 0;

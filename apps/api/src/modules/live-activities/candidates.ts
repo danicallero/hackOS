@@ -6,6 +6,7 @@ import {
   type AttendeeActivityLiveProps,
   activityLiveActivitySubject,
   attendeeActivityLiveActivitySubject,
+  DEADLINE_CLOSING_MINUTES_DEFAULT,
   DEADLINE_LIVE_ACTIVITY_SUBJECT,
   type DeadlineLiveProps,
   LIVE_ACTIVITY_CONFIG_KINDS,
@@ -35,6 +36,7 @@ import {
   type SubmissionFact,
 } from "./kinds.js";
 import { userKindRank } from "./preferences.js";
+import { readLiveActivityTimings } from "./settings.js";
 import {
   buildActivityLiveProps,
   type JudgingWindow,
@@ -93,6 +95,8 @@ export interface LiveActivityContext {
   attendeeItems: LiveAttendeeItem[];
   audiences: Map<number, Set<string>>;
   deadline: DeadlineWindow | null;
+  /** Minutes left when an unsubmitted team's deadline activity turns urgent (event setting). */
+  deadlineClosingMinutes: number;
   submissions: Map<number, SubmissionFact>;
   accreditation: { endsAt: Date } | null;
   accreditationCounts: Map<boolean, AccreditationCounts>;
@@ -189,6 +193,7 @@ export async function loadLiveActivityContext(
     attendeeItems: [],
     audiences: new Map(),
     deadline: null,
+    deadlineClosingMinutes: DEADLINE_CLOSING_MINUTES_DEFAULT,
     submissions: new Map(),
     accreditation: null,
     accreditationCounts: new Map(),
@@ -253,7 +258,9 @@ export async function loadLiveActivityContext(
     (u) => u.eventAccess && hasCapability(u, CAPABILITIES.QUEUE_STATUS),
   );
   if (participants.length > 0) {
-    ctx.deadline = await readDeadlineWindow(db);
+    const timings = await readLiveActivityTimings(db);
+    ctx.deadlineClosingMinutes = timings.deadlineClosing;
+    ctx.deadline = await readDeadlineWindow(db, timings.deadlineLead);
     if (ctx.deadline) ctx.submissions = await loadSubmissionFacts(participants, db);
   }
 
@@ -354,7 +361,13 @@ export async function candidatesFor(
     add(
       "deadline",
       DEADLINE_LIVE_ACTIVITY_SUBJECT,
-      buildDeadlineLiveProps(ctx.deadline, ctx.submissions.get(userId), language, now),
+      buildDeadlineLiveProps(
+        ctx.deadline,
+        ctx.submissions.get(userId),
+        language,
+        now,
+        ctx.deadlineClosingMinutes,
+      ),
     );
   }
 

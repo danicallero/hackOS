@@ -2,11 +2,12 @@ let mockNfcSupported = true;
 jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupported: () => mockNfcSupported }));
 
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { Alert } from "react-native";
+import { AccessibilityInfo, Alert } from "react-native";
 import { DiaryScreen } from "@/components/diary-screen";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
 import type { SponsorCollection } from "@/lib/diary-sponsors";
+import { haptic } from "@/lib/haptics";
 import { renderMobile } from "./render";
 
 type MenuProps = {
@@ -129,12 +130,29 @@ jest.mock("@/components/glass-view", () => ({
   isRealLiquidGlassAvailable: () => mockGlass,
 }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
-jest.mock("@/components/wallet-screen", () => ({ __esModule: true, default: () => null }));
+let mockWalletProps: { initialPurpose?: string } | null = null;
+jest.mock("@/components/wallet-screen", () => ({
+  __esModule: true,
+  default: (props: { initialPurpose?: string }) => {
+    mockWalletProps = props;
+    return null;
+  },
+}));
 jest.mock("react-native-svg", () => {
   const { View } = require("react-native");
   return { __esModule: true, default: View, Path: View, Circle: View };
 });
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
+jest.mock("@/lib/me-context", () => ({
+  useMeContext: () => ({
+    me: { id: 1, name: "Dani", surname: "C.", email: "d@x.test", image: null },
+  }),
+}));
+let mockReduceMotion = false;
+jest.mock("react-native-reanimated", () => ({
+  ...require("react-native-reanimated/mock"),
+  useReducedMotion: () => mockReduceMotion,
+}));
 jest.mock("@/theme/colors", () => ({
   colors: new Proxy({}, { get: (_target, key) => (key === "__esModule" ? false : "black") }),
 }));
@@ -205,6 +223,8 @@ beforeEach(() => {
   mockNfcSupported = true;
   mockGlass = false;
   mockParams = {};
+  mockReduceMotion = false;
+  jest.mocked(haptic).mockClear();
   mockPush.mockReset();
   mockSetOptions.mockReset();
   mockSetOptions.mockImplementation((options: NativeOptions) => mockOnOptions?.(options));
@@ -297,6 +317,8 @@ describe("Wallet", () => {
     expect(screen.queryByTestId("wallet-modal")).toBeNull();
     await fireEvent.press(screen.getByLabelText("tabWallet"));
     expect(screen.getByTestId("wallet-modal")).toBeTruthy();
+    // The card someone you meet scans comes first.
+    expect(mockWalletProps?.initialPurpose).toBe("badge");
   });
 
   it("keeps the wallet button on Companies, where the star is hidden", async () => {
@@ -332,6 +354,7 @@ describe("People", () => {
       mockNfc?.onValue("04A1B2C3D4E5F6");
       mockNfc?.onClose();
     });
+    await fireEvent.press(await screen.findByTestId("connection-celebration"));
     await waitFor(() => expect(screen.getByText("diarySaved")).toBeTruthy());
     expect(screen.getByText("Bea R.")).toBeTruthy();
     const [, init] = calls("/api/me/diary/scan")[0] ?? [];
@@ -339,6 +362,79 @@ describe("People", () => {
     expect((init?.headers as Record<string, string>)["Idempotency-Key"]).toEqual(
       expect.any(String),
     );
+  });
+
+  async function scanWithNfc() {
+    await renderMobile(<DiaryScreen />);
+    await screen.findByText("Ana S.");
+    await fireEvent.press(screen.getByRole("button", { name: "diaryScanNfc" }));
+    await act(async () => {
+      mockNfc?.onValue("04A1B2C3D4E5F6");
+      mockNfc?.onClose();
+    });
+  }
+
+  it("celebrates a new connection, announces it and skips on tap (#935)", async () => {
+    const announce = jest.spyOn(AccessibilityInfo, "announceForAccessibility");
+    await scanWithNfc();
+    await screen.findByTestId("connection-celebration");
+    expect(screen.getByTestId("connection-celebration-burst")).toBeTruthy();
+    expect(screen.getByTestId("connection-celebration-skia")).toBeTruthy();
+    expect(announce).toHaveBeenCalledWith("diaryConnected:Bea R.");
+    expect(haptic).toHaveBeenCalledWith("success");
+    // Once it covers the screen, the person joins the list and their profile
+    // opens underneath, so both are in place when it fades.
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } }),
+    );
+    expect(screen.getByTestId("connection-celebration")).toBeTruthy();
+    expect(screen.getByText("Bea R.")).toBeTruthy();
+    await fireEvent.press(screen.getByTestId("connection-celebration"));
+    await waitFor(() => expect(screen.queryByTestId("connection-celebration")).toBeNull());
+    expect(screen.getByText("diarySaved")).toBeTruthy();
+    expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+
+  it("dismisses the celebration by itself and opens the profile", async () => {
+    await scanWithNfc();
+    await screen.findByTestId("connection-celebration");
+    await waitFor(() => expect(screen.queryByTestId("connection-celebration")).toBeNull(), {
+      timeout: 4000,
+    });
+    expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } });
+  });
+
+  it("celebrates over the QR camera without closing it first", async () => {
+    mockNfcSupported = false;
+    await renderMobile(<DiaryScreen />);
+    await screen.findByText("Ana S.");
+    await fireEvent.press(screen.getByRole("button", { name: "personScanBadgeCode" }));
+    await fireEvent.press(screen.getByRole("button", { name: "qr fixture" }));
+    await screen.findByTestId("connection-celebration");
+    // The camera is still mounted underneath; a second read is ignored.
+    await fireEvent.press(screen.getByRole("button", { name: "qr fixture", hidden: true }));
+    expect(calls("/api/me/diary/scan")).toHaveLength(1);
+    await fireEvent.press(screen.getByTestId("connection-celebration"));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "qr fixture" })).toBeNull());
+    expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } });
+  });
+
+  it("uses a still crossfade under reduced motion", async () => {
+    mockReduceMotion = true;
+    await scanWithNfc();
+    await screen.findByTestId("connection-celebration");
+    expect(screen.queryByTestId("connection-celebration-burst")).toBeNull();
+    expect(screen.queryByTestId("connection-celebration-skia")).toBeNull();
+    expect(haptic).toHaveBeenCalledWith("success");
+    expect(haptic).not.toHaveBeenCalledWith("medium");
+  });
+
+  it("does not celebrate a re-scan of someone already saved", async () => {
+    scanResult = person(1, "Ana S.");
+    await scanWithNfc();
+    await waitFor(() => expect(calls("/api/me/diary/scan")).toHaveLength(1));
+    await screen.findByText("diarySaved");
+    expect(screen.queryByTestId("connection-celebration")).toBeNull();
   });
 
   it("keeps QR and manual entry in the secondary menu", async () => {
@@ -593,5 +689,6 @@ describe("Companies", () => {
     });
     expect(await screen.findByLabelText("diaryCompaniesProgress:2/2")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Zeta" })).toBeTruthy();
+    expect(screen.queryByTestId("connection-celebration")).toBeNull();
   });
 });

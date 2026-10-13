@@ -132,6 +132,61 @@ describe("scanning people", () => {
     expect(await rowCount()).toBe(1);
   });
 
+  it("adds both people to each other's diary when both share a profile", async () => {
+    const ana = await person("Ana");
+    const ben = await person("Ben");
+    expect((await scan(ben.badge, ana.id)).statusCode).toBe(201);
+    const bens = (await list(ben.id)).json().items;
+    expect(bens).toHaveLength(1);
+    expect(bens[0].person.userId).toBe(ana.id);
+    expect((await list(ana.id)).json().items[0].person.userId).toBe(ben.id);
+    // Re-scanning from either side is idempotent.
+    expect((await scan(ben.badge, ana.id)).statusCode).toBe(200);
+    expect((await scan(ana.badge, ben.id)).statusCode).toBe(200);
+    expect(await rowCount()).toBe(2);
+  });
+
+  it("stays one-way while the scanner shares no profile", async () => {
+    const ana = await person("Ana");
+    const ben = await person("Ben", { visible: false });
+    expect((await scan(ana.badge, ben.id)).statusCode).toBe(201);
+    expect((await list(ben.id)).json().items).toHaveLength(1);
+    expect((await list(ana.id)).json().items).toHaveLength(0);
+    expect(await rowCount()).toBe(1);
+  });
+
+  it("re-adds a removed reciprocal entry on a new scan without touching the other side", async () => {
+    const ana = await person("Ana");
+    const ben = await person("Ben");
+    await scan(ben.badge, ana.id);
+    const anasEntry = (await list(ana.id)).json().items[0];
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/me/diary/${anasEntry.id}`,
+      headers: { ...asUser(ana.id), "idempotency-key": `del-${++keySeq}` },
+    });
+    expect(del.statusCode).toBe(204);
+    expect((await list(ben.id)).json().items).toHaveLength(1);
+    expect((await list(ana.id)).json().items).toHaveLength(0);
+    await scan(ben.badge, ana.id);
+    expect((await list(ana.id)).json().items).toHaveLength(1);
+  });
+
+  it("converges simultaneous mutual scans without deadlock", async () => {
+    const ana = await person("Ana");
+    const ben = await person("Ben");
+    const results = await Promise.all([
+      scan(ben.badge, ana.id),
+      scan(ana.badge, ben.id),
+      scan(ben.badge, ana.id),
+      scan(ana.badge, ben.id),
+    ]);
+    for (const r of results) expect([200, 201]).toContain(r.statusCode);
+    expect(await rowCount()).toBe(2);
+    expect((await list(ana.id)).json().items).toHaveLength(1);
+    expect((await list(ben.id)).json().items).toHaveLength(1);
+  });
+
   it("resolves a ticket QR to its holder", async () => {
     const ana = await person("Ana");
     const res = await scan(ana.ticket);
@@ -291,6 +346,14 @@ describe("scanning sponsor stands", () => {
     const viaQr = await scan("STAND-ABCDEFGHJKMNPQRS");
     expect(viaQr.statusCode).toBe(200);
     expect(viaQr.json().id).toBe(res.json().id);
+  });
+
+  it("stays one-way for a stand even when the scanner shares a profile", async () => {
+    const ana = await person("Ana");
+    const acme = await enterprise("Acme");
+    await standTag(acme, "04ACAC00000001");
+    expect((await scan("04ACAC00000001", ana.id)).statusCode).toBe(201);
+    expect(await rowCount()).toBe(1);
   });
 
   it("does not save a sponsor that has not been revealed", async () => {

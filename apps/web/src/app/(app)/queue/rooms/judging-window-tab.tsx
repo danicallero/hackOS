@@ -4,7 +4,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { type Control, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { FormActions } from "@/components/common/form-actions";
@@ -17,6 +17,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { fromLocalInputValue } from "@/lib/event-datetime";
@@ -25,9 +26,19 @@ import { getQueueSettings, type QueueSettings, updateQueueSettings } from "@/lib
 import type { SaveState } from "@/lib/save-state";
 import { toast } from "@/lib/toast";
 
+// Pre-call and called-too-long minutes (H38, H34): the automatic "you're up
+// soon" notification and the staff warning, edited next to the judging hours.
+const PRE_CALL_RANGE = { min: 0, max: 240 };
+const CALLED_TOO_LONG_RANGE = { min: 1, max: 240 };
+
+const inRange = (value: string, { min, max }: { min: number; max: number }) =>
+  /^\d+$/.test(value) && Number(value) >= min && Number(value) <= max;
+
 const schema = z.object({
   judgingStartsAt: z.string(),
   judgingEndsAt: z.string(),
+  preCallMinutes: z.string().refine((v) => inRange(v, PRE_CALL_RANGE), "range"),
+  calledTooLongMinutes: z.string().refine((v) => inRange(v, CALLED_TOO_LONG_RANGE), "range"),
 });
 
 type Values = z.infer<typeof schema>;
@@ -36,6 +47,8 @@ function fromSettings(settings: QueueSettings): Values {
   return {
     judgingStartsAt: toDatetimeLocal(settings.schedule_start_at),
     judgingEndsAt: toDatetimeLocal(settings.schedule_end_at),
+    preCallMinutes: String(settings.pre_call_notification_eta_minutes),
+    calledTooLongMinutes: String(settings.called_too_long_threshold_minutes),
   };
 }
 
@@ -98,13 +111,58 @@ function PacePreview({ startsAt, endsAt }: { startsAt: string; endsAt: string })
   );
 }
 
+function MinutesField({
+  control,
+  name,
+  label,
+  range,
+}: {
+  control: Control<Values>;
+  name: "preCallMinutes" | "calledTooLongMinutes";
+  label: string;
+  range: { min: number; max: number };
+}) {
+  const { t } = useLocale();
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <FormControl>
+            <Input
+              {...field}
+              type="number"
+              inputMode="numeric"
+              min={range.min}
+              max={range.max}
+              className="w-24"
+            />
+          </FormControl>
+          {fieldState.error && (
+            <p role="alert" className="text-destructive text-sm">
+              {t("timingRangeError", range)}
+            </p>
+          )}
+        </FormItem>
+      )}
+    />
+  );
+}
+
 export function JudgingWindowTab({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
   const { t } = useLocale();
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const form = useForm<Values>({
     resolver: zodResolver(schema),
-    defaultValues: { judgingStartsAt: "", judgingEndsAt: "" },
+    defaultValues: {
+      judgingStartsAt: "",
+      judgingEndsAt: "",
+      preCallMinutes: "10",
+      calledTooLongMinutes: "10",
+    },
   });
   const { reset, formState } = form;
 
@@ -133,6 +191,8 @@ export function JudgingWindowTab({ onDirtyChange }: { onDirtyChange?: (dirty: bo
       const next = await updateQueueSettings({
         scheduleStartAt: fromDatetimeLocal(values.judgingStartsAt),
         scheduleEndAt: fromDatetimeLocal(values.judgingEndsAt),
+        preCallNotificationEtaMinutes: Number(values.preCallMinutes),
+        calledTooLongThresholdMinutes: Number(values.calledTooLongMinutes),
       });
       reset(fromSettings(next));
       setSaveState("saved");
@@ -151,7 +211,7 @@ export function JudgingWindowTab({ onDirtyChange }: { onDirtyChange?: (dirty: bo
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-6">
         <SectionCard
           variant="plain"
           footer={
@@ -186,6 +246,18 @@ export function JudgingWindowTab({ onDirtyChange }: { onDirtyChange?: (dirty: bo
                 <FormMessage />
               </FormItem>
             )}
+          />
+          <MinutesField
+            control={form.control}
+            name="preCallMinutes"
+            label={t("judgingPreCallMinutes")}
+            range={PRE_CALL_RANGE}
+          />
+          <MinutesField
+            control={form.control}
+            name="calledTooLongMinutes"
+            label={t("judgingCalledTooLongMinutes")}
+            range={CALLED_TOO_LONG_RANGE}
           />
           <PacePreview
             startsAt={values.judgingStartsAt ?? ""}

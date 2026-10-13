@@ -39,6 +39,15 @@ const KINDS = ["activity", "attendee_activity", "queue", "accreditation", "deadl
 function settings() {
   return {
     maxConcurrent: 2,
+    leadMinutes: 15,
+    defaultLeadMinutes: 15,
+    leadMinutesCustom: false,
+    timings: {
+      deadlineLead: { value: 180, default: 180, custom: false },
+      deadlineClosing: { value: 15, default: 15, custom: false },
+      accreditationLead: { value: 60, default: 60, custom: false },
+      accreditationTail: { value: 60, default: 60, custom: false },
+    },
     roles,
     kinds: KINDS.map((kind, priority) => ({
       kind,
@@ -89,6 +98,8 @@ const rowNames = () =>
 const lastPutBody = () =>
   vi.mocked(api.put).mock.calls.at(-1)?.[1] as {
     maxConcurrent: number;
+    leadMinutes: number;
+    timings: Record<string, number>;
     kinds: { kind: string; enabled: boolean; roleIds: number[] }[];
   };
 
@@ -103,6 +114,15 @@ beforeEach(() => {
     const b = body as ReturnType<typeof lastPutBody>;
     return Promise.resolve({
       maxConcurrent: b.maxConcurrent,
+      leadMinutes: b.leadMinutes,
+      defaultLeadMinutes: 15,
+      leadMinutesCustom: b.leadMinutes !== 15,
+      timings: Object.fromEntries(
+        Object.entries(b.timings).map(([key, value]) => {
+          const dflt = settings().timings[key as "deadlineLead"].default;
+          return [key, { value, default: dflt, custom: value !== dflt }];
+        }),
+      ),
       roles,
       kinds: b.kinds.map((k, priority) => ({ ...k, priority, requiredCapability: null })),
     });
@@ -186,6 +206,71 @@ describe("LiveActivitiesTab", () => {
     expect(new Set(body.kinds.map((k) => k.kind)).size).toBe(KINDS.length);
     expect(body.kinds).toHaveLength(KINDS.length);
     expect(body.maxConcurrent).toBe(2);
+  });
+
+  it("edits the lead time, validates its range and resets to the default", async () => {
+    const user = userEvent.setup();
+    await render();
+    const input = container.querySelector<HTMLInputElement>("#live-activities-lead");
+    expect(input?.value).toBe("15");
+    expect(container.textContent).not.toContain("liveActivitiesLeadReset");
+
+    await act(async () => user.clear(input as HTMLInputElement));
+    await act(async () => user.type(input as HTMLInputElement, "300"));
+    expect(button("saveChanges").disabled).toBe(true);
+    expect(input?.getAttribute("aria-invalid")).toBe("true");
+
+    await act(async () => user.clear(input as HTMLInputElement));
+    await act(async () => user.type(input as HTMLInputElement, "45"));
+    expect(button("saveChanges").disabled).toBe(false);
+    await act(async () => user.click(button("saveChanges")));
+    expect(lastPutBody().leadMinutes).toBe(45);
+
+    await act(async () => user.click(button("liveActivitiesLeadReset")));
+    expect(input?.value).toBe("15");
+    await act(async () => user.click(button("saveChanges")));
+    expect(lastPutBody().leadMinutes).toBe(15);
+  });
+
+  it("edits a kind's timings inline, shows the range error and resets to the default", async () => {
+    const user = userEvent.setup();
+    await render();
+    // Only the deadline and accreditation editors carry timing fields.
+    expect(container.querySelector("#live-activity-timing-deadlineLead")).toBeNull();
+
+    await act(async () => user.click(rowButton("liveActivityKindDeadline")));
+    const closing = container.querySelector<HTMLInputElement>(
+      "#live-activity-timing-deadlineClosing",
+    );
+    expect(closing?.value).toBe("15");
+    expect(container.textContent).toContain("liveActivityTimingDeadlineLeadHint");
+
+    await act(async () => user.clear(closing as HTMLInputElement));
+    await act(async () => user.type(closing as HTMLInputElement, "999"));
+    expect(closing?.value).toBe("999");
+    expect(closing?.getAttribute("aria-invalid")).toBe("true");
+    expect(container.textContent).toContain("timingRangeError");
+    expect(button("saveChanges").disabled).toBe(true);
+
+    await act(async () => user.clear(closing as HTMLInputElement));
+    await act(async () => user.type(closing as HTMLInputElement, "30"));
+    expect(container.textContent).not.toContain("timingRangeError");
+    await act(async () => user.click(button("saveChanges")));
+    expect(lastPutBody().timings).toEqual({
+      deadlineLead: 180,
+      deadlineClosing: 30,
+      accreditationLead: 60,
+      accreditationTail: 60,
+    });
+
+    await act(async () => user.click(button("liveActivitiesLeadReset")));
+    expect(closing?.value).toBe("15");
+    await act(async () => user.click(button("saveChanges")));
+    expect(lastPutBody().timings.deadlineClosing).toBe(15);
+
+    await act(async () => user.click(rowButton("liveActivityKindAccreditation")));
+    expect(container.querySelector("#live-activity-timing-accreditationLead")).not.toBeNull();
+    expect(container.querySelector("#live-activity-timing-accreditationTail")).not.toBeNull();
   });
 
   it("keeps the draft and reports an error when saving fails", async () => {
