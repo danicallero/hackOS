@@ -122,6 +122,10 @@ describe("staff edit response", () => {
     const res = await editAnswers(responseId, { age: "not-a-number" });
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body).error.message).toBe("Response fails template validation");
+    expect(JSON.parse(res.body).error.details).toMatchObject({
+      fields: { age: "must be a number" },
+      fieldReasons: { age: "must_be_number" },
+    });
   });
 
   it("validates a legacy response against the current field type staff edit", async () => {

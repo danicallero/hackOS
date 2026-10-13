@@ -34,7 +34,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { toast } from "@/lib/toast";
@@ -172,10 +173,7 @@ export function MetadataCard({
       toast.success(t("formUpdated"), { compactTitle: t("toastSaveForm") });
     } catch (err) {
       setSaveState("error");
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveForm"),
-        t("toastSaveForm"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveForm")), t("toastSaveForm"));
     }
   }
 

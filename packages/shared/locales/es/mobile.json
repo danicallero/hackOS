@@ -473,7 +473,6 @@
   "scheduleErrorScanNeedsParticipants": "Una actividad que exige escaneo debe ser visible para los participantes.",
   "scheduleErrorNotFound": "Esta actividad ya no existe.",
   "scheduleErrorForbidden": "No tienes permiso para editar la agenda.",
-  "scheduleSaveFailedReason": "No se pudo guardar la actividad: {reason}",
   "scheduleDeleteError": "No se pudo eliminar la actividad. Revisa la conexión e inténtalo de nuevo.",
   "translationsAndSettings": "Traducciones y ajustes técnicos",
   "scheduleTitleLabel": "Título",
@@ -911,5 +910,8 @@
   "networkingLoadError": "No se ha podido cargar el perfil.",
   "networkingSaveError": "No se ha podido guardar el perfil.",
   "networkingInvite": "Los participantes y representantes de empresas que escaneen tu acreditación en el evento verán este perfil, y os añadiréis mutuamente a contactos.",
-  "networkingInviteAction": "Completar perfil"
+  "networkingInviteAction": "Completar perfil",
+  "upgradeRequiredTitle": "Actualización necesaria",
+  "upgradeRequiredBody": "Actualiza hackOS para seguir usando la app.",
+  "upgradeRequiredAction": "Actualizar"
 }

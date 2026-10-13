@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import type { StatisticsParticipantStatus } from "@hackos/shared/statistics";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/csr/SquaresFour";
@@ -97,16 +97,17 @@ export default function LogisticsStatsPage() {
 
   const liveStats = useLiveQuery<LogisticsStats>(
     logisticsApi.stats,
-    "/api/logistics/stream",
+    REALTIME_SCOPES.LOGISTICS,
     LOGISTICS_EVENTS,
-    { enabled: canGeneralStats && activePhase !== "before" },
+    { enabled: canGeneralStats && activePhase !== "before", resourceKey: ["logistics", "stats"] },
   );
   const mealPlans = useLiveQuery(
     logisticsApi.mealPlans,
-    "/api/logistics/stream",
+    REALTIME_SCOPES.LOGISTICS,
     MEAL_PLAN_EVENTS,
     {
       enabled: canGeneralStats && activePhase === "during",
+      resourceKey: ["logistics", "meal-plans"],
     },
   );
 
@@ -136,7 +137,7 @@ export default function LogisticsStatsPage() {
         });
         setScopesLoaded(true);
       })
-      .catch((error) => setBeforeError(errorMessage(error, t("couldNotLoadStatistics"))))
+      .catch((error) => setBeforeError(errorMessage(error, t, t("couldNotLoadStatistics"))))
       .finally(() => setScopesLoading(false));
   }, [canStats, setSelectedScopeKeys, t]);
 
@@ -180,7 +181,7 @@ export default function LogisticsStatsPage() {
         if (requestId === beforeRequest.current) setApplicationStats(next);
       } catch (error) {
         if (requestId === beforeRequest.current)
-          setBeforeError(errorMessage(error, t("couldNotLoadStatistics")));
+          setBeforeError(errorMessage(error, t, t("couldNotLoadStatistics")));
       } finally {
         if (requestId === beforeRequest.current) setBeforeLoading(false);
       }
@@ -207,7 +208,7 @@ export default function LogisticsStatsPage() {
     try {
       setHours(await logisticsApi.presenceHours());
     } catch (error) {
-      setAfterError(errorMessage(error, t("couldNotLoadStatistics")));
+      setAfterError(errorMessage(error, t, t("couldNotLoadStatistics")));
     } finally {
       setAfterLoading(false);
     }

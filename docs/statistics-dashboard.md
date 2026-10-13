@@ -174,7 +174,7 @@ so older preferences cannot blank or break a dashboard. The default layout
 gives the composed overview additional width, and users can reset their
 personal layout to current catalog defaults.
 
-## Configuration and compatibility
+## Configuration history
 
 The current schema stores an explicit publication flag and a generic ACL
 table. Application templates use `statistics.enabled`; the old `reporting`

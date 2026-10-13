@@ -25,8 +25,9 @@ backend, one workstream at a time.
 
 Realtime readers share one authenticated fetch/SSE transport per tab through
 `lib/sse-broker.ts`, with canonical identity owned by `SessionProvider` and
-100 ms scope-union coalescing. Existing reader paths map to authorized logical
-scopes; recovery and sequence gaps stay scope-specific. Public TV uses one
+100 ms scope-union coalescing. `useEventSource`, `useAutoRefresh` and `useLiveQuery` take a
+`REALTIME_SCOPES` value (`domainScope(topic)` / `reviewScope(id)` for the
+parameterized ones), never a stream URL; recovery and sequence gaps stay scope-specific. Public TV uses one
 payload-free stream. See [realtime transport](../../docs/realtime-transport.md)
 for the contract, bounds, revocation and migration behavior.
 
@@ -69,6 +70,32 @@ old-cookie profile response; `useLiveQuery` retains its bounded one-trailing-
 refetch behavior for SSE bursts. The cache is only a browser deduplication
 layer: API reads remain the authoritative Postgres projection.
 
+### One read pattern (#1003)
+
+Every authenticated read goes through `lib/server-state.ts`: use
+`useLiveQuery(fetcher, stream, events, { resourceKey })` when SSE events should
+refresh it, or `useServerResource(key, fetcher)` for a plain read (dictionaries,
+meal plan). `resourceKey` is required and must contain every parameter the
+fetcher uses; entries are scoped to the signed-in identity, dropped on identity
+change, shared by concurrent readers and reused for 30 seconds. A caller's own
+`refetch()`/`reload()` bypasses the cached value. Do not add module-level
+caches or `useEffect` + `api.get` reads, and never turn a failed read into an
+empty or hard-coded list: expose `error` and render `ContextualError` with a
+retry. `useAutoRefresh` pages are migrated as they are touched.
+
+### Background refresh failures
+
+A page whose `load()` is re-run by `useAutoRefresh` must not treat a failed
+background refetch like a failed first load (event-day 429s would blank the
+screen). Use `hooks/use-background-refresh.ts`: call `succeeded()` after a load
+and `failed(err)` in its `catch`. `failed` returns true only for a first-load
+failure or a 404, so only then show `ContextualError` (or "not found" for a
+404). Otherwise keep the data and user-local state such as selections
+(reconcile selections against the new rows, never clear them), render
+`StaleDataNotice`, and add `retryNonce` to the load effect for the built-in
+exponential-backoff retry. No toast per failed refetch. Call `reset()` when the
+page switches to a different resource.
+
 ## Toasts
 
 Use `@/lib/toast` rather than importing Sileo directly. Toasts live in the
@@ -84,6 +111,11 @@ applies to loading, custom-icon, and promise feedback. Descriptions wrap long
 words and links so the full explanation stays inside the surface. Their surface
 is intentionally inverted (light toast on dark UI, dark toast on light UI), with
 state colors tuned for that surface.
+
+Never render `ApiError.message` (English server copy): use
+`apiErrorText(err, t, t("couldNotX"))` from `@/lib/api-error-text`, which
+resolves the error reason to localized copy first (`pnpm check:api-error-messages`
+enforces it). See `docs/api-reference.md` § Errors.
 
 Define a concise localized heading for every toast (usually two or three words).
 Errors use `toast.error(message, t("addChallengeLabel"))`, or `{ title: … }`
@@ -584,3 +616,9 @@ change the account column's height. A full-width role card starts collapsed
 and shows the visible role. It reveals all assigned role names, marking the
 visible role with a badge. Effective capabilities are grouped by area; each
 group opens on demand and shows capability names without descriptions.
+
+Pure schedule/announcement form models, localized content resolution, presence
+math, role/category labels, timezone-store behavior and account-removal progress
+parsing live in `packages/shared` (#1001). Keep web rendering, storage and
+`datetime-local` conversion here. See [shared client models](../../docs/notifications.md#shared-client-models-1001)
+for drift decisions and fallback orders.

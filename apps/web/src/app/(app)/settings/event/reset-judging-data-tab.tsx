@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
@@ -61,24 +62,17 @@ export function ResetJudgingDataTab({ icon: Icon }: { icon: PhosphorIcon }) {
   async function wipeJudgingData() {
     setPending(true);
     try {
-      await api.post<{ ok: true }>(
-        "/api/queue/admin/reset",
-        {
-          confirmationPhrase: SERVER_CONFIRMATION_PHRASE,
-          acknowledgeIrreversible: true,
-        },
-        { headers: { "Idempotency-Key": crypto.randomUUID() } },
-      );
+      await api.post<{ ok: true }>("/api/queue/admin/reset", {
+        confirmationPhrase: SERVER_CONFIRMATION_PHRASE,
+        acknowledgeIrreversible: true,
+      });
       setPending(false);
       setStage(0);
       setResetComplete(true);
       toast.success(t("judgingDataReset"), { compactTitle: t("toastResetJudging") });
     } catch (err) {
       setPending(false);
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotResetJudgingData"),
-        t("toastResetJudging"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotResetJudgingData")), t("toastResetJudging"));
     }
   }
 

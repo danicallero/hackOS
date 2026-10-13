@@ -160,11 +160,9 @@ describe("MealPlanSection (#933)", () => {
     await act(async () => boxes()[1]?.click());
     expect(container.textContent).not.toContain("columnUnanswered");
     await act(async () => save()?.click());
-    expect(mocks.put).toHaveBeenCalledWith(
-      "/api/users/7/meal-plan",
-      { meals: [{ activityId: 3, attending: true }] },
-      expect.anything(),
-    );
+    expect(mocks.put).toHaveBeenCalledWith("/api/users/7/meal-plan", {
+      meals: [{ activityId: 3, attending: true }],
+    });
   });
 
   it("is clean again after reverting an edit", async () => {
@@ -191,11 +189,9 @@ describe("MealPlanSection (#933)", () => {
     expect(save()?.disabled).toBe(false);
     await act(async () => save()?.click());
 
-    expect(mocks.put).toHaveBeenCalledWith(
-      "/api/users/7/meal-plan",
-      { meals: [{ activityId: 1, attending: false }] },
-      expect.anything(),
-    );
+    expect(mocks.put).toHaveBeenCalledWith("/api/users/7/meal-plan", {
+      meals: [{ activityId: 1, attending: false }],
+    });
   });
 
   it("is read-only without meal-plans:manage", async () => {

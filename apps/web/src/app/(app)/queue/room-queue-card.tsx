@@ -214,7 +214,7 @@ export function RoomQueueCard({
                   onClick={() =>
                     void mutate(
                       `notify-${entry.id}`,
-                      () => entryAction(entry.id, "notify-enter", undefined, crypto.randomUUID()),
+                      () => entryAction(entry.id, "notify-enter", undefined),
                       t("teamRenotified"),
                     )
                   }
@@ -230,7 +230,7 @@ export function RoomQueueCard({
                   onClick={() =>
                     void mutate(
                       `bring-${entry.id}`,
-                      () => entryAction(entry.id, "bring-in", undefined, crypto.randomUUID()),
+                      () => entryAction(entry.id, "bring-in", undefined),
                       t("teamBroughtIn"),
                     )
                   }
@@ -247,12 +247,10 @@ export function RoomQueueCard({
                     void mutate(
                       `requeue-${entry.id}`,
                       () =>
-                        entryAction(
-                          entry.id,
-                          "requeue",
-                          { position: "bottom", reason: "Queue operations: requeued" },
-                          crypto.randomUUID(),
-                        ),
+                        entryAction(entry.id, "requeue", {
+                          position: "bottom",
+                          reason: "Queue operations: requeued",
+                        }),
                       t("teamRequeued"),
                     )
                   }
@@ -269,12 +267,7 @@ export function RoomQueueCard({
                     void mutate(
                       `noshow-${entry.id}`,
                       () =>
-                        entryAction(
-                          entry.id,
-                          "no-show",
-                          { reason: "Queue operations: absent" },
-                          crypto.randomUUID(),
-                        ),
+                        entryAction(entry.id, "no-show", { reason: "Queue operations: absent" }),
                       t("teamMarkedAbsent"),
                     )
                   }
@@ -302,16 +295,11 @@ export function RoomQueueCard({
                   void mutate(
                     `call-${entry.id}`,
                     () =>
-                      entryAction(
-                        entry.id,
-                        "manual-call",
-                        {
-                          targetStatus: "called",
-                          roomId: room.room.id,
-                          reason: "Queue operations: manually called next",
-                        },
-                        crypto.randomUUID(),
-                      ),
+                      entryAction(entry.id, "manual-call", {
+                        targetStatus: "called",
+                        roomId: room.room.id,
+                        reason: "Queue operations: manually called next",
+                      }),
                     t("teamAddedWaiting"),
                   )
                 }
@@ -360,12 +348,9 @@ export function RoomQueueCard({
                             void mutate(
                               `top-${entry.id}`,
                               () =>
-                                entryAction(
-                                  entry.id,
-                                  "move-top",
-                                  { reason: "Queue operations: moved to top" },
-                                  crypto.randomUUID(),
-                                ),
+                                entryAction(entry.id, "move-top", {
+                                  reason: "Queue operations: moved to top",
+                                }),
                               t("teamMovedTop"),
                             )
                           }
@@ -380,16 +365,11 @@ export function RoomQueueCard({
                             void mutate(
                               `waiting-${entry.id}`,
                               () =>
-                                entryAction(
-                                  entry.id,
-                                  "manual-call",
-                                  {
-                                    targetStatus: "called",
-                                    roomId: room.room.id,
-                                    reason: "Queue operations: sent to waiting room",
-                                  },
-                                  crypto.randomUUID(),
-                                ),
+                                entryAction(entry.id, "manual-call", {
+                                  targetStatus: "called",
+                                  roomId: room.room.id,
+                                  reason: "Queue operations: sent to waiting room",
+                                }),
                               t("teamAddedWaiting"),
                             )
                           }

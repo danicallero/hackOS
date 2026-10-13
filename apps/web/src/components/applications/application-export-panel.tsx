@@ -9,9 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
+import type { Translate } from "@/lib/i18n";
 import { type I18nText, type MessageKey, pickText, useLocale } from "@/lib/i18n";
+import { intentKey, settleIntentKey } from "@/lib/intent-key";
 import { toast } from "@/lib/toast";
 
 const EXPORT_STATUSES = [
@@ -95,8 +98,8 @@ function allFieldIds(catalog: ExportCatalog): string[] {
   ];
 }
 
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
+function errorMessage(error: unknown, t: Translate, fallback: string): string {
+  return apiErrorText(error, t, fallback);
 }
 
 export function ApplicationExportPanel({
@@ -137,7 +140,7 @@ export function ApplicationExportPanel({
       setCatalog(next);
       setSelectedFields(allFieldIds(next));
     } catch (error) {
-      const message = errorMessage(error, t("applicationExportCatalogFailed"));
+      const message = errorMessage(error, t, t("applicationExportCatalogFailed"));
       setCatalogError(message);
       toast.error(message, t("toastExportApplications"));
     } finally {
@@ -272,21 +275,24 @@ export function ApplicationExportPanel({
 
     setExporting(true);
     try {
+      const requestBody = JSON.stringify({
+        statuses: selectedStatuses,
+        fields: selected.map((option) => option.selection),
+        ...(applicationId ? { application_ids: [applicationId] } : {}),
+        documents,
+        language,
+      });
+      const intent = `POST applications.zip ${requestBody}`;
       const response = await fetch(`${API_URL}/api/exports/applications.zip`, {
         method: "POST",
         credentials: "include",
         headers: {
           "content-type": "application/json",
-          "Idempotency-Key": crypto.randomUUID(),
+          "Idempotency-Key": intentKey(intent),
         },
-        body: JSON.stringify({
-          statuses: selectedStatuses,
-          fields: selected.map((option) => option.selection),
-          ...(applicationId ? { application_ids: [applicationId] } : {}),
-          documents,
-          language,
-        }),
+        body: requestBody,
       });
+      settleIntentKey(intent, response.status);
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as {
@@ -324,7 +330,7 @@ export function ApplicationExportPanel({
           t("exportFiles"),
         );
     } catch (error) {
-      const message = errorMessage(error, t("applicationExportFailed"));
+      const message = errorMessage(error, t, t("applicationExportFailed"));
       setExportError(message);
       toast.error(message, t("toastExportApplications"));
     } finally {

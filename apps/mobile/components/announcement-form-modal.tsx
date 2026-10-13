@@ -1,4 +1,9 @@
 import { MenuView } from "@expo/ui/community/menu";
+import {
+  emptyAnnouncementForm,
+  type TargetingMode,
+  targetingModeOf,
+} from "@hackos/shared/announcement-form";
 import { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,7 +12,6 @@ import { FloatingGlassButton, Section, ToggleRow } from "@/components/native-ui"
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import {
-  type AdminAnnouncement,
   ANNOUNCEMENT_CHANNELS,
   ANNOUNCEMENT_SCREEN_PLACEMENTS,
   type AnnouncementChannel,
@@ -49,8 +53,6 @@ function placementLabel(
   }
 }
 
-type TargetingMode = "everyone" | "roles" | "specific";
-
 function targetingLabel(mode: TargetingMode, t: ReturnType<typeof useLocale>["t"]): string {
   switch (mode) {
     case "everyone":
@@ -62,51 +64,7 @@ function targetingLabel(mode: TargetingMode, t: ReturnType<typeof useLocale>["t"
   }
 }
 
-function emptyForm(): AnnouncementInput {
-  return {
-    title: "",
-    body: "",
-    translations: {
-      es: { title: "", body: "" },
-      gl: { title: "", body: "" },
-      en: { title: "", body: "" },
-    },
-    notifyUsers: false,
-    screenPlacement: "none",
-    publishAt: null,
-    expiresAt: null,
-    roleIds: [],
-    intoleranceIds: [],
-    channels: ["in_app", "email", "push"],
-    recipientUserIds: [],
-  };
-}
-
-export function announcementToForm(a: AdminAnnouncement): AnnouncementInput {
-  return {
-    title: a.title,
-    body: a.body,
-    translations: {
-      es: a.translations?.es ?? { title: a.title, body: a.body },
-      gl: a.translations?.gl ?? { title: "", body: "" },
-      en: a.translations?.en ?? { title: "", body: "" },
-    },
-    notifyUsers: a.notify_users,
-    screenPlacement: a.screen_placement,
-    publishAt: a.publish_at,
-    expiresAt: a.expires_at,
-    roleIds: a.role_ids ?? [],
-    intoleranceIds: a.intolerance_ids ?? [],
-    channels: a.channels ?? ["in_app", "email", "push"],
-    recipientUserIds: (a.recipients ?? []).map((r) => r.id),
-  };
-}
-
-function targetingModeOf(values: AnnouncementInput): TargetingMode {
-  if (values.recipientUserIds.length > 0) return "specific";
-  if (values.roleIds.length > 0 || values.intoleranceIds.length > 0) return "roles";
-  return "everyone";
-}
+export { announcementToForm } from "@hackos/shared/announcement-form";
 
 /**
  * Admin create/edit form (H50, DELTA 0601) — same field set and validation
@@ -132,14 +90,14 @@ export function AnnouncementFormModal({
   const { t, language } = useLocale();
   const insets = useSafeAreaInsets();
   const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
-  const [values, setValues] = useState<AnnouncementInput>(initial ?? emptyForm());
+  const [values, setValues] = useState<AnnouncementInput>(initial ?? emptyAnnouncementForm());
   const [recipients, setRecipients] = useState<AnnouncementRecipient[]>(initialRecipients ?? []);
   const [roles, setRoles] = useState<Array<{ id: number; name: string }>>([]);
   const [intolerances, setIntolerances] = useState<
     Array<{ id: number; label: Record<string, string> }>
   >([]);
   const [targetingMode, setTargetingModeState] = useState<TargetingMode>(
-    targetingModeOf(initial ?? emptyForm()),
+    targetingModeOf(initial ?? emptyAnnouncementForm()),
   );
   const [scheduledSend, setScheduledSend] = useState(Boolean(initial?.publishAt));
   const [scheduledExpiry, setScheduledExpiry] = useState(Boolean(initial?.expiresAt));
@@ -164,7 +122,7 @@ export function AnnouncementFormModal({
 
   useEffect(() => {
     if (!visible) return;
-    const next = initial ?? emptyForm();
+    const next = initial ?? emptyAnnouncementForm();
     setValues(next);
     setRecipients(initialRecipients ?? []);
     setTargetingModeState(targetingModeOf(next));

@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { linkSecondaryEmail, removeDevpostParticipant, removeRepoMember } from "@/lib/projects";
 import { toast } from "@/lib/toast";
@@ -76,10 +76,7 @@ export function MemberRemoveButton({
           toast.success(t("memberRemoved"), { compactTitle: t("toastRemoveMember") });
           await onRemoved();
         } catch (err) {
-          toast.error(
-            err instanceof ApiError ? err.message : t("couldNotRemoveMember"),
-            t("toastRemoveMember"),
-          );
+          toast.error(apiErrorText(err, t, t("couldNotRemoveMember")), t("toastRemoveMember"));
         } finally {
           setBusy(false);
         }
@@ -119,7 +116,7 @@ export function DevpostParticipantActions({
       await onChanged();
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : t("couldNotDeleteParticipant"),
+        apiErrorText(err, t, t("couldNotDeleteParticipant")),
         t("toastDeleteParticipant"),
       );
     } finally {
@@ -137,10 +134,7 @@ export function DevpostParticipantActions({
       setSelectedUserId("");
       await onChanged();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLinkParticipant"),
-        t("toastLinkParticipant"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLinkParticipant")), t("toastLinkParticipant"));
     } finally {
       setBusy(null);
     }
@@ -253,10 +247,7 @@ export function ProjectMemberAdder({
               setSelectedUserId("");
               toast.success(t("memberAdded"), { compactTitle: t("addMemberLabel") });
             } catch (err) {
-              toast.error(
-                err instanceof ApiError ? err.message : t("couldNotAddMember"),
-                t("addMemberLabel"),
-              );
+              toast.error(apiErrorText(err, t, t("couldNotAddMember")), t("addMemberLabel"));
             } finally {
               setBusy(false);
             }
@@ -316,10 +307,7 @@ export function ProjectChallengeAdder({
               await onAdd(Number(challengeId));
               toast.success(t("challengeAddedMsg"), { compactTitle: t("addChallengeLabel") });
             } catch (err) {
-              toast.error(
-                err instanceof ApiError ? err.message : t("couldNotAddChallenge"),
-                t("addChallengeLabel"),
-              );
+              toast.error(apiErrorText(err, t, t("couldNotAddChallenge")), t("addChallengeLabel"));
             } finally {
               setBusy(false);
             }

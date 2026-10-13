@@ -45,7 +45,9 @@ new, forward-only `NNNN_name.sql` files in `apps/api/db/migrations/`.
 
 `pnpm --filter @hackos/api test` rebuilds an empty database from the active
 migration directory and compares its generated DBML byte-for-byte with the
-checked-in ERD. `pnpm schema:check` performs the same comparison against the
+checked-in ERD. The root-level `test/migrations.test.ts` suite is assigned to
+the fourth integration shard and uses its own temporary database for the
+concurrent migration and checksum checks. `pnpm schema:check` performs the same comparison against the
 configured database.
 
 ## Staging reset and deployment

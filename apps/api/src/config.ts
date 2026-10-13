@@ -150,6 +150,12 @@ const envSchema = z.object({
    * mobile sign-in to pass Better Auth's origin check.
    */
   MOBILE_APP_SCHEME: z.string().default("hackos"),
+  /**
+   * Oldest native build (the number in `X-HackOS-Build`) still allowed to call
+   * the API (#999). Mobile requests below it, including builds that predate the
+   * header, get `426 upgrade_required`. 0 disables the floor.
+   */
+  MOBILE_MIN_BUILD: z.coerce.number().int().min(0).max(1_000_000).default(0),
 
   LOG_LEVEL: z.string().default("info"),
   /** Emit redacted Expo push ticket metadata, including receipt IDs, when debugging delivery. */

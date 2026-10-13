@@ -1,10 +1,11 @@
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
+import type { Translate } from "@/lib/i18n";
 
 /** Turn an unknown thrown value into a message, preferring ApiError copy. */
-export function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof ApiError ? err.message : fallback;
+export function errorMessage(err: unknown, t: Translate, fallback: string): string {
+  return apiErrorText(err, t, fallback);
 }
 
 /**

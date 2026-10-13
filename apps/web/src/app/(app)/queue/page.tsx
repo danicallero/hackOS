@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
+import { errorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { enqueueAllChallengeQueues, getAllRoomViews, type RoomView } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
@@ -101,14 +102,14 @@ export default function QueueOperationsPage() {
 
   const roomViews = useLiveQuery<RoomView[]>(
     () => getAllRoomViews(),
-    "/api/queue/stream",
+    REALTIME_SCOPES.QUEUE,
     [
       EVENTS.QUEUE_ENTRY_CHANGED,
       EVENTS.QUEUE_ROOM_CHANGED,
       EVENTS.QUEUE_NOTIFY_ENTER,
       EVENTS.QUEUE_TEAM_CALLED,
     ],
-    { enabled: canViewRooms, onEvent: announceTeamEnter },
+    { enabled: canViewRooms, onEvent: announceTeamEnter, resourceKey: ["queue", "room-views"] },
   );
 
   const rooms = useMemo(() => roomViews.data ?? [], [roomViews.data]);
@@ -127,7 +128,7 @@ export default function QueueOperationsPage() {
   const onGenerate = useCallback(async () => {
     setBusy(true);
     try {
-      const result = await enqueueAllChallengeQueues(crypto.randomUUID());
+      const result = await enqueueAllChallengeQueues();
       toast.success(
         t("queuesGenerated", { inserted: result.inserted, challenges: result.challenges.length }),
         { compactTitle: t("generateQueues") },
@@ -159,7 +160,7 @@ export default function QueueOperationsPage() {
         <EmptyState
           icon={TicketIcon}
           title={t("couldNotLoadQueueOps")}
-          description={roomViews.error instanceof Error ? roomViews.error.message : t("tryAgain")}
+          description={errorText(roomViews.error, t, t("tryAgain"))}
         />
       </PageLayout>
     );

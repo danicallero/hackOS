@@ -1,6 +1,6 @@
 "use client";
 
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { BowlFoodIcon } from "@phosphor-icons/react/dist/csr/BowlFood";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { HardDriveIcon } from "@phosphor-icons/react/dist/csr/HardDrive";
@@ -63,9 +63,9 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
   }
   const activities = useLiveQuery(
     () => logisticsApi.scannableActivities(category),
-    "/api/logistics/stream",
+    REALTIME_SCOPES.LOGISTICS,
     SCAN_EVENTS,
-    { debounceMs: 400 },
+    { debounceMs: 400, resourceKey: ["logistics", "scannable-activities", category] },
   );
   const items = useMemo(() => activities.data?.items ?? [], [activities.data]);
 
@@ -130,7 +130,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
       setFindResults(results);
     } catch (err) {
       setFindResults(null);
-      setFindError(errorMessage(err, t("userSearchFailed")));
+      setFindError(errorMessage(err, t, t("userSearchFailed")));
     } finally {
       setFindBusy(false);
     }
@@ -216,7 +216,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
         setRepeatPrompt(err.details as ActivityScanResult);
       } else {
         setTransactionState("attention");
-        setError(errorMessage(err, t("scanFailed")));
+        setError(errorMessage(err, t, t("scanFailed")));
       }
     } finally {
       setBusy(false);
@@ -316,7 +316,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
             setTransactionState("attention");
             continue;
           }
-          const message = errorMessage(err, t("offlineSyncFailed"));
+          const message = errorMessage(err, t, t("offlineSyncFailed"));
           const businessRejection =
             err instanceof ApiError &&
             err.status >= 400 &&

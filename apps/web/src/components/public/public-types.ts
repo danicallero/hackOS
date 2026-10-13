@@ -44,8 +44,7 @@ export interface PublicAnnouncement {
   translations?: Partial<Record<"es" | "gl" | "en", { title: string; body: string }>>;
   publishAt: string | null;
   expiresAt: string | null;
-  /** Optional while older API deployments are still serving the legacy feed. */
-  screenPlacement?: "none" | "fullscreen" | "embedded";
+  screenPlacement: "none" | "fullscreen" | "embedded";
 }
 
 /** GET /api/public/applications item — an open form applicants can apply to. */

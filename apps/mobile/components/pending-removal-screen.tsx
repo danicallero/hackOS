@@ -4,6 +4,7 @@ import { Alert, Linking, Pressable, Text, useWindowDimensions, View } from "reac
 
 import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { ApiError } from "@/lib/api";
+import { errorText } from "@/lib/api-error-reason";
 import { forceLocalSignOut, signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
@@ -109,7 +110,7 @@ export function PendingRemovalScreen({
       ) {
         await refresh();
       } else {
-        setError(cause instanceof Error ? cause.message : t("accountRemovalCancelError"));
+        setError(errorText(cause, t, t("accountRemovalCancelError")));
       }
     } finally {
       setCancelling(false);
@@ -125,7 +126,7 @@ export function PendingRemovalScreen({
       const result = await signOut();
       if (result.error) throw new Error(result.error.message || t("signOutError"));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("signOutError"));
+      setError(errorText(cause, t, t("signOutError")));
       setSignOutFailed(true);
       setSigningOut(false);
     }

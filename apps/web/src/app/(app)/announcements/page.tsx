@@ -5,25 +5,27 @@
 // consumes the CRUD API in apps/api/src/modules/notifications/routes/announcements.ts.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
 import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
 import type { UserOption } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError } from "@/lib/api";
+import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import type { Announcement, AnnouncementInput } from "@/lib/notifications";
@@ -83,7 +85,7 @@ export default function AnnouncementsPage() {
   const canManage = useCan(CAPABILITIES.ANNOUNCEMENTS_MANAGE);
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
-  const hasLoadedRef = useRef(false);
+  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<Announcement | null>(null);
@@ -92,41 +94,38 @@ export default function AnnouncementsPage() {
   const [editingItem, setEditingItem] = useState<Announcement | null>(null);
 
   const load = useCallback(async () => {
-    if (!hasLoadedRef.current) setLoading(true);
-    setLoadError(null);
+    if (!hasLoaded()) setLoading(true);
     try {
       const result = await notificationsApi.listAnnouncements();
-      hasLoadedRef.current = true;
+      succeeded();
+      setLoadError(null);
       setItems(result.items);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements");
-      setLoadError(message);
-      toast.error(message, t("announcements"));
+      // A failed background refresh keeps the list (#1012).
+      if (!failed(err)) return;
+      setLoadError(apiErrorText(err, t, t("couldNotLoadAnnouncements")));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, succeeded, failed, hasLoaded]);
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // publishes/edits/deletes an announcement elsewhere (H50).
-  const liveRefresh = useAutoRefresh("/api/content/stream", [EVENTS.CONTENT_ANNOUNCEMENT]);
+  const liveRefresh = useAutoRefresh(REALTIME_SCOPES.PUBLIC_CONTENT, [EVENTS.CONTENT_ANNOUNCEMENT]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (canManage) void load();
     else setLoading(false);
-  }, [canManage, load, liveRefresh]);
+  }, [canManage, load, liveRefresh, retryNonce]);
 
   async function openEdit(item: Announcement) {
     try {
       const full = await notificationsApi.getAnnouncement(item.id);
       setEditingItem(full);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"),
-        t("announcements"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLoadAnnouncements")), t("announcements"));
     }
   }
 
@@ -139,7 +138,7 @@ export default function AnnouncementsPage() {
       setDeleting(null);
       await load();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotDeleteAnnouncement");
+      const message = apiErrorText(err, t, t("couldNotDeleteAnnouncement"));
       setDeleteError(message);
       toast.error(message, t("deleteAnnouncementAria"));
     } finally {
@@ -216,6 +215,7 @@ export default function AnnouncementsPage() {
 
   return (
     <PageLayout>
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         title={t("announcements")}
         primaryAction={
@@ -230,7 +230,7 @@ export default function AnnouncementsPage() {
         columns={columns}
         data={items}
         getRowId={(a) => String(a.id)}
-        loading={loading && !hasLoadedRef.current}
+        loading={loading && !hasLoaded()}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         searchable={(a) => `${a.title} ${a.body}`}
         searchPlaceholder={t("searchAnnouncementsPlaceholder")}

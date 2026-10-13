@@ -15,7 +15,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
@@ -55,7 +56,6 @@ export function ChallengeAlertDialog({
           body,
           target: allParticipants ? "participants" : "challenge",
         },
-        { headers: { "idempotency-key": crypto.randomUUID() } },
       );
       toast.success(t("challengeAlertSent", { count: result.recipients }), {
         compactTitle: t("sendChallengeAlert"),
@@ -64,10 +64,7 @@ export function ChallengeAlertDialog({
       setTitle(empty);
       setBody(empty);
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotSendChallengeAlert"),
-        t("sendChallengeAlert"),
-      );
+      toast.error(apiErrorText(error, t, t("couldNotSendChallengeAlert")), t("sendChallengeAlert"));
     } finally {
       setSending(false);
     }

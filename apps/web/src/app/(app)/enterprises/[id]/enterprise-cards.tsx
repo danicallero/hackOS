@@ -5,7 +5,7 @@
 // logo. The logo is uploaded via a presigned PUT (H44 object storage); the API
 // sets logo_url to the resulting public URL server-side, so we just reload.
 
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
@@ -38,6 +38,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api, apiUpload } from "@/lib/api";
+import { apiErrorText, errorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
@@ -220,7 +221,7 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
 
   // Soft, in-place refresh instead of a hard reload when membership changes
   // elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
@@ -254,10 +255,7 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
       await loadMembers();
       toast.success(t("userAffiliated"), { compactTitle: t("addMemberLabel") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotAddUser"),
-        t("addMemberLabel"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotAddUser")), t("addMemberLabel"));
     } finally {
       setBusy(false);
     }
@@ -270,10 +268,7 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
       await loadMembers();
       toast.success(t("affiliationRemoved"), { compactTitle: t("toastRemoveMember") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRemoveUser"),
-        t("toastRemoveMember"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRemoveUser")), t("toastRemoveMember"));
     } finally {
       setBusy(false);
     }
@@ -376,7 +371,7 @@ export function LogoCard({
         compactTitle: t("uploadLogo"),
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("couldNotUploadLogo"), t("uploadLogo"));
+      toast.error(errorText(err, t, t("couldNotUploadLogo")), t("uploadLogo"));
     } finally {
       setUploading(false);
     }
@@ -494,10 +489,7 @@ export function EditCard({
       await onSaved();
       toast.success(t("enterpriseUpdated"), { compactTitle: t("toastSaveCompany") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveEnterprise"),
-        t("toastSaveCompany"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveEnterprise")), t("toastSaveCompany"));
     }
   }
 

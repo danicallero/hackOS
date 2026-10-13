@@ -6,7 +6,7 @@
 // page is the full, unscoped query surface referenced there.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { LogIcon } from "@phosphor-icons/react/dist/csr/Log";
 import Link from "next/link";
@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePersistedState } from "@/hooks/use-persisted-state";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { getActionLabel } from "@/lib/audit-labels";
 import { fromDatetimeLocal, shortDateTimeFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -151,7 +151,7 @@ export default function AuditPage() {
   // Soft, in-place refresh instead of a hard reload — audit entries are
   // created by every sensitive mutation in the app (H53), so this stays on
   // the audit-scoped stream.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=audit", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.AUDIT), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
@@ -185,7 +185,7 @@ export default function AuditPage() {
         if (cancelled) return;
         setItems([]);
         setTotal(0);
-        const message = err instanceof ApiError ? err.message : t("couldNotLoadAuditLog");
+        const message = apiErrorText(err, t, t("couldNotLoadAuditLog"));
         setLoadError(message);
         toast.error(message, t("toastAudit"));
       })

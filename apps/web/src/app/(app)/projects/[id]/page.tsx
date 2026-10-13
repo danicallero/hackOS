@@ -3,7 +3,7 @@
 // Project detail with hot-edit membership and challenge assignment (H20-H21).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
@@ -24,7 +24,8 @@ import { PresentationStatus } from "@/components/projects/presentation-status";
 import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   addRepoChallenge,
@@ -101,10 +102,7 @@ export default function ProjectDetailPage() {
         }
       }
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadProject"),
-        t("projectLabel"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLoadProject")), t("projectLabel"));
       setRepo(null);
     } finally {
       setLoading(false);
@@ -113,8 +111,8 @@ export default function ProjectDetailPage() {
 
   // Soft, in-place refresh instead of a hard reload when this project
   // changes elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
-  const queueRefresh = useAutoRefresh("/api/tv/stream", [EVENTS.DATA_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
+  const queueRefresh = useAutoRefresh(REALTIME_SCOPES.PUBLIC_TV, [EVENTS.DATA_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
@@ -265,7 +263,7 @@ export default function ProjectDetailPage() {
                 repoId={repo.id}
                 currentMembers={repo.members}
                 onAdd={async (userId) => {
-                  await addRepoMember(repo.id, userId, crypto.randomUUID());
+                  await addRepoMember(repo.id, userId);
                   await load();
                 }}
               />
@@ -334,9 +332,7 @@ export default function ProjectDetailPage() {
                                 await load();
                               } catch (err) {
                                 toast.error(
-                                  err instanceof ApiError
-                                    ? err.message
-                                    : t("couldNotRemoveChallenge"),
+                                  apiErrorText(err, t, t("couldNotRemoveChallenge")),
                                   t("toastWithdrawChallenge"),
                                 );
                               }
@@ -371,7 +367,7 @@ export default function ProjectDetailPage() {
                                 await load();
                               } catch (err) {
                                 toast.error(
-                                  err instanceof ApiError ? err.message : t("couldNotRemovePrize"),
+                                  apiErrorText(err, t, t("couldNotRemovePrize")),
                                   t("toastRemovePrize"),
                                 );
                               }
@@ -393,7 +389,7 @@ export default function ProjectDetailPage() {
               repoId={repo.id}
               challenges={availableChallenges}
               onAdd={async (challengeId) => {
-                await addRepoChallenge(repo.id, challengeId, crypto.randomUUID());
+                await addRepoChallenge(repo.id, challengeId);
                 await load();
               }}
             />

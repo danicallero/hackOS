@@ -26,7 +26,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
@@ -157,10 +158,7 @@ export function UserInviteLinksSection({
       toast.success(t("linkWithdrawn"), { compactTitle: t("toastWithdrawInvite") });
       await onChanged();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotWithdrawLink"),
-        t("toastWithdrawInvite"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotWithdrawLink")), t("toastWithdrawInvite"));
     } finally {
       setBusy((current) => {
         const next = new Set(current);
@@ -207,7 +205,7 @@ export function UserInviteLinksSection({
       toast.success(t("userInviteLinkCreated"), { compactTitle: t("toastCreateInvite") });
       await onChanged();
     } catch (err) {
-      setCreateError(err instanceof ApiError ? err.message : t("couldNotCreateUserInviteLink"));
+      setCreateError(apiErrorText(err, t, t("couldNotCreateUserInviteLink")));
     } finally {
       setCreatePending(false);
     }

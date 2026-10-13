@@ -43,7 +43,6 @@ import { DragHandle, SortableItem } from "@/components/common/drag-handle";
 import { FormActions } from "@/components/common/form-actions";
 import { IconButton } from "@/components/common/icon-button";
 import { SectionCard } from "@/components/common/section-card";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
@@ -57,7 +56,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Section } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -189,7 +189,7 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
       setDraft(next);
       setStatus("ready");
     } catch (err) {
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadLiveActivities"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadLiveActivities")));
       setStatus("error");
     }
   }, [t]);
@@ -236,10 +236,7 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
       toast.success(t("saved"), { compactTitle: t("liveActivitiesTitle") });
     } catch (err) {
       setSaveState("error");
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveLiveActivities"),
-        t("liveActivitiesTitle"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveLiveActivities")), t("liveActivitiesTitle"));
     } finally {
       setPending(false);
     }

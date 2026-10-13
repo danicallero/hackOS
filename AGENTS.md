@@ -106,6 +106,9 @@ canonical doc (see promotion path in `.claude/reflections/README.md`).
 Read AGENTS.md (this file, if not already in context)
       │
       ▼
+Read HANDOFF.md at the worktree root, if present (see "Handoff notes")
+      │
+      ▼
 Identify the affected domain/module
       │
       ├── matching docs/*.md section
@@ -145,6 +148,22 @@ touches.
 - Don't invent an H-number for something that isn't in
   `plan/historias-hackos.md` (e.g. for a GitHub issue with no story) — link
   the issue directly instead.
+
+## Handoff notes
+
+When your context, token or usage budget runs low — or you are about to stop
+before the task is complete for any reason — write `HANDOFF.md` at the root of
+your worktree before you stop, and keep it current from then on. Another agent
+must be able to continue with no other context. Include:
+
+- the issue/task and its goal, the branch, and the PR (if any);
+- what is done: files changed, migrations, tests added;
+- what is left: concrete next steps, open questions, known failing tests;
+- the exact validation commands and their last result;
+- gotchas: infra state, env vars, decisions made and why.
+
+`HANDOFF.md` is a working note, not documentation: never commit it (add it to
+`.git/info/exclude`). A new agent picking up a worktree reads it first.
 
 ## Before you finish
 

@@ -1,4 +1,3 @@
-import type { MessageKey } from "@/lib/i18n";
 import type { ScannerPerson } from "@/lib/scanner-types";
 
 /**
@@ -47,9 +46,7 @@ function iconForRole(role: string | null): RoleFilterIcon {
  * retired): a real role name is shown as-is, untranslated; null (no visible
  * role) falls back to the translated "Unassigned" label.
  */
-export function roleDisplayName(role: RoleFilterValue, t: (key: MessageKey) => string): string {
-  return role ?? t("roleUnassigned");
-}
+export { roleDisplayName } from "@hackos/shared/display-labels";
 
 /** Icon for the "no filter, show everyone" sentinel row, shared by both screens' UIs (label comes from `t("roleAll")`). */
 export const ROLE_FILTER_ALL_ICON: "person.2" = "person.2";

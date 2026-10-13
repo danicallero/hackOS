@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -58,33 +58,39 @@ export default function PresencePage() {
 
   const estimate = useLiveQuery<PresenceEstimate>(
     logisticsApi.presenceEstimate,
-    "/api/logistics/stream",
+    REALTIME_SCOPES.LOGISTICS,
     PRESENCE_EVENTS,
-    { enabled: canPresence, debounceMs: 400 },
+    { enabled: canPresence, debounceMs: 400, resourceKey: ["logistics", "presence", "estimate"] },
   );
   const hours = useLiveQuery<PresenceHours[]>(
     logisticsApi.presenceHours,
-    "/api/logistics/stream",
+    REALTIME_SCOPES.LOGISTICS,
     PRESENCE_EVENTS,
-    { enabled: canPresence, debounceMs: 400 },
+    { enabled: canPresence, debounceMs: 400, resourceKey: ["logistics", "presence", "hours"] },
   );
   const openSessions = useLiveQuery<OpenPresenceSession[]>(
     async () => (await logisticsApi.presenceOpenSessions()).items,
-    "/api/logistics/stream",
+    REALTIME_SCOPES.LOGISTICS,
     PRESENCE_EVENTS,
-    { enabled: canPresence, debounceMs: 400 },
+    {
+      enabled: canPresence,
+      debounceMs: 400,
+      resourceKey: ["logistics", "presence", "open-sessions"],
+    },
   );
 
   // H24/H27: each read model keeps its own failure and retry path so one
   // outage cannot make another operational dataset look empty or unknown.
   const estimateError = queryLoadError(
     estimate.error,
+    t,
     t("attendanceDataUnavailable"),
     estimate.refetch,
   );
-  const hoursError = queryLoadError(hours.error, t("couldNotLoadStatistics"), hours.refetch);
+  const hoursError = queryLoadError(hours.error, t, t("couldNotLoadStatistics"), hours.refetch);
   const openSessionsError = queryLoadError(
     openSessions.error,
+    t,
     t("attendanceDataUnavailable"),
     openSessions.refetch,
   );

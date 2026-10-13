@@ -1,4 +1,5 @@
 import { API_URL } from "./env";
+import { intentKey, settleIntentKey } from "./intent-key";
 
 /**
  * Typed error mirroring the API's error envelope
@@ -49,18 +50,22 @@ export async function apiFetch<T = unknown>(
   const method = rest.method?.toUpperCase() ?? "GET";
   const isMutation = !["GET", "HEAD", "OPTIONS"].includes(method);
   const isPublicRead = path.startsWith("/api/public/") && (method === "GET" || method === "HEAD");
+  const intent =
+    isMutation && !new Headers(headers).has("Idempotency-Key")
+      ? `${method} ${path} ${JSON.stringify(body ?? null)}`
+      : null;
+  // A transport failure throws before settling, which keeps the key for the retry.
   const res = await fetch(buildUrl(path, query), {
     credentials: isPublicRead ? "omit" : (requestedCredentials ?? "include"),
     headers: {
       ...(body !== undefined ? { "content-type": "application/json" } : {}),
-      ...(isMutation && !new Headers(headers).has("Idempotency-Key")
-        ? { "Idempotency-Key": crypto.randomUUID() }
-        : {}),
+      ...(intent ? { "Idempotency-Key": intentKey(intent) } : {}),
       ...headers,
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     ...rest,
   });
+  if (intent) settleIntentKey(intent, res.status);
 
   if (res.status === 204) return undefined as T;
 
@@ -102,12 +107,20 @@ export async function apiFetch<T = unknown>(
  * JSON-stringifies its body, which can't carry a `FormData` payload.
  */
 export async function apiUpload<T = unknown>(path: string, body: FormData): Promise<T> {
+  const intent = `POST ${path} ${[...body.entries()]
+    .map(([name, value]) =>
+      value instanceof File
+        ? `${name}:${value.name}:${value.size}:${value.lastModified}`
+        : `${name}:${value}`,
+    )
+    .join("|")}`;
   const res = await fetch(buildUrl(path), {
     method: "POST",
     credentials: "include",
-    headers: { "Idempotency-Key": crypto.randomUUID() },
+    headers: { "Idempotency-Key": intentKey(intent) },
     body,
   });
+  settleIntentKey(intent, res.status);
 
   if (res.status === 204) return undefined as T;
 

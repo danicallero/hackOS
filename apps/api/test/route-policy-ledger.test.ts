@@ -13,30 +13,13 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(397);
-    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(20);
+    expect(rows).toHaveLength(463);
+    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(21);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
-    // +4 (#966): the caller's own Live Activity device/session registry and
-    // read model under /api/me/live-activities.
-    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(73);
-    // +2 (H8): GET .../seed-diff and POST .../reset-to-default, both gated
-    // by permissions:manage like every other role-mutation route.
-    // +4 (H8): GET/POST /api/role-grant-rules and PATCH/DELETE
-    // /api/role-grant-rules/:ruleId, the admin CRUD for configurable
-    // automatic role grant/revoke rules — all gated by permissions:manage.
-    // +1 (H42): PATCH /api/tv/config sets the wall's display-language
-    // override, gated by tv:control like the rest of TV control.
-    // +3 (H22/H24/H54): GET /api/logistics/people (logisticsRead) and the two
-    // presence-hours CSV export routes (logistics:stats), for the unified
-    // logistics scan+people-finder view.
-    // +1 (H44): DELETE /api/challenges/:id, gated like publish/unpublish —
-    // capability-only, deliberately not the owner-inclusive edit policy.
-    // +2 (H12, #846): staff-only consolidation of duplicate university and
-    // degree rows.
-    // +6 (H27): the generic scope catalog, aggregate query, safe CSV export,
-    // and generic scope visibility GET/PUT/DELETE routes.
-    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(221);
-    expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(71);
+    // #992: match the current inventory enforced by scripts/route-policy-audit.ts.
+    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(98);
+    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(252);
+    expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(80);
     expect(app.routePolicyExemptions).toEqual([
       { url: "/api/auth/*", exemption: "better-auth-generated" },
     ]);
@@ -62,6 +45,7 @@ describe("final route-policy ledger", () => {
       "GET /api/tv/rooms",
       "GET /api/tv/stream",
       "GET /api/wallet/artwork/:id/:scale.png",
+      "GET /api/wallet/artwork/default/:slot/:scale.png",
       "GET /healthz",
       "GET /metrics",
       "GET /readyz",

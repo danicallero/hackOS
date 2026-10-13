@@ -24,7 +24,7 @@ export function PeopleTab({ onOpenPerson }: { onOpenPerson: (userId: number) => 
       const { items } = await logisticsApi.listPeople();
       setPeople(items);
     } catch (err) {
-      setError(errorMessage(err, t("couldNotLoadPeople")));
+      setError(errorMessage(err, t, t("couldNotLoadPeople")));
     } finally {
       setLoading(false);
     }

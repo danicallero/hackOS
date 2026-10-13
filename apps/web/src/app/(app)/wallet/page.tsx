@@ -14,7 +14,7 @@ import { Spinner } from "@/components/common/spinner";
 import { TabBar } from "@/components/common/tab-bar";
 import { WalletButtons, type WalletPurpose } from "@/components/common/wallet-buttons";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type TicketQrPayload } from "@/lib/logistics";
 import { useMe } from "@/lib/session";
@@ -40,7 +40,7 @@ export default function WalletPage() {
     try {
       setPayload(await logisticsApi.myTicket());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("couldNotLoadYourApplications"));
+      setError(apiErrorText(err, t, t("couldNotLoadYourApplications")));
     } finally {
       setLoading(false);
     }

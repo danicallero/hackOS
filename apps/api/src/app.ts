@@ -38,6 +38,7 @@ import {
 import { valkey } from "./lib/valkey.js";
 import { registerModules } from "./modules/index.js";
 import { authContextPlugin } from "./plugins/auth-context.js";
+import { clientFloorPlugin } from "./plugins/client-floor.js";
 import { requestContextPlugin } from "./plugins/request-context.js";
 
 export type App = FastifyInstance;
@@ -360,7 +361,7 @@ export async function buildApp(): Promise<App> {
   // Every application route is part of the machine-readable access ledger.
   // Startup fails closed if a route is added without an explicit policy; the
   // Better Auth generated catch-all is the sole narrow exemption.
-  registerRoutePolicyInfrastructure(app, { enforce: true });
+  registerRoutePolicyInfrastructure(app);
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
@@ -410,6 +411,7 @@ export async function buildApp(): Promise<App> {
   // never needs to reach the object store directly. 5 MB cap on a logo.
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
   await app.register(requestContextPlugin);
+  await app.register(clientFloorPlugin);
   await app.register(authContextPlugin);
 
   // Event-day admission is deliberately a separate, in-process scheduler

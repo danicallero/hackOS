@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Surface } from "@/components/ui/surface";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
 import {
   collapseRepoQueueMemberships,
@@ -122,7 +122,7 @@ export function TeamQueueSearch({
         setMemberships(collapseRepoQueueMemberships(await getRepoChallenges(repoId)));
       } catch (err) {
         setMemberships([]);
-        setError(err instanceof ApiError ? err.message : t("queueTeamSearchFailed"));
+        setError(apiErrorText(err, t, t("queueTeamSearchFailed")));
       } finally {
         setLoading(false);
       }
@@ -153,24 +153,16 @@ export function TeamQueueSearch({
     setBusyEntryId(entry.entry_id);
     try {
       if (action === "manual-call") {
-        await entryAction(
-          entry.entry_id,
-          "manual-call",
-          {
-            targetStatus: "called",
-            roomId,
-            reason: "Queue operations: manually added to waiting room",
-          },
-          crypto.randomUUID(),
-        );
+        await entryAction(entry.entry_id, "manual-call", {
+          targetStatus: "called",
+          roomId,
+          reason: "Queue operations: manually added to waiting room",
+        });
         toast.success(t("teamAddedWaiting"), { compactTitle: t("toastCallTeam") });
       } else if (action === "move-top") {
-        await entryAction(
-          entry.entry_id,
-          "move-top",
-          { reason: "Queue operations: moved team to top from team search" },
-          crypto.randomUUID(),
-        );
+        await entryAction(entry.entry_id, "move-top", {
+          reason: "Queue operations: moved team to top from team search",
+        });
         toast.success(t("teamMovedTop"), { compactTitle: t("toastPrioritizeTeam") });
       } else if (action === "move-end") {
         if (entry.status === "waiting") {
@@ -178,27 +170,18 @@ export function TeamQueueSearch({
             entry.entry_id,
             999_999,
             "Queue operations: moved team to end from team search",
-            crypto.randomUUID(),
           );
         } else {
-          await entryAction(
-            entry.entry_id,
-            "requeue",
-            {
-              position: "bottom",
-              reason: "Queue operations: moved team to end from team search",
-            },
-            crypto.randomUUID(),
-          );
+          await entryAction(entry.entry_id, "requeue", {
+            position: "bottom",
+            reason: "Queue operations: moved team to end from team search",
+          });
         }
         toast.success(t("teamRequeued"), { compactTitle: t("toastRequeueTeam") });
       } else {
-        await entryAction(
-          entry.entry_id,
-          "disqualify",
-          { reason: "Queue operations: disqualified from team search" },
-          crypto.randomUUID(),
-        );
+        await entryAction(entry.entry_id, "disqualify", {
+          reason: "Queue operations: disqualified from team search",
+        });
         toast.success(t("queueTeamDisqualified"), { compactTitle: t("toastDisqualifyTeam") });
       }
       await loadMemberships(entry.repo_id);

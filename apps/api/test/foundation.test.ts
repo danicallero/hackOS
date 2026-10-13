@@ -254,6 +254,26 @@ describe("foundation", () => {
       payload: { badge: "B2" },
     });
     expect(mismatch.statusCode).toBe(409);
+
+    // #994: a replay inside the retention window (6 days) survives the purge
+    // and still returns the stored response; past 8 days it re-executes.
+    const { pool } = await import("../src/db/pool.js");
+    const { purgeExpiredIdempotencyKeys } = await import("../src/lib/idempotency.js");
+    const send = () =>
+      app.inject({
+        method: "POST",
+        url: "/scan",
+        headers: { "idempotency-key": key },
+        payload: { badge: "B1" },
+      });
+    await pool.query(`UPDATE idempotency_keys SET created_at = now() - interval '6 days'`);
+    await purgeExpiredIdempotencyKeys();
+    const inWindow = await send();
+    expect(inWindow.headers["idempotency-replayed"]).toBe("true");
+    expect(inWindow.json()).toEqual({ execution: 1, got: "B1" });
+    await pool.query(`UPDATE idempotency_keys SET created_at = now() - interval '8 days'`);
+    await purgeExpiredIdempotencyKeys();
+    expect((await send()).json()).toEqual({ execution: 2, got: "B1" });
   });
 
   it("SSE broadcast fans out through valkey to a subscribed envelope", async () => {
@@ -263,5 +283,26 @@ describe("foundation", () => {
     expect(envelope?.type).toBe("queue.entry.status_changed");
     expect(Number(envelope?.id)).toBeGreaterThan(0);
     expect(envelope?.data).toEqual({ entryId: 7 });
+  });
+});
+
+describe("idempotency_keys retention (#994)", () => {
+  it("purges only expired rows and replays inside the window", async () => {
+    const { pool } = await import("../src/db/pool.js");
+    const { purgeExpiredIdempotencyKeys } = await import("../src/lib/idempotency.js");
+    const row = (k: string, status: number | null, age: string) =>
+      pool.query(
+        `INSERT INTO idempotency_keys (key, scope, request_hash, response_status, response_body, created_at)
+         VALUES ($1, 's', 'h', $2, '{"ok":true}', now() - $3::interval)`,
+        [k, status, age],
+      );
+    await row("old-done", 200, "8 days");
+    await row("new-done", 200, "6 days");
+    await row("old-inflight", null, "2 days");
+    await row("new-inflight", null, "1 minute");
+
+    expect(await purgeExpiredIdempotencyKeys()).toBe(2);
+    const { rows } = await pool.query(`SELECT key FROM idempotency_keys ORDER BY key`);
+    expect(rows.map((r) => r.key)).toEqual(["new-done", "new-inflight"]);
   });
 });

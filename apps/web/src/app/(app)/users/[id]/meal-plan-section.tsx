@@ -11,11 +11,11 @@ import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
 import { apiErrorReason } from "@/lib/api-error-reason";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { pickText, useLocale } from "@/lib/i18n";
-import { idempotencyHeaders } from "@/lib/logistics";
 import type { MealPlan, MealPlanMeal } from "@/lib/meal-plan";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -83,20 +83,13 @@ export function MealPlanSection({ userId }: { userId: number }) {
     if (!plan) return;
     setSaving(true);
     try {
-      const next = await api.put<MealPlan>(
-        `/api/users/${userId}/meal-plan`,
-        {
-          meals: edited.map((m) => ({ activityId: m.activityId, attending: draft[m.activityId] })),
-        },
-        { headers: idempotencyHeaders("meal-plan") },
-      );
+      const next = await api.put<MealPlan>(`/api/users/${userId}/meal-plan`, {
+        meals: edited.map((m) => ({ activityId: m.activityId, attending: draft[m.activityId] })),
+      });
       apply(next);
       toast.success(t("mealPlanSaved"), { compactTitle: t("toastSaveUserMealPlan") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveUserMealPlan"),
-        t("toastSaveUserMealPlan"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveUserMealPlan")), t("toastSaveUserMealPlan"));
     } finally {
       setSaving(false);
     }

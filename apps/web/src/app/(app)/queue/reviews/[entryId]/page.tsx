@@ -28,7 +28,7 @@ import { ProjectDescriptionLinks } from "@/components/projects/project-descripti
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { changedFieldLabel, requiredUnanswered } from "@/lib/attempt-review";
 import { useLocale } from "@/lib/i18n";
 import {
@@ -70,7 +70,7 @@ export default function ReviewDetailPage() {
       setNotes(data.review.notes ?? "");
       setDirty(false);
     } catch (err) {
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadReviews"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadReviews")));
       setDetail(null);
     } finally {
       setLoading(false);

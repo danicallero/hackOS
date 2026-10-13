@@ -1,18 +1,21 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { Spinner } from "@/components/common/spinner";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
 import { TrackTiming } from "@/components/projects/track-timing";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { listDevpostPrizes } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
@@ -26,6 +29,7 @@ type DevpostPrize = {
   mappedChallengeTitle: string | null;
 };
 
+import { apiErrorText } from "@/lib/api-error-text";
 import { ChallengeAlertDialog } from "./challenge-alert-dialog";
 import { EditCard } from "./challenge-cards";
 
@@ -45,6 +49,8 @@ export default function ChallengeDetailPage() {
   const [devpostPrizes, setDevpostPrizes] = useState<DevpostPrize[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
+  const [notFound, setNotFound] = useState(false);
+  const { succeeded, failed, reset, stale, retryNonce } = useBackgroundRefresh();
 
   const load = useCallback(async () => {
     // A background live-refresh shouldn't flash the whole editor away —
@@ -60,15 +66,19 @@ export default function ChallengeDetailPage() {
         setDevpostPrizes([]);
       }
       setStatus("ready");
+      succeeded();
     } catch (err) {
-      setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadChallenge"));
+      // A failed background refresh keeps the loaded challenge (#1012).
+      if (!failed(err)) return;
+      setErrorMsg(apiErrorText(err, t, t("couldNotLoadChallenge")));
+      setNotFound(isNotFoundError(err));
       setStatus("error");
     }
-  }, [canMapPrizes, id, t]);
+  }, [canMapPrizes, id, t, succeeded, failed]);
 
   // Soft, in-place refresh instead of a hard reload when another admin edits
   // this challenge elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
@@ -77,9 +87,13 @@ export default function ChallengeDetailPage() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       void load();
     } else {
+      setNotFound(true);
       setStatus("error");
     }
-  }, [id, load, liveRefresh]);
+  }, [id, load, liveRefresh, retryNonce]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a different challenge is a different resource, so its first load may show an error.
+  useEffect(() => reset(), [id, reset]);
 
   if (status === "loading") {
     return (
@@ -90,6 +104,14 @@ export default function ChallengeDetailPage() {
   }
 
   if (status === "error" || !challenge) {
+    if (!notFound) {
+      return (
+        <ContextualError
+          message={errorMsg || t("couldNotLoadChallenge")}
+          onRetry={() => void load()}
+        />
+      );
+    }
     return (
       <div className="space-y-6">
         <EmptyState
@@ -103,6 +125,7 @@ export default function ChallengeDetailPage() {
 
   return (
     <PageLayout width="reading">
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         title={textForDisplay(challenge.title)}
         secondaryActions={

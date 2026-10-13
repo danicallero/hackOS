@@ -1,3 +1,4 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { Question } from "@hackos/shared/questions";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
@@ -153,7 +154,7 @@ export async function assertTextFieldLeases(
   const missing = fields.filter((field) => !held.has(field));
   if (missing.length) {
     throw new ConflictError("Your editing lease has expired or belongs to another judge", {
-      code: "review_field_lease_required",
+      code: ERROR_REASONS.REVIEW_FIELD_LEASE_REQUIRED,
       fields: missing,
     });
   }

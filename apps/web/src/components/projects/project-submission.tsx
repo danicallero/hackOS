@@ -11,7 +11,8 @@ import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   claimProject,
@@ -84,7 +85,7 @@ export function ProjectLifecycle({
       setState(await projectSubmission(id));
       setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t("couldNotLoadProject"));
+      setError(apiErrorText(e, t, t("couldNotLoadProject")));
     }
   }, [id, stage, t]);
   useEffect(() => {
@@ -99,7 +100,7 @@ export function ProjectLifecycle({
       await load();
       return true;
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t("couldNotSaveProject"));
+      setError(apiErrorText(e, t, t("couldNotSaveProject")));
       return false;
     } finally {
       setBusy(false);
@@ -338,7 +339,7 @@ export function ImportedProjectClaim({
   useEffect(() => {
     projectLinkCandidates(state.id)
       .then((r) => setCandidates(r.groups))
-      .catch((e) => setError(e instanceof ApiError ? e.message : t("couldNotLoadProjects")));
+      .catch((e) => setError(apiErrorText(e, t, t("couldNotLoadProjects"))));
   }, [state.id, t]);
   if (state.claimStatus === "confirmed" || state.claimStatus === "rejected") return null;
   async function claim(groupId?: number, kind: "group" | "repo" = "group") {
@@ -353,7 +354,7 @@ export function ImportedProjectClaim({
       await onChanged();
       setReview(false);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t("couldNotSaveProject"));
+      setError(apiErrorText(e, t, t("couldNotSaveProject")));
     } finally {
       setBusy(false);
     }
@@ -383,14 +384,10 @@ export function ImportedProjectClaim({
           onClick={async () => {
             setBusy(true);
             try {
-              await api.post(
-                `/api/me/projects/${state.id}/reject-claim`,
-                {},
-                { headers: { "Idempotency-Key": crypto.randomUUID() } },
-              );
+              await api.post(`/api/me/projects/${state.id}/reject-claim`, {});
               router.replace("/my-project");
             } catch (e) {
-              setError(e instanceof ApiError ? e.message : t("couldNotSaveProject"));
+              setError(apiErrorText(e, t, t("couldNotSaveProject")));
             } finally {
               setBusy(false);
             }

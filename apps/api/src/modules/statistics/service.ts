@@ -14,7 +14,6 @@ import {
   statisticsPanelKeys,
 } from "../applications/stats.js";
 import {
-  canonicalStatisticsPanelKey,
   isCompatibleStatisticsPanel,
   panelDefinition,
   ROLE_SCOPE_PANEL_KEYS,
@@ -135,7 +134,7 @@ export async function accessibleStatisticsScopes(
   const panelKeysFor = (scopeKey: string, available: Set<string>) =>
     new Set(
       [...available].filter((panelKey) => {
-        const explicit = decisionsByScope.get(scopeKey)?.get(canonicalStatisticsPanelKey(panelKey));
+        const explicit = decisionsByScope.get(scopeKey)?.get(panelKey);
         return explicit ? explicit === "allow" : generalAccess;
       }),
     );
@@ -248,11 +247,17 @@ export function mergeApplicationSnapshots(
     }
     return result;
   }, {});
-  const funnel = snapshots.reduce<Record<string, number>>((result, snapshot) => {
-    for (const [key, value] of Object.entries(
-      (snapshot.funnel as Record<string, number> | undefined) ?? {},
-    )) {
-      result[key] = (result[key] ?? 0) + Number(value);
+  const overviewMetrics = snapshots.reduce<Record<string, number>>((result, snapshot) => {
+    const overview = (snapshot.overview as Record<string, number> | undefined) ?? {};
+    for (const key of [
+      "sent",
+      "confirmed",
+      "rejected",
+      "expired_confirmations",
+      "still_able_to_confirm",
+    ]) {
+      const value = overview[key];
+      if (value !== undefined) result[key] = (result[key] ?? 0) + Number(value);
     }
     return result;
   }, {});
@@ -338,14 +343,14 @@ export function mergeApplicationSnapshots(
     (total, [status, count]) => total + (status === "draft" ? 0 : count),
     0,
   );
-  const confirmed = Number(funnel.confirmed ?? 0);
-  const sent = Number(funnel.sent ?? 0);
+  const confirmed = Number(overviewMetrics.confirmed ?? 0);
+  const sent = Number(overviewMetrics.sent ?? 0);
   const overview = {
     submitted,
     confirmed,
-    rejected: Number(funnel.rejected ?? counts.rejected ?? 0),
-    expired_confirmations: Number(funnel.expired ?? 0),
-    still_able_to_confirm: Number(funnel.still_in_window ?? 0),
+    rejected: Number(overviewMetrics.rejected ?? counts.rejected ?? 0),
+    expired_confirmations: Number(overviewMetrics.expired_confirmations ?? 0),
+    still_able_to_confirm: Number(overviewMetrics.still_able_to_confirm ?? 0),
     confirmation_rate: sent > 0 ? confirmed / sent : null,
     average_confirmation_time_hours: (() => {
       const weightedCount = timeValues.reduce((total, value) => total + value.count, 0);
@@ -360,7 +365,6 @@ export function mergeApplicationSnapshots(
     application: snapshots.length === 1 ? first.application : null,
     counts_by_status: counts,
     overview,
-    funnel,
     time_series: timeSeries,
     time_to_confirm_hours: {
       avg: overview.average_confirmation_time_hours,
@@ -478,9 +482,7 @@ export async function queryStatistics(
   const defaultPanelKeys = [...new Set(selectedScopes.flatMap((scope) => scope.panelKeys))].filter(
     (key) => isCompatibleStatisticsPanel(key, scopeKinds),
   );
-  const panelKeys = (query.panelKeys?.length ? query.panelKeys : defaultPanelKeys).map(
-    canonicalStatisticsPanelKey,
-  );
+  const panelKeys = query.panelKeys?.length ? query.panelKeys : defaultPanelKeys;
   for (const panelKey of [...new Set(panelKeys)]) {
     const definition = definitionByKey.get(panelKey) ?? panelDefinition(panelKey);
     if (!definition || !isCompatibleStatisticsPanel(panelKey, scopeKinds)) {
@@ -580,7 +582,6 @@ export async function queryStatistics(
   }
   if (!allowedPanelSet.has("overview")) {
     delete result.overview;
-    delete result.funnel;
     delete result.counts_by_status;
     delete result.time_to_confirm_hours;
   }

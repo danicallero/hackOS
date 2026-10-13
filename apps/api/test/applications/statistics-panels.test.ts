@@ -34,8 +34,8 @@ describe("dynamic application statistics panels", () => {
   it("applies H8 precedence and defaults to deny", () => {
     expect(
       resolveStatisticsPanelAccess([
-        { panelKey: "funnel", rolePosition: 100, state: "allow" },
-        { panelKey: "funnel", rolePosition: 200, state: "deny" },
+        { panelKey: "overview", rolePosition: 100, state: "allow" },
+        { panelKey: "overview", rolePosition: 200, state: "deny" },
         { panelKey: "shirt-sizes", rolePosition: 200, state: "inherit" },
         { panelKey: "shirt-sizes", rolePosition: 100, state: "allow" },
         { panelKey: "food-intolerances", rolePosition: 100, state: "inherit" },
@@ -48,16 +48,7 @@ describe("dynamic application statistics panels", () => {
       resolveStatisticsPanelDecisions([
         { panelKey: "overview", rolePosition: 100, state: "allow" },
         { panelKey: "overview", rolePosition: 200, state: "deny" },
-        { panelKey: "funnel", rolePosition: 100, state: "inherit" },
-      ]),
-    ).toEqual(new Map([["overview", "deny"]]));
-  });
-
-  it("lets a deny win conflicting legacy funnel and overview rules at the same position", () => {
-    expect(
-      resolveStatisticsPanelDecisions([
-        { panelKey: "funnel", rolePosition: 100, state: "allow" },
-        { panelKey: "overview", rolePosition: 100, state: "deny" },
+        { panelKey: "shirt-sizes", rolePosition: 100, state: "inherit" },
       ]),
     ).toEqual(new Map([["overview", "deny"]]));
   });

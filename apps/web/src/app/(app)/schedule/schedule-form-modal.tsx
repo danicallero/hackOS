@@ -6,6 +6,7 @@
 // its full Starts date).
 
 import { ACTIVITY_KINDS, isMealActivityKind } from "@hackos/shared/activity-kinds";
+import { scheduleItemToForm as sharedScheduleItemToForm } from "@hackos/shared/schedule-form";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
@@ -32,6 +33,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import {
@@ -86,50 +88,21 @@ export function scheduleItemToForm(
   item: PublicScheduleItem,
   accountLanguage: Language,
 ): ScheduleInput {
-  const resolved =
-    item.primaryLanguage === accountLanguage
-      ? { title: item.title, description: item.description }
-      : {
-          title: item.titleI18n?.[accountLanguage] ?? "",
-          description: item.descriptionI18n?.[accountLanguage] ?? "",
-        };
+  const form = sharedScheduleItemToForm(item, accountLanguage);
   return {
-    title: resolved.title,
-    description: resolved.description ?? "",
-    location: item.location ?? "",
-    type: item.type ?? "activity",
-    requiresScan: item.requiresScan ?? false,
-    startsAt: toDatetimeLocal(item.startsAt),
-    endsAt: toDatetimeLocal(item.endsAt),
-    visibility: item.visibility ?? "hidden",
-    publishAt: toDatetimeLocal(item.publishAt),
-    audiences: item.audiences ?? [],
-    liveActivityAudience: item.liveActivityAudience ?? false,
-    contactNote: item.contactNote ?? "",
-    notes: item.notes ?? "",
+    ...form,
+    description: form.description ?? "",
+    location: form.location ?? "",
+    contactNote: form.contactNote ?? "",
+    notes: form.notes ?? "",
+    startsAt: toDatetimeLocal(form.startsAt),
+    endsAt: toDatetimeLocal(form.endsAt),
+    publishAt: toDatetimeLocal(form.publishAt),
   };
 }
 
 /** The non-viewer locales' hand-edited/machine-translated title+description, including the item's original primary language if it isn't the viewer's own (H50 extension). */
-export function scheduleItemToTranslations(
-  item: PublicScheduleItem,
-  accountLanguage: Language,
-): ScheduleTranslations {
-  const translations: ScheduleTranslations = {};
-  for (const language of LANGUAGES) {
-    if (language === accountLanguage) continue;
-    if (language === item.primaryLanguage) {
-      translations[language] = { title: item.title, description: item.description };
-      continue;
-    }
-    const title = item.titleI18n?.[language];
-    const description = item.descriptionI18n?.[language];
-    if (title !== undefined || description !== undefined) {
-      translations[language] = { title, description };
-    }
-  }
-  return translations;
-}
+export { scheduleItemToTranslations } from "@hackos/shared/schedule-form";
 
 export function scheduleDuplicateForm(
   item: PublicScheduleItem,
@@ -252,10 +225,7 @@ export function ScheduleFormModal({
       });
       setTranslations((prev) => ({ ...prev, ...result }));
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotTranslate"),
-        t("toastTranslate"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotTranslate")), t("toastTranslate"));
     } finally {
       setTranslating(false);
     }
@@ -278,10 +248,7 @@ export function ScheduleFormModal({
         await logisticsApi.saveScheduleTranslations(result.id, prepared.translations);
       }
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastSaveActivity"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastSaveActivity"));
     } finally {
       setPending(false);
     }
@@ -789,7 +756,7 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
       await loadOwners();
       toast.success(t("userAffiliated"), { compactTitle: t("toastAddOwner") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddUser"), t("toastAddOwner"));
+      toast.error(apiErrorText(err, t, t("couldNotAddUser")), t("toastAddOwner"));
     } finally {
       setBusy(false);
     }
@@ -802,10 +769,7 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
       await loadOwners();
       toast.success(t("affiliationRemoved"), { compactTitle: t("toastRemoveOwner") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRemoveUser"),
-        t("toastRemoveOwner"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRemoveUser")), t("toastRemoveOwner"));
     } finally {
       setBusy(false);
     }

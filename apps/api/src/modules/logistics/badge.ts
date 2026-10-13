@@ -1,3 +1,4 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { Queryable } from "../../db/pool.js";
 import { AppError } from "../../lib/errors.js";
 import { scannerCredentialDigest } from "./credential-tombstones.js";
@@ -46,7 +47,9 @@ export async function resolveByBadge(
     [scannerCredentialDigest("badge", badgeId)],
   );
   if (tombstone.rows[0]) {
-    throw new AppError(409, "badge_revoked", "This badge has been revoked");
+    throw new AppError(409, "badge_revoked", "This badge has been revoked", {
+      code: ERROR_REASONS.BADGE_REVOKED,
+    });
   }
 
   const current = await db.query(
@@ -68,7 +71,10 @@ export async function resolveByBadge(
       LIMIT 1`,
     [badgeId],
   );
-  if (revoked.rows[0]) throw new AppError(409, "badge_revoked", "This badge has been revoked");
+  if (revoked.rows[0])
+    throw new AppError(409, "badge_revoked", "This badge has been revoked", {
+      code: ERROR_REASONS.BADGE_REVOKED,
+    });
 
   throw new AppError(404, "badge_unknown", "Badge not recognized");
 }

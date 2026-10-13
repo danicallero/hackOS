@@ -76,7 +76,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { groupApplicationFields } from "@/lib/application-field-groups";
 import { fieldErrorsFromApi, validationErrorSummary } from "@/lib/application-validation";
 import { LOCALE_CODES, pickText, type Translate, useLocale } from "@/lib/i18n";
@@ -748,7 +749,7 @@ export function ReviewModal({
         });
       }
       const summary = validationErrorSummary(nextErrors, answerFields, lang);
-      const serverMessage = err instanceof ApiError ? err.message : "";
+      const serverMessage = apiErrorText(err, t, "");
       showErrorToast(err, t("couldNotSaveAnswers"), {
         ...(summary || serverMessage
           ? {
@@ -773,7 +774,7 @@ export function ReviewModal({
       if (options.notify) options.notify();
       else toast.success(label, { compactTitle: t("toastDecisions") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("actionFailed"), t("toastDecisions"));
+      toast.error(apiErrorText(err, t, t("actionFailed")), t("toastDecisions"));
     } finally {
       setBusy(false);
     }
@@ -789,7 +790,7 @@ export function ReviewModal({
       await onChanged();
       toast.success(t("staffNotesSaved"), { compactTitle: t("saveNotes") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveNotes"), t("saveNotes"));
+      toast.error(apiErrorText(err, t, t("couldNotSaveNotes")), t("saveNotes"));
     } finally {
       setSavingNotes(false);
     }
@@ -902,10 +903,7 @@ export function ReviewModal({
       if (mountedRef.current) updateModalStatus("review");
       toast.success(t("acceptanceUndone"), { compactTitle: t("toastUndoAcceptance") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("actionFailed"),
-        t("toastUndoAcceptance"),
-      );
+      toast.error(apiErrorText(err, t, t("actionFailed")), t("toastUndoAcceptance"));
     } finally {
       if (mountedRef.current) setBusy(false);
     }
@@ -1859,11 +1857,10 @@ function DecisionMenu({
                     void run(
                       t("returnedToDraft"),
                       () =>
-                        api.post(
-                          `/api/responses/${responseId}/return-to-draft`,
-                          { allow_resubmit_after_close: false, auto_accept_on_resubmit: false },
-                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
-                        ),
+                        api.post(`/api/responses/${responseId}/return-to-draft`, {
+                          allow_resubmit_after_close: false,
+                          auto_accept_on_resubmit: false,
+                        }),
                       { refresh: false, nextStatus: "draft" },
                     )
                   }
@@ -1876,11 +1873,10 @@ function DecisionMenu({
                     void run(
                       t("returnedToDraft"),
                       () =>
-                        api.post(
-                          `/api/responses/${responseId}/return-to-draft`,
-                          { allow_resubmit_after_close: true, auto_accept_on_resubmit: false },
-                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
-                        ),
+                        api.post(`/api/responses/${responseId}/return-to-draft`, {
+                          allow_resubmit_after_close: true,
+                          auto_accept_on_resubmit: false,
+                        }),
                       { refresh: false, nextStatus: "draft" },
                     )
                   }
@@ -1893,11 +1889,10 @@ function DecisionMenu({
                     void run(
                       t("returnedToDraft"),
                       () =>
-                        api.post(
-                          `/api/responses/${responseId}/return-to-draft`,
-                          { allow_resubmit_after_close: true, auto_accept_on_resubmit: true },
-                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
-                        ),
+                        api.post(`/api/responses/${responseId}/return-to-draft`, {
+                          allow_resubmit_after_close: true,
+                          auto_accept_on_resubmit: true,
+                        }),
                       { refresh: false, nextStatus: "draft" },
                     )
                   }
@@ -1947,10 +1942,7 @@ function DecisionMenu({
                 onSelect={() =>
                   void run(
                     t("reaccepted"),
-                    () =>
-                      api.post(`/api/responses/${responseId}/re-accept`, undefined, {
-                        headers: { "Idempotency-Key": crypto.randomUUID() },
-                      }),
+                    () => api.post(`/api/responses/${responseId}/re-accept`, undefined),
                     { refresh: false, nextStatus: "accepted" },
                   )
                 }

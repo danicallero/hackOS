@@ -2149,6 +2149,11 @@ an id's first post).
 
 ## Other infrastructure
 
+- `lib/client-build.ts` sends the native build number as `X-HackOS-Build` on API
+  and realtime requests. When the API answers `426 upgrade_required`
+  (`lib/upgrade-required.ts`), the root layout replaces the app with
+  `UpgradeRequiredScreen`, which opens the store (#999). See
+  [mobile-release](./mobile-release.md#minimum-supported-build).
 - `lib/app-version.ts` shows the installed binary's version and a seven-character
   commit in Sign in and Account. `app.config.ts` captures EAS/CI commit metadata,
   falling back to the checkout's HEAD when building locally; builds without Git
@@ -2250,3 +2255,13 @@ demand from the grouped search action. All toolbar actions stay mounted while
 searching; blur or cancel ends search without rebuilding the toolbar. Legacy headers use the same
 grouping with their existing search field. People/Companies switching, saved
 contacts, favourites and wallet actions retain their existing behavior.
+
+## Shared client models (#1001)
+
+Schedule and announcement forms use the framework-free models in
+`packages/shared`; schedule and scanner localized text use the same resolver.
+Presence math, role/category labels, timezone-store behavior and account-removal
+progress parsing are shared too. Native rendering, ISO date inputs and
+SecureStore access stay in this app. See
+[shared client models](./notifications.md#shared-client-models-1001) for the
+trimming/null decisions and the unchanged announcement fallback policy.

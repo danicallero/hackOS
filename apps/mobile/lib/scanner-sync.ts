@@ -1,4 +1,6 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { ApiError, apiFetch, CLOCK_SKEW_TOLERANCE_MS, getClockSkewMs } from "./api";
+import { apiErrorReason, scanFailureCode } from "./api-error-reason";
 import { authClient } from "./auth-client";
 import { createIdempotencyKey } from "./idempotency-key";
 import {
@@ -111,14 +113,11 @@ async function waitForLocalSnapshotWrite(write: Promise<void>): Promise<Error | 
   return result;
 }
 
-/** Matches apps/api/src/modules/logistics/activities.ts BadRequestError text. */
-const TIMESTAMP_FUTURE_ERROR = "Offline scan timestamp must be in the past";
-
 type ReplayFailure = "retryable" | "terminal";
 
 function classifyReplayFailure(error: unknown): ReplayFailure {
   if (!(error instanceof ApiError)) return "retryable";
-  if (error instanceof ApiError && error.message.includes("still in flight")) {
+  if (apiErrorReason(error) === ERROR_REASONS.IDEMPOTENCY_IN_FLIGHT) {
     return "retryable";
   }
   if (
@@ -189,22 +188,14 @@ async function attemptClockSkewCorrection(
     // corrected failure returned `true`, which silently left the scan pending
     // on terminal errors and allowed transient failures to advance the queue.
     if (classifyReplayFailure(error) === "retryable") {
-      await noteRetryableError(
-        scan.id,
-        error instanceof Error ? error.message : "Network error",
-        ownerUserId,
-      );
+      await noteRetryableError(scan.id, scanFailureCode(error), ownerUserId);
       return "retryable";
     }
     if (isStaleCredentialRejection(error)) {
       await deleteScan(scan.id, ownerUserId);
       return "terminal";
     }
-    await failScan(
-      scan.id,
-      error instanceof Error ? error.message : "Request rejected",
-      ownerUserId,
-    );
+    await failScan(scan.id, scanFailureCode(error), ownerUserId);
     return "terminal";
   }
 }
@@ -232,11 +223,7 @@ export async function replayPendingScans(
       // activity and presence log until someone finds the retry button. Only
       // genuine business rejections (400/404/409…) are final.
       if (failure === "retryable") {
-        await noteRetryableError(
-          scan.id,
-          error instanceof Error ? error.message : "Network error",
-          ownerUserId,
-        );
+        await noteRetryableError(scan.id, scanFailureCode(error), ownerUserId);
         break;
       }
       // A 404 is terminal for a queued identity-bearing scan: the participant
@@ -252,21 +239,17 @@ export async function replayPendingScans(
       if (
         error instanceof ApiError &&
         error.status === 400 &&
-        error.message.includes(TIMESTAMP_FUTURE_ERROR)
+        apiErrorReason(error) === ERROR_REASONS.SCAN_TIMESTAMP_IN_FUTURE
       ) {
         const correction = await attemptClockSkewCorrection(scan, ownerUserId, sessionCookie);
         if (correction === "acknowledged" || correction === "terminal") continue;
         if (correction === "retryable") break;
       }
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
-        await failScan(scan.id, error.message, ownerUserId);
+        await failScan(scan.id, scanFailureCode(error), ownerUserId);
         continue;
       }
-      await noteRetryableError(
-        scan.id,
-        error instanceof Error ? error.message : "Network error",
-        ownerUserId,
-      );
+      await noteRetryableError(scan.id, scanFailureCode(error), ownerUserId);
       break;
     }
   }

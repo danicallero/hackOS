@@ -1,6 +1,6 @@
 "use client";
 
-import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { AddressBookIcon } from "@phosphor-icons/react/dist/csr/AddressBook";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -13,7 +13,8 @@ import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -117,9 +118,7 @@ function DiaryPage() {
   const [focusNonce, setFocusNonce] = useState(0);
   const loadedAt = useRef(0);
   const hasEntries = useRef(false);
-  const liveRefresh = useAutoRefresh(`/api/events/stream?topic=${SSE_TOPICS.DIRECTORY}`, [
-    EVENTS.DOMAIN_CHANGED,
-  ]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.DIRECTORY), [EVENTS.DOMAIN_CHANGED]);
 
   useEffect(() => {
     function onFocus() {
@@ -143,7 +142,7 @@ function DiaryPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        const message = err instanceof ApiError ? err.message : t("diaryCouldNotLoad");
+        const message = apiErrorText(err, t, t("diaryCouldNotLoad"));
         // A failed background refresh keeps what is already shown.
         if (hasEntries.current) toast.error(message, t("diary"));
         else setLoadError(message);
@@ -176,10 +175,7 @@ function DiaryPage() {
             await api.patch<DiaryEntry>(`/api/me/diary/${mark.id}`, { starred: !mark.starred }),
           );
         } catch (err) {
-          toast.error(
-            err instanceof ApiError ? err.message : t("diaryCouldNotSave"),
-            t("diaryFavourite"),
-          );
+          toast.error(apiErrorText(err, t, t("diaryCouldNotSave")), t("diaryFavourite"));
         } finally {
           setBusyId(null);
         }
@@ -198,7 +194,7 @@ function DiaryPage() {
       setNoteTarget(null);
       toast.success(t("diaryNoteSaved"), { compactTitle: t("diaryNote") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("diaryCouldNotSave"), t("diaryNote"));
+      toast.error(apiErrorText(err, t, t("diaryCouldNotSave")), t("diaryNote"));
     } finally {
       setBusyId(null);
     }
@@ -214,10 +210,7 @@ function DiaryPage() {
       setRemoveTarget(null);
       toast.success(t("diaryRemoved"), { compactTitle: t("diaryRemoveTitle") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("diaryCouldNotSave"),
-        t("diaryRemoveTitle"),
-      );
+      toast.error(apiErrorText(err, t, t("diaryCouldNotSave")), t("diaryRemoveTitle"));
     } finally {
       setBusyId(null);
     }

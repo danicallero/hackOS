@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { type ProjectSubmission, projectReconciliation } from "@/lib/projects";
 import { useCan } from "@/lib/session";
@@ -75,7 +76,7 @@ export default function ReconciliationPage() {
       setMax(next.config.maxTeamSize?.toString() ?? "");
       setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t("couldNotLoadProjects"));
+      setError(apiErrorText(e, t, t("couldNotLoadProjects")));
     }
   }, [allowed, t]);
   useEffect(() => {
@@ -364,7 +365,7 @@ export default function ReconciliationPage() {
                 await load();
                 setRulesOpen(false);
               } catch (e) {
-                setError(e instanceof ApiError ? e.message : t("couldNotSaveProject"));
+                setError(apiErrorText(e, t, t("couldNotSaveProject")));
               } finally {
                 setBusy(false);
               }
@@ -412,7 +413,7 @@ export default function ReconciliationPage() {
             await load();
             setDecision(null);
           } catch (e) {
-            setError(e instanceof ApiError ? e.message : t("couldNotSaveProject"));
+            setError(apiErrorText(e, t, t("couldNotSaveProject")));
           } finally {
             setBusy(false);
           }

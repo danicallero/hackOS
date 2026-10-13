@@ -1,6 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ApiError } from "@/lib/api";
+import { apiErrorCopy } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
@@ -59,7 +60,7 @@ export function RequestFeedback({
       accessibilityRole="alert"
     >
       <Text selectable style={[styles.error, { color: colors.onDestructiveSurface }]}>
-        {message ?? t(errorKey(error))}
+        {(error instanceof ApiError ? apiErrorCopy(error, t) : message) ?? t(errorKey(error))}
       </Text>
       {onRetry ? (
         <Pressable

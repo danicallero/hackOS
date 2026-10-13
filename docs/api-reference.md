@@ -271,6 +271,16 @@ lease owner before changing a text field, so the browser's read-only state is
 not the concurrency boundary. Numeric and choice answers retain the existing
 field-level merge behavior.
 
+The web panel (`judging/review-form.tsx`) mounts one form per queue entry.
+Leaving an entry — switching teams or navigating elsewhere in the app — makes one save
+attempt for edits still in the 800 ms autosave window or held after a failed
+save; a field leased by another judge rejects it with an error toast rather
+than retrying. Responses requested for a previous entry are dropped. A failed
+autosave stays visible with a retry action and pauses autosave until a save
+succeeds; while edits cannot be saved (failed save, conflict, offline),
+switching teams asks for confirmation, and leaving with any unsaved edits
+triggers the shared unsaved-changes guard (#1014).
+
 ### live-activities (#966 · H38, H25, H26, H59, H19, H22)
 The device/session registry (`PUT /api/me/live-activities/device`,
 `PUT`/`DELETE /api/me/live-activities/sessions`), the read model
@@ -522,6 +532,50 @@ return silent success or swallow a failure. The global error handler
 | `ConflictError` | 409 | `conflict` — capacity full, a double transition, a stale badge, an already-used token |
 | `TooManyRequestsError` | 429 | `too_many_requests` — carries `retryAfterSeconds` |
 | `ServiceUnavailableError` | 503 | `service_unavailable` — a dependent provider/credential isn't configured (e.g. unset Wallet signing keys) |
+
+#### Machine-readable reasons (#996)
+
+`error.code` stays the generic class code above. When a client has to tell
+two failures of the same class apart (retry vs. delete a scan, which form
+message to show), the error carries a stable reason in **`details.code`**.
+Clients branch on `details.code` — never on `message`, which is English copy
+and may be reworded. Reason names live in `packages/shared/src/error-reasons.ts`
+(`ERROR_REASONS`), imported by API, web and mobile; add new ones there. Web and
+mobile read it with `apiErrorReason(err)`, which falls back to the top-level
+code when there is no reason.
+
+| Reason (`details.code`) | Status | Meaning |
+|---|---|---|
+| `idempotency_in_flight` | 409 | Same `Idempotency-Key` still being processed; retry shortly |
+| `idempotency_payload_mismatch` | 409 | `Idempotency-Key` reused with a different request |
+| `scan_timestamp_in_future` | 400 | Offline scan `scannedAt` is ahead of the server clock |
+| `badge_revoked` / `ticket_revoked` | 409 | Also the top-level `code`, kept for installed clients |
+| `team_member_busy` | 409 | A team member is busy in another judging room (H30) |
+| `schedule_ends_before_starts` | 400 | Schedule item ends at or before it starts |
+| `schedule_scan_needs_participants` | 400 | A scan-required item must be participant-visible |
+| `schedule_item_not_found` | 404 | Schedule item does not exist |
+
+Application response validation (`400`, "Response fails template validation")
+returns `details.fieldReasons` (field key → `FIELD_ERROR_REASONS` value such as
+`required`, `must_be_number`, `too_short`) next to the legacy `details.fields`
+message map, which is kept unchanged for installed clients.
+
+**Clients never show `message` (#1013).** Each reason a user can trigger has
+copy in all three locales under `apiError_<reason>` in
+`packages/shared/locales/*/common.json`. Web resolves it with
+`apiErrorText(err, t, fallback)` (`apps/web/src/lib/api-error-text.ts`) and
+mobile with the same helper in `apps/mobile/lib/api-error-reason.ts`: reason
+copy first, then localized generic copy by status (401/403/429/5xx), then the
+caller's own localized fallback. `showErrorToast` does the same for
+`ApiError`s. `pnpm check:api-error-messages` (part of `pnpm lint`) rejects
+`instanceof ApiError ? x.message` in UI code. When adding a reason a user can
+trigger, add the `apiError_<reason>` entry in es/gl/en; the web test
+`api-error-text.test.ts` fails if a shared reason lacks copy. The offline
+scanner queue stores a failure code (`<reason>` or `http_<status>`/`network`)
+rather than text and localizes it on display.
+
+Existing English messages are intentionally unchanged until the minimum
+supported mobile build reads reasons.
 
 ### Audit (H53)
 Any sensitive mutation calls `audit(client, { actorId, entityType, entityId,

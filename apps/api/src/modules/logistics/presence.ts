@@ -1,4 +1,5 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
@@ -229,7 +230,9 @@ export async function presenceScan(
     await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [PRESENCE_LOCK_NS, userId]);
     const lockedParticipant = await lockDoorParticipant(client, userId, input.kind);
     if (lockedParticipant.badgeId !== input.badgeId) {
-      throw new AppError(409, "badge_revoked", "This badge has been revoked");
+      throw new AppError(409, "badge_revoked", "This badge has been revoked", {
+        code: ERROR_REASONS.BADGE_REVOKED,
+      });
     }
     assertBadgeScanTimestamp(input.scannedAt, lockedParticipant.badgeAssignedAt);
     const pendingDoorRemoval = lockedParticipant.pendingRemoval;

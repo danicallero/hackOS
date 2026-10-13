@@ -16,7 +16,7 @@ describe("identity, applications and exports route policy ledger", () => {
   it("records token and contextual authorization rather than weaker policy labels", () => {
     const app = Fastify();
     apps.push(app);
-    registerRoutePolicyInfrastructure(app, { enforce: true });
+    registerRoutePolicyInfrastructure(app);
     registerInviteRoutes(app);
     registerUploadRoutes(app);
     registerWorkflowRoutes(app);

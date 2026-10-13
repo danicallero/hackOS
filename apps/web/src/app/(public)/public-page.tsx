@@ -96,7 +96,7 @@ export function PublicPage() {
         // (H50/H41-H42) belong on the public site — everything else on this
         // feed exists purely for notification delivery, never for display.
         screenAnnouncements: announcementResult.items.filter(
-          (item) => item.screenPlacement && item.screenPlacement !== "none",
+          (item) => item.screenPlacement !== "none",
         ),
         openApplications: applicationResult.applications,
       });

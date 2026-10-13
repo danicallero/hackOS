@@ -205,7 +205,6 @@ describe("StandsScreen (#935)", () => {
       method: "POST",
       body: JSON.stringify({ kind: "nfc", uid: "04A1B2C3D4E5F6" }),
     });
-    expect((call?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
     expect(screen.getByText("standsCounts:1/1")).toBeTruthy();
     expect(Alert.alert).not.toHaveBeenCalled();
   });
@@ -257,15 +256,12 @@ describe("StandsScreen (#935)", () => {
     expect(mockReads[0]?.cancel).toHaveBeenCalled();
   });
 
-  it("keeps the server's reason for an unexpected link failure", async () => {
+  it("shows localized copy, not the server message, for an unexpected link failure", async () => {
     linkResult = () => Promise.reject(new ApiError("Enterprise not found", 404, "not_found"));
     await renderMobile(<StandsScreen />);
     await tapLink("Acme");
     await waitFor(() =>
-      expect(Alert.alert).toHaveBeenCalledWith(
-        "standsLinkNfc",
-        "standsLinkFailed\n\nEnterprise not found",
-      ),
+      expect(Alert.alert).toHaveBeenCalledWith("standsLinkNfc", "standsLinkFailed"),
     );
   });
 
