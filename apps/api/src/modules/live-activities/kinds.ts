@@ -124,7 +124,7 @@ export interface DeadlineWindow {
 /**
  * Submissions close at `event_config.hacking_ends_at` — the same instant
  * `projects/lifecycle.ts` enforces ("The submission deadline has passed")
- * and Devpost imports lock at. Decision (H19): the activity runs for the
+ * and native projects imports lock at. Decision (H19): the activity runs for the
  * whole hacking period, from `hacking_starts_at` until the deadline passes;
  * only without a start does it fall back to the configured deadline lead
  * (`deadlineLead`, default `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES`) before the
@@ -156,7 +156,7 @@ export interface SubmissionFact {
  * Each user's hackOS project status: every project or work group they are an
  * active member of (the same three membership sources as
  * `isActiveProjectMember`, H54 fixture boundary included), submitted only
- * when all of them are. No project in hackOS → `null` (e.g. a Devpost team
+ * when all of them are. No project in hackOS → `null` (e.g. a native projects team
  * not imported yet): unknown, never "not submitted".
  */
 export async function loadSubmissionFacts(
@@ -168,22 +168,9 @@ export async function loadSubmissionFacts(
   const { rows } = await db.query<{ user_id: number; name: string; status: string }>(
     `SELECT s.user_id, r.name, r.submission_status AS status
        FROM submissions s
-       JOIN repos r ON r.id = s.repo_id AND r.reconciled_into_repo_id IS NULL
+       JOIN repos r ON r.id = s.repo_id
        JOIN users u ON u.id = s.user_id AND u.is_test_account = r.is_test_account
       WHERE s.user_id = ANY($1::int[]) AND s.status = 'active'
-     UNION
-     SELECT dp.user_id, r.name, r.submission_status
-       FROM devpost_participants dp
-       JOIN repos r ON r.id = dp.repo_id AND r.reconciled_into_repo_id IS NULL
-       JOIN users u ON u.id = dp.user_id AND u.is_test_account = r.is_test_account
-      WHERE dp.user_id = ANY($1::int[])
-     UNION
-     SELECT m.user_id, COALESCE(r.name, g.name),
-            CASE WHEN g.linked_repo_id IS NULL THEN 'draft' ELSE r.submission_status END
-       FROM planned_work_group_members m
-       JOIN planned_work_groups g ON g.id = m.group_id
-       LEFT JOIN repos r ON r.id = g.linked_repo_id
-      WHERE m.user_id = ANY($1::int[]) AND m.status = 'active'
       ORDER BY 1, 2`,
     [userIds],
   );

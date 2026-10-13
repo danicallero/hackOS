@@ -19,13 +19,12 @@ export async function createChallenge(
     [enterprise.rows[0].id, ownerId],
   );
   const { rows } = await pool.query(
-    `INSERT INTO challenges (author, title, judging_panel_criteria, devpost_tags)
-     VALUES ($1, $2, $3, $4) RETURNING id`,
+    `INSERT INTO challenges (author, title, judging_panel_criteria)
+     VALUES ($1, $2, $3) RETURNING id`,
     [
       sponsor.rows[0].id,
       overrides.title ?? `Challenge ${crypto.randomUUID().slice(0, 8)}`,
       overrides.judgingPanelCriteria ? JSON.stringify(overrides.judgingPanelCriteria) : null,
-      JSON.stringify(overrides.devpostTags ?? []),
     ],
   );
   return rows[0].id;
@@ -52,8 +51,8 @@ export async function createEnterpriseChallenges(
   const challengeIds: number[] = [];
   for (let i = 0; i < count; i++) {
     const { rows } = await pool.query(
-      `INSERT INTO challenges (author, title, devpost_tags, judging_panel_criteria)
-       VALUES ($1, $2, '[]'::jsonb, $3) RETURNING id`,
+      `INSERT INTO challenges (author, title, judging_panel_criteria)
+       VALUES ($1, $2, $3) RETURNING id`,
       [
         sponsor.rows[0].id,
         `Challenge ${i + 1} ${crypto.randomUUID().slice(0, 8)}`,

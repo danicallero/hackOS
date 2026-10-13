@@ -4,6 +4,7 @@ import { audit } from "../../lib/audit.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { revealDueEnterprises } from "../sponsors/service.js";
 import { revealDueChallenges } from "./service.js";
+import { publishDueWinners } from "./winner-publication.js";
 
 /**
  * Scheduled reveal trigger (H45). Visibility itself is explicit: public routes
@@ -46,6 +47,7 @@ export async function runScheduledVisibilityPublisherOnce(): Promise<{
 
 registerWorker(QUEUE_NAME, async () => {
   await runScheduledVisibilityPublisherOnce();
+  await publishDueWinners();
 });
 
 export async function scheduleScheduledVisibilityPublisher(): Promise<void> {

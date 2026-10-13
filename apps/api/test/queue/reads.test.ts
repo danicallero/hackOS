@@ -384,22 +384,18 @@ describe("participant view (H38)", () => {
     expect(res.json().every((entry: { repoId: number }) => entry.repoId === repoId)).toBe(true);
   });
 
-  it("keeps queue and room reads available for a linked Devpost participant", async () => {
+  it("keeps queue and room reads available for the native active roster", async () => {
     const member = await createUser({ email: "secondary-linked@test.local" });
     const challengeId = await createChallenge();
     const roomId = await createRoom();
     await assignChallengeToRoom(roomId, challengeId);
     const { pool } = await import("../../src/db/pool.js");
-    const repo = await pool.query(
-      `INSERT INTO repos (name) VALUES ('Devpost fallback') RETURNING id`,
-    );
+    const repo = await pool.query(`INSERT INTO repos (name) VALUES ('Native roster') RETURNING id`);
     const repoId = repo.rows[0].id;
-    await pool.query(
-      `INSERT INTO devpost_participants
-         (repo_id, email, user_id, import_batch, merge_status)
-       VALUES ($1, 'secondary-linked@test.local', $2, 'test-import', 'manually_linked')`,
-      [repoId, member],
-    );
+    await pool.query(`INSERT INTO submissions(repo_id,user_id,status) VALUES($1,$2,'active')`, [
+      repoId,
+      member,
+    ]);
     await pool.query(
       `INSERT INTO queue_entries (challenge_id, repo_id, status, position, assigned_room_id)
        VALUES ($1, $2, 'presenting', 1, $3)`,

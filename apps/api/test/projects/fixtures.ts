@@ -78,7 +78,7 @@ export async function seedMatchableUsers(): Promise<SeededUsers> {
 }
 
 /** challenges.author needs a sponsor -> enterprise chain. */
-export async function createChallenge(title: string, devpostTags: string[]): Promise<number> {
+export async function createChallenge(title: string, _devpostTags: string[]): Promise<number> {
   const suffix = crypto.randomUUID();
   const owner = await pool.query(
     `INSERT INTO users (email, email_verified) VALUES ($1, true) RETURNING id`,
@@ -92,8 +92,8 @@ export async function createChallenge(title: string, devpostTags: string[]): Pro
     [enterprise.rows[0].id, owner.rows[0].id],
   );
   const challenge = await pool.query(
-    `INSERT INTO challenges (author, title, devpost_tags) VALUES ($1, $2, $3::jsonb) RETURNING id`,
-    [sponsor.rows[0].id, title, JSON.stringify(devpostTags)],
+    `INSERT INTO challenges (author, title) VALUES ($1, $2) RETURNING id`,
+    [sponsor.rows[0].id, title],
   );
   return challenge.rows[0].id;
 }

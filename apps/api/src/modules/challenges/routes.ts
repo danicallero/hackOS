@@ -1,6 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import {
   getRequestAuthorizationContext,
@@ -42,6 +43,13 @@ import {
   unpublishChallenge,
   updateChallenge,
 } from "./service.js";
+import {
+  announcePublishedWinners,
+  publishWinnersNow,
+  scheduleWinners,
+  visibleWinnerRows,
+  winnerPublication,
+} from "./winner-publication.js";
 import { getChallengeWinners, removeChallengeWinner, setChallengeWinner } from "./winners.js";
 
 const challengeParam = { source: "params", field: "id" } as const;
@@ -330,6 +338,67 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
     },
   );
 
+  r.get(
+    "/api/challenges/:id/winners/publication",
+    {
+      ...access({ kind: "contextual", policy: "challenge-edit", resource: challengeParam }),
+      preHandler: requireChallengeEdit(challengeParam),
+      schema: {
+        params: challengeIdParam,
+        summary: "Read winner publication",
+        description:
+          "Owning sponsors and challenge editors read private publication scheduling (H60).",
+      },
+    },
+    (q) => winnerPublication(pool, q.params.id),
+  );
+  r.put(
+    "/api/challenges/:id/winners/publication",
+    {
+      ...access({ kind: "contextual", policy: "challenge-edit", resource: challengeParam }),
+      preHandler: [requireChallengeEdit(challengeParam), idempotencyGuard],
+      schema: {
+        params: challengeIdParam,
+        body: z.object({ publishAt: z.iso.datetime({ offset: true }).nullable() }),
+        summary: "Schedule winner publication",
+        description:
+          "Audits a future SQL-clock winner reveal time; scheduling emits no public invalidation before publication (H60,H53).",
+      },
+    },
+    (q) => scheduleWinners(q.userId as number, q.params.id, q.body.publishAt),
+  );
+  r.post(
+    "/api/challenges/:id/winners/publish",
+    {
+      ...access({ kind: "contextual", policy: "challenge-edit", resource: challengeParam }),
+      preHandler: [requireChallengeEdit(challengeParam), idempotencyGuard],
+      schema: {
+        params: challengeIdParam,
+        summary: "Publish winners now",
+        description:
+          "Serializes an audited publication transition and emits one payload-free invalidation per public topic only after commit (H60).",
+      },
+    },
+    (q) => publishWinnersNow(q.userId as number, q.params.id),
+  );
+  r.get(
+    "/api/public/challenges/:id/winners",
+    {
+      ...access({ kind: "public", anonymousCategory: "public-content" }),
+      schema: {
+        params: challengeIdParam,
+        summary: "Read published winners",
+        description:
+          "Returns no winner field until publication and gallery audience allow the caller to read the result (H60).",
+      },
+    },
+    async (q) => {
+      const winners = (await visibleWinnerRows(pool, q.userId)).filter(
+        (row) => row.challengeId === q.params.id,
+      );
+      return winners.length ? { winners } : {};
+    },
+  );
   // H46: internal winner ranking — same access as editing the challenge
   // (admin or the owning sponsor rep), never public, never other sponsors.
   r.get(
@@ -363,12 +432,15 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      return setChallengeWinner(
+      const winner = await setChallengeWinner(
         req.userId as number,
         req.params.id,
         req.params.rank,
         req.body.repoId,
       );
+      if ((await winnerPublication(pool, req.params.id)).publishedAt)
+        await announcePublishedWinners();
+      return winner;
     },
   );
 
@@ -385,6 +457,8 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       await removeChallengeWinner(req.userId as number, req.params.id, req.params.rank);
+      if ((await winnerPublication(pool, req.params.id)).publishedAt)
+        await announcePublishedWinners();
       return { removed: true };
     },
   );

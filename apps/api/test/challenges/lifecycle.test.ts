@@ -324,7 +324,6 @@ describe("challenge lifecycle (H43-H45)", () => {
         description: "Admin correction",
         criteria: "Admin criteria",
         prizes: [{ name: "Admin prize", link: null }],
-        devpostTags: ["Admin tag"],
         judgingPanelCriteria: [],
         maxPresentationSeconds: 120,
         maxInWaitingArea: 3,

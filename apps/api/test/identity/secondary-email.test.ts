@@ -64,19 +64,14 @@ describe("H6 secondary email", () => {
       `INSERT INTO repos (name) VALUES ('Secondary reconciliation') RETURNING id`,
     );
     const repoId = repo.rows[0].id;
-    await pool.query(
-      `INSERT INTO devpost_participants (repo_id, email, import_batch, merge_status)
-       VALUES ($1, 'devpost-me@example.com', 'test-import', 'unmatched')`,
-      [repoId],
-    );
-    const res = await requestSecondary(a, userId, "devpost-me@example.com");
+    const res = await requestSecondary(a, userId, "alternate-me@example.com");
     expect(res.statusCode).toBe(200);
 
     const { rows: pending } = await pool.query(
       `SELECT secondary_email, secondary_email_verified_at FROM users WHERE id = $1`,
       [userId],
     );
-    expect(pending[0].secondary_email).toBe("devpost-me@example.com");
+    expect(pending[0].secondary_email).toBe("alternate-me@example.com");
     expect(pending[0].secondary_email_verified_at).toBeNull();
 
     const { rows: outbox } = await pool.query(
@@ -87,7 +82,7 @@ describe("H6 secondary email", () => {
     // H6 regression: the verification email must be addressed to the NEW
     // secondary address, never the user's primary (payload.recipient overrides
     // users.email in the email channel adapter).
-    expect(outbox[0].payload.recipient).toBe("devpost-me@example.com");
+    expect(outbox[0].payload.recipient).toBe("alternate-me@example.com");
 
     const token = await latestToken(userId);
     const verify = await a.inject({
@@ -104,16 +99,11 @@ describe("H6 secondary email", () => {
       [userId],
     );
     expect(after[0].secondary_email_verified_at).not.toBeNull();
-    const reconciled = await pool.query(
-      `SELECT user_id, merge_status FROM devpost_participants WHERE repo_id = $1`,
-      [repoId],
-    );
-    expect(reconciled.rows).toEqual([{ user_id: userId, merge_status: "auto_matched" }]);
     const submission = await pool.query(
       `SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2`,
       [repoId, userId],
     );
-    expect(submission.rows).toHaveLength(1);
+    expect(submission.rows).toHaveLength(0);
 
     // audited
     const { rows: auditRows } = await pool.query(
@@ -130,72 +120,6 @@ describe("H6 secondary email", () => {
     const res = await requestSecondary(a, userId, "taken@example.com");
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe("conflict");
-  });
-
-  it("reconciles added and replaced secondary emails without removing manual links", async () => {
-    const a = await getApp();
-    const userId = await createUser({ email: "primary@example.com" });
-    const { pool } = await import("../../src/db/pool.js");
-    await pool.query(
-      `UPDATE users
-          SET secondary_email = 'old-devpost@example.com', secondary_email_verified_at = now()
-        WHERE id = $1`,
-      [userId],
-    );
-    const oldRepo = await pool.query(
-      `INSERT INTO repos (name) VALUES ('Old secondary') RETURNING id`,
-    );
-    const newRepo = await pool.query(
-      `INSERT INTO repos (name) VALUES ('New secondary') RETURNING id`,
-    );
-    const manualRepo = await pool.query(
-      `INSERT INTO repos (name) VALUES ('Manual link') RETURNING id`,
-    );
-    await pool.query(
-      `INSERT INTO devpost_participants (repo_id, email, user_id, import_batch, merge_status)
-       VALUES ($1, 'old-devpost@example.com', $2, 'test-import', 'auto_matched'),
-              ($3, 'new-devpost@example.com', NULL, 'test-import', 'unmatched'),
-              ($4, 'operator-linked@example.com', $2, 'test-import', 'manually_linked')`,
-      [oldRepo.rows[0].id, userId, newRepo.rows[0].id, manualRepo.rows[0].id],
-    );
-    await pool.query(
-      `INSERT INTO submissions (repo_id, user_id, imported_from)
-       VALUES ($1, $2, 'devpost'), ($3, $2, 'devpost')`,
-      [oldRepo.rows[0].id, userId, manualRepo.rows[0].id],
-    );
-
-    expect((await requestSecondary(a, userId, "new-devpost@example.com")).statusCode).toBe(200);
-    const afterChange = await pool.query(
-      `SELECT repo_id, user_id, merge_status FROM devpost_participants ORDER BY repo_id`,
-    );
-    expect(afterChange.rows).toEqual([
-      { repo_id: oldRepo.rows[0].id, user_id: null, merge_status: "unmatched" },
-      { repo_id: newRepo.rows[0].id, user_id: null, merge_status: "unmatched" },
-      { repo_id: manualRepo.rows[0].id, user_id: userId, merge_status: "manually_linked" },
-    ]);
-    const removedSubmission = await pool.query(
-      `SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2`,
-      [oldRepo.rows[0].id, userId],
-    );
-    expect(removedSubmission.rows).toHaveLength(0);
-
-    const verify = await a.inject({
-      method: "POST",
-      url: "/api/me/secondary-email/verify",
-      headers: asUser(userId),
-      payload: { token: await latestToken(userId) },
-    });
-    expect(verify.statusCode).toBe(200);
-    const afterVerify = await pool.query(
-      `SELECT user_id, merge_status FROM devpost_participants WHERE repo_id = $1`,
-      [newRepo.rows[0].id],
-    );
-    expect(afterVerify.rows).toEqual([{ user_id: userId, merge_status: "auto_matched" }]);
-    const newSubmission = await pool.query(
-      `SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2`,
-      [newRepo.rows[0].id, userId],
-    );
-    expect(newSubmission.rows).toHaveLength(1);
   });
 
   it("409 when the address is another user's VERIFIED secondary email", async () => {
@@ -352,49 +276,6 @@ describe("H6 secondary email", () => {
       headers: asUser(owner),
     });
     expect(unknown.statusCode).toBe(400);
-  });
-
-  it("removing a verified secondary email revokes only its automatic project links", async () => {
-    const a = await getApp();
-    const userId = await createUser({ email: "primary@example.com" });
-    const { pool } = await import("../../src/db/pool.js");
-    const secondaryRepo = await pool.query(
-      `INSERT INTO repos (name) VALUES ('Secondary-linked') RETURNING id`,
-    );
-    const primaryRepo = await pool.query(
-      `INSERT INTO repos (name) VALUES ('Primary-linked') RETURNING id`,
-    );
-    await pool.query(
-      `INSERT INTO devpost_participants (repo_id, email, import_batch)
-       VALUES ($1, 'secondary@example.com', 'test'), ($2, 'primary@example.com', 'test')`,
-      [secondaryRepo.rows[0].id, primaryRepo.rows[0].id],
-    );
-    await requestSecondary(a, userId, "secondary@example.com");
-    await a.inject({
-      method: "POST",
-      url: "/api/me/secondary-email/verify",
-      headers: asUser(userId),
-      payload: { token: await latestToken(userId) },
-    });
-
-    const removed = await a.inject({
-      method: "DELETE",
-      url: "/api/me/secondary-email",
-      headers: asUser(userId),
-    });
-    expect(removed.statusCode).toBe(200);
-    const identities = await pool.query(
-      `SELECT email, user_id, merge_status FROM devpost_participants ORDER BY email`,
-    );
-    expect(identities.rows).toEqual([
-      { email: "primary@example.com", user_id: userId, merge_status: "auto_matched" },
-      { email: "secondary@example.com", user_id: null, merge_status: "unmatched" },
-    ]);
-    const user = await pool.query(
-      `SELECT secondary_email, secondary_email_verified_at FROM users WHERE id = $1`,
-      [userId],
-    );
-    expect(user.rows[0]).toEqual({ secondary_email: null, secondary_email_verified_at: null });
   });
 
   it("staff with user-write access can remove another account's secondary email", async () => {

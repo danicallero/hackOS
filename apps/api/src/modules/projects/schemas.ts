@@ -1,51 +1,5 @@
 import { z } from "zod";
 
-/** Body shared by preview and confirm — raw CSV text of both Devpost exports. */
-export const importCsvBodySchema = z.object({
-  projectsCsv: z.string().min(1, "projectsCsv is required"),
-  participantsCsv: z.string().min(1, "participantsCsv is required"),
-  // Optional because preview is read-only. Confirm validates that each tag
-  // came from this exact export before it mutates challenge tag state.
-  tagMappings: z
-    .array(
-      z.object({
-        tag: z.string().trim().min(1).max(500),
-        challengeId: z.number().int().positive(),
-      }),
-    )
-    .max(500)
-    .default([]),
-});
-export type ImportCsvBody = z.infer<typeof importCsvBodySchema>;
-
-export const linkParticipantBodySchema = z.object({
-  repoId: z.number().int().positive(),
-  email: z
-    .string()
-    .email()
-    .transform((v) => v.toLowerCase()),
-  userId: z.number().int().positive(),
-});
-export type LinkParticipantBody = z.infer<typeof linkParticipantBodySchema>;
-
-export const claimEmailBodySchema = z.object({
-  repoId: z.number().int().positive(),
-  email: z
-    .string()
-    .email()
-    .transform((v) => v.toLowerCase()),
-});
-export type ClaimEmailBody = z.infer<typeof claimEmailBodySchema>;
-
-export const mapPrizeBodySchema = z.object({
-  challengeId: z.number().int().positive(),
-});
-export type MapPrizeBody = z.infer<typeof mapPrizeBodySchema>;
-
-export const prizeParamsSchema = z.object({
-  prizeName: z.string().min(1),
-});
-
 export const repoIdParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
@@ -53,11 +7,6 @@ export const repoIdParamsSchema = z.object({
 export const repoMemberParamsSchema = z.object({
   repoId: z.coerce.number().int().positive(),
   userId: z.coerce.number().int().positive(),
-});
-
-export const repoDevpostParticipantParamsSchema = z.object({
-  repoId: z.coerce.number().int().positive(),
-  email: z.email().transform((v) => v.toLowerCase()),
 });
 
 export const repoChallengeParamsSchema = z.object({
@@ -68,11 +17,6 @@ export const repoChallengeParamsSchema = z.object({
 /** POST /api/challenges/:challengeId/repos:bulk-add|bulk-remove (H21 bulk enrollment). */
 export const challengeIdOnlyParamsSchema = z.object({
   challengeId: z.coerce.number().int().positive(),
-});
-
-export const repoPrizeParamsSchema = z.object({
-  repoId: z.coerce.number().int().positive(),
-  prizeName: z.string().min(1),
 });
 
 const repoUrl = z.string().url().max(2000);

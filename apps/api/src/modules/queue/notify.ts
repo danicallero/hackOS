@@ -13,7 +13,7 @@ import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
 /**
  * Team members for a repo. `submissions` is the normal source, while the
- * Devpost fallback keeps notifications correct during or after an import even
+ * native projects fallback keeps notifications correct during or after an import even
  * if a legacy participant row has not yet gained its submission.
  */
 export async function repoMemberIds(

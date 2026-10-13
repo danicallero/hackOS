@@ -48,6 +48,14 @@ import { type EventReminder, readEventReminder, saveEventReminder } from "./remi
 /** Every writable field's owning capability (H8) — one entry per `eventConfigBody` key. */
 const EVENT_SETTINGS_CAPABILITIES: Record<string, Capability> = {
   name: CAPABILITIES.EVENT_MANAGE,
+  projectDraftsOpenAt: CAPABILITIES.EVENT_MANAGE,
+  projectSubmissionsCloseAt: CAPABILITIES.EVENT_MANAGE,
+  projectDraftVisibility: CAPABILITIES.EVENT_MANAGE,
+  projectGalleryOpensAt: CAPABILITIES.EVENT_MANAGE,
+  projectGalleryAudience: CAPABILITIES.EVENT_MANAGE,
+  projectEditsLockAt: CAPABILITIES.EVENT_MANAGE,
+  projectMaxTeamSize: CAPABILITIES.EVENT_MANAGE,
+
   eventReminderScheduledAt: CAPABILITIES.EVENT_MANAGE,
   tagline: CAPABILITIES.EVENT_MANAGE,
   timezone: CAPABILITIES.EVENT_MANAGE,
@@ -56,9 +64,6 @@ const EVENT_SETTINGS_CAPABILITIES: Record<string, Capability> = {
   hackingStartsAt: CAPABILITIES.EVENT_MANAGE,
   hackingEndsAt: CAPABILITIES.EVENT_MANAGE,
   showStartCountdown: CAPABILITIES.EVENT_MANAGE,
-  participantsCanCreateProjects: CAPABILITIES.EVENT_MANAGE,
-  participantSelfServiceStartsAt: CAPABILITIES.EVENT_MANAGE,
-  participantSelfServiceEndsAt: CAPABILITIES.EVENT_MANAGE,
   venueName: CAPABILITIES.VENUE_MANAGE,
   venueLatitude: CAPABILITIES.VENUE_MANAGE,
   venueLongitude: CAPABILITIES.VENUE_MANAGE,
@@ -135,9 +140,14 @@ const eventConfigBody = z
     hackingStartsAt: z.coerce.date().nullable().optional(),
     hackingEndsAt: z.coerce.date().nullable().optional(),
     showStartCountdown: z.boolean().optional(),
-    participantsCanCreateProjects: z.boolean().optional(),
-    participantSelfServiceStartsAt: z.coerce.date().nullable().optional(),
-    participantSelfServiceEndsAt: z.coerce.date().nullable().optional(),
+    projectDraftsOpenAt: z.coerce.date().nullable().optional(),
+    projectSubmissionsCloseAt: z.coerce.date().nullable().optional(),
+    projectDraftVisibility: z.enum(["team_only", "attendees", "public"]).optional(),
+    projectGalleryOpensAt: z.coerce.date().nullable().optional(),
+    projectGalleryAudience: z.enum(["staff", "attendees", "public"]).optional(),
+    projectEditsLockAt: z.coerce.date().nullable().optional(),
+    projectMaxTeamSize: z.number().int().positive().max(100).nullable().optional(),
+
     presenceAutoEntryAt: z.coerce.date().nullable().optional(),
     presenceCertaintyWindowMinutes: z.number().int().min(15).max(10080).optional(),
     venueName: z.string().nullable().optional(),
@@ -180,9 +190,6 @@ const DEFAULTS = {
   hacking_starts_at: null,
   hacking_ends_at: null,
   show_start_countdown: false,
-  participants_can_create_projects: false,
-  participant_self_service_starts_at: null,
-  participant_self_service_ends_at: null,
   presence_auto_entry_at: null,
   presence_certainty_window_minutes: 720,
   venue_name: null,
@@ -199,9 +206,24 @@ const DEFAULTS = {
   require_staff_dietary: false,
   shirt_sizes: ["XS", "S", "M", "L", "XL", "XXL"],
   meal_plan_cutoff_hours: 24,
+  project_drafts_open_at: null,
+  project_submissions_close_at: null,
+  project_draft_visibility: "team_only",
+  project_gallery_opens_at: null,
+  project_gallery_audience: "staff",
+  project_edits_lock_at: null,
+  project_max_team_size: null,
 } as const;
 
 interface EventConfigRow {
+  project_drafts_open_at: string | null;
+  project_submissions_close_at: string | null;
+  project_draft_visibility: string;
+  project_gallery_opens_at: string | null;
+  project_gallery_audience: string;
+  project_edits_lock_at: string | null;
+  project_max_team_size: number | null;
+
   name: string | null;
   tagline: string | null;
   timezone: string;
@@ -210,9 +232,6 @@ interface EventConfigRow {
   hacking_starts_at: string | null;
   hacking_ends_at: string | null;
   show_start_countdown: boolean;
-  participants_can_create_projects: boolean;
-  participant_self_service_starts_at: string | null;
-  participant_self_service_ends_at: string | null;
   presence_auto_entry_at: string | null;
   presence_certainty_window_minutes: number;
   venue_name: string | null;
@@ -235,15 +254,15 @@ async function readConfig(db: Queryable = pool): Promise<EventConfigRow> {
   const { rows } = await db.query(
     `SELECT name, tagline, timezone, event_starts_at, event_ends_at,
             hacking_starts_at, hacking_ends_at,
-            show_start_countdown, participants_can_create_projects,
-            participant_self_service_starts_at, participant_self_service_ends_at,
+            show_start_countdown,
+
             presence_auto_entry_at, presence_certainty_window_minutes,
             venue_name, venue_latitude, venue_longitude,
             wifi_ssid, wifi_password,
             pass_back_fields, pass_field_labels, pass_field_visibility,
             require_sponsor_shirt_size, require_sponsor_dietary,
             require_staff_shirt_size, require_staff_dietary, shirt_sizes,
-            meal_plan_cutoff_hours
+            meal_plan_cutoff_hours, project_drafts_open_at,project_submissions_close_at,project_draft_visibility,project_gallery_opens_at,project_gallery_audience,project_edits_lock_at,project_max_team_size
        FROM event_config WHERE id = 1`,
   );
   return rows[0] ?? DEFAULTS;
@@ -282,9 +301,14 @@ function toPublic(
     hackingEndsAt: row.hacking_ends_at,
     showStartCountdown: row.show_start_countdown,
     // H19: public so participant clients know whether to offer self-creation.
-    participantsCanCreateProjects: row.participants_can_create_projects,
-    participantSelfServiceStartsAt: row.participant_self_service_starts_at,
-    participantSelfServiceEndsAt: row.participant_self_service_ends_at,
+    projectDraftsOpenAt: row.project_drafts_open_at,
+    projectSubmissionsCloseAt: row.project_submissions_close_at,
+    projectDraftVisibility: row.project_draft_visibility,
+    projectGalleryOpensAt: row.project_gallery_opens_at,
+    projectGalleryAudience: row.project_gallery_audience,
+    projectEditsLockAt: row.project_edits_lock_at,
+    projectMaxTeamSize: row.project_max_team_size,
+
     presenceAutoEntryAt: row.presence_auto_entry_at,
     presenceCertaintyWindowMinutes: row.presence_certainty_window_minutes,
     judgingStartsAt: judging.judging_starts_at,
@@ -409,18 +433,6 @@ export function registerEventRoutes(app: FastifyInstance): void {
             b.showStartCountdown === undefined
               ? current.show_start_countdown
               : b.showStartCountdown,
-          participants_can_create_projects:
-            b.participantsCanCreateProjects === undefined
-              ? current.participants_can_create_projects
-              : b.participantsCanCreateProjects,
-          participant_self_service_starts_at:
-            b.participantSelfServiceStartsAt === undefined
-              ? current.participant_self_service_starts_at
-              : b.participantSelfServiceStartsAt,
-          participant_self_service_ends_at:
-            b.participantSelfServiceEndsAt === undefined
-              ? current.participant_self_service_ends_at
-              : b.participantSelfServiceEndsAt,
           presence_auto_entry_at:
             b.presenceAutoEntryAt === undefined
               ? current.presence_auto_entry_at
@@ -486,16 +498,6 @@ export function registerEventRoutes(app: FastifyInstance): void {
           }
         }
         if (
-          next.participant_self_service_starts_at !== null &&
-          next.participant_self_service_ends_at !== null &&
-          new Date(next.participant_self_service_ends_at).getTime() <=
-            new Date(next.participant_self_service_starts_at).getTime()
-        ) {
-          throw new BadRequestError(
-            "participantSelfServiceEndsAt must be after participantSelfServiceStartsAt",
-          );
-        }
-        if (
           next.event_starts_at !== null &&
           next.event_ends_at !== null &&
           new Date(next.event_ends_at).getTime() <= new Date(next.event_starts_at).getTime()
@@ -510,8 +512,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
           `INSERT INTO event_config
             (id, name, tagline, timezone, event_starts_at, event_ends_at,
              hacking_starts_at, hacking_ends_at,
-             show_start_countdown, participants_can_create_projects,
-             participant_self_service_starts_at, participant_self_service_ends_at,
+             show_start_countdown,
+
              presence_auto_entry_at, presence_certainty_window_minutes,
              venue_name, venue_latitude, venue_longitude,
              wifi_ssid, wifi_password,
@@ -519,7 +521,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
              require_sponsor_shirt_size, require_sponsor_dietary,
              require_staff_shirt_size, require_staff_dietary, shirt_sizes,
              meal_plan_cutoff_hours)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20::jsonb, $21::jsonb, $22, $23, $24, $25, $26, $27)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb, $18::jsonb, $19, $20, $21, $22, $23, $24)
          ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, tagline = EXCLUDED.tagline, timezone = EXCLUDED.timezone,
                 event_starts_at = EXCLUDED.event_starts_at,
@@ -527,9 +529,6 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 hacking_starts_at = EXCLUDED.hacking_starts_at,
                 hacking_ends_at = EXCLUDED.hacking_ends_at,
                 show_start_countdown = EXCLUDED.show_start_countdown,
-                participants_can_create_projects = EXCLUDED.participants_can_create_projects,
-                participant_self_service_starts_at = EXCLUDED.participant_self_service_starts_at,
-                participant_self_service_ends_at = EXCLUDED.participant_self_service_ends_at,
                 presence_auto_entry_at = EXCLUDED.presence_auto_entry_at,
                 presence_certainty_window_minutes = EXCLUDED.presence_certainty_window_minutes,
                 venue_name = EXCLUDED.venue_name,
@@ -548,8 +547,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 meal_plan_cutoff_hours = EXCLUDED.meal_plan_cutoff_hours
          RETURNING name, tagline, timezone, event_starts_at, event_ends_at,
                    hacking_starts_at, hacking_ends_at,
-                   show_start_countdown, participants_can_create_projects,
-                   participant_self_service_starts_at, participant_self_service_ends_at,
+                   show_start_countdown,
+
                    presence_auto_entry_at, presence_certainty_window_minutes,
                    venue_name, venue_latitude, venue_longitude,
                    wifi_ssid, wifi_password,
@@ -566,9 +565,6 @@ export function registerEventRoutes(app: FastifyInstance): void {
             next.hacking_starts_at,
             next.hacking_ends_at,
             next.show_start_countdown,
-            next.participants_can_create_projects,
-            next.participant_self_service_starts_at,
-            next.participant_self_service_ends_at,
             next.presence_auto_entry_at,
             next.presence_certainty_window_minutes,
             next.venue_name,
@@ -587,6 +583,40 @@ export function registerEventRoutes(app: FastifyInstance): void {
             next.meal_plan_cutoff_hours,
           ],
         );
+        if (b.projectDraftsOpenAt !== undefined)
+          await client.query("UPDATE event_config SET project_drafts_open_at=$1 WHERE id=1", [
+            b.projectDraftsOpenAt,
+          ]);
+        if (b.projectSubmissionsCloseAt !== undefined)
+          await client.query("UPDATE event_config SET project_submissions_close_at=$1 WHERE id=1", [
+            b.projectSubmissionsCloseAt,
+          ]);
+        if (b.projectDraftVisibility !== undefined)
+          await client.query("UPDATE event_config SET project_draft_visibility=$1 WHERE id=1", [
+            b.projectDraftVisibility,
+          ]);
+        if (b.projectGalleryOpensAt !== undefined)
+          await client.query("UPDATE event_config SET project_gallery_opens_at=$1 WHERE id=1", [
+            b.projectGalleryOpensAt,
+          ]);
+        if (b.projectGalleryAudience !== undefined)
+          await client.query("UPDATE event_config SET project_gallery_audience=$1 WHERE id=1", [
+            b.projectGalleryAudience,
+          ]);
+        if (b.projectEditsLockAt !== undefined)
+          await client.query("UPDATE event_config SET project_edits_lock_at=$1 WHERE id=1", [
+            b.projectEditsLockAt,
+          ]);
+        if (b.projectMaxTeamSize !== undefined)
+          await client.query("UPDATE event_config SET project_max_team_size=$1 WHERE id=1", [
+            b.projectMaxTeamSize,
+          ]);
+        const phaseCheck = await client.query(
+          `SELECT COALESCE(project_submissions_close_at,hacking_ends_at) < COALESCE(project_drafts_open_at,hacking_starts_at) AS invalid FROM event_config WHERE id=1`,
+        );
+        if (phaseCheck.rows[0]?.invalid)
+          throw new BadRequestError("Project submission close must follow draft opening");
+        rows[0] = await readConfig(client);
         if (b.eventReminderScheduledAt !== undefined)
           await saveEventReminder(client, req.userId, b.eventReminderScheduledAt);
         const reminder = await readEventReminder(client);

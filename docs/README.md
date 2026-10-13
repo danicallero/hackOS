@@ -56,14 +56,14 @@ Architecture & modules:
 - [Mutation idempotency matrix](./idempotency-matrix.md) — the retry
   classification for every state-changing API route, including durable
   outbox/object-storage and SSE boundaries.
-- [Challenges & Devpost projects](./challenges-devpost.md) — the `challenges`
+- [Challenges & Devpost projects](./projects.md) — the `challenges`
   and `projects` modules and the Devpost intake pipeline.
 - [Public profile (#934)](./directory.md) — the opt-in profile shown to the
   people who scan you, what they can see, access, moderation and
   account-removal coverage.
 - [Event diary (#935)](./diary.md) — saving people and sponsor stands by
   NFC/QR scan, privacy rules, stand tags and account-removal coverage.
-- [Planned work groups](./work-groups.md) — pre-event participant groups,
+- [Planned work groups](./projects.md) — pre-event participant groups,
   explicit invitations, intended challenges, and staff/sponsor estimates.
 - [Queue groups (H46)](./queue-groups.md) — the enterprise-scoped grouping
   layer between challenges and the rooms/queues that judge them: why

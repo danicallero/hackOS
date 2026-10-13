@@ -17,6 +17,9 @@ export function mutationDomainForPath(url: string): string | null {
   const path = url.split("?", 1)[0] ?? url;
   const matches = (prefix: string): boolean => path === prefix || path.startsWith(`${prefix}/`);
 
+  // H60 private winner edits never invalidate other sponsors or public readers.
+  if (/^\/api\/challenges\/[^/]+\/winners(?:\/|$)/.test(path)) return null;
+
   // Application forms and responses share one read-model domain (H11-H15).
   if (
     matches("/api/applications") ||
@@ -27,14 +30,12 @@ export function mutationDomainForPath(url: string): string | null {
     return SSE_TOPICS.APPLICATIONS;
   }
 
-  // Devpost/projects and queue membership edits are project read-model writes
+  // native projects/projects and queue membership edits are project read-model writes
   // even when the URL is nested under a challenge (H16-H21).
   if (
     matches("/api/projects") ||
     matches("/api/repos") ||
-    matches("/api/devpost") ||
     matches("/api/me/projects") ||
-    matches("/api/me/work-groups") ||
     /^\/api\/challenges\/[^/]+\/repos(?:\/|$)/.test(path)
   ) {
     return SSE_TOPICS.PROJECTS;
@@ -121,8 +122,7 @@ export function publicContentMutationForPath(url: string): boolean {
     path === "/api/challenges" ||
     path === "/api/challenges/visibility" ||
     singleResource("/api/challenges") ||
-    /^\/api\/challenges\/[^/]+\/(?:publish|unpublish)$/.test(path) ||
-    /^\/api\/devpost\/prizes\/[^/]+\/map$/.test(path)
+    /^\/api\/challenges\/[^/]+\/(?:publish|unpublish)$/.test(path)
   );
 }
 
