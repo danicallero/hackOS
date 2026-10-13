@@ -45,19 +45,24 @@ async function withClient<T>(fn: (client: pg.Client) => Promise<T>): Promise<T> 
 }
 
 describe("consolidated migration baseline (H1-H59)", () => {
-  it("is the sole active migration and concurrent first applies serialize", async () => {
+  it("applies the baseline and forward migrations exactly once under concurrency", async () => {
     const names = (
       await readdir(join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations"))
     )
       .filter((name) => name.endsWith(".sql"))
       .sort();
-    expect(names).toEqual(["0001_hackos_baseline.sql"]);
+    expect(names[0]).toBe("0001_hackos_baseline.sql");
+    validateMigrationFilenames(names);
 
     const results = await Promise.all([
       migrate(databaseUrl.toString()),
       migrate(databaseUrl.toString()),
     ]);
-    expect(results.filter((result) => result.length > 0)).toEqual([["0001_hackos_baseline.sql"]]);
+    expect(results.filter((result) => result.length > 0)).toEqual([names]);
+    const ledger = await withClient((client) =>
+      client.query<{ name: string }>("SELECT name FROM _migrations ORDER BY name"),
+    );
+    expect(ledger.rows.map((row) => row.name)).toEqual(names);
   });
 
   it("matches the checked-in ERD and retains the required relational boundaries", async () => {
