@@ -33,11 +33,6 @@ import type { FormSection, TemplateField } from "./schemas.js";
 export interface ApplicationRow {
   id: number;
   name: string;
-  /** DEPRECATED (H8): legacy static classification, no longer set by the API
-   *  or read as authoritative — see application_grants_roles + roles.name
-   *  (and granted_role_name in admin.routes.ts) for the real, drift-proof
-   *  classification. */
-  type: string | null;
   template: TemplateField[];
   sections: FormSection[];
   current_form_version: number;

@@ -139,7 +139,7 @@ describe("TV announcement layers", () => {
     }
   });
 
-  it("ignores legacy notices without an explicit screen placement", () => {
+  it("ignores inbox-only notices on venue screens", () => {
     expect(
       activeAnnouncement(
         [
@@ -149,6 +149,7 @@ describe("TV announcement layers", () => {
             body: "No wall display",
             publishAt: null,
             expiresAt: null,
+            screenPlacement: "none",
           },
         ],
         "fullscreen",

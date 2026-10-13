@@ -1,7 +1,7 @@
 import type { StatisticsParticipantStatus } from "@hackos/shared/statistics";
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
-import { canonicalStatisticsPanelKey, STATISTICS_BASE_PANEL_KEYS } from "../statistics/catalog.js";
+import { STATISTICS_BASE_PANEL_KEYS } from "../statistics/catalog.js";
 import type { StatisticsConfig, TemplateField } from "./schemas.js";
 import { requireApplication } from "./service.js";
 
@@ -19,9 +19,6 @@ import { requireApplication } from "./service.js";
 interface Counts {
   [status: string]: number;
 }
-
-/** Compatibility export for callers that used the original H27 name. */
-export const BASE_STAT_PANEL_KEYS = STATISTICS_BASE_PANEL_KEYS;
 
 export const fieldPanelKey = (key: string) => `field:${key.toLowerCase()}`;
 
@@ -57,7 +54,7 @@ export function resolveStatisticsPanelDecisions(
 ): Map<string, "allow" | "deny"> {
   const byPanel = new Map<string, StatisticsPanelDecision>();
   for (const decision of decisions) {
-    const panelKey = canonicalStatisticsPanelKey(decision.panelKey);
+    const panelKey = decision.panelKey;
     const current = byPanel.get(panelKey);
     if (
       decision.state !== "inherit" &&
@@ -91,13 +88,46 @@ export function statisticsPanelKeys(
   }>,
 ) {
   return new Set([
-    ...BASE_STAT_PANEL_KEYS,
+    ...STATISTICS_BASE_PANEL_KEYS,
     ...template
       .filter((field) => field.statistics?.enabled === true)
       .map((field) => fieldPanelKey(field.key)),
   ]);
 }
 
+/** Resolve a caller's panel ACL with H8's own role-position semantics. */
+export async function allowedStatisticsPanels(
+  applicationId: number,
+  userId: number,
+  generalAccess = false,
+): Promise<Set<string>> {
+  const application = await requireApplication(pool, applicationId);
+  const { rows } = await pool.query(
+    `SELECT a.panel_key, a.state, r.position
+       FROM statistics_scope_panel_role_access a
+       JOIN user_roles ur ON ur.role_id = a.role_id AND ur.user_id = $2
+       JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+      WHERE a.scope_key = $1 AND a.state <> 'inherit'
+      ORDER BY a.panel_key, r.position DESC`,
+    [`application:${applicationId}`, userId],
+  );
+  const decisions = resolveStatisticsPanelDecisions(
+    (rows as Array<{ panel_key: string; state: "allow" | "deny"; position: number }>).map(
+      (row) => ({
+        panelKey: row.panel_key,
+        rolePosition: Number(row.position),
+        state: row.state,
+      }),
+    ),
+  );
+  const availablePanels = statisticsPanelKeys(application.template);
+  return new Set(
+    [...availablePanels].filter((panelKey) => {
+      const explicit = decisions.get(panelKey);
+      return explicit ? explicit === "allow" : generalAccess;
+    }),
+  );
+}
 export async function applicationStats(
   applicationId: number,
   field?: string,
@@ -227,12 +257,12 @@ export async function applicationStats(
       capacity: app.capacity,
     },
     counts_by_status: byStatus,
-    funnel: funnel.rows[0],
     overview: {
       submitted: Object.entries(byStatus).reduce(
         (total, [status, count]) => total + (status === "draft" ? 0 : count),
         0,
       ),
+      sent: Number(funnel.rows[0]?.sent ?? 0),
       confirmed: Number(funnel.rows[0]?.confirmed ?? 0),
       rejected: Number(funnel.rows[0]?.rejected ?? byStatus.rejected ?? 0),
       expired_confirmations: Number(funnel.rows[0]?.expired ?? 0),
@@ -281,7 +311,6 @@ export async function applicationStats(
 function filterStatisticsPanels(result: Record<string, unknown>, allowed: Set<string>): void {
   if (!allowed.has("overview")) {
     delete result.overview;
-    delete result.funnel;
     delete result.counts_by_status;
     delete result.time_to_confirm_hours;
   }
