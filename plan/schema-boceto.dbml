@@ -6,7 +6,8 @@
 //   Haku admin  -> applications, application_responses, accreditation (users.badge_id,
 //                  check_in_logs, time_logs, activity_logs, meal_entitlements, food_intolerances)
 //   FastTrack   -> rooms, queue_entries, room_queue_state, attempt_review (+ versions)
-//   Devpost     -> repos, submissions, devpost_* staging
+//   (new)       -> in-house project submission: repos, submissions, project_* tables, challenge_winners
+//                  (H16-H21, H60). Devpost and its import were retired on 2026-10-13.
 //
 // If this drifts from 001_initial_schema.sql, the SQL wins. Edit the SQL, reseed, then fix this.
 
@@ -31,9 +32,7 @@ Table users {
   university_id integer
   shirt_size text
   language text [not null, default: 'en', note: 'en | es | gl']
-  email_verified_at timestamptz [note: 'verified == not null; same pattern for secondary']
-  secondary_email text
-  secondary_email_verified_at timestamptz
+  email_verified_at timestamptz [note: 'verified == not null. One address per account: H6 (secondary email) is retired']
   notes text
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
@@ -88,8 +87,6 @@ Table email_verification_tokens {
 
 Enum token_type {
   primary_email
-  secondary_email
-  account_claim       // Devpost-imported person claims their account
   password_reset
   sponsor_invite
   spot_confirmation   // accepted applicant confirms the spot
@@ -135,7 +132,6 @@ Table challenges {
   criteria text [note: 'public-facing criteria text']
   judging_panel_criteria jsonb [note: 'drives the dynamic judge scoring form — sponsor-defined']
   prizes jsonb [note: 'name + link per prize']
-  devpost_tags jsonb [not null, default: '[]', note: 'Devpost "Opt-In Prize" aliases; the import matches against these so one prize export maps to an existing challenge instead of creating a duplicate']
   status challenge_status [not null, default: 'draft']
   max_presentation_seconds integer
   auto_call_count integer [not null, default: 3]
@@ -292,71 +288,102 @@ Table judging_session {
   ended_at timestamptz
 }
 
-// ── repos & devpost (project intake) ──────────────────────────────────────
+// ── projects (in-house submission, H16-H21) ───────────────────────────────
+
+Table project_settings {
+  id integer [pk, note: 'single row per event (H17)']
+  creation_opens_at timestamptz [note: 'participants can create projects from here (H19)']
+  creation_closes_at timestamptz
+  editing_closes_at timestamptz [note: 'participants can edit drafts and resubmit until here (H20)']
+  submissions_close_at timestamptz [note: 'last moment to submit; the last submitted snapshot is the one that counts']
+  gallery_opens_at timestamptz [note: 'null = no gallery (H18)']
+  draft_visibility text [not null, default: 'team', note: 'team | participants | public (H17)']
+  max_team_size integer [note: 'null = unlimited (H19)']
+  updated_at timestamptz [default: `now()`]
+}
+
+Table project_form_fields {
+  id integer [pk, increment]
+  key text [not null, unique, note: 'stable identifier; answers survive label/order edits (H16)']
+  kind text [not null, note: 'short_text | long_text | link | image | file | single_choice | multiple_choice']
+  label jsonb [not null, note: 'es/gl/en']
+  options jsonb [note: 'choices for *_choice kinds']
+  limits jsonb [note: 'max length, max files, accepted types…']
+  required boolean [not null, default: false, note: 'enforced on submit only, never on draft save']
+  position integer [not null]
+  archived_at timestamptz [note: 'removing a field archives it; existing answers are kept']
+  created_at timestamptz [default: `now()`]
+  updated_at timestamptz [default: `now()`]
+}
 
 Table repos {
   id integer [pk, increment]
   name text [not null]
-  description text [not null, default: '']
-  github_url text
-  devpost_url text
-  demo_url text
+  status text [not null, default: 'draft', note: 'draft | submitted (H20)']
+  submitted_at timestamptz [note: 'latest submission; null while never submitted']
+  created_by integer
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
 
-  Note: 'A project/team. Deliberately independent from application_responses — registration teams and submission teams need not match.'
+  Note: 'A project/team. Deliberately independent from application_responses — registration teams and submission teams need not match. Its content lives in project_field_values (H16).'
+}
+
+Table project_field_values {
+  repo_id integer [not null]
+  field_id integer [not null]
+  value jsonb [not null, note: 'text, url list, choice keys, or private object keys for image/file uploads']
+  updated_by integer
+  updated_at timestamptz [default: `now()`, note: 'draft autosave (H20)']
+
+  indexes {
+    (repo_id, field_id) [pk]
+  }
+}
+
+Table project_submission_snapshots {
+  id integer [pk, increment]
+  repo_id integer [not null]
+  submitted_by integer [not null]
+  content jsonb [not null, note: 'immutable copy of name, field values, team and challenges at submit time']
+  created_at timestamptz [default: `now()`]
 }
 
 Table submissions {
   repo_id integer [not null]
   user_id integer [not null]
-  imported_from text [not null, default: 'manual', note: 'manual | devpost']
-  external_id text
+  status text [not null, default: 'active', note: 'invited | active — an invite counts as membership only once accepted (H19)']
+  invited_by integer
   created_at timestamptz [default: `now()`]
 
   indexes {
     (repo_id, user_id) [pk]
   }
+
+  Note: 'Team membership. A person may belong to more than one project.'
 }
 
-Table devpost_participants {
+// ── winners (H60) ─────────────────────────────────────────────────────────
+
+Table challenge_winners {
+  id integer [pk, increment]
+  challenge_id integer [not null]
   repo_id integer [not null]
-  email text [not null]
-  name text
-  surname text
-  devpost_username text
-  user_id integer [note: 'null until matched/claimed']
-  import_batch text [not null]
-  merge_status text [not null, default: 'unmatched', note: 'unmatched | auto_matched | manually_linked']
-  linked_by integer
-  linked_at timestamptz
-  claim_email_sent_at timestamptz
-  created_at timestamptz [default: `now()`]
-
-  indexes {
-    (repo_id, email) [pk]
-  }
-}
-
-Table devpost_prizes {
-  name text [pk]
-  last_batch text
+  placement text [not null, note: 'prize name or position']
+  recorded_by integer [not null]
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
 
-  Note: 'Every opt-in prize name ever seen in an import, so the challenge editor can autocomplete devpost_tags.'
+  indexes {
+    (challenge_id, repo_id) [unique]
+  }
 }
 
-Table repo_devpost_prizes {
-  repo_id integer [not null]
-  prize text [not null]
-  created_at timestamptz [default: `now()`]
-
-  indexes {
-    (repo_id, prize) [pk]
-  }
-
-  Note: 'Persisted at import time. Mapping a prize to a challenge later enqueues these repos without re-importing the CSV.'
+Table challenge_winner_publication {
+  challenge_id integer [pk]
+  publish_at timestamptz [note: 'null = unscheduled; no participant/public read returns winners before this time']
+  published_at timestamptz
+  scheduled_by integer
+  updated_at timestamptz [default: `now()`]
 }
 
 // ── schedule (Directus: horario with timed publication) ───────────────────
@@ -659,12 +686,20 @@ Ref: judging_session.judge_id > users.id
 Ref: judging_session.queue_entry_id > queue_entries.id
 Ref: judging_session.room_id > rooms.id
 
+Ref: repos.created_by > users.id
 Ref: submissions.repo_id > repos.id
 Ref: submissions.user_id > users.id
-Ref: devpost_participants.repo_id > repos.id
-Ref: devpost_participants.user_id > users.id
-Ref: devpost_participants.linked_by > users.id
-Ref: repo_devpost_prizes.repo_id > repos.id
+Ref: submissions.invited_by > users.id
+Ref: project_field_values.repo_id > repos.id [delete: cascade]
+Ref: project_field_values.field_id > project_form_fields.id
+Ref: project_field_values.updated_by > users.id
+Ref: project_submission_snapshots.repo_id > repos.id [delete: cascade]
+Ref: project_submission_snapshots.submitted_by > users.id
+Ref: challenge_winners.challenge_id > challenges.id
+Ref: challenge_winners.repo_id > repos.id
+Ref: challenge_winners.recorded_by > users.id
+Ref: challenge_winner_publication.challenge_id - challenges.id
+Ref: challenge_winner_publication.scheduled_by > users.id
 
 Ref: activity_logs.user_id > users.id
 Ref: activity_logs.activity_id > activities.id
@@ -730,11 +765,14 @@ TableGroup queue_judging {
 }
 
 TableGroup projects {
+  project_settings
+  project_form_fields
   repos
+  project_field_values
+  project_submission_snapshots
   submissions
-  devpost_participants
-  devpost_prizes
-  repo_devpost_prizes
+  challenge_winners
+  challenge_winner_publication
 }
 
 TableGroup applications_flow {

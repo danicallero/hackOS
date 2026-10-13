@@ -11,6 +11,23 @@ retry contract.
 | Naturally idempotent resource convergence | Profile/UI/notification preferences, public directory profile (`PUT /api/me/public-profile`) and its moderation, event diary favourite/note/removal (`PATCH`/`DELETE /api/me/diary/:entryId`), sponsor meal plan replacement (`PUT /api/me/meal-plan` and the audited staff correction `PUT /api/users/:id/meal-plan`, serialized per user with a row lock; one post-commit `logistics.meal_plan.updated` carrying only changed meals, none when nothing changed), inbox read/delete, push-token registration, the Live Activity device/session registry (`PUT /api/me/live-activities/device`, `PUT`/`DELETE /api/me/live-activities/sessions`, #966), schedule/challenge/room/TV configuration, role and role-grant-rule configuration, university normalization, review score replacement | `PUT`/`PATCH` converges on the supplied resource representation; `DELETE` either removes the exact resource or returns the documented missing-resource conflict. Clients still attach a key automatically, allowing safe response replay while preserving semantic convergence. |
 | State-machine / uniqueness-protected | Invite acceptance, Better Auth session/password/verification operations, Devpost imports and claims, application draft/submission/review decisions, account removal, wallet-device protocols, telemetry | The underlying token lock, unique constraint, or transition lock supplies one winner. These remain explicitly documented exceptions because some are third-party protocol endpoints or have identity/session semantics that cannot replay a generic HTTP response. |
 
+## Retention
+
+`idempotency_keys` is bounded (#994, H54 data minimisation). The
+`applications-expirer` tick deletes, in batches of 1000 and using
+`idempotency_keys_created_at_idx`:
+
+- completed rows older than **7 days** — longer than any legitimate replay,
+  including a mobile scanner that reuses its scan id as key after an offline
+  shift;
+- rows with no response (abandoned in-flight attempts and the H54
+  pending-removal marker) older than **1 day**, well past the 30 s reclaim
+  threshold.
+
+A key reused after its window executes again as a new request. Because the
+table is bounded, the account-removal scrub in `identity/removal.ts` scans at
+most 7 days of rows.
+
 ## Exactly-once boundary
 
 `idempotency_keys` stores a hash of method, route template, parameters and body,

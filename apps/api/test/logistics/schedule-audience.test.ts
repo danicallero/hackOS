@@ -306,6 +306,7 @@ describe("scan requires participant audience (H59)", () => {
       },
     });
     expect(res.statusCode).toBe(400);
+    expect(res.json().error.details.code).toBe("schedule_scan_needs_participants");
   });
 
   it("rejects flipping a scannable item's audience away from participant", async () => {

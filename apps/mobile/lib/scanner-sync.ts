@@ -1,4 +1,6 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { ApiError, apiFetch, CLOCK_SKEW_TOLERANCE_MS, getClockSkewMs } from "./api";
+import { apiErrorReason } from "./api-error-reason";
 import { authClient } from "./auth-client";
 import { createIdempotencyKey } from "./idempotency-key";
 import {
@@ -111,14 +113,11 @@ async function waitForLocalSnapshotWrite(write: Promise<void>): Promise<Error | 
   return result;
 }
 
-/** Matches apps/api/src/modules/logistics/activities.ts BadRequestError text. */
-const TIMESTAMP_FUTURE_ERROR = "Offline scan timestamp must be in the past";
-
 type ReplayFailure = "retryable" | "terminal";
 
 function classifyReplayFailure(error: unknown): ReplayFailure {
   if (!(error instanceof ApiError)) return "retryable";
-  if (error instanceof ApiError && error.message.includes("still in flight")) {
+  if (apiErrorReason(error) === ERROR_REASONS.IDEMPOTENCY_IN_FLIGHT) {
     return "retryable";
   }
   if (
@@ -252,7 +251,7 @@ export async function replayPendingScans(
       if (
         error instanceof ApiError &&
         error.status === 400 &&
-        error.message.includes(TIMESTAMP_FUTURE_ERROR)
+        apiErrorReason(error) === ERROR_REASONS.SCAN_TIMESTAMP_IN_FUTURE
       ) {
         const correction = await attemptClockSkewCorrection(scan, ownerUserId, sessionCookie);
         if (correction === "acknowledged" || correction === "terminal") continue;
