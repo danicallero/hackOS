@@ -407,7 +407,7 @@ The schedule-item reminder job is an event-level automation: Event settings →
 Notifications (`/settings/event?tab=notifications`, `event:manage`) has the
 on/off switch (`schedule_reminders_enabled`, default on) and the lead time
 ("Remind before start", 1–1440 minutes, default 15). Both live in the
-singleton `notification_automation_settings` (migration `0608`), where the lead
+singleton `notification_automation_settings` (migration `0607`), where the lead
 is a nullable override of the built-in default (R018: a value equal to the
 default is stored as NULL, and "Default (15 min)" resets it).
 `GET`/`PUT /api/notifications/automation` read and save them in one audited

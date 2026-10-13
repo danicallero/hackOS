@@ -286,7 +286,7 @@ intrinsic gate still holds. An empty role list means nobody receives it.
 anything — the capability or data gate always applies as well.
 
 Storage (migration `0604_live_activities.sql`): the singleton
-`live_activity_settings.max_concurrent` (default 2) and the nullable `lead_minutes` (migration `0607`; NULL = use `LIVE_ACTIVITY_LEAD_MINUTES`, only an intentional override is stored) and the equally nullable `deadline_lead_minutes`, `deadline_closing_minutes`, `accreditation_lead_minutes` and `accreditation_tail_minutes` (migration `0608`; NULL = the matching environment variable, or 15 for the closing window),
+`live_activity_settings.max_concurrent` (default 2) and the nullable `lead_minutes` (NULL = use `LIVE_ACTIVITY_LEAD_MINUTES`, only an intentional override is stored) and the equally nullable `deadline_lead_minutes`, `deadline_closing_minutes`, `accreditation_lead_minutes` and `accreditation_tail_minutes` (all migration `0607`; NULL = the matching environment variable, or 15 for the closing window),
 `live_activity_kind_settings (kind, enabled, priority)` with a deferred
 unique priority, and `live_activity_kind_roles (kind, role_id)` (cascade on a
 hard role delete; a soft-deleted role is ignored when reading). The migration
