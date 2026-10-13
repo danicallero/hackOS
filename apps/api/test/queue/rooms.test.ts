@@ -524,6 +524,29 @@ describe("queue_settings singleton", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().pre_call_notification_eta_minutes).toBe(7);
 
+    // H53: audited with before/after, and the timings are range-checked.
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: audits } = await pool.query(
+      `SELECT actor_id, before, after FROM audit_log WHERE entity_type = 'queue_settings'`,
+    );
+    expect(audits).toHaveLength(1);
+    expect(audits[0].actor_id).toBe(adminId);
+    expect(audits[0].after.pre_call_notification_eta_minutes).toBe(7);
+    for (const payload of [
+      { preCallNotificationEtaMinutes: 241 },
+      { preCallNotificationEtaMinutes: -1 },
+      { calledTooLongThresholdMinutes: 0 },
+      { calledTooLongThresholdMinutes: 241 },
+    ]) {
+      const bad = await app.inject({
+        method: "PATCH",
+        url: "/api/queue/settings",
+        headers: asUser(adminId),
+        payload,
+      });
+      expect(bad.statusCode, JSON.stringify(payload)).toBe(400);
+    }
+
     const read = await app.inject({
       method: "GET",
       url: "/api/queue/settings",

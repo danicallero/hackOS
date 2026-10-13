@@ -27,9 +27,12 @@ import {
   LIVE_ACTIVITY_LEAD_MINUTES_MIN,
   LIVE_ACTIVITY_MAX_CONCURRENT_MAX,
   LIVE_ACTIVITY_MAX_CONCURRENT_MIN,
+  LIVE_ACTIVITY_TIMING_KEYS,
+  LIVE_ACTIVITY_TIMING_RANGES,
   type LiveActivityConfigKind,
   type LiveActivityKindSetting,
   type LiveActivitySettings,
+  type LiveActivityTimingKey,
 } from "@hackos/shared/live-activities";
 import { ArrowDownIcon } from "@phosphor-icons/react/dist/csr/ArrowDown";
 import { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
@@ -42,7 +45,6 @@ import { IconButton } from "@/components/common/icon-button";
 import { SectionCard } from "@/components/common/section-card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -61,6 +63,7 @@ import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { capabilityDescription, prettifyCapability } from "../../permissions/helpers";
 import { DrilldownBackButton } from "../../permissions/role-editor";
+import { TimingField } from "./timing-field";
 import { useCategorySaveState } from "./use-category-save-state";
 
 type LiveActivityRole = LiveActivitySettings["roles"][number];
@@ -97,14 +100,40 @@ interface Draft {
   /** Minutes before a schedule item starts; null while the field is empty or out of range. */
   leadMinutes: number | null;
   defaultLeadMinutes: number;
+  /** Deadline and accreditation windows; null while a field is empty or out of range. */
+  timings: Record<LiveActivityTimingKey, number | null>;
+  timingDefaults: Record<LiveActivityTimingKey, number>;
   kinds: DraftKind[];
 }
+
+/** The timing fields each kind's editor shows. */
+const KIND_TIMINGS: Partial<Record<LiveActivityConfigKind, LiveActivityTimingKey[]>> = {
+  deadline: ["deadlineLead", "deadlineClosing"],
+  accreditation: ["accreditationLead", "accreditationTail"],
+};
+
+const TIMING_LABELS: Record<LiveActivityTimingKey, MessageKey> = {
+  deadlineLead: "liveActivityTimingDeadlineLead",
+  deadlineClosing: "liveActivityTimingDeadlineClosing",
+  accreditationLead: "liveActivityTimingAccreditationLead",
+  accreditationTail: "liveActivityTimingAccreditationTail",
+};
+
+const TIMING_HINTS: Partial<Record<LiveActivityTimingKey, MessageKey>> = {
+  deadlineLead: "liveActivityTimingDeadlineLeadHint",
+};
 
 function toDraft(settings: LiveActivitySettings): Draft {
   return {
     maxConcurrent: settings.maxConcurrent,
     leadMinutes: settings.leadMinutes,
     defaultLeadMinutes: settings.defaultLeadMinutes,
+    timings: Object.fromEntries(
+      LIVE_ACTIVITY_TIMING_KEYS.map((key) => [key, settings.timings[key].value]),
+    ) as Draft["timings"],
+    timingDefaults: Object.fromEntries(
+      LIVE_ACTIVITY_TIMING_KEYS.map((key) => [key, settings.timings[key].default]),
+    ) as Draft["timingDefaults"],
     kinds: [...settings.kinds]
       .sort((a, b) => a.priority - b.priority)
       .map(({ kind, enabled, roleIds, requiredCapability }) => ({
@@ -121,6 +150,7 @@ export function toPayload(draft: Draft) {
   return {
     maxConcurrent: draft.maxConcurrent,
     leadMinutes: draft.leadMinutes,
+    timings: draft.timings,
     kinds: draft.kinds.map(({ kind, enabled, roleIds }) => ({ kind, enabled, roleIds })),
   };
 }
@@ -142,7 +172,10 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
   const [pending, setPending] = useState(false);
 
   const isDirty = saved !== null && draft !== null && !samePayload(saved, draft);
-  const leadInvalid = draft !== null && draft.leadMinutes === null;
+  const leadInvalid =
+    draft !== null &&
+    (draft.leadMinutes === null ||
+      LIVE_ACTIVITY_TIMING_KEYS.some((k) => draft.timings[k] === null));
   const [saveState, setSaveState] = useCategorySaveState(isDirty, onDirtyChange);
 
   const load = useCallback(async () => {
@@ -187,7 +220,7 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!draft || pending || draft.leadMinutes === null) return;
+    if (!draft || pending || leadInvalid) return;
     setPending(true);
     setSaveState("saving");
     try {
@@ -251,6 +284,11 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
       index={currentIndex}
       count={draft.kinds.length}
       roles={roles}
+      timings={draft.timings}
+      timingDefaults={draft.timingDefaults}
+      onTimingChange={(key, value) =>
+        setDraft((prev) => (prev ? { ...prev, timings: { ...prev.timings, [key]: value } } : prev))
+      }
       onChange={(patch) => updateKind(current.kind, patch)}
       onMove={(toIndex) => move(current.kind, toIndex)}
     />
@@ -287,50 +325,21 @@ export function LiveActivitiesTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
                   ))}
                 </SelectContent>
               </Select>
-              <Label htmlFor="live-activities-lead">{t("liveActivitiesLeadMinutes")}</Label>
-              <Input
-                id="live-activities-lead"
-                type="number"
-                inputMode="numeric"
-                min={LIVE_ACTIVITY_LEAD_MINUTES_MIN}
-                max={LIVE_ACTIVITY_LEAD_MINUTES_MAX}
-                className="w-24"
-                value={draft.leadMinutes ?? ""}
-                aria-invalid={leadInvalid || undefined}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  const value = Number(raw);
-                  setDraft((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          leadMinutes:
-                            raw !== "" &&
-                            Number.isInteger(value) &&
-                            value >= LIVE_ACTIVITY_LEAD_MINUTES_MIN &&
-                            value <= LIVE_ACTIVITY_LEAD_MINUTES_MAX
-                              ? value
-                              : null,
-                        }
-                      : prev,
-                  );
-                }}
-              />
-              {draft.leadMinutes !== draft.defaultLeadMinutes && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    setDraft((prev) =>
-                      prev ? { ...prev, leadMinutes: prev.defaultLeadMinutes } : prev,
-                    )
-                  }
-                >
-                  {t("liveActivitiesLeadReset", { minutes: draft.defaultLeadMinutes })}
-                </Button>
-              )}
             </div>
+          )}
+
+          {!(isMobile && current) && (
+            <TimingField
+              id="live-activities-lead"
+              label={t("liveActivitiesLeadMinutes")}
+              value={draft.leadMinutes}
+              defaultValue={draft.defaultLeadMinutes}
+              min={LIVE_ACTIVITY_LEAD_MINUTES_MIN}
+              max={LIVE_ACTIVITY_LEAD_MINUTES_MAX}
+              onChange={(leadMinutes) =>
+                setDraft((prev) => (prev ? { ...prev, leadMinutes } : prev))
+              }
+            />
           )}
 
           {isMobile ? (
@@ -470,6 +479,9 @@ function KindEditor({
   index,
   count,
   roles,
+  timings,
+  timingDefaults,
+  onTimingChange,
   onChange,
   onMove,
 }: {
@@ -477,6 +489,9 @@ function KindEditor({
   index: number;
   count: number;
   roles: LiveActivityRole[];
+  timings: Draft["timings"];
+  timingDefaults: Draft["timingDefaults"];
+  onTimingChange: (key: LiveActivityTimingKey, value: number | null) => void;
   onChange: (patch: Partial<DraftKind>) => void;
   onMove: (toIndex: number) => void;
 }) {
@@ -531,6 +546,23 @@ function KindEditor({
           onCheckedChange={(enabled) => onChange({ enabled })}
         />
       </div>
+
+      {KIND_TIMINGS[setting.kind]?.map((key) => {
+        const hint = TIMING_HINTS[key];
+        return (
+          <TimingField
+            key={key}
+            id={`live-activity-timing-${key}`}
+            label={t(TIMING_LABELS[key])}
+            hint={hint ? t(hint) : undefined}
+            value={timings[key]}
+            defaultValue={timingDefaults[key]}
+            min={LIVE_ACTIVITY_TIMING_RANGES[key].min}
+            max={LIVE_ACTIVITY_TIMING_RANGES[key].max}
+            onChange={(value) => onTimingChange(key, value)}
+          />
+        );
+      })}
 
       {setting.requiredCapability && (
         <div className="space-y-1">

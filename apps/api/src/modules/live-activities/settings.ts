@@ -1,9 +1,12 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import {
+  DEADLINE_CLOSING_MINUTES_DEFAULT,
   LIVE_ACTIVITY_CONFIG_KINDS,
   type LiveActivityConfigKind,
   type LiveActivityKindSetting,
   type LiveActivitySettings,
+  type LiveActivityTiming,
+  type LiveActivityTimingKey,
 } from "@hackos/shared/live-activities";
 import { config } from "../../config.js";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
@@ -40,6 +43,58 @@ export async function readLeadMinutes(db: Queryable = pool): Promise<number> {
     `SELECT lead_minutes FROM live_activity_settings WHERE id = 1`,
   );
   return rows[0]?.lead_minutes ?? config.LIVE_ACTIVITY_LEAD_MINUTES;
+}
+
+/** Column and deployment default of each timing besides the schedule lead (R018). */
+const TIMINGS: Record<LiveActivityTimingKey, { column: string; fallback: () => number }> = {
+  deadlineLead: {
+    column: "deadline_lead_minutes",
+    fallback: () => config.LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES,
+  },
+  deadlineClosing: {
+    column: "deadline_closing_minutes",
+    fallback: () => DEADLINE_CLOSING_MINUTES_DEFAULT,
+  },
+  accreditationLead: {
+    column: "accreditation_lead_minutes",
+    fallback: () => config.LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES,
+  },
+  accreditationTail: {
+    column: "accreditation_tail_minutes",
+    fallback: () => config.LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES,
+  },
+};
+
+const TIMING_KEYS = Object.keys(TIMINGS) as LiveActivityTimingKey[];
+
+async function readTimingRows(
+  db: Queryable,
+): Promise<Record<LiveActivityTimingKey, LiveActivityTiming>> {
+  const { rows } = await db.query<Record<string, number | null>>(
+    `SELECT ${TIMING_KEYS.map((k) => TIMINGS[k].column).join(", ")}
+       FROM live_activity_settings WHERE id = 1`,
+  );
+  const timings = {} as Record<LiveActivityTimingKey, LiveActivityTiming>;
+  for (const key of TIMING_KEYS) {
+    const stored = rows[0]?.[TIMINGS[key].column] ?? null;
+    const fallback = TIMINGS[key].fallback();
+    timings[key] = { value: stored ?? fallback, default: fallback, custom: stored !== null };
+  }
+  return timings;
+}
+
+/**
+ * The effective deadline and accreditation timings (H19, H22): organizer
+ * override, else the deployment default.
+ */
+export async function readLiveActivityTimings(
+  db: Queryable = pool,
+): Promise<Record<LiveActivityTimingKey, number>> {
+  const rows = await readTimingRows(db);
+  return Object.fromEntries(TIMING_KEYS.map((k) => [k, rows[k].value])) as Record<
+    LiveActivityTimingKey,
+    number
+  >;
 }
 
 /**
@@ -91,6 +146,7 @@ export async function readLiveActivitySettings(
     leadMinutes: settingsRows[0]?.lead_minutes ?? config.LIVE_ACTIVITY_LEAD_MINUTES,
     defaultLeadMinutes: config.LIVE_ACTIVITY_LEAD_MINUTES,
     leadMinutesCustom: settingsRows[0]?.lead_minutes != null,
+    timings: await readTimingRows(db),
     // Priorities are reported as consecutive ranks, so the UI and the
     // ranking never see gaps.
     kinds: kinds.map(({ order: _order, ...kind }, index) => ({ ...kind, priority: index })),
@@ -102,6 +158,8 @@ export interface LiveActivitySettingsInput {
   maxConcurrent: number;
   /** Lead time in minutes; `undefined` keeps the stored value, `null` returns to the deployment default. */
   leadMinutes?: number | null;
+  /** Per timing: `undefined` keeps it, `null` (or the default itself) clears the override. */
+  timings?: Partial<Record<LiveActivityTimingKey, number | null>>;
   /** Every configurable kind exactly once; array order is the priority (index 0 = highest). */
   kinds: { kind: LiveActivityConfigKind; enabled: boolean; roleIds: number[] }[];
 }
@@ -144,6 +202,16 @@ export async function saveLiveActivitySettings(
       await client.query(`UPDATE live_activity_settings SET lead_minutes = $1 WHERE id = 1`, [
         override,
       ]);
+    }
+    for (const key of TIMING_KEYS) {
+      const requested = input.timings?.[key];
+      if (requested === undefined) continue;
+      // R018: a value equal to the default is stored as "no override".
+      const override = requested === TIMINGS[key].fallback() ? null : requested;
+      await client.query(
+        `UPDATE live_activity_settings SET ${TIMINGS[key].column} = $1 WHERE id = 1`,
+        [override],
+      );
     }
     for (const [priority, kind] of input.kinds.entries()) {
       await client.query(

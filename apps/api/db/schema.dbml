@@ -581,6 +581,23 @@ Table live_activity_devices {
   user_id integer [not null]
 }
 
+Table live_activity_kind_opt_outs {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  kind text [not null]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, kind) [pk]
+  }
+}
+
+Table live_activity_kind_orders {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  kinds "text[]" [not null]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  user_id integer [pk, not null]
+}
+
 Table live_activity_kind_roles {
   kind text [not null]
   role_id integer [not null]
@@ -617,9 +634,13 @@ Table live_activity_sessions {
 }
 
 Table live_activity_settings {
+  accreditation_lead_minutes integer
+  accreditation_tail_minutes integer
+  deadline_closing_minutes integer
+  deadline_lead_minutes integer
   id integer [pk, not null, default: `1`]
-  max_concurrent integer [not null, default: `2`]
   lead_minutes integer
+  max_concurrent integer [not null, default: `2`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
 }
 
@@ -666,6 +687,13 @@ Table meal_scan_batches {
   is_test_account boolean [not null, default: `false`, note: 'H54 fixture marker captured at enqueue; remains stable if submitted_by is scrubbed.']
   status text [not null, default: `'pending'::text`]
   submitted_by integer
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table notification_automation_settings {
+  id integer [pk, not null, default: `1`]
+  schedule_reminder_lead_minutes integer
+  schedule_reminders_enabled boolean [not null, default: `true`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
 }
 
@@ -1467,6 +1495,8 @@ Ref: judging_session.judge_id > users.id
 Ref: judging_session.queue_entry_id > queue_entries.id
 Ref: judging_session.room_id > rooms.id
 Ref: live_activity_devices.user_id > users.id
+Ref: live_activity_kind_opt_outs.user_id > users.id
+Ref: live_activity_kind_orders.user_id > users.id
 Ref: live_activity_kind_roles.kind > live_activity_kind_settings.kind
 Ref: live_activity_kind_roles.role_id > roles.id
 Ref: live_activity_sessions.device_id > live_activity_devices.id

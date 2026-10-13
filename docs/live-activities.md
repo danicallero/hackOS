@@ -165,8 +165,8 @@ the account language.
   passes. **Decision:** participants expect the countdown whenever they are
   hacking, so it is not limited to the last hours; it replaced a 3-hour lead,
   which left a running hackathon without it. Only when `hacking_starts_at` is
-  unset does it fall back to `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` (default
-  180) before the deadline. `startsAt` is `hacking_starts_at` (for a progress
+  unset does it fall back to the **deadline lead** (event setting, default
+  `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` = 180, 15–1440) before the deadline. `startsAt` is `hacking_starts_at` (for a progress
   bar), or null. A hacking period longer than ActivityKit's 8 hours is
   covered by replacing the iOS activity (see the state machine).
 - Who: holders of `queue:status` (the participant capability; `*` passes)
@@ -181,8 +181,9 @@ the account language.
   not (an unlinked work group counts as draft), and `null` when the user has
   none in hackOS, for example a Devpost team that is not imported yet. A
   `null` status is unknown and is never shown as "not submitted".
-- `phase`: `submitted`; `closing` in the last 15 minutes
-  (`DEADLINE_CLOSING_MINUTES`) for a known draft; otherwise `open`.
+- `phase`: `submitted`; `closing` in the last **closing window** (event
+  setting, default 15 minutes = `DEADLINE_CLOSING_MINUTES_DEFAULT`, 1–240) for
+  a known draft; otherwise `open`.
 - **Alert policy:** one alerting update, when a known draft enters
   `closing`. A `null` status never alerts.
 - `url`: `hackos://project` (proposed; the app has no project screen yet).
@@ -190,10 +191,11 @@ the account language.
 ### Accreditation desk (H22, H24, H27)
 
 - **Decision:** `event_config` has no check-in window, so the desk's window
-  is derived. It opens `LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES` (default 60)
-  before `event_starts_at` (else `hacking_starts_at`) and closes
-  `LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES` (default 60) after
-  `hacking_starts_at` (else the event start). Outside it, staff are not
+  is derived. It opens the **accreditation lead** (event setting, default
+  `LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES` = 60, 0–1440) before
+  `event_starts_at` (else `hacking_starts_at`) and closes the **accreditation
+  tail** (event setting, default `LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES` =
+  60, 0–1440) after `hacking_starts_at` (else the event start). Outside it, staff are not
   interrupted all event long.
 - Who: holders of `accredit:scan` (or `*`).
 - Counts follow the scanner home tile (`scannerRoleStats`): `eligible` is
@@ -263,8 +265,8 @@ capability that owns event identity and timing):
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/live-activities/settings` | `LiveActivitySettings`: `maxConcurrent`, `leadMinutes` (with `defaultLeadMinutes` and `leadMinutesCustom`), `kinds` sorted by priority, and `roles` (every non-deleted role, highest position first, raw name as `GET /api/roles` returns it) so the editor needs no roles-manager permission. |
-| `PUT /api/live-activities/settings` | `{ maxConcurrent: 1–5, leadMinutes?: 0–240 \| null, kinds: [{ kind, enabled, roleIds }] }`. `leadMinutes` is how long before a staff or attendee schedule item starts its Live Activity appears: omitted keeps it, `null` (or the deployment default) clears the override. The deadline and accreditation leads stay deployment-only because they anchor to the hacking window, not to schedule items. `kinds` lists every kind exactly once and its **array order is the priority** (first = 0 = highest). Unknown or deleted role ids are a 400. Audited (`live_activity_settings`, H53) in the same transaction; `Idempotency-Key` replays. |
+| `GET /api/live-activities/settings` | `LiveActivitySettings`: `maxConcurrent`, `leadMinutes` (with `defaultLeadMinutes` and `leadMinutesCustom`), `timings` (`deadlineLead`, `deadlineClosing`, `accreditationLead`, `accreditationTail`, each `{ value, default, custom }`), `kinds` sorted by priority, and `roles` (every non-deleted role, highest position first, raw name as `GET /api/roles` returns it) so the editor needs no roles-manager permission. |
+| `PUT /api/live-activities/settings` | `{ maxConcurrent: 1–5, leadMinutes?: 0–240 \| null, timings?: { deadlineLead?: 15–1440 \| null, deadlineClosing?: 1–240 \| null, accreditationLead?: 0–1440 \| null, accreditationTail?: 0–1440 \| null }, kinds: [{ kind, enabled, roleIds }] }`. `leadMinutes` is how long before a staff or attendee schedule item starts its Live Activity appears: omitted keeps it, `null` (or the deployment default) clears the override. `timings` works the same way per key (omitted keeps it; `null` or the default itself clears the override), so a value equal to the deployment default is never materialized (R018). Every consumer reads the configured value (`readLiveActivityTimings`), and the save runs the worker early. `kinds` lists every kind exactly once and its **array order is the priority** (first = 0 = highest). Unknown or deleted role ids are a 400. Audited (`live_activity_settings`, H53) in the same transaction; `Idempotency-Key` replays. |
 
 Kinds (`LIVE_ACTIVITY_CONFIG_KINDS`) and the gate each keeps on top of its
 role list (`requiredCapability` in the response):
@@ -284,7 +286,7 @@ intrinsic gate still holds. An empty role list means nobody receives it.
 anything — the capability or data gate always applies as well.
 
 Storage (migration `0604_live_activities.sql`): the singleton
-`live_activity_settings.max_concurrent` (default 2) and the nullable `lead_minutes` (migration `0607`; NULL = use `LIVE_ACTIVITY_LEAD_MINUTES`, only an intentional override is stored),
+`live_activity_settings.max_concurrent` (default 2) and the nullable `lead_minutes` (migration `0607`; NULL = use `LIVE_ACTIVITY_LEAD_MINUTES`, only an intentional override is stored) and the equally nullable `deadline_lead_minutes`, `deadline_closing_minutes`, `accreditation_lead_minutes` and `accreditation_tail_minutes` (migration `0608`; NULL = the matching environment variable, or 15 for the closing window),
 `live_activity_kind_settings (kind, enabled, priority)` with a deferred
 unique priority, and `live_activity_kind_roles (kind, role_id)` (cascade on a
 hard role delete; a soft-deleted role is ignored when reading). The migration
@@ -305,7 +307,7 @@ move up/down buttons; each row has its on/off switch and a plain-text role
 summary. The editor shows the kind's description, the read-only
 `requiredCapability` and role checkboxes from the response's `roles`. The
 shown-at-once limit, the lead time ("Show before start", minutes, 0–240, with a
-reset to the deployment default) and every kind share one draft and the category's single
+reset to the deployment default) and every kind share one draft; the deadline and accreditation editors also carry their own timing fields (deadline: appears before the deadline, urgent when time left; accreditation: opens before the event, open after hacking starts), each with inline range validation and a "Default (N min)" reset. They and the category's single
 Save footer and unsaved-changes guard, sent as one `PUT`. Per schedule item,
 the item editor's "Show Live Activity to audience" switch (web and mobile; only
 for items with an audience) sets `liveActivityAudience`, and the schedule
@@ -755,9 +757,17 @@ props contract is unchanged. Details: [mobile.md](./mobile.md#live-activities-an
 | `APPLE_APNS_ENVIRONMENT` | `production` | Shared with Wallet. TestFlight and App Store builds use `production`; `sandbox` is only for development-signed builds and must not be set on a host that also pushes Wallet passes. |
 | `APNS_BUNDLE_ID` | `com.hackudc.os` | Development builds use `com.hackudc.os.debug`. |
 | `LIVE_ACTIVITY_LEAD_MINUTES` | `15` | Default for the event setting "Show before start" (Event settings → Live Activities): minutes before a scannable activity (staff) or an opted-in schedule item (attendees) starts that its Live Activity appears (0–240). An organizer override in the database wins; clearing it returns to this value. |
-| `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` | `180` | Only when `hacking_starts_at` is unset: minutes before submissions close (`hacking_ends_at`) that participants get the deadline countdown (15–1440). With a start, it runs for the whole hacking period. |
-| `LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES` | `60` | Minutes before the event start that the accreditation desk activity opens (0–1440). |
-| `LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES` | `60` | Minutes after hacking starts that the accreditation desk activity stays open (0–1440). |
+| `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` | `180` | Default for the event setting "Appears before deadline" (Event settings → Live Activities → Submission deadline), used only when `hacking_starts_at` is unset: minutes before submissions close (`hacking_ends_at`) that participants get the deadline countdown (15–1440). With a start, it runs for the whole hacking period. |
+| `LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES` | `60` | Default for the event setting "Opens before event": minutes before the event start that the accreditation desk activity opens (0–1440). |
+| `LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES` | `60` | Default for the event setting "Open after hacking starts": minutes after hacking starts that the accreditation desk activity stays open (0–1440). |
+
+Not environment variables: the deadline "urgent when time left" window (default
+15 minutes, an event setting only). Deliberately fixed, since they are
+infrastructure or data labels rather than organizer decisions: the worker tick
+(20 s), the per-activity update throttle (30 s), the iOS rotation and
+open-ended refresh timings, the APNs JWT and request timeouts, and the "last
+10 min" accreditation arrivals window, which is baked into the native widget
+label.
 
 Without the key, the API boots normally. The read endpoint and Android
 delivery work, and the worker logs one warning and skips iOS. A half-set pair
@@ -818,7 +828,12 @@ and `deploy/README.md`.
   for the whole hacking period (not before it starts, lead fallback without
   a start) and the configured lead time moving staff and attendee activities.
 - `settings.test.ts`: configuration routes (access, validation, priorities,
-  audit, idempotent replay) and the lead time (override only, reset, 0–240).
+  audit, idempotent replay), the lead time (override only, reset, 0–240)
+  and the deadline and accreditation timings (override only, audit, reset,
+  per-key ranges). `kinds.test.ts` also proves each timing moves its
+  consumer (deadline lead, closing window, accreditation window both sides).
+- `notifications/automation.test.ts`: the schedule reminder switch and lead
+  (access, override only, audit, ranges) and that the reminder job honours both.
 - `logistics/schedule-live-activity-toggle.test.ts`: the roster toggle's PATCH
   (audit, early tick, 403 for `schedule:read`).
 - `preferences.test.ts`: per-kind preferences (entitlement, partial and

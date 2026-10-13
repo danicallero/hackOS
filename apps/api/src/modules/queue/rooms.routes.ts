@@ -726,28 +726,45 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       schema: { body: queueSettingsBody },
     },
     async (req) => {
-      const existing = (await pool.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0];
-      const { rows } = await pool.query(
-        `UPDATE queue_settings
-            SET handoff_buffer_minutes = $1, schedule_start_at = $2, schedule_end_at = $3,
-                pre_call_notification_eta_minutes = $4, requeue_prompt_default = $5,
-                called_too_long_threshold_minutes = $6
-          WHERE id = 1
-          RETURNING *`,
-        [
-          req.body.handoffBufferMinutes ?? existing.handoff_buffer_minutes,
-          req.body.scheduleStartAt === undefined
-            ? existing.schedule_start_at
-            : req.body.scheduleStartAt,
-          req.body.scheduleEndAt === undefined ? existing.schedule_end_at : req.body.scheduleEndAt,
-          req.body.preCallNotificationEtaMinutes ?? existing.pre_call_notification_eta_minutes,
-          req.body.requeuePromptDefault ?? existing.requeue_prompt_default,
-          req.body.calledTooLongThresholdMinutes ?? existing.called_too_long_threshold_minutes,
-        ],
-      );
+      // H53: judging timings (window, pre-call ETA, called-too-long) are event
+      // configuration; the audit row commits with the update.
+      const row = await withTransaction(async (client) => {
+        const existing = (
+          await client.query(`SELECT * FROM queue_settings WHERE id = 1 FOR UPDATE`)
+        ).rows[0];
+        const { rows } = await client.query(
+          `UPDATE queue_settings
+              SET handoff_buffer_minutes = $1, schedule_start_at = $2, schedule_end_at = $3,
+                  pre_call_notification_eta_minutes = $4, requeue_prompt_default = $5,
+                  called_too_long_threshold_minutes = $6
+            WHERE id = 1
+            RETURNING *`,
+          [
+            req.body.handoffBufferMinutes ?? existing.handoff_buffer_minutes,
+            req.body.scheduleStartAt === undefined
+              ? existing.schedule_start_at
+              : req.body.scheduleStartAt,
+            req.body.scheduleEndAt === undefined
+              ? existing.schedule_end_at
+              : req.body.scheduleEndAt,
+            req.body.preCallNotificationEtaMinutes ?? existing.pre_call_notification_eta_minutes,
+            req.body.requeuePromptDefault ?? existing.requeue_prompt_default,
+            req.body.calledTooLongThresholdMinutes ?? existing.called_too_long_threshold_minutes,
+          ],
+        );
+        await audit(client, {
+          actorId: actor(req.userId),
+          entityType: "queue_settings",
+          entityId: 1,
+          action: "update",
+          before: existing,
+          after: rows[0],
+        });
+        return rows[0];
+      });
       // #966 (H38): the judging window gates the queue Live Activity.
       await requestLiveActivitySync();
-      return rows[0];
+      return row;
     },
   );
 

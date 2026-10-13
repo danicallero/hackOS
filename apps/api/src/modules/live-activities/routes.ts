@@ -409,7 +409,12 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
           "`maxConcurrent` is the most Live Activities one device shows at once; lower " +
           "priority candidates beyond it are not started. `leadMinutes` is how long before a " +
           "schedule item starts its staff or attendee Live Activity appears: the organizer " +
-          "override when `leadMinutesCustom`, else the deployment default `defaultLeadMinutes`. `roles` lists every assignable " +
+          "override when `leadMinutesCustom`, else the deployment default `defaultLeadMinutes`. `timings` holds the other event-set " +
+          "windows, each `{ value, default, custom }`: `deadlineLead` (minutes before submissions close " +
+          "that the deadline activity appears when the hacking start is unset), `deadlineClosing` " +
+          "(minutes left when an unsubmitted team's activity turns urgent), `accreditationLead` and " +
+          "`accreditationTail` (minutes before the event starts and after hacking starts that the " +
+          "accreditation desk is open). `roles` lists every assignable " +
           "(non-deleted) role, highest position first, with the same raw name `GET /api/roles` " +
           "returns, so the editor needs no roles-manager permission.",
         response: { 200: liveActivitySettingsSchema },
@@ -431,7 +436,9 @@ export function registerLiveActivityRoutes(app: FastifyInstance): void {
           "list (unknown or deleted roles are a 400); an empty list means nobody receives it. " +
           "Roles created later are not added to any kind automatically. `maxConcurrent` is " +
           "1–5. `leadMinutes` (0–240; omit to keep it, `null` or the deployment default clears " +
-          "the override) is the lead time of staff and attendee schedule Live Activities. Audited; returns the saved configuration. Running Live Activities follow within " +
+          "the override) is the lead time of staff and attendee schedule Live Activities. `timings` " +
+          "sets any of `deadlineLead` (15–1440), `deadlineClosing` (1–240), `accreditationLead` and " +
+          "`accreditationTail` (0–1440) the same way (omit to keep, `null` or the default clears). Audited; returns the saved configuration. Running Live Activities follow within " +
           "seconds: the save schedules an early worker tick (ended when no longer allowed, or " +
           "outranked when a higher-priority one starts).",
         body: putLiveActivitySettingsBodySchema,

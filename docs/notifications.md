@@ -401,6 +401,28 @@ closes with thanks and an invitation to future editions. Email correspondence
 uses edition red as a brand/action accent in both themes, not as a status color;
 this is deliberately separate from the web's ink/blue primary control pairing.
 
+### Automatic reminder settings (H45, H51)
+
+The schedule-item reminder job is an event-level automation: Event settings →
+Notifications (`/settings/event?tab=notifications`, `event:manage`) has the
+on/off switch (`schedule_reminders_enabled`, default on) and the lead time
+("Remind before start", 1–1440 minutes, default 15). Both live in the
+singleton `notification_automation_settings` (migration `0608`), where the lead
+is a nullable override of the built-in default (R018: a value equal to the
+default is stored as NULL, and "Default (15 min)" resets it).
+`GET`/`PUT /api/notifications/automation` read and save them in one audited
+transaction (`notification_automation_settings`, H53); the save queues an
+early job run. While off, the job claims nothing, so no `reminded_at` is
+recorded and turning it back on reminds items that are still upcoming. People's
+own opt-ins and channels (`notification_preferences`) are unchanged. Other
+automatic notifications are already event-configurable elsewhere: the queue
+pre-call ETA (judging window settings), the meal-plan lock hours and the
+scheduled entrance reminder (Event settings). Live Activity timings are in
+Event settings → Live Activities ([live-activities.md](./live-activities.md)).
+
+Deliberately fixed: the outbox dispatcher and its retry backoff, the schedule
+reminder and announcement publisher tick (15 s), and push receipt polling.
+
 ### Scheduled pre-event entrance reminder
 
 `event.reminder` is an email-only operational template scheduled from Event
