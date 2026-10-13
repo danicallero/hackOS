@@ -249,6 +249,8 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | POST | `/api/me/work-groups/:id/invites/decline` | authenticated + email-verification:caller |
 | DELETE | `/api/me/work-groups/:id/members/:userId` | authenticated + email-verification:caller |
 | POST | `/api/me/work-groups/:id/submit` | authenticated + email-verification:caller |
+| GET | `/api/notifications/automation` | capability:event:manage |
+| PUT | `/api/notifications/automation` | capability:event:manage + email-verification:caller |
 | DELETE | `/api/presence/activity-logs/:id` | capability:presence:scan + email-verification:caller |
 | PATCH | `/api/presence/activity-logs/:id` | capability:presence:scan + email-verification:caller |
 | GET | `/api/presence/estimate` | capability:anyOf(presence:scan,logistics:stats) |

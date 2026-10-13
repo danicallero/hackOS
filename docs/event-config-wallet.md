@@ -234,8 +234,10 @@ header. A shared save footer pairs the submit button with the persistent save
 state; successful saves also use the app's Sileo toast. Forms retain native Enter
 submission from inputs. Multi-column fields align at the start so helpers do not
 move neighboring labels or controls. The danger zone keeps the three-stage event-wide reset
-confirmation (H16–H40/H53). Judging timing lives in Queue → Rooms, on the separate
-`/api/queue/settings` resource (`QUEUE_ADMIN`).
+confirmation (H16–H40/H53). Judging timing lives in Event settings → Judging window, on the separate
+`/api/queue/settings` resource (`QUEUE_ADMIN`, audited as `queue_settings`): the judging hours, the pre-call
+notice (notify a team when its estimated wait is under N minutes, 0–240) and the called-too-long staff warning
+(1–240). The automatic reminder and Live Activity timings are in Event settings → Notifications and → Live Activities.
 
 Event is split into General (identity), Schedule (paired event/hacking dates,
 countdown preview, email reminder) and Participants (project creation and

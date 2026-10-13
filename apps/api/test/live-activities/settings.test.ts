@@ -123,6 +123,178 @@ describe("Live Activity settings routes", () => {
     expect(rows[1].after.maxConcurrent).toBe(2);
   });
 
+  it("stores the lead time only as an override, audits it and resets it (H45, #966)", async () => {
+    const { config } = await import("../../src/config.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const admin = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
+    const readSettings = async () =>
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/live-activities/settings",
+          headers: asUser(admin),
+        })
+      ).json();
+    const storedLead = async () =>
+      (await pool.query(`SELECT lead_minutes FROM live_activity_settings`)).rows[0]?.lead_minutes ??
+      null;
+
+    expect(await readSettings()).toMatchObject({
+      leadMinutes: config.LIVE_ACTIVITY_LEAD_MINUTES,
+      defaultLeadMinutes: config.LIVE_ACTIVITY_LEAD_MINUTES,
+      leadMinutesCustom: false,
+    });
+
+    // Omitting it keeps the default and stores nothing.
+    expect((await put(admin, body(LIVE_ACTIVITY_CONFIG_KINDS))).statusCode).toBe(200);
+    expect(await storedLead()).toBeNull();
+
+    const saved = await put(admin, { ...body(LIVE_ACTIVITY_CONFIG_KINDS), leadMinutes: 45 });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ leadMinutes: 45, leadMinutesCustom: true });
+    expect(await storedLead()).toBe(45);
+    // A later save without the field leaves the override alone.
+    await put(admin, body(LIVE_ACTIVITY_CONFIG_KINDS));
+    expect(await storedLead()).toBe(45);
+
+    const { rows } = await pool.query(
+      `SELECT before, after FROM audit_log
+        WHERE entity_type = 'live_activity_settings' ORDER BY id`,
+    );
+    expect(rows[1].before.leadMinutes).toBe(config.LIVE_ACTIVITY_LEAD_MINUTES);
+    expect(rows[1].after.leadMinutes).toBe(45);
+
+    // Back to the deployment default: by null, or by typing the default itself.
+    const reset = await put(admin, { ...body(LIVE_ACTIVITY_CONFIG_KINDS), leadMinutes: null });
+    expect(reset.json()).toMatchObject({
+      leadMinutes: config.LIVE_ACTIVITY_LEAD_MINUTES,
+      leadMinutesCustom: false,
+    });
+    expect(await storedLead()).toBeNull();
+    await put(admin, { ...body(LIVE_ACTIVITY_CONFIG_KINDS), leadMinutes: 45 });
+    await put(admin, {
+      ...body(LIVE_ACTIVITY_CONFIG_KINDS),
+      leadMinutes: config.LIVE_ACTIVITY_LEAD_MINUTES,
+    });
+    expect(await storedLead()).toBeNull();
+  });
+
+  it("validates the lead time between 0 and 240 minutes", async () => {
+    const admin = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
+    for (const leadMinutes of [-1, 241, 1.5, "15"]) {
+      const res = await put(admin, { ...body(LIVE_ACTIVITY_CONFIG_KINDS), leadMinutes });
+      expect(res.statusCode).toBe(400);
+    }
+    for (const leadMinutes of [0, 240]) {
+      const res = await put(admin, { ...body(LIVE_ACTIVITY_CONFIG_KINDS), leadMinutes });
+      expect(res.statusCode).toBe(200);
+    }
+  });
+
+  it("stores the deadline and accreditation timings only as overrides, audited, resettable (H19, H22, H45)", async () => {
+    const { config } = await import("../../src/config.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const admin = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
+    const read = async () =>
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/live-activities/settings",
+          headers: asUser(admin),
+        })
+      ).json().timings;
+    const storedRow = async () =>
+      (
+        await pool.query(
+          `SELECT deadline_lead_minutes AS dl, deadline_closing_minutes AS dc,
+                  accreditation_lead_minutes AS al, accreditation_tail_minutes AS at
+             FROM live_activity_settings`,
+        )
+      ).rows[0];
+
+    expect(await read()).toEqual({
+      deadlineLead: {
+        value: config.LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES,
+        default: config.LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES,
+        custom: false,
+      },
+      deadlineClosing: { value: 15, default: 15, custom: false },
+      accreditationLead: {
+        value: config.LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES,
+        default: config.LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES,
+        custom: false,
+      },
+      accreditationTail: {
+        value: config.LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES,
+        default: config.LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES,
+        custom: false,
+      },
+    });
+
+    // Omitting `timings` stores nothing.
+    expect((await put(admin, body(LIVE_ACTIVITY_CONFIG_KINDS))).statusCode).toBe(200);
+    expect(await storedRow()).toEqual({ dl: null, dc: null, al: null, at: null });
+
+    // Two fields saved leave the other columns null (R018).
+    const saved = await put(admin, {
+      ...body(LIVE_ACTIVITY_CONFIG_KINDS),
+      timings: { deadlineClosing: 30, accreditationLead: 90 },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().timings).toMatchObject({
+      deadlineClosing: { value: 30, custom: true },
+      accreditationLead: { value: 90, custom: true },
+      deadlineLead: { custom: false },
+      accreditationTail: { custom: false },
+    });
+    expect(await storedRow()).toEqual({ dl: null, dc: 30, al: 90, at: null });
+
+    // A later save without a key keeps it; the default itself or null clears it.
+    await put(admin, { ...body(LIVE_ACTIVITY_CONFIG_KINDS), timings: { deadlineLead: 200 } });
+    expect(await storedRow()).toEqual({ dl: 200, dc: 30, al: 90, at: null });
+    await put(admin, {
+      ...body(LIVE_ACTIVITY_CONFIG_KINDS),
+      timings: { deadlineLead: config.LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES, deadlineClosing: null },
+    });
+    expect(await storedRow()).toEqual({ dl: null, dc: null, al: 90, at: null });
+
+    const { rows } = await pool.query(
+      `SELECT before, after FROM audit_log
+        WHERE entity_type = 'live_activity_settings' ORDER BY id`,
+    );
+    expect(rows[1].before.timings.deadlineClosing.value).toBe(15);
+    expect(rows[1].after.timings.deadlineClosing.value).toBe(30);
+  });
+
+  it("validates each timing against its range", async () => {
+    const admin = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
+    const bad: Record<string, unknown>[] = [
+      { deadlineLead: 14 },
+      { deadlineLead: 1441 },
+      { deadlineClosing: 0 },
+      { deadlineClosing: 241 },
+      { accreditationLead: -1 },
+      { accreditationTail: 1441 },
+      { accreditationTail: 1.5 },
+      { accreditationLead: "60" },
+      { unknown: 5 },
+    ];
+    for (const timings of bad) {
+      const res = await put(admin, { ...body(LIVE_ACTIVITY_CONFIG_KINDS), timings });
+      expect(res.statusCode, JSON.stringify(timings)).toBe(400);
+    }
+    const ok = await put(admin, {
+      ...body(LIVE_ACTIVITY_CONFIG_KINDS),
+      timings: {
+        deadlineLead: 15,
+        deadlineClosing: 240,
+        accreditationLead: 0,
+        accreditationTail: 1440,
+      },
+    });
+    expect(ok.statusCode).toBe(200);
+  });
+
   it("rejects incomplete, duplicated or out-of-range bodies and unknown roles", async () => {
     const admin = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     const missing = await put(admin, body(LIVE_ACTIVITY_CONFIG_KINDS.slice(1)));

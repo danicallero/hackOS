@@ -61,6 +61,21 @@ export interface LiveActivityKindSetting {
 export interface LiveActivitySettings {
   /** Most Live Activities one device shows at once (1–5). */
   maxConcurrent: number;
+  /**
+   * Minutes before a schedule item starts that its staff or attendee Live
+   * Activity appears (H25, H26, H59): the organizer override, else the
+   * deployment default.
+   */
+  leadMinutes: number;
+  /** The deployment default (`LIVE_ACTIVITY_LEAD_MINUTES`) used without an override. */
+  defaultLeadMinutes: number;
+  /** True when an organizer override is stored. */
+  leadMinutesCustom: boolean;
+  /**
+   * The other organizer-set timings (deadline and accreditation windows),
+   * each the override or, without one, the default.
+   */
+  timings: Record<LiveActivityTimingKey, LiveActivityTiming>;
   /** Sorted by priority. */
   kinds: LiveActivityKindSetting[];
   /**
@@ -85,6 +100,46 @@ export interface MyLiveActivityPreferences {
 /** Bounds of `LiveActivitySettings.maxConcurrent`. */
 export const LIVE_ACTIVITY_MAX_CONCURRENT_MIN = 1;
 export const LIVE_ACTIVITY_MAX_CONCURRENT_MAX = 5;
+
+/**
+ * Event-set Live Activity timings besides the schedule lead (H19, H20, H22).
+ * `deadlineLead`: minutes before submissions close that the deadline activity
+ * appears when `hacking_starts_at` is unset; `deadlineClosing`: minutes left
+ * when an unsubmitted team's activity turns urgent; `accreditationLead` and
+ * `accreditationTail`: minutes before the event starts / after hacking starts
+ * that the desk activity is open.
+ */
+export const LIVE_ACTIVITY_TIMING_KEYS = [
+  "deadlineLead",
+  "deadlineClosing",
+  "accreditationLead",
+  "accreditationTail",
+] as const;
+export type LiveActivityTimingKey = (typeof LIVE_ACTIVITY_TIMING_KEYS)[number];
+
+export const LIVE_ACTIVITY_TIMING_RANGES: Record<
+  LiveActivityTimingKey,
+  { min: number; max: number }
+> = {
+  deadlineLead: { min: 15, max: 1440 },
+  deadlineClosing: { min: 1, max: 240 },
+  accreditationLead: { min: 0, max: 1440 },
+  accreditationTail: { min: 0, max: 1440 },
+};
+
+/** Default of `deadlineClosing` (there is no deployment variable for it). */
+export const DEADLINE_CLOSING_MINUTES_DEFAULT = 15;
+
+export interface LiveActivityTiming {
+  /** The override when `custom`, else the default. */
+  value: number;
+  default: number;
+  custom: boolean;
+}
+
+/** Bounds of `LiveActivitySettings.leadMinutes`. */
+export const LIVE_ACTIVITY_LEAD_MINUTES_MIN = 0;
+export const LIVE_ACTIVITY_LEAD_MINUTES_MAX = 240;
 
 /** Subject key of the single queue Live Activity a participant can have. */
 export const QUEUE_LIVE_ACTIVITY_SUBJECT = "judging";

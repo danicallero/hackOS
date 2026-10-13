@@ -13,6 +13,8 @@ export function QuickAction({
   busy,
   onPress,
   iconNode,
+  dimmed = false,
+  accessory,
 }: {
   icon: SymbolViewProps["name"];
   iconTint?: SymbolViewProps["tintColor"];
@@ -25,35 +27,88 @@ export function QuickAction({
   selected?: boolean;
   busy: boolean;
   onPress: () => void;
+  /** Greyed, for a tile the owner has chosen not to share (#934). */
+  dimmed?: boolean;
+  /** Sits in the tile's top corner, outside the dimming (the owner's eye). */
+  accessory?: ReactNode;
+}) {
+  return (
+    <View style={{ flex: 1 }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ busy, disabled: busy, selected }}
+        disabled={busy}
+        onPress={onPress}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          backgroundColor: pressed ? colors.elevatedSurface : colors.surface,
+          borderCurve: "continuous",
+          borderRadius: 14,
+          flex: 1,
+          gap: 6,
+          justifyContent: "center",
+          minHeight: 64,
+          opacity: dimmed ? 0.4 : 1,
+          paddingHorizontal: 8,
+          paddingVertical: 10,
+        })}
+      >
+        {busy ? (
+          <ActivityIndicator color={colors.accent} />
+        ) : (
+          (iconNode ?? <SymbolView accessible={false} name={icon} size={22} tintColor={iconTint} />)
+        )}
+        <Text numberOfLines={1} style={{ color: colors.accent, fontSize: 13, fontWeight: "600" }}>
+          {title}
+        </Text>
+      </Pressable>
+      {accessory ? (
+        <View style={{ position: "absolute", right: 4, top: 4 }}>{accessory}</View>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * The owner's eye (#934): open means scanners see the element, slashed means
+ * they do not. Sits on the element it governs; the element itself is greyed
+ * by its caller when hidden.
+ */
+export function VisibilityToggle({
+  visible,
+  label,
+  onChange,
+}: {
+  visible: boolean;
+  /** What it governs, e.g. "CV". */
+  label: string;
+  onChange: (visible: boolean) => void;
 }) {
   return (
     <Pressable
-      accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ busy, disabled: busy, selected }}
-      disabled={busy}
-      onPress={onPress}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: visible }}
+      hitSlop={8}
+      onPress={() => onChange(!visible)}
       style={({ pressed }) => ({
         alignItems: "center",
         backgroundColor: pressed ? colors.elevatedSurface : colors.surface,
-        borderCurve: "continuous",
+        borderColor: colors.separator,
         borderRadius: 14,
-        flex: 1,
-        gap: 6,
+        borderWidth: 1,
+        height: 28,
         justifyContent: "center",
-        minHeight: 64,
-        paddingHorizontal: 8,
-        paddingVertical: 10,
+        width: 28,
       })}
     >
-      {busy ? (
-        <ActivityIndicator color={colors.accent} />
-      ) : (
-        (iconNode ?? <SymbolView accessible={false} name={icon} size={22} tintColor={iconTint} />)
-      )}
-      <Text numberOfLines={1} style={{ color: colors.accent, fontSize: 13, fontWeight: "600" }}>
-        {title}
-      </Text>
+      <SymbolView
+        accessible={false}
+        name={visible ? "eye" : "eye.slash"}
+        size={15}
+        tintColor={visible ? colors.accent : colors.secondaryLabel}
+      />
     </Pressable>
   );
 }
@@ -101,28 +156,40 @@ export function DetailRow({
   label,
   value,
   onPress,
+  valueNode,
+  trailing,
+  dimmed = false,
 }: {
   icon: SymbolViewProps["name"];
   label?: string;
   value: string;
   onPress?: () => void;
+  /** Replaces the value text, e.g. the owner's input (#934). */
+  valueNode?: ReactNode;
+  /** After the value, outside the dimming (the owner's eye). */
+  trailing?: ReactNode;
+  /** Greyed, for data the owner has chosen not to share. */
+  dimmed?: boolean;
 }) {
   const content = (
     <>
       <SymbolView accessible={false} name={icon} size={20} tintColor={colors.accent} />
-      <View style={{ flex: 1, gap: 2 }}>
+      <View style={{ flex: 1, gap: 2, opacity: dimmed ? 0.4 : 1 }}>
         {label ? <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>{label}</Text> : null}
-        <Text
-          selectable={!onPress}
-          style={{
-            color: onPress ? colors.interactiveText : colors.label,
-            fontSize: 16,
-            lineHeight: 22,
-          }}
-        >
-          {value}
-        </Text>
+        {valueNode ?? (
+          <Text
+            selectable={!onPress}
+            style={{
+              color: onPress ? colors.interactiveText : colors.label,
+              fontSize: 16,
+              lineHeight: 22,
+            }}
+          >
+            {value}
+          </Text>
+        )}
       </View>
+      {trailing}
       {onPress ? (
         <SymbolView
           accessible={false}
@@ -141,6 +208,9 @@ export function DetailRow({
     paddingHorizontal: 16,
     paddingVertical: 10,
   };
+  if (valueNode || trailing) {
+    return <View style={style}>{content}</View>;
+  }
   if (!onPress) {
     return (
       <View accessible accessibilityLabel={label ? `${label}, ${value}` : value} style={style}>

@@ -63,15 +63,19 @@ const WALLET_CARD_MIN_HEIGHT = 400;
  * Opened as an overlay of Account, which passes `contentTopInset` to clear its
  * floating close button; the title-less `others/wallet` route serves deep links.
  */
-export default function WalletScreen({ contentTopInset = 0 }: { contentTopInset?: number }) {
+export default function WalletScreen({
+  contentTopInset = 0,
+  initialPurpose = "ticket",
+}: {
+  contentTopInset?: number;
+  /** Which card shows first; Contacts opens on the badge others scan (#935). */
+  initialPurpose?: "ticket" | "badge";
+}) {
   useColorScheme();
   const { language, t } = useLocale();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const { me, refetch: refetchMe } = useMeContext();
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  // Which way the ticket/badge card last transitioned, so the cross-slide
-  // animation below knows which side each state should enter/exit from.
-  const [swipeDirection, setSwipeDirection] = useState<1 | -1>(1);
+  const [selectedIndex, setSelectedIndex] = useState(initialPurpose === "badge" ? 1 : 0);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<Error | null>(null);
   const [spotConfirmed, setSpotConfirmed] = useState(false);
@@ -202,7 +206,6 @@ export default function WalletScreen({ contentTopInset = 0 }: { contentTopInset?
   }
 
   function goToPurpose(nextIndex: number) {
-    setSwipeDirection(nextIndex > selectedIndex ? 1 : -1);
     setSelectedIndex(nextIndex);
   }
 
@@ -450,8 +453,12 @@ export default function WalletScreen({ contentTopInset = 0 }: { contentTopInset?
                 simultaneously, in the direction the card just moved. */}
             <Animated.View
               key={selectedIndex}
-              entering={swipeDirection === 1 ? SlideInRight : SlideInLeft}
-              exiting={swipeDirection === 1 ? SlideOutLeft : SlideOutRight}
+              // Each card has a fixed side, ticket left and badge right, so
+              // its slide follows from its own index. A direction kept in
+              // state would reach the outgoing card one render late, sending
+              // it out on the side the new one comes in from.
+              entering={selectedIndex === 1 ? SlideInRight : SlideInLeft}
+              exiting={selectedIndex === 0 ? SlideOutLeft : SlideOutRight}
             >
               {value ? (
                 <View

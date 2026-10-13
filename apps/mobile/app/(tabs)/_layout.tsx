@@ -1,6 +1,9 @@
+import { useNavigation, useSegments } from "expo-router";
+import { useLayoutEffect } from "react";
 import { useColorScheme, View } from "react-native";
 
-import { OpaqueRouterTabs } from "@/components/opaque-router-tabs";
+import { OpaqueRouterTabs, tabLabelKeyForSegment } from "@/components/opaque-router-tabs";
+import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 
 /**
@@ -17,6 +20,19 @@ export default function TabLayout() {
   useColorScheme();
   const { me, loading: meLoading } = useMeContext();
   const capabilities = me?.capabilities ?? [];
+  const { t } = useLocale();
+  const navigation = useNavigation();
+  // Typed routes narrow this to the layout's own segment; the child is read at runtime.
+  const segments: readonly string[] = useSegments();
+  const labelKey = tabLabelKeyForSegment(segments[1]);
+  const title = labelKey ? t(labelKey) : "";
+
+  // The root stack titles a pushed detail's back item (and its long-press
+  // menu) after this screen; without a title it falls back to the route
+  // group's name, "(tabs)". Name it after the active tab instead.
+  useLayoutEffect(() => {
+    navigation.setOptions({ title });
+  }, [navigation, title]);
 
   // Keep the initial loading guard: mounting the router before the profile is
   // known would register a participant tab set and then change it underneath

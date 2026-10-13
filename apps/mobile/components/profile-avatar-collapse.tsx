@@ -466,10 +466,10 @@ export function ProfileAvatarCollapseAnchor({
     <Animated.View
       ref={controller.anchorRef}
       collapsable={false}
-      accessible={false}
-      importantForAccessibility="no-hide-descendants"
       onLayout={controller.onAnchorLayout}
-      pointerEvents="none"
+      // #934: the avatar inside is the photo menu, so its touches and its
+      // accessibility label must reach it; the anchor itself stays inert.
+      pointerEvents="box-none"
       style={[{ height: size, width: size }, style]}
     >
       {children}
