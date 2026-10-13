@@ -1,4 +1,5 @@
 import { DEFAULT_ACTIVITY_KIND, isMealActivityKind } from "@hackos/shared/activity-kinds";
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -121,7 +122,7 @@ function serialize(row: Record<string, unknown>) {
 /**
  * A staff-only item (no audience tags) has no meaningful "visibility" at
  * all — it's neither public nor private, staff sees it unconditionally
- * regardless (H59 follow-up, schedule_visibility_requires_audience 0720).
+ * regardless (H59 follow-up, schedule_visibility_requires_audience constraint).
  * `visibility`/`publish_at` only describe when a *tagged* audience gets to
  * see an item, so they're forced back to their staff-only defaults the
  * moment an item ends up with no audience — silently, not a validation
@@ -159,7 +160,9 @@ async function getUserLanguage(userId: number): Promise<Language> {
 
 function assertWindow(startsAt: Date, endsAt: Date) {
   if (endsAt.getTime() <= startsAt.getTime()) {
-    throw new BadRequestError("endsAt must be after startsAt");
+    throw new BadRequestError("endsAt must be after startsAt", {
+      code: ERROR_REASONS.SCHEDULE_ENDS_BEFORE_STARTS,
+    });
   }
 }
 
@@ -174,7 +177,9 @@ function assertScanRequiresParticipantAudience(
   audiences: readonly string[],
 ) {
   if (requiresScan && !audiences.includes("participant")) {
-    throw new BadRequestError("Only a participant-visible item can require scanning");
+    throw new BadRequestError("Only a participant-visible item can require scanning", {
+      code: ERROR_REASONS.SCHEDULE_SCAN_NEEDS_PARTICIPANTS,
+    });
   }
 }
 
@@ -193,7 +198,7 @@ export async function emitScheduleChanged(data: unknown) {
  * see "when this was scheduled to go live" via serialize()/GET /api/schedule,
  * and leaving it doesn't cause re-triggering since visibility='hidden' no
  * longer matches once flipped. Never touches a staff-only (empty-audience)
- * item — schedule_visibility_requires_audience (0720) guarantees those never
+ * item — schedule_visibility_requires_audience guarantees those never
  * carry a publish_at in the first place, since "reveal" only means anything
  * for an item some non-staff audience is waiting on.
  */
@@ -381,7 +386,11 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
          FROM schedule WHERE id = $1 FOR UPDATE`,
       [id],
     );
-    if (!current.rows[0]) throw new NotFoundError("Schedule item not found", { id });
+    if (!current.rows[0])
+      throw new NotFoundError("Schedule item not found", {
+        id,
+        code: ERROR_REASONS.SCHEDULE_ITEM_NOT_FOUND,
+      });
     const before = serialize(current.rows[0]);
     const nextStartsAt = patch.startsAt ?? (current.rows[0].starts_at as Date);
     const nextEndsAt = patch.endsAt ?? (current.rows[0].ends_at as Date);
@@ -499,7 +508,11 @@ export async function deleteScheduleItem(actorId: number | null, id: number) {
         RETURNING ${SCHEDULE_COLUMNS}`,
       [id],
     );
-    if (!rows[0]) throw new NotFoundError("Schedule item not found", { id });
+    if (!rows[0])
+      throw new NotFoundError("Schedule item not found", {
+        id,
+        code: ERROR_REASONS.SCHEDULE_ITEM_NOT_FOUND,
+      });
     await audit(client, {
       actorId,
       entityType: "schedule",
@@ -529,7 +542,11 @@ export async function saveScheduleTranslations(
       `SELECT ${SCHEDULE_COLUMNS} FROM schedule WHERE id = $1 FOR UPDATE`,
       [id],
     );
-    if (!current.rows[0]) throw new NotFoundError("Schedule item not found", { id });
+    if (!current.rows[0])
+      throw new NotFoundError("Schedule item not found", {
+        id,
+        code: ERROR_REASONS.SCHEDULE_ITEM_NOT_FOUND,
+      });
     const before = serialize(current.rows[0]);
     const nextTitleI18n = { ...before.titleI18n } as Record<string, string>;
     const nextDescriptionI18n = { ...before.descriptionI18n } as Record<string, string | null>;
@@ -608,7 +625,7 @@ export async function setScheduleVisibility(
       `SELECT id, visibility FROM schedule WHERE id = ANY($1::int[]) FOR UPDATE`,
       [ids],
     );
-    // schedule_visibility_requires_audience (0720) rejects 'shown' on a
+    // schedule_visibility_requires_audience rejects 'shown' on a
     // staff-only item — silently skip those rather than let a batch that
     // happens to include one fail the whole transaction; "hidden" is always
     // safe for every row.
@@ -652,7 +669,7 @@ export async function setScheduleBulkPublishAt(
       `SELECT id, publish_at FROM schedule WHERE id = ANY($1::int[]) FOR UPDATE`,
       [ids],
     );
-    // schedule_visibility_requires_audience (0720) rejects a non-null
+    // schedule_visibility_requires_audience rejects a non-null
     // publish_at on a staff-only item (nothing tagged is waiting on a
     // reveal) — silently skip those; clearing (publishAt: null) is always
     // safe for every row.
@@ -691,7 +708,7 @@ export async function setScheduleBulkPublishAt(
  * One row can be either a real account (`userId` set, name/surname/email
  * from `users`) or a free-text name (`freeTextName` set, no account behind
  * it — an external vendor, a volunteer without a login) — never both,
- * enforced by schedule_owners_exactly_one_identity (0719).
+ * enforced by the schedule_owners_exactly_one_identity constraint.
  */
 export interface ScheduleOwner {
   id: number;
@@ -777,7 +794,11 @@ export async function addScheduleOwner(
   const { rows: scheduleRows } = await pool.query(`SELECT id FROM schedule WHERE id = $1`, [
     scheduleId,
   ]);
-  if (!scheduleRows[0]) throw new NotFoundError("Schedule item not found", { scheduleId });
+  if (!scheduleRows[0])
+    throw new NotFoundError("Schedule item not found", {
+      scheduleId,
+      code: ERROR_REASONS.SCHEDULE_ITEM_NOT_FOUND,
+    });
 
   if ("userId" in input) {
     const { userId } = input;

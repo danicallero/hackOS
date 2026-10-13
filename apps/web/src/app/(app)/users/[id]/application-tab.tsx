@@ -11,6 +11,7 @@ import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import {
@@ -111,10 +112,7 @@ export function ApplicationTab({ userId }: { userId: number }) {
         askFoodIntolerances: detail.application.ask_food_intolerances,
       });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotOpenApplication"),
-        t("toastOpenApplication"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotOpenApplication")), t("toastOpenApplication"));
     } finally {
       setOpeningId(null);
     }

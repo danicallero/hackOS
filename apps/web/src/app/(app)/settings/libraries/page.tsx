@@ -6,11 +6,14 @@
 // a self-contained manager (list + create/edit/delete, or for shirt sizes a
 // single ordered list saved as one event_config field).
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
+import { useCan } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import { DegreesManager } from "./degrees-manager";
 import { IntolerancesManager } from "./intolerances-manager";
@@ -18,6 +21,15 @@ import { ShirtSizesManager } from "./shirt-sizes-manager";
 import { UniversitiesManager } from "./universities-manager";
 
 export default function LibrariesSettingsPage() {
+  const { t } = useLocale();
+  const canManage = useCan(CAPABILITIES.INTOLERANCES_MANAGE);
+
+  if (!canManage) return <AccessDenied ask={t("noLibrariesAccessDesc")} />;
+
+  return <LibrariesSettingsContent />;
+}
+
+function LibrariesSettingsContent() {
   const { t } = useLocale();
   const { tab, setTab } = useUrlTab({
     values: ["intolerances", "shirt-sizes", "universities", "degrees"] as const,

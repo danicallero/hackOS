@@ -6,10 +6,9 @@ import type { Queryable } from "../../db/pool.js";
  * challenges (`queue_group_challenges`). Every join that used to read
  * `room_challenges.challenge_id` directly now takes the two hops through here.
  *
- * Today every group is 1:1 with a challenge (0410's backfill + trigger), so
- * every helper below returns exactly what the old single-challenge lookup did.
- * They are written for the N>1 case regardless, because the merge UI that
- * creates shared groups is the next step.
+ * Groups can hold one challenge or a merged set of challenges. The helpers
+ * return the full shared queue scope so reads and mutations apply the same
+ * behavior across both shapes.
  */
 
 /**
@@ -57,11 +56,9 @@ export const CHALLENGE_ROOM_IDS_FOR_MARKER_SQL = `
 
 /**
  * The name a queue carries, for any query that already has `challenges c` in
- * scope. Always the queue group's `display_name`: a solo group's name follows
- * its challenge's title (0412's trigger), so this reads as the challenge title
- * for every 1:1 group and as the admin-chosen shared-queue name for a merged
- * one. The COALESCE is a safety net for the group-less challenge 0410's
- * trigger makes impossible.
+ * scope. A single-member group's display name corresponds to its challenge's
+ * title; a shared group's name is admin-chosen. COALESCE is a safety net for
+ * malformed data with no group row.
  */
 export const QUEUE_GROUP_LABEL_JOIN = `
   LEFT JOIN queue_group_challenges qgc_label ON qgc_label.challenge_id = c.id
@@ -79,7 +76,7 @@ export async function roomChallengeIds(
   return rows.map((row: { challenge_id: number }) => Number(row.challenge_id));
 }
 
-/** The queue_group a challenge feeds. Never null in practice (0410's trigger). */
+/** The queue_group a challenge feeds. Never null for a managed challenge. */
 export async function challengeQueueGroupId(
   client: Queryable,
   challengeId: number,
@@ -87,15 +84,6 @@ export async function challengeQueueGroupId(
   const { rows } = await client.query(
     `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
     [challengeId],
-  );
-  return rows[0] ? Number(rows[0].queue_group_id) : null;
-}
-
-/** The queue_group a room serves, or null when the room is unassigned. */
-export async function roomQueueGroupId(client: Queryable, roomId: number): Promise<number | null> {
-  const { rows } = await client.query(
-    `SELECT queue_group_id FROM room_queue_groups WHERE room_id = $1`,
-    [roomId],
   );
   return rows[0] ? Number(rows[0].queue_group_id) : null;
 }
@@ -108,14 +96,5 @@ export async function queueGroupEnterpriseId(
   const { rows } = await client.query(`SELECT enterprise_id FROM queue_groups WHERE id = $1`, [
     queueGroupId,
   ]);
-  return rows[0] ? Number(rows[0].enterprise_id) : null;
-}
-
-/** The enterprise a room's pool belongs to, or null when unassigned. */
-export async function roomEnterpriseId(client: Queryable, roomId: number): Promise<number | null> {
-  const { rows } = await client.query(
-    `SELECT enterprise_id FROM room_enterprises WHERE room_id = $1`,
-    [roomId],
-  );
   return rows[0] ? Number(rows[0].enterprise_id) : null;
 }

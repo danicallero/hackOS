@@ -8,6 +8,7 @@
 // Each category retains its own capability and save scope (H8, H39).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { BellIcon } from "@phosphor-icons/react/dist/csr/Bell";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
@@ -26,6 +27,7 @@ import { useCallback, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
@@ -90,6 +92,10 @@ export default function EventSettingsPage() {
   const canInvites = useCan(CAPABILITIES.INVITES_MANAGE);
   const canJudging = useCan(CAPABILITIES.QUEUE_ADMIN);
   const canDanger = useCan(CAPABILITIES.ADMIN_ALL);
+  const canReadEventConfig = canEvent || canVenue || canWallet || canPresence || canInvites;
+  const liveRefresh = useAutoRefresh(canReadEventConfig ? "/api/events/stream?topic=content" : "", [
+    EVENTS.DOMAIN_CHANGED,
+  ]);
   const canByCategory: Record<Category, boolean> = {
     event: canEvent,
     venue: canVenue,
@@ -157,7 +163,7 @@ export default function EventSettingsPage() {
   const showBack = active !== null && visibleCategories.length > 1;
 
   return (
-    <EventConfigProvider enabled={canEvent || canVenue || canWallet || canPresence || canInvites}>
+    <EventConfigProvider enabled={canReadEventConfig} refreshKey={liveRefresh}>
       <PageLayout width="content">
         <PageHeader
           title={active ? labels[active] : t("eventSettings")}

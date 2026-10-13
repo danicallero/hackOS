@@ -34,7 +34,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
 import { getEventTimeZone } from "@/lib/event-time";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -167,11 +168,14 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
     },
   });
   const { reset, formState, control } = form;
+  const dirtyFields = formState.dirtyFields;
+  // The subscription lets react-hook-form preserve dirty values during reset.
+  void dirtyFields;
   const values = useWatch({ control });
   const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, onDirtyChange);
 
   useEffect(() => {
-    if (config) reset(fromConfig(config));
+    if (config) reset(fromConfig(config), { keepDirtyValues: true });
   }, [config, reset]);
 
   async function onSubmit(values: Values) {
@@ -210,10 +214,7 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
       toast.success(t("saved"), { compactTitle: t("toastEventSettings") });
     } catch (err) {
       setSaveState("error");
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
-        t("toastEventSettings"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveEventSettings")), t("toastEventSettings"));
     }
   }
 
@@ -225,7 +226,7 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
     else if (names.length > 0) setView("schedule");
   }
 
-  if (status !== "ready" || !config) {
+  if (!config || status === "error") {
     return <EventConfigLoadState />;
   }
   const timezone = isValidTimeZone(values.timezone?.trim())

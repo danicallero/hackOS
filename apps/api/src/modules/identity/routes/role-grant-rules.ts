@@ -19,7 +19,7 @@ import {
 /**
  * A rule keyed off `source_role_id` fires when THAT role is assigned/removed
  * (H8, role-assignment-as-trigger) — a parallel matching key to
- * `trigger_event`, mutually exclusive with it (0812's CHECK constraint).
+ * `trigger_event`, mutually exclusive with it (enforced by a CHECK constraint).
  * Detects a longer cycle (A implies B implies ... implies A) that the CHECK
  * constraint can't express on its own: walks OUTWARD from `targetRoleId`
  * (the role the candidate rule would grant) along existing ENABLED
@@ -66,8 +66,8 @@ async function wouldCreateRoleImplicationCycle(
  * fires off either of two mutually-exclusive keys: a fixed, developer-
  * defined `trigger_event` (packages/shared/src/role-grant-triggers.ts — the
  * vocabulary of "what can happen") OR `source_role_id`, an admin-chosen role
- * whose own assignment/removal fires the rule (role-assignment-as-trigger,
- * 0812 — "assigning role X also grants role Y"). Either way the rule maps
+ * whose own assignment/removal fires the rule (for example, assigning role X
+ * also grants role Y). Either way the rule maps
  * onto an admin-chosen role and action ("what results"), optionally scoped
  * to one enterprise (trigger_event rules only). `identity/role-grants.ts`'s
  * applyRoleGrantRule/applyRoleAssignmentGrantRules/

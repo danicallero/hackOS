@@ -1,5 +1,5 @@
 "use client";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useParams, useRouter } from "next/navigation";
@@ -13,13 +13,16 @@ import { PageLayout } from "@/components/common/page-layout";
 import { PAIRED_HEADER_CLASS, SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
 import { ProjectLifecycle } from "@/components/projects/project-submission";
 import { WorkGroupField as Field, WorkGroupEditor } from "@/components/projects/work-group-editor";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   addWorkGroupChallenge,
@@ -47,8 +50,8 @@ export default function WorkGroupDetailPage() {
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const { succeeded, failed, reset, stale, retryNonce } = useBackgroundRefresh();
   const load = useCallback(async () => {
-    setLoadError(null);
     try {
       const [next, catalogue] = await Promise.all([
         getMyWorkGroup(id),
@@ -56,6 +59,8 @@ export default function WorkGroupDetailPage() {
       ]);
       setGroup(next);
       setChallenges(catalogue.items);
+      succeeded();
+      setLoadError(null);
       if (next.linked_repo_id != null) {
         const mine = await myProjects();
         if (mine.projects.some((project) => project.id === next.linked_repo_id)) {
@@ -63,24 +68,27 @@ export default function WorkGroupDetailPage() {
         }
       }
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
-        t("projectLabel"),
-      );
-      setLoadError(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      // A failed background refresh keeps the loaded group (#1012).
+      if (!failed(error)) return;
       setGroup(null);
+      // "Not found" is reserved for a 404.
+      setLoadError(
+        isNotFoundError(error) ? null : apiErrorText(error, t, t("couldNotLoadProject")),
+      );
     } finally {
       setLoading(false);
     }
-  }, [id, router, t]);
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
-  const challengeRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [
+  }, [id, router, t, succeeded, failed]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
+  const challengeRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [
     EVENTS.DOMAIN_CHANGED,
   ]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: project mutations may establish the import link (#854).
   useEffect(() => {
     void load();
-  }, [load, liveRefresh, challengeRefresh]);
+  }, [load, liveRefresh, challengeRefresh, retryNonce]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a different group is a different resource, so its first load may show an error.
+  useEffect(() => reset(), [id, reset]);
   if (loading)
     return (
       <div className="flex min-h-80 items-center justify-center">
@@ -96,11 +104,11 @@ export default function WorkGroupDetailPage() {
     if (!group) return;
     setResponding(true);
     try {
-      await respondWorkGroupInvite(group.id, action, crypto.randomUUID());
+      await respondWorkGroupInvite(group.id, action);
       if (action === "decline") router.replace("/my-project");
       else await load();
     } catch (error) {
-      setLoadError(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
+      setLoadError(apiErrorText(error, t, t("couldNotSaveProject")));
     } finally {
       setResponding(false);
     }
@@ -119,6 +127,7 @@ export default function WorkGroupDetailPage() {
   );
   return (
     <PageLayout>
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         className={
           active
@@ -201,7 +210,7 @@ function Members({
   async function invite() {
     setBusy(true);
     try {
-      await inviteWorkGroupMember(group.id, email, crypto.randomUUID());
+      await inviteWorkGroupMember(group.id, email);
       setEmail("");
       await onChanged();
     } catch (error) {
@@ -211,10 +220,7 @@ function Members({
           description: t("inviteAcceptedParticipantRequired"),
         });
       } else {
-        toast.error(
-          error instanceof ApiError ? error.message : t("couldNotSendInvite"),
-          t("toastSendInvite"),
-        );
+        toast.error(apiErrorText(error, t, t("couldNotSendInvite")), t("toastSendInvite"));
       }
     } finally {
       setBusy(false);
@@ -279,12 +285,10 @@ function Members({
                     setBusy(true);
                     setMemberError(null);
                     try {
-                      await removeWorkGroupMember(group.id, member.userId, crypto.randomUUID());
+                      await removeWorkGroupMember(group.id, member.userId);
                       await onChanged();
                     } catch (error) {
-                      setMemberError(
-                        error instanceof ApiError ? error.message : t("couldNotSaveProject"),
-                      );
+                      setMemberError(apiErrorText(error, t, t("couldNotSaveProject")));
                     } finally {
                       setBusy(false);
                     }
@@ -322,13 +326,13 @@ function Challenges({
     setBusy(true);
     setError(null);
     try {
-      if (remove) await removeWorkGroupChallenge(group.id, challengeId, crypto.randomUUID());
-      else await addWorkGroupChallenge(group.id, challengeId, crypto.randomUUID());
+      if (remove) await removeWorkGroupChallenge(group.id, challengeId);
+      else await addWorkGroupChallenge(group.id, challengeId);
       setSelected("");
       if (!remove) setAddOpen(false);
       await onChanged();
     } catch (error) {
-      setError(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
+      setError(apiErrorText(error, t, t("couldNotSaveProject")));
     } finally {
       setBusy(false);
     }
@@ -453,11 +457,11 @@ function DeleteGroup({ group, onDeleted }: { group: PlannedWorkGroup; onDeleted:
         onConfirm={async () => {
           setPending(true);
           try {
-            await deleteWorkGroup(group.id, crypto.randomUUID());
+            await deleteWorkGroup(group.id);
             setOpen(false);
             onDeleted();
           } catch (error) {
-            setError(error instanceof ApiError ? error.message : t("couldNotDeleteProject"));
+            setError(apiErrorText(error, t, t("couldNotDeleteProject")));
           } finally {
             setPending(false);
           }

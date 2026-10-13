@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  emptyAnnouncementForm,
+  type TargetingMode,
+  targetingModeOf,
+} from "@hackos/shared/announcement-form";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
@@ -24,10 +29,11 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, api } from "@/lib/api";
+import { getFoodIntolerances, useFoodIntolerances } from "@/hooks/use-food-intolerances";
+import { apiErrorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal, getTimeZoneLabel } from "@/lib/datetime";
-import { type Translate, useLocale } from "@/lib/i18n";
-import type { Announcement, AnnouncementInput, NotificationChannel } from "@/lib/notifications";
+import { pickText, type Translate, useLocale } from "@/lib/i18n";
+import type { AnnouncementInput, NotificationChannel } from "@/lib/notifications";
 import { notificationsApi } from "@/lib/notifications";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -43,51 +49,9 @@ function channelLabel(channel: NotificationChannel, t: Translate): string {
   return map[channel];
 }
 
-type TargetingMode = "everyone" | "roles" | "specific";
+export const EMPTY_ANNOUNCEMENT_FORM: AnnouncementInput = emptyAnnouncementForm();
 
-function targetingModeOf(values: AnnouncementInput): TargetingMode {
-  if (values.recipientUserIds.length > 0) return "specific";
-  if (values.roleIds.length > 0 || values.intoleranceIds.length > 0) return "roles";
-  return "everyone";
-}
-
-export const EMPTY_ANNOUNCEMENT_FORM: AnnouncementInput = {
-  title: "",
-  body: "",
-  translations: {
-    es: { title: "", body: "" },
-    gl: { title: "", body: "" },
-    en: { title: "", body: "" },
-  },
-  notifyUsers: false,
-  screenPlacement: "none",
-  publishAt: null,
-  expiresAt: null,
-  roleIds: [],
-  intoleranceIds: [],
-  channels: ["in_app", "email", "push"],
-  recipientUserIds: [],
-};
-
-export function announcementToForm(a: Announcement): AnnouncementInput {
-  return {
-    title: a.title,
-    body: a.body,
-    translations: {
-      es: a.translations?.es ?? { title: a.title, body: a.body },
-      gl: a.translations?.gl ?? { title: "", body: "" },
-      en: a.translations?.en ?? { title: "", body: "" },
-    },
-    notifyUsers: a.notify_users,
-    screenPlacement: a.screen_placement,
-    publishAt: a.publish_at,
-    expiresAt: a.expires_at,
-    roleIds: a.role_ids ?? [],
-    intoleranceIds: a.intolerance_ids ?? [],
-    channels: a.channels ?? ["in_app", "email", "push"],
-    recipientUserIds: (a.recipients ?? []).map((r) => r.id),
-  };
-}
+export { announcementToForm } from "@hackos/shared/announcement-form";
 
 /**
  * Form modal for creating or editing announcements.
@@ -116,9 +80,7 @@ export function AnnouncementFormModal({
   const [values, setValues] = useState(initial);
   const [recipients, setRecipients] = useState<UserOption[]>(initialRecipients ?? []);
   const [roles, setRoles] = useState<Array<{ id: number; name: string }>>([]);
-  const [intolerances, setIntolerances] = useState<
-    Array<{ id: number; label: Record<string, string> | unknown }>
-  >([]);
+  const { intolerances } = useFoodIntolerances();
   // Tracked as its own state rather than derived from role/intolerance filters:
   // picking "By role" or "Specific people" starts with an empty
   // selection, and a purely-derived mode would immediately snap back to
@@ -152,16 +114,10 @@ export function AnnouncementFormModal({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      notificationsApi.targetingOptions(),
-      api.get<{ intolerances: Array<{ id: number; label: Record<string, string> | unknown }> }>(
-        "/api/public/food-intolerances",
-      ),
-    ])
-      .then(([options, dictionary]) => {
+    Promise.all([notificationsApi.targetingOptions(), getFoodIntolerances()])
+      .then(([options]) => {
         if (cancelled) return;
         setRoles(options.roles);
-        setIntolerances(dictionary.intolerances);
       })
       .catch(() => {
         if (!cancelled)
@@ -207,10 +163,7 @@ export function AnnouncementFormModal({
         };
       });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotTranslate"),
-        t("toastTranslate"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotTranslate")), t("toastTranslate"));
     } finally {
       setTranslating(false);
     }
@@ -330,10 +283,7 @@ export function AnnouncementFormModal({
         expiresAt: values.screenPlacement === "none" ? null : expiresAt,
       });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveAnnouncement"),
-        t("publishAnnouncement"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveAnnouncement")), t("publishAnnouncement"));
     } finally {
       setPending(false);
     }
@@ -608,13 +558,7 @@ export function AnnouncementFormModal({
                         id="announcement-intolerance-picker"
                         options={intolerances.map((intolerance) => ({
                           value: String(intolerance.id),
-                          label:
-                            typeof intolerance.label === "object" && intolerance.label
-                              ? ((intolerance.label as Record<string, string>)[language] ??
-                                (intolerance.label as Record<string, string>).es ??
-                                (intolerance.label as Record<string, string>).en ??
-                                String(intolerance.id))
-                              : String(intolerance.id),
+                          label: pickText(intolerance.label, language) || String(intolerance.id),
                         }))}
                         value={values.intoleranceIds.map(String)}
                         onChange={(intoleranceIds) =>

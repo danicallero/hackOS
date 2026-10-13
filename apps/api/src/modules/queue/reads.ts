@@ -61,7 +61,7 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
 /**
  * The read-only label a room's queue carries (H29/H41/H46): the queue_group's
  * enterprise, plus the group's name. The name is always `display_name` — a
- * solo group's follows its challenge's title (0412), so a 1:1 group still
+ * solo group's name follows its challenge's title, so a 1:1 group still
  * shows the challenge title and a merged one shows the admin-chosen name of
  * the shared queue. `id` stays a member challenge id the judging panel and TV
  * already key off; `judging_panel_criteria` is the single form every team in
@@ -310,7 +310,7 @@ export async function challengeProgress(challengeId: number, fixtureMarker: bool
 
 /**
  * H41: per-room presenting/called/next — feeds both the operator panel and
- * the TV. `includeCrossRoomSkips` (H203) is opt-in and only ever passed by
+ * the TV. `includeCrossRoomSkips` (#203) is opt-in and only ever passed by
  * the authenticated operator/judge route: it names other teams and rooms, so
  * it must never reach the public, unauthenticated TV feed.
  */
@@ -371,7 +371,7 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
     ? await withEtaMinutes(await waitingQueueView(challengeIds))
     : [];
 
-  // H30/H203: read-only projection of the same cross-room busy-member guard
+  // H30/#203: read-only projection of the same cross-room busy-member guard
   // callNextForRoom enforces (guard.ts) — explains, without mutating
   // anything, why a waiting team at the top of the queue was not (yet)
   // called into THIS room. Recomputed on every read, so it clears the moment
@@ -566,11 +566,6 @@ export async function roomAssignments(roomId: number) {
     challenges: challengeAssignments.rows,
     judges: judgeAssignments.rows,
   };
-}
-
-export async function allRoomViews() {
-  const rooms = (await pool.query(`SELECT id FROM rooms ORDER BY id ASC`)).rows;
-  return Promise.all(rooms.map((r: { id: number }) => roomView(r.id)));
 }
 
 /**
@@ -1228,7 +1223,7 @@ export async function roomPace(
     suggestedMinutesPerTeam,
     effectiveMinutesPerTeam,
     autoAdjusted,
-    // H34/H203: operator-configured called-too-long warning threshold,
+    // H34/#203: operator-configured called-too-long warning threshold,
     // replacing the frontend's temporary max(10, 2x desired) fallback.
     calledTooLongThresholdMinutes: settings.called_too_long_threshold_minutes,
   };

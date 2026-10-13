@@ -18,7 +18,8 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -54,10 +55,7 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
       toast.success(t("rolesAdded"), { compactTitle: t("toastAssignRole") });
       setRoleIdsToAdd([]);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotAddRole"),
-        t("toastAssignRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotAddRole")), t("toastAssignRole"));
     } finally {
       if (added.length > 0) {
         setRoleIdsToAdd((current) => current.filter((roleId) => !added.includes(roleId)));
@@ -74,10 +72,7 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
       toast.success(t("roleRemoved"), { compactTitle: t("toastRemoveRole") });
       onChanged();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRemoveRole"),
-        t("toastRemoveRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRemoveRole")), t("toastRemoveRole"));
     } finally {
       setBusy(false);
     }
@@ -212,10 +207,7 @@ export function EnterpriseMemberships({
       loadMemberships();
       await onChanged();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotAddEnterprise"),
-        t("toastJoinCompany"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotAddEnterprise")), t("toastJoinCompany"));
     } finally {
       setBusy(false);
     }

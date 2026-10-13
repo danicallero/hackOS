@@ -1577,7 +1577,7 @@ describe("H8/H9/H10 invite kind composes with pre-assigned roles", () => {
     const extraRole = await createRole([CAPABILITIES.QUEUE_OPERATE], {
       name: "sponsor-extra-role",
     });
-    // truncateAll wipes the real 0801/0805 seed data (see helpers.ts), so
+    // truncateAll wipes the default seed data (see helpers.ts), so
     // recreate the Sponsor role + its role_grant_rules row the way
     // roles.test.ts's "H8 sponsor auto-grant rule" describe block does.
     const sponsorRole = await createRole([], { name: "Sponsor" });

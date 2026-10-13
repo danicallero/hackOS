@@ -75,8 +75,10 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
+import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { toast } from "@/lib/toast";
@@ -102,13 +104,7 @@ import {
   SortableField,
   SortableSection,
 } from "./questions-dnd";
-import {
-  EMPTY_I18N,
-  type IntoleranceOption,
-  LOCALES,
-  logisticsPreviewFields,
-  withLogisticsSection,
-} from "./shared";
+import { EMPTY_I18N, LOCALES, logisticsPreviewFields, withLogisticsSection } from "./shared";
 
 /** A field/section with a stable client-only identity for drag reordering —
  *  `key` can transiently collide while editing (auto-generated from the
@@ -227,8 +223,8 @@ export function QuestionsCard({
   const [preview, setPreview] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [missingReservedKeys, setMissingReservedKeys] = useState<string[] | null>(null);
-  const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
-  const shirtSizes = useShirtSizes();
+  const { intolerances } = useFoodIntolerances();
+  const { sizes: shirtSizes } = useShirtSizes();
   const dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -245,15 +241,6 @@ export function QuestionsCard({
     setFields(seededFields);
     setSections(withIds(form.sections));
   }, [form.template, form.sections, saveState]);
-
-  // The dictionary backing the dietary-restrictions preview options, so the
-  // preview matches what an applicant will actually pick from (H12).
-  useEffect(() => {
-    api
-      .get<{ intolerances: IntoleranceOption[] }>("/api/public/food-intolerances")
-      .then((r) => setIntolerances(r.intolerances))
-      .catch(() => setIntolerances([]));
-  }, []);
 
   useEffect(() => {
     onDirtyChange?.(saveState !== "saved");
@@ -569,10 +556,7 @@ export function QuestionsCard({
       toast.success(t("questionsSaved"), { compactTitle: t("saveQuestions") });
     } catch (e) {
       setSaveState("error");
-      toast.error(
-        e instanceof ApiError ? e.message : t("couldNotSaveQuestions"),
-        t("saveQuestions"),
-      );
+      toast.error(apiErrorText(e, t, t("couldNotSaveQuestions")), t("saveQuestions"));
     } finally {
       setSaving(false);
     }

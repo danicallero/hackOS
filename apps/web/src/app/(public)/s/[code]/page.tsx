@@ -14,7 +14,8 @@ import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
 import { withReturnPath } from "@/lib/return-path";
@@ -48,10 +49,10 @@ export default function CompanyTagPage() {
         setState({
           status: "error",
           key: collectErrorKey(err),
-          text: err instanceof ApiError ? err.message : "",
+          text: apiErrorText(err, t, ""),
         });
       });
-  }, [status, code]);
+  }, [status, code, t]);
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col px-5 py-6">

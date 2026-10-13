@@ -4,7 +4,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { afterAll, describe, expect, it } from "vitest";
 
 /**
- * H540: a slow SSE client (write() never drains) gets disconnected instead
+ * #540: a slow SSE client (write() never drains) gets disconnected instead
  * of buffering unboundedly, and connection budgets reject subscribe() before
  * the response is hijacked. Small limits are set via env *before* importing
  * config/sse (vitest isolates modules per test file), so this stays fast and
@@ -40,7 +40,7 @@ function fakeReq(ip: string, userId: number | null = null): FastifyRequest {
   return { userId, ip } as unknown as FastifyRequest;
 }
 
-describe("SSE backpressure (H540)", () => {
+describe("SSE backpressure (#540)", () => {
   it("disconnects a client whose writes never drain within SSE_WRITE_TIMEOUT_MS", async () => {
     const reply = fakeReply(() => false);
     let closed = false;
@@ -74,7 +74,7 @@ describe("SSE backpressure (H540)", () => {
   });
 });
 
-describe("SSE connection budgets (H540)", () => {
+describe("SSE connection budgets (#540)", () => {
   it("rejects subscribe() past the per-client budget", async () => {
     const req = fakeReq("10.10.20.1");
     const replies: FastifyReply[] = [];

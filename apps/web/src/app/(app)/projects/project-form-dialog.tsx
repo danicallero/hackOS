@@ -17,7 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { createMyProject, createRepo, updateMyProject, updateRepo } from "@/lib/projects";
 import { toast } from "@/lib/toast";
@@ -94,19 +95,14 @@ export function ProjectFormDialog({
           challengeIds: challengeIds.map(Number),
         };
         const created =
-          mode.kind === "create"
-            ? await createRepo(input, crypto.randomUUID())
-            : await createMyProject(input, crypto.randomUUID());
+          mode.kind === "create" ? await createRepo(input) : await createMyProject(input);
         toast.success(t("projectCreated"), { compactTitle: t("toastCreateProject") });
         setOpen(false);
         resetToInitial();
         await onSaved(created.repo.id as number);
       }
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveProject"),
-        t("toastSaveProject"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveProject")), t("toastSaveProject"));
     } finally {
       setPending(false);
     }

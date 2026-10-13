@@ -3,7 +3,6 @@ import {
   type DiaryEntry,
   diaryInitials,
   diaryScanErrorKey,
-  isDiaryEntryAvailable,
   sortDiaryEntries,
   upsertDiaryEntry,
 } from "./diary";
@@ -78,12 +77,6 @@ describe("diary ordering (#935)", () => {
 });
 
 describe("diary cards", () => {
-  it("treats hidden people and unrevealed sponsors as unavailable", () => {
-    expect(isDiaryEntryAvailable(entry(1))).toBe(true);
-    expect(isDiaryEntryAvailable(entry(1, { person: null }))).toBe(false);
-    expect(isDiaryEntryAvailable(entry(2, { kind: "sponsor", person: null }))).toBe(false);
-  });
-
   it("derives up to two initials", () => {
     expect(diaryInitials("Ana S.")).toBe("AS");
     expect(diaryInitials("élia  maría  pérez")).toBe("ÉM");

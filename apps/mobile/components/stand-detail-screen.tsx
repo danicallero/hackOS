@@ -20,10 +20,10 @@ import {
   useStandTagLink,
 } from "@/components/stand-tag-link";
 import { SymbolView } from "@/components/symbol";
-import { ApiError, apiFetch } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import type { StandSummary, StandTag } from "@/lib/stands";
@@ -102,7 +102,6 @@ export function StandDetailScreen() {
         method: "PUT",
         headers: {
           "content-type": "application/json",
-          "Idempotency-Key": createIdempotencyKey(),
         },
         body: JSON.stringify({ scannable }),
       });
@@ -110,10 +109,7 @@ export function StandDetailScreen() {
     } catch (err) {
       setStand((current) => (current ? { ...current, scannable: previous } : current));
       void haptic("error");
-      Alert.alert(
-        t("standsTitle"),
-        err instanceof ApiError ? err.message : t("standsScannableFailed"),
-      );
+      Alert.alert(t("standsTitle"), apiErrorText(err, t, t("standsScannableFailed")));
     } finally {
       setScanBusy(false);
     }
@@ -125,7 +121,6 @@ export function StandDetailScreen() {
     try {
       await apiFetch(`/api/enterprises/${stand.enterpriseId}/stand-tags/${tag.id}`, {
         method: "DELETE",
-        headers: { "Idempotency-Key": createIdempotencyKey() },
       });
       void haptic("success");
       setStand((current) =>
@@ -140,10 +135,7 @@ export function StandDetailScreen() {
       );
     } catch (err) {
       void haptic("error");
-      Alert.alert(
-        t("standsRemoveTag"),
-        err instanceof ApiError ? err.message : t("standsRemoveTagFailed"),
-      );
+      Alert.alert(t("standsRemoveTag"), apiErrorText(err, t, t("standsRemoveTagFailed")));
     } finally {
       setRemoving((current) => {
         const next = new Set(current);

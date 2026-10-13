@@ -7,8 +7,8 @@ import { buildTestApp, ensureApplicationFormVersion, truncateAll } from "../help
 /**
  * Better Auth integration (H1-H5): real sign-up/sign-in/sign-out against
  * Postgres through the mounted /api/auth/* handler — no mocks, verifying the
- * snake_case column mapping in src/modules/identity/auth.ts against
- * migration 0101 for real.
+ * snake_case column mapping in src/modules/identity/auth.ts against the
+ * consolidated baseline schema.
  */
 
 let app: App;
@@ -757,7 +757,7 @@ describe("H54 pending identity boundary", () => {
   });
 });
 
-describe("H188 return-path continuity", () => {
+describe("#188 return-path continuity", () => {
   it("carries a same-origin `next` from sign-up through to the emailed verify link", async () => {
     const a = await getApp();
     await signUp(a, {

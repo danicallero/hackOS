@@ -80,7 +80,7 @@ describe("scheduleStatus", () => {
     ).toBe("staffOnly");
     // Never "draft"/"scheduled"/"public" even if those fields were somehow
     // still set — the API itself forces them back to hidden/null the moment
-    // audiences goes empty (schedule_visibility_requires_audience, 0720),
+    // audiences goes empty (schedule_visibility_requires_audience),
     // but the client-side status derivation stays defensive regardless.
     expect(
       scheduleStatus(

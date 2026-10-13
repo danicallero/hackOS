@@ -5,7 +5,7 @@
 // uses this app's shared API wrappers, cards, tabs and form controls.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
@@ -60,6 +60,7 @@ import {
 import { invalidateServerState } from "@/lib/server-state";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
+import { confirmDiscardUnsavedChanges } from "@/lib/use-unsaved-changes-guard";
 import type { Challenge } from "../challenges/shared";
 
 import { challengeName, errorMessage, exportHref, queueErrorToastContent } from "./helpers";
@@ -70,6 +71,7 @@ import { ReviewForm } from "./review-form";
 function showQueueError(t: Translate, err: unknown, fallbackTitle: string) {
   const copy = queueErrorToastContent(
     err,
+    t,
     fallbackTitle,
     t("couldNotCallTeam"),
     t("teamCallBlockedDescription"),
@@ -101,13 +103,22 @@ export default function QueuePage() {
   const [searchResults, setSearchResults] = useState<QueueSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedReviewEntry, setSelectedReviewEntry] = useState<QueueEntry | null>(null);
+  // #1014: the review form saves pending edits when it leaves an entry; it
+  // only reports edits it cannot save (failed save, conflict, offline), and
+  // switching away from those asks first.
+  const [reviewEditsAtRisk, setReviewEditsAtRisk] = useState(false);
+  const selectReviewEntry = (entry: QueueEntry | null) => {
+    if (!confirmDiscardUnsavedChanges(reviewEditsAtRisk, t)) return false;
+    setSelectedReviewEntry(entry);
+    return true;
+  };
   const [actionError, setActionError] = useState<string | null>(null);
 
   const activeRoomId = roomId ?? rooms[0]?.id ?? null;
 
   const roomView = useLiveQuery<RoomView>(
     (signal) => (activeRoomId ? getRoomView(activeRoomId, signal) : Promise.resolve(null as never)),
-    "/api/queue/stream",
+    REALTIME_SCOPES.QUEUE,
     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED, EVENTS.QUEUE_NOTIFY_ENTER],
     {
       enabled: canUse && activeRoomId != null,
@@ -132,7 +143,7 @@ export default function QueuePage() {
       activeRoomId
         ? getRoomPace(activeRoomId, signal, effectiveChallengeId)
         : Promise.resolve(null as never),
-    "/api/queue/stream",
+    REALTIME_SCOPES.QUEUE,
     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
     {
       enabled: canUse && activeRoomId != null,
@@ -147,7 +158,7 @@ export default function QueuePage() {
       effectiveChallengeId
         ? getChallengeProgress(effectiveChallengeId, signal)
         : Promise.resolve(null as never),
-    "/api/queue/stream",
+    REALTIME_SCOPES.QUEUE,
     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
     {
       enabled: canUse && effectiveChallengeId != null,
@@ -181,7 +192,7 @@ export default function QueuePage() {
         setRooms([]);
         setChallenges([]);
       } else {
-        const message = errorMessage(err, t("couldNotLoadQueueSetup"));
+        const message = errorMessage(err, t, t("couldNotLoadQueueSetup"));
         setActionError(message);
         showQueueError(t, err, t("couldNotLoadQueueSetup"));
       }
@@ -229,12 +240,11 @@ export default function QueuePage() {
       mutate(
         `manual-${entry.id}`,
         () =>
-          entryAction(
-            entry.id,
-            "manual-call",
-            { targetStatus, roomId: activeRoomId, reason: "Manual queue selection" },
-            crypto.randomUUID(),
-          ),
+          entryAction(entry.id, "manual-call", {
+            targetStatus,
+            roomId: activeRoomId,
+            reason: "Manual queue selection",
+          }),
         targetStatus === "in_room" ? t("teamBroughtIn") : t("teamCalled"),
       ),
     [activeRoomId, mutate, t],
@@ -306,8 +316,7 @@ export default function QueuePage() {
             <Select
               value={activeRoomId ? String(activeRoomId) : ""}
               onValueChange={(value) => {
-                setRoomId(Number(value));
-                setSelectedReviewEntry(null);
+                if (selectReviewEntry(null)) setRoomId(Number(value));
               }}
               disabled={roomsLoading || rooms.length === 0}
             >
@@ -339,12 +348,7 @@ export default function QueuePage() {
               <Button
                 disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
                 onClick={() =>
-                  activeRoomId &&
-                  mutate(
-                    "pause",
-                    () => resumeRoom(activeRoomId, crypto.randomUUID()),
-                    t("roomResumed"),
-                  )
+                  activeRoomId && mutate("pause", () => resumeRoom(activeRoomId), t("roomResumed"))
                 }
                 loading={busy === "pause"}
               >
@@ -359,12 +363,7 @@ export default function QueuePage() {
                 confirmLabel={t("pause")}
                 autoClose
                 onConfirm={() =>
-                  activeRoomId &&
-                  mutate(
-                    "pause",
-                    () => pauseRoom(activeRoomId, crypto.randomUUID()),
-                    t("roomPaused"),
-                  )
+                  activeRoomId && mutate("pause", () => pauseRoom(activeRoomId), t("roomPaused"))
                 }
                 trigger={
                   <Button
@@ -466,11 +465,7 @@ export default function QueuePage() {
               onQuery={setSearch}
               onManualCall={handleManualCall}
               onEntryAction={(entry, action, body, label) =>
-                mutate(
-                  `${action}-${entry.id}`,
-                  () => entryAction(entry.id, action, body, crypto.randomUUID()),
-                  label,
-                )
+                mutate(`${action}-${entry.id}`, () => entryAction(entry.id, action, body), label)
               }
               onMoveToPosition={(entry, position) =>
                 mutate(
@@ -480,7 +475,6 @@ export default function QueuePage() {
                       entry.id,
                       position,
                       "Judging panel: moved team to position",
-                      crypto.randomUUID(),
                     ),
                   t("queueTeamMoved"),
                 )
@@ -489,12 +483,7 @@ export default function QueuePage() {
                 mutate(
                   `move-top-${entry.id}`,
                   () =>
-                    entryAction(
-                      entry.id,
-                      "move-top",
-                      { reason: "Search: moved to top of queue" },
-                      crypto.randomUUID(),
-                    ),
+                    entryAction(entry.id, "move-top", { reason: "Search: moved to top of queue" }),
                   t("teamMovedTop"),
                 )
               }
@@ -503,16 +492,11 @@ export default function QueuePage() {
                 mutate(
                   `add-waiting-${entry.id}`,
                   () =>
-                    entryAction(
-                      entry.id,
-                      "manual-call",
-                      {
-                        targetStatus: "called",
-                        roomId: activeRoomId,
-                        reason: "Search: to waiting room",
-                      },
-                      crypto.randomUUID(),
-                    ),
+                    entryAction(entry.id, "manual-call", {
+                      targetStatus: "called",
+                      roomId: activeRoomId,
+                      reason: "Search: to waiting room",
+                    }),
                   t("teamAddedWaiting"),
                 )
               }
@@ -520,16 +504,14 @@ export default function QueuePage() {
                 mutate(
                   `re-enter-${entry.id}-${position}`,
                   () =>
-                    entryAction(
-                      entry.id,
-                      "re-enter",
-                      { position, reason: "Recovered from manual search" },
-                      crypto.randomUUID(),
-                    ),
+                    entryAction(entry.id, "re-enter", {
+                      position,
+                      reason: "Recovered from manual search",
+                    }),
                   t("teamReentered"),
                 )
               }
-              onOpenReview={setSelectedReviewEntry}
+              onOpenReview={selectReviewEntry}
             />
           </div>
 
@@ -546,16 +528,13 @@ export default function QueuePage() {
                 canOperate={canOperate}
                 busy={busy}
                 onEntryAction={(entry, action, body, label) =>
-                  mutate(
-                    `${action}-${entry.id}`,
-                    () => entryAction(entry.id, action, body, crypto.randomUUID()),
-                    label,
-                  )
+                  mutate(`${action}-${entry.id}`, () => entryAction(entry.id, action, body), label)
                 }
               />
             </div>
 
             <ReviewForm
+              key={(selectedReviewEntry ?? active)?.id ?? "none"}
               entry={selectedReviewEntry ?? active}
               challenge={activeChallenge}
               panel={view.challenge?.judging_panel_criteria ?? null}
@@ -566,7 +545,8 @@ export default function QueuePage() {
                   active?.status === "presenting" ||
                   selectedReviewEntry != null)
               }
-              onCloseExisting={selectedReviewEntry ? () => setSelectedReviewEntry(null) : undefined}
+              onCloseExisting={selectedReviewEntry ? () => selectReviewEntry(null) : undefined}
+              onUnsavedEditsAtRisk={setReviewEditsAtRisk}
             />
           </div>
         </div>

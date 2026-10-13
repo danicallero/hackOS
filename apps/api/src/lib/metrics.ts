@@ -2,7 +2,7 @@ import client from "@prometheus-io/client";
 import type { RequestLane } from "./request-lanes.js";
 
 /**
- * Shared Prometheus registry (H540). Pool and SSE modules register their own
+ * Shared Prometheus registry (#540). Pool and SSE modules register their own
  * gauges/histograms/counters onto this; scraped via GET /metrics (app.ts).
  */
 export const register = new client.Registry();
@@ -210,6 +210,27 @@ export const containerMemoryUnlimited = new client.Gauge({
   labelNames: ["resource"],
   registers: [register],
 });
+
+/** Distinct `build` label values kept before the rest collapse into `other` (#999). */
+const MAX_BUILD_LABELS = 64;
+const seenBuilds = new Set<string>();
+
+export const mobileClientRequestsTotal = new client.Counter({
+  name: "hackos_mobile_client_requests_total",
+  help: "Mobile requests by reported native build and floor outcome (#999)",
+  labelNames: ["build", "outcome"],
+  registers: [register],
+});
+
+/** `build` is a native build number, `unreported` (pre-header install) or `other` once the label set is full. */
+export function observeMobileClient(build: string, outcome: "allowed" | "rejected"): void {
+  let label = build;
+  if (build !== "unreported" && !seenBuilds.has(build)) {
+    if (seenBuilds.size >= MAX_BUILD_LABELS) label = "other";
+    else seenBuilds.add(build);
+  }
+  mobileClientRequestsTotal.inc({ build: label, outcome });
+}
 
 export function observeHttpRequest(lane: RequestLane, method: string): void {
   httpRequestsTotal.inc({ lane, method: method.toUpperCase() });

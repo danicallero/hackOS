@@ -33,8 +33,8 @@ delivery: it still governs `listAnnouncementsPublic` regardless of
 A **notify-only** announcement (`screen_placement = 'none'` and
 `notify_users = true`) has no such window — it fires once at `publish_at` (or
 immediately if null) and that's it. `expires_at` is rejected for that specific
-combination, both by a DB `CHECK` (`announcements_no_expiry_when_notify_only`,
-migration `0722`) and by Zod validation
+combination, both by a DB `CHECK` (`announcements_no_expiry_when_notify_only`)
+and by Zod validation
 (`schemas.ts`). A `screen_placement = 'none'` row that *isn't* a notification
 (`notify_users = false`) can still carry an `expires_at` as an ordinary
 content-feed window — the constraint only tightens the notify-only case.
@@ -310,10 +310,11 @@ routes.
 
 ## Mobile admin UI
 
-Reached from the Notifications tab (`apps/mobile/app/(tabs)/notifications.tsx`):
-holding `ANNOUNCEMENTS_MANAGE` adds a third "Manage" segment next to
+Reached from Others → Notification settings
+(`apps/mobile/app/(tabs)/others/notification-settings/index.tsx`): holding
+`ANNOUNCEMENTS_MANAGE` adds a third "Manage" segment next to
 Messages/Preferences, with a header Add button and
-`ManageAnnouncementsView` (`components/announcement-manage-view.tsx`) — a
+`ManageAnnouncementsView` (`apps/mobile/components/announcement-manage-view.tsx`) — a
 swipeable list (`ScheduleSwipeRow`, reused from the Schedule tab) whose
 edit/Add actions open `AnnouncementFormModal`
 (`components/announcement-form-modal.tsx`), which mirrors the web admin
@@ -433,3 +434,32 @@ and attaches the permanent entrance QR as inline `ticket.png` using
 `cid:event-ticket@hackos`. Official Wallet badge PNGs are exports of the same
 SVGs used in the web wallet. Revoked access or an event that has already opened
 supersedes the queued email. The existing outbox handles delivery and retries.
+
+## Shared client models (#1001)
+
+`@hackos/shared/announcement-form` owns announcement defaults, targeting-mode
+selection and edit hydration for both admin forms. Rendering, API calls and
+platform date inputs remain in each app.
+
+Schedule and activity content (including the offline scanner) use
+`@hackos/shared/localized-text`: requested language → English → authored text.
+Each field resolves independently; empty or whitespace-only translations are
+absent. When the requested language is the authored language, canonical text
+wins. Announcements retain their existing API order: requested language →
+Spanish → Galician → English. Aligning announcement fallback with schedule
+fallback remains a product question; #1001 does not change it.
+
+`@hackos/shared/schedule-form` owns edit hydration, translations and submission
+preparation. Canonical and translated titles are trimmed; if the canonical title
+is blank, the first filled translation in `es`, `gl`, `en` order becomes canonical
+and carries `titleLanguage`. Missing translated descriptions are `null` in the
+shared model; web converts nullable values to empty strings for controlled inputs
+and converts timestamps to event-zone datetime-local values.
+
+Presence duration/sums live in `@hackos/shared/presence-timeline`: invalid dates
+and negative durations contribute zero, minutes are rounded, and provisional
+windows stop at their deadline. Role/category labels, timezone-store behavior
+and non-identifying account-removal progress parsing are also shared; browser
+storage and native SecureStore remain platform adapters.
+
+Run `pnpm --filter @hackos/shared test` for these framework-free model tests.

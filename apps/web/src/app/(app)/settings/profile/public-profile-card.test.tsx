@@ -211,7 +211,7 @@ describe("PublicProfileCard", () => {
   it("refreshes on the personal stream, not the global directory topic", async () => {
     vi.mocked(api.get).mockResolvedValue(profile());
     await render(<PublicProfileCard />);
-    expect(live.args.slice(0, 2)).toEqual(["/api/queue/me/stream", [EVENTS.USER_SESSION_CHANGED]]);
+    expect(live.args.slice(0, 2)).toEqual(["personal", [EVENTS.USER_SESSION_CHANGED]]);
   });
 
   it("locks the fields while saving so no edit is lost", async () => {
@@ -263,7 +263,7 @@ describe("PublicProfileCard", () => {
     vi.mocked(api.get).mockRejectedValueOnce(new ApiError(500, "internal", "Server down"));
     await render(<PublicProfileCard />);
 
-    expect(container.querySelector("[role=alert]")?.textContent).toContain("Server down");
+    expect(container.querySelector("[role=alert]")?.textContent).toContain("apiErrorServer");
     expect(toast.error).not.toHaveBeenCalled();
     expect(showErrorToast).not.toHaveBeenCalled();
 

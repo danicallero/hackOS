@@ -2,6 +2,8 @@
 
 Historical log of specific changes and bug fixes, each with the rationale —
 not a description of the applications/identity modules as they stand today.
+Migration filenames in this historical log refer to retired history; the
+current runner applies only files in `apps/api/db/migrations/`.
 For current behavior read [`api-reference.md`](../api-reference.md) (roles,
 capabilities, module map) and
 [`account-deletion.md`](../account-deletion.md)

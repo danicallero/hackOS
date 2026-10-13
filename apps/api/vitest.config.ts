@@ -2,6 +2,9 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    ...(process.env.API_TEST_SHARD_FILES
+      ? { include: JSON.parse(process.env.API_TEST_SHARD_FILES) as string[] }
+      : {}),
     globalSetup: ["./test/global-setup.ts"],
     setupFiles: ["./test/setup.ts"],
     // DB-backed tests share one database; suites run sequentially so

@@ -195,7 +195,7 @@ export async function hasEventAccess(db: Queryable, userId: number): Promise<boo
 }
 
 /**
- * H8/H10 full-replacement: grants the seeded Mentor/Participant role (0805)
+ * H8/H10 full-replacement: grants the seeded Mentor/Participant role
  * that matches `category`, replacing whichever of the two the user
  * previously held from this same mechanism (a re-classification switches
  * type, it doesn't stack both). This is the write-side counterpart to

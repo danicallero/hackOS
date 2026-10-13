@@ -114,7 +114,7 @@ function withFrontendCallback(token: string, path: string): string {
 }
 
 /**
- * Same-origin guard (H188) for the `next` destination a client asked to be
+ * Same-origin guard (#188) for the `next` destination a client asked to be
  * returned to after verification. Only a relative path is accepted — never
  * an absolute URL or a protocol-relative `//host`, which browsers resolve as
  * absolute and would let a crafted sign-up/resend request redirect a user
@@ -148,8 +148,8 @@ function frontendPathFromBetterAuthUrl(url: string): string | undefined {
  *   and wraps it in its own Kysely PostgresDialect internally; we never hand
  *   it a second connection pool.
  * - `user.modelName: "users"` + `fields` — Better Auth's user model is NOT a
- *   separate table. It's pointed at the EXISTING `users` table from
- *   0001_initial.sql, camelCase fields mapped to our snake_case columns.
+ *   separate table. It's pointed at the EXISTING `users` table in the
+ *   consolidated baseline, with camelCase fields mapped to snake_case columns.
  *   `additionalFields` covers only what Better Auth itself writes at
  *   sign-up/verification time (surname, language); shirt size, food
  *   intolerances, dni, badge id etc. live on the same table but are only
@@ -161,8 +161,8 @@ function frontendPathFromBetterAuthUrl(url: string): string | undefined {
  *   every other table in this schema instead of Better Auth's default
  *   random-string ids.
  * - `sessions` / `accounts` / `verifications` are hand-written in
- *   db/migrations/0101_better_auth.sql; the `fields` maps below must match
- *   that migration column-for-column.
+ *   the consolidated baseline; the `fields` maps below must match those
+ *   schema columns exactly.
  * - `emailAndPassword.autoSignIn: false` is what turns on Better Auth's
  *   built-in generic-duplicate-response path on sign-up (see
  *   node_modules/better-auth dist/api/routes/sign-up.mjs
@@ -341,7 +341,7 @@ export const auth = betterAuth({
       // Point the browser at the web app's /verify-email page after the API
       // verifies the token (shows a real success page, logged in). If the
       // caller (sign-up or resend-verification) asked to be returned to a
-      // specific same-origin destination, honor it (H188).
+      // specific same-origin destination, honor it (#188).
       const frontendPath = frontendPathFromBetterAuthUrl(url) ?? "/verify-email?verified=1";
       await enqueueAuthEmail(pool, Number(user.id), "auth.verify", {
         name: user.name,

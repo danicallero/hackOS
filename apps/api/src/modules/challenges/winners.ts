@@ -63,9 +63,8 @@ export async function setChallengeWinner(
     // Eligibility is scoped to the challenge's *queue group*, not the bare
     // challenge id: challenges merged into one shared queue are judged
     // together, so a repo evaluated through that queue counts as entered in
-    // every challenge the group feeds (draft §5). Since 0410 every challenge
-    // sits in its own 1:1 group, so today the group resolves to exactly
-    // `challengeId` and this behaves identically to the pre-group check; the
+    // every challenge the group feeds (draft §5). Unmerged challenges have
+    // their own group; merged challenges share the same eligibility scope. The
     // `UNION SELECT $1` keeps that true even for a challenge with no group
     // row at all. The win is still recorded against the challenge_id the
     // sponsor is picking for — `challenge_winners` is unchanged.

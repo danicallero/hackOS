@@ -28,7 +28,7 @@ beforeEach(async () => {
   config.REVIEW_FIXTURE_DELETION_PIN = fixturePin;
   // H8 full-replacement: configureFixtureParticipant grants the real seeded
   // Participant role (identity/role.ts's assignAttendeeRole) instead of
-  // writing manual_attendee_roles directly — truncateAll wipes 0805's seed
+  // writing manual_attendee_roles directly — truncateAll wipes the seed
   // data every test, so recreate it before regenerate() runs.
   await seedAttendeeRoles();
 });

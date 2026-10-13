@@ -37,7 +37,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText, errorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { type DevpostPrize, listDevpostPrizes } from "@/lib/projects";
@@ -109,7 +110,7 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
       })
       .catch((error) => {
         if (!cancelled) {
-          setLoadError(error instanceof ApiError ? error.message : t("couldNotLoadChallengeData"));
+          setLoadError(apiErrorText(error, t, t("couldNotLoadChallengeData")));
         }
       })
       .finally(() => {
@@ -153,19 +154,13 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
         try {
           await api.post(`/api/challenges/${created.id}/publish`, {});
         } catch (error) {
-          toast.error(
-            error instanceof ApiError ? error.message : t("checkBuilderFields"),
-            t("toastCreateChallenge"),
-          );
+          toast.error(apiErrorText(error, t, t("checkBuilderFields")), t("toastCreateChallenge"));
         }
       }
       toast.success(t("challengeCreated"), { compactTitle: t("toastCreateChallenge") });
       onCreated(created);
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("checkBuilderFields"),
-        t("toastCreateChallenge"),
-      );
+      toast.error(errorText(error, t, t("checkBuilderFields")), t("toastCreateChallenge"));
     }
   }
 

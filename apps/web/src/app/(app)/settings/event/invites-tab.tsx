@@ -16,7 +16,8 @@ import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
@@ -54,10 +55,13 @@ export function InvitesTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
     },
   });
   const { reset, formState } = form;
+  const dirtyFields = formState.dirtyFields;
+  // The subscription lets react-hook-form preserve dirty values during reset.
+  void dirtyFields;
   const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, onDirtyChange);
 
   useEffect(() => {
-    if (config) reset(fromConfig(config));
+    if (config) reset(fromConfig(config), { keepDirtyValues: true });
   }, [config, reset]);
 
   async function onSubmit(values: Values) {
@@ -70,14 +74,11 @@ export function InvitesTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
       toast.success(t("saved"), { compactTitle: t("toastInviteSettings") });
     } catch (err) {
       setSaveState("error");
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
-        t("toastInviteSettings"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveEventSettings")), t("toastInviteSettings"));
     }
   }
 
-  if (status !== "ready" || !config) {
+  if (!config || status === "error") {
     return <EventConfigLoadState />;
   }
 

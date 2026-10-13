@@ -3,12 +3,13 @@
 // A participant sees a team preparing (or presenting) to challenges. Projects,
 // planned work groups and their queue status are one model, not destinations to
 // reconcile mentally (H19, H20, H38, #852).
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ComponentProps, useCallback, useEffect, useMemo, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
@@ -16,11 +17,14 @@ import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { PresentationStatus } from "@/components/projects/presentation-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   acceptProjectInvite,
@@ -51,6 +55,8 @@ export default function MyProjectPage() {
   const [canCreate, setCanCreate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [redirecting, setRedirecting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const { succeeded, failed, stale, retryNonce } = useBackgroundRefresh();
 
   const load = useCallback(async () => {
     try {
@@ -65,6 +71,8 @@ export default function MyProjectPage() {
       setInvites(invitesRes.invites);
       setCanCreate(groupsRes.canCreate);
       setQueue(queueRes);
+      succeeded();
+      setLoadError(null);
       const unlinkedGroups = groupsRes.groups.filter(
         (group) => !projectsRes.projects.some((project) => project.id === group.linked_repo_id),
       );
@@ -81,24 +89,24 @@ export default function MyProjectPage() {
         );
       }
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
-        t("projectLabel"),
-      );
+      // A failed background refresh keeps the loaded projects; only a failed
+      // first load replaces them with an error, never the empty state (#1012).
+      if (!failed(error)) return;
+      setLoadError(apiErrorText(error, t, t("couldNotLoadProject")));
     } finally {
       setLoading(false);
     }
-  }, [router, t]);
+  }, [router, t, succeeded, failed]);
 
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
-  const queueRefresh = useAutoRefresh("/api/queue/me/stream", [
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
+  const queueRefresh = useAutoRefresh(REALTIME_SCOPES.PERSONAL, [
     EVENTS.USER_QUEUE_CHANGED,
     EVENTS.USER_QUEUE_CALLED,
   ]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce.
   useEffect(() => {
     void load();
-  }, [load, liveRefresh, queueRefresh]);
+  }, [load, liveRefresh, queueRefresh, retryNonce]);
 
   const queueByProject = useMemo(() => {
     const result = new Map<number, MyQueueEntry[]>();
@@ -116,12 +124,14 @@ export default function MyProjectPage() {
 
   return (
     <PageLayout>
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         title={t("myProjects")}
         primaryAction={canCreate ? <CreateWorkGroup onCreated={load} /> : undefined}
       />
+      {loadError && <ContextualError message={loadError} onRetry={() => void load()} />}
       {invites.length > 0 && <PendingInvitesCard invites={invites} onChanged={load} />}
-      {projects.length === 0 && groups.length === 0 ? (
+      {loadError ? null : projects.length === 0 && groups.length === 0 ? (
         <EmptyState
           icon={FolderSimpleIcon}
           title={t("myProjectsEmptyTitle")}
@@ -171,16 +181,13 @@ function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
   async function create() {
     setSaving(true);
     try {
-      await createWorkGroup(name.trim(), challengeIds.map(Number), crypto.randomUUID());
+      await createWorkGroup(name.trim(), challengeIds.map(Number));
       setName("");
       setChallengeIds([]);
       setOpen(false);
       await onCreated();
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotCreateWorkGroup"),
-        t("toastCreateProject"),
-      );
+      toast.error(apiErrorText(error, t, t("couldNotCreateWorkGroup")), t("toastCreateProject"));
     } finally {
       setSaving(false);
     }
@@ -330,14 +337,11 @@ function PendingInvitesCard({
   async function respond(repoId: number, action: "accept" | "decline") {
     setBusy(repoId);
     try {
-      if (action === "accept") await acceptProjectInvite(repoId, crypto.randomUUID());
-      else await declineProjectInvite(repoId, crypto.randomUUID());
+      if (action === "accept") await acceptProjectInvite(repoId);
+      else await declineProjectInvite(repoId);
       await onChanged();
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
-        t("toastReplyInvite"),
-      );
+      toast.error(apiErrorText(error, t, t("couldNotLoadProject")), t("toastReplyInvite"));
     } finally {
       setBusy(null);
     }

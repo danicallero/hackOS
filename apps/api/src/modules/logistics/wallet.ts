@@ -37,7 +37,7 @@ import {
   venueDirections,
 } from "./wallet-settings.js";
 
-// users.language is 'en' | 'es' | 'gl' (0001_initial) — the pass header's
+// users.language is 'en' | 'es' | 'gl' (baseline schema) — the pass header's
 // month abbreviation follows the holder's language (H28).
 const PASS_LOCALES: Record<string, string> = { en: "en-GB", es: "es-ES", gl: "gl-ES" };
 
@@ -477,7 +477,7 @@ export async function buildApplePass(
   const manifestJson = JSON.stringify(manifest);
   const signature = await signManifest(manifestJson);
   // modifiedAt drives the Last-Modified header on the webservice pass GET —
-  // update_tag is integer epoch millis (0504); an unparsable legacy tag
+  // update_tag is integer epoch millis; an unparsable legacy tag
   // degrades to "now" (always modified) rather than breaking the fetch.
   const tagMillis = Number(pass.update_tag);
   const modifiedAt = Number.isFinite(tagMillis) ? new Date(tagMillis) : new Date();
@@ -642,8 +642,8 @@ export async function appleChangedSerials(input: {
     [input.deviceLibraryIdentifier],
   );
   if (devicePass.rowCount === 0) throw new UnauthorizedError();
-  // update_tag is integer epoch millis (0504) and MUST be compared
-  // numerically: rows written before 0504 mixed seconds and millis, and the
+  // update_tag is integer epoch millis and MUST be compared
+  // numerically: older rows mixed seconds and milliseconds, and the
   // device echoes back whatever lastUpdated we sent it previously — a text
   // comparison across formats made this endpoint answer "nothing changed"
   // for passes that HAD changed, breaking both push-triggered refetches and

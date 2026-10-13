@@ -24,13 +24,14 @@ describe("judging helpers", () => {
   it("moves H30 details into an automatically expanded toast description", () => {
     expect(
       queueErrorToastContent(
-        new ApiError(409, "conflict", "Team has a member busy in another room (H30)"),
+        new ApiError(409, "conflict", "reworded", { code: "team_member_busy" }),
+        (key) => key,
         "Queue action failed.",
         "Couldn't call team",
         "This team cannot be called yet because one of its members is active in another room.",
       ),
     ).toEqual({
-      message: "Team has a member busy in another room (H30)",
+      message: "apiError_team_member_busy",
       title: "Couldn't call team",
       description:
         "This team cannot be called yet because one of its members is active in another room.",
@@ -38,17 +39,18 @@ describe("judging helpers", () => {
     });
   });
 
-  it("keeps useful non-H30 API errors as expandable details", () => {
+  it("never shows the English message of non-H30 API errors", () => {
     expect(
       queueErrorToastContent(
         new ApiError(409, "conflict", "Room already has an active team"),
+        (key) => key,
         "Queue action failed.",
         "Couldn't call team",
         "This team cannot be called yet because one of its members is active in another room.",
       ),
     ).toMatchObject({
       title: "Queue action failed.",
-      description: "Room already has an active team",
+      description: undefined,
       isBusyTeam: false,
     });
   });

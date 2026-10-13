@@ -1,40 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { invalidateServerState, readServerState, writeServerState } from "@/lib/server-state";
 import type { Intolerance } from "@/lib/types";
+import { useServerResource } from "./use-server-resource";
 
-// One request per page load, shared by the profile page and the next-entry prompt (#933).
-let cached: Promise<Intolerance[]> | null = null;
+const KEY = ["public", "food-intolerances"] as const;
 
-function loadIntolerances(): Promise<Intolerance[]> {
-  cached ??= api
-    .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
-    .then((r) => r.intolerances)
-    .catch(() => {
-      // Retry on the next mount instead of caching the failure.
-      cached = null;
-      return [];
-    });
-  return cached;
+const fetchIntolerances = (signal: AbortSignal) =>
+  api
+    .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances", { signal })
+    .then((r) => r.intolerances);
+
+/** Read the shared dictionary, reusing its identity-scoped cache and in-flight request. */
+export function getFoodIntolerances(): Promise<Intolerance[]> {
+  return readServerState(KEY, fetchIntolerances);
 }
 
-/** Food-intolerance dictionary for dietary pickers (H12/H25). */
-export function useFoodIntolerances(): Intolerance[] {
-  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    void loadIntolerances().then((list) => {
-      if (!cancelled) setIntolerances(list);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+/** Force an authoritative read and publish it to mounted dictionary consumers. */
+export async function refreshFoodIntolerances(): Promise<Intolerance[]> {
+  invalidateServerState(KEY);
+  const intolerances = await getFoodIntolerances();
+  writeServerState(KEY, intolerances);
   return intolerances;
 }
 
-/** Test seam: forget the cached dictionary. */
-export function resetFoodIntolerancesCache(): void {
-  cached = null;
+/** Food-intolerance dictionary for dietary pickers (H12/H25). */
+export function useFoodIntolerances(): {
+  intolerances: Intolerance[];
+  loading: boolean;
+  error: unknown;
+  reload: () => void;
+} {
+  const { data, loading, error, reload } = useServerResource(KEY, fetchIntolerances);
+  return { intolerances: data ?? [], loading, error, reload };
 }

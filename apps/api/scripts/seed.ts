@@ -1,10 +1,8 @@
 /**
  * Dev seed: a bootstrap admin user holding a "Platform administrator" role
- * (the `*` wildcard, H8). Idempotent — safe to re-run. Since 0801 only
- * carries over a "Platform administrator" role when a real installation's
- * pre-existing `permission_groups` data used that template, a fresh dev
- * database won't have one yet — this script creates it on demand instead of
- * requiring it pre-exist. The admin's credentials are created via Better
+ * (the `*` wildcard, H8). Idempotent — safe to re-run. A fresh dev database
+ * may not have this role yet, so the script creates it on demand instead of
+ * requiring it to pre-exist. The admin's credentials are created via Better
  * Auth once the identity module lands; until then the user row exists for
  * FK/testing purposes.
  */

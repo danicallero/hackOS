@@ -3,8 +3,10 @@ import { inferAdditionalFields } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import * as SecureStore from "expo-secure-store";
 import type { ApiMode } from "./api-mode";
+import { clientBuildHeaders } from "./client-build";
 import { API_URL } from "./env";
 import { notifySignOut } from "./sign-out-events";
+import { isUpgradeRequired, markUpgradeRequired } from "./upgrade-required";
 
 const STORAGE_PREFIX = "hackos";
 let activeStoragePrefix = STORAGE_PREFIX;
@@ -21,6 +23,15 @@ function createMobileAuthClient(mode: ApiMode = "production") {
   activeStoragePrefix = mode === "development" ? "hackos-dev" : STORAGE_PREFIX;
   return createAuthClient({
     baseURL: API_URL,
+    fetchOptions: {
+      headers: clientBuildHeaders(),
+      // Sign-in and session calls hit the same floor as application reads (#999).
+      onError: ({ error }) => {
+        if (isUpgradeRequired(error.status, (error as { code?: string }).code)) {
+          markUpgradeRequired();
+        }
+      },
+    },
     plugins: [
       expoClient({
         scheme: "hackos",

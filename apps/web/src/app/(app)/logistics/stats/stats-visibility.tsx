@@ -18,7 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type I18nText, type MessageKey, pickText, useLocale } from "@/lib/i18n";
 import type { PermissionState } from "@/lib/types";
 
@@ -100,7 +101,7 @@ export function StatsVisibility({ scopeKey }: { scopeKey: string }) {
         setExpandedRoles(new Set());
       })
       .catch((err) => {
-        if (active) setError(err instanceof ApiError ? err.message : t("couldNotLoadStatistics"));
+        if (active) setError(apiErrorText(err, t, t("couldNotLoadStatistics")));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -133,7 +134,7 @@ export function StatsVisibility({ scopeKey }: { scopeKey: string }) {
         },
       ]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("couldNotSaveStatisticsVisibility"));
+      setError(apiErrorText(err, t, t("couldNotSaveStatisticsVisibility")));
     } finally {
       setPending(null);
     }
@@ -198,7 +199,7 @@ export function StatsVisibility({ scopeKey }: { scopeKey: string }) {
       });
       setRoleToRemove(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("couldNotRemoveStatisticsRole"));
+      setError(apiErrorText(err, t, t("couldNotRemoveStatisticsRole")));
     } finally {
       setPending(null);
     }

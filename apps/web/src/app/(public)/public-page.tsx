@@ -96,7 +96,7 @@ export function PublicPage() {
         // (H50/H41-H42) belong on the public site — everything else on this
         // feed exists purely for notification delivery, never for display.
         screenAnnouncements: announcementResult.items.filter(
-          (item) => item.screenPlacement && item.screenPlacement !== "none",
+          (item) => item.screenPlacement !== "none",
         ),
         openApplications: applicationResult.applications,
       });
@@ -256,7 +256,7 @@ function PublicPageContent({
                 </div>
                 <Button asChild size="sm">
                   {/* Selecting a specific form survives account creation and
-                      verification (H188): land directly back on this form. */}
+                      verification (#188): land directly back on this form. */}
                   <Link href={withReturnPath("/signup", `/my-applications/${form.id}`)}>
                     {t("apply")}
                   </Link>

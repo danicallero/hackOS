@@ -3,15 +3,13 @@
  */
 
 import { getEventTimeZone } from "@/lib/event-time";
-import { LOCALE_CODES, type Translate } from "@/lib/i18n";
+import { LOCALE_CODES } from "@/lib/i18n";
 import type { UserDetail } from "@/lib/types";
 
 /** H8: the header pill just shows the user's actual role name (illustrative tone, never used for gating). */
 export const ROLE_TONE = "neutral";
 
-export function roleDisplayName(role: UserDetail["visibleRoleName"], t: Translate): string {
-  return role ?? t("roleUnassigned");
-}
+export { roleDisplayName } from "@hackos/shared/display-labels";
 
 export function fullName(u: Pick<UserDetail, "name" | "surname" | "email">): string {
   return [u.name, u.surname].filter(Boolean).join(" ").trim() || u.email;
@@ -23,16 +21,6 @@ export function initials(u: Pick<UserDetail, "name" | "surname" | "email">): str
   if (a || b) return `${a ?? ""}${b ?? ""}`.toUpperCase();
   return u.email.slice(0, 2).toUpperCase();
 }
-
-export const TAB_VALUES = [
-  "overview",
-  "qr",
-  "permissions",
-  "presence",
-  "activity",
-  "application",
-  "projects",
-] as const;
 
 /** Shared clock format for every timestamp on this profile (logs, presence, activity). */
 export function formatUserDate(value: string | Date, language: "es" | "gl" | "en"): string {

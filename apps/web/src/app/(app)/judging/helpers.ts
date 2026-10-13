@@ -4,8 +4,10 @@
  * every panel in this directory.
  */
 
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { Question } from "@hackos/shared/questions";
-import { ApiError } from "@/lib/api";
+import { apiErrorReason } from "@/lib/api-error-reason";
+import { apiErrorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
 import type { Translate } from "@/lib/i18n";
 import type { QueueEntry } from "@/lib/queue";
@@ -47,8 +49,8 @@ export function exportHref(path: string): string {
   return `${API_URL}${path}`;
 }
 
-export function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof ApiError ? err.message : fallback;
+export function errorMessage(err: unknown, t: Translate, fallback: string): string {
+  return apiErrorText(err, t, fallback);
 }
 
 /**
@@ -59,12 +61,13 @@ export function errorMessage(err: unknown, fallback: string): string {
  */
 export function queueErrorToastContent(
   err: unknown,
+  t: Translate,
   fallbackTitle: string,
   busyTitle: string,
   busyDescription: string,
 ) {
-  const message = errorMessage(err, fallbackTitle);
-  const isBusyTeam = message.includes("(H30)") || /^Busy in /i.test(message);
+  const message = errorMessage(err, t, fallbackTitle);
+  const isBusyTeam = apiErrorReason(err) === ERROR_REASONS.TEAM_MEMBER_BUSY;
   const title = isBusyTeam ? busyTitle : fallbackTitle;
   const description = isBusyTeam
     ? busyDescription

@@ -199,12 +199,11 @@ a test account. The same rule decides whether a scan saves the person
 | `DELETE /api/users/:id/public-profile` | `users:write` (moderation), `Idempotency-Key` |
 
 No capability grants directory browsing. Staff may read profiles through
-user management as described below. The former `directory:read` (seeded by
-`0101_public_profile.sql`) is retired by `0801_retire_directory_read.sql`,
-which deletes its grants and seeded-role defaults and removes it from the
-catalogue constraint. Admins (`*`) and user staff get no browsing shortcut:
-only `users:read` still reaches photos, as the staff user pages need. The
-route schemas in `/documentation` are the request and response reference.
+user management as described below. The former `directory:read` grants are
+retired history and are absent from the current baseline and seeded roles.
+Admins (`*`) and user staff get no browsing shortcut: only `users:read` still
+reaches photos, as the staff user pages need. The route schemas in
+`/documentation` are the request and response reference.
 
 - There is no listing route and no save-by-id route; people are added to a
   diary only by `POST /api/me/diary/scan`.

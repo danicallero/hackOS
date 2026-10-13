@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  canonicalStatisticsPanelKey,
-  isCompatibleStatisticsPanel,
-  panelDefinition,
-  panelSupportsScope,
-} from "../../src/modules/statistics/catalog.js";
+import { isCompatibleStatisticsPanel } from "../../src/modules/statistics/catalog.js";
 import {
   parseStatisticsScopeKey,
   publicStatisticsScope,
@@ -12,19 +7,11 @@ import {
 } from "../../src/modules/statistics/service.js";
 
 describe("generic statistics catalog", () => {
-  it("canonicalizes retired panel ids without creating duplicate panels", () => {
-    expect(canonicalStatisticsPanelKey("funnel")).toBe("overview");
-    expect(canonicalStatisticsPanelKey("submissions-by-day")).toBe("applications-over-time");
-    expect(panelDefinition("confirmations-by-day")?.key).toBe("confirmations-over-time");
-  });
-
   it("declares scope compatibility explicitly", () => {
     expect(isCompatibleStatisticsPanel("overview", ["application"])).toBe(true);
     expect(isCompatibleStatisticsPanel("overview", ["role"])).toBe(false);
     expect(isCompatibleStatisticsPanel("shirt-sizes", ["application", "role"])).toBe(true);
     expect(isCompatibleStatisticsPanel("field:gender", ["application", "role"])).toBe(false);
-    expect(panelSupportsScope("field:gender", "application")).toBe(true);
-    expect(panelSupportsScope("field:gender", "role")).toBe(false);
   });
 
   it("round-trips opaque scope resource keys", () => {

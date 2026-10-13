@@ -58,7 +58,7 @@ async function createItem(opts: {
       opts.notes ?? null,
       opts.contactNote ?? null,
       // A staff-only item is always stored hidden — schedule_visibility_requires_audience
-      // (0720/0721) rejects anything else, so the default follows the audiences.
+      // rejects anything else, so the default follows the audiences.
       opts.visibility ?? (opts.audiences.length > 0 ? "shown" : "hidden"),
     ],
   );
@@ -306,6 +306,7 @@ describe("scan requires participant audience (H59)", () => {
       },
     });
     expect(res.statusCode).toBe(400);
+    expect(res.json().error.details.code).toBe("schedule_scan_needs_participants");
   });
 
   it("rejects flipping a scannable item's audience away from participant", async () => {

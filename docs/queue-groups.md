@@ -1,9 +1,8 @@
 # Queue groups (H46)
 
 The grouping layer between an enterprise's challenges and the rooms/queues that
-judge them. Added by `apps/api/db/migrations/0410_queue_groups.sql`; rooms were
-repointed onto it by `0411_room_queue_groups.sql`; `0413_room_enterprises.sql`
-split "which enterprise a room belongs to" off from "which queue it serves".
+judge them. The current schema separates which enterprise a room belongs to
+from which queue it serves.
 
 > **Status: complete.** Rooms, queue reads, ordering, the room-assignment
 > screen and the merge action all go through queue groups. An enterprise with
@@ -12,7 +11,7 @@ split "which enterprise a room belongs to" off from "which queue it serves".
 > editable queue name and behaves
 > exactly as one-queue-per-challenge did until an explicit merge.
 >
-> **Room ownership is a separate decision from room serving (0413).** A room's
+> **Room ownership is a separate decision from room serving.** A room's
 > enterprise (`room_enterprises`) and a room's serving queue
 > (`room_queue_groups`) used to be the same fact, read one way. They no longer
 > are: an admin assigns a room to an enterprise once (Rooms admin page,
@@ -39,8 +38,8 @@ invalidates the room and the previously served queue's read models.
 
 ## Why
 
-A room used to judge exactly one challenge (`room_challenges`, unique per room
-since `0401`), and each challenge had its own queue. The target model is that
+A room used to judge exactly one challenge (`room_challenges`), and each
+challenge had its own queue. The target model is that
 rooms serve an **enterprise**, and each enterprise decides which of its
 challenges share a judging queue and which get their own. Different subsets of
 an enterprise's challenges may form different shared queues. A queue group is
@@ -73,18 +72,16 @@ room_enterprises >── rooms ──< room_queue_groups >── queue_groups
   1:1 group or a shared one, never both. `ON DELETE CASCADE` on both FKs, so
   deleting a group releases its challenges and deleting a challenge leaves no
   orphan membership.
-- **`room_enterprises`** (0413) — `room_id` (PK), `enterprise_id`,
+- **`room_enterprises`** — `room_id` (PK), `enterprise_id`,
   `assigned_at`, `assigned_by`. A room belongs to at most one enterprise at a
   time. This is the room-pool/ownership fact, set from the Rooms admin page
   (admin-only) and independent of whether the room is currently serving any
   of that enterprise's queues.
-- **`room_queue_groups`** — `room_challenges` renamed and repointed by `0411`:
-  `(room_id, queue_group_id)`, `assigned_at`, `assigned_by`, still `UNIQUE` on
-  `room_id`. A room serves at most one group at a time. Before 0413 the
-  enterprise a room judged for was *derived* from this table
-  (`room_queue_groups → queue_groups.enterprise_id`); now it must belong to
-  the enterprise the room is pooled into (`room_enterprises`) — enforced by
-  the `room_queue_groups_enterprise_guard` constraint trigger (0413). A room
+- **`room_queue_groups`** — `(room_id, queue_group_id)`, `assigned_at`,
+  `assigned_by`, and `UNIQUE` on `room_id`. A room serves at most one group at
+  a time. It must belong to the enterprise the room is pooled into
+  (`room_enterprises`) — enforced by the `room_queue_groups_enterprise_guard`
+  constraint trigger. A room
   with no row here is pooled but not currently serving anything, or not
   pooled at all.
 
@@ -135,7 +132,7 @@ challenges of one enterprise into one group.
 The statement skips challenges that already have a membership row, so it is
 safe to re-run.
 
-## How the group is read (0411)
+## How the group is read
 
 Every query that used to read `room_challenges.challenge_id` now takes two
 hops. The shared SQL fragments and helpers live in
@@ -146,7 +143,7 @@ hops. The shared SQL fragments and helpers live in
 | `ROOM_CHALLENGE_IDS_SQL` / `roomChallengeIds` | which challenges a room can call from |
 | `CHALLENGE_ROOM_IDS_SQL` | which rooms serve a challenge's queue |
 | `GROUP_SIBLING_CHALLENGE_IDS_SQL` | which challenges share a challenge's queue (includes itself only when the challenge has a group) |
-| `roomEnterpriseId` / `queueGroupEnterpriseId` | which enterprise a room/group belongs to |
+| `queueGroupEnterpriseId` | which enterprise a queue group belongs to |
 
 Consumers: `queue/reads.ts`, `queue/rooms.routes.ts`, `queue/entries.routes.ts`,
 `queue/notify.ts`, `queue/service.ts`, `queue/contextual-access.ts` and
@@ -198,7 +195,7 @@ Reviews use the same one-row-per-queue rule and additionally return the
 complete list of member challenges that project applied to, so the queue name
 and application context are both visible without duplicating the review.
 
-### Room assignment (0413)
+### Room assignment
 
 Two separate route pairs now cover what one used to:
 
@@ -225,7 +222,7 @@ Two separate route pairs now cover what one used to:
 queue-side (challenges, judges, criteria) — unrelated to who may *pool* a
 room, which is admin-only regardless of caller.
 
-## Merging (0412)
+## Merging
 
 Merging is the only thing that produces a group with more than one challenge.
 It lives in `queue/group-merge.ts` behind seven routes, all gated by the same
@@ -262,7 +259,7 @@ The merge itself, in one transaction:
    groups and renumber positions across them, so concurrent calls have to
    serialise; a fixed lock order means two overlapping merges cannot deadlock.
 2. **Refuses a group spanning enterprises.** The database already refuses it
-   (0410's constraint trigger); the service check exists so the caller gets a
+   (the database constraint trigger); the service check exists so the caller gets a
    400 instead of a `23514`.
 3. **Locks affected queue entries, then refuses once judging has started** — a
    submitted `attempt_review` or a `completed` entry gives a 409. Merely being
@@ -282,7 +279,7 @@ The merge itself, in one transaction:
 
 ## The merged judging form
 
-`queue_groups.judging_panel_criteria` (0412) holds a shared queue's single
+`queue_groups.judging_panel_criteria` holds a shared queue's single
 form. `NULL` means "resolve the member challenge's own
 `challenges.judging_panel_criteria`", which is every 1:1 group — so nothing
 about a single-challenge enterprise's scoring changes.
@@ -339,8 +336,8 @@ Naming and merging deliberately do **not** live on the enterprise profile: an
 admin would have to know which enterprise to open first, and one destination
 must not have two homes (§4).
 
-Room → **enterprise** pooling lives on `/queue/rooms` (admin-only, `queue:admin`,
-0413) — a venue-planning decision, not a judging one. Room → **queue** linking
+Room → **enterprise** pooling lives on `/queue/rooms` (admin-only, `queue:admin`)
+— a venue-planning decision, not a judging one. Room → **queue** linking
 (routing an enterprise's pooled rooms to its specific queues, including
 **unlinking** a room an enterprise would rather leave idle) stays queue-side,
 on a queue's own page (Judging queues → a queue → Rooms), reachable by both

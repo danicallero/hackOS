@@ -7,7 +7,7 @@ import { z } from "zod";
 import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { sendCsv, toCsv } from "../../lib/csv.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
-import { requireIdempotencyKey } from "../../lib/idempotency.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
 import { putObject } from "../../lib/storage.js";
 import {
@@ -119,7 +119,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       schema: {
         body: createEnterpriseBody,
         summary: "Create an enterprise",
@@ -138,7 +138,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/visibility",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       schema: {
         body: bulkVisibilityBody,
         summary: "Set enterprise visibility",
@@ -183,7 +183,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id",
     {
       ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
-      preHandler: [requireEnterpriseAccess(enterpriseParam), requireIdempotencyKey],
+      preHandler: [requireEnterpriseAccess(enterpriseParam), idempotencyGuard],
       schema: {
         params: enterpriseIdParam,
         body: updateEnterpriseBody,
@@ -226,7 +226,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/members",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       schema: {
         params: enterpriseIdParam,
         body: addMemberBody,
@@ -246,7 +246,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/members/:userId",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       schema: {
         params: memberParams,
         summary: "Remove enterprise member",
@@ -303,7 +303,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/judges",
     {
       ...access(judgePolicy),
-      preHandler: [requireEnterpriseJudgeManager(enterpriseParam), requireIdempotencyKey],
+      preHandler: [requireEnterpriseJudgeManager(enterpriseParam), idempotencyGuard],
       schema: {
         params: enterpriseIdParam,
         body: addJudgeBody,
@@ -323,7 +323,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/judges/:userId",
     {
       ...access(judgePolicy),
-      preHandler: [requireEnterpriseJudgeManager(enterpriseParam), requireIdempotencyKey],
+      preHandler: [requireEnterpriseJudgeManager(enterpriseParam), idempotencyGuard],
       schema: {
         params: judgeParams,
         summary: "Remove enterprise judge",
@@ -360,7 +360,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/stand-tags",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       schema: {
         params: enterpriseIdParam,
         body: standTagBody,
@@ -380,7 +380,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/stand-tags/:tagId",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       schema: {
         params: standTagParams,
         body: standTagLabelBody,
@@ -405,7 +405,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/stand-tags/:tagId",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       schema: {
         params: standTagParams,
         summary: "Remove a company tag",
@@ -459,7 +459,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/stand-scannable",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       schema: {
         params: enterpriseIdParam,
         body: standScannableBody,
@@ -479,7 +479,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/stands/qr",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       schema: {
         summary: "Generate missing company QR codes",
         description:
@@ -578,7 +578,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/logo",
     {
       ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
-      preHandler: [requireEnterpriseAccess(enterpriseParam), requireIdempotencyKey],
+      preHandler: [requireEnterpriseAccess(enterpriseParam), idempotencyGuard],
       schema: {
         params: enterpriseIdParam,
         querystring: z.object({ variant: z.enum(["default", "negative"]).default("default") }),
@@ -629,7 +629,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/sponsor-faq",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       schema: {
         body: sponsorFaqBody,
         summary: "Update sponsor FAQ",

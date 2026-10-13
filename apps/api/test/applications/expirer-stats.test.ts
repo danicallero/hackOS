@@ -315,7 +315,8 @@ describe("pre-event stats (H27)", () => {
     const body = res.json();
 
     expect(body.counts_by_status.confirmed).toBe(1);
-    expect(body.funnel.confirmed).toBe(1);
+    expect(body.overview.confirmed).toBe(1);
+    expect(body).not.toHaveProperty("funnel");
 
     const shirtMap = Object.fromEntries(
       body.shirt_sizes_confirmed.map((r: { value: string; n: number }) => [r.value, r.n]),

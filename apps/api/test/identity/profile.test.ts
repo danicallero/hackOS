@@ -637,13 +637,42 @@ describe("self-service account removal (H54)", () => {
     // notification_outbox row from its invite email).
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
-    const user = await createUser({ name: "Invited Unassigned", emailVerified: false });
+    const email = "invited-unassigned@example.test";
+    const user = await createUser({
+      name: "Invited Unassigned",
+      email,
+      emailVerified: false,
+    });
     await addCredentialPassword(user);
+    const { rows: enterpriseRows } = await pool.query(
+      `INSERT INTO enterprises (name) VALUES ($1) RETURNING id`,
+      [`Removal invite redemption ${user}`],
+    );
+    const { rows: enterpriseLinks } = await pool.query(
+      `INSERT INTO enterprise_invite_links (token, enterprise_id)
+       VALUES ($1, $2) RETURNING id`,
+      [`removal-enterprise-link-${user}`, enterpriseRows[0].id],
+    );
+    const { rows: userLinks } = await pool.query(
+      `INSERT INTO user_invite_links (token, kind)
+       VALUES ($1, 'participant') RETURNING id`,
+      [`removal-user-link-${user}`],
+    );
+    await pool.query(
+      `INSERT INTO enterprise_invite_link_redemptions (link_id, user_id, email, name)
+       VALUES ($1, $2, $3, 'Invited Unassigned')`,
+      [enterpriseLinks[0].id, user, email],
+    );
+    await pool.query(
+      `INSERT INTO user_invite_link_redemptions (link_id, user_id, email, name)
+       VALUES ($1, $2, $3, 'Invited Unassigned')`,
+      [userLinks[0].id, user, email],
+    );
     const { rows: tok } = await pool.query(
       `INSERT INTO email_verification_tokens (token, type, email, user_id, kind, expires_at, used_at)
-       VALUES ('claim-tok', 'account_claim', 'invited@example.com', $1, 'participant', now(), now())
+       VALUES ('claim-tok', 'account_claim', $2, $1, 'participant', now(), now())
        RETURNING id`,
-      [user],
+      [user, email],
     );
     await pool.query(
       `INSERT INTO audit_log (actor_id, entity_type, entity_id, action, source)
@@ -672,6 +701,28 @@ describe("self-service account removal (H54)", () => {
     });
     expect(deleted.statusCode).toBe(200);
     expect(deleted.json().deleted).toBe(true);
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM enterprise_invite_link_redemptions WHERE user_id = $1`, [
+          user,
+        ])
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (await pool.query(`SELECT 1 FROM user_invite_link_redemptions WHERE user_id = $1`, [user]))
+        .rowCount,
+    ).toBe(0);
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM enterprise_invite_link_redemptions WHERE email = $1`, [
+          email,
+        ])
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (await pool.query(`SELECT 1 FROM user_invite_link_redemptions WHERE email = $1`, [email]))
+        .rowCount,
+    ).toBe(0);
     expect(
       (await pool.query(`SELECT 1 FROM email_verification_tokens WHERE id = $1`, [tok[0].id]))
         .rowCount,
@@ -1477,6 +1528,19 @@ describe("self-service account removal (H54)", () => {
       requiresVenueExit: false,
     });
 
+    const failedProbe = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers: { ...asUser(user), "idempotency-key": "self-anonymize-initial-scope" },
+      payload: { confirm: true, reauthenticationPassword: "wrong-password" },
+    });
+    expect(failedProbe.statusCode).toBe(400);
+    const { rows: initialMarker } = await pool.query(
+      `SELECT scope FROM idempotency_keys WHERE key = $1`,
+      ["self-anonymize-initial-scope"],
+    );
+    expect(initialMarker).toEqual([{ scope: "POST /api/me/anonymize removal-complete" }]);
+
     const headers = { ...asUser(user), "idempotency-key": "self-anonymize-replay" };
     const removed = await a.inject({
       method: "POST",
@@ -1486,6 +1550,11 @@ describe("self-service account removal (H54)", () => {
     });
     expect(removed.statusCode).toBe(200);
     expect(removed.json().anonymized).toBe(true);
+    const { rows: completionMarker } = await pool.query(
+      `SELECT scope FROM idempotency_keys WHERE key = $1`,
+      ["self-anonymize-replay"],
+    );
+    expect(completionMarker).toEqual([{ scope: "POST /api/me/anonymize removal-complete" }]);
 
     const replay = await a.inject({
       method: "POST",

@@ -13,7 +13,7 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import type { Room, RoomAssignments } from "@/lib/queue";
 import { toast } from "@/lib/toast";
@@ -87,7 +87,7 @@ export function RoomFormPanel({
     try {
       await onSubmit({ ...values, name, location: values.location.trim() });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveRoom"), t("saveRoom"));
+      toast.error(apiErrorText(err, t, t("couldNotSaveRoom")), t("saveRoom"));
     } finally {
       setPending(false);
     }
@@ -132,7 +132,7 @@ export function RoomFormPanel({
                   await onDelete();
                   setDeleteOpen(false);
                 } catch (err) {
-                  setDeleteError(err instanceof ApiError ? err.message : t("couldNotDeleteRoom"));
+                  setDeleteError(apiErrorText(err, t, t("couldNotDeleteRoom")));
                 } finally {
                   setDeleting(false);
                 }

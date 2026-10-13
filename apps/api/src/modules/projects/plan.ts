@@ -206,7 +206,7 @@ export async function buildImportPlan(
   }
 
   // Existing repos, keyed EXACTLY like the `repos_devpost_url_key` unique
-  // index (0300 migration) so this lookup and confirmImport's
+  // index so this lookup and confirmImport's
   // `ON CONFLICT (devpost_url)` upsert agree on the same row every time.
   const urls = projects.map((p) => p.url).filter((u): u is string => Boolean(u));
   const existingByUrl = new Map<string, number>();
@@ -222,7 +222,7 @@ export async function buildImportPlan(
   }
   // Best-effort dedupe for projects with no Devpost URL at all: match by
   // exact name among repos that also have no URL. Documented limitation —
-  // see 0300 migration and the workstream report.
+  // see the workstream report.
   const namesWithoutUrl = projects.filter((p) => !p.url).map((p) => p.title);
   const existingByNullUrlName = new Map<string, number>();
   if (namesWithoutUrl.length > 0) {

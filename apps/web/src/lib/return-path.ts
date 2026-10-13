@@ -5,7 +5,7 @@
  * starting with a single `/` is same-origin by construction; anything else
  * (an absolute URL, or a protocol-relative `//host` which browsers resolve as
  * absolute) could send a user off-site and is rejected in favor of the
- * fallback (H188: return destinations must be same-origin guarded).
+ * fallback (#188: return destinations must be same-origin guarded).
  */
 export function safeReturnPath(
   candidate: string | null | undefined,

@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
@@ -19,6 +19,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { PublicationControls } from "@/components/common/publication-controls";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -35,7 +36,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api, apiUpload } from "@/lib/api";
+import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import { api, apiUpload } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
@@ -161,7 +164,7 @@ export default function EnterprisesPage() {
   const me = useMe();
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
   const [loading, setLoading] = useState(true);
-  const hasLoadedRef = useRef(false);
+  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sponsorRetryNonce, setSponsorRetryNonce] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
@@ -171,22 +174,27 @@ export default function EnterprisesPage() {
   const columns = useMemo(() => buildColumns(t, LOCALE_CODES[language]), [t, language]);
 
   const load = useCallback(async () => {
-    if (!hasLoadedRef.current) setLoading(true);
-    setLoadError(null);
+    if (!hasLoaded()) setLoading(true);
     try {
       const r = await api.get<{ enterprises: Enterprise[] }>("/api/enterprises");
-      hasLoadedRef.current = true;
+      succeeded();
+      setLoadError(null);
       setEnterprises(r.enterprises);
-      setSelectedIds(new Set());
+      // Keep the admin's selection across live refreshes; drop deleted rows (#1012).
+      const remaining = new Set(r.enterprises.map((e) => String(e.id)));
+      setSelectedIds((current) => {
+        const next = new Set([...current].filter((id) => remaining.has(id)));
+        return next.size === current.size ? current : next;
+      });
     } catch (err) {
+      // A failed background refresh keeps the list and selection (#1012).
+      if (!failed(err)) return;
       setEnterprises([]);
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadEnterprises");
-      setLoadError(message);
-      toast.error(message, t("toastCompanies"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadEnterprises")));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, succeeded, failed, hasLoaded]);
 
   const bulkVisibility = useCallback(
     async (visible: boolean) => {
@@ -205,10 +213,11 @@ export default function EnterprisesPage() {
               : t("hidEnterpriseOther", { count: ids.length }),
           { compactTitle: t("toastCompanyVisibility") },
         );
+        setSelectedIds(new Set());
         await load();
       } catch (err) {
         toast.error(
-          err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"),
+          apiErrorText(err, t, t("couldNotUpdateVisibility")),
           t("toastCompanyVisibility"),
         );
       } finally {
@@ -220,7 +229,7 @@ export default function EnterprisesPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits an enterprise elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
@@ -243,7 +252,7 @@ export default function EnterprisesPage() {
       })
       .catch((err) => {
         if (!alive) return;
-        const message = err instanceof ApiError ? err.message : t("couldNotLoadYourEnterprise");
+        const message = apiErrorText(err, t, t("couldNotLoadYourEnterprise"));
         setLoadError(message);
         toast.error(message, t("toastDeleteCompany"));
         setLoading(false);
@@ -259,6 +268,7 @@ export default function EnterprisesPage() {
     router,
     liveRefresh,
     sponsorRetryNonce,
+    retryNonce,
     t,
   ]);
 
@@ -300,6 +310,7 @@ export default function EnterprisesPage() {
 
   return (
     <PageLayout>
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         title={t("enterprises")}
         primaryAction={
@@ -320,7 +331,7 @@ export default function EnterprisesPage() {
         searchable={(e) => `${e.name} ${e.website ?? ""}`}
         searchPlaceholder={t("searchEnterprisesPlaceholder")}
         pageSize={15}
-        loading={loading && !hasLoadedRef.current}
+        loading={loading && !hasLoaded()}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         selectable
         selectedIds={selectedIds}
@@ -449,18 +460,12 @@ function CreateEnterpriseModal({
         if (defaultLogo) await uploadLogo(created.id, defaultLogo, "default");
         if (darkLogo) await uploadLogo(created.id, darkLogo, "negative");
       } catch (err) {
-        toast.error(
-          err instanceof ApiError ? err.message : t("couldNotUploadLogo"),
-          t("uploadLogo"),
-        );
+        toast.error(apiErrorText(err, t, t("couldNotUploadLogo")), t("uploadLogo"));
       }
       toast.success(t("enterpriseCreated"), { compactTitle: t("toastCreateCompany") });
       await onCreated(created);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotCreateEnterprise"),
-        t("toastCreateCompany"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotCreateEnterprise")), t("toastCreateCompany"));
     }
   }
 

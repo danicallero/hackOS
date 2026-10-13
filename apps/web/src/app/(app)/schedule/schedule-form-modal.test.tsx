@@ -3,7 +3,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScheduleInput } from "@/lib/logistics";
-import { cleanScheduleForm, EMPTY_SCHEDULE_FORM, ScheduleFormModal } from "./schedule-form-modal";
+import {
+  cleanScheduleForm,
+  EMPTY_SCHEDULE_FORM,
+  mergeScheduleTranslationsRefresh,
+  ScheduleFormModal,
+} from "./schedule-form-modal";
 
 // #966: an activity with an audience can show that audience a Live Activity.
 
@@ -38,7 +43,7 @@ let container: HTMLDivElement;
 let root: Root;
 let onSubmit: ReturnType<typeof vi.fn<(values: ScheduleInput) => Promise<{ id: number }>>>;
 
-async function render(initial: ScheduleInput) {
+async function render(initial: ScheduleInput, scheduleId?: number) {
   await act(async () => {
     root.render(
       <ScheduleFormModal
@@ -46,6 +51,7 @@ async function render(initial: ScheduleInput) {
         onOpenChange={vi.fn()}
         title="edit"
         initial={initial}
+        scheduleId={scheduleId}
         onSubmit={onSubmit}
       />,
     );
@@ -96,5 +102,33 @@ describe("ScheduleFormModal Live Activity audience switch", () => {
       cleanScheduleForm({ ...base, audiences: ["participant"], liveActivityAudience: true })
         .liveActivityAudience,
     ).toBe(true);
+  });
+
+  it("refreshes untouched fields while preserving edits to the open item", async () => {
+    const user = userEvent.setup();
+    await render(base, 1);
+    const title = document.querySelector<HTMLInputElement>("#schedule-title");
+    const location = document.querySelector<HTMLInputElement>("#schedule-location");
+    await act(async () => {
+      await user.clear(title as HTMLInputElement);
+      await user.type(title as HTMLInputElement, "Local title");
+    });
+
+    await render({ ...base, title: "Server title", location: "Main hall" }, 1);
+
+    expect(title?.value).toBe("Local title");
+    expect(location?.value).toBe("Main hall");
+  });
+});
+
+describe("schedule translation refresh merge", () => {
+  it("preserves a locally edited translation field and accepts untouched updates", () => {
+    expect(
+      mergeScheduleTranslationsRefresh(
+        { es: { title: "Local title", description: "Old description" } },
+        { es: { title: "Old title", description: "Old description" } },
+        { es: { title: "Server title", description: "New description" } },
+      ),
+    ).toEqual({ es: { title: "Local title", description: "New description" } });
   });
 });

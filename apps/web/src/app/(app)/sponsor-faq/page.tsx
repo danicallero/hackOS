@@ -42,7 +42,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Surface } from "@/components/ui/surface";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type I18nText, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import { useCan, useMe } from "@/lib/session";
@@ -80,7 +81,7 @@ export default function SponsorFaqPage() {
         setDraft(r.items);
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : t("couldNotLoadSponsorFaq"));
+        setError(apiErrorText(err, t, t("couldNotLoadSponsorFaq")));
       });
   }, [t]);
 
@@ -101,10 +102,7 @@ export default function SponsorFaqPage() {
       setDraft(r.items);
       toast.success(t("saved"), { compactTitle: t("toastSaveFaq") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveSponsorFaq"),
-        t("toastSaveFaq"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveSponsorFaq")), t("toastSaveFaq"));
     } finally {
       setSaving(false);
     }
@@ -258,7 +256,7 @@ function SponsorScheduleCard() {
         setItems(schedule.items);
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : t("couldNotLoadSchedule"));
+        setError(apiErrorText(err, t, t("couldNotLoadSchedule")));
       });
   }, [t]);
 

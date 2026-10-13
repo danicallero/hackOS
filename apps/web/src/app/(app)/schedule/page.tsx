@@ -20,7 +20,7 @@ import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -39,7 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
@@ -80,12 +80,12 @@ import {
   ResizableHead,
   useScheduleTableConfig,
 } from "./schedule-table-config";
+import { useScheduleLoader } from "./use-schedule-loader";
 
 export default function SchedulePage() {
   const { t, language } = useLocale();
   const canEdit = useCan(CAPABILITIES.SCHEDULE_MANAGE);
-  // schedule:manage implies read; a read-only holder gets the staff table
-  // without any edit, create, delete or reorder controls.
+  // schedule:manage implies read; read-only holders get the staff table.
   const canRead = useCan(CAPABILITIES.SCHEDULE_READ) || canEdit;
 
   const [items, setItems] = useState<PublicScheduleItem[] | null>(null);
@@ -127,25 +127,14 @@ export default function SchedulePage() {
     [tableConfig, setTableConfig],
   );
 
-  const load = useCallback(() => {
-    setError(null);
-    // SCHEDULE_READ and SCHEDULE_MANAGE may load this management
-    // listing. Participants use /timetable, which owns the public feed.
-    logisticsApi
-      .schedule()
-      .then((r) => {
-        setItems(r.items);
-        setSelectedIds(new Set());
-      })
-      .catch((err) => {
-        setError(err instanceof ApiError ? err.message : t("couldNotLoadSchedule"));
-      });
-  }, [t]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (canRead) load(); // Data fetch when capability becomes available; load() callback is stable.
-  }, [canRead, load]);
+  const load = useScheduleLoader({
+    canRead,
+    t,
+    setItems,
+    setError,
+    setSelectedIds,
+    setEditingItem,
+  });
 
   const updateItem = useCallback((id: number, patch: Partial<PublicScheduleItem>) => {
     setItems((prev) => prev?.map((it) => (it.id === id ? { ...it, ...patch } : it)) ?? prev);
@@ -171,10 +160,7 @@ export default function SchedulePage() {
         });
         updateItem(item.id, updated);
       } catch (err) {
-        toast.error(
-          err instanceof ApiError ? err.message : t("couldNotMoveScheduleItem"),
-          t("toastMoveActivity"),
-        );
+        toast.error(apiErrorText(err, t, t("couldNotMoveScheduleItem")), t("toastMoveActivity"));
       }
     },
     [t, updateItem],
@@ -266,10 +252,7 @@ export default function SchedulePage() {
         setDraft(null);
         load();
       } catch (err) {
-        toast.error(
-          err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-          t("toastSaveActivity"),
-        );
+        toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastSaveActivity"));
       } finally {
         setBusy(false);
       }
@@ -306,10 +289,7 @@ export default function SchedulePage() {
       setDeletingItem(null);
       load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotDeleteScheduleItem"),
-        t("toastDeleteActivity"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotDeleteScheduleItem")), t("toastDeleteActivity"));
     } finally {
       setBusy(false);
     }
@@ -326,7 +306,7 @@ export default function SchedulePage() {
       load();
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"),
+        apiErrorText(err, t, t("couldNotUpdateVisibility")),
         t("toastActivityVisibility"),
       );
     } finally {
@@ -342,10 +322,7 @@ export default function SchedulePage() {
       toast.success(t("bulkScheduleSet"), { compactTitle: t("toastPublishSchedule") });
       load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"),
-        t("toastPublishSchedule"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotUpdateVisibility")), t("toastPublishSchedule"));
     } finally {
       setBusy(false);
     }

@@ -8,7 +8,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { setEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import type { EventConfig } from "@/lib/types";
@@ -27,9 +28,11 @@ const EventConfigContext = createContext<EventConfigContextValue | null>(null);
 export function EventConfigProvider({
   children,
   enabled = true,
+  refreshKey = 0,
 }: {
   children: React.ReactNode;
   enabled?: boolean;
+  refreshKey?: number;
 }) {
   const { t } = useLocale();
   const [config, setConfig] = useState<EventConfig | null>(null);
@@ -54,21 +57,24 @@ export function EventConfigProvider({
     try {
       const cfg = await api.get<EventConfig>("/api/event");
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
+      setEventTimeZone(cfg.timezone);
       setConfig(cfg);
       setStatus("ready");
     } catch (err) {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
-      setError(err instanceof ApiError ? err.message : t("couldNotLoadEventSettings"));
+      setError(apiErrorText(err, t, t("couldNotLoadEventSettings")));
       setStatus("error");
     }
   }, [t, enabled]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is the SSE nonce that intentionally retriggers this read.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching event config from API is a legitimate external-system sync on mount.
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   const applyConfig = useCallback((next: EventConfig) => {
+    requestIdRef.current += 1;
     setConfig(next);
     setEventTimeZone(next.timezone);
   }, []);

@@ -20,7 +20,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
@@ -55,10 +56,13 @@ export function PresenceTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
     defaultValues: { presenceAutoEntryAt: "", presenceCertaintyWindowMinutes: 720 },
   });
   const { reset, formState } = form;
+  const dirtyFields = formState.dirtyFields;
+  // The subscription lets react-hook-form preserve dirty values during reset.
+  void dirtyFields;
   const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, onDirtyChange);
 
   useEffect(() => {
-    if (config) reset(fromConfig(config));
+    if (config) reset(fromConfig(config), { keepDirtyValues: true });
   }, [config, reset]);
 
   async function onSubmit(values: Values) {
@@ -74,14 +78,11 @@ export function PresenceTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
       toast.success(t("saved"), { compactTitle: t("attendanceTab") });
     } catch (err) {
       setSaveState("error");
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
-        t("attendanceTab"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveEventSettings")), t("attendanceTab"));
     }
   }
 
-  if (status !== "ready" || !config) {
+  if (!config || status === "error") {
     return <EventConfigLoadState />;
   }
 

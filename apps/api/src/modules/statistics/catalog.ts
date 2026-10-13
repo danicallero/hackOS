@@ -26,23 +26,6 @@ export const STATISTICS_BASE_PANEL_KEYS = [
   "food-intolerances",
 ] as const;
 
-/**
- * These aliases are accepted when reading old ACLs/layouts.  New responses
- * use the descriptive panel ids above so the rename from Application
- * Evolution does not create two visualizations for the same series.
- */
-export const LEGACY_STATISTICS_PANEL_ALIASES: Record<string, string> = {
-  funnel: "overview",
-  "submissions-by-day": "applications-over-time",
-  "confirmations-by-day": "confirmations-over-time",
-  "submissions-by-hour": "applications-by-hour",
-  "submissions-by-dow": "applications-by-day-of-week",
-};
-
-export function canonicalStatisticsPanelKey(key: string): string {
-  return LEGACY_STATISTICS_PANEL_ALIASES[key] ?? key;
-}
-
 export const STATISTICS_PANEL_CATALOG: readonly StatisticsPanelDefinition[] = [
   {
     key: "overview",
@@ -101,14 +84,7 @@ export const STATISTICS_PANEL_CATALOG: readonly StatisticsPanelDefinition[] = [
 export const ROLE_SCOPE_PANEL_KEYS = ["shirt-sizes", "food-intolerances"] as const;
 
 export function panelDefinition(key: string): StatisticsPanelDefinition | undefined {
-  return STATISTICS_PANEL_CATALOG.find((panel) => panel.key === canonicalStatisticsPanelKey(key));
-}
-
-export function panelSupportsScope(key: string, scopeKind: StatisticsScopeKind): boolean {
-  return (
-    panelDefinition(key)?.supportedScopeKinds.includes(scopeKind) ??
-    (key.startsWith("field:") && scopeKind === "application")
-  );
+  return STATISTICS_PANEL_CATALOG.find((panel) => panel.key === key);
 }
 
 export function isCompatibleStatisticsPanel(

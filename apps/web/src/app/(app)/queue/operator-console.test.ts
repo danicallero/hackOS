@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RoomView } from "@/lib/queue";
-import {
-  filterOperatorRows,
-  operatorQueueStats,
-  operatorRows,
-  operatorRowsForRooms,
-  sortOperatorRows,
-} from "./operator-console-model";
+import { operatorRows, operatorRowsForRooms, sortOperatorRows } from "./operator-console-model";
 
 function room(id: number, overrides: Partial<RoomView> = {}): RoomView {
   return {
@@ -47,28 +41,6 @@ function entry(
 }
 
 describe("queue operator console model", () => {
-  it("counts active, paused, live, called and waiting work", () => {
-    const rooms = [
-      room(1, {
-        active: entry(10, "presenting"),
-        called: [entry(11, "called")],
-        next: [entry(12, "waiting")],
-      }),
-      room(2, {
-        state: { is_paused: true } as RoomView["state"],
-        next: [entry(13, "waiting"), entry(14, "waiting")],
-      }),
-    ];
-
-    expect(operatorQueueStats(rooms)).toEqual({
-      activeRooms: 1,
-      pausedRooms: 1,
-      presenting: 1,
-      called: 1,
-      waiting: 3,
-    });
-  });
-
   it("keeps the attention view focused on called teams and the next waiting team", () => {
     const view = room(1, {
       called: [entry(20, "called")],
@@ -120,24 +92,5 @@ describe("queue operator console model", () => {
     const rows = operatorRowsForRooms([firstRoom, sharedRoom], "waiting");
     expect(rows.map((row) => row.entry.id)).toEqual([40, 41]);
     expect(rows[0]?.destinationRooms?.map((item) => item.room.id)).toEqual([1, 2]);
-  });
-
-  it("searches the visible shared queue projection locally", () => {
-    const rows = operatorRowsForRooms(
-      [
-        room(1, {
-          challenge: { id: 1, title: "Climate", enterprise_name: "Sponsor", queue_group_id: 4 },
-          next: [entry(50, "waiting", 1)],
-        }),
-        room(2, {
-          challenge: { id: 2, title: "Robotics", enterprise_name: "Sponsor", queue_group_id: 4 },
-          next: [entry(51, "waiting", 2)],
-        }),
-      ],
-      "waiting",
-    );
-
-    expect(filterOperatorRows(rows, "team 51").map((row) => row.entry.id)).toEqual([51]);
-    expect(filterOperatorRows(rows, "room 2").map((row) => row.entry.id)).toEqual([50, 51]);
   });
 });

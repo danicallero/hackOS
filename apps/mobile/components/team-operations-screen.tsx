@@ -28,7 +28,6 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
 import { isPadIdiom } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
@@ -297,7 +296,6 @@ export function TeamOperationsScreen() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Idempotency-Key": createIdempotencyKey(),
           },
           body: JSON.stringify({ userId }),
         });
@@ -402,7 +400,6 @@ export function TeamOperationsScreen() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Idempotency-Key": createIdempotencyKey(),
           },
           body: JSON.stringify({
             repoId: entry.repo_id,
@@ -535,7 +532,6 @@ export function TeamOperationsScreen() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Idempotency-Key": createIdempotencyKey(),
           },
           body: JSON.stringify({ challengeId }),
         });

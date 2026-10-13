@@ -4,10 +4,10 @@
  * This is deliberately a client-side scenario runner, not a second resource
  * scheduler. It drives the real HTTP/SSE surface and reads the existing
  * admission, lane, SSE and participant-invalidation metrics (H22-H42, H46,
- * H540, #544). The fixture is reset only when `--mode prepare` is selected;
+ * #540, #544). The fixture is reset only when `--mode prepare` is selected;
  * the load mode never mutates schema or deployment/resource settings. A real
  * run is allowed only against the internal qualification API in NODE_ENV=test;
- * this keeps x-test-user-id out of the attendee API path (H22-H42, H46, H540,
+ * this keeps x-test-user-id out of the attendee API path (H22-H42, H46, #540,
  * #544).
  *
  * Examples:

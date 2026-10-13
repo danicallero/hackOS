@@ -199,7 +199,7 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
-describe("unread-only grace period (H489)", () => {
+describe("unread-only grace period (#489)", () => {
   it("keeps a just-read notification visible until it is collapsed again", async () => {
     const inbox = await renderMobile(<NotificationsScreen />);
 

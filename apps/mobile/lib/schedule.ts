@@ -1,9 +1,4 @@
-import {
-  activityKind,
-  activityKindLabelKey,
-  DEFAULT_ACTIVITY_KIND,
-  toActivityKind,
-} from "@hackos/shared/activity-kinds";
+import { activityKind, toActivityKind } from "@hackos/shared/activity-kinds";
 import type { Language } from "@hackos/shared/locale";
 import type { SymbolViewProps } from "@/components/symbol";
 import { apiFetch } from "./api";
@@ -65,27 +60,13 @@ export interface ScheduleOwner {
   freeTextName: string | null;
 }
 
-export interface ScheduleInput {
-  title: string;
-  description: string | null;
-  location: string | null;
-  type: string | null;
-  requiresScan: boolean;
-  startsAt: string;
-  endsAt: string;
-  visibility: "shown" | "hidden";
-  publishAt: string | null;
-  audiences: ScheduleAudience[];
-  contactNote: string | null;
-  notes: string | null;
-  /** Opt-in attendee Live Activity; only an item with an audience can have it (#966). */
-  liveActivityAudience?: boolean;
-  /** Language `title`/`description` are written in, when it isn't the editor's own (single-language entry). */
-  titleLanguage?: Language;
-}
+export type {
+  ScheduleInput,
+  ScheduleTranslation,
+  ScheduleTranslations,
+} from "@hackos/shared/schedule-form";
 
-export type ScheduleTranslation = { title?: string; description?: string | null };
-export type ScheduleTranslations = Partial<Record<Language, ScheduleTranslation>>;
+import type { ScheduleInput, ScheduleTranslations } from "@hackos/shared/schedule-form";
 
 /** Replace one item in the in-memory/offline schedule snapshot after a save. */
 export function upsertScheduleItem(
@@ -104,31 +85,7 @@ export function upsertScheduleItem(
  * item's primary (authored) language — never blank, since primaryLanguage's
  * canonical `title`/`description` is always filled.
  */
-export function resolveScheduleText(
-  item: ScheduleItem,
-  language: Language,
-): { title: string; description: string | null } {
-  const firstText = (...values: (string | null | undefined)[]) =>
-    values.find((value) => typeof value === "string" && value.trim().length > 0) ?? null;
-  const fallbackLanguage =
-    language === item.primaryLanguage || language === "en" ? undefined : "en";
-  return {
-    // Resolve title and description independently. A translated title must
-    // not hide an available description (or vice versa) when translations
-    // were entered one field at a time (H50).
-    title:
-      firstText(
-        language === item.primaryLanguage ? undefined : item.titleI18n?.[language],
-        fallbackLanguage ? item.titleI18n?.[fallbackLanguage] : undefined,
-        item.title,
-      ) ?? item.title,
-    description: firstText(
-      language === item.primaryLanguage ? undefined : item.descriptionI18n?.[language],
-      fallbackLanguage ? item.descriptionI18n?.[fallbackLanguage] : undefined,
-      item.description,
-    ),
-  };
-}
+export { resolveScheduleText } from "@hackos/shared/localized-text";
 
 /** H50 extension: whether automatic translation is configured for this deployment. */
 export async function fetchScheduleTranslateAvailability(): Promise<boolean> {
@@ -225,9 +182,7 @@ export async function removeScheduleOwner(scheduleId: number, ownerId: number): 
   await apiFetch(`/api/schedule/${scheduleId}/owners/${ownerId}`, { method: "DELETE" });
 }
 
-export function scheduleTypeLabel(type: string | null | undefined, t: Translate): string {
-  return t(activityKindLabelKey(toActivityKind(type) ?? DEFAULT_ACTIVITY_KIND));
-}
+export { scheduleTypeLabel } from "@hackos/shared/display-labels";
 
 /**
  * SF Symbol for a schedule item's category (Android aliases live in

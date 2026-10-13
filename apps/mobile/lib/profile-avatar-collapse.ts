@@ -636,26 +636,9 @@ function clamp01(value: number) {
 }
 
 /** Diameter the avatar ends at: the lens, inset on every side. */
-export function profileGooeyEndDiameter(hole: ProfileCameraCutoutFrame): number {
+function gooeyTargetDiameter(hole: ProfileCameraCutoutFrame): number {
   "worklet";
   return Math.max(0, Math.min(hole.width, hole.height) - 2 * PROFILE_GOOEY_LENS_INSET);
-}
-
-/** Uniform scale of the avatar at the end of the morph. */
-export function profileGooeyEndScale(size: number, hole: ProfileCameraCutoutFrame): number {
-  if (!(size > 0)) return 1;
-  return Math.max(0, Math.min(1, profileGooeyEndDiameter(hole) / size));
-}
-
-/** Vector the avatar centre travels to reach the lens centre. */
-export function profileGooeyEndOffset(
-  start: ProfileCameraCutoutFrame,
-  hole: ProfileCameraCutoutFrame,
-): { dx: number; dy: number } {
-  return {
-    dx: hole.left + hole.width / 2 - (start.left + start.width / 2),
-    dy: hole.top + hole.height / 2 - (start.top + start.height / 2),
-  };
 }
 
 /** Scroll offset to morph progress: 0 expanded, 1 inside the lens. */
@@ -686,7 +669,7 @@ export function profileGooeyFrame(
 ) {
   "worklet";
   const t = clamp01(progress);
-  const endDiameter = profileGooeyEndDiameter(hole);
+  const endDiameter = gooeyTargetDiameter(hole);
   const holeDiameter = Math.min(hole.width, hole.height);
   const holeX = hole.left + hole.width / 2;
   const holeY = hole.top + hole.height / 2;

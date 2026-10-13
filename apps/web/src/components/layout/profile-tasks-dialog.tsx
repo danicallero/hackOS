@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { mealPlanSaveErrorKey, useMealPlan } from "@/hooks/use-meal-plan";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { pickText, useLocale } from "@/lib/i18n";
 import {
   answersFromPlan,
@@ -110,9 +111,7 @@ function ProfileTasksSteps({
       setError(
         task === "meal_plan"
           ? t(mealPlanSaveErrorKey(err))
-          : err instanceof ApiError
-            ? err.message
-            : t("couldNotSaveProfile"),
+          : apiErrorText(err, t, t("couldNotSaveProfile")),
       );
     } finally {
       setPending(false);
@@ -175,7 +174,7 @@ function DietaryStep({
   onSubmit: StepSubmit;
 }) {
   const { t, language } = useLocale();
-  const intolerances = useFoodIntolerances();
+  const { intolerances, error: dictionaryError, reload: reloadDictionary } = useFoodIntolerances();
   const [selected, setSelected] = useState<string[]>(me.foodIntolerances.map(String));
   const originalNotes = me.foodIntoleranceNotes ?? "";
   const [notes, setNotes] = useState(originalNotes);
@@ -211,6 +210,9 @@ function DietaryStep({
     >
       <div className="space-y-2">
         <Label>{t("foodIntolerances")}</Label>
+        {dictionaryError ? (
+          <ContextualError message={t("couldNotLoadDictionary")} onRetry={reloadDictionary} />
+        ) : null}
         <MultiSelect
           options={options}
           value={selected}

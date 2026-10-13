@@ -83,15 +83,15 @@ documented in full in its own section below.
 
 ## Backend changes
 
-**Schema.** Migration `0815_role_event_access.sql` adds the independent
-`roles.event_access` flag, its `role_seed_defaults` snapshot, and the
-`user_event_access` canonical read projection. A user is entitled only when
+**Schema.** The current schema uses the independent `roles.event_access`
+flag, its `role_seed_defaults` snapshot, and the `user_event_access` canonical
+read projection. A user is entitled only when
 their account is active and non-anonymized and at least one assigned,
 non-deleted role has the flag enabled; visibility and capabilities do not
-change that result. The same migration backfills roles, legacy users, durable
-tickets, and wallet-pass state so an already-approved app build keeps working
-through the rollout. `push_tokens` (already existed in
-`0001_initial.sql`) is now also written via the route below.
+change that result. The schema includes the role, user, ticket, and wallet-pass
+state needed to keep already-approved app builds working. `push_tokens` is
+defined in the consolidated baseline and is now also written via the route
+below.
 
 **Endpoints / hooks.**
 - `POST /api/me/push-tokens` (`apps/api/src/modules/notifications/routes/push-tokens.ts`)
@@ -614,7 +614,7 @@ Mobile filter triggers draw one background: standalone `FilterMenu` owns its cir
   (`components/schedule-swipe-row.tsx`, reused as-is), and both the header
   Add button and a row's swipe-to-edit open
   `components/announcement-form-modal.tsx`, which mirrors the web admin's
-  `AnnouncementFormModal` field-for-field (H50, DELTA 0722) — same
+  `AnnouncementFormModal` field-for-field (H50) — same
   audience/specific-recipient targeting exclusivity, per-announcement
   channel candidates, and the notify-only-vs-screen-placed window
   distinction. The recipient picker hits
@@ -680,7 +680,7 @@ Mobile filter triggers draw one background: standalone `FilterMenu` owns its cir
   glyph in the time gutter (`entriesOverlap`, `lib/schedule.ts`). The
   reminder bell sits absolutely positioned in the card's top-right corner
   (`hitSlop` — a 44pt touch box stretched the row and pulled the bell off the
-  title, H374) and toggles the H59 per-category notification model
+  title, #374) and toggles the H59 per-category notification model
   **straight from the list** via `lib/use-schedule-notifications.ts`;
   filled/accent means on, outline/grey off. The header branches on
   `isRealLiquidGlassAvailable()` (`components/glass-view.tsx`): on iOS 26+ it's
@@ -980,9 +980,8 @@ and the native view exists; every other case keeps the paths above unchanged
   stops rising: its bottom edge moves up with the content, keeping its gap to
   the text below, or along an ease-in path to the lens centre when that is
   higher, so it is in the lens by progress 1. It stays a circle and shrinks
-  uniformly towards its top to the lens diameter minus 1 dp per side by 0.55
-  (`PROFILE_GOOEY_SHRINK_END`; `profileGooeyEndDiameter` /
-  `profileGooeyEndScale`), gliding to the lens column; until then it also
+  uniformly towards its top to 1 dp inside the lens by 0.55
+  (`PROFILE_GOOEY_SHRINK_END`), gliding to the lens column; until then it also
   keeps at least the staging gap (0.9 lens diameters) below the lens, so a
   photo never touches it. It blurs (up to 6 dp) and darkens (`darkness`) from
   55% of the shrink (`PROFILE_GOOEY_FADE_START`), is 85% black once fully
@@ -2149,6 +2148,11 @@ an id's first post).
 
 ## Other infrastructure
 
+- `lib/client-build.ts` sends the native build number as `X-HackOS-Build` on API
+  and realtime requests. When the API answers `426 upgrade_required`
+  (`lib/upgrade-required.ts`), the root layout replaces the app with
+  `UpgradeRequiredScreen`, which opens the store (#999). See
+  [mobile-release](./mobile-release.md#minimum-supported-build).
 - `lib/app-version.ts` shows the installed binary's version and a seven-character
   commit in Sign in and Account. `app.config.ts` captures EAS/CI commit metadata,
   falling back to the checkout's HEAD when building locally; builds without Git
@@ -2250,3 +2254,13 @@ demand from the grouped search action. All toolbar actions stay mounted while
 searching; blur or cancel ends search without rebuilding the toolbar. Legacy headers use the same
 grouping with their existing search field. People/Companies switching, saved
 contacts, favourites and wallet actions retain their existing behavior.
+
+## Shared client models (#1001)
+
+Schedule and announcement forms use the framework-free models in
+`packages/shared`; schedule and scanner localized text use the same resolver.
+Presence math, role/category labels, timezone-store behavior and account-removal
+progress parsing are shared too. Native rendering, ISO date inputs and
+SecureStore access stay in this app. See
+[shared client models](./notifications.md#shared-client-models-1001) for the
+trimming/null decisions and the unchanged announcement fallback policy.

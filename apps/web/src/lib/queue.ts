@@ -162,7 +162,7 @@ export interface RoomPace {
   suggestedMinutesPerTeam: number | null;
   autoAdjusted: boolean;
   effectiveMinutesPerTeam: number;
-  /** H34/H203: operator-configured called-too-long warning threshold. */
+  /** H34/#203: operator-configured called-too-long warning threshold. */
   calledTooLongThresholdMinutes: number;
 }
 
@@ -224,7 +224,7 @@ export interface RoomEnterpriseAssignment {
 export interface RoomAssignments {
   roomId: number;
   room: Room;
-  /** Which enterprise's room pool the room belongs to (H46, 0413). */
+  /** Which enterprise's room pool the room belongs to (H46). */
   enterprise: RoomEnterpriseAssignment | null;
   /** Which of that enterprise's queues the room currently serves, if any. */
   queueGroup: RoomQueueGroupAssignment | null;
@@ -325,16 +325,12 @@ export const previewQueueGroupMerge = (enterpriseId: number, challengeIds: numbe
 export const mergeQueueGroups = (
   enterpriseId: number,
   body: { challengeIds: number[]; displayName: string },
-) =>
-  api.post<QueueGroup>(`/api/enterprises/${enterpriseId}/queue-groups/merge`, body, {
-    headers: { "Idempotency-Key": crypto.randomUUID() },
-  });
+) => api.post<QueueGroup>(`/api/enterprises/${enterpriseId}/queue-groups/merge`, body);
 
 export const splitQueueGroup = (enterpriseId: number, queueGroupId: number) =>
   api.post<{ groups: QueueGroup[] }>(
     `/api/enterprises/${enterpriseId}/queue-groups/${queueGroupId}/split`,
     {},
-    { headers: { "Idempotency-Key": crypto.randomUUID() } },
   );
 
 export const updateQueueGroup = (
@@ -348,18 +344,10 @@ export const getAssignableRooms = (enterpriseId: number) =>
     .then((response) => response.rooms);
 
 export const setQueueGroupRooms = (queueGroupId: number, roomIds: number[]) =>
-  api.put<QueueGroup>(
-    `/api/queue/groups/${queueGroupId}/rooms`,
-    { roomIds },
-    { headers: { "Idempotency-Key": crypto.randomUUID() } },
-  );
+  api.put<QueueGroup>(`/api/queue/groups/${queueGroupId}/rooms`, { roomIds });
 
 export const moveQueueEntry = (entryId: number, position: number) =>
-  api.post(
-    `/api/queue/entries/${entryId}/move-to`,
-    { position },
-    { headers: { "Idempotency-Key": crypto.randomUUID() } },
-  );
+  api.post(`/api/queue/entries/${entryId}/move-to`, { position });
 
 /** GET /api/queue/me — participant view (H38). */
 export interface MyQueueRoom {
@@ -501,16 +489,11 @@ export const getRepoChallenges = (repoId: number) =>
   api.get<RepoChallenge[]>(`/api/queue/repos/${repoId}/challenges`);
 export const getMyQueue = () => api.get<MyQueueEntry[]>("/api/queue/me");
 export const listRooms = () => api.get<Room[]>("/api/queue/rooms");
-/** GET /api/queue/rooms/:id → room fields + attached queue state (not a RoomView). */
-export const getRoom = (roomId: number) =>
-  api.get<Room & { queueState: RoomQueueState | null }>(`/api/queue/rooms/${roomId}`);
 export const getQueueSettings = () => api.get<QueueSettings>("/api/queue/settings");
 
 // ── room control (H29, H35) ────────────────────────────────────────────────
 const idem = (key?: string) => (key ? { headers: { "Idempotency-Key": key } } : undefined);
 
-export const callNext = (roomId: number, idempotencyKey?: string, force?: boolean) =>
-  api.post(`/api/queue/rooms/${roomId}/call-next`, force ? { force } : {}, idem(idempotencyKey));
 export const pauseRoom = (roomId: number, idempotencyKey?: string) =>
   api.post(`/api/queue/rooms/${roomId}/pause`, {}, idem(idempotencyKey));
 export const resumeRoom = (roomId: number, idempotencyKey?: string) =>
@@ -524,10 +507,6 @@ export const updateRoom = (
   body: Partial<Pick<Room, "name" | "location" | "status">>,
 ) => api.patch<Room>(`/api/queue/rooms/${roomId}`, body);
 export const deleteRoom = (roomId: number) => api.delete(`/api/queue/rooms/${roomId}`);
-export const updateRoomState = (
-  roomId: number,
-  body: { maxInWaitingArea?: number; desiredMinutesPerTeam?: number },
-) => api.patch<RoomQueueState>(`/api/queue/rooms/${roomId}/state`, body);
 export const updateQueueSettings = (body: {
   handoffBufferMinutes?: number;
   scheduleStartAt?: string | null;
@@ -574,16 +553,10 @@ export interface QueueGenerationResult {
 }
 
 export const generateQueue = (queueGroupId: number) =>
-  api.post<QueueGenerationResult>(
-    `/api/queue/groups/${queueGroupId}/generate`,
-    {},
-    { headers: { "Idempotency-Key": crypto.randomUUID() } },
-  );
+  api.post<QueueGenerationResult>(`/api/queue/groups/${queueGroupId}/generate`, {});
 
 export const clearQueue = (queueGroupId: number) =>
-  api.delete<{ cleared: number }>(`/api/queue/groups/${queueGroupId}/entries`, {
-    headers: { "Idempotency-Key": crypto.randomUUID() },
-  });
+  api.delete<{ cleared: number }>(`/api/queue/groups/${queueGroupId}/entries`);
 
 // ── entry transitions (H30-H34) ────────────────────────────────────────────
 // Critical mutations accept an Idempotency-Key; pass a fresh uuid to dedupe
@@ -622,9 +595,6 @@ export const moveQueueEntryToPosition = (
     { position, ...(reason ? { reason } : {}) },
     idem(idempotencyKey),
   );
-export const getEntryHistory = (entryId: number) =>
-  api.get(`/api/queue/entries/${entryId}/history`);
-
 // ── judging / evaluation (H36-H37) ─────────────────────────────────────────
 export interface AttemptReview {
   attempt_id: number;

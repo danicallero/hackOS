@@ -11,17 +11,13 @@
  *   common.json, `kind<Pascal>` in web.json) and typed as template literals,
  *   so the apps fail to typecheck until both keys exist, and
  *   `pnpm check:copy` fails until all three locales do;
- * - `icon` is a stable presentation key the web maps exhaustively to a component
- *   (`Record<ActivityKindIconName, …>` — a new name breaks the build until
- *   it's mapped), `symbol` is the SF Symbol the mobile app renders (a mobile
- *   test asserts it also has an Android fallback in components/symbol.tsx);
+ * - `symbol` is the SF Symbol the mobile app renders (a mobile test asserts it
+ *   also has an Android fallback in components/symbol.tsx);
  * - `scan: "meal"` carries the meal semantics (always scannable, repeat
  *   counting, meal stats) instead of hardcoding `'meal'` in SQL.
  */
 
 export interface ActivityKindDefinition {
-  /** Stable web icon key — see apps/web/src/app/(app)/schedule/schedule-model.ts. */
-  readonly icon: string;
   /** SF Symbol name — needs an Android alias in apps/mobile/components/symbol.tsx. */
   readonly symbol: string;
   /**
@@ -33,19 +29,17 @@ export interface ActivityKindDefinition {
 }
 
 const KINDS = {
-  activity: { icon: "sparkles", symbol: "sparkles", scan: "activity" },
-  meal: { icon: "utensils", symbol: "fork.knife", scan: "meal" },
-  workshop: { icon: "mic", symbol: "mic", scan: "activity" },
-  talk: { icon: "mic", symbol: "mic", scan: "activity" },
-  ceremony: { icon: "party-popper", symbol: "party.popper", scan: "activity" },
-  deadline: { icon: "flag", symbol: "flag", scan: "activity" },
-  other: { icon: "calendar-days", symbol: "calendar", scan: "activity" },
+  activity: { symbol: "sparkles", scan: "activity" },
+  meal: { symbol: "fork.knife", scan: "meal" },
+  workshop: { symbol: "mic", scan: "activity" },
+  talk: { symbol: "mic", scan: "activity" },
+  ceremony: { symbol: "party.popper", scan: "activity" },
+  deadline: { symbol: "flag", scan: "activity" },
+  other: { symbol: "calendar", scan: "activity" },
 } as const satisfies Record<string, ActivityKindDefinition>;
 
 export type ActivityKind = keyof typeof KINDS;
 
-/** Every web icon key the registry references (web maps these exhaustively). */
-export type ActivityKindIconName = (typeof KINDS)[ActivityKind]["icon"];
 /** Every SF Symbol name the registry references (mobile renders these directly). */
 export type ActivityKindSymbolName = (typeof KINDS)[ActivityKind]["symbol"];
 
@@ -69,7 +63,7 @@ function isActivityKind(value: unknown): value is ActivityKind {
   return typeof value === "string" && value in KINDS;
 }
 
-/** The definition for a kind, with literal `icon`/`symbol` types preserved. */
+/** The definition for a kind, with literal `symbol`/`scan` types preserved. */
 export function activityKind<K extends ActivityKind>(kind: K): (typeof KINDS)[K] {
   return KINDS[kind];
 }

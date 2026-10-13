@@ -397,7 +397,8 @@ export const scheduleBulkPublishAtBody = z.object({
 
 /**
  * Exactly one of userId (a real hackOS account) or freeTextName (an external
- * name with no login — a vendor, a volunteer) per schedule_owners_exactly_one_identity (0719).
+ * name with no login — a vendor, a volunteer) per the
+ * schedule_owners_exactly_one_identity constraint.
  */
 export const scheduleOwnerBody = z
   .object({

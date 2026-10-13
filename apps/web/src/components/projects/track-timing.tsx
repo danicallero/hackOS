@@ -5,7 +5,8 @@ import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 
 type Timing = {
@@ -42,7 +43,7 @@ export function TrackTiming({
       setPreparation(String(next.preparationSeconds / 60));
       setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t("couldNotLoadChallenge"));
+      setError(apiErrorText(e, t, t("couldNotLoadChallenge")));
     }
   }, [challengeId, t]);
   useEffect(() => {
@@ -69,19 +70,15 @@ export function TrackTiming({
               setBusy(true);
               setError(null);
               try {
-                await api.patch(
-                  `/api/queue/challenges/${challengeId}/timing`,
-                  {
-                    targetSeconds: Math.round(Number(target) * 60),
-                    preparationSeconds: Math.round(Number(preparation) * 60),
-                  },
-                  { headers: { "Idempotency-Key": crypto.randomUUID() } },
-                );
+                await api.patch(`/api/queue/challenges/${challengeId}/timing`, {
+                  targetSeconds: Math.round(Number(target) * 60),
+                  preparationSeconds: Math.round(Number(preparation) * 60),
+                });
                 await load();
                 onSaved?.();
                 setOpen(false);
               } catch (e) {
-                setError(e instanceof ApiError ? e.message : t("couldNotSaveProject"));
+                setError(apiErrorText(e, t, t("couldNotSaveProject")));
               } finally {
                 setBusy(false);
               }

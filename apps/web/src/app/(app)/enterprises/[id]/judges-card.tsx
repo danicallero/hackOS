@@ -5,7 +5,7 @@
 // of the enterprise's challenges. The candidate pool is every account —
 // enterprises may bring outside judges — and adding one is silent.
 
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
@@ -15,7 +15,8 @@ import { UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { UserList } from "@/lib/types";
@@ -43,12 +44,12 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
       setJudges(roster.judges);
       setCandidates(pool.users);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("searchFailed"), t("judges"));
+      toast.error(apiErrorText(err, t, t("searchFailed")), t("judges"));
       setJudges([]);
     }
   }, [enterpriseId, t]);
 
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
@@ -82,10 +83,7 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
       await load();
       toast.success(t("judgeAssigned"), { compactTitle: t("assignJudgeLabel") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotAssignJudge"),
-        t("assignJudgeLabel"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotAssignJudge")), t("assignJudgeLabel"));
     } finally {
       setBusy(false);
     }
@@ -98,10 +96,7 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
       await load();
       toast.success(t("judgeRemoved"), { compactTitle: t("toastRemoveJudge") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRemoveJudge"),
-        t("toastRemoveJudge"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRemoveJudge")), t("toastRemoveJudge"));
     } finally {
       setBusy(false);
     }

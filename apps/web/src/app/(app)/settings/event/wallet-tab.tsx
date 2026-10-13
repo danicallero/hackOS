@@ -30,7 +30,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig, PassBackField } from "@/lib/types";
@@ -382,8 +383,8 @@ export function WalletTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Sync local form state from loaded event config; populate inputs when config arrives.
-    if (config) applyFromConfig(config);
-  }, [config, applyFromConfig]);
+    if (config && !dirty) applyFromConfig(config);
+  }, [config, dirty, applyFromConfig]);
 
   function markDirty<T>(setter: (value: T) => void) {
     return (value: T) => {
@@ -412,22 +413,17 @@ export function WalletTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
     } catch (err) {
       setSaveState("error");
       setSaveError(
-        err instanceof ApiError
-          ? err.message
-          : err instanceof SyntaxError
-            ? t("walletInvalidOptions")
-            : t("couldNotSaveEventSettings"),
+        err instanceof SyntaxError
+          ? t("walletInvalidOptions")
+          : apiErrorText(err, t, t("couldNotSaveEventSettings")),
       );
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
-        t("toastWalletSettings"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveEventSettings")), t("toastWalletSettings"));
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (status !== "ready" || !config) {
+  if (!config || status === "error") {
     return <EventConfigLoadState />;
   }
   const liveEventName = config.name?.trim() ?? "";

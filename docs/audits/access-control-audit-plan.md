@@ -2,6 +2,9 @@
 
 Status: **implemented and independently release-gate verified (2026-07-31);
 superseded by the H8 role-hierarchy rewrite below (2026-08-31)**.
+Historical migration references whose files are absent from
+`apps/api/db/migrations/` describe retired history only. Files under
+`apps/api/db/migration-history/` are not applied by the current runner.
 The historical design rationale remains below for traceability; the generated
 runtime ledger is
 [`access-control-route-ledger.md`](../access-control-route-ledger.md). The

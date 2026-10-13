@@ -11,7 +11,7 @@
 //   POST /api/me/responses/:responseId/confirm   → confirm my place (H15)
 //   POST /api/me/responses/:responseId/decline   → decline my place (H15)
 import { sponsorShareKey } from "@hackos/shared/applications";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { ShieldWarningIcon } from "@phosphor-icons/react/dist/csr/ShieldWarning";
 import Link from "next/link";
@@ -32,8 +32,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/surface";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { getFoodIntolerances, useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { validationErrorSummary } from "@/lib/application-validation";
 import { pickText, useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
@@ -48,7 +50,6 @@ import {
   fieldErrorsFromApi,
   fmtDateTime,
   groupFieldsBySections,
-  type IntoleranceOption,
   isConfirmationExpiredError,
   isNotFoundError,
   type MutationKey,
@@ -72,8 +73,8 @@ export default function MyApplicationDetailPage() {
   const lang: Language = language;
   const [form, setForm] = useState<PublicForm | null>(null);
   const [response, setResponse] = useState<MyResponseDetail | null>(null);
-  const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
-  const shirtSizes = useShirtSizes();
+  const { intolerances } = useFoodIntolerances();
+  const { sizes: shirtSizes } = useShirtSizes();
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [answerRevision, setAnswerRevision] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -99,7 +100,6 @@ export default function MyApplicationDetailPage() {
   const hasLoadedRef = useRef(false);
   const formRef = useRef<PublicForm | null>(null);
   const responseRef = useRef<MyResponseDetail | null>(null);
-  const intolerancesRef = useRef<IntoleranceOption[]>([]);
   const tRef = useRef(t);
   useEffect(() => {
     tRef.current = t;
@@ -137,7 +137,7 @@ export default function MyApplicationDetailPage() {
     const [formRes, respRes, intolRes] = await Promise.allSettled([
       api.get<PublicForm>(`/api/public/applications/${id}`),
       api.get<MyResponseDetail>(`/api/applications/${id}/response`),
-      api.get<{ intolerances: IntoleranceOption[] }>("/api/public/food-intolerances"),
+      getFoodIntolerances(),
     ]);
     const nextForm = formRes.status === "fulfilled" ? formRes.value : formRef.current;
     const nextResponse = respRes.status === "fulfilled" ? respRes.value : responseRef.current;
@@ -158,25 +158,18 @@ export default function MyApplicationDetailPage() {
       responseRef.current = null;
       setConfirmationExpired(false);
     }
-    if (intolRes.status === "fulfilled") intolerancesRef.current = intolRes.value.intolerances;
 
     const nextFormError =
       formRes.status === "rejected" && !isNotFoundError(formRes.reason)
-        ? formRes.reason instanceof ApiError
-          ? formRes.reason.message
-          : tRef.current("couldNotLoadApplication")
+        ? apiErrorText(formRes.reason, tRef.current, tRef.current("couldNotLoadApplication"))
         : null;
     const nextResponseError =
       respRes.status === "rejected" && !isNotFoundError(respRes.reason)
-        ? respRes.reason instanceof ApiError
-          ? respRes.reason.message
-          : tRef.current("couldNotLoadApplication")
+        ? apiErrorText(respRes.reason, tRef.current, tRef.current("couldNotLoadApplication"))
         : null;
     const nextIntolerancesError =
       intolRes.status === "rejected"
-        ? intolRes.reason instanceof ApiError
-          ? intolRes.reason.message
-          : tRef.current("couldNotLoadApplication")
+        ? apiErrorText(intolRes.reason, tRef.current, tRef.current("couldNotLoadApplication"))
         : null;
     setFormError(nextFormError);
     setResponseError(nextResponseError);
@@ -187,7 +180,6 @@ export default function MyApplicationDetailPage() {
     );
     setForm(formRef.current);
     setResponse(responseRef.current);
-    setIntolerances(intolerancesRef.current);
     // Seed answers from the saved response, then prefill the appended shirt-size
     // and dietary fields from the profile so the applicant doesn't re-enter data
     // the API already knows (H12). Saved values always win over the profile.
@@ -218,9 +210,7 @@ export default function MyApplicationDetailPage() {
   // discard an in-progress draft (it's only saved client-side until
   // "Save draft"/submit).
   const editableRef = useRef(false);
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=applications", [
-    EVENTS.DOMAIN_CHANGED,
-  ]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED]);
   const isFirstLiveRefresh = useRef(true);
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
@@ -335,13 +325,13 @@ export default function MyApplicationDetailPage() {
         showErrorToast(err, t("couldNotSubmitApplication"), {
           ...(summary
             ? {
-                description: `${err.message}\n${summary}`,
+                description: summary,
                 duration: 12_000,
                 autopilot: { expand: 0, collapse: 0 },
               }
             : !isTemplateValidation
               ? {
-                  description: err.message,
+                  description: apiErrorText(err, t, t("couldNotSubmitApplication")),
                   duration: 12_000,
                   autopilot: { expand: 0, collapse: 0 },
                   action: { label: t("retry"), onClick: () => void handleSubmit() },
@@ -350,7 +340,10 @@ export default function MyApplicationDetailPage() {
           compactTitle: t("submitApplication"),
         });
         if (!isTemplateValidation) {
-          setActionError({ action: "submit", message: err.message });
+          setActionError({
+            action: "submit",
+            message: apiErrorText(err, t, t("couldNotSubmitApplication")),
+          });
         }
       } else {
         setActionError({ action: "submit", message: t("couldNotSubmitApplication") });
@@ -390,7 +383,7 @@ export default function MyApplicationDetailPage() {
       } else {
         setActionError({
           action: "confirm",
-          message: err instanceof ApiError ? err.message : t("couldNotConfirmPlace"),
+          message: apiErrorText(err, t, t("couldNotConfirmPlace")),
         });
       }
     } finally {
@@ -423,7 +416,7 @@ export default function MyApplicationDetailPage() {
     } catch (err) {
       setActionError({
         action: "decline",
-        message: err instanceof ApiError ? err.message : t("couldNotReleasePlace"),
+        message: apiErrorText(err, t, t("couldNotReleasePlace")),
       });
     } finally {
       setActing(false);

@@ -114,9 +114,9 @@ describe("#538 operational rate limits", () => {
       await register.getSingleMetricAsString("hackos_rate_limit_store_errors_total")
     ).match(/bucket="scan"} (\d+)/)?.[1];
 
-    const original = valkey.incr.bind(valkey);
+    const original = valkey.multi.bind(valkey);
     // biome-ignore lint/suspicious/noExplicitAny: monkey-patching a client method for one test
-    (valkey as any).incr = async () => {
+    (valkey as any).multi = () => {
       throw new Error("simulated Valkey outage");
     };
     try {
@@ -129,7 +129,7 @@ describe("#538 operational rate limits", () => {
       expect(res.statusCode).not.toBe(429);
     } finally {
       // biome-ignore lint/suspicious/noExplicitAny: restoring the monkey-patch above
-      (valkey as any).incr = original;
+      (valkey as any).multi = original;
     }
 
     const after = (

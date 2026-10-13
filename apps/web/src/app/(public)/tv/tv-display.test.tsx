@@ -61,11 +61,11 @@ describe("TvDisplay public realtime boundary", () => {
 
     expect(useEventSource).toHaveBeenCalledOnce();
     expect(useEventSource).toHaveBeenCalledWith(
-      "/api/tv/stream",
+      "public-tv",
       expect.objectContaining({ events: [EVENTS.DATA_CHANGED] }),
     );
-    expect(useEventSource).not.toHaveBeenCalledWith("/api/content/stream", expect.anything());
-    expect(useEventSource).not.toHaveBeenCalledWith("/api/queue/stream", expect.anything());
+    expect(useEventSource).not.toHaveBeenCalledWith("public-content", expect.anything());
+    expect(useEventSource).not.toHaveBeenCalledWith("queue", expect.anything());
   });
 });
 
@@ -139,7 +139,7 @@ describe("TV announcement layers", () => {
     }
   });
 
-  it("ignores legacy notices without an explicit screen placement", () => {
+  it("ignores inbox-only notices on venue screens", () => {
     expect(
       activeAnnouncement(
         [
@@ -149,6 +149,7 @@ describe("TV announcement layers", () => {
             body: "No wall display",
             publishAt: null,
             expiresAt: null,
+            screenPlacement: "none",
           },
         ],
         "fullscreen",

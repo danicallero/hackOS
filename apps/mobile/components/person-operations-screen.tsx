@@ -29,6 +29,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SymbolView } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
+import { errorText } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -364,7 +365,7 @@ export function PersonOperationsScreen() {
       if (claimFailed) Alert.alert(t("personLinkBadge"), t("scannerNfcWriteFailed"));
     } catch (cause) {
       void haptic("error");
-      const message = cause instanceof Error ? cause.message : t("requestError");
+      const message = errorText(cause, t, t("requestError"));
       Alert.alert(
         cause instanceof ApiError ? t("scannerBusinessRejected") : t("requestError"),
         message,
@@ -476,10 +477,7 @@ export function PersonOperationsScreen() {
               void haptic(result.state === "acknowledged" ? "warning" : "light");
             } catch (cause) {
               void haptic("error");
-              Alert.alert(
-                t("scannerBusinessRejected"),
-                cause instanceof Error ? cause.message : t("requestError"),
-              );
+              Alert.alert(t("scannerBusinessRejected"), errorText(cause, t, t("requestError")));
             } finally {
               badgeMutationInFlight.current = false;
               setBusy(false);

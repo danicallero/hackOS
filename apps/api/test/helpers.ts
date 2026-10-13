@@ -52,8 +52,8 @@ export async function authorizationContextFor(userId: number) {
  * A unique, collision-free role position. ALLOW-only test roles (as created
  * by createUserWithCapabilities/createRole below) never need a particular
  * ordering relative to each other — no DENY exists in this codebase's own
- * migrated roles, so any unique integer is safe (see 0801's migration
- * comment for why ALLOW-only role membership is order-independent).
+ * seeded roles, so any unique integer is safe (ALLOW-only role membership is
+ * order-independent).
  */
 function randomRolePosition(): number {
   return 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
@@ -94,10 +94,10 @@ export async function createRole(
 }
 
 /**
- * Records a role's seed-time capability snapshot (role_seed_defaults, 0807),
+ * Records a role's seed-time capability snapshot (`role_seed_defaults`),
  * for tests exercising GET .../seed-diff and POST .../reset-to-default
- * against an is_seeded role — since truncateAll wipes the real 0801/0805
- * seed data every test, tests recreate a minimal seeded role + snapshot
+ * against an is_seeded role — since truncateAll wipes the default seed data
+ * every test, tests recreate a minimal seeded role + snapshot
  * themselves via createRole({ isSeeded: true }) + this helper.
  */
 export async function seedRoleDefaults(
@@ -132,8 +132,8 @@ const ATTENDEE_ROLE_NAMES = { mentor: "Mentor", participant: "Participant" } as 
  * they don't already exist — production's `identity/role.ts`
  * assignAttendeeRole (PUT /api/users/:id/attendee-role, accreditation's
  * walk-in classification) and review-fixtures' synthetic-account setup look
- * these up by name and 409/throw if missing, but truncateAll wipes
- * 0801/0805's real seed data between every test. Call this in any test
+ * these up by name and 409/throw if missing, but truncateAll wipes the default
+ * seed data between every test. Call this in any test
  * exercising either flow.
  */
 export async function seedAttendeeRoles(): Promise<void> {

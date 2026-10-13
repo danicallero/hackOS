@@ -47,7 +47,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText, errorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
@@ -217,10 +218,7 @@ export function EditCard({
       toast.success(t("challengeUpdated"), { compactTitle: t("toastSaveChallenge") });
     } catch (err) {
       setSaveError(true);
-      toast.error(
-        err instanceof Error ? err.message : t("checkBuilderFields"),
-        t("toastSaveChallenge"),
-      );
+      toast.error(errorText(err, t, t("checkBuilderFields")), t("toastSaveChallenge"));
     }
   }
 
@@ -470,7 +468,7 @@ export function EditCard({
                         router.push("/challenges");
                       } catch (err) {
                         toast.error(
-                          err instanceof ApiError ? err.message : t("couldNotDeleteChallenge"),
+                          apiErrorText(err, t, t("couldNotDeleteChallenge")),
                           t("deleteChallenge"),
                         );
                       } finally {
@@ -543,10 +541,7 @@ function BulkEnrollmentCard({ challengeId }: { challengeId: number }) {
         { compactTitle: t("toastChallengeEntries") },
       );
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("bulkActionFailed"),
-        t("toastChallengeEntries"),
-      );
+      toast.error(apiErrorText(err, t, t("bulkActionFailed")), t("toastChallengeEntries"));
     } finally {
       setBusy(null);
       setConfirming(null);
@@ -649,10 +644,7 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
       setWinners(list);
       setEligible(repos);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadWinners"),
-        t("winnersTabLabel"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLoadWinners")), t("winnersTabLabel"));
     } finally {
       setLoading(false);
     }
@@ -678,10 +670,7 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
       setNewRepoId("");
       await load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveWinner"),
-        t("toastAddWinner"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveWinner")), t("toastAddWinner"));
     } finally {
       setBusy(false);
     }
@@ -694,10 +683,7 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
       toast.success(t("winnerRemoved"), { compactTitle: t("toastRemoveWinner") });
       await load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRemoveWinner"),
-        t("toastRemoveWinner"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRemoveWinner")), t("toastRemoveWinner"));
     } finally {
       setBusy(false);
     }

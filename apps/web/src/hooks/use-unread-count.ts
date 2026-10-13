@@ -1,11 +1,11 @@
 "use client";
 
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { useCallback, useEffect } from "react";
 import { notificationsApi } from "@/lib/notifications";
 import { useLiveQuery } from "./use-event-source";
 
-const PERSONAL_STREAM = "/api/queue/me/stream";
+const PERSONAL_STREAM = REALTIME_SCOPES.PERSONAL;
 
 /**
  * Marking a notification read doesn't broadcast an SSE event (it would be
@@ -29,6 +29,7 @@ export function useUnreadCount(enabled = true): number {
   );
   const { data, refetch } = useLiveQuery(fetcher, PERSONAL_STREAM, [EVENTS.USER_NOTIFICATION], {
     enabled,
+    resourceKey: ["notifications", "unread-count"],
   });
 
   useEffect(() => {

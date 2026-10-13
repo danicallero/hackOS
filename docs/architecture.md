@@ -263,7 +263,7 @@ is no global refresh stream and no read-cache invalidation hook: reads come
 from Postgres, while SSE is only a scoped freshness signal. **The API tier is
 therefore stateless** — any instance can serve any SSE client.
 
-**Backpressure and connection budgets (H540).** A write to a slow client's
+**Backpressure and connection budgets (#540).** A write to a slow client's
 socket can report its kernel buffer is full (`write() === false`); rather than
 buffer unboundedly, `sse.ts` waits up to `SSE_WRITE_TIMEOUT_MS` for the
 socket to drain, then disconnects — the client's own auto-reconnect + refetch
@@ -368,7 +368,7 @@ not replica count, bounds latency for the periodic drains — tune `every: N` if
 
 **Postgres is the real ceiling.** It's a single primary — the deliberate
 bottleneck that keeps correctness simple. Pool size and timeouts are
-env-configurable per process (`DB_POOL_MAX`, `DB_*_TIMEOUT_MS`; H540 — see
+env-configurable per process (`DB_POOL_MAX`, `DB_*_TIMEOUT_MS`; #540 — see
 `docs/env-vars.md`), and every replica of api/worker holds its own pool, so
 the budget to respect before scaling replicas is:
 

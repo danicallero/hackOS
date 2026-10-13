@@ -207,13 +207,6 @@ export interface ApplicationStats {
     capacity: number | null;
   };
   counts_by_status?: Record<string, number>;
-  funnel: {
-    sent: number;
-    still_in_window: number;
-    expired: number;
-    declined: number;
-    confirmed: number;
-  };
 }
 
 // ── status presentation ───────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { safeReturnPath, withReturnPath } from "./return-path";
 
-describe("safeReturnPath (H188 same-origin guard)", () => {
+describe("safeReturnPath (#188 same-origin guard)", () => {
   it("accepts a relative path", () => {
     expect(safeReturnPath("/my-applications/5")).toBe("/my-applications/5");
   });

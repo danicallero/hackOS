@@ -1,4 +1,5 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
@@ -229,7 +230,9 @@ export async function presenceScan(
     await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [PRESENCE_LOCK_NS, userId]);
     const lockedParticipant = await lockDoorParticipant(client, userId, input.kind);
     if (lockedParticipant.badgeId !== input.badgeId) {
-      throw new AppError(409, "badge_revoked", "This badge has been revoked");
+      throw new AppError(409, "badge_revoked", "This badge has been revoked", {
+        code: ERROR_REASONS.BADGE_REVOKED,
+      });
     }
     assertBadgeScanTimestamp(input.scannedAt, lockedParticipant.badgeAssignedAt);
     const pendingDoorRemoval = lockedParticipant.pendingRemoval;
@@ -614,7 +617,7 @@ export async function listTimeLogs(userId: number, actorId?: number) {
     kind: r.kind as "in" | "out",
     scannedAt: (r.scanned_at as Date).toISOString(),
     notes: (r.notes as string | null) ?? null,
-    // scanned_by NULL = system-generated log (event-end auto exit, 0708)
+    // scanned_by NULL = system-generated log (event-end auto exit)
     scannedBy:
       r.scanned_by == null
         ? null
@@ -976,7 +979,7 @@ export async function presenceTimeline(userId: number, cutoff?: number, actorId?
     activityName: (row.activity_name as string | null) ?? null,
     category: (row.category as string | null) ?? null,
     notes: (row.notes as string | null) ?? null,
-    // recorded_by NULL = system-generated log (event-end auto exit, 0708)
+    // recorded_by NULL = system-generated log (event-end auto exit)
     recordedBy:
       row.recorded_by == null
         ? null

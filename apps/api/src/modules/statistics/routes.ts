@@ -12,12 +12,12 @@ import {
 } from "../../lib/capabilities.js";
 import { sendCsv } from "../../lib/csv.js";
 import { ForbiddenError } from "../../lib/errors.js";
-import { requireIdempotencyKey } from "../../lib/idempotency.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { requireApplication } from "../applications/service.js";
 import { statisticsPanelKeys } from "../applications/stats.js";
 import { lockRoleGraph, requireRoleMutationAuthority } from "../identity/role-authority.js";
-import { canonicalStatisticsPanelKey, ROLE_SCOPE_PANEL_KEYS } from "./catalog.js";
+import { ROLE_SCOPE_PANEL_KEYS } from "./catalog.js";
 import {
   accessibleStatisticsScopes,
   parseStatisticsScopeKey,
@@ -233,7 +233,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
   r.put(
     "/api/statistics/access",
     {
-      preHandler: [requireAuth, requireIdempotencyKey],
+      preHandler: [requireAuth, idempotencyGuard],
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         summary: "Set a generic statistics scope panel override",
@@ -249,7 +249,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       ) {
         throw new ForbiddenError("Missing capability: statistics:manage");
       }
-      const panelKey = canonicalStatisticsPanelKey(req.body.panel_key);
+      const panelKey = req.body.panel_key;
       const parsed = parseStatisticsScopeKey(req.body.scope_key);
       if (!parsed) {
         throw new ForbiddenError("Statistics scope or panel is not configurable");
@@ -307,7 +307,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/statistics/access/:roleId",
     {
-      preHandler: [requireAuth, requireIdempotencyKey],
+      preHandler: [requireAuth, idempotencyGuard],
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         summary: "Remove a role's generic statistics overrides",

@@ -10,9 +10,12 @@ import { ExportSensitivityBadge } from "@/components/exports/export-sensitivity-
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
+import type { Translate } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n";
+import { intentKey, settleIntentKey } from "@/lib/intent-key";
 import { toast } from "@/lib/toast";
 
 interface ActivityExportOption {
@@ -27,8 +30,8 @@ interface ActivityExportOption {
 
 type ExportMode = "people" | "scans";
 
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
+function errorMessage(error: unknown, t: Translate, fallback: string): string {
+  return apiErrorText(error, t, fallback);
 }
 
 async function downloadActivityExport(
@@ -36,15 +39,18 @@ async function downloadActivityExport(
   mode: ExportMode,
   language: string,
 ): Promise<void> {
+  const requestBody = JSON.stringify({ activity_ids: activityIds, mode, language });
+  const intent = `POST activities.csv ${requestBody}`;
   const response = await fetch(`${API_URL}/api/exports/activities.csv`, {
     method: "POST",
     credentials: "include",
     headers: {
       "content-type": "application/json",
-      "Idempotency-Key": crypto.randomUUID(),
+      "Idempotency-Key": intentKey(intent),
     },
-    body: JSON.stringify({ activity_ids: activityIds, mode, language }),
+    body: requestBody,
   });
+  settleIntentKey(intent, response.status);
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as {
       error?: { message?: string };
@@ -88,7 +94,7 @@ export function ActivityExportPanel({ trigger }: { trigger?: ReactNode }) {
           : response.activities.map((activity) => String(activity.id));
       });
     } catch (loadError) {
-      const message = errorMessage(loadError, t("activityExportCatalogFailed"));
+      const message = errorMessage(loadError, t, t("activityExportCatalogFailed"));
       setError(message);
     } finally {
       setLoading(false);
@@ -121,7 +127,7 @@ export function ActivityExportPanel({ trigger }: { trigger?: ReactNode }) {
       await downloadActivityExport(selectedIds.map(Number), mode, language);
       toast.success(t("activityExportDownloaded"), { compactTitle: t("toastExportActivities") });
     } catch (exportError) {
-      const message = errorMessage(exportError, t("activityExportFailed"));
+      const message = errorMessage(exportError, t, t("activityExportFailed"));
       setError(message);
       toast.error(message, t("toastExportActivities"));
     } finally {

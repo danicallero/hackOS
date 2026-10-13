@@ -1,6 +1,7 @@
 "use client";
 
-import { EVENTS } from "@hackos/shared/events";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowUUpLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowUUpLeft";
 import { KeyIcon } from "@phosphor-icons/react/dist/csr/Key";
@@ -12,6 +13,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { AccessDenied } from "@/components/common/access-denied";
 import { ActionGroup } from "@/components/common/action-group";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -43,9 +45,11 @@ import { Section } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
-import { invalidateServerState, readServerState } from "@/lib/server-state";
+import { readServerState } from "@/lib/server-state";
+import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type {
   PermissionState,
@@ -60,6 +64,7 @@ import { GrantRulesOverviewModal } from "./grant-rules-overview";
 import { permissionTemplateName } from "./helpers";
 import { DrilldownBackButton, RoleEditor } from "./role-editor";
 import { RoleList } from "./role-list";
+import { invalidatePermissionsResources, PERMISSIONS_RESOURCES } from "./server-state";
 
 // H8: one role hierarchy with the selected role persisted in ?role=<id>.
 // Desktop uses two panes; below md, the same state drives a mobile drill-down.
@@ -80,17 +85,16 @@ const createSchema = (t: Translate) =>
 
 type CreateValues = z.infer<ReturnType<typeof createSchema>>;
 
-const PERMISSIONS_RESOURCES = {
-  roles: ["permissions", "roles"],
-  templates: ["permissions", "role-templates"],
-  users: ["permissions", "users", 200],
-} as const;
+export default function PermissionsPage() {
+  const canManage = useCan(CAPABILITIES.PERMISSIONS_MANAGE);
+  const { t } = useLocale();
 
-function invalidatePermissionsResources() {
-  for (const key of Object.values(PERMISSIONS_RESOURCES)) invalidateServerState(key);
+  if (!canManage) return <AccessDenied ask={t("noPermissionsAccessDesc")} />;
+
+  return <PermissionsPageContent />;
 }
 
-export default function PermissionsPage() {
+function PermissionsPageContent() {
   const { t } = useLocale();
   const router = useRouter();
   const pathname = usePathname();
@@ -176,11 +180,7 @@ export default function PermissionsPage() {
       if (rolesResult.status === "fulfilled") {
         setRoles(rolesResult.value);
       } else {
-        setLoadError(
-          rolesResult.reason instanceof ApiError
-            ? rolesResult.reason.message
-            : t("couldNotLoadRoles"),
-        );
+        setLoadError(apiErrorText(rolesResult.reason, t, t("couldNotLoadRoles")));
       }
       if (templatesResult.status === "fulfilled") setTemplates(templatesResult.value);
       if (usersResult.status === "fulfilled") mergeUsers(usersResult.value.users);
@@ -195,10 +195,7 @@ export default function PermissionsPage() {
       const all = await api.get<RoleSummary[]>("/api/roles", { query: { includeDeleted: true } });
       setDeletedRoles(all.filter((r) => r.deletedAt !== null));
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadRoles"),
-        t("announcementRolesLabel"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLoadRoles")), t("announcementRolesLabel"));
     } finally {
       setTrashLoading(false);
     }
@@ -219,10 +216,7 @@ export default function PermissionsPage() {
       setDeletedRoles((prev) => prev.filter((r) => r.id !== roleId));
       await load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRestoreRole"),
-        t("toastRestoreRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRestoreRole")), t("toastRestoreRole"));
     } finally {
       setRestoringId(null);
     }
@@ -230,7 +224,7 @@ export default function PermissionsPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits a role elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=identity", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.IDENTITY), [EVENTS.DOMAIN_CHANGED]);
 
   // Only the very first run is a real (spinner-showing) load; every
   // subsequent retrigger is the liveRefresh nonce bumping, which must stay
@@ -270,7 +264,7 @@ export default function PermissionsPage() {
       setRoles((prev) => [...prev, role]);
       selectRole(role.id);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateRole"), t("createRole"));
+      toast.error(apiErrorText(err, t, t("couldNotCreateRole")), t("createRole"));
     }
   }
 
@@ -285,10 +279,7 @@ export default function PermissionsPage() {
       applyRole(updated);
     } catch (err) {
       setRoles(before);
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotMoveRole"),
-        t("toastMoveRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotMoveRole")), t("toastMoveRole"));
     }
   }
 
@@ -302,10 +293,7 @@ export default function PermissionsPage() {
       applyRole(r);
       toast.success(t("roleUpdated"), { compactTitle: t("toastSaveRole") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveRole"),
-        t("toastSaveRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveRole")), t("toastSaveRole"));
     }
   }
 
@@ -319,10 +307,7 @@ export default function PermissionsPage() {
       applyRole(r);
       toast.success(t("capabilitiesSaved"), { compactTitle: t("toastSavePermissions") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveCapabilities"),
-        t("toastSavePermissions"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveCapabilities")), t("toastSavePermissions"));
     }
   }
 
@@ -334,10 +319,7 @@ export default function PermissionsPage() {
       applyRole(r);
       toast.success(t("memberAdded"), { compactTitle: t("toastAssignRole") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotAddMemberRole"),
-        t("toastAssignRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotAddMemberRole")), t("toastAssignRole"));
     }
   }
 
@@ -347,10 +329,7 @@ export default function PermissionsPage() {
       invalidatePermissionsResources();
       applyRole(r);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRemoveMemberRole"),
-        t("toastRemoveRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRemoveMemberRole")), t("toastRemoveRole"));
     }
   }
 
@@ -398,10 +377,7 @@ export default function PermissionsPage() {
       applyRole(r);
       toast.success(t("resetToDefaultDone"), { compactTitle: t("toastResetRole") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotResetRole"),
-        t("toastResetRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotResetRole")), t("toastResetRole"));
     }
   }
 
@@ -413,7 +389,7 @@ export default function PermissionsPage() {
       setRoles((prev) => prev.filter((r) => r.id !== roleId));
       selectRole(null);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteRole"), t("deleteRole"));
+      toast.error(apiErrorText(err, t, t("couldNotDeleteRole")), t("deleteRole"));
     }
   }
 

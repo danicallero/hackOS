@@ -819,9 +819,9 @@ async function prepareAccountRemoval(
       if (options.requestedAction && options.requestedAction !== action) {
         throw new ConflictError("This account-removal request is already in progress.", { action });
       }
-      // Legacy pending rows may predate removal_requires_exit.  Re-check the
-      // authoritative door state rather than allowing finalization to delete
-      // an identity that is still needed to record its exit.
+      // A pending removal is retried after staff record an exit or its
+      // recovery deadline expires. Recheck the live door state before
+      // finalization so an identity still needed to record an exit is retained.
       const venue = await removalVenueState(client, options.targetId);
       const deadlineExpired = await removalDeadlineExpired(client, user.removal_expires_at);
       requiresVenueExit = venue.requiresExit && !deadlineExpired;
@@ -1432,20 +1432,18 @@ async function scrubRelationships(
          OR lower(email) = ANY($2::text[])`,
     [userId, emails.map((email) => email.toLowerCase())],
   );
-  // Invite redemption rows denormalize the invitee's email/name even when the
-  // user FK is configured ON DELETE SET NULL. They are not part of the
-  // anonymous audit set, so remove the subject's rows before deleting users;
-  // the email fallback covers legacy rows whose FK was already detached.
-  const normalizedEmails = emails.map((email) => email.toLowerCase());
+  // Invite redemption rows carry personal details outside the audit set. Delete
+  // them by their live user FK before deleting the user, since the FK becomes
+  // NULL on deletion and would otherwise leave the denormalized details behind.
   await client.query(
     `DELETE FROM enterprise_invite_link_redemptions
-      WHERE user_id = $1 OR lower(email) = ANY($2::text[])`,
-    [userId, normalizedEmails],
+      WHERE user_id = $1`,
+    [userId],
   );
   await client.query(
     `DELETE FROM user_invite_link_redemptions
-      WHERE user_id = $1 OR lower(email) = ANY($2::text[])`,
-    [userId, normalizedEmails],
+      WHERE user_id = $1`,
+    [userId],
   );
   const deletedEntries = await deleteOrphanedProjects(client, repoIds);
   deletedQueueEntries?.push(...deletedEntries);
@@ -1566,6 +1564,7 @@ async function scrubRelationships(
   await client.query(`DELETE FROM wallet_passes WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM wallet_access_tokens WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM tickets WHERE user_id = $1`, [userId]);
+  const normalizedEmails = emails.map((email) => email.toLowerCase());
   await client.query(
     `DELETE FROM email_verification_tokens
       WHERE user_id = $1 OR lower(email) = ANY($2::text[])`,
@@ -1703,17 +1702,6 @@ async function scrubRelationships(
       scheduleOwnerAuditEntityIds,
     ],
   );
-  if (preserveIdempotency) {
-    // Keep compatibility with callers that supplied the former user-scoped
-    // marker. Current self-service routes insert directly into this
-    // identity-free completion scope; either way, the response is only a
-    // boolean and has no identity bridge (H54).
-    await client.query(
-      `UPDATE idempotency_keys SET scope = $3
-        WHERE key = $1 AND scope = $2`,
-      [preserveIdempotency.key, preserveIdempotency.scope, preserveIdempotency.completionScope],
-    );
-  }
   await client.query(
     `DELETE FROM idempotency_keys
       WHERE (

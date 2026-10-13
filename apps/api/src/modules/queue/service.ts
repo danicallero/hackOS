@@ -1,3 +1,4 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -913,6 +914,7 @@ async function assertEntryCanMove(
     {
       entryId: entry.id,
       repoId: entry.repo_id,
+      code: ERROR_REASONS.TEAM_MEMBER_BUSY,
       ...(busy.roomName ? { roomName: busy.roomName } : {}),
       status: busy.status,
     },
@@ -1033,53 +1035,6 @@ export async function cancelEntry(
   }).then(broadcastEntry);
 }
 
-/**
- * H21: remove a repo from a challenge queue. Waiting/called teams are
- * cancelled; teams already in the room are disqualified so the live judging
- * surface stops showing them. Remaining active entries are compacted.
- */
-export async function removeRepoFromChallenge(
-  entryId: number,
-  actorId: number,
-  reason?: string,
-): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
-    const entry = await lockEntry(client, entryId);
-    await assertEntryFixtureScope(client, actorId, entryId);
-    const removable = ["waiting", "called", "in_room", "presenting"];
-    assertFrom(entry, removable, "remove from challenge");
-    const nextStatus =
-      entry.status === "waiting" || entry.status === "called" ? "cancelled" : "disqualified";
-    const res = await client.query(
-      `UPDATE queue_entries
-          SET status = $1, assigned_room_id = NULL, position = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL, presentation_paused_at = NULL, presentation_paused_seconds = 0, presentation_total_seconds = NULL, room_entered_at = NULL, completed_at = NULL
-        WHERE id = $2
-        RETURNING *`,
-      [nextStatus, entryId],
-    );
-    await writeQueueHistory(client, {
-      entryId,
-      actorId,
-      previousStatus: entry.status,
-      newStatus: nextStatus,
-      action: "remove_from_challenge",
-      reason,
-    });
-    await audit(client, {
-      actorId,
-      entityType: "queue_entry",
-      entityId: entryId,
-      action: "remove_from_challenge",
-      before: { status: entry.status, challengeId: entry.challenge_id, repoId: entry.repo_id },
-      after: { status: nextStatus },
-      reason,
-    });
-    await compactQueueGroupPositions(client, entry.challenge_id);
-    return res.rows[0];
-  }).then(broadcastEntry);
-}
-
 // ── manual call (any team, any position, H37 search-and-bring-in) ──────────
 
 export async function manualCall(
@@ -1169,7 +1124,10 @@ export async function manualCall(
         fixtureMarker,
       })
     ) {
-      throw new ConflictError("Team has a member busy in another room (H30)", { entryId });
+      throw new ConflictError("Team has a member busy in another room (H30)", {
+        entryId,
+        code: ERROR_REASONS.TEAM_MEMBER_BUSY,
+      });
     }
     let updated: QueueEntryRow;
     try {
@@ -1185,7 +1143,10 @@ export async function manualCall(
     } catch (err) {
       const pgErr = err as { code?: string; constraint?: string };
       if (pgErr.code === PG_UNIQUE_VIOLATION && pgErr.constraint === "one_active_entry_per_repo") {
-        throw new ConflictError("Team has a member busy in another room (H30)", { entryId });
+        throw new ConflictError("Team has a member busy in another room (H30)", {
+          entryId,
+          code: ERROR_REASONS.TEAM_MEMBER_BUSY,
+        });
       }
       if (pgErr.code === PG_UNIQUE_VIOLATION) {
         throw new ConflictError("Room already has an active team", { roomId });
@@ -1667,7 +1628,7 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
     const byGroup = new Map<number, QueueEntryRow[]>();
     for (const e of calledEntries as QueueEntryRow[]) {
       const groupId = await challengeQueueGroupId(client, e.challenge_id);
-      // A challenge with no group row cannot exist (0410's trigger), but a
+      // A managed challenge should always have a group row, but a
       // negative synthetic key keeps such a row in its own partition rather
       // than silently merging every ungrouped entry together.
       const key = groupId ?? -e.challenge_id;

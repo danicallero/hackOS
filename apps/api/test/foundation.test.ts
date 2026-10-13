@@ -52,7 +52,7 @@ describe("foundation", () => {
     expect(res.json()).toEqual({ status: "degraded", postgres: "ok", valkey: "down" });
   });
 
-  it("metrics serves the Prometheus registry, unauthenticated (H540)", async () => {
+  it("metrics serves the Prometheus registry, unauthenticated (#540)", async () => {
     app = await buildTestApp();
     const res = await app.inject({ method: "GET", url: "/metrics" });
     expect(res.statusCode).toBe(200);
@@ -66,25 +66,70 @@ describe("foundation", () => {
 
     const json = await app.inject({ method: "GET", url: "/documentation/json" });
     expect(json.statusCode).toBe(200);
-    const spec = json.json();
+    const spec = json.json() as {
+      openapi: string;
+      info: { title: string };
+      components: {
+        securitySchemes: {
+          sessionToken: { type: string };
+          bearerToken: { type: string };
+        };
+      };
+      paths: Record<
+        string,
+        Record<string, { tags?: string[]; security?: Record<string, string[]>[] }>
+      >;
+    };
+    const operationAt = (path: string, method: string) => {
+      const operation = spec.paths[path]?.[method];
+      expect(operation, `${method.toUpperCase()} ${path}`).toBeDefined();
+      return operation as { tags?: string[]; security?: Record<string, string[]>[] };
+    };
     expect(spec.openapi).toBe("3.0.3");
     expect(spec.info.title).toBe("hackOS API");
     expect(spec.components.securitySchemes.sessionToken.type).toBe("apiKey");
     expect(spec.components.securitySchemes.bearerToken.type).toBe("http");
-    expect(spec.paths["/api/me"].get.tags).toEqual(["identity"]);
-    expect(spec.paths["/api/me"].get.security).toEqual([{ sessionToken: [] }, { bearerToken: [] }]);
-    expect(spec.paths["/api/auth/sign-up/email"].post.tags).toEqual(["auth"]);
-    expect(spec.paths["/api/auth/sign-in/email"].post.tags).toEqual(["auth"]);
-    expect(spec.paths["/api/auth/get-session"].get.tags).toEqual(["auth"]);
-    expect(spec.paths["/api/auth/{*}"]).toBeUndefined();
-    expect(spec.paths["/healthz"].get.security).toEqual([]);
-    expect(spec.paths["/readyz"].get.security).toEqual([]);
-    expect(spec.paths["/api/tv/stream"].get.security).toEqual([]);
-    expect(spec.paths["/api/queue/stream"].get.security).toEqual([
+    expect(operationAt("/api/me", "get").tags).toEqual(["identity"]);
+    const catchAllOperations = Object.entries(spec.paths).flatMap(([path, methods]) =>
+      Object.entries(methods)
+        .filter(([method]) =>
+          ["get", "post", "put", "patch", "delete", "options", "head"].includes(method),
+        )
+        .filter(([, operation]) => operation.tags?.includes("api"))
+        .map(([method]) => `${method.toUpperCase()} ${path}`),
+    );
+    expect(catchAllOperations).toEqual([]);
+    const untaggedOperations = Object.entries(spec.paths).flatMap(([path, methods]) =>
+      Object.entries(methods)
+        .filter(([method]) =>
+          ["get", "post", "put", "patch", "delete", "options", "head"].includes(method),
+        )
+        .filter(([, operation]) => !operation.tags?.length)
+        .map(([method]) => `${method.toUpperCase()} ${path}`),
+    );
+    expect(untaggedOperations).toEqual([]);
+    expect(operationAt("/api/projects/reconciliation", "get").tags).toEqual(["projects"]);
+    expect(operationAt("/api/challenges", "get").tags).toEqual(["challenges"]);
+    expect(operationAt("/api/realtime/stream", "get").tags).toEqual(["foundation"]);
+    expect(operationAt("/api/presence/lookup", "post").tags).toEqual(["logistics"]);
+    expect(operationAt("/api/statistics/query", "post").tags).toEqual(["statistics"]);
+    expect(operationAt("/api/exports/applications.csv", "get").tags).toEqual(["exports"]);
+    expect(operationAt("/api/me", "get").security).toEqual([
       { sessionToken: [] },
       { bearerToken: [] },
     ]);
-    expect(spec.paths["/api/events/stream"].get.security).toEqual([
+    expect(operationAt("/api/auth/sign-up/email", "post").tags).toEqual(["auth"]);
+    expect(operationAt("/api/auth/sign-in/email", "post").tags).toEqual(["auth"]);
+    expect(operationAt("/api/auth/get-session", "get").tags).toEqual(["auth"]);
+    expect(spec.paths["/api/auth/{*}"]).toBeUndefined();
+    expect(operationAt("/healthz", "get").security).toEqual([]);
+    expect(operationAt("/readyz", "get").security).toEqual([]);
+    expect(operationAt("/api/tv/stream", "get").security).toEqual([]);
+    expect(operationAt("/api/queue/stream", "get").security).toEqual([
+      { sessionToken: [] },
+      { bearerToken: [] },
+    ]);
+    expect(operationAt("/api/events/stream", "get").security).toEqual([
       { sessionToken: [] },
       { bearerToken: [] },
     ]);
@@ -209,6 +254,26 @@ describe("foundation", () => {
       payload: { badge: "B2" },
     });
     expect(mismatch.statusCode).toBe(409);
+
+    // #994: a replay inside the retention window (6 days) survives the purge
+    // and still returns the stored response; past 8 days it re-executes.
+    const { pool } = await import("../src/db/pool.js");
+    const { purgeExpiredIdempotencyKeys } = await import("../src/lib/idempotency.js");
+    const send = () =>
+      app.inject({
+        method: "POST",
+        url: "/scan",
+        headers: { "idempotency-key": key },
+        payload: { badge: "B1" },
+      });
+    await pool.query(`UPDATE idempotency_keys SET created_at = now() - interval '6 days'`);
+    await purgeExpiredIdempotencyKeys();
+    const inWindow = await send();
+    expect(inWindow.headers["idempotency-replayed"]).toBe("true");
+    expect(inWindow.json()).toEqual({ execution: 1, got: "B1" });
+    await pool.query(`UPDATE idempotency_keys SET created_at = now() - interval '8 days'`);
+    await purgeExpiredIdempotencyKeys();
+    expect((await send()).json()).toEqual({ execution: 2, got: "B1" });
   });
 
   it("SSE broadcast fans out through valkey to a subscribed envelope", async () => {
@@ -218,5 +283,26 @@ describe("foundation", () => {
     expect(envelope?.type).toBe("queue.entry.status_changed");
     expect(Number(envelope?.id)).toBeGreaterThan(0);
     expect(envelope?.data).toEqual({ entryId: 7 });
+  });
+});
+
+describe("idempotency_keys retention (#994)", () => {
+  it("purges only expired rows and replays inside the window", async () => {
+    const { pool } = await import("../src/db/pool.js");
+    const { purgeExpiredIdempotencyKeys } = await import("../src/lib/idempotency.js");
+    const row = (k: string, status: number | null, age: string) =>
+      pool.query(
+        `INSERT INTO idempotency_keys (key, scope, request_hash, response_status, response_body, created_at)
+         VALUES ($1, 's', 'h', $2, '{"ok":true}', now() - $3::interval)`,
+        [k, status, age],
+      );
+    await row("old-done", 200, "8 days");
+    await row("new-done", 200, "6 days");
+    await row("old-inflight", null, "2 days");
+    await row("new-inflight", null, "1 minute");
+
+    expect(await purgeExpiredIdempotencyKeys()).toBe(2);
+    const { rows } = await pool.query(`SELECT key FROM idempotency_keys ORDER BY key`);
+    expect(rows.map((r) => r.key)).toEqual(["new-done", "new-inflight"]);
   });
 });

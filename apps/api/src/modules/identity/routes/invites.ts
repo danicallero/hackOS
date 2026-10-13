@@ -13,7 +13,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "../../../lib/errors.js";
-import { requireIdempotencyKey } from "../../../lib/idempotency.js";
+import { idempotencyGuard } from "../../../lib/idempotency.js";
 import { keyByIp, rateLimitGuard } from "../../../lib/rate-limit.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { getEventName } from "../../event/service.js";
@@ -78,7 +78,7 @@ async function inviteRequirements(
  *
  * Token storage: email_verification_tokens with type 'sponsor_invite'
  * (kind=sponsor, carries enterprise_id) or 'account_claim' (staff /
- * participant). The `kind` column (migration 0101) tells acceptance which
+ * participant). The `kind` column tells acceptance which
  * profile fields to demand. Expired invite -> the org regenerates
  * (POST /:id/regenerate): new token row, old one stamped used (H9).
  * Reusable links live in enterprise_invite_links (the company-scoped H43
@@ -196,7 +196,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   api.post(
     "/api/invites",
     {
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         body: z.object({
@@ -365,7 +365,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   api.post(
     "/api/invites/:id/regenerate",
     {
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
@@ -446,7 +446,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   api.post(
     "/api/invites/:id/expire",
     {
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
@@ -482,7 +482,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   api.post(
     "/api/invites/:id/renew",
     {
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
@@ -534,7 +534,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   api.post(
     "/api/invites/:id/resend",
     {
-      preHandler: [manage, requireIdempotencyKey],
+      preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),

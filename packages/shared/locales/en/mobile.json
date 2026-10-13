@@ -473,7 +473,6 @@
   "scheduleErrorScanNeedsParticipants": "An activity that requires a scan must be visible to participants.",
   "scheduleErrorNotFound": "This activity no longer exists.",
   "scheduleErrorForbidden": "You don't have permission to edit the schedule.",
-  "scheduleSaveFailedReason": "Couldn't save the activity: {reason}",
   "scheduleDeleteError": "Couldn't delete the activity. Check your connection and try again.",
   "translationsAndSettings": "Translations and technical settings",
   "scheduleTitleLabel": "Title",
@@ -911,5 +910,8 @@
   "networkingLoadError": "Couldn't load the profile.",
   "networkingSaveError": "Couldn't save the profile.",
   "networkingInvite": "Participants and company representatives who scan your badge at the event will see this profile, and you'll be added to each other's contacts.",
-  "networkingInviteAction": "Complete profile"
+  "networkingInviteAction": "Complete profile",
+  "upgradeRequiredTitle": "Update required",
+  "upgradeRequiredBody": "Update hackOS to keep using the app.",
+  "upgradeRequiredAction": "Update"
 }

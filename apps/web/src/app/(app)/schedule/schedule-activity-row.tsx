@@ -15,7 +15,7 @@ import { useCallback } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
@@ -105,10 +105,7 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastActivityTime"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastActivityTime"));
       return false;
     }
   }
@@ -121,10 +118,7 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastActivityLocation"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastActivityLocation"));
       return false;
     }
   }
@@ -137,10 +131,7 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("saveNotes"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("saveNotes"));
       return false;
     }
   }
@@ -156,10 +147,7 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastActivityType"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastActivityType"));
       return false;
     }
   }
@@ -180,10 +168,7 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastActivityAudience"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastActivityAudience"));
       return false;
     }
   }
@@ -194,10 +179,7 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastActivityScanning"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastActivityScanning"));
       return false;
     }
   }
@@ -209,7 +191,7 @@ export function ActivityRow({
       return true;
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        apiErrorText(err, t, t("couldNotSaveScheduleItem")),
         t("toastActivityLiveActivity"),
       );
       return false;
@@ -224,7 +206,7 @@ export function ActivityRow({
       return true;
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        apiErrorText(err, t, t("couldNotSaveScheduleItem")),
         t("toastActivityVisibility"),
       );
       return false;
@@ -238,10 +220,7 @@ export function ActivityRow({
       onUpdate(updated);
       return true;
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastPublishSchedule"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastPublishSchedule"));
       return false;
     }
   }
@@ -283,7 +262,7 @@ export function ActivityRow({
             item={item}
             status={status}
             // Staff-only items are shown to staff unconditionally and the API
-            // rejects 'shown' on them (0720) — nothing to toggle (H59).
+            // rejects 'shown' on them — nothing to toggle (H59).
             disabled={isStaffOnly}
             disabledHint={isStaffOnly ? t("staffSeeAllHint") : undefined}
             fieldLabel={t("statusColumn")}

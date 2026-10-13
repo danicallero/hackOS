@@ -187,7 +187,7 @@ describe("sponsor representative + judge (H8/H55)", () => {
     expect(ids).toEqual(expect.arrayContaining(["sponsors", "liveJudging", "projects"]));
   });
 
-  it("does not gain rooms via the sponsor association alone (0413: queue:admin only)", () => {
+  it("does not gain rooms via the sponsor association alone (queue:admin only)", () => {
     expect(visibleHrefs(ctx)).not.toContain("/queue/rooms");
   });
 

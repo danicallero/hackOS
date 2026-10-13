@@ -3,7 +3,7 @@
 The API has a small, in-process admission scheduler for finite HTTP work. It
 limits how many non-streaming requests can execute at once when the process is
 busy, and chooses which waiting request runs next. This is a resilience and
-latency policy (H8, H540, #544), not an authorization mechanism: capability
+latency policy (H8, #540, #544), not an authorization mechanism: capability
 guards still decide whether the request is allowed to perform the operation.
 
 The scheduler is local to one API process. Caddy sends traffic to the single

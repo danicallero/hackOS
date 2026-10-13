@@ -304,7 +304,7 @@ export async function bumpAllAppleWalletUpdateTags(db: Queryable = pool): Promis
   // Advance beyond all existing Apple tags even when the DB clock lags
   // issuance's Node clock; the row floor also protects concurrent bumps.
   // Numeric casts accept fractional legacy tags still written on badge
-  // rotation, while the resulting tag remains integer milliseconds (0504).
+  // rotation, while the resulting tag remains integer milliseconds.
   const { rows } = await db.query(
     `UPDATE wallet_passes SET update_tag = GREATEST(
         (extract(epoch FROM clock_timestamp()) * 1000)::bigint,

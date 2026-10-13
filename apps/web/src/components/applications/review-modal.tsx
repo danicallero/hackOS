@@ -76,7 +76,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, api } from "@/lib/api";
+import { getFoodIntolerances, useFoodIntolerances } from "@/hooks/use-food-intolerances";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { groupApplicationFields } from "@/lib/application-field-groups";
 import { fieldErrorsFromApi, validationErrorSummary } from "@/lib/application-validation";
 import { LOCALE_CODES, pickText, type Translate, useLocale } from "@/lib/i18n";
@@ -251,10 +253,9 @@ function exportAnswers(
   return Promise.all([
     loadNames("/api/public/universities", "universities", idsFor("university")),
     loadNames("/api/public/degrees", "degrees", idsFor("degree")),
-    api
-      .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
+    getFoodIntolerances()
       .then(
-        ({ intolerances }) =>
+        (intolerances) =>
           new Map(
             intolerances.map((intolerance) => [intolerance.id, pickText(intolerance.label, lang)]),
           ),
@@ -450,7 +451,7 @@ export function ReviewModal({
 
   const [staffNotes, setStaffNotes] = useState(response.staff_notes ?? "");
   const [savingNotes, setSavingNotes] = useState(false);
-  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
+  const { intolerances } = useFoodIntolerances();
 
   const hasLogisticsFields = askShirtSize || askFoodIntolerances;
   const logisticsFields = logisticsAnswerFields(askShirtSize, askFoodIntolerances, intolerances);
@@ -464,12 +465,6 @@ export function ReviewModal({
   };
   const files = applicationFiles(answerFields, answerValues, lang);
 
-  useEffect(() => {
-    api
-      .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
-      .then((res) => setIntolerances(res.intolerances))
-      .catch(() => {});
-  }, []);
   // Seeded straight from response.reviews (already returned by both the list
   // and detail endpoints) — no separate fetch needed to hydrate the reviewer's
   // own row on open.
@@ -748,7 +743,7 @@ export function ReviewModal({
         });
       }
       const summary = validationErrorSummary(nextErrors, answerFields, lang);
-      const serverMessage = err instanceof ApiError ? err.message : "";
+      const serverMessage = apiErrorText(err, t, "");
       showErrorToast(err, t("couldNotSaveAnswers"), {
         ...(summary || serverMessage
           ? {
@@ -773,7 +768,7 @@ export function ReviewModal({
       if (options.notify) options.notify();
       else toast.success(label, { compactTitle: t("toastDecisions") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("actionFailed"), t("toastDecisions"));
+      toast.error(apiErrorText(err, t, t("actionFailed")), t("toastDecisions"));
     } finally {
       setBusy(false);
     }
@@ -789,7 +784,7 @@ export function ReviewModal({
       await onChanged();
       toast.success(t("staffNotesSaved"), { compactTitle: t("saveNotes") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveNotes"), t("saveNotes"));
+      toast.error(apiErrorText(err, t, t("couldNotSaveNotes")), t("saveNotes"));
     } finally {
       setSavingNotes(false);
     }
@@ -902,10 +897,7 @@ export function ReviewModal({
       if (mountedRef.current) updateModalStatus("review");
       toast.success(t("acceptanceUndone"), { compactTitle: t("toastUndoAcceptance") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("actionFailed"),
-        t("toastUndoAcceptance"),
-      );
+      toast.error(apiErrorText(err, t, t("actionFailed")), t("toastUndoAcceptance"));
     } finally {
       if (mountedRef.current) setBusy(false);
     }
@@ -1859,11 +1851,10 @@ function DecisionMenu({
                     void run(
                       t("returnedToDraft"),
                       () =>
-                        api.post(
-                          `/api/responses/${responseId}/return-to-draft`,
-                          { allow_resubmit_after_close: false, auto_accept_on_resubmit: false },
-                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
-                        ),
+                        api.post(`/api/responses/${responseId}/return-to-draft`, {
+                          allow_resubmit_after_close: false,
+                          auto_accept_on_resubmit: false,
+                        }),
                       { refresh: false, nextStatus: "draft" },
                     )
                   }
@@ -1876,11 +1867,10 @@ function DecisionMenu({
                     void run(
                       t("returnedToDraft"),
                       () =>
-                        api.post(
-                          `/api/responses/${responseId}/return-to-draft`,
-                          { allow_resubmit_after_close: true, auto_accept_on_resubmit: false },
-                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
-                        ),
+                        api.post(`/api/responses/${responseId}/return-to-draft`, {
+                          allow_resubmit_after_close: true,
+                          auto_accept_on_resubmit: false,
+                        }),
                       { refresh: false, nextStatus: "draft" },
                     )
                   }
@@ -1893,11 +1883,10 @@ function DecisionMenu({
                     void run(
                       t("returnedToDraft"),
                       () =>
-                        api.post(
-                          `/api/responses/${responseId}/return-to-draft`,
-                          { allow_resubmit_after_close: true, auto_accept_on_resubmit: true },
-                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
-                        ),
+                        api.post(`/api/responses/${responseId}/return-to-draft`, {
+                          allow_resubmit_after_close: true,
+                          auto_accept_on_resubmit: true,
+                        }),
                       { refresh: false, nextStatus: "draft" },
                     )
                   }
@@ -1947,10 +1936,7 @@ function DecisionMenu({
                 onSelect={() =>
                   void run(
                     t("reaccepted"),
-                    () =>
-                      api.post(`/api/responses/${responseId}/re-accept`, undefined, {
-                        headers: { "Idempotency-Key": crypto.randomUUID() },
-                      }),
+                    () => api.post(`/api/responses/${responseId}/re-accept`, undefined),
                     { refresh: false, nextStatus: "accepted" },
                   )
                 }

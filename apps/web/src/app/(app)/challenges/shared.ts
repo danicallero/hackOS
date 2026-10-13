@@ -56,15 +56,6 @@ export function isScheduled(availableFrom: string | null): boolean {
   return !Number.isNaN(at.getTime()) && at.getTime() > Date.now();
 }
 
-export function toJsonText(value: unknown, fallback: unknown): string {
-  return JSON.stringify(value ?? fallback, null, 2);
-}
-
-export function parseJsonField(value: string, fallback: unknown): unknown {
-  if (!value.trim()) return fallback;
-  return JSON.parse(value);
-}
-
 export const EMPTY_I18N: I18nText = { en: "", es: "", gl: "" };
 
 /** Normalise a possibly-null i18n value from the API into an editable I18nText. */
