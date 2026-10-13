@@ -40,7 +40,7 @@ afterAll(async () => {
 async function createScheduleItem(startsAt: Date, type: string | null = null): Promise<number> {
   const { rows } = await pool.query(
     // A shown item needs at least one audience — schedule_visibility_requires_audience
-    // (0720/0721); a reminder is something a participant opted into, so that's the tag.
+    // a reminder is something a participant opted into, so that's the tag.
     `INSERT INTO schedule (title, starts_at, ends_at, visibility, type, audiences)
      VALUES ($1, $2::timestamptz, $2::timestamptz + interval '1 hour', 'shown', $3, ARRAY['participant'])
      RETURNING id`,

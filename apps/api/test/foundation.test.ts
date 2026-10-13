@@ -52,7 +52,7 @@ describe("foundation", () => {
     expect(res.json()).toEqual({ status: "degraded", postgres: "ok", valkey: "down" });
   });
 
-  it("metrics serves the Prometheus registry, unauthenticated (H540)", async () => {
+  it("metrics serves the Prometheus registry, unauthenticated (#540)", async () => {
     app = await buildTestApp();
     const res = await app.inject({ method: "GET", url: "/metrics" });
     expect(res.statusCode).toBe(200);
@@ -66,25 +66,70 @@ describe("foundation", () => {
 
     const json = await app.inject({ method: "GET", url: "/documentation/json" });
     expect(json.statusCode).toBe(200);
-    const spec = json.json();
+    const spec = json.json() as {
+      openapi: string;
+      info: { title: string };
+      components: {
+        securitySchemes: {
+          sessionToken: { type: string };
+          bearerToken: { type: string };
+        };
+      };
+      paths: Record<
+        string,
+        Record<string, { tags?: string[]; security?: Record<string, string[]>[] }>
+      >;
+    };
+    const operationAt = (path: string, method: string) => {
+      const operation = spec.paths[path]?.[method];
+      expect(operation, `${method.toUpperCase()} ${path}`).toBeDefined();
+      return operation as { tags?: string[]; security?: Record<string, string[]>[] };
+    };
     expect(spec.openapi).toBe("3.0.3");
     expect(spec.info.title).toBe("hackOS API");
     expect(spec.components.securitySchemes.sessionToken.type).toBe("apiKey");
     expect(spec.components.securitySchemes.bearerToken.type).toBe("http");
-    expect(spec.paths["/api/me"].get.tags).toEqual(["identity"]);
-    expect(spec.paths["/api/me"].get.security).toEqual([{ sessionToken: [] }, { bearerToken: [] }]);
-    expect(spec.paths["/api/auth/sign-up/email"].post.tags).toEqual(["auth"]);
-    expect(spec.paths["/api/auth/sign-in/email"].post.tags).toEqual(["auth"]);
-    expect(spec.paths["/api/auth/get-session"].get.tags).toEqual(["auth"]);
-    expect(spec.paths["/api/auth/{*}"]).toBeUndefined();
-    expect(spec.paths["/healthz"].get.security).toEqual([]);
-    expect(spec.paths["/readyz"].get.security).toEqual([]);
-    expect(spec.paths["/api/tv/stream"].get.security).toEqual([]);
-    expect(spec.paths["/api/queue/stream"].get.security).toEqual([
+    expect(operationAt("/api/me", "get").tags).toEqual(["identity"]);
+    const catchAllOperations = Object.entries(spec.paths).flatMap(([path, methods]) =>
+      Object.entries(methods)
+        .filter(([method]) =>
+          ["get", "post", "put", "patch", "delete", "options", "head"].includes(method),
+        )
+        .filter(([, operation]) => operation.tags?.includes("api"))
+        .map(([method]) => `${method.toUpperCase()} ${path}`),
+    );
+    expect(catchAllOperations).toEqual([]);
+    const untaggedOperations = Object.entries(spec.paths).flatMap(([path, methods]) =>
+      Object.entries(methods)
+        .filter(([method]) =>
+          ["get", "post", "put", "patch", "delete", "options", "head"].includes(method),
+        )
+        .filter(([, operation]) => !operation.tags?.length)
+        .map(([method]) => `${method.toUpperCase()} ${path}`),
+    );
+    expect(untaggedOperations).toEqual([]);
+    expect(operationAt("/api/projects/reconciliation", "get").tags).toEqual(["projects"]);
+    expect(operationAt("/api/challenges", "get").tags).toEqual(["challenges"]);
+    expect(operationAt("/api/realtime/stream", "get").tags).toEqual(["foundation"]);
+    expect(operationAt("/api/presence/lookup", "post").tags).toEqual(["logistics"]);
+    expect(operationAt("/api/statistics/query", "post").tags).toEqual(["statistics"]);
+    expect(operationAt("/api/exports/applications.csv", "get").tags).toEqual(["exports"]);
+    expect(operationAt("/api/me", "get").security).toEqual([
       { sessionToken: [] },
       { bearerToken: [] },
     ]);
-    expect(spec.paths["/api/events/stream"].get.security).toEqual([
+    expect(operationAt("/api/auth/sign-up/email", "post").tags).toEqual(["auth"]);
+    expect(operationAt("/api/auth/sign-in/email", "post").tags).toEqual(["auth"]);
+    expect(operationAt("/api/auth/get-session", "get").tags).toEqual(["auth"]);
+    expect(spec.paths["/api/auth/{*}"]).toBeUndefined();
+    expect(operationAt("/healthz", "get").security).toEqual([]);
+    expect(operationAt("/readyz", "get").security).toEqual([]);
+    expect(operationAt("/api/tv/stream", "get").security).toEqual([]);
+    expect(operationAt("/api/queue/stream", "get").security).toEqual([
+      { sessionToken: [] },
+      { bearerToken: [] },
+    ]);
+    expect(operationAt("/api/events/stream", "get").security).toEqual([
       { sessionToken: [] },
       { bearerToken: [] },
     ]);

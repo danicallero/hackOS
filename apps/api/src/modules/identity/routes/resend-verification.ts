@@ -33,11 +33,11 @@ export function registerResendVerificationRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Resend the sign-up verification email",
         description:
-          "Rate limited to 3/hour with a 60s cooldown between attempts (H3), enforced in Valkey before delegating the actual token issuance and outbox enqueue to Better Auth. `callbackURL` optionally carries the same-origin destination to return to after verifying (H188).",
+          "Rate limited to 3/hour with a 60s cooldown between attempts (H3), enforced in Valkey before delegating the actual token issuance and outbox enqueue to Better Auth. `callbackURL` optionally carries the same-origin destination to return to after verifying (#188).",
         body: z.object({
           email: z.string().email(),
           // The web app's own path to redirect back to after verification
-          // (H188 return-path continuity); forwarded to Better Auth as-is,
+          // (#188 return-path continuity); forwarded to Better Auth as-is,
           // which stamps it into the emailed verify link's callbackURL.
           callbackURL: z.string().optional(),
         }),

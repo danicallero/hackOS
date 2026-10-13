@@ -162,7 +162,7 @@ export interface RoomPace {
   suggestedMinutesPerTeam: number | null;
   autoAdjusted: boolean;
   effectiveMinutesPerTeam: number;
-  /** H34/H203: operator-configured called-too-long warning threshold. */
+  /** H34/#203: operator-configured called-too-long warning threshold. */
   calledTooLongThresholdMinutes: number;
 }
 
@@ -224,7 +224,7 @@ export interface RoomEnterpriseAssignment {
 export interface RoomAssignments {
   roomId: number;
   room: Room;
-  /** Which enterprise's room pool the room belongs to (H46, 0413). */
+  /** Which enterprise's room pool the room belongs to (H46). */
   enterprise: RoomEnterpriseAssignment | null;
   /** Which of that enterprise's queues the room currently serves, if any. */
   queueGroup: RoomQueueGroupAssignment | null;

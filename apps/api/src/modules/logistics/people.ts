@@ -91,7 +91,7 @@ export async function searchPeople(
     );
   }
 
-  // unaccent (migration 0505) makes the comparison accent-insensitive while
+  // `unaccent` makes the comparison accent-insensitive while
   // the stored names keep their accents: "ana per" finds "Ana Pérez".
   const like = `%${needle}%`;
   const fuzzy = await pool.query(

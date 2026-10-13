@@ -256,7 +256,7 @@ function PublicPageContent({
                 </div>
                 <Button asChild size="sm">
                   {/* Selecting a specific form survives account creation and
-                      verification (H188): land directly back on this form. */}
+                      verification (#188): land directly back on this form. */}
                   <Link href={withReturnPath("/signup", `/my-applications/${form.id}`)}>
                     {t("apply")}
                   </Link>

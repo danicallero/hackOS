@@ -33,8 +33,8 @@ delivery: it still governs `listAnnouncementsPublic` regardless of
 A **notify-only** announcement (`screen_placement = 'none'` and
 `notify_users = true`) has no such window — it fires once at `publish_at` (or
 immediately if null) and that's it. `expires_at` is rejected for that specific
-combination, both by a DB `CHECK` (`announcements_no_expiry_when_notify_only`,
-migration `0722`) and by Zod validation
+combination, both by a DB `CHECK` (`announcements_no_expiry_when_notify_only`)
+and by Zod validation
 (`schemas.ts`). A `screen_placement = 'none'` row that *isn't* a notification
 (`notify_users = false`) can still carry an `expires_at` as an ordinary
 content-feed window — the constraint only tightens the notify-only case.
@@ -310,10 +310,11 @@ routes.
 
 ## Mobile admin UI
 
-Reached from the Notifications tab (`apps/mobile/app/(tabs)/notifications.tsx`):
-holding `ANNOUNCEMENTS_MANAGE` adds a third "Manage" segment next to
+Reached from Others → Notification settings
+(`apps/mobile/app/(tabs)/others/notification-settings/index.tsx`): holding
+`ANNOUNCEMENTS_MANAGE` adds a third "Manage" segment next to
 Messages/Preferences, with a header Add button and
-`ManageAnnouncementsView` (`components/announcement-manage-view.tsx`) — a
+`ManageAnnouncementsView` (`apps/mobile/components/announcement-manage-view.tsx`) — a
 swipeable list (`ScheduleSwipeRow`, reused from the Schedule tab) whose
 edit/Add actions open `AnnouncementFormModal`
 (`components/announcement-form-modal.tsx`), which mirrors the web admin

@@ -41,12 +41,12 @@ const multiplexed = new Map<FastifyReply, Multiplexed>();
 let relayStarted = false;
 let relayStarting: Promise<void> | null = null;
 
-// Connection budgets (H540): reject before hijacking the response, so a
+// Connection budgets (#540): reject before hijacking the response, so a
 // rejection is a normal Fastify JSON error rather than an aborted stream.
 let globalConnCount = 0;
 const clientConnCounts = new Map<string, number>();
 
-// Backpressure (H540): tracks a reply currently waiting to drain, so repeat
+// Backpressure (#540): tracks a reply currently waiting to drain, so repeat
 // writes to the same slow client are skipped instead of piling up.
 const draining = new Map<FastifyReply, NodeJS.Timeout>();
 
@@ -346,7 +346,7 @@ function clientKeyFor(req: FastifyRequest): string {
  * Attach a Fastify reply as an SSE subscriber of `topic`. Call from a GET
  * handler; the function keeps the connection open until the client drops.
  *
- * Enforces global/per-topic/per-client connection budgets (H540) before
+ * Enforces global/per-topic/per-client connection budgets (#540) before
  * touching the response, so a rejection is a normal `TooManyRequestsError`
  * JSON response rather than an aborted stream.
  */

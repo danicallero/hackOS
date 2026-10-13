@@ -33,7 +33,7 @@ describe("judging workspace H29-H40", () => {
     expect(canTransition("presenting", "disqualify")).toBe(true);
   });
 
-  it("H34/H203 prefers the operator-configured called-too-long threshold", () => {
+  it("H34/#203 prefers the operator-configured called-too-long threshold", () => {
     // Configured value wins over the derived fallback, in both directions.
     expect(calledTooLongThresholdMinutes(8, 5)).toBe(5);
     expect(calledTooLongThresholdMinutes(4, 45)).toBe(45);

@@ -9,9 +9,8 @@ disagree, the stories win.
 
 ## 1. The `event_config` singleton
 
-One row (`id = 1`, enforced by `CHECK`), created in `0002_event_config.sql` and
-extended by `0003`–`0006` (and later migrations for presence policy, invite
-requirements, and the shirt-size catalogue). Read via `GET /api/public/event`
+One row (`id = 1`, enforced by `CHECK`), defined in the consolidated baseline.
+Read via `GET /api/public/event`
 (anonymous — the countdown feed for the website and TV panels) and
 `GET/PUT /api/event`. `GET` is readable by anyone holding at least one
 event-settings capability; `PUT` enforces **one capability per field group**
@@ -84,8 +83,8 @@ background.
 the event is baked into issued passes. Composition:
 
 - **Header** (top corner, left-aligned): tickets show the doors-open time and
-  date (`event_starts_at`, falling back to `hacking_starts_at` for deployments
-  that predate `0006`), formatted "6 feb 2026" with the month abbreviated in
+  date (`event_starts_at`, falling back to `hacking_starts_at` when no event
+  start is configured), formatted "6 feb 2026" with the month abbreviated in
   the **holder's language** (`users.language` → es/gl/en locale). Badges are
   not date-bound: they show the uppercased `badgeValue` caption ("BADGE")
   instead of a date.
@@ -189,7 +188,7 @@ ever ran. Passes installed while the URL was wrong never registered and can't
 be pushed a fix — holders must re-add the pass.
 
 1. The API bumps `wallet_passes.update_tag` — canonical format is **integer
-   epoch milliseconds** (`0504`; it was mixed seconds/millis before, which
+   epoch milliseconds** (older rows may contain mixed seconds/milliseconds, which
    broke the text comparison in step 3 and devices never refetched).
    Event-wide bumps use the greater of database epoch milliseconds and one
    above the highest existing Apple tag, with a per-row increment floor for
@@ -274,7 +273,7 @@ around that rule:
 
 - The confirm response carries `wallet_token` (plus `user_id` and a masked
   email). It is a row in `wallet_access_tokens`
-  (`logistics/wallet-access.ts`, migration `0510`): random, bound to one
+  (`logistics/wallet-access.ts`): random, bound to one
   `(user, purpose)`, valid for **one hour**, multi-use inside that window
   (adding the pass to both wallets, or retrying, is normal). The
   `applications-expirer` tick drops rows a day past expiry.

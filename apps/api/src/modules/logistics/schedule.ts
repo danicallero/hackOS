@@ -121,7 +121,7 @@ function serialize(row: Record<string, unknown>) {
 /**
  * A staff-only item (no audience tags) has no meaningful "visibility" at
  * all — it's neither public nor private, staff sees it unconditionally
- * regardless (H59 follow-up, schedule_visibility_requires_audience 0720).
+ * regardless (H59 follow-up, schedule_visibility_requires_audience constraint).
  * `visibility`/`publish_at` only describe when a *tagged* audience gets to
  * see an item, so they're forced back to their staff-only defaults the
  * moment an item ends up with no audience — silently, not a validation
@@ -193,7 +193,7 @@ export async function emitScheduleChanged(data: unknown) {
  * see "when this was scheduled to go live" via serialize()/GET /api/schedule,
  * and leaving it doesn't cause re-triggering since visibility='hidden' no
  * longer matches once flipped. Never touches a staff-only (empty-audience)
- * item — schedule_visibility_requires_audience (0720) guarantees those never
+ * item — schedule_visibility_requires_audience guarantees those never
  * carry a publish_at in the first place, since "reveal" only means anything
  * for an item some non-staff audience is waiting on.
  */
@@ -608,7 +608,7 @@ export async function setScheduleVisibility(
       `SELECT id, visibility FROM schedule WHERE id = ANY($1::int[]) FOR UPDATE`,
       [ids],
     );
-    // schedule_visibility_requires_audience (0720) rejects 'shown' on a
+    // schedule_visibility_requires_audience rejects 'shown' on a
     // staff-only item — silently skip those rather than let a batch that
     // happens to include one fail the whole transaction; "hidden" is always
     // safe for every row.
@@ -652,7 +652,7 @@ export async function setScheduleBulkPublishAt(
       `SELECT id, publish_at FROM schedule WHERE id = ANY($1::int[]) FOR UPDATE`,
       [ids],
     );
-    // schedule_visibility_requires_audience (0720) rejects a non-null
+    // schedule_visibility_requires_audience rejects a non-null
     // publish_at on a staff-only item (nothing tagged is waiting on a
     // reveal) — silently skip those; clearing (publishAt: null) is always
     // safe for every row.
@@ -691,7 +691,7 @@ export async function setScheduleBulkPublishAt(
  * One row can be either a real account (`userId` set, name/surname/email
  * from `users`) or a free-text name (`freeTextName` set, no account behind
  * it — an external vendor, a volunteer without a login) — never both,
- * enforced by schedule_owners_exactly_one_identity (0719).
+ * enforced by the schedule_owners_exactly_one_identity constraint.
  */
 export interface ScheduleOwner {
   id: number;

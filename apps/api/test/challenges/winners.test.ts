@@ -60,8 +60,8 @@ async function createEntrant(challengeId: number, repoName: string): Promise<num
 }
 
 /**
- * Two challenges of the SAME enterprise — the only shape 0410's guard trigger
- * lets share a queue group.
+ * Two challenges of the same enterprise, which are eligible to share a queue
+ * group.
  */
 async function createSiblingChallenges(ownerUserId: number): Promise<[number, number]> {
   const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
@@ -90,9 +90,8 @@ async function groupOf(challengeId: number): Promise<number> {
 
 /**
  * Moves `challengeId` into `targetChallengeId`'s queue group, simulating the
- * admin "merge these challenges into one shared queue" action that PR3 of the
- * room/judging redesign will ship. Done in raw SQL because no service or route
- * creates a multi-challenge group yet (0410 only auto-fills 1:1 groups).
+ * admin "merge these challenges into one shared queue" action. Done in raw
+ * SQL here so the test isolates winner eligibility from the merge endpoint.
  */
 async function mergeIntoGroup(challengeId: number, targetChallengeId: number): Promise<void> {
   const orphan = await groupOf(challengeId);
@@ -223,8 +222,8 @@ describe("challenge winners (H46)", () => {
     const server = await getApp();
     const owner = await createUser();
     const [challengeA, challengeB] = await createSiblingChallenges(owner);
-    // Every challenge gets its own 1:1 group from 0410's trigger, so entering
-    // A must not make the repo eligible for the unrelated challenge B.
+    // Unmerged challenges have separate groups, so entering A must not make
+    // the repo eligible for the unrelated challenge B.
     expect(await groupOf(challengeA)).not.toBe(await groupOf(challengeB));
     const repo = await createEntrant(challengeA, "Only In A");
 

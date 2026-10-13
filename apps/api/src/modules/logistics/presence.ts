@@ -614,7 +614,7 @@ export async function listTimeLogs(userId: number, actorId?: number) {
     kind: r.kind as "in" | "out",
     scannedAt: (r.scanned_at as Date).toISOString(),
     notes: (r.notes as string | null) ?? null,
-    // scanned_by NULL = system-generated log (event-end auto exit, 0708)
+    // scanned_by NULL = system-generated log (event-end auto exit)
     scannedBy:
       r.scanned_by == null
         ? null
@@ -976,7 +976,7 @@ export async function presenceTimeline(userId: number, cutoff?: number, actorId?
     activityName: (row.activity_name as string | null) ?? null,
     category: (row.category as string | null) ?? null,
     notes: (row.notes as string | null) ?? null,
-    // recorded_by NULL = system-generated log (event-end auto exit, 0708)
+    // recorded_by NULL = system-generated log (event-end auto exit)
     recordedBy:
       row.recorded_by == null
         ? null

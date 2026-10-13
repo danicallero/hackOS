@@ -308,9 +308,9 @@ moment an item ends up with no audience (not a validation error — removing
 the last audience tag is a normal edit); the bulk `POST /api/schedule/visibility`
 (`shown`) and `POST /api/schedule/publish-at` (non-null) routes silently skip
 any staff-only item in their batch rather than fail it. A DB constraint,
-`schedule_visibility_requires_audience` (0722), with the nullable-array
- expression normalized by `COALESCE` in 0723, backstops this at the data layer:
- `COALESCE(array_length(audiences,1), 0) > 0 OR (visibility = 'hidden' AND
+`schedule_visibility_requires_audience`, with the nullable-array expression
+normalized by `COALESCE`, backstops this at the data layer:
+`COALESCE(array_length(audiences,1), 0) > 0 OR (visibility = 'hidden' AND
  publish_at IS NULL)`. There is no separate `public` audience — the anonymous web/TV feed
 is served exactly the `participant` slice. Items also carry an optional
 staff-only `notes`
@@ -611,8 +611,8 @@ statistics overrides for that role and scope without changing its general
 Logistics capability.
 
 Application-question panels are opt-in via the field's `statistics.enabled`
-configuration. Migration 0824 transformed current retained form JSON and
-removed the former application-specific routes and `reporting` alias; newly
+configuration. Retained form templates use the normalized statistics shape,
+and the API has no application-specific routes or `reporting` alias; newly
 added questions do not become statistics automatically. Configured enum options are retained
 when their response count is zero. Sensitive derived dimensions such as age
 and study level are calculated server-side against the event reference date;

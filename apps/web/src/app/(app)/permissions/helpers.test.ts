@@ -36,7 +36,7 @@ describe("permission helpers", () => {
     expect(templateRequiresWildcardAuthority(template)).toBe(true);
   });
 
-  it("labels a role-assignment-triggered rule by its source role, not the (null) trigger_event (H8, 0812)", () => {
+  it("labels a role-assignment-triggered rule by its source role, not the (null) trigger_event (H8)", () => {
     // Mimics the real catalogue entry ("{roleName} is assigned") closely
     // enough to exercise interpolation without importing the JSON locale.
     const t = (key: string, values?: Record<string, string | number>) => {

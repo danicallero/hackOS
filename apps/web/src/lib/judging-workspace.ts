@@ -41,7 +41,7 @@ export function canTransition(status: QueueStatus | string, action: JudgingActio
 }
 
 /**
- * How long a team may sit in `called` before the operator is warned (H34/H203).
+ * How long a team may sit in `called` before the operator is warned (H34/#203).
  *
  * The operator-configured value (`queue_settings.called_too_long_threshold_minutes`,
  * served on `GET /api/queue/rooms/:id/pace`) wins. The `max(10, 2x desired)`

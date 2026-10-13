@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react-native";
 
 /**
- * H374 — the schedule opens on "what's happening now", not on day 1.
+ * #374 — the schedule opens on "what's happening now", not on day 1.
  *
  * Three separate defects used to make this never fire on device, and each of
  * them is asserted here:
@@ -164,7 +164,7 @@ beforeEach(() => {
   });
 });
 
-describe("schedule scroll-to-active (H374)", () => {
+describe("schedule scroll-to-active (#374)", () => {
   it("targets the active card, offset by the section header", async () => {
     await renderMobile(<ScheduleScreen />);
     await screen.findByText("Happening now");

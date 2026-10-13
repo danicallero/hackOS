@@ -10,7 +10,7 @@ import { useMe } from "@/lib/session";
 /**
  * H1: an unverified account can sign in but can't do anything transactional.
  * We surface that state persistently until they verify, with an in-place resend
- * action. The current page is carried through as `next` (H188) so verification
+ * action. The current page is carried through as `next` (#188) so verification
  * brings them right back where they were interrupted.
  */
 export function VerificationBanner() {

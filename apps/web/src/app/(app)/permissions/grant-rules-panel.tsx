@@ -51,7 +51,7 @@ import { ALL_TRIGGER_EVENTS, ruleTriggerLabel, triggerEventLabel } from "./helpe
  * `grant-rules-overview.tsx`.
  *
  * A rule's trigger is one of two mutually-exclusive kinds (H8
- * role-assignment-as-trigger, 0812): a fixed domain `triggerEvent` (the
+ * role-assignment-as-trigger): a fixed domain `triggerEvent` (the
  * original sponsor/judge events) or `sourceRoleId` — "when this OTHER role
  * is assigned/removed", where the role itself is the admin-chosen parameter,
  * so it needs its own picker rather than a registry entry. `triggerMode`
@@ -117,7 +117,7 @@ export function GrantRulesPanel({
   const [rules, setRules] = useState<RoleGrantRule[]>([]);
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   // The role catalogue for the "when role assigned" source-role picker
-  // (H8 role-assignment-as-trigger, 0812) — fetched here regardless of
+  // (H8 role-assignment-as-trigger) — fetched here regardless of
   // `roles`/`scopedRole` so this mode works whether the panel is scoped to
   // one role or (unscoped, legacy path) shows the full role picker too.
   const [allRoles, setAllRoles] = useState<RoleSummary[]>([]);

@@ -44,7 +44,7 @@ function ForgotPasswordForm() {
     // H5: the response is identical whether or not the email exists — never
     // reveal registration status. We always show the confirmation.
     // Carries the interrupted destination through to /reset-password so it
-    // can hand it to /login after the new password is set (H188).
+    // can hand it to /login after the new password is set (#188).
     try {
       const { error } = await authClient.requestPasswordReset({
         email: values.email,

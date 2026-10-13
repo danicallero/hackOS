@@ -48,45 +48,140 @@ const pkg = require("../package.json") as { version: string };
 // One entry per tag `docsTagFor` can return. Keeps /documentation's sidebar
 // grouped and readable instead of an alphabetical dump of every route.
 const TAG_DESCRIPTIONS: Record<string, string> = {
-  foundation: "Liveness and infrastructure — nothing story-specific.",
+  foundation: "Liveness, shared infrastructure and realtime transport.",
   public: "Unauthenticated read-only endpoints for the public event site.",
   auth: "Better Auth session lifecycle (sign up/in/out, verification, password reset).",
   identity: "Users, invites, permissions and the caller's own profile (H1–H10).",
   applications: "Application forms, review, decisions and confirmations (H11–H15).",
   projects: "Devpost import/sync and project/repo records (H16–H21, H44–H46).",
-  queue: "Judging queue, TV displays and their realtime streams (H29–H42).",
-  logistics: "Accreditation, badge/presence scanning and on-site activities (H22–H27).",
+  challenges: "Challenge details, visibility and judging configuration (H44–H46, H49).",
+  enterprises: "Enterprise records, memberships and sponsor configuration (H9, H43–H46).",
+  queue:
+    "Judging queues, shared queue groups, room assignment, TV displays and realtime streams (H29–H46).",
+  logistics:
+    "Accreditation, badge/presence scanning, schedule, Wallet and on-site activities (H22–H28, H48–H49, H59).",
+  event: "Event identity, timing, venue and admission settings (H10, H45, H47).",
+  exports: "Application and operational data exports (H54, H56).",
+  directory: "Opt-in public participant profiles and their shared details (#934).",
+  diary: "The attendee's saved people and sponsor stands (#935).",
+  "live-activities": "Participant and staff Live Activities / Live Updates (#966).",
+  statistics: "Configurable event statistics and their access controls (H27).",
+  "work-groups": "Pre-event participant groups, invitations and intended challenges (#852).",
+  sponsors: "Sponsor content, including the sponsor FAQ (H43–H45, H58).",
   notifications: "Announcements and the notification outbox (H47–H51).",
   telemetry: "Low-cardinality browser observations for event-day realtime load (H38, #544).",
   audit: "Read access to the audit trail for sensitive mutations (H53).",
-  api: "Everything not yet grouped under a more specific tag above.",
+  api: "API routes that do not yet have a domain tag.",
 };
 
 function logSoftFailure(req: FastifyRequest, err: unknown, message: string): void {
   req.log.warn({ err, method: req.method, url: req.url }, message);
 }
 
+function routeMatchesPrefix(url: string, prefix: string): boolean {
+  return url === prefix || url.startsWith(`${prefix}/`);
+}
+
 function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
   if (url === "/healthz" || url === "/readyz" || url === "/metrics") return "foundation";
-  if (url.startsWith("/api/public/")) return "public";
-  if (url.startsWith("/api/auth/")) return "auth";
+  if (routeMatchesPrefix(url, "/api/realtime")) return "foundation";
+  if (routeMatchesPrefix(url, "/api/public")) return "public";
+  if (routeMatchesPrefix(url, "/api/auth")) return "auth";
+
+  if (routeMatchesPrefix(url, "/api/me/diary")) return "diary";
+  if (routeMatchesPrefix(url, "/api/me/live-activities")) return "live-activities";
+  if (routeMatchesPrefix(url, "/api/me/work-groups")) return "work-groups";
+  if (routeMatchesPrefix(url, "/api/me/projects")) return "projects";
   if (
-    url.startsWith("/api/me") ||
-    url.startsWith("/api/users") ||
-    url.startsWith("/api/permissions") ||
-    url.startsWith("/api/admin/review-fixtures")
+    ["/api/me/notifications", "/api/me/notification-preferences", "/api/me/push-tokens"].some(
+      (prefix) => routeMatchesPrefix(url, prefix),
+    )
+  )
+    return "notifications";
+  if (
+    ["/api/me/applications", "/api/me/responses"].some((prefix) => routeMatchesPrefix(url, prefix))
+  )
+    return "applications";
+  if (routeMatchesPrefix(url, "/api/me/public-profile") || url.includes("/public-profile"))
+    return "directory";
+  if (
+    ["/api/me/logistics", "/api/me/meal-plan", "/api/me/ticket", "/api/me/wallet"].some((prefix) =>
+      routeMatchesPrefix(url, prefix),
+    )
+  )
+    return "logistics";
+  if (/^\/api\/users\/[^/]+\/(?:applications|responses)(?:\/|$)/.test(url)) return "applications";
+  if (/^\/api\/users\/[^/]+\/projects(?:\/|$)/.test(url)) return "projects";
+  if (/^\/api\/users\/[^/]+\/enterprises(?:\/|$)/.test(url)) return "sponsors";
+  if (/^\/api\/users\/[^/]+\/(?:activity|meal-plan|ticket)(?:\/|$)/.test(url)) return "logistics";
+  if (/^\/api\/enterprises\/[^/]+\/(?:assignable-rooms|queue-groups)(?:\/|$)/.test(url))
+    return "queue";
+  if (routeMatchesPrefix(url, "/api/event/wallet")) return "logistics";
+
+  if (
+    [
+      "/api/me",
+      "/api/users",
+      "/api/permissions",
+      "/api/admin/review-fixtures",
+      "/api/invites",
+      "/api/profile",
+      "/api/roles",
+      "/api/role-grant-rules",
+      "/api/role-templates",
+    ].some((prefix) => routeMatchesPrefix(url, prefix))
   )
     return "identity";
-  if (url.startsWith("/api/invites") || url.startsWith("/api/profile")) return "identity";
-  if (url.startsWith("/api/applications")) return "applications";
-  if (url.startsWith("/api/devpost") || url.startsWith("/api/repos")) return "projects";
-  if (url.startsWith("/api/queue") || url.startsWith("/api/tv") || url.startsWith("/api/stream"))
+
+  if (
+    ["/api/applications", "/api/responses", "/api/files"].some((prefix) =>
+      routeMatchesPrefix(url, prefix),
+    )
+  )
+    return "applications";
+  if (
+    ["/api/devpost", "/api/projects", "/api/repos"].some((prefix) =>
+      routeMatchesPrefix(url, prefix),
+    )
+  )
+    return "projects";
+  if (routeMatchesPrefix(url, "/api/challenges")) return "challenges";
+  if (
+    ["/api/queue", "/api/tv", "/api/content", "/api/events"].some((prefix) =>
+      routeMatchesPrefix(url, prefix),
+    )
+  )
     return "queue";
-  if (url.startsWith("/api/accreditation") || url.startsWith("/api/activities")) return "logistics";
-  if (url.startsWith("/api/announcements") || url.startsWith("/api/notifications"))
+  if (
+    [
+      "/api/accreditation",
+      "/api/activities",
+      "/api/degrees",
+      "/api/food-intolerances",
+      "/api/logistics",
+      "/api/presence",
+      "/api/scanner",
+      "/api/schedule",
+      "/api/universities",
+      "/api/wallet",
+    ].some((prefix) => routeMatchesPrefix(url, prefix))
+  )
+    return "logistics";
+  if (
+    ["/api/announcements", "/api/notifications"].some((prefix) => routeMatchesPrefix(url, prefix))
+  )
     return "notifications";
-  if (url.startsWith("/api/telemetry/")) return "telemetry";
-  if (url.startsWith("/api/audit")) return "audit";
+  if (routeMatchesPrefix(url, "/api/telemetry")) return "telemetry";
+  if (routeMatchesPrefix(url, "/api/audit")) return "audit";
+  if (routeMatchesPrefix(url, "/api/enterprises")) return "enterprises";
+  if (routeMatchesPrefix(url, "/api/sponsor-faq")) return "sponsors";
+  if (routeMatchesPrefix(url, "/api/diary")) return "diary";
+  if (routeMatchesPrefix(url, "/api/event")) return "event";
+  if (routeMatchesPrefix(url, "/api/exports")) return "exports";
+  if (routeMatchesPrefix(url, "/api/directory")) return "directory";
+  if (routeMatchesPrefix(url, "/api/statistics")) return "statistics";
+  if (routeMatchesPrefix(url, "/api/work-groups")) return "work-groups";
+  if (routeMatchesPrefix(url, "/api/live-activities")) return "live-activities";
   return "api";
 }
 
@@ -321,7 +416,7 @@ export async function buildApp(): Promise<App> {
   // from #540's pg pool and SSE budgets. It derives its ceiling from the
   // existing per-process pool size without changing that configuration and
   // reserves slots for P0/P1 operational traffic when participant/public
-  // requests surge (H29, H38, H41-H42, H540, #544).
+  // requests surge (H29, H38, H41-H42, #540, #544).
   const requestAdmission = new RequestAdmission({
     maxConcurrent: config.dbPoolMax,
     maxBestEffortPending: Math.max(16, config.dbPoolMax * 8),
@@ -480,7 +575,7 @@ export async function buildApp(): Promise<App> {
         title: "hackOS API",
         version: pkg.version,
         description:
-          "Hackathon management API. Routes are grouped by story area below; " +
+          "Hackathon management API. Routes are grouped by domain below; " +
           "each schema is the single source of truth for both validation and " +
           "this document — see CLAUDE.md's documentation-sync rule before " +
           "adding a route without a summary/description.",
@@ -614,7 +709,7 @@ export async function buildApp(): Promise<App> {
       },
       schema: {
         description:
-          "Prometheus scrape endpoint (H540): pg pool saturation/wait, query " +
+          "Prometheus scrape endpoint (#540): pg pool saturation/wait, query " +
           "timeouts, #544 priority-lane request rate/admission wait and bounded " +
           "best-effort queue depth, SSE connection counts by lane/topic, " +
           "participant invalidation outcomes, browser refetch observations, " +

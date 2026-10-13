@@ -360,7 +360,7 @@ describe("visibility window (H50 vigencia — DELTA expires_at)", () => {
           title: "too late",
           body: "b",
           // expires_at only stays meaningful for screen-placed rows (H50,
-          // DELTA 0722) — a notify-only row can't carry one at all.
+          // a notify-only row can't carry one at all.
           screenPlacement: "fullscreen",
           publishAt: iso(-120_000),
           expiresAt: iso(-60_000),

@@ -2,7 +2,7 @@ import client from "@prometheus-io/client";
 import type { RequestLane } from "./request-lanes.js";
 
 /**
- * Shared Prometheus registry (H540). Pool and SSE modules register their own
+ * Shared Prometheus registry (#540). Pool and SSE modules register their own
  * gauges/histograms/counters onto this; scraped via GET /metrics (app.ts).
  */
 export const register = new client.Registry();

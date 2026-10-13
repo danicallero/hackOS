@@ -14,8 +14,8 @@ import { broadcastForActiveUsers } from "./active-broadcast.js";
  * Event-end automatic exit (H24, product override of the original "the
  * system never closes a session itself" stance): once
  * event_config.event_ends_at passes, every door session still open gets a
- * final `out` at exactly event_ends_at, with scanned_by NULL (system actor,
- * migration 0708) and an audit row per person. The estimator is unaffected
+ * final `out` at exactly event_ends_at, with scanned_by NULL (system actor)
+ * and an audit row per person. The estimator is unaffected
  * when the session's certainty window already expired — an `out` outside the
  * window credits nothing — so this only restores the raw session invariant
  * (in/out alternation) and stops the reconciliation list from filling up

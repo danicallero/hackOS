@@ -23,11 +23,8 @@ import {
 } from "./fixtures.js";
 
 /**
- * H46: rooms serve a queue_group, not a challenge (0411 repoint). Two things
- * are under test: that a 1:1 group — every group that exists today — behaves
- * exactly as the old per-challenge link did, and that the group-aware code
- * paths do the right thing for a merged N>1 group, which only direct SQL can
- * build until the merge UI ships.
+ * H46: rooms serve a queue_group, not a challenge. Tests cover both a single-
+ * member group and a merged group with multiple challenges.
  */
 
 let app: App;
@@ -46,8 +43,8 @@ afterAll(async () => {
   await app?.close();
 });
 
-describe("0411 repoint", () => {
-  it("gives every existing room_queue_groups row exactly one challenge (lossless backfill)", async () => {
+describe("room-to-queue-group links", () => {
+  it("resolves a room's single-member queue group to its challenge", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const challengeId = await createChallenge();
     const roomId = await createRoom();
@@ -63,7 +60,7 @@ describe("0411 repoint", () => {
     );
     expect(rows).toEqual([{ challenge_id: challengeId }]);
 
-    // The 0401 unique-per-room invariant survived the rename.
+    // A room can serve only one queue group at a time.
     const { rows: constraints } = await pool.query(
       `SELECT conname FROM pg_constraint WHERE conrelid = 'room_queue_groups'::regclass
         AND conname = 'room_queue_groups_room_id_unique'`,
@@ -325,7 +322,7 @@ describe("merged N>1 group", () => {
   });
 });
 
-describe("room -> enterprise pool assignment access (0413)", () => {
+describe("room -> enterprise pool assignment access", () => {
   it("is admin-only: refuses even the owning enterprise's rep", async () => {
     const { enterpriseId, repId, challengeIds } = await createEnterpriseChallenges(1);
     const groupId = await queueGroupOf(challengeIds[0]!);

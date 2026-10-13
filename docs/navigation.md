@@ -343,7 +343,7 @@ despite a working API.
   correctly for both already; only the frontend gate needs to match.
 - `apps/web/src/app/(app)/challenges/page.tsx` and
   `apps/web/src/app/(app)/enterprises/page.tsx` gate on `isSponsorRep`.
-  `apps/web/src/app/(app)/queue/rooms/page.tsx` does not (0413): pooling a
+  `apps/web/src/app/(app)/queue/rooms/page.tsx` does not: pooling a
   room into an enterprise is `queue:admin` only.
 - Queue operations (`/queue`) is one destination with three tabs (`?tab=rooms`
   the default, `?tab=queues`, and administrator-only `?tab=configuration`):

@@ -283,7 +283,7 @@ export function ActivityRow({
             item={item}
             status={status}
             // Staff-only items are shown to staff unconditionally and the API
-            // rejects 'shown' on them (0720) — nothing to toggle (H59).
+            // rejects 'shown' on them — nothing to toggle (H59).
             disabled={isStaffOnly}
             disabledHint={isStaffOnly ? t("staffSeeAllHint") : undefined}
             fieldLabel={t("statusColumn")}

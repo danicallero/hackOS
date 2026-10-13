@@ -26,7 +26,7 @@ export function triggerEventLabel(event: string, t: Translate): string {
 
 /**
  * Human label for a rule's trigger, covering BOTH mutually-exclusive kinds
- * (H8, 0812): a fixed trigger_event (triggerEventLabel above) or
+ * (H8): a fixed trigger_event (triggerEventLabel above) or
  * sourceRoleId — "when this role is assigned" — which has no fixed registry
  * entry since the role itself IS the admin-chosen parameter.
  */

@@ -103,10 +103,9 @@ export type QueueChallengeFixtureScope = {
 /**
  * Resolve a challenge's complete queue scope for challenge-only reads.
  *
- * Migration 0410 gives managed challenges one queue-group membership, but a
- * manually deleted group or a legacy row can still leave malformed data in a
- * database. Those rows are not a queue: callers must not silently fall back
- * to challenge-only filtering because that can expose a partial or mixed
+ * Managed challenges must have one queue-group membership. If malformed data
+ * reaches the database, callers must not silently fall back to challenge-only
+ * filtering because that can expose a partial or mixed
  * queue. The group marker also validates every member challenge, enterprise,
  * and queued repository before the read proceeds.
  */

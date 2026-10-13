@@ -891,7 +891,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       const { q, limit, offset } = req.query;
       const needle = q?.trim().replace(/\s+/g, " ") || null;
       const filter = needle ? `%${needle}%` : null;
-      // unaccent (migration 0505) makes name/surname matching accent-insensitive.
+      // `unaccent` makes name/surname matching accent-insensitive.
       const where = filter
         ? `WHERE account_state = 'active' AND anonymized_at IS NULL
              AND is_test_account = false

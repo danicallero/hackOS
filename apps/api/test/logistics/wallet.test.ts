@@ -520,7 +520,7 @@ describe("H28 Apple Wallet PassKit", () => {
   it.each([
     0, 60_000,
   ])("reports an event-config bump with %i ms clock skew (H28 / #896)", async (clockSkew) => {
-    // Pre-0504 regression: issuance wrote millisecond tags, bumps wrote
+    // Legacy regression: issuance wrote millisecond tags, bumps wrote
     // second tags, and the endpoint compared them AS TEXT — so this exact
     // sequence (poll, change event, poll again with the stored lastUpdated)
     // could answer 204 and the device never refetched, which is how both

@@ -1,4 +1,4 @@
-/** Row shapes for raw SQL results (plan/07 §4, rooms/queue/judging section of 0001_initial.sql). */
+/** Row shapes for raw SQL results (plan/07 §4 and the consolidated baseline schema). */
 
 export interface QueueEntryRow {
   id: number;

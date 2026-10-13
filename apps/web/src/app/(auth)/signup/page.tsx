@@ -86,7 +86,7 @@ function SignUpInner() {
   const { t, language } = useLocale();
   // The application (or other same-origin destination) the visitor was
   // trying to reach — carried through verification so they land back there
-  // instead of the schedule (H188: applicant return-path continuity).
+  // instead of the schedule (#188: applicant return-path continuity).
   const rawNext = useSearchParams().get("next");
   const next = safeReturnPath(rawNext, "");
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
@@ -132,7 +132,7 @@ function SignUpInner() {
       name: values.name,
       surname: values.surname,
       language: values.language,
-      // Carried through to the verification email's redirect (H188): the API
+      // Carried through to the verification email's redirect (#188): the API
       // decodes this back into `next` on /verify-email.
       ...(verificationCallbackURL ? { callbackURL: verificationCallbackURL } : {}),
     });

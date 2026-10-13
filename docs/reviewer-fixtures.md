@@ -142,16 +142,14 @@ These are implementation assumptions, not legal conclusions:
 - The static deletion PIN remains synthetic-only. If a product owner requests
   a universal real-user PIN, security review must explicitly replace this
   boundary rather than silently broadening it.
-- `0730` is validated from both a fresh schema and a populated latest-main
-  schema whose migration ledger ends at `0725`; it also converts legacy
-  `anonymized_at` rows before installing fixture markers. A database that
-  already recorded the pre-squash H54 chain is detected by the runner and
-  normalized transactionally by `0747`. Once deployed, migration checksums are
-  immutable and later corrections use a new migration.
-- Fresh fixture databases use the clean production bootstrap (`pnpm migrate`)
-  through `0823_clean_production_schema.sql`; reviewer access is represented
-  only by `user_roles` and `roles.event_access`, never by legacy application
-  type or manual-attendee compatibility state.
+- The consolidated baseline contains the account-removal and fixture-marker
+  schema. The active migration runner validates each ledger entry against the
+  deployed files and checks immutable checksums; it does not recognize retired
+  compatibility chains or perform a populated-database account-removal upgrade.
+- Fresh fixture databases use the current schema bootstrap (`pnpm migrate`)
+  from `0001_hackos_baseline.sql` plus the active migrations. Reviewer access is
+  represented only by `user_roles` and `roles.event_access`, never by legacy
+  application type or manual-attendee compatibility state.
 - The current credential-retirement implementation stores a stable keyed HMAC
   digest in an unlinked global denylist. It does not retain the raw badge or
   ticket value; legitimate physical badge reuse is bounded by the server-side

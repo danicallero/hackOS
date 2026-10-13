@@ -775,7 +775,7 @@ const COLLAPSED_DESCRIPTION_LINES = 2;
  * Whether a card's text needs the collapsed-with-fade treatment. `numberOfLines`
  * clamps without telling us it did, and `onTextLayout` needs a real layout
  * pass, so we go by length: short entries render in full, long ones clamp
- * with a fade hint that there's more to read in the detail view (H374).
+ * with a fade hint that there's more to read in the detail view (#374).
  */
 export function isScheduleCardTruncated(item: Pick<ScheduleItem, "title" | "description">) {
   const description = item.description ?? "";

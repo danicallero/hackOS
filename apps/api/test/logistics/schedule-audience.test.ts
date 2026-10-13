@@ -58,7 +58,7 @@ async function createItem(opts: {
       opts.notes ?? null,
       opts.contactNote ?? null,
       // A staff-only item is always stored hidden — schedule_visibility_requires_audience
-      // (0720/0721) rejects anything else, so the default follows the audiences.
+      // rejects anything else, so the default follows the audiences.
       opts.visibility ?? (opts.audiences.length > 0 ? "shown" : "hidden"),
     ],
   );
