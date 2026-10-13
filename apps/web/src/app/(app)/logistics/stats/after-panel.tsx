@@ -52,7 +52,7 @@ export function AfterPanel({
   const [activityChart, setActivityChart] = useState<StatsChartType>("bar");
 
   const accredited = stats?.accreditedCount ?? 0;
-  const confirmed = applicationStats?.overview?.confirmed ?? applicationStats?.funnel?.confirmed;
+  const confirmed = applicationStats?.overview?.confirmed;
   const attendanceRate =
     accredited === 0 ? null : Math.round((summary.attended / accredited) * 100);
   const funnelRows = [

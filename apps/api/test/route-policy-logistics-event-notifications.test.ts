@@ -22,7 +22,7 @@ describe("logistics, event and notifications route policy ledger", () => {
   it("requires explicit metadata for every owned route and records their access classes", () => {
     const app = Fastify();
     apps.push(app);
-    registerRoutePolicyInfrastructure(app, { enforce: true });
+    registerRoutePolicyInfrastructure(app);
 
     registerLogisticsRoutes(app);
     registerIntoleranceRoutes(app);

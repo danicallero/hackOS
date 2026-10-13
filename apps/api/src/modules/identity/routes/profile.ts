@@ -418,10 +418,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           code: "idempotency_key_required",
         });
       }
-      // Use the identity-free completion scope from the first insert. The
-      // request may revoke the session before Fastify's onSend hook runs; a
-      // later storage failure must therefore be retryable under the same
-      // scope, without leaving a stale user-scoped row behind.
+      // Use the identity-free completion scope from the first insert. Removal
+      // may revoke the session before Fastify's onSend hook runs, so retries
+      // must be able to replay the boolean result without authentication.
       req.idempotencyScope = completionScope;
       if (await replayCompletedIdempotency(req, reply, completionScope)) return;
       await assertActiveAuthenticatedUser(req);

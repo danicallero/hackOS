@@ -266,7 +266,7 @@ export async function buildApp(): Promise<App> {
   // Every application route is part of the machine-readable access ledger.
   // Startup fails closed if a route is added without an explicit policy; the
   // Better Auth generated catch-all is the sole narrow exemption.
-  registerRoutePolicyInfrastructure(app, { enforce: true });
+  registerRoutePolicyInfrastructure(app);
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 

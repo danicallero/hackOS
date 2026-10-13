@@ -109,14 +109,6 @@ export interface ApplicationStats {
     average_confirmation_time_hours: number | null;
   };
   counts_by_status?: Record<string, number>;
-  funnel?: {
-    sent: number;
-    still_in_window: number;
-    expired: number;
-    declined: number;
-    confirmed: number;
-    rejected?: number;
-  };
   time_series?: {
     submissions_by_day: Array<{ bucket: string; n: number }>;
     confirmations_by_day: Array<{ bucket: string; n: number }>;

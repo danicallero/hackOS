@@ -6,14 +6,14 @@ describe("statistics layout", () => {
     expect(
       sanitizeStatsLayout(
         {
-          order: ["funnel", "shirt-sizes", "missing", "funnel"],
-          hidden: ["funnel", "missing"],
-          charts: { funnel: "pie", "shirt-sizes": "pie", missing: "line" },
+          order: ["retired", "shirt-sizes", "missing", "retired"],
+          hidden: ["retired", "missing"],
+          charts: { retired: "pie", "shirt-sizes": "pie", missing: "line" },
           sections: [
-            { id: "main", title: "Main", panelKeys: ["funnel", "shirt-sizes", "missing"] },
+            { id: "main", title: "Main", panelKeys: ["retired", "shirt-sizes", "missing"] },
             { id: "invalid", title: 42, panelKeys: ["overview"] },
           ],
-          sizes: { funnel: { width: 2, height: 2 } },
+          sizes: { retired: { width: 2, height: 2 } },
         },
         ["overview", "shirt-sizes"],
       ),
