@@ -19,6 +19,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { PublicationControls } from "@/components/common/publication-controls";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -35,6 +36,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
@@ -161,7 +163,7 @@ export default function EnterprisesPage() {
   const me = useMe();
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
   const [loading, setLoading] = useState(true);
-  const hasLoadedRef = useRef(false);
+  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sponsorRetryNonce, setSponsorRetryNonce] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
@@ -171,22 +173,27 @@ export default function EnterprisesPage() {
   const columns = useMemo(() => buildColumns(t, LOCALE_CODES[language]), [t, language]);
 
   const load = useCallback(async () => {
-    if (!hasLoadedRef.current) setLoading(true);
-    setLoadError(null);
+    if (!hasLoaded()) setLoading(true);
     try {
       const r = await api.get<{ enterprises: Enterprise[] }>("/api/enterprises");
-      hasLoadedRef.current = true;
+      succeeded();
+      setLoadError(null);
       setEnterprises(r.enterprises);
-      setSelectedIds(new Set());
+      // Keep the admin's selection across live refreshes; drop deleted rows (#1012).
+      const remaining = new Set(r.enterprises.map((e) => String(e.id)));
+      setSelectedIds((current) => {
+        const next = new Set([...current].filter((id) => remaining.has(id)));
+        return next.size === current.size ? current : next;
+      });
     } catch (err) {
+      // A failed background refresh keeps the list and selection (#1012).
+      if (!failed(err)) return;
       setEnterprises([]);
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadEnterprises");
-      setLoadError(message);
-      toast.error(message, t("toastCompanies"));
+      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadEnterprises"));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, succeeded, failed, hasLoaded]);
 
   const bulkVisibility = useCallback(
     async (visible: boolean) => {
@@ -205,6 +212,7 @@ export default function EnterprisesPage() {
               : t("hidEnterpriseOther", { count: ids.length }),
           { compactTitle: t("toastCompanyVisibility") },
         );
+        setSelectedIds(new Set());
         await load();
       } catch (err) {
         toast.error(
@@ -259,6 +267,7 @@ export default function EnterprisesPage() {
     router,
     liveRefresh,
     sponsorRetryNonce,
+    retryNonce,
     t,
   ]);
 
@@ -300,6 +309,7 @@ export default function EnterprisesPage() {
 
   return (
     <PageLayout>
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         title={t("enterprises")}
         primaryAction={
@@ -320,7 +330,7 @@ export default function EnterprisesPage() {
         searchable={(e) => `${e.name} ${e.website ?? ""}`}
         searchPlaceholder={t("searchEnterprisesPlaceholder")}
         pageSize={15}
-        loading={loading && !hasLoadedRef.current}
+        loading={loading && !hasLoaded()}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         selectable
         selectedIds={selectedIds}

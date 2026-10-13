@@ -1,4 +1,5 @@
 import { DEFAULT_ACTIVITY_KIND, isMealActivityKind } from "@hackos/shared/activity-kinds";
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -159,7 +160,9 @@ async function getUserLanguage(userId: number): Promise<Language> {
 
 function assertWindow(startsAt: Date, endsAt: Date) {
   if (endsAt.getTime() <= startsAt.getTime()) {
-    throw new BadRequestError("endsAt must be after startsAt");
+    throw new BadRequestError("endsAt must be after startsAt", {
+      code: ERROR_REASONS.SCHEDULE_ENDS_BEFORE_STARTS,
+    });
   }
 }
 
@@ -174,7 +177,9 @@ function assertScanRequiresParticipantAudience(
   audiences: readonly string[],
 ) {
   if (requiresScan && !audiences.includes("participant")) {
-    throw new BadRequestError("Only a participant-visible item can require scanning");
+    throw new BadRequestError("Only a participant-visible item can require scanning", {
+      code: ERROR_REASONS.SCHEDULE_SCAN_NEEDS_PARTICIPANTS,
+    });
   }
 }
 
@@ -381,7 +386,11 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
          FROM schedule WHERE id = $1 FOR UPDATE`,
       [id],
     );
-    if (!current.rows[0]) throw new NotFoundError("Schedule item not found", { id });
+    if (!current.rows[0])
+      throw new NotFoundError("Schedule item not found", {
+        id,
+        code: ERROR_REASONS.SCHEDULE_ITEM_NOT_FOUND,
+      });
     const before = serialize(current.rows[0]);
     const nextStartsAt = patch.startsAt ?? (current.rows[0].starts_at as Date);
     const nextEndsAt = patch.endsAt ?? (current.rows[0].ends_at as Date);
@@ -499,7 +508,11 @@ export async function deleteScheduleItem(actorId: number | null, id: number) {
         RETURNING ${SCHEDULE_COLUMNS}`,
       [id],
     );
-    if (!rows[0]) throw new NotFoundError("Schedule item not found", { id });
+    if (!rows[0])
+      throw new NotFoundError("Schedule item not found", {
+        id,
+        code: ERROR_REASONS.SCHEDULE_ITEM_NOT_FOUND,
+      });
     await audit(client, {
       actorId,
       entityType: "schedule",
@@ -529,7 +542,11 @@ export async function saveScheduleTranslations(
       `SELECT ${SCHEDULE_COLUMNS} FROM schedule WHERE id = $1 FOR UPDATE`,
       [id],
     );
-    if (!current.rows[0]) throw new NotFoundError("Schedule item not found", { id });
+    if (!current.rows[0])
+      throw new NotFoundError("Schedule item not found", {
+        id,
+        code: ERROR_REASONS.SCHEDULE_ITEM_NOT_FOUND,
+      });
     const before = serialize(current.rows[0]);
     const nextTitleI18n = { ...before.titleI18n } as Record<string, string>;
     const nextDescriptionI18n = { ...before.descriptionI18n } as Record<string, string | null>;
@@ -777,7 +794,11 @@ export async function addScheduleOwner(
   const { rows: scheduleRows } = await pool.query(`SELECT id FROM schedule WHERE id = $1`, [
     scheduleId,
   ]);
-  if (!scheduleRows[0]) throw new NotFoundError("Schedule item not found", { scheduleId });
+  if (!scheduleRows[0])
+    throw new NotFoundError("Schedule item not found", {
+      scheduleId,
+      code: ERROR_REASONS.SCHEDULE_ITEM_NOT_FOUND,
+    });
 
   if ("userId" in input) {
     const { userId } = input;

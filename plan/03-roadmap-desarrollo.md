@@ -21,7 +21,7 @@ Objetivo: entregar por fases, con paralelismo seguro y trazabilidad a `Hxx`.
 
 ## Fase 2 — Núcleo del evento (P0)
 
-- Proyectos por importación: H16-H17.
+- Proyectos con envío propio (formulario, fases, borradores, galería, correcciones): H16-H21.
 - Colas y judging: H29-H40.
 - TV en vivo: H41-H42.
 
@@ -39,6 +39,7 @@ Objetivo: entregar por fases, con paralelismo seguro y trazabilidad a `Hxx`.
 - Sponsors: H43-H46.
 - Horario y contenido público: H47-H49.
 - Notificaciones y correo: H50-H52.
+- Ganadores con publicación programada: H60.
 
 **Salida:** experiencia completa para sponsors, asistentes y staff.
 
@@ -46,7 +47,6 @@ Objetivo: entregar por fases, con paralelismo seguro y trazabilidad a `Hxx`.
 
 - Exportaciones y datos personales: H54.
 - Móvil único por capacidades: H55.
-- Post-MVP: H18-H21.
 
 **Salida:** plataforma completa + backlog de expansión claro.
 

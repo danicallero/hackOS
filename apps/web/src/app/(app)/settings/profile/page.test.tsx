@@ -28,9 +28,16 @@ vi.mock("@/lib/i18n", () => ({
   useLocale: () => ({ language: "en", t: (key: string) => key }),
 }));
 vi.mock("@/lib/use-unsaved-changes-guard", () => ({ useUnsavedChangesGuard: () => {} }));
-vi.mock("@/hooks/use-shirt-sizes", () => ({ useShirtSizes: () => ["M"] }));
+vi.mock("@/hooks/use-shirt-sizes", () => ({
+  useShirtSizes: () => ({ sizes: ["M"], loading: false, error: null, reload: () => {} }),
+}));
 vi.mock("@/hooks/use-food-intolerances", () => ({
-  useFoodIntolerances: () => [{ id: 3, label: { en: "Gluten" }, description: null }],
+  useFoodIntolerances: () => ({
+    intolerances: [{ id: 3, label: { en: "Gluten" }, description: null }],
+    loading: false,
+    error: null,
+    reload: () => {},
+  }),
 }));
 vi.mock("@/components/common/multi-select", () => ({
   MultiSelect: ({

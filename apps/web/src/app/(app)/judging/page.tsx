@@ -60,6 +60,7 @@ import {
 import { invalidateServerState } from "@/lib/server-state";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
+import { confirmDiscardUnsavedChanges } from "@/lib/use-unsaved-changes-guard";
 import type { Challenge } from "../challenges/shared";
 
 import { challengeName, errorMessage, exportHref, queueErrorToastContent } from "./helpers";
@@ -101,6 +102,15 @@ export default function QueuePage() {
   const [searchResults, setSearchResults] = useState<QueueSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedReviewEntry, setSelectedReviewEntry] = useState<QueueEntry | null>(null);
+  // #1014: the review form saves pending edits when it leaves an entry; it
+  // only reports edits it cannot save (failed save, conflict, offline), and
+  // switching away from those asks first.
+  const [reviewEditsAtRisk, setReviewEditsAtRisk] = useState(false);
+  const selectReviewEntry = (entry: QueueEntry | null) => {
+    if (!confirmDiscardUnsavedChanges(reviewEditsAtRisk, t)) return false;
+    setSelectedReviewEntry(entry);
+    return true;
+  };
   const [actionError, setActionError] = useState<string | null>(null);
 
   const activeRoomId = roomId ?? rooms[0]?.id ?? null;
@@ -306,8 +316,7 @@ export default function QueuePage() {
             <Select
               value={activeRoomId ? String(activeRoomId) : ""}
               onValueChange={(value) => {
-                setRoomId(Number(value));
-                setSelectedReviewEntry(null);
+                if (selectReviewEntry(null)) setRoomId(Number(value));
               }}
               disabled={roomsLoading || rooms.length === 0}
             >
@@ -529,7 +538,7 @@ export default function QueuePage() {
                   t("teamReentered"),
                 )
               }
-              onOpenReview={setSelectedReviewEntry}
+              onOpenReview={selectReviewEntry}
             />
           </div>
 
@@ -556,6 +565,7 @@ export default function QueuePage() {
             </div>
 
             <ReviewForm
+              key={(selectedReviewEntry ?? active)?.id ?? "none"}
               entry={selectedReviewEntry ?? active}
               challenge={activeChallenge}
               panel={view.challenge?.judging_panel_criteria ?? null}
@@ -566,7 +576,8 @@ export default function QueuePage() {
                   active?.status === "presenting" ||
                   selectedReviewEntry != null)
               }
-              onCloseExisting={selectedReviewEntry ? () => setSelectedReviewEntry(null) : undefined}
+              onCloseExisting={selectedReviewEntry ? () => selectReviewEntry(null) : undefined}
+              onUnsavedEditsAtRisk={setReviewEditsAtRisk}
             />
           </div>
         </div>

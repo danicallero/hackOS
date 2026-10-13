@@ -1,4 +1,5 @@
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS } from "@hackos/shared/events";
 import type { Job } from "bullmq";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -61,7 +62,9 @@ export async function enqueueMealScanBatch(
       );
       const lockedOwner = owner.rows[0];
       if (!lockedOwner || lockedOwner.badge_id !== badgeId) {
-        throw new AppError(409, "badge_revoked", "This badge has been revoked");
+        throw new AppError(409, "badge_revoked", "This badge has been revoked", {
+          code: ERROR_REASONS.BADGE_REVOKED,
+        });
       }
       await assertFixtureSubjectScope(client, actorId, userId);
       owners.set(badgeId, {
