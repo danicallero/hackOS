@@ -75,6 +75,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
+import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
@@ -227,8 +228,8 @@ export function QuestionsCard({
   const [preview, setPreview] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [missingReservedKeys, setMissingReservedKeys] = useState<string[] | null>(null);
-  const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
-  const shirtSizes = useShirtSizes();
+  const { intolerances } = useFoodIntolerances();
+  const { sizes: shirtSizes } = useShirtSizes();
   const dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -245,15 +246,6 @@ export function QuestionsCard({
     setFields(seededFields);
     setSections(withIds(form.sections));
   }, [form.template, form.sections, saveState]);
-
-  // The dictionary backing the dietary-restrictions preview options, so the
-  // preview matches what an applicant will actually pick from (H12).
-  useEffect(() => {
-    api
-      .get<{ intolerances: IntoleranceOption[] }>("/api/public/food-intolerances")
-      .then((r) => setIntolerances(r.intolerances))
-      .catch(() => setIntolerances([]));
-  }, []);
 
   useEffect(() => {
     onDirtyChange?.(saveState !== "saved");

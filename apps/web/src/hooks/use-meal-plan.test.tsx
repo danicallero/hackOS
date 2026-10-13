@@ -21,7 +21,8 @@ vi.mock("@/lib/api", () => ({
 
 import { ApiError, api } from "@/lib/api";
 import type { MealPlan } from "@/lib/meal-plan";
-import { mealPlanSaveErrorKey, resetMealPlanStore, useMealPlan } from "./use-meal-plan";
+import { resetServerStateForTests } from "@/lib/server-state";
+import { mealPlanSaveErrorKey, useMealPlan } from "./use-meal-plan";
 
 const meal = {
   activityId: 11,
@@ -48,7 +49,7 @@ describe("useMealPlan (#933)", () => {
   }
 
   beforeEach(() => {
-    resetMealPlanStore();
+    resetServerStateForTests();
     vi.mocked(api.get).mockResolvedValue(plan);
     container = document.createElement("div");
     root = createRoot(container);
