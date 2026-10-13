@@ -20,7 +20,7 @@ import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -80,12 +80,12 @@ import {
   ResizableHead,
   useScheduleTableConfig,
 } from "./schedule-table-config";
+import { useScheduleLoader } from "./use-schedule-loader";
 
 export default function SchedulePage() {
   const { t, language } = useLocale();
   const canEdit = useCan(CAPABILITIES.SCHEDULE_MANAGE);
-  // schedule:manage implies read; a read-only holder gets the staff table
-  // without any edit, create, delete or reorder controls.
+  // schedule:manage implies read; read-only holders get the staff table.
   const canRead = useCan(CAPABILITIES.SCHEDULE_READ) || canEdit;
 
   const [items, setItems] = useState<PublicScheduleItem[] | null>(null);
@@ -127,25 +127,14 @@ export default function SchedulePage() {
     [tableConfig, setTableConfig],
   );
 
-  const load = useCallback(() => {
-    setError(null);
-    // SCHEDULE_READ and SCHEDULE_MANAGE may load this management
-    // listing. Participants use /timetable, which owns the public feed.
-    logisticsApi
-      .schedule()
-      .then((r) => {
-        setItems(r.items);
-        setSelectedIds(new Set());
-      })
-      .catch((err) => {
-        setError(apiErrorText(err, t, t("couldNotLoadSchedule")));
-      });
-  }, [t]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (canRead) load(); // Data fetch when capability becomes available; load() callback is stable.
-  }, [canRead, load]);
+  const load = useScheduleLoader({
+    canRead,
+    t,
+    setItems,
+    setError,
+    setSelectedIds,
+    setEditingItem,
+  });
 
   const updateItem = useCallback((id: number, patch: Partial<PublicScheduleItem>) => {
     setItems((prev) => prev?.map((it) => (it.id === id ? { ...it, ...patch } : it)) ?? prev);

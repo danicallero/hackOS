@@ -76,6 +76,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { getFoodIntolerances, useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { groupApplicationFields } from "@/lib/application-field-groups";
@@ -252,10 +253,9 @@ function exportAnswers(
   return Promise.all([
     loadNames("/api/public/universities", "universities", idsFor("university")),
     loadNames("/api/public/degrees", "degrees", idsFor("degree")),
-    api
-      .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
+    getFoodIntolerances()
       .then(
-        ({ intolerances }) =>
+        (intolerances) =>
           new Map(
             intolerances.map((intolerance) => [intolerance.id, pickText(intolerance.label, lang)]),
           ),
@@ -451,7 +451,7 @@ export function ReviewModal({
 
   const [staffNotes, setStaffNotes] = useState(response.staff_notes ?? "");
   const [savingNotes, setSavingNotes] = useState(false);
-  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
+  const { intolerances } = useFoodIntolerances();
 
   const hasLogisticsFields = askShirtSize || askFoodIntolerances;
   const logisticsFields = logisticsAnswerFields(askShirtSize, askFoodIntolerances, intolerances);
@@ -465,12 +465,6 @@ export function ReviewModal({
   };
   const files = applicationFiles(answerFields, answerValues, lang);
 
-  useEffect(() => {
-    api
-      .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
-      .then((res) => setIntolerances(res.intolerances))
-      .catch(() => {});
-  }, []);
   // Seeded straight from response.reviews (already returned by both the list
   // and detail endpoints) — no separate fetch needed to hydrate the reviewer's
   // own row on open.

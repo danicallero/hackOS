@@ -10,7 +10,7 @@ import { scheduleItemToForm as sharedScheduleItemToForm } from "@hackos/shared/s
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { PublicationControls } from "@/components/common/publication-controls";
 import { SectionCard } from "@/components/common/section-card";
@@ -138,6 +138,48 @@ export function cleanScheduleForm(form: ScheduleInput): ScheduleInput {
   };
 }
 
+function sameValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/** Merge a live server snapshot into the schedule editor without replacing fields edited locally. */
+export function mergeScheduleRefresh(
+  current: ScheduleInput,
+  previous: ScheduleInput,
+  next: ScheduleInput,
+): ScheduleInput {
+  const merged = { ...next };
+  for (const key of Object.keys(previous) as Array<keyof ScheduleInput>) {
+    if (!sameValue(current[key], previous[key])) {
+      Object.assign(merged, { [key]: current[key] });
+    }
+  }
+  return merged;
+}
+
+/** Preserve edited translation fields while accepting untouched values from a live snapshot. */
+export function mergeScheduleTranslationsRefresh(
+  current: ScheduleTranslations,
+  previous: ScheduleTranslations,
+  next: ScheduleTranslations,
+): ScheduleTranslations {
+  const merged: ScheduleTranslations = { ...next };
+  for (const language of LANGUAGES) {
+    const currentLocale = current[language] ?? {};
+    const previousLocale = previous[language] ?? {};
+    const nextLocale = { ...(merged[language] ?? {}) };
+    for (const field of ["title", "description"] as const) {
+      if (!sameValue(currentLocale[field], previousLocale[field])) {
+        if (field === "title") nextLocale.title = currentLocale.title;
+        else nextLocale.description = currentLocale.description;
+      }
+    }
+    if (Object.keys(nextLocale).length > 0) merged[language] = nextLocale;
+    else delete merged[language];
+  }
+  return merged;
+}
+
 export function ScheduleFormModal({
   open,
   onOpenChange,
@@ -182,16 +224,42 @@ export function ScheduleFormModal({
   const [translateAvailable, setTranslateAvailable] = useState(false);
   const [translating, setTranslating] = useState(false);
   const [translationsOpen, setTranslationsOpen] = useState(false);
+  const previousInitialRef = useRef({
+    scheduleId,
+    initial,
+    translations: initialTranslations ?? {},
+  });
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setValues(initial); // Reset form state when editing different item or switching create/edit mode.
-    setAdvancedOpen(false);
-    setTranslationsOpen(false);
-    setScheduledPublish(Boolean(initial.publishAt));
-    setPendingOwners([]);
-    setTranslations(initialTranslations ?? {});
-  }, [initial, initialTranslations]);
+    const previous = previousInitialRef.current;
+    const nextTranslations = initialTranslations ?? {};
+    if (previous.scheduleId !== scheduleId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- switching records resets the editor to that record's server snapshot.
+      setValues(initial);
+      setAdvancedOpen(false);
+      setTranslationsOpen(false);
+      setScheduledPublish(Boolean(initial.publishAt));
+      setPendingOwners([]);
+      setTranslations(nextTranslations);
+    } else if (
+      !sameValue(previous.initial, initial) ||
+      !sameValue(previous.translations, nextTranslations)
+    ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- live refresh updates untouched fields while preserving local edits.
+      setValues((current) => mergeScheduleRefresh(current, previous.initial, initial));
+      setTranslations((current) =>
+        mergeScheduleTranslationsRefresh(current, previous.translations, nextTranslations),
+      );
+      setScheduledPublish((current) =>
+        current !== Boolean(previous.initial.publishAt) ? current : Boolean(initial.publishAt),
+      );
+    }
+    previousInitialRef.current = {
+      scheduleId,
+      initial,
+      translations: nextTranslations,
+    };
+  }, [initial, initialTranslations, scheduleId]);
 
   useEffect(() => {
     let cancelled = false;
