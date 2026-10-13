@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { LibraryToolbar } from "./library-toolbar";
@@ -52,7 +53,7 @@ export function DegreesManager() {
       setEntries(result.degrees);
       setError(null);
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : t("couldNotLoadDirectory"));
+      setError(apiErrorText(cause, t, t("couldNotLoadDirectory")));
     } finally {
       setLoading(false);
     }
@@ -75,10 +76,7 @@ export function DegreesManager() {
       setEditing(undefined);
       await load();
     } catch (cause) {
-      toast.error(
-        cause instanceof ApiError ? cause.message : t("couldNotSaveDegree"),
-        t("toastSaveDegree"),
-      );
+      toast.error(apiErrorText(cause, t, t("couldNotSaveDegree")), t("toastSaveDegree"));
     } finally {
       setSaving(false);
     }
@@ -92,10 +90,7 @@ export function DegreesManager() {
       setDeleting(null);
       await load();
     } catch (cause) {
-      toast.error(
-        cause instanceof ApiError ? cause.message : t("couldNotDeleteDegree"),
-        t("toastDeleteDegree"),
-      );
+      toast.error(apiErrorText(cause, t, t("couldNotDeleteDegree")), t("toastDeleteDegree"));
     } finally {
       setSaving(false);
     }
@@ -120,9 +115,7 @@ export function DegreesManager() {
       setNormalizationTargetId("");
       await load();
     } catch (cause) {
-      setNormalizationError(
-        cause instanceof ApiError ? cause.message : t("couldNotNormalizeDegrees"),
-      );
+      setNormalizationError(apiErrorText(cause, t, t("couldNotNormalizeDegrees")));
     } finally {
       setNormalizing(false);
     }

@@ -34,7 +34,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
 import { getEventTimeZone } from "@/lib/event-time";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -210,10 +211,7 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
       toast.success(t("saved"), { compactTitle: t("toastEventSettings") });
     } catch (err) {
       setSaveState("error");
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
-        t("toastEventSettings"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveEventSettings")), t("toastEventSettings"));
     }
   }
 

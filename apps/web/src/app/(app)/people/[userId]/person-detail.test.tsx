@@ -163,7 +163,7 @@ describe("PersonDetail (#934, #935)", () => {
   it("keeps a failed load in place with a retry", async () => {
     person = new ApiError(500, "internal", "Server down");
     await render();
-    expect(container.querySelector("[role=alert]")?.textContent).toContain("Server down");
+    expect(container.querySelector("[role=alert]")?.textContent).toContain("apiErrorServer");
     person = entry({ displayName: "Back again" });
     const retry = [...container.querySelectorAll("button")].find((b) => b.textContent === "retry");
     await act(async () => retry?.click());

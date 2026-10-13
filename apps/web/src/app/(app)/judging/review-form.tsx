@@ -212,7 +212,7 @@ export function ReviewForm({
         : Promise.resolve(null),
     ])
       .catch((err) => {
-        if (!cancelled) setSaveError(errorMessage(err, t("couldNotLoadReview")));
+        if (!cancelled) setSaveError(errorMessage(err, t, t("couldNotLoadReview")));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -348,7 +348,7 @@ export function ReviewForm({
       } catch (err) {
         if (currentEntryRef.current !== entryId) return;
         const fallback = t("couldNotSaveReview");
-        const message = errorMessage(err, fallback);
+        const message = errorMessage(err, t, fallback);
         setSaveError(message);
       } finally {
         savingRef.current = false;

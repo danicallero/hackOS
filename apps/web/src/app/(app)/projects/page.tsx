@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { listRepos } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
@@ -152,7 +152,7 @@ export default function ProjectsPage() {
       // A failed background refresh keeps the list (#1012).
       if (!failed(err)) return;
       setRepos([]);
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadProjects"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadProjects")));
     } finally {
       setLoading(false);
     }

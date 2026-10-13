@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
+import { errorText } from "@/lib/api-error-text";
 import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { clearAccountRemovalProgress } from "@/lib/privacy-removal";
@@ -93,7 +94,7 @@ export function PendingRemovalScreen({
         setCancelOpen(false);
         await refresh();
       } else {
-        setError(cause instanceof Error ? cause.message : t("accountRemovalCancelError"));
+        setError(errorText(cause, t, t("accountRemovalCancelError")));
       }
     } finally {
       setCancelling(false);
@@ -109,7 +110,7 @@ export function PendingRemovalScreen({
       if (result.error) throw new Error(result.error.message || t("couldNotSignOut"));
       window.location.assign("/login");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("couldNotSignOut"));
+      setError(errorText(cause, t, t("couldNotSignOut")));
       setSigningOut(false);
     }
   }

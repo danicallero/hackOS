@@ -22,7 +22,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   type AccountRemovalEligibility,
@@ -188,10 +189,7 @@ function useAccountRemoval(user: UserDetail) {
       else toast.success(message, { compactTitle: t("toastCloseAccount") });
       router.push("/users");
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRemoveAccount"),
-        t("toastCloseAccount"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRemoveAccount")), t("toastCloseAccount"));
       setPending(false);
     }
   }

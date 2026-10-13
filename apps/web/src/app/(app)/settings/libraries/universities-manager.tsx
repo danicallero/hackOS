@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { LibraryToolbar } from "./library-toolbar";
@@ -84,7 +85,7 @@ export function UniversitiesManager() {
     } catch (err) {
       // A failed background refresh keeps the list (#1012).
       if (!failed(err)) return;
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadDirectory"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadDirectory")));
     } finally {
       setLoading(false);
     }
@@ -121,10 +122,7 @@ export function UniversitiesManager() {
       setEditing(undefined);
       await load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveUniversity"),
-        t("toastSaveUniversity"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveUniversity")), t("toastSaveUniversity"));
     }
   }
 
@@ -141,9 +139,7 @@ export function UniversitiesManager() {
         err instanceof ApiError &&
           (err.details as { reason?: string } | undefined)?.reason === "university_in_use"
           ? t("universityInUse")
-          : err instanceof ApiError
-            ? err.message
-            : t("couldNotDeleteUniversity"),
+          : apiErrorText(err, t, t("couldNotDeleteUniversity")),
         t("deleteUniversityTitle"),
       );
     } finally {
@@ -171,9 +167,7 @@ export function UniversitiesManager() {
       setNormalizationTargetId("");
       await load();
     } catch (err) {
-      setNormalizationError(
-        err instanceof ApiError ? err.message : t("couldNotNormalizeUniversities"),
-      );
+      setNormalizationError(apiErrorText(err, t, t("couldNotNormalizeUniversities")));
     } finally {
       setNormalizing(false);
     }

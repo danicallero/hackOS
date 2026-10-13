@@ -24,7 +24,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { parseCoordinate, parseCoordinatePair } from "@/lib/coords";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
@@ -166,10 +167,7 @@ export function VenueTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
       toast.success(t("saved"), { compactTitle: t("toastVenueSettings") });
     } catch (err) {
       setSaveState("error");
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
-        t("toastVenueSettings"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveEventSettings")), t("toastVenueSettings"));
     }
   }
 

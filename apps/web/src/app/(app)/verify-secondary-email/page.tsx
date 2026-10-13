@@ -9,7 +9,8 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
@@ -50,7 +51,7 @@ function VerifySecondaryInner() {
       } catch (err) {
         setState({
           status: "error",
-          message: err instanceof ApiError ? err.message : t("couldNotVerifyLink"),
+          message: apiErrorText(err, t, t("couldNotVerifyLink")),
         });
       }
     },
@@ -81,7 +82,7 @@ function VerifySecondaryInner() {
       .catch((err) =>
         setState({
           status: "error",
-          message: err instanceof ApiError ? err.message : t("couldNotVerifyLink"),
+          message: apiErrorText(err, t, t("couldNotVerifyLink")),
         }),
       );
   }, [token, t, runVerify]);

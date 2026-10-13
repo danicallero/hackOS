@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePersistedState } from "@/hooks/use-persisted-state";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { getActionLabel } from "@/lib/audit-labels";
 import { fromDatetimeLocal, shortDateTimeFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -185,7 +185,7 @@ export default function AuditPage() {
         if (cancelled) return;
         setItems([]);
         setTotal(0);
-        const message = err instanceof ApiError ? err.message : t("couldNotLoadAuditLog");
+        const message = apiErrorText(err, t, t("couldNotLoadAuditLog"));
         setLoadError(message);
         toast.error(message, t("toastAudit"));
       })

@@ -21,7 +21,8 @@ import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { type ApplicationForm, fmtDateTime, grantedRoleNameLabel, windowState } from "./lib";
@@ -50,7 +51,7 @@ export default function ApplicationsPage() {
     } catch (err) {
       // A failed background refresh keeps the list (#1012).
       if (!failed(err)) return;
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadApplicationForms"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadApplicationForms")));
     } finally {
       setLoading(false);
     }

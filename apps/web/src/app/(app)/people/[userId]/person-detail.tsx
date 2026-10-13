@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { apiAssetUrl, type DirectoryEntry } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
@@ -86,7 +87,7 @@ function PersonReader({ userId }: { userId: number }) {
         else {
           setState({
             status: "error",
-            message: err instanceof ApiError ? err.message : t("couldNotLoadPerson"),
+            message: apiErrorText(err, t, t("couldNotLoadPerson")),
           });
         }
       });

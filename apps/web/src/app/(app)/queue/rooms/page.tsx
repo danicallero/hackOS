@@ -15,6 +15,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   assignRoomEnterprise,
@@ -82,7 +83,7 @@ export default function QueueRoomsPage({ embedded = false }: { embedded?: boolea
         setLoadError(null);
         setRooms([]);
       } else {
-        const message = err instanceof ApiError ? err.message : t("couldNotLoadRoomAdminData");
+        const message = apiErrorText(err, t, t("couldNotLoadRoomAdminData"));
         setLoadError(message);
         toast.error(message, t("rooms"));
       }
@@ -98,7 +99,7 @@ export default function QueueRoomsPage({ embedded = false }: { embedded?: boolea
         const roomAssignments = await getRoomAssignments(roomId);
         setAssignments((current) => ({ ...current, [roomId]: roomAssignments }));
       } catch (err) {
-        const message = err instanceof ApiError ? err.message : t("couldNotLoadRoomDetails");
+        const message = apiErrorText(err, t, t("couldNotLoadRoomDetails"));
         setRoomDetailsError(message);
         toast.error(message, t("rooms"));
       }
@@ -172,7 +173,7 @@ export default function QueueRoomsPage({ embedded = false }: { embedded?: boolea
         );
         return true;
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateRoom"), t("saveRoom"));
+        toast.error(apiErrorText(err, t, t("couldNotUpdateRoom")), t("saveRoom"));
         return false;
       }
     },
@@ -189,7 +190,7 @@ export default function QueueRoomsPage({ embedded = false }: { embedded?: boolea
       setSelectedRoomId(created.id);
       setPanelMode("edit");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateRoom"), t("createRoom"));
+      toast.error(apiErrorText(err, t, t("couldNotCreateRoom")), t("createRoom"));
     } finally {
       setDraftSaving(false);
     }
@@ -203,7 +204,7 @@ export default function QueueRoomsPage({ embedded = false }: { embedded?: boolea
         try {
           await assignRoomEnterprise(created.id, Number(values.enterpriseId));
         } catch (err) {
-          assignmentError = err instanceof ApiError ? err.message : t("couldNotAssignEnterprise");
+          assignmentError = apiErrorText(err, t, t("couldNotAssignEnterprise"));
         }
       }
       toast.success(t("roomCreated"), { compactTitle: t("createRoom") });

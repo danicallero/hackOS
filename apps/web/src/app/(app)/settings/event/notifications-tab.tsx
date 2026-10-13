@@ -17,7 +17,8 @@ import { SectionCard } from "@/components/common/section-card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { TimingField } from "./timing-field";
@@ -67,7 +68,7 @@ export function NotificationsTab({ onDirtyChange }: { onDirtyChange: (dirty: boo
       setDraft(next);
       setStatus("ready");
     } catch (err) {
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadNotificationSettings"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadNotificationSettings")));
       setStatus("error");
     }
   }, [t]);
@@ -98,7 +99,7 @@ export function NotificationsTab({ onDirtyChange }: { onDirtyChange: (dirty: boo
     } catch (err) {
       setSaveState("error");
       toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveNotificationSettings"),
+        apiErrorText(err, t, t("couldNotSaveNotificationSettings")),
         t("notificationsAutomationTitle"),
       );
     } finally {

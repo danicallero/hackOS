@@ -6,7 +6,8 @@ import { Modal } from "@/components/common/modal";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   LABEL_MAX,
@@ -72,11 +73,7 @@ export function LinkNfcDialog({
     } catch (err) {
       const inUse = standTagInUseKey(err);
       if (inUse) setError(t(inUse));
-      else
-        toast.error(
-          err instanceof ApiError ? err.message : t("standTagCouldNotAdd"),
-          t("standTagLinkNfc"),
-        );
+      else toast.error(apiErrorText(err, t, t("standTagCouldNotAdd")), t("standTagLinkNfc"));
     } finally {
       setPending(false);
     }

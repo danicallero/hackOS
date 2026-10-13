@@ -130,7 +130,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
       setFindResults(results);
     } catch (err) {
       setFindResults(null);
-      setFindError(errorMessage(err, t("userSearchFailed")));
+      setFindError(errorMessage(err, t, t("userSearchFailed")));
     } finally {
       setFindBusy(false);
     }
@@ -216,7 +216,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
         setRepeatPrompt(err.details as ActivityScanResult);
       } else {
         setTransactionState("attention");
-        setError(errorMessage(err, t("scanFailed")));
+        setError(errorMessage(err, t, t("scanFailed")));
       }
     } finally {
       setBusy(false);
@@ -316,7 +316,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
             setTransactionState("attention");
             continue;
           }
-          const message = errorMessage(err, t("offlineSyncFailed"));
+          const message = errorMessage(err, t, t("offlineSyncFailed"));
           const businessRejection =
             err instanceof ApiError &&
             err.status >= 400 &&

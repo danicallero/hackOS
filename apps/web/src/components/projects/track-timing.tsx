@@ -5,7 +5,8 @@ import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 
 type Timing = {
@@ -42,7 +43,7 @@ export function TrackTiming({
       setPreparation(String(next.preparationSeconds / 60));
       setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t("couldNotLoadChallenge"));
+      setError(apiErrorText(e, t, t("couldNotLoadChallenge")));
     }
   }, [challengeId, t]);
   useEffect(() => {
@@ -77,7 +78,7 @@ export function TrackTiming({
                 onSaved?.();
                 setOpen(false);
               } catch (e) {
-                setError(e instanceof ApiError ? e.message : t("couldNotSaveProject"));
+                setError(apiErrorText(e, t, t("couldNotSaveProject")));
               } finally {
                 setBusy(false);
               }

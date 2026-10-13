@@ -24,7 +24,8 @@ import { PresentationStatus } from "@/components/projects/presentation-status";
 import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   addRepoChallenge,
@@ -101,10 +102,7 @@ export default function ProjectDetailPage() {
         }
       }
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadProject"),
-        t("projectLabel"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLoadProject")), t("projectLabel"));
       setRepo(null);
     } finally {
       setLoading(false);
@@ -334,9 +332,7 @@ export default function ProjectDetailPage() {
                                 await load();
                               } catch (err) {
                                 toast.error(
-                                  err instanceof ApiError
-                                    ? err.message
-                                    : t("couldNotRemoveChallenge"),
+                                  apiErrorText(err, t, t("couldNotRemoveChallenge")),
                                   t("toastWithdrawChallenge"),
                                 );
                               }
@@ -371,7 +367,7 @@ export default function ProjectDetailPage() {
                                 await load();
                               } catch (err) {
                                 toast.error(
-                                  err instanceof ApiError ? err.message : t("couldNotRemovePrize"),
+                                  apiErrorText(err, t, t("couldNotRemovePrize")),
                                   t("toastRemovePrize"),
                                 );
                               }

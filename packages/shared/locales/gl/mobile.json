@@ -473,7 +473,6 @@
   "scheduleErrorScanNeedsParticipants": "Unha actividade que esixe escaneo debe ser visible para os participantes.",
   "scheduleErrorNotFound": "Esta actividade xa non existe.",
   "scheduleErrorForbidden": "Non tes permiso para editar a axenda.",
-  "scheduleSaveFailedReason": "Non se puido gardar a actividade: {reason}",
   "scheduleDeleteError": "Non se puido eliminar a actividade. Revisa a conexión e téntao de novo.",
   "translationsAndSettings": "Traducións e axustes técnicos",
   "scheduleTitleLabel": "Título",

@@ -560,6 +560,20 @@ returns `details.fieldReasons` (field key → `FIELD_ERROR_REASONS` value such a
 `required`, `must_be_number`, `too_short`) next to the legacy `details.fields`
 message map, which is kept unchanged for installed clients.
 
+**Clients never show `message` (#1013).** Each reason a user can trigger has
+copy in all three locales under `apiError_<reason>` in
+`packages/shared/locales/*/common.json`. Web resolves it with
+`apiErrorText(err, t, fallback)` (`apps/web/src/lib/api-error-text.ts`) and
+mobile with the same helper in `apps/mobile/lib/api-error-reason.ts`: reason
+copy first, then localized generic copy by status (401/403/429/5xx), then the
+caller's own localized fallback. `showErrorToast` does the same for
+`ApiError`s. `pnpm check:api-error-messages` (part of `pnpm lint`) rejects
+`instanceof ApiError ? x.message` in UI code. When adding a reason a user can
+trigger, add the `apiError_<reason>` entry in es/gl/en; the web test
+`api-error-text.test.ts` fails if a shared reason lacks copy. The offline
+scanner queue stores a failure code (`<reason>` or `http_<status>`/`network`)
+rather than text and localizes it on display.
+
 Existing English messages are intentionally unchanged until the minimum
 supported mobile build reads reasons.
 

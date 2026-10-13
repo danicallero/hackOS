@@ -15,7 +15,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import type {
@@ -93,7 +94,7 @@ export function InviteUserDialog({
       );
     } catch (cause) {
       setRoles([]);
-      setRolesError(cause instanceof ApiError ? cause.message : t("couldNotLoadRoles"));
+      setRolesError(apiErrorText(cause, t, t("couldNotLoadRoles")));
     } finally {
       setRolesLoading(false);
     }
@@ -109,7 +110,7 @@ export function InviteUserDialog({
       setEnterprises(data.enterprises);
     } catch (cause) {
       setEnterprises([]);
-      setEnterprisesError(cause instanceof ApiError ? cause.message : t("couldNotLoadEnterprises"));
+      setEnterprisesError(apiErrorText(cause, t, t("couldNotLoadEnterprises")));
     } finally {
       setEnterprisesLoading(false);
     }
@@ -191,7 +192,7 @@ export function InviteUserDialog({
       }
       await onChanged?.();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : t("couldNotCreateInvite"));
+      setError(apiErrorText(cause, t, t("couldNotCreateInvite")));
     } finally {
       setPending(false);
     }

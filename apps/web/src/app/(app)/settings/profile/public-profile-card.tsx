@@ -27,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api, apiUpload } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import type { DirectoryEntry } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
@@ -148,7 +149,7 @@ export function PublicProfileCard() {
     return (
       <SectionCard icon={AddressBookIcon} title={t("publicProfileTitle")}>
         <ContextualError
-          message={error instanceof ApiError ? error.message : t("couldNotLoadPublicProfile")}
+          message={apiErrorText(error, t, t("couldNotLoadPublicProfile"))}
           onRetry={() => refetch("retry")}
         />
       </SectionCard>
@@ -200,7 +201,7 @@ export function PublicProfileCard() {
       setEdits(null);
       toast.success(t("publicProfileSaved"), { compactTitle: t("toastSavePublicProfile") });
     } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : t("couldNotSavePublicProfile"));
+      setSaveError(apiErrorText(err, t, t("couldNotSavePublicProfile")));
       showErrorToast(
         err instanceof ApiError ? err : new Error(t("couldNotSavePublicProfile")),
         t("toastSavePublicProfile"),
@@ -340,7 +341,7 @@ function CvField({
       onSaved(await apiUpload<PublicProfile>(OWN_CV_PATH, body));
       toast.success(t("cvUploaded"), { compactTitle: t("toastUploadCv") });
     } catch (err) {
-      fail(err instanceof ApiError ? err.message : t("couldNotUploadCv"), t("toastUploadCv"));
+      fail(apiErrorText(err, t, t("couldNotUploadCv")), t("toastUploadCv"));
     } finally {
       setBusy(null);
       if (inputRef.current) inputRef.current.value = "";
@@ -354,7 +355,7 @@ function CvField({
       onSaved(await api.delete<PublicProfile>(OWN_CV_PATH));
       toast.success(t("cvRemoved"), { compactTitle: t("toastRemoveCv") });
     } catch (err) {
-      fail(err instanceof ApiError ? err.message : t("couldNotRemoveCv"), t("toastRemoveCv"));
+      fail(apiErrorText(err, t, t("couldNotRemoveCv")), t("toastRemoveCv"));
     } finally {
       setBusy(null);
     }

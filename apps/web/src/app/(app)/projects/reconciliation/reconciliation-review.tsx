@@ -18,7 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   claimProject,
@@ -287,7 +287,7 @@ function AdminLink({
         if (live) setGroups(result.groups);
       })
       .catch((e) => {
-        if (live) setError(e instanceof ApiError ? e.message : t("couldNotLoadProjects"));
+        if (live) setError(apiErrorText(e, t, t("couldNotLoadProjects")));
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -348,7 +348,7 @@ function AdminLink({
             await onChanged();
             setSelected(null);
           } catch (e) {
-            setError(e instanceof ApiError ? e.message : t("couldNotSaveProject"));
+            setError(apiErrorText(e, t, t("couldNotSaveProject")));
           } finally {
             setBusy(false);
           }
