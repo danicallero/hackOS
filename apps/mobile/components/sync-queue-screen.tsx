@@ -8,7 +8,7 @@ import {
   type TextStyle,
   View,
 } from "react-native";
-
+import { FilterMenu } from "@/components/filter-menu";
 import {
   ActionButton,
   EmptyState,
@@ -26,7 +26,6 @@ import {
   scannerOperationLabel,
   subjectLabel,
 } from "@/components/scanner-transaction-status";
-import { SegmentedControl } from "@/components/segmented-control";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
@@ -54,7 +53,7 @@ export default function SyncQueueScreen() {
   const sync = useScannerSync();
   const scrollRef = useRef<ScrollView>(null);
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
-  const [filter, setFilter] = useState<QueueFilter>("all");
+  const [filters, setFilters] = useState<Exclude<QueueFilter, "all">[]>([]);
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [activities, setActivities] = useState<ScannerActivity[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -88,15 +87,15 @@ export default function SyncQueueScreen() {
 
   const queue = useMemo(() => {
     const current = [...sync.queue].reverse();
-    if (filter === "errors") {
-      return current.filter((scan) => scan.status === "failed" || scan.lastError);
-    }
-    if (filter === "waiting") return current.filter((scan) => scan.status === "pending");
-    if (filter === "confirmed") {
-      return current.filter((scan) => scan.status === "acknowledged");
-    }
-    return current;
-  }, [filter, sync.queue]);
+    if (filters.length === 0) return current;
+    return current.filter(
+      (scan) =>
+        (filters.includes("errors") && (scan.status === "failed" || Boolean(scan.lastError))) ||
+        (filters.includes("waiting") && scan.status === "pending") ||
+        (filters.includes("confirmed") && scan.status === "acknowledged"),
+    );
+  }, [filters, sync.queue]);
+  const onlyErrors = filters.length === 1 && filters[0] === "errors";
 
   // O(1) lookups shared by every row instead of each one scanning the full
   // roster/activity list/queue on its own — this screen can show hundreds of
@@ -232,7 +231,14 @@ export default function SyncQueueScreen() {
         ) : null}
       </Section>
 
-      <View style={{ gap: 8 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+        }}
+      >
         <Text
           accessibilityRole="header"
           style={{
@@ -244,28 +250,47 @@ export default function SyncQueueScreen() {
         >
           {t("scannerCurrentQueue")}
         </Text>
-        <SegmentedControl
-          label={t("scannerQueueFilter")}
-          values={[
-            t("scannerQueueFilterAll"),
-            t("scannerQueueFilterErrors"),
-            t("scannerQueueFilterWaiting"),
-            t("scannerQueueFilterConfirmed"),
+        <FilterMenu
+          accessibilityLabel={t("scannerQueueFilter")}
+          active={filters.length > 0}
+          items={[
+            { id: "all", label: t("scannerQueueFilterAll"), selected: filters.length === 0 },
+            {
+              id: "errors",
+              label: t("scannerQueueFilterErrors"),
+              selected: filters.includes("errors"),
+              icon: "exclamationmark.triangle",
+            },
+            {
+              id: "waiting",
+              label: t("scannerQueueFilterWaiting"),
+              selected: filters.includes("waiting"),
+              icon: "clock",
+            },
+            {
+              id: "confirmed",
+              label: t("scannerQueueFilterConfirmed"),
+              selected: filters.includes("confirmed"),
+              icon: "checkmark.circle",
+            },
           ]}
-          selectedIndex={FILTERS.indexOf(filter)}
-          onChange={(index) => setFilter(FILTERS[index] ?? "all")}
+          onSelect={(id) => {
+            if (id === "all") setFilters([]);
+            else if (id === "errors" || id === "waiting" || id === "confirmed")
+              setFilters((current) =>
+                current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+              );
+          }}
         />
       </View>
 
       {queue.length === 0 ? (
         <Section>
           <EmptyState
-            icon={filter === "errors" ? "checkmark.circle" : "arrow.triangle.2.circlepath"}
-            title={filter === "errors" ? t("scannerNoSyncErrors") : t("scannerNoQueue")}
+            icon={onlyErrors ? "checkmark.circle" : "arrow.triangle.2.circlepath"}
+            title={onlyErrors ? t("scannerNoSyncErrors") : t("scannerNoQueue")}
             description={
-              filter === "errors"
-                ? t("scannerNoSyncErrorsDescription")
-                : t("scannerNoQueueDescription")
+              onlyErrors ? t("scannerNoSyncErrorsDescription") : t("scannerNoQueueDescription")
             }
           />
         </Section>
@@ -312,7 +337,6 @@ export default function SyncQueueScreen() {
   );
 }
 
-const FILTERS: QueueFilter[] = ["all", "errors", "waiting", "confirmed"];
 const numberStyle: TextStyle = { fontVariant: ["tabular-nums"], fontWeight: "700" };
 
 function queueHealth(queue: PendingScan[]) {

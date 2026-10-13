@@ -88,7 +88,6 @@ const ANDROID_SYMBOL_NAMES = {
   keyboard: "keyboard",
   "line.3.horizontal": "drag_handle",
   "line.3.horizontal.decrease": "filter_list",
-  "line.3.horizontal.decrease.circle.fill": "filter_alt",
   lanyardcard: "badge",
   link: "link",
   "list.bullet": "list",

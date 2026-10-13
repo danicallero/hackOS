@@ -1,4 +1,3 @@
-import { MenuView } from "@expo/ui/community/menu";
 import {
   useFocusEffect,
   useLocalSearchParams,
@@ -9,13 +8,12 @@ import {
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { FilterMenu } from "@/components/filter-menu";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
-  AndroidFilterMenu,
   EmptyState,
   LegacyHeaderIconButton,
   LegacyScreenHeader,
-  MenuTriggerIcon,
   Separator,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -56,7 +54,7 @@ export function PeopleDirectoryScreen() {
   const sync = useScannerSync();
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(autoSearch === "1");
-  const [roleFilter, setRoleFilter] = useState<"all" | string>("all");
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -79,6 +77,40 @@ export function PeopleDirectoryScreen() {
     const options = roleFilterOptionsFromRoster(directory, (role) => roleDisplayName(role, t));
     return [{ value: "all" as const, label: t("roleAll"), icon: ROLE_FILTER_ALL_ICON }, ...options];
   }, [directory, t]);
+
+  const selectRole = useCallback((id: string) => {
+    setSelectedRoles((current) =>
+      id === "all"
+        ? []
+        : current.includes(id)
+          ? current.filter((role) => role !== id)
+          : [...current, id],
+    );
+  }, []);
+  const filterItems = useMemo(
+    () =>
+      roleFilters.map((filter) => ({
+        id: filter.value,
+        label: filter.label,
+        icon: filter.icon,
+        selected:
+          filter.value === "all"
+            ? selectedRoles.length === 0
+            : selectedRoles.includes(filter.value),
+      })),
+    [roleFilters, selectedRoles],
+  );
+  const filterMenu = useMemo(
+    () => (
+      <FilterMenu
+        accessibilityLabel={t("scannerFilterGroups")}
+        active={selectedRoles.length > 0}
+        items={filterItems}
+        onSelect={selectRole}
+      />
+    ),
+    [filterItems, selectRole, selectedRoles.length, t],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -157,29 +189,9 @@ export function PeopleDirectoryScreen() {
         onChangeText: (event: { nativeEvent: { text: string } }) =>
           setQuery(event.nativeEvent.text),
       },
-      headerRight: () => (
-        <MenuView
-          actions={roleFilters.map((filter) => ({
-            id: filter.value,
-            title: filter.label,
-            image: filter.icon,
-            state: roleFilter === filter.value ? "on" : "off",
-          }))}
-          onPressAction={({ nativeEvent }) => setRoleFilter(nativeEvent.event as typeof roleFilter)}
-        >
-          <SymbolView
-            name={
-              roleFilter === "all"
-                ? "line.3.horizontal.decrease"
-                : "line.3.horizontal.decrease.circle.fill"
-            }
-            tintColor={colors.accent}
-            size={19}
-          />
-        </MenuView>
-      ),
+      headerRight: () => filterMenu,
     });
-  }, [glassAvailable, navigation, roleFilter, roleFilters, t, usesListTitle]);
+  }, [glassAvailable, navigation, filterMenu, t, usesListTitle]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().replace(/\s+/g, " ").toLocaleLowerCase();
@@ -188,7 +200,11 @@ export function PeopleDirectoryScreen() {
       // list (unlike the plain scan directory, which lists everyone) only
       // shows people who already have one.
       if (activityId && !person.badgeId) return false;
-      if (roleFilter !== "all" && person.role !== roleFilter) return false;
+      if (
+        selectedRoles.length > 0 &&
+        (person.role === null || !selectedRoles.includes(person.role))
+      )
+        return false;
       if (!needle) return true;
       return [
         person.name,
@@ -203,7 +219,7 @@ export function PeopleDirectoryScreen() {
         .toLocaleLowerCase()
         .includes(needle);
     });
-  }, [directory, query, roleFilter, activityId, t]);
+  }, [directory, query, selectedRoles, activityId, t]);
 
   const openPerson = useCallback(
     (person: ScannerPerson) => {
@@ -231,56 +247,7 @@ export function PeopleDirectoryScreen() {
 
   const legacyHeader = !glassAvailable ? (
     <LegacyScreenHeader
-      actions={
-        process.env.EXPO_OS === "android" ? (
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            isInteractive
-            style={{ borderRadius: 22, height: 44, width: 44 }}
-          >
-            <AndroidFilterMenu
-              accessibilityLabel={t("scannerFilterGroups")}
-              items={roleFilters.map((filter) => ({
-                id: filter.value,
-                label: filter.label,
-                selected: roleFilter === filter.value,
-              }))}
-              onSelect={(id) => setRoleFilter(id as typeof roleFilter)}
-            />
-          </GlassView>
-        ) : (
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            isInteractive
-            style={{ borderRadius: 22, height: 44, width: 44 }}
-          >
-            <MenuView
-              actions={roleFilters.map((filter) => ({
-                id: filter.value,
-                title: filter.label,
-                image: filter.icon,
-                state: (roleFilter === filter.value ? "on" : "off") as "on" | "off",
-              }))}
-              onPressAction={({ nativeEvent }) =>
-                setRoleFilter(nativeEvent.event as typeof roleFilter)
-              }
-            >
-              <MenuTriggerIcon
-                icon={
-                  roleFilter === "all"
-                    ? "line.3.horizontal.decrease"
-                    : "line.3.horizontal.decrease.circle.fill"
-                }
-                accessibilityLabel={t("scannerFilterGroups")}
-                accessibilityState={{ selected: roleFilter !== "all" }}
-                tintColor={roleFilter === "all" ? colors.label : colors.accent}
-              />
-            </MenuView>
-          </GlassView>
-        )
-      }
+      actions={filterMenu}
       cancelLabel={t("cancel")}
       leading={
         <LegacyHeaderIconButton

@@ -177,7 +177,7 @@ silently substituting the default model.
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-10-01
+Date: 2026-10-13
 
 ### Trigger
 Composing detail pages, lists, or participant workflows.
@@ -196,7 +196,10 @@ Use open sections for related page content, with quiet hairlines where spacing
 alone leaves row ownership ambiguous. Removing cards does not mean removing
 all boundaries. Repeated inbox/list rows still need clear ownership: use quiet
 hairlines, restrained neutral washes and distinct subject/meta/body hierarchy.
-Validate with several adjacent records, not just one isolated item. Keep static metadata as text and secondary multi-record
+For operational screens, distinguish the main count from supporting metrics instead
+of giving every number an identical card. Group scanner actions into visible,
+bounded controls; replacing a camera must also reconsider how the freed space
+serves the operator. Validate with several adjacent records, not just one isolated item. Keep static metadata as text and secondary multi-record
 navigation available without making it the default.
 
 ### Validation

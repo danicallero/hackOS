@@ -129,6 +129,33 @@ describe("queue operations search (H29-H31)", () => {
     }
   });
 
+  it("combines room statuses and clears the selection with All", async () => {
+    const paused = { ...ROOMS[1], state: { is_paused: true } };
+    mockApiFetch.mockImplementation((path: string) => {
+      const rooms = [ROOMS[0], paused];
+      if (path === "/api/queue/rooms") return Promise.resolve(rooms.map(({ room }) => room));
+      return Promise.resolve(rooms.find((view) => view.room.id === Number(path.split("/")[4])));
+    });
+    await renderMobile(<QueueOperationsScreen />);
+    await waitFor(() => expect(screen.getByText("Aula 3.1")).toBeTruthy());
+    const select = async (id: string) => {
+      await act(async () => mockSetOptions.mock.calls.at(-1)?.[0].headerRight().props.onSelect(id));
+    };
+    await select("live");
+    expect(screen.queryByText("Aula 3.1")).toBeNull();
+    await select("paused");
+    expect(screen.getByText("Aula 3.1")).toBeTruthy();
+    expect(screen.getByText("Aula 3.0")).toBeTruthy();
+    await select("live");
+    expect(screen.queryByText("Aula 3.0")).toBeNull();
+    await search("daniel");
+    expect(screen.getByText("Aula 3.1")).toBeTruthy();
+    expect(screen.queryByText("Aula 3.0")).toBeNull();
+    await select("all");
+    expect(screen.getByText("Aula 3.0")).toBeTruthy();
+    expect(mockSetOptions.mock.calls.at(-1)?.[0].headerRight().props.active).toBe(false);
+  });
+
   it("falls back to the empty state, with no duplicate count line, when nothing matches", async () => {
     await renderMobile(<QueueOperationsScreen />);
     await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(ROOMS.length + 1));

@@ -61,6 +61,7 @@ jest.mock("expo-router", () => ({
 jest.mock("expo-router/stack", () => {
   const { Pressable } = require("react-native");
   const Toolbar = Object.assign(({ children }: { children?: unknown }) => children ?? null, {
+    Spacer: () => null,
     View: ({ children }: { children?: unknown }) => children ?? null,
     Button: ({
       accessibilityLabel,
@@ -251,7 +252,11 @@ function calls(path: string) {
 
 type NativeOptions = {
   headerRight?: () => React.ReactElement;
-  headerSearchBarOptions?: { onChangeText: (e: { nativeEvent: { text: string } }) => void };
+  headerSearchBarOptions?: {
+    onChangeText: (e: { nativeEvent: { text: string } }) => void;
+    onBlur: () => void;
+    onCancelButtonPress: () => void;
+  };
 };
 
 /** The options the last `setOptions` call left in place. */
@@ -456,10 +461,19 @@ describe("People", () => {
       expect.objectContaining({ headerLargeTitle: false, title: "" }),
     );
     expect(screen.getByRole("header", { name: "tabDiary" })).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("scheduleSearch"));
+    expect(nativeSearch()).toEqual(
+      expect.objectContaining({ placement: "stacked", allowToolbarIntegration: false }),
+    );
     await act(async () => nativeSearch()?.onChangeText({ nativeEvent: { text: "bea" } }));
     expect(screen.getByText("Bea R.")).toBeTruthy();
     expect(screen.queryByText("José P.")).toBeNull();
-    await act(async () => nativeSearch()?.onChangeText({ nativeEvent: { text: "" } }));
+    await act(async () => nativeSearch()?.onBlur());
+    expect(mockSetOptions.mock.calls.at(-1)?.[0].headerSearchBarOptions).toBeUndefined();
+    await fireEvent.press(screen.getByLabelText("scheduleSearch"));
+    await act(async () => nativeSearch()?.onCancelButtonPress());
+    expect(mockSetOptions.mock.calls.at(-1)?.[0].headerSearchBarOptions).toBeUndefined();
+    expect(screen.getByText("José P.")).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("diaryShowFavourites"));
     expect(screen.getByText("José P.")).toBeTruthy();
     expect(screen.queryByText("Bea R.")).toBeNull();

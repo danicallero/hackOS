@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { SearchBarCommands } from "react-native-screens";
 import { useAccountWallet, WalletModal } from "@/components/account-wallet";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
 import { CompanyAlbum, CompanySheet } from "@/components/company-album";
@@ -92,6 +93,7 @@ export function DiaryScreen() {
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const wallet = useAccountWallet();
   const scrollRef = useRef<ScrollView>(null);
+  const nativeSearch = useRef<SearchBarCommands>(null);
   // iOS rests at a negative offset under `contentInsetAdjustmentBehavior=
   // "automatic"`, so `y: 0` would leave the first rows under the status bar.
   // Only scroll when the list has moved from its true top.
@@ -402,13 +404,6 @@ export function DiaryScreen() {
     }
   }
 
-  const headerItems = (
-    <>
-      <FavouritesToggle visible={searchable} on={favouritesOnly} onToggle={toggleFavourites} />
-      <WalletToggle onToggle={wallet.toggle} />
-    </>
-  );
-
   useLayoutEffect(() => {
     if (!glassAvailable) {
       navigation.setOptions({ headerShown: false });
@@ -426,20 +421,37 @@ export function DiaryScreen() {
       headerTransparent: true,
       headerShadowVisible: false,
       // Removed on Companies: the native bar has no inert state.
-      headerSearchBarOptions: searchable
-        ? {
-            placeholder: t("diarySearchPlaceholder"),
-            autoCapitalize: "none",
-            hideWhenScrolling: true,
-            allowToolbarIntegration: false,
-            placement: "integratedButton",
-            onChangeText: (event: { nativeEvent: { text: string } }) =>
-              setQuery(event.nativeEvent.text),
-            onCancelButtonPress: () => setQuery(""),
-          }
-        : undefined,
+      headerSearchBarOptions:
+        searchable && searchOpen
+          ? {
+              ref: nativeSearch,
+              placeholder: t("diarySearchPlaceholder"),
+              autoCapitalize: "none",
+              hideWhenScrolling: true,
+              allowToolbarIntegration: false,
+              placement: "stacked",
+              onChangeText: (event: { nativeEvent: { text: string } }) =>
+                setQuery(event.nativeEvent.text),
+              onBlur: () => setSearchOpen(false),
+              onCancelButtonPress: () => {
+                setQuery("");
+                setSearchOpen(false);
+              },
+            }
+          : undefined,
     });
-  }, [glassAvailable, navigation, searchable, t]);
+  }, [glassAvailable, navigation, searchable, searchOpen, t]);
+
+  useEffect(() => {
+    if (!glassAvailable || !searchOpen) return;
+    let frame: number;
+    const focus = () => {
+      if (nativeSearch.current) nativeSearch.current.focus();
+      else frame = requestAnimationFrame(focus);
+    };
+    frame = requestAnimationFrame(focus);
+    return () => cancelAnimationFrame(frame);
+  }, [glassAvailable, searchOpen]);
 
   const noteInitial =
     noteTarget?.kind === "person"
@@ -623,6 +635,12 @@ export function DiaryScreen() {
         </Stack.Toolbar>
         {/* Native SF Symbol bar items, so the system draws the same circles as its search button. */}
         <Stack.Toolbar placement="right">
+          <Stack.Toolbar.Button
+            icon="wallet.pass"
+            separateBackground
+            accessibilityLabel={t("tabWallet")}
+            onPress={wallet.toggle}
+          />
           {searchable ? (
             <Stack.Toolbar.Button
               icon={favouritesOnly ? "star.fill" : "star"}
@@ -632,11 +650,13 @@ export function DiaryScreen() {
               onPress={toggleFavourites}
             />
           ) : null}
-          <Stack.Toolbar.Button
-            icon="wallet.pass"
-            accessibilityLabel={t("tabWallet")}
-            onPress={wallet.toggle}
-          />
+          {searchable ? (
+            <Stack.Toolbar.Button
+              icon="magnifyingglass"
+              accessibilityLabel={t("scheduleSearch")}
+              onPress={() => setSearchOpen(true)}
+            />
+          ) : null}
         </Stack.Toolbar>
         {overlays}
       </>
@@ -646,15 +666,41 @@ export function DiaryScreen() {
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       <LegacyScreenHeader
         actions={
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            isInteractive
-            style={{ borderRadius: 22, flexDirection: "row", height: 44 }}
-          >
-            {headerItems}
-          </GlassView>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <GlassView
+              colorScheme="auto"
+              glassEffectStyle="regular"
+              isInteractive
+              style={{ borderRadius: 22, height: 44, width: 44 }}
+            >
+              <WalletToggle onToggle={wallet.toggle} />
+            </GlassView>
+            {searchable ? (
+              <GlassView
+                colorScheme="auto"
+                glassEffectStyle="regular"
+                isInteractive
+                style={{ borderRadius: 22, flexDirection: "row", height: 44 }}
+              >
+                <FavouritesToggle visible on={favouritesOnly} onToggle={toggleFavourites} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("scheduleSearch")}
+                  onPress={() => setSearchOpen(true)}
+                  style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+                >
+                  <SymbolView
+                    accessible={false}
+                    name="magnifyingglass"
+                    size={19}
+                    tintColor={colors.label}
+                  />
+                </Pressable>
+              </GlassView>
+            ) : null}
+          </View>
         }
+        showSearchButton={false}
         cancelLabel={t("cancel")}
         onCloseSearch={() => {
           setSearchOpen(false);

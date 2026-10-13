@@ -2,8 +2,9 @@ import { EVENTS } from "@hackos/shared/events";
 import { useFocusEffect, usePathname, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FilterMenu } from "@/components/filter-menu";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
@@ -30,7 +31,7 @@ import type { ScannerPerson } from "@/lib/scanner-types";
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
-import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
 
 interface ScannerRoleStat {
   role: ScannerPerson["role"];
@@ -187,63 +188,65 @@ export function GeneralScannerScreen() {
   return (
     <View style={{ backgroundColor: "black", flex: 1 }}>
       <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
-      <QrCamera
-        hint={null}
-        onClose={pathname === "/scan" ? undefined : () => safeBack(router, "/(tabs)/scan")}
-        onValue={(value) => void resolve(value)}
-      />
-      <ScannerToolbarActions
-        top={insets.top + 4}
-        options={roleOptions}
-        groups={groups}
-        onToggle={toggleGroup}
-        onClear={clearGroups}
-        onOpenPeople={() =>
-          router.push(
-            // Android's legacy (non-Liquid-Glass) header lands on a plain
-            // title with a separate search icon to tap; this jumps straight
-            // into search with the keyboard up instead. iOS uses the native
-            // `headerSearchBarOptions` bar there, unaffected by this param.
-            process.env.EXPO_OS === "android"
-              ? { pathname: "/(tabs)/scan/people", params: { autoSearch: "1" } }
-              : "/(tabs)/scan/people",
-          )
-        }
-        peopleLabel={t("scannerViewPeople")}
-      />
+      <Text
+        accessibilityRole="header"
+        style={{
+          position: "absolute",
+          left: 24,
+          top: insets.top + 8,
+          color: "white",
+          fontSize: 28,
+          fontWeight: "700",
+        }}
+      >
+        {t("tabScan")}
+      </Text>
       <View
         pointerEvents="box-none"
         style={{
           left: 0,
-          position: "absolute",
-          right: 0,
-          top: insets.top + 4,
+          paddingTop: insets.top + 8,
+          paddingLeft: 16,
+          paddingRight: 16,
+          alignItems: "flex-end",
+          minHeight: insets.top + 56,
           zIndex: 30,
         }}
       >
-        <ScannerQueueStatus
-          queue={sync.queue}
-          syncing={sync.syncing}
-          onSync={() => void sync.sync()}
-          onRetry={() => void sync.retryFailed()}
-          onRetryOne={(id) => void sync.retryOne(id)}
-          onDelete={(id) => void sync.discardScan(id)}
-          clockSkewMs={sync.clockSkewMs}
-          fillWidth={false}
-        />
-      </View>
-      <View
-        pointerEvents="box-none"
-        style={{
-          left: 0,
-          position: "absolute",
-          right: 0,
-          top: insets.top + 56,
-        }}
-      >
-        <View pointerEvents="none">
-          <ScannerGroupStatistics stats={stats} />
+        <View style={{ alignSelf: "flex-end", flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <ScannerRoleFilter
+            options={roleOptions}
+            groups={groups}
+            onToggle={toggleGroup}
+            onClear={clearGroups}
+          />
+          <ScannerQueueStatus
+            queue={sync.queue}
+            syncing={sync.syncing}
+            onSync={() => void sync.sync()}
+            onRetry={() => void sync.retryFailed()}
+            onRetryOne={(id) => void sync.retryOne(id)}
+            onDelete={(id) => void sync.discardScan(id)}
+            clockSkewMs={sync.clockSkewMs}
+            fillWidth={false}
+          />
         </View>
+      </View>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+        <ScannerGroupStatistics
+          stats={stats}
+          onOpenPeople={() =>
+            router.push(
+              // Android's legacy (non-Liquid-Glass) header lands on a plain
+              // title with a separate search icon to tap; this jumps straight
+              // into search with the keyboard up instead. iOS uses the native
+              // `headerSearchBarOptions` bar there, unaffected by this param.
+              process.env.EXPO_OS === "android"
+                ? { pathname: "/(tabs)/scan/people", params: { autoSearch: "1" } }
+                : "/(tabs)/scan/people",
+            )
+          }
+        />
         {error ? (
           <GlassView
             colorScheme="dark"
@@ -292,291 +295,165 @@ export function GeneralScannerScreen() {
             </Pressable>
           </GlassView>
         ) : null}
-      </View>
+        <QrCamera
+          nfcFirst
+          hint={null}
+          onClose={pathname === "/scan" ? undefined : () => safeBack(router, "/(tabs)/scan")}
+          onValue={(value) => void resolve(value)}
+        />
+      </ScrollView>
     </View>
   );
 }
 
-/** Keeps the filter's outside-tap backdrop and panel above every other floating control (stats tiles, sync pill, camera controls). */
-const FILTER_PANEL_Z_INDEX = 1000;
-
-/**
- * The group-filter and people-finder controls, side by side in one
- * elongated glass pill — see `ScannerGroupFilterButton`.
- *
- * `Stack.Toolbar.Menu`'s `unstable_keepPresented` (the native "stays open
- * across taps" option) turned out to live up to its name — in practice the
- * menu still closed after every action and its toolbar placement sat at a
- * different height than the rest of this screen's floating chrome (the
- * "Ready" sync pill included). So the filter panel stays a custom panel
- * instead of `MenuView`/`Stack.Toolbar.Menu` (neither of which support
- * staying open across taps). It previously lived in its own separate
- * circular button next to people-finder's; the two are now one pill (same
- * combined footprint, single glass shape) so both stay a direct one-tap
- * action instead of one being buried inside the other's menu.
- */
-function ScannerToolbarActions({
+/** H22–H26: labelled filter and People Finder controls stay directly reachable. */
+function ScannerRoleFilter({
   options,
-  top,
   groups,
   onToggle,
   onClear,
-  onOpenPeople,
-  peopleLabel,
 }: {
-  top: number;
   options: RoleFilterOption[];
   groups: string[];
   onToggle: (group: string) => void;
   onClear: () => void;
-  onOpenPeople: () => void;
-  peopleLabel: string;
-}) {
-  return (
-    <ScannerGroupFilterButton
-      options={options}
-      top={top}
-      groups={groups}
-      onToggle={onToggle}
-      onClear={onClear}
-      onOpenPeople={onOpenPeople}
-      peopleLabel={peopleLabel}
-    />
-  );
-}
-
-/**
- * Floating group-filter + people-finder pill: one elongated glass shape
- * with two side-by-side tap zones instead of two separate circular
- * buttons — same combined footprint, but reads as one control. Left zone
- * opens the filter panel below the pill (stays open
- * across multiple role toggles, closing only on an outside tap, so the
- * operator can build up a combination like participants + sponsors in one
- * go); right zone navigates straight to the people finder, one tap.
- */
-function ScannerGroupFilterButton({
-  options,
-  top,
-  groups,
-  onToggle,
-  onClear,
-  onOpenPeople,
-  peopleLabel,
-}: {
-  top: number;
-  options: RoleFilterOption[];
-  groups: string[];
-  onToggle: (group: string) => void;
-  onClear: () => void;
-  onOpenPeople: () => void;
-  peopleLabel: string;
 }) {
   const { t } = useLocale();
-  const [open, setOpen] = useState(false);
-  const { height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const filterIcon =
-    groups.length === 0 ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill";
-  const rows = [{ value: null, label: t("roleAll"), icon: ROLE_FILTER_ALL_ICON }, ...options];
+  const rows = [
+    { id: "all", label: t("roleAll"), icon: ROLE_FILTER_ALL_ICON, selected: groups.length === 0 },
+    ...options.map((option) => ({
+      id: `role:${option.value}`,
+      label: option.label,
+      icon: option.icon,
+      selected: groups.includes(option.value),
+    })),
+  ];
+  const select = (id: string) => {
+    void haptic("selection");
+    if (id === "all") onClear();
+    else onToggle(id.slice("role:".length));
+  };
 
   return (
-    <>
-      {open ? (
-        <Pressable
-          accessibilityLabel={t("close")}
-          accessibilityRole="button"
-          onPress={() => setOpen(false)}
-          style={{
-            bottom: 0,
-            left: 0,
-            position: "absolute",
-            right: 0,
-            top: 0,
-            zIndex: FILTER_PANEL_Z_INDEX,
-          }}
-        />
-      ) : null}
-      <GlassView
-        colorScheme="dark"
-        glassEffectStyle="regular"
-        isInteractive
-        style={{
-          borderRadius: 22,
-          flexDirection: "row",
-          height: 44,
-          position: "absolute",
-          right: 16,
-          top,
-          width: 88,
-          zIndex: FILTER_PANEL_Z_INDEX + 1,
-        }}
-      >
-        <Pressable
-          accessibilityLabel={t("scannerFilterGroups")}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: open }}
-          onPress={() => {
-            void haptic("light");
-            setOpen((current) => !current);
-          }}
-          // Hit area still spans the full half (unchanged flex:1) — only
-          // the icon's visual position nudges toward the pill's middle,
-          // now that there's no divider marking each half's own center.
-          style={{ alignItems: "center", flex: 1, justifyContent: "center", paddingLeft: 8 }}
-        >
-          <SymbolView name={filterIcon} tintColor="white" size={19} weight="semibold" />
-        </Pressable>
-        <Pressable
-          accessibilityLabel={peopleLabel}
-          accessibilityRole="button"
-          onPress={() => {
-            void haptic("light");
-            onOpenPeople();
-          }}
-          style={{ alignItems: "center", flex: 1, justifyContent: "center", paddingRight: 8 }}
-        >
-          <SymbolView
-            name="person.crop.badge.magnifyingglass"
-            tintColor="white"
-            size={19}
-            weight="semibold"
-          />
-        </Pressable>
-      </GlassView>
-      {open ? (
-        <View
-          style={{
-            position: "absolute",
-            right: 16,
-            top: top + 52,
-            width: 220,
-            zIndex: FILTER_PANEL_Z_INDEX + 1,
-          }}
-        >
-          <GlassView
-            colorScheme="dark"
-            glassEffectStyle="regular"
-            style={{
-              borderColor: "rgba(255,255,255,0.14)",
-              borderCurve: "continuous",
-              borderRadius: 18,
-              borderWidth: 0.5,
-              elevation: 12,
-              overflow: "hidden",
-              shadowColor: "#000",
-              shadowOffset: { height: 6, width: 0 },
-              shadowOpacity: 0.4,
-              shadowRadius: 16,
-            }}
-          >
-            <ScrollView style={{ maxHeight: Math.max(44, height - top - 68 - insets.bottom) }}>
-              {rows.map((row, index) => {
-                const selected =
-                  row.value === null ? groups.length === 0 : groups.includes(row.value);
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    key={row.value ?? "all"}
-                    onPress={() => {
-                      void haptic("selection");
-                      if (row.value === null) onClear();
-                      else onToggle(row.value);
-                    }}
-                    style={{
-                      alignItems: "center",
-                      borderTopColor: "rgba(255,255,255,0.12)",
-                      borderTopWidth: index === 0 ? 0 : 0.5,
-                      flexDirection: "row",
-                      gap: 10,
-                      paddingHorizontal: 14,
-                      paddingVertical: 12,
-                    }}
-                  >
-                    <SymbolView accessible={false} name={row.icon} tintColor="white" size={16} />
-                    <Text
-                      selectable={false}
-                      style={{ color: "white", flex: 1, fontSize: 15, fontWeight: "600" }}
-                    >
-                      {row.label}
-                    </Text>
-                    {selected ? (
-                      <SymbolView
-                        accessible={false}
-                        name="checkmark"
-                        tintColor={colors.accent}
-                        size={15}
-                        weight="bold"
-                      />
-                    ) : null}
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </GlassView>
-        </View>
-      ) : null}
-    </>
+    <FilterMenu
+      colorScheme="dark"
+      accessibilityLabel={t("scannerFilterGroups")}
+      active={groups.length > 0}
+      items={rows}
+      onSelect={select}
+    />
   );
 }
 
 function ScannerGroupStatistics({
   stats,
+  onOpenPeople,
 }: {
   stats: { accredited: number; confirmed: number; inside: number };
+  onOpenPeople: () => void;
 }) {
   const { t } = useLocale();
   const items = [
-    { icon: "person.2", label: t("scannerStatConfirmed"), value: stats.confirmed },
-    { icon: "lanyardcard", label: t("scannerAccredited"), value: stats.accredited },
-    { icon: "building.2", label: t("scannerInside"), value: stats.inside },
-  ] as const;
-
+    { label: t("scannerStatConfirmed"), value: stats.confirmed },
+    { label: t("scannerInside"), value: stats.inside },
+  ];
   return (
-    <View
-      pointerEvents="none"
-      style={{ flexDirection: "row", gap: 8, marginTop: 10, paddingHorizontal: 16 }}
-    >
-      {items.map((item) => (
-        <GlassView
-          colorScheme="dark"
-          glassEffectStyle="regular"
-          key={item.label}
-          style={{
-            borderCurve: "continuous",
-            borderRadius: 16,
-            flex: 1,
-            gap: 5,
-            padding: 12,
-          }}
-        >
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
-            <SymbolView accessible={false} name={item.icon} tintColor="white" size={14} />
-            <Text
-              selectable
-              adjustsFontSizeToFit
-              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-              minimumFontScale={CHROME_MIN_FONT_SCALE}
-              numberOfLines={1}
-              style={{ color: "rgba(255,255,255,0.72)", flex: 1, fontSize: 11, fontWeight: "600" }}
-            >
-              {item.label}
-            </Text>
-          </View>
+    <View style={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 16, gap: 24 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+        }}
+      >
+        <View style={{ gap: 4, flexShrink: 1 }}>
           <Text
             selectable
             maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
             style={{
               color: "white",
-              fontSize: 24,
-              fontVariant: ["tabular-nums"],
+              fontSize: 44,
               fontWeight: "700",
+              fontVariant: ["tabular-nums"],
             }}
           >
-            {item.value}
+            {stats.accredited}
           </Text>
+          <Text
+            selectable
+            maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+            style={{ color: "rgba(255,255,255,0.72)", fontSize: 15 }}
+          >
+            {t("scannerAccredited")}
+          </Text>
+        </View>
+        <GlassView
+          colorScheme="dark"
+          glassEffectStyle="regular"
+          isInteractive
+          style={{ borderRadius: 24, flexShrink: 1 }}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("scannerViewPeople")}
+            onPress={onOpenPeople}
+            style={{
+              minHeight: 48,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+            }}
+          >
+            <SymbolView
+              accessible={false}
+              name="person.crop.badge.magnifyingglass"
+              size={19}
+              tintColor="white"
+            />
+            <Text style={{ color: "white", fontSize: 15, fontWeight: "500", flexShrink: 1 }}>
+              {t("scannerViewPeople")}
+            </Text>
+          </Pressable>
         </GlassView>
-      ))}
+      </View>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 16,
+          borderBottomWidth: 1,
+          borderBottomColor: "rgba(255,255,255,0.16)",
+          paddingBottom: 24,
+        }}
+      >
+        {items.map((item) => (
+          <View key={item.label} style={{ flex: 1, gap: 5 }}>
+            <Text
+              selectable
+              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+              style={{
+                color: "white",
+                fontSize: 28,
+                fontWeight: "600",
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              {item.value}
+            </Text>
+            <Text
+              selectable
+              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+              style={{ color: "rgba(255,255,255,0.72)", fontSize: 13 }}
+            >
+              {item.label}
+            </Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }

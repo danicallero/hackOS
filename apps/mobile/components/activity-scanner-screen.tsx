@@ -1,13 +1,24 @@
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import {
+  AppState,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
-import { AdaptiveBackButton, AdaptiveToolbarButton } from "@/components/native-ui";
+import { AdaptiveBackButton } from "@/components/native-ui";
+import { NfcReader } from "@/components/nfc-reader";
 import { QrCamera } from "@/components/QrCamera";
+import { NfcScannerSurface } from "@/components/scanner-nfc-surface";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
@@ -24,9 +35,11 @@ import {
   findPersonByTicket,
   getActivityState,
   listScannerActivities,
+  listScannerPeople,
   pendingScans,
 } from "@/lib/scanner-db";
 import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@/lib/scanner-types";
+import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
@@ -58,7 +71,34 @@ export function ActivityScannerScreen() {
   const { sync: runSync, lastSync } = syncState;
   const [localActivity, setLocalActivity] = useState<ScannerActivity | null>(null);
   const [result, setResult] = useState<ActivityScanResult | null>(null);
-  const [nfcSessionKey, setNfcSessionKey] = useState(0);
+  const focused = useIsFocused();
+  const nfcSupport = useNfcSupportStatus();
+  const nfcReadSucceeded = useRef(false);
+  const androidStarted = useRef(false);
+  const [nfcRunning, setNfcRunning] = useState(false);
+  const [nfcVisible, setNfcVisible] = useState(false);
+  const [cameraVisible, setCameraVisible] = useState(false);
+  const [people, setPeople] = useState<ScannerPerson[] | null>(null);
+  const stopNfc = useCallback(() => {
+    setNfcRunning(false);
+    setNfcVisible(false);
+  }, []);
+  useEffect(() => {
+    if (!focused) {
+      androidStarted.current = false;
+      stopNfc();
+      setCameraVisible(false);
+    }
+  }, [focused, stopNfc]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "background") {
+        stopNfc();
+        setCameraVisible(false);
+      }
+    });
+    return () => subscription.remove();
+  }, [stopNfc]);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -76,6 +116,40 @@ export function ActivityScannerScreen() {
         : localActivity,
     [activityId, localActivity, syncState.serverSnapshot],
   );
+
+  useEffect(() => {
+    if (
+      Platform.OS !== "android" ||
+      !focused ||
+      !activity ||
+      nfcSupport !== "supported" ||
+      androidStarted.current
+    )
+      return;
+    androidStarted.current = true;
+    nfcReadSucceeded.current = false;
+    setNfcRunning(true);
+    setNfcVisible(true);
+  }, [focused, activity, nfcSupport]);
+
+  const loadPeople = useCallback(() => {
+    void listScannerPeople()
+      .then(setPeople)
+      .catch(() => {});
+  }, []);
+  useEffect(() => loadPeople(), [loadPeople]);
+  useEffect(() => {
+    if (lastSync) loadPeople();
+  }, [lastSync, loadPeople]);
+  const roster = syncState.serverSnapshot?.people ?? people;
+  const inside = roster?.filter((person) => person.lastPresenceKind === "in").length;
+
+  // H25/H26: only an explicitly started session reopens after reader teardown.
+  useEffect(() => {
+    if (!nfcRunning || !focused || result || registering || nfcVisible) return;
+    const timeout = setTimeout(() => setNfcVisible(true), 500);
+    return () => clearTimeout(timeout);
+  }, [nfcRunning, focused, result, registering, nfcVisible]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -163,53 +237,59 @@ export function ActivityScannerScreen() {
 
   const scanned = useCallback(
     async (raw: string) => {
-      const badgeId = raw.trim();
-      const serverPerson = syncState.serverSnapshot?.people.find(
-        (candidate) => candidate.badgeId === badgeId || candidate.ticketToken === badgeId,
-      );
-      const ticketPerson = syncState.serverSnapshot ? null : await findPersonByTicket(badgeId);
-      const found = syncState.serverSnapshot
-        ? {
-            person: serverPerson ?? null,
-            revoked: syncState.serverSnapshot.people.some((person) =>
-              person.revokedBadgeIds.includes(badgeId),
-            ),
-          }
-        : ticketPerson
-          ? { person: ticketPerson, revoked: false }
-          : await findPersonByBadge(badgeId);
-      if (!found.person) {
-        setError(found.revoked ? t("scannerBadgeRevoked") : t("scannerBadgeUnknown"));
-        setResult(null);
-        return;
+      setRegistering(true);
+      try {
+        const badgeId = raw.trim();
+        const serverPerson = syncState.serverSnapshot?.people.find(
+          (candidate) => candidate.badgeId === badgeId || candidate.ticketToken === badgeId,
+        );
+        const ticketPerson = syncState.serverSnapshot ? null : await findPersonByTicket(badgeId);
+        const found = syncState.serverSnapshot
+          ? {
+              person: serverPerson ?? null,
+              revoked: syncState.serverSnapshot.people.some((person) =>
+                person.revokedBadgeIds.includes(badgeId),
+              ),
+            }
+          : ticketPerson
+            ? { person: ticketPerson, revoked: false }
+            : await findPersonByBadge(badgeId);
+        if (!found.person) {
+          setError(found.revoked ? t("scannerBadgeRevoked") : t("scannerBadgeUnknown"));
+          setResult(null);
+          return;
+        }
+        const ticketToken = found.person.ticketToken === badgeId ? badgeId : undefined;
+        const state = syncState.serverSnapshot
+          ? {
+              userId: found.person.userId,
+              activityId,
+              count:
+                syncState.serverSnapshot.activityStates.find(
+                  (candidate) =>
+                    candidate.userId === found.person!.userId &&
+                    candidate.activityId === activityId,
+                )?.count ?? 0,
+            }
+          : await getActivityState(found.person.userId, activityId);
+        setError(null);
+        setRegistering(false);
+        if (state.count > 0) {
+          void haptic("warning");
+          setResult({
+            badgeId,
+            ticketToken,
+            count: state.count,
+            person: found.person,
+            state: "repeat_pending",
+            wasRepeat: true,
+          });
+          return;
+        }
+        await store(found.person, badgeId, false, state.count, ticketToken);
+      } finally {
+        setRegistering(false);
       }
-      const ticketToken = found.person.ticketToken === badgeId ? badgeId : undefined;
-      const state = syncState.serverSnapshot
-        ? {
-            userId: found.person.userId,
-            activityId,
-            count:
-              syncState.serverSnapshot.activityStates.find(
-                (candidate) =>
-                  candidate.userId === found.person!.userId && candidate.activityId === activityId,
-              )?.count ?? 0,
-          }
-        : await getActivityState(found.person.userId, activityId);
-      setError(null);
-      setRegistering(false);
-      if (state.count > 0) {
-        void haptic("warning");
-        setResult({
-          badgeId,
-          ticketToken,
-          count: state.count,
-          person: found.person,
-          state: "repeat_pending",
-          wasRepeat: true,
-        });
-        return;
-      }
-      await store(found.person, badgeId, false, state.count, ticketToken);
     },
     [activityId, store, syncState.serverSnapshot, t],
   );
@@ -226,58 +306,81 @@ export function ActivityScannerScreen() {
     [activityId, scanned],
   );
 
+  const queueStatus = (
+    <ScannerQueueStatus
+      queue={syncState.queue}
+      syncing={syncState.syncing}
+      onSync={() => void syncState.sync()}
+      onRetry={() => void syncState.retryFailed()}
+      onRetryOne={(id) => void syncState.retryOne(id)}
+      onDelete={(id) => void syncState.discardScan(id)}
+      clockSkewMs={syncState.clockSkewMs}
+      fillWidth={false}
+    />
+  );
+
   return (
     <View style={{ backgroundColor: "black", flex: 1 }}>
       <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
-      <QrCamera
-        hint={null}
-        autoStartNfc={Boolean(activity) && !manualNonce}
-        nfcSessionKey={nfcSessionKey}
-        onValue={(value) => void scanned(value)}
-        requestCameraOnFocus={false}
-        scanningEnabled={Boolean(activity) && !result}
+      <Modal
+        visible={cameraVisible}
+        animationType="slide"
+        onRequestClose={() => setCameraVisible(false)}
+      >
+        {cameraVisible ? (
+          <QrCamera
+            hideNfc
+            autoStartNfc={false}
+            requestCameraOnFocus
+            onClose={() => setCameraVisible(false)}
+            onValue={(value) => {
+              setCameraVisible(false);
+              void scanned(value);
+            }}
+            scanningEnabled={Boolean(activity) && !result && !registering}
+          />
+        ) : null}
+      </Modal>
+      <NfcReader
+        visible={nfcRunning && nfcVisible && focused && !result && !registering}
+        showAndroidOverlay={false}
+        onValue={(value) => {
+          nfcReadSucceeded.current = true;
+          setNfcVisible(false);
+          void scanned(value);
+        }}
+        onClose={() => {
+          setNfcVisible(false);
+          if (!nfcReadSucceeded.current) stopNfc();
+          nfcReadSucceeded.current = false;
+        }}
       />
       <AdaptiveBackButton
         top={insets.top}
         colorScheme="dark"
         tintColor="white"
-        onPress={() => safeBack(router, "/(tabs)/activities")}
-      />
-      <AdaptiveToolbarButton
-        top={insets.top}
-        side="right"
-        icon="person.crop.badge.magnifyingglass"
-        colorScheme="dark"
-        tintColor="white"
-        accessibilityLabel={t("scannerSearchPerson")}
         onPress={() =>
-          router.push({
-            pathname: "/(tabs)/activities/people",
-            // Android's legacy (non-Liquid-Glass) header lands on a plain
-            // title with a separate search icon to tap; this jumps straight
-            // into search with the keyboard up instead. iOS uses the native
-            // `headerSearchBarOptions` bar there, unaffected by this param.
-            params:
-              process.env.EXPO_OS === "android"
-                ? { activityId: String(activityId), autoSearch: "1" }
-                : { activityId: String(activityId) },
-          })
+          cameraVisible ? setCameraVisible(false) : safeBack(router, "/(tabs)/activities")
         }
       />
-      <GlassView
+      <View
+        pointerEvents="box-none"
+        style={{ position: "absolute", top: insets.top + 8, right: 16, zIndex: 30 }}
+      >
+        {queueStatus}
+      </View>
+      <View
         testID={UI_TEST_IDS.scanner.result}
-        colorScheme="dark"
-        glassEffectStyle="regular"
         style={{
           alignSelf: "center",
           borderRadius: 999,
           height: 44,
           justifyContent: "center",
-          left: "22.5%",
-          maxWidth: "55%",
+          left: 72,
+
           paddingHorizontal: 16,
           position: "absolute",
-          right: "22.5%",
+          right: 140,
           top: insets.top,
         }}
       >
@@ -288,12 +391,27 @@ export function ActivityScannerScreen() {
         >
           {activity ? resolveActivityText(activity, language) : t("scannerActivity")}
         </Text>
-      </GlassView>
-      <View
-        pointerEvents="box-none"
-        style={{ left: 0, right: 0, position: "absolute", top: insets.top + 56 }}
+      </View>
+      <ScrollView
+        style={{ flex: 1, marginTop: insets.top + 56 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+        }}
       >
-        <ActivityStatistics activity={activity} stats={stats} />
+        <ActivityStatistics
+          activity={activity}
+          stats={stats}
+          inside={inside}
+          onOpenPeople={() =>
+            router.push({
+              pathname: "/(tabs)/activities/people",
+              params:
+                process.env.EXPO_OS === "android"
+                  ? { activityId: String(activityId), autoSearch: "1" }
+                  : { activityId: String(activityId) },
+            })
+          }
+        />
         {error ? (
           <GlassView
             colorScheme="dark"
@@ -342,19 +460,30 @@ export function ActivityScannerScreen() {
             </Pressable>
           </GlassView>
         ) : null}
-        <View pointerEvents="box-none" style={{ marginTop: 14, marginHorizontal: 16 }}>
-          <ScannerQueueStatus
-            queue={syncState.queue}
-            syncing={syncState.syncing}
-            onSync={() => void syncState.sync()}
-            onRetry={() => void syncState.retryFailed()}
-            onRetryOne={(id) => void syncState.retryOne(id)}
-            onDelete={(id) => void syncState.discardScan(id)}
-            clockSkewMs={syncState.clockSkewMs}
-            fillWidth={false}
-          />
-        </View>
-      </View>
+        <NfcScannerSurface
+          onValue={(value) => void scanned(value)}
+          nfcActive={nfcRunning && focused && !result && !registering}
+          nfcStartLabel={t("scannerNfcStart")}
+          scanningEnabled={Boolean(activity) && !result && !registering}
+          onNfc={
+            nfcSupport === "supported"
+              ? () => {
+                  if (nfcRunning) stopNfc();
+                  else {
+                    nfcReadSucceeded.current = false;
+                    setNfcRunning(true);
+                    setNfcVisible(true);
+                  }
+                }
+              : undefined
+          }
+          onCamera={() => {
+            stopNfc();
+            setCameraVisible(true);
+          }}
+          onManual={stopNfc}
+        />
+      </ScrollView>
       {result ? (
         <ActivityResultPanel
           activity={activity}
@@ -365,11 +494,9 @@ export function ActivityScannerScreen() {
           onCancel={() => {
             setResult(null);
             setRegistering(false);
-            setNfcSessionKey((key) => key + 1);
           }}
           onContinue={() => {
             setResult(null);
-            setNfcSessionKey((key) => key + 1);
           }}
           onRegisterAnother={() =>
             void store(result.person, result.badgeId, true, result.count, result.ticketToken)
@@ -429,13 +556,11 @@ function ActivityResultPanel({
         position: "absolute",
         right: 0,
         top: 0,
-        transform: [{ translateY: 50 }],
       }}
     >
-      <GlassView
-        colorScheme="dark"
-        glassEffectStyle="regular"
+      <View
         style={{
+          backgroundColor: colors.surface,
           borderCurve: "continuous",
           borderRadius: 24,
           maxHeight: cardMaxHeight,
@@ -444,19 +569,10 @@ function ActivityResultPanel({
           width: "100%",
         }}
       >
-        {/* A single child keeps this predictable on the native Liquid Glass
-            container (ExpoGlassView) — passing it the ScrollView and the
-            footer as two siblings directly let the glass surface size to
-            only the first one, silently dropping the footer with the
-            close/confirm buttons off screen. The native container doesn't
-            reliably propagate its own maxHeight into plain-Yoga flex-shrink
-            math for its children, so the same cap is repeated here on an
-            ordinary View — that's what actually lets the ScrollView give up
-            space to the footer instead of just being clipped along with it. */}
         <View style={{ flexShrink: 1, maxHeight: cardMaxHeight, overflow: "hidden" }}>
           <ScrollView
             style={{ flexGrow: 0, flexShrink: 1, minHeight: 0 }}
-            contentContainerStyle={{ gap: 14, padding: 16 }}
+            contentContainerStyle={{ gap: 20, padding: 20 }}
           >
             <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 16 }}>
               <View style={{ flex: 1, gap: 5 }}>
@@ -482,14 +598,11 @@ function ActivityResultPanel({
                     size={18}
                   />
                   <Text
+                    accessibilityLiveRegion="polite"
                     selectable
                     style={{
-                      color:
-                        repeatPending || result.state === "saved"
-                          ? colors.warning
-                          : result.state === "attention"
-                            ? colors.destructive
-                            : colors.success,
+                      flexShrink: 1,
+                      color: colors.label,
                       fontSize: 13,
                       fontWeight: "700",
                     }}
@@ -503,27 +616,25 @@ function ActivityResultPanel({
                           : t("scannerStateSaved")}
                   </Text>
                 </View>
-                <Text selectable style={{ color: "white", fontSize: 21, fontWeight: "700" }}>
+                <Text selectable style={{ color: colors.label, fontSize: 21, fontWeight: "700" }}>
                   {fullName}
                 </Text>
-                <Text selectable style={{ color: "rgba(255,255,255,0.68)", fontSize: 15 }}>
+                <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
                   {result.person.email || t("accountNotSet")}
                 </Text>
               </View>
               <View
                 style={{
                   alignItems: "center",
-                  backgroundColor: repeatPending ? "rgba(255,149,0,0.18)" : "rgba(52,199,89,0.18)",
-                  borderRadius: 18,
-                  height: 56,
+                  gap: 2,
+                  minWidth: 56,
                   justifyContent: "center",
-                  width: 56,
                 }}
               >
                 <Text
                   selectable
                   style={{
-                    color: repeatPending ? colors.warning : colors.success,
+                    color: colors.label,
                     fontSize: 29,
                     fontVariant: ["tabular-nums"],
                     fontWeight: "800",
@@ -531,20 +642,22 @@ function ActivityResultPanel({
                 >
                   {result.count}
                 </Text>
+                <Text selectable style={{ color: colors.secondaryLabel, fontSize: 12 }}>
+                  {meal ? t("scannerServed") : t("scannerPasses")}
+                </Text>
               </View>
             </View>
 
             {hasMealDetails ? (
               <View
                 style={{
-                  backgroundColor: "rgba(255,255,255,0.09)",
-                  borderCurve: "continuous",
-                  borderRadius: 16,
+                  borderTopColor: colors.separator,
+                  borderTopWidth: 1,
                   gap: 9,
-                  padding: 12,
+                  paddingTop: 16,
                 }}
               >
-                <Text selectable style={{ color: "rgba(255,255,255,0.62)", fontWeight: "700" }}>
+                <Text selectable style={{ color: colors.secondaryLabel, fontWeight: "700" }}>
                   {t("scannerDietaryGroup")}
                 </Text>
                 {result.person.intolerances.length > 0 ? (
@@ -553,13 +666,10 @@ function ActivityResultPanel({
                       <View
                         key={item.id}
                         style={{
-                          backgroundColor: "rgba(255,149,0,0.18)",
-                          borderRadius: 999,
-                          paddingHorizontal: 10,
-                          paddingVertical: 6,
+                          paddingVertical: 2,
                         }}
                       >
-                        <Text selectable style={{ color: colors.warning, fontWeight: "700" }}>
+                        <Text selectable style={{ color: colors.label, fontWeight: "700" }}>
                           {item.label[language] ?? item.label.en}
                         </Text>
                       </View>
@@ -570,11 +680,11 @@ function ActivityResultPanel({
                   <View style={{ gap: 3 }}>
                     <Text
                       selectable
-                      style={{ color: colors.warning, fontSize: 12, fontWeight: "700" }}
+                      style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: "700" }}
                     >
                       {t("personFoodNotes")}
                     </Text>
-                    <Text selectable style={{ color: "white", lineHeight: 20 }}>
+                    <Text selectable style={{ color: colors.label, lineHeight: 20 }}>
                       {result.person.foodIntoleranceNotes}
                     </Text>
                   </View>
@@ -583,11 +693,11 @@ function ActivityResultPanel({
                   <View style={{ gap: 3 }}>
                     <Text
                       selectable
-                      style={{ color: "rgba(255,255,255,0.62)", fontSize: 12, fontWeight: "700" }}
+                      style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: "700" }}
                     >
                       {t("personNotes")}
                     </Text>
-                    <Text selectable style={{ color: "white", lineHeight: 20 }}>
+                    <Text selectable style={{ color: colors.label, lineHeight: 20 }}>
                       {result.person.notes}
                     </Text>
                   </View>
@@ -610,12 +720,12 @@ function ActivityResultPanel({
             style={{
               flexShrink: 0,
               minHeight: 50,
-              paddingBottom: 16,
-              paddingHorizontal: 16,
-              paddingTop: 4,
+              borderTopColor: colors.separator,
+              borderTopWidth: 1,
+              padding: 20,
             }}
           >
-            <View style={{ flexDirection: "row", gap: 10 }}>
+            <View style={{ gap: 10 }}>
               {repeatPending ? (
                 <>
                   <ResultActionButton
@@ -640,7 +750,7 @@ function ActivityResultPanel({
             </View>
           </View>
         </View>
-      </GlassView>
+      </View>
     </View>
   );
 }
@@ -668,10 +778,10 @@ function ResultActionButton({
       style={({ pressed }) => ({
         alignItems: "center",
         alignSelf: "stretch",
-        backgroundColor: secondary ? "rgba(255,255,255,0.12)" : colors.accent,
+        backgroundColor: secondary ? colors.elevatedSurface : colors.primaryAction,
         borderRadius: 999,
-        flex: 1,
-        height: 50,
+        minHeight: 50,
+        paddingVertical: 12,
         justifyContent: "center",
         opacity: disabled ? 0.45 : pressed ? 0.72 : 1,
         paddingHorizontal: 12,
@@ -680,7 +790,7 @@ function ResultActionButton({
       <Text
         selectable
         style={{
-          color: secondary ? "white" : colors.accentText,
+          color: secondary ? colors.interactiveText : colors.primaryActionText,
           fontSize: 16,
           fontWeight: "600",
           textAlign: "center",
@@ -702,67 +812,123 @@ interface ActivityStats {
 function ActivityStatistics({
   activity,
   stats,
+  inside,
+  onOpenPeople,
 }: {
   activity: ScannerActivity | null;
   stats: ActivityStats | null;
+  inside: number | undefined;
+  onOpenPeople: () => void;
 }) {
   const { t } = useLocale();
   const meal = isMealActivityKind(activity?.category);
   const items = [
+    { label: t("scannerDistinctPeople"), value: stats?.distinctPeople, occupancy: false },
     {
-      icon: meal ? "fork.knife" : "qrcode",
-      label: meal ? t("scannerServed") : t("scannerPasses"),
-      value: stats?.count,
-    },
-    { icon: "person.2.fill", label: t("scannerPeople"), value: stats?.distinctPeople },
-    {
-      icon: "arrow.trianglehead.2.clockwise.rotate.90",
-      label: t("scannerRepeats"),
+      label: meal ? t("scannerExtraServings") : t("scannerExtraScans"),
       value: stats?.repeats,
+      occupancy: false,
     },
-  ] as const;
-
+    { label: t("scannerInsideBuilding"), value: inside, occupancy: true },
+  ];
   return (
-    <View
-      pointerEvents="none"
-      style={{ flexDirection: "row", gap: 8, marginTop: 10, paddingHorizontal: 16 }}
-    >
-      {items.map((item) => (
-        <GlassView
-          colorScheme="dark"
-          glassEffectStyle="regular"
-          key={item.label}
-          style={{
-            borderCurve: "continuous",
-            borderRadius: 16,
-            flex: 1,
-            gap: 5,
-            padding: 12,
-          }}
-        >
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
-            <SymbolView accessible={false} name={item.icon} tintColor="white" size={14} />
-            <Text
-              selectable
-              numberOfLines={1}
-              style={{ color: "rgba(255,255,255,0.72)", flex: 1, fontSize: 11, fontWeight: "600" }}
-            >
-              {item.label}
-            </Text>
-          </View>
+    <View style={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 16, gap: 24 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+        }}
+      >
+        <View style={{ gap: 4 }}>
           <Text
             selectable
             style={{
               color: "white",
-              fontSize: 24,
-              fontVariant: ["tabular-nums"],
+              fontSize: 44,
               fontWeight: "700",
+              fontVariant: ["tabular-nums"],
             }}
           >
-            {item.value ?? "…"}
+            {stats?.count ?? "…"}
           </Text>
+          <Text selectable style={{ color: "rgba(255,255,255,0.72)", fontSize: 15 }}>
+            {meal ? t("scannerServingsTotal") : t("scannerScansTotal")}
+          </Text>
+        </View>
+        <GlassView
+          colorScheme="dark"
+          glassEffectStyle="regular"
+          isInteractive
+          style={{ borderRadius: 24, flexShrink: 1 }}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("scannerViewPeople")}
+            onPress={onOpenPeople}
+            style={{
+              minHeight: 48,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+            }}
+          >
+            <SymbolView
+              accessible={false}
+              name="person.crop.badge.magnifyingglass"
+              size={19}
+              tintColor="white"
+            />
+            <Text style={{ color: "white", fontSize: 15, fontWeight: "500", flexShrink: 1 }}>
+              {t("scannerViewPeople")}
+            </Text>
+          </Pressable>
         </GlassView>
-      ))}
+      </View>
+      <View
+        style={{
+          flexDirection: "row",
+          gap: 16,
+          borderBottomWidth: 1,
+          borderBottomColor: "rgba(255,255,255,0.16)",
+          paddingBottom: 24,
+        }}
+      >
+        {items.map((item) => (
+          <View
+            key={item.label}
+            style={{
+              flex: 1,
+              gap: 5,
+              ...(item.occupancy
+                ? { borderLeftWidth: 1, borderLeftColor: "rgba(255,255,255,0.16)", paddingLeft: 16 }
+                : {}),
+            }}
+          >
+            <Text
+              selectable
+              style={{
+                color: "white",
+                fontSize: 28,
+                fontWeight: "600",
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              {item.value ?? "…"}
+            </Text>
+            <Text
+              selectable
+              style={{ color: "rgba(255,255,255,0.72)", fontSize: 13, minHeight: 34 }}
+            >
+              {item.label}
+            </Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }

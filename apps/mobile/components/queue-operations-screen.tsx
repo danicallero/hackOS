@@ -1,10 +1,8 @@
-import { MenuView } from "@expo/ui/community/menu";
 import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
 import { useFocusEffect, useNavigation, usePathname, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   FlatList,
-  Platform,
   Pressable,
   RefreshControl,
   Text,
@@ -13,7 +11,7 @@ import {
   View,
 } from "react-native";
 
-import { GlassView } from "@/components/glass-view";
+import { FilterMenu } from "@/components/filter-menu";
 import { ActionButton, EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -74,7 +72,7 @@ export function QueueOperationsScreen() {
   const [notifiedEntryId, setNotifiedEntryId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [roomFilter, setRoomFilter] = useState<"all" | "live" | "paused">("all");
+  const [roomFilters, setRoomFilters] = useState<string[]>([]);
   const [justCalledEntryIds, setJustCalledEntryIds] = useState<Set<number>>(new Set());
   const canOperate = canOperateQueues(me?.capabilities ?? []);
   const columns = width >= 1_100 ? 3 : width >= 680 ? 2 : 1;
@@ -91,74 +89,46 @@ export function QueueOperationsScreen() {
   );
   const rooms = data ?? [];
 
+  const selectRoomFilter = useCallback((id: string) => {
+    setRoomFilters((current) =>
+      id === "all"
+        ? []
+        : current.includes(id)
+          ? current.filter((status) => status !== id)
+          : [...current, id],
+    );
+  }, []);
+
   useLayoutEffect(() => {
     headerNavigation.setOptions({
       title: usesListTitle ? "" : t("tabQueueOperations"),
       headerLargeTitle: !usesListTitle,
       headerRight: () => (
-        <MenuView
-          actions={[
+        <FilterMenu
+          accessibilityLabel={t("scheduleFilter")}
+          active={roomFilters.length > 0}
+          items={[
             {
               id: "all",
-              title: t("queueOpsFilterAll"),
-              image: "square.grid.2x2",
-              state: roomFilter === "all" ? "on" : "off",
+              label: t("queueOpsFilterAll"),
+              icon: "square.grid.2x2",
+              selected: roomFilters.length === 0,
             },
             {
               id: "live",
-              title: t("queueOpsFilterLive"),
-              image: "play.circle",
-              state: roomFilter === "live" ? "on" : "off",
+              label: t("queueOpsFilterLive"),
+              icon: "play.circle",
+              selected: roomFilters.includes("live"),
             },
             {
               id: "paused",
-              title: t("queueOpsFilterPaused"),
-              image: "pause.circle",
-              state: roomFilter === "paused" ? "on" : "off",
+              label: t("queueOpsFilterPaused"),
+              icon: "pause.circle",
+              selected: roomFilters.includes("paused"),
             },
           ]}
-          onPressAction={({ nativeEvent }) => setRoomFilter(nativeEvent.event as typeof roomFilter)}
-        >
-          {Platform.OS === "android" ? (
-            // Native-stack's headerRight gets iOS's automatic Liquid Glass
-            // pill chrome for free; Android has no equivalent, so this button
-            // rendered as a bare icon there. Match the same GlassView circle
-            // activities-screen/people-directory-screen already use for their
-            // Android header actions.
-            <GlassView
-              colorScheme="auto"
-              glassEffectStyle="regular"
-              isInteractive
-              style={{
-                alignItems: "center",
-                borderRadius: 22,
-                height: 44,
-                justifyContent: "center",
-                width: 44,
-              }}
-            >
-              <SymbolView
-                name={
-                  roomFilter === "all"
-                    ? "line.3.horizontal.decrease"
-                    : "line.3.horizontal.decrease.circle.fill"
-                }
-                tintColor={colors.accent}
-                size={19}
-              />
-            </GlassView>
-          ) : (
-            <SymbolView
-              name={
-                roomFilter === "all"
-                  ? "line.3.horizontal.decrease"
-                  : "line.3.horizontal.decrease.circle.fill"
-              }
-              tintColor={colors.accent}
-              size={19}
-            />
-          )}
-        </MenuView>
+          onSelect={selectRoomFilter}
+        />
       ),
       headerSearchBarOptions: {
         placeholder: t("queueOpsSearchPlaceholder"),
@@ -172,15 +142,15 @@ export function QueueOperationsScreen() {
           setQuery(event.nativeEvent.text),
       },
     });
-  }, [headerNavigation, roomFilter, t, usesListTitle]);
+  }, [headerNavigation, roomFilters, selectRoomFilter, t, usesListTitle]);
 
   const visibleRooms = useMemo(
     () =>
       rooms.filter((room) => {
-        if (roomFilter === "all") return true;
-        return roomFilter === "paused" ? room.state?.is_paused === true : !room.state?.is_paused;
+        if (roomFilters.length === 0) return true;
+        return roomFilters.includes(room.state?.is_paused === true ? "paused" : "live");
       }),
-    [roomFilter, rooms],
+    [roomFilters, rooms],
   );
   const searchActive = query.trim().length > 0;
   const searchResults = useMemo(

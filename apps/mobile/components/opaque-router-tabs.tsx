@@ -95,7 +95,7 @@ const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
   },
   scan: {
     href: "/(tabs)/scan",
-    icon: "qrcode.viewfinder",
+    icon: "wave.3.right",
     labelKey: "tabScan",
     triggerName: "scan",
   },

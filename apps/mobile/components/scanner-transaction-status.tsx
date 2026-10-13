@@ -535,7 +535,7 @@ export function ScannerTransactionStatus({
   const { t } = useLocale();
   const state = scannerTransactionState(scan);
   const presentation = {
-    ready: { icon: "qrcode.viewfinder", label: t("scannerStateReady"), tone: colors.accent },
+    ready: { icon: "wave.3.right", label: t("scannerStateReady"), tone: colors.accent },
     saved: {
       icon: "internaldrive.fill",
       label: t("scannerStateSaved"),
