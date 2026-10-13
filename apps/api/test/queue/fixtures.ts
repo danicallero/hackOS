@@ -32,8 +32,8 @@ export async function createChallenge(
 }
 
 /**
- * Several challenges authored by ONE enterprise — the only shape a shared
- * queue group can legally take (0410's cross-enterprise guard).
+ * Several challenges authored by one enterprise, the valid shape for a
+ * shared queue group.
  */
 export async function createEnterpriseChallenges(
   count: number,
@@ -95,9 +95,8 @@ export async function createRoom(
 
 /**
  * Point a room at the queue group the challenge feeds — the room->challenge
- * link now goes through `room_queue_groups`. Every challenge has exactly one
- * group (0410), so this remains "assign this challenge to this room". Also
- * pools the room into the challenge's enterprise (`room_enterprises`, 0413):
+ * link now goes through `room_queue_groups`. Also pools the room into the
+ * challenge's enterprise (`room_enterprises`):
  * a room may only serve a queue_group belonging to the enterprise it is
  * pooled into, enforced by `room_queue_groups_enterprise_guard`.
  */
@@ -130,7 +129,7 @@ export async function queueGroupOf(challengeId: number): Promise<number> {
 
 /**
  * Assign a room directly to a queue group (for merged, N>1 group tests).
- * Pools the room into the group's enterprise first (0413's guard requires
+ * Pools the room into the group's enterprise first (the guard requires
  * it) unless `skipPooling` is set, for tests that specifically exercise the
  * guard by pooling the room elsewhere first.
  */
@@ -154,7 +153,7 @@ export async function assignQueueGroupToRoom(
   );
 }
 
-/** Pool a room into an enterprise (`room_enterprises`, 0413) without touching its serving queue. */
+/** Pool a room into an enterprise (`room_enterprises`) without touching its serving queue. */
 export async function poolRoomToEnterprise(roomId: number, enterpriseId: number): Promise<void> {
   await pool.query(
     `INSERT INTO room_enterprises (room_id, enterprise_id) VALUES ($1, $2)

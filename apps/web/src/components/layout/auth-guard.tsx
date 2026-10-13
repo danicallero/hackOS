@@ -13,7 +13,7 @@ import { useSessionContext } from "@/lib/session";
  * authority — this only keeps unauthenticated users out of the shell.
  *
  * The page the person was trying to reach is carried through as `next`
- * (H188): a deep link into the app while logged out — including an
+ * (#188): a deep link into the app while logged out — including an
  * already-used verification link, which Better Auth answers as success
  * without auto-signing in (H2) — must not silently strand the person on a
  * bare /login with no way back to what they were doing. Read straight from

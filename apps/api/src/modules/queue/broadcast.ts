@@ -50,7 +50,7 @@ export async function queueFixtureMarker(
     const row = rows[0];
     if (!row || row.challenge_is_test_account !== row.repo_is_test_account) return null;
     // A queue entry without a queue-group membership has no safe operator
-    // topic. Historical databases should fail closed until 0410 can repair it.
+    // topic, so fail closed when its queue group is missing.
     if (row.queue_group_id == null) return null;
     const marker = row.challenge_is_test_account === true;
     try {

@@ -21,7 +21,7 @@ const envSchema = z.object({
 
   DATABASE_URL: z.string().default("postgres://hackos:hackos@localhost:5433/hackos"),
   /**
-   * Postgres pool tuning (H540, #544). `DB_POOL_MAX` is per-process — api and
+   * Postgres pool tuning (#540, #544). `DB_POOL_MAX` is per-process — api and
    * worker each hold their own pool, and every replica of each multiplies
    * it — so (api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX)
    * + an operational allowance must stay under Postgres's own
@@ -175,7 +175,7 @@ const envSchema = z.object({
     .transform((v) => (v === undefined ? undefined : v === "true")),
 
   /**
-   * SSE connection budgets and slow-client backpressure (H540). Defaults are
+   * SSE connection budgets and slow-client backpressure (#540). Defaults are
    * a generous safety net (bound runaway reconnect loops / a stuck client),
    * not a tight production cap — see docs/env-vars.md.
    */

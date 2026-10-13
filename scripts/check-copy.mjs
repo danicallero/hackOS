@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 
 /**
- * Lightweight guard for the H196 copy rules (docs/DESIGN.md §10):
+ * Lightweight guard for the #196 copy rules (docs/DESIGN.md §10):
  * every i18n entry has all three locales, and no entry leaks story
  * identifiers or raw capability-key syntax into user-facing copy.
  *
@@ -21,7 +21,7 @@ import { extname, join } from "node:path";
  * It also cross-checks call sites: every static t("...") key referenced from
  * apps/web/src or apps/mobile must resolve in that app's namespace-fallback
  * chain (web -> common, mobile -> common), catching typos and wrong-namespace
- * keys that the internal-consistency check above can't see (H459).
+ * keys that the internal-consistency check above can't see (#459).
  */
 
 const LANGS = ["en", "es", "gl"];
@@ -133,7 +133,7 @@ for (const ns of NAMESPACES) {
 // chain per app: web -> common for apps/web, mobile -> common for
 // apps/mobile (see apps/web/src/lib/i18n.ts and apps/mobile/lib/i18n.tsx).
 // Catches typos/wrong-namespace keys that pass the internal-consistency
-// check above but only fail at runtime as a raw key literal (H459).
+// check above but only fail at runtime as a raw key literal (#459).
 const SKIP_DIRS = new Set([
   "node_modules",
   ".next",

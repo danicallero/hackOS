@@ -311,7 +311,7 @@ describe("call_next (H29, H30)", () => {
     );
   });
 
-  it("H203: room view explains a cross-room skip, preserves position, and clears once the blocker leaves", async () => {
+  it("#203: room view explains a cross-room skip, preserves position, and clears once the blocker leaves", async () => {
     const { challengeId: ch1, roomId: room1 } = await setup();
     const ch2 = await createChallenge();
     const room2 = await createRoom({ name: "Room 2" });

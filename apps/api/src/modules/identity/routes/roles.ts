@@ -57,7 +57,7 @@ import { getPermissionGroupTemplate, PERMISSION_GROUP_TEMPLATES } from "../templ
  * create/update bodies. Role CREATION separately refuses the reserved name
  * `system:superadmin` itself via `assertNotSuperadminRole`, so an API caller
  * can never mint a decoy role under that identity. DELETE soft-deletes
- * (`roles.deleted_at`, 0804) instead of removing the row; POST .../restore
+ * (`roles.deleted_at`) instead of removing the row; POST .../restore
  * reverses it, 409ing only if another role has since taken its exact
  * position (see that route's own schema description).
  */
@@ -79,15 +79,15 @@ const roleResponse = z.object({
   /** Independent of visibility/capabilities: this role entitles its holders to the event app/ticket. */
   eventAccess: z.boolean(),
   isProtected: z.boolean(),
-  // H8/0800/0807: true for a role inserted by a seed migration (0801's
-  // Sponsor, every 0805 default) rather than created via POST /api/roles.
+  // H8: true for a role from the seeded default catalogue rather than one
+  // created via POST /api/roles.
   // Scopes the trash/restore panel and gates the reset-to-default action.
   isSeeded: z.boolean(),
   // Sparse: capabilities with no explicit row are implicitly 'inherit' and
   // omitted (mirrors the role_capabilities table — a missing row IS inherit).
   capabilities: z.array(z.object({ capability: z.string(), state: permissionState })),
   memberIds: z.array(z.number()),
-  // H8: soft-delete marker (0804). Non-null means this role no longer grants
+  // H8: soft-delete marker. Non-null means this role no longer grants
   // anything and is hidden from the default GET /api/roles listing.
   deletedAt: z.string().nullable(),
 });
@@ -252,7 +252,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List roles by position",
         description:
-          "Lists every non-deleted role highest-position first (H8). Each role's memberIds contains active, non-anonymized real accounts only; synthetic Store-review fixtures are excluded. Invitation managers get this same read access to choose deferred role pre-assignments; only PERMISSIONS_MANAGE can mutate. Pass includeDeleted=true (PERMISSIONS_MANAGE only) to ALSO list soft-deleted roles, scoped to is_seeded=true ones only — the trash/restore panel only ever offers back roles from the seeded default catalogue (0801/0805), never a custom role an admin created and later deleted. Non-deleted roles in the response are unaffected by this scoping.",
+          "Lists every non-deleted role highest-position first (H8). Each role's memberIds contains active, non-anonymized real accounts only; synthetic Store-review fixtures are excluded. Invitation managers get this same read access to choose deferred role pre-assignments; only PERMISSIONS_MANAGE can mutate. Pass includeDeleted=true (PERMISSIONS_MANAGE only) to ALSO list soft-deleted roles, scoped to is_seeded=true ones only — the trash/restore panel only ever offers back roles from the seeded default catalogue, never a custom role an admin created and later deleted. Non-deleted roles in the response are unaffected by this scoping.",
         querystring: z.object({ includeDeleted: z.coerce.boolean().default(false) }),
         response: { 200: z.array(roleResponse) },
       },
@@ -540,7 +540,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Soft-delete a role",
         description:
-          "Soft-deletes a role (H8, 0804): sets deleted_at instead of removing the row, so its history, capability set, and member list survive for POST .../restore. A deleted role stops granting access immediately. Every default role (Platform administrator included) is deletable this way — the only role this route always refuses is system:superadmin, which is CLI-only.",
+          "Soft-deletes a role (H8): sets deleted_at instead of removing the row, so its history, capability set, and member list survive for POST .../restore. A deleted role stops granting access immediately. Every default role (Platform administrator included) is deletable this way — the only role this route always refuses is system:superadmin, which is CLI-only.",
         params: roleIdParams,
         response: { 200: z.object({ deleted: z.literal(true) }) },
       },
@@ -582,7 +582,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Restore a soft-deleted role",
         description:
-          "Clears deleted_at on a soft-deleted role (H8, 0804), reinstating its capability grants and member list immediately. The role keeps its original position; if another role has since taken that exact slot, this 409s instead of silently picking a new one — move the colliding role, or the one being restored, via PATCH .../position first, then retry.",
+          "Clears deleted_at on a soft-deleted role (H8), reinstating its capability grants and member list immediately. The role keeps its original position; if another role has since taken that exact slot, this 409s instead of silently picking a new one — move the colliding role, or the one being restored, via PATCH .../position first, then retry.",
         params: roleIdParams,
         response: { 200: roleResponse },
       },
@@ -634,7 +634,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Compare a seeded role against its seed-time snapshot",
         description:
-          "Reports whether this role is one of the seeded defaults (0801 Sponsor / 0805 catalogue, is_seeded=true) and, if so, whether its live role_capabilities have drifted from the ALLOW set it was seeded with (role_seed_defaults, 0807). `diff` lists every capability whose current tri-state differs from its seed-time state (missing on either side reads as 'inherit'); empty/isSeeded=false for a non-seeded or custom role, since neither carries a snapshot to compare against.",
+          "Reports whether this role is one of the seeded defaults (is_seeded=true) and, if so, whether its live role_capabilities have drifted from the ALLOW set it was seeded with (`role_seed_defaults`). `diff` lists every capability whose current tri-state differs from its seed-time state (missing on either side reads as 'inherit'); empty/isSeeded=false for a non-seeded or custom role, since neither carries a snapshot to compare against.",
         params: roleIdParams,
         response: { 200: seedDiffResponse },
       },
@@ -685,7 +685,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Reset a seeded role's capabilities to its seed-time snapshot",
         description:
-          "Replaces this role's live role_capabilities with exactly its role_seed_defaults snapshot (H8, 0807) — the ALLOW set it was seeded with; nothing outside that set survives, everything else reverts to implicit INHERIT. Only valid for is_seeded=true roles that still carry a snapshot; system:superadmin is never seeded so this always 404s/403s for it. Guarded the same as PUT .../capabilities: the actor's highest role must sit above this role's position, and — since a reset can re-grant capabilities the role had drifted away from — the actor must already possess every capability that would newly become ALLOW as a result of the reset (or hold the wildcard). That means an admin who lost a capability since this role's last edit cannot use reset to hand it back to themselves via this role; they would need someone who still holds it to do so, or to edit the role's capabilities directly for whichever subset they do possess.",
+          "Replaces this role's live role_capabilities with exactly its role_seed_defaults snapshot (H8) — the ALLOW set it was seeded with; nothing outside that set survives, everything else reverts to implicit INHERIT. Only valid for is_seeded=true roles that still carry a snapshot; system:superadmin is never seeded so this always 404s/403s for it. Guarded the same as PUT .../capabilities: the actor's highest role must sit above this role's position, and — since a reset can re-grant capabilities the role had drifted away from — the actor must already possess every capability that would newly become ALLOW as a result of the reset (or hold the wildcard). That means an admin who lost a capability since this role's last edit cannot use reset to hand it back to themselves via this role; they would need someone who still holds it to do so, or to edit the role's capabilities directly for whichever subset they do possess.",
         params: roleIdParams,
         response: { 200: roleResponse },
       },

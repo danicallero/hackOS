@@ -148,14 +148,14 @@ describe("H8 role resolution semantics", () => {
     expect(await userHasCapability(context, CAPABILITIES.AUDIT_READ)).toBe(true);
   });
 
-  it("a user holding a non-visible role alongside a visible one resolves to the visible role everywhere (0813: mirrors real Event Director + Organizer): getEffectiveRole, getHighestVisibleRoleName, and the bulk user_effective_role_name view all agree", async () => {
+  it("a user holding a non-visible role alongside a visible one resolves to the visible role everywhere (mirrors Event Director + Organizer): getEffectiveRole, getHighestVisibleRoleName, and the bulk user_effective_role_name view all agree", async () => {
     const { getEffectiveRole, getHighestVisibleRoleName } = await import(
       "../../src/modules/identity/role.js"
     );
     const { pool } = await import("../../src/db/pool.js");
     const userId = await createUser();
     // Higher position, NOT visible — mirrors the real "Event Director"
-    // (0813: is_visible=false) sitting above the real "Organizer"
+    // (is_visible=false) sitting above the real "Organizer"
     // (is_visible=true, higher position wins the ALLOW/DENY chain but not
     // here — this is about the *displayed* role, not capabilities).
     const hiddenTop = await createRole([], { name: "hidden-top", isVisible: false });
@@ -926,7 +926,7 @@ describe("H8 is_protected is the real, enforced lockout (not just system:superad
 });
 
 describe("H8 platform-administrator roles are mutable", () => {
-  it("a role named 'Platform administrator' seeded the way 0801 seeds it is fully mutable via the API", async () => {
+  it("a seeded role named 'Platform administrator' is fully mutable via the API", async () => {
     const a = await getApp();
     const actor = await manager();
     const { pool } = await import("../../src/db/pool.js");
@@ -934,7 +934,7 @@ describe("H8 platform-administrator roles are mutable", () => {
       `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
       [actor],
     );
-    // Matches 0801's actual INSERT shape post-fix: is_visible=true, is_protected=false.
+    // Matches the seeded shape: is_visible=true, is_protected=false.
     const roleId = await createRole([CAPABILITIES.ADMIN_ALL], {
       name: "Platform administrator",
       isVisible: true,
@@ -1237,7 +1237,7 @@ describe("H8 capability-possession authority (independent of the position guard)
   });
 });
 
-describe("H8 default seeded role set (0805)", () => {
+describe("H8 default seeded role set", () => {
   // roles.test.ts's beforeEach truncates every table (test/helpers.ts's
   // truncateAll), which wipes migration-seeded rows along with everything
   // else — so this suite can't just query the shared test database the way
@@ -1337,7 +1337,7 @@ describe("H8 default seeded role set (0805)", () => {
       Mentor: [],
       Participant: [CAPABILITIES.QUEUE_STATUS],
     };
-    // #935: 0801 retires 0101's directory:read grants, so no role keeps one.
+    // #935: the retired directory:read grant is absent from seeded roles.
     for (const [name, caps] of Object.entries(expected)) {
       const { rows: roleRows } = await pool.query(
         `SELECT id, is_protected, deleted_at FROM roles WHERE name = $1`,
@@ -1356,7 +1356,7 @@ describe("H8 default seeded role set (0805)", () => {
     }
   });
 
-  it("marks only the public-facing default roles is_visible (0813): Organizer/Day Staff/Mentor/Sponsor/Participant true, the ten internal functional/team roles false", async () => {
+  it("marks only the public-facing default roles is_visible: Organizer/Day Staff/Mentor/Sponsor/Participant true, the ten internal functional/team roles false", async () => {
     const pool = await seededRoles();
     const visible = ["Organizer", "Day Staff", "Mentor", "Sponsor", "Participant"];
     const notVisible = [
@@ -1438,7 +1438,7 @@ describe("H8 default seeded role set (0805)", () => {
     );
   });
 
-  it("seeds zero legacy H8 template roles on a fresh install (0801 only ports pre-existing permission_groups data)", async () => {
+  it("seeds zero legacy H8 template roles on a fresh install", async () => {
     const pool = await seededRoles();
     const legacyTemplateRoleNames = [
       "Platform administrator",
@@ -1474,8 +1474,8 @@ describe("H8 default seeded role set (0805)", () => {
     );
     expect(oldDraftRows).toHaveLength(0);
 
-    // Total default set on a fresh install: 0805's fifteen roles + 0801's
-    // always-created Sponsor role. system:superadmin is CLI-only, never
+    // Total default set on a fresh install: fifteen roles plus Sponsor.
+    // system:superadmin is CLI-only, never
     // created by migrations.
     const { rows: allRoles } = await pool.query(`SELECT name FROM roles ORDER BY name`);
     expect(allRoles.map((r: { name: string }) => r.name).sort()).toEqual(
@@ -1533,7 +1533,7 @@ describe("H8 default seeded role set (0805)", () => {
     expect(positionOf("Judging Coordinator")).toBeGreaterThan(positionOf("Judging Team"));
   });
 
-  it("marks every 0801/0805 seeded role is_seeded=true, and snapshots exactly its ALLOW set into role_seed_defaults", async () => {
+  it("marks every seeded role is_seeded=true, and snapshots exactly its ALLOW set into role_seed_defaults", async () => {
     const pool = await seededRoles();
     const { rows: unseeded } = await pool.query(`SELECT name FROM roles WHERE NOT is_seeded`);
     expect(unseeded).toEqual([]);
@@ -1556,7 +1556,7 @@ describe("H8 default seeded role set (0805)", () => {
       Object.keys(eventDirector[0].capabilities).map(() => "allow"),
     );
 
-    // Mentor has no seeded grant once 0801 retired #934's directory:read (#935).
+    // Mentor has no seeded directory:read grant (#935).
     const { rows: mentor } = await pool.query(
       `SELECT rsd.capabilities
          FROM roles r
@@ -1578,7 +1578,7 @@ describe("H8 default seeded role set (0805)", () => {
     });
   });
 
-  it("seeds ten role-assignment-triggered rules (0812) that all imply Organizer, and one fires end-to-end", async () => {
+  it("seeds ten role-assignment-triggered rules that all imply Organizer, and one fires end-to-end", async () => {
     const pool = await seededRoles();
     const { rows: organizerRows } = await pool.query(
       `SELECT id FROM roles WHERE name = 'Organizer'`,
@@ -1730,7 +1730,7 @@ describe("H8 trash/restore panel scoped to seeded roles", () => {
   });
 });
 
-describe("H8 seed-diff and reset-to-default (0807)", () => {
+describe("H8 seed-diff and reset-to-default", () => {
   async function seededRoleWithSnapshot(caps: string[], name = `seed-diff-${crypto.randomUUID()}`) {
     const roleId = await createRole(caps, { name, isSeeded: true });
     await seedRoleDefaults(roleId, Object.fromEntries(caps.map((c) => [c, "allow" as const])));
@@ -2113,7 +2113,7 @@ describe("H8 role-grant-rules CRUD API", () => {
   });
 });
 
-describe("H8 role-assignment-triggered grant rules (0812)", () => {
+describe("H8 role-assignment-triggered grant rules", () => {
   async function highPositionManager(extraCapabilities: string[] = []): Promise<number> {
     const actor = await createUserWithCapabilities([
       CAPABILITIES.PERMISSIONS_MANAGE,

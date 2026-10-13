@@ -157,7 +157,7 @@ export function RoleEditor({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // H8: seeded roles (0801/0805) can drift from their seed-time snapshot as
+  // H8: seeded roles can drift from their seed-time snapshot as
   // an admin edits their capabilities; re-check on every role change (and
   // after every capability save/reset, since applyRole gives us a new
   // `role` object) so the "reset to default" banner tracks live drift.

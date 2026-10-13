@@ -114,7 +114,7 @@ beforeEach(() => {
   mockApi();
 });
 
-describe("schedule list (H374)", () => {
+describe("schedule list (#374)", () => {
   it("clamps a long description instead of expanding in place", async () => {
     await renderMobile(<ScheduleScreen />);
 

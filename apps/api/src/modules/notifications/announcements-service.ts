@@ -10,9 +10,8 @@ import type { Language } from "./translate/index.js";
 
 /**
  * H50 announcements: publish_at + expires_at is the vigencia window
- * ("aparece y desaparece solo"). DELTA(H50): expires_at + fanned_out_at are
- * new columns from migration 0600 — the boceto only had a start, and nothing
- * tracked whether the per-user fan-out had already run for a given row.
+ * ("aparece y desaparece solo"). `fanned_out_at` tracks whether the one-time
+ * per-user notification fan-out has already run for a given row.
  *
  * DELTA(H50, 0601): role/intolerance targeting and a per-announcement channel
  * candidate set. Current holders of `roleIds`, optionally narrowed by

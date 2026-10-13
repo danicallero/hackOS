@@ -1,6 +1,9 @@
 # Application form builder UX audit (H11, H12)
 
 Status: implementation complete; verified by browser screenshots
+Historical migration references whose files are absent from
+`apps/api/db/migrations/` describe retired history only. Files under
+`apps/api/db/migration-history/` are not applied by the current runner.
 Scope: `apps/web/src/app/(app)/applications` create flow + `[id]` builder
 (Form settings + Questions cards, preview, Overview tab)
 

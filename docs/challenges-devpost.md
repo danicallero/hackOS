@@ -18,8 +18,8 @@ document and the stories disagree, the stories win.
 
 ### 1.1 Domain model (existing projects and additive submission lifecycle)
 
-The relationships already exist in `0001_initial.sql` and `0300_projects_devpost.sql`.
-This code adapts to them; it does not reshape them.
+The relationships are defined in the consolidated baseline schema. This code
+adapts to them; it does not reshape them.
 
 ```
 users ──< submissions >── repos ──< repo_devpost_prizes >── devpost_prizes

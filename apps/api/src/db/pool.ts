@@ -14,7 +14,7 @@ export const pool = new pg.Pool({
 
 export type Queryable = pg.Pool | pg.PoolClient;
 
-// Saturation gauges (H540): pull-based off the pool's own live counters, no
+// Saturation gauges (#540): pull-based off the pool's own live counters, no
 // polling loop needed. totalCount includes idle + checked-out connections.
 new client.Gauge({
   name: "hackos_db_pool_total",

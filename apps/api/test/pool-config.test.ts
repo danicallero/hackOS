@@ -5,7 +5,7 @@ import { pool } from "../src/db/pool.js";
 import { isTimeoutError } from "../src/lib/db-errors.js";
 
 /**
- * H540: pool sizing/timeouts are env-driven, saturation makes callers wait
+ * #540: pool sizing/timeouts are env-driven, saturation makes callers wait
  * (not hang forever), and Postgres timeouts surface as classifiable errors.
  * Uses scratch pools, never the shared `pool` other suites depend on.
  */
@@ -21,7 +21,7 @@ afterAll(async () => {
   await Promise.all(scratchPools.map((p) => p.end()));
 });
 
-describe("pool configuration (H540)", () => {
+describe("pool configuration (#540)", () => {
   it("wires max and timeouts from config onto the shared pool", () => {
     const opts = pool.options;
     expect(opts.max).toBe(config.dbPoolMax);

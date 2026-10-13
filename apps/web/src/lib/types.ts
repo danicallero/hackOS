@@ -119,12 +119,12 @@ export interface RoleSummary {
   eventAccess: boolean;
   /** Built-in roles (e.g. Platform administrator). Informational only — see deletedAt/name for what's actually locked. */
   isProtected: boolean;
-  /** H8/0800: true for a role from the seeded default catalogue (0801 Sponsor / 0805). Scopes trash/restore and gates reset-to-default. */
+  /** H8: true for a role from the seeded default catalogue. Scopes trash/restore and gates reset-to-default. */
   isSeeded: boolean;
   /** Sparse: a capability with no explicit row is implicitly 'inherit'. */
   capabilities: { capability: string; state: PermissionState }[];
   memberIds: number[];
-  /** H8/0804: soft-delete marker. Non-null means this role grants nothing and is hidden from the default list. */
+  /** H8: soft-delete marker. Non-null means this role grants nothing and is hidden from the default list. */
   deletedAt: string | null;
 }
 /** GET /api/roles/:id — identical shape to the list item. */
@@ -143,9 +143,9 @@ export interface RoleGrantRule {
   id: number;
   roleId: number;
   roleName: string;
-  /** Mutually exclusive with sourceRoleId — null when this rule fires off sourceRoleId instead (0812). */
+  /** Mutually exclusive with sourceRoleId — null when this rule fires off sourceRoleId instead. */
   triggerEvent: string | null;
-  /** Mutually exclusive with triggerEvent — set means "fires when this role is assigned/removed" (H8 role-assignment-as-trigger, 0812). */
+  /** Mutually exclusive with triggerEvent — set means "fires when this role is assigned/removed" (H8 role-assignment-as-trigger). */
   sourceRoleId: number | null;
   sourceRoleName: string | null;
   action: "grant" | "revoke";

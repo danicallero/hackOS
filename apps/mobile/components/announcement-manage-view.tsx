@@ -52,7 +52,7 @@ function statusTone(status: AnnouncementStatus): "warning" | "success" | "neutra
 }
 
 /**
- * Announcement management (H50, DELTA 0722), reached from the Notifications
+ * Announcement management (H50), reached from notification settings
  * tab's "Manage" segment when the account holds ANNOUNCEMENTS_MANAGE. Mirrors
  * the Schedule tab's own admin pattern: swipeable rows reveal edit/delete,
  * and both the swipe's edit action and the header's Add button open

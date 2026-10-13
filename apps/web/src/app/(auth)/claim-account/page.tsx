@@ -203,7 +203,7 @@ function ClaimInner() {
         <CardContent className="text-center">
           <SubmitButton
             onClick={() =>
-              // H9/H10/H188: every invitation kind lands somewhere specific
+              // H9/H10/#188: every invitation kind lands somewhere specific
               // after signing in — login honours the `next` param.
               router.push(withReturnPath("/login", destinationForKind(lookup.kind)))
             }

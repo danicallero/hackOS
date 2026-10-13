@@ -115,7 +115,7 @@ browser must never change what a public screen shows, so `LocaleProvider`
 language" sync on `/tv`; `TvDisplay`'s own `load()` is the only thing that
 calls `setLanguage` there, driven by the venue config it already fetches.
 
-`language` lives in `event_config.tv_language` (migration 0009, nullable —
+`language` lives in `event_config.tv_language` (nullable —
 null means "no override", the wall falls back to Spanish) alongside the Wi-Fi
 fields, so it survives control-page reloads and applies even when nobody is
 at the control page. `GET /api/tv/config` serves it publicly; `PATCH
@@ -126,8 +126,8 @@ other TV change.
 
 ## Venue Wi-Fi
 
-Credentials live in `event_config` (`wifi_ssid`, `wifi_password`,
-migration 0008), edited in **Settings → Event → Venue** behind
+Credentials live in `event_config` (`wifi_ssid`, `wifi_password`), edited in
+**Settings → Event → Venue** behind
 `VENUE_MANAGE`. `GET /api/tv/config` serves them to the screens; both the
 `live` screen and the full-screen `wifi` mode read from there, so a *scheduled*
 Wi-Fi slot works with nobody at the control page.

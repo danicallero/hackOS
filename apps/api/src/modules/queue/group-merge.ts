@@ -18,13 +18,12 @@ import { compactQueueGroupPositions } from "./ordering.js";
  * Merging an enterprise's challenges into one shared judging queue, and
  * splitting them back apart (H46).
  *
- * This is the only thing in the product that can produce a `queue_groups` row
- * with more than one challenge — everything else (group-scoped ordering,
- * call-once dedupe, the expanded room set) was already built for N>1 and has
- * simply never seen one. The rules:
+ * This is the product action that moves challenges into a shared queue.
+ * Other queue operations support shared groups and preserve their ordering,
+ * call-once dedupe and room scope. The rules:
  *
  * - A group only ever holds challenges of its own enterprise. Enforced in the
- *   database (0410's `queue_group_enterprise_guard`); re-checked here so the
+ *   database (`queue_group_enterprise_guard`); re-checked here so the
  *   caller gets a business error instead of a constraint violation.
  * - Merging is refused once any team involved has been **evaluated** — not
  *   merely once a queue exists or is being called from. Positions get
@@ -259,7 +258,7 @@ async function assertEnterpriseChallenges(
     .filter((row: { enterprise_id: number }) => Number(row.enterprise_id) !== enterpriseId)
     .map((row: { id: number }) => Number(row.id));
   if (foreign.length) {
-    // The same rule 0410's constraint trigger enforces, surfaced as a
+    // The same rule the database constraint trigger enforces, surfaced as a
     // business error rather than a 23514 from the database.
     throw new BadRequestError("A shared queue cannot span enterprises", {
       enterpriseId,
@@ -452,8 +451,7 @@ export async function splitQueueGroup(input: {
     const beforeTopology = await captureQueueTopology(client, [queueGroupId]);
 
     // The lowest challenge id keeps the existing group; the rest each get a
-    // fresh 1:1 group named after their own title, matching what 0410's
-    // per-challenge trigger would have created.
+    // fresh 1:1 group named after their own title.
     const [kept, ...moved] = memberIds;
     if (kept === undefined) throw new BadRequestError("Queue group is empty", { queueGroupId });
     for (const challengeId of moved) {

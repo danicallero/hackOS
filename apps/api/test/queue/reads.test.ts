@@ -628,7 +628,7 @@ describe("pace (H39)", () => {
   });
 });
 
-describe("called-too-long threshold (H34, H203)", () => {
+describe("called-too-long threshold (H34, #203)", () => {
   it("exposes a configurable threshold via queue settings and room pace, not a hardcoded fallback", async () => {
     const challengeId = await createChallenge();
     const roomId = await createRoom({ desiredMinutesPerTeam: 10 });

@@ -83,15 +83,15 @@ documented in full in its own section below.
 
 ## Backend changes
 
-**Schema.** Migration `0815_role_event_access.sql` adds the independent
-`roles.event_access` flag, its `role_seed_defaults` snapshot, and the
-`user_event_access` canonical read projection. A user is entitled only when
+**Schema.** The current schema uses the independent `roles.event_access`
+flag, its `role_seed_defaults` snapshot, and the `user_event_access` canonical
+read projection. A user is entitled only when
 their account is active and non-anonymized and at least one assigned,
 non-deleted role has the flag enabled; visibility and capabilities do not
-change that result. The same migration backfills roles, legacy users, durable
-tickets, and wallet-pass state so an already-approved app build keeps working
-through the rollout. `push_tokens` (already existed in
-`0001_initial.sql`) is now also written via the route below.
+change that result. The schema includes the role, user, ticket, and wallet-pass
+state needed to keep already-approved app builds working. `push_tokens` is
+defined in the consolidated baseline and is now also written via the route
+below.
 
 **Endpoints / hooks.**
 - `POST /api/me/push-tokens` (`apps/api/src/modules/notifications/routes/push-tokens.ts`)
@@ -614,7 +614,7 @@ Mobile filter triggers draw one background: standalone `FilterMenu` owns its cir
   (`components/schedule-swipe-row.tsx`, reused as-is), and both the header
   Add button and a row's swipe-to-edit open
   `components/announcement-form-modal.tsx`, which mirrors the web admin's
-  `AnnouncementFormModal` field-for-field (H50, DELTA 0722) — same
+  `AnnouncementFormModal` field-for-field (H50) — same
   audience/specific-recipient targeting exclusivity, per-announcement
   channel candidates, and the notify-only-vs-screen-placed window
   distinction. The recipient picker hits
@@ -680,7 +680,7 @@ Mobile filter triggers draw one background: standalone `FilterMenu` owns its cir
   glyph in the time gutter (`entriesOverlap`, `lib/schedule.ts`). The
   reminder bell sits absolutely positioned in the card's top-right corner
   (`hitSlop` — a 44pt touch box stretched the row and pulled the bell off the
-  title, H374) and toggles the H59 per-category notification model
+  title, #374) and toggles the H59 per-category notification model
   **straight from the list** via `lib/use-schedule-notifications.ts`;
   filled/accent means on, outline/grey off. The header branches on
   `isRealLiquidGlassAvailable()` (`components/glass-view.tsx`): on iOS 26+ it's

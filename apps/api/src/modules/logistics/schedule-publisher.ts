@@ -6,8 +6,8 @@ import { emitScheduleChanged, revealDueScheduleItems } from "./schedule.js";
 
 /**
  * Scheduled reveal trigger for schedule/activities (H47, H48; issue #80).
- * Audit finding: schedule rows carry publish_at since 0001_initial.sql but
- * nothing ever flipped visibility when it matured, so a scheduled reveal was
+ * Audit finding: schedule rows carry publish_at, but nothing ever flipped
+ * visibility when it matured, so a scheduled reveal was
  * invisible to open clients (H47 "se reflejen al momento") and untraceable
  * (H53). Mirrors challenges/visibility-publisher.ts: flip inside a
  * transaction, audit each id, broadcast once after commit.

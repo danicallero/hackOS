@@ -308,7 +308,7 @@ const MessagesView = memo(function MessagesView({ unreadOnly }: { unreadOnly: bo
         },
       );
       // Stays in the "unread only" list — just no longer styled as unread —
-      // until the user collapses it again (H489): removing it immediately
+      // until the user collapses it again (#489): removing it immediately
       // would filter out the very item they just opened to read.
       updateBothCaches(item.id, (row) => ({ ...row, read_at: result.read_at }));
       emitNotificationChange();
@@ -359,7 +359,7 @@ const MessagesView = memo(function MessagesView({ unreadOnly }: { unreadOnly: bo
       void markRead(item);
     } else if (wasExpanded && unreadOnly) {
       // Collapsing an already-read item while filtering unread-only: its
-      // grace period is over, so it can now drop out of the list (H489).
+      // grace period is over, so it can now drop out of the list (#489).
       unread.setData((current) =>
         current
           ? {

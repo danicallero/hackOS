@@ -77,7 +77,7 @@ function ResetPasswordForm() {
       return;
     }
     // H5: resetting closes all old sessions server-side; send them to sign in,
-    // carrying whatever they were trying to reach before recovery (H188).
+    // carrying whatever they were trying to reach before recovery (#188).
     toast.success(t("passwordUpdated"), { compactTitle: t("toastChangePassword") });
     router.push(withReturnPath("/login", rawNext));
   }

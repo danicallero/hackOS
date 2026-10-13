@@ -176,12 +176,12 @@ personal layout to current catalog defaults.
 
 ## Configuration history
 
-Migration `0818_statistics_configuration.sql` introduced the explicit
-publication flag and generic ACL table. Forward-only migration 0824 transforms
-current retained application templates exactly once, moving `reporting: true`
-to `statistics.enabled: true`, removing the old key, and moving application
-ACL rows into the generic scope table. Immutable submitted-form snapshots stay
-unchanged.
+The current schema stores an explicit publication flag and a generic ACL
+table. Application templates use `statistics.enabled`; the old `reporting`
+alias and application-specific routes are not part of the API. Immutable
+submitted-form snapshots stay unchanged. Old time-series ACL/layout ids are
+canonicalized to the descriptive `applications-*` ids at read time; `funnel`
+is canonicalized to `overview`.
 
 Question publication and visualization metadata are stored with the application
 template, so deployment/event configuration remains the source of truth rather

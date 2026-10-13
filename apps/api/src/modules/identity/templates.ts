@@ -3,7 +3,7 @@ import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 /**
  * H8's platform templates are a code catalogue used to prefill a new role's
  * capabilities (routes/roles.ts's create-from-template flow) and to seed the
- * initial role hierarchy (migration 0801). Labels are message keys only;
+ * initial role hierarchy. Labels are message keys only;
  * clients resolve them in their own trilingual copy.
  */
 export interface PermissionGroupTemplate {

@@ -28,7 +28,7 @@ export interface RequestAdmissionOptions {
 
 /**
  * Small in-process priority gate for finite HTTP work (H29, H38, H41-H42,
- * H540, #544). Role position orders queued requests first; reserved capacity
+ * #540, #544). Role position orders queued requests first; reserved capacity
  * keeps all P2/P3 traffic from consuming the operational share, including
  * authenticated participant and sponsor requests.
  */

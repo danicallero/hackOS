@@ -80,7 +80,7 @@ function VerifyEmailInner() {
   const verified =
     !errorInfo && (params.get("verified") !== null || params.get("status") === "verified");
   // Where to send the person after a successful verification or a resend
-  // (H188): the application or other same-origin destination they were
+  // (#188): the application or other same-origin destination they were
   // originally interrupted from, falling back to the schedule.
   const rawNext = params.get("next");
   const next = safeReturnPath(rawNext, "/timetable");
@@ -107,7 +107,7 @@ function VerifyEmailInner() {
     try {
       await api.post("/api/auth/resend-verification", {
         email: values.email,
-        // Keep the interrupted destination alive across a resend too (H188).
+        // Keep the interrupted destination alive across a resend too (#188).
         ...(rawNext
           ? { callbackURL: `/verify-email?verified=1&next=${encodeURIComponent(next)}` }
           : {}),

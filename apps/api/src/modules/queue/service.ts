@@ -1675,7 +1675,7 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
     const byGroup = new Map<number, QueueEntryRow[]>();
     for (const e of calledEntries as QueueEntryRow[]) {
       const groupId = await challengeQueueGroupId(client, e.challenge_id);
-      // A challenge with no group row cannot exist (0410's trigger), but a
+      // A managed challenge should always have a group row, but a
       // negative synthetic key keeps such a row in its own partition rather
       // than silently merging every ungrouped entry together.
       const key = groupId ?? -e.challenge_id;
