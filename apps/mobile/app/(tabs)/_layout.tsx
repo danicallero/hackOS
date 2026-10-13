@@ -22,7 +22,8 @@ export default function TabLayout() {
   const capabilities = me?.capabilities ?? [];
   const { t } = useLocale();
   const navigation = useNavigation();
-  const segments = useSegments();
+  // Typed routes narrow this to the layout's own segment; the child is read at runtime.
+  const segments: readonly string[] = useSegments();
   const labelKey = tabLabelKeyForSegment(segments[1]);
   const title = labelKey ? t(labelKey) : "";
 
