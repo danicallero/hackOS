@@ -7,10 +7,10 @@ import { MultiSelect } from "@/components/common/multi-select";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { api } from "@/lib/api";
+import { getFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { pickText, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
-import type { Intolerance, UserListItem } from "@/lib/types";
+import type { UserListItem } from "@/lib/types";
 
 function csvValue(value: string) {
   return `"${value.replaceAll('"', '""')}"`;
@@ -49,9 +49,7 @@ export function UserRosterExportPanel({
     setExporting(true);
     let intoleranceNames = new Map<number, string>();
     try {
-      const { intolerances } = await api.get<{ intolerances: Intolerance[] }>(
-        "/api/public/food-intolerances",
-      );
+      const intolerances = await getFoodIntolerances();
       intoleranceNames = new Map(
         intolerances.map((intolerance) => [intolerance.id, pickText(intolerance.label, language)]),
       );

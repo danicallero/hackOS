@@ -29,10 +29,10 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { api } from "@/lib/api";
+import { getFoodIntolerances, useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { apiErrorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal, getTimeZoneLabel } from "@/lib/datetime";
-import { type Translate, useLocale } from "@/lib/i18n";
+import { pickText, type Translate, useLocale } from "@/lib/i18n";
 import type { AnnouncementInput, NotificationChannel } from "@/lib/notifications";
 import { notificationsApi } from "@/lib/notifications";
 import { toast } from "@/lib/toast";
@@ -80,9 +80,7 @@ export function AnnouncementFormModal({
   const [values, setValues] = useState(initial);
   const [recipients, setRecipients] = useState<UserOption[]>(initialRecipients ?? []);
   const [roles, setRoles] = useState<Array<{ id: number; name: string }>>([]);
-  const [intolerances, setIntolerances] = useState<
-    Array<{ id: number; label: Record<string, string> | unknown }>
-  >([]);
+  const { intolerances } = useFoodIntolerances();
   // Tracked as its own state rather than derived from role/intolerance filters:
   // picking "By role" or "Specific people" starts with an empty
   // selection, and a purely-derived mode would immediately snap back to
@@ -116,16 +114,10 @@ export function AnnouncementFormModal({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      notificationsApi.targetingOptions(),
-      api.get<{ intolerances: Array<{ id: number; label: Record<string, string> | unknown }> }>(
-        "/api/public/food-intolerances",
-      ),
-    ])
-      .then(([options, dictionary]) => {
+    Promise.all([notificationsApi.targetingOptions(), getFoodIntolerances()])
+      .then(([options]) => {
         if (cancelled) return;
         setRoles(options.roles);
-        setIntolerances(dictionary.intolerances);
       })
       .catch(() => {
         if (!cancelled)
@@ -566,13 +558,7 @@ export function AnnouncementFormModal({
                         id="announcement-intolerance-picker"
                         options={intolerances.map((intolerance) => ({
                           value: String(intolerance.id),
-                          label:
-                            typeof intolerance.label === "object" && intolerance.label
-                              ? ((intolerance.label as Record<string, string>)[language] ??
-                                (intolerance.label as Record<string, string>).es ??
-                                (intolerance.label as Record<string, string>).en ??
-                                String(intolerance.id))
-                              : String(intolerance.id),
+                          label: pickText(intolerance.label, language) || String(intolerance.id),
                         }))}
                         value={values.intoleranceIds.map(String)}
                         onChange={(intoleranceIds) =>

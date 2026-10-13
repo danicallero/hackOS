@@ -292,6 +292,10 @@ export function GrantRulesPanel({
                       variant="ghost"
                       className="text-muted-foreground hover:text-destructive"
                       onClick={() => setDeleteTarget(rule)}
+                      aria-label={t("deleteGrantRuleAria", {
+                        role: rule.roleName,
+                        trigger: ruleTriggerLabel(rule, t),
+                      })}
                     >
                       <TrashIcon aria-hidden="true" />
                     </Button>

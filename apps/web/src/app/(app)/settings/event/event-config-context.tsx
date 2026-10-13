@@ -28,9 +28,11 @@ const EventConfigContext = createContext<EventConfigContextValue | null>(null);
 export function EventConfigProvider({
   children,
   enabled = true,
+  refreshKey = 0,
 }: {
   children: React.ReactNode;
   enabled?: boolean;
+  refreshKey?: number;
 }) {
   const { t } = useLocale();
   const [config, setConfig] = useState<EventConfig | null>(null);
@@ -55,6 +57,7 @@ export function EventConfigProvider({
     try {
       const cfg = await api.get<EventConfig>("/api/event");
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
+      setEventTimeZone(cfg.timezone);
       setConfig(cfg);
       setStatus("ready");
     } catch (err) {
@@ -64,12 +67,14 @@ export function EventConfigProvider({
     }
   }, [t, enabled]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is the SSE nonce that intentionally retriggers this read.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching event config from API is a legitimate external-system sync on mount.
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   const applyConfig = useCallback((next: EventConfig) => {
+    requestIdRef.current += 1;
     setConfig(next);
     setEventTimeZone(next.timezone);
   }, []);

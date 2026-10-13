@@ -37,6 +37,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import {
+  getFoodIntolerances,
+  refreshFoodIntolerances,
+  useFoodIntolerances,
+} from "@/hooks/use-food-intolerances";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { pickText, useLocale } from "@/lib/i18n";
@@ -86,7 +91,7 @@ const EMPTY: Values = {
 
 export function IntolerancesManager() {
   const { t } = useLocale();
-  const [entries, setEntries] = useState<Intolerance[]>([]);
+  const { intolerances: entries } = useFoodIntolerances();
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
@@ -99,32 +104,32 @@ export function IntolerancesManager() {
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: EMPTY });
   const { reset } = form;
 
-  const load = useCallback(async () => {
-    if (!hasLoaded()) setLoading(true);
-    try {
-      const { intolerances } = await api.get<{ intolerances: Intolerance[] }>(
-        "/api/public/food-intolerances",
-      );
-      succeeded();
-      setLoadError(null);
-      setEntries(intolerances);
-    } catch (err) {
-      // A failed background refresh keeps the list (#1012).
-      if (!failed(err)) return;
-      setLoadError(apiErrorText(err, t, t("couldNotLoadDictionary")));
-    } finally {
-      setLoading(false);
-    }
-  }, [t, succeeded, failed, hasLoaded]);
+  const load = useCallback(
+    async (force = false) => {
+      if (!hasLoaded()) setLoading(true);
+      try {
+        if (force) await refreshFoodIntolerances();
+        else await getFoodIntolerances();
+        succeeded();
+        setLoadError(null);
+      } catch (err) {
+        // A failed background refresh keeps the list (#1012).
+        if (!failed(err)) return;
+        setLoadError(apiErrorText(err, t, t("couldNotLoadDictionary")));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [t, succeeded, failed, hasLoaded],
+  );
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // edits the intolerances library elsewhere.
   const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.LOGISTICS), [EVENTS.DOMAIN_CHANGED]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
+    load(liveRefresh > 0 || retryNonce > 0);
   }, [load, liveRefresh, retryNonce]);
 
   // Prime the form whenever the create/edit modal opens.
@@ -163,7 +168,7 @@ export function IntolerancesManager() {
         toast.success(t("intoleranceAdded"), { compactTitle: t("toastSaveDietaryNeed") });
       }
       setEditing(undefined);
-      await load();
+      await load(true);
     } catch (err) {
       toast.error(apiErrorText(err, t, t("couldNotSaveEntry")), t("toastSaveDietaryNeed"));
     }
@@ -176,7 +181,7 @@ export function IntolerancesManager() {
       await api.delete(`/api/food-intolerances/${deleteTarget.id}`);
       toast.success(t("intoleranceDeleted"), { compactTitle: t("toastDeleteDietaryNeed") });
       setDeleteTarget(null);
-      await load();
+      await load(true);
     } catch (err) {
       toast.error(apiErrorText(err, t, t("couldNotDeleteEntry")), t("toastDeleteDietaryNeed"));
     } finally {

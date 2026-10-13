@@ -111,11 +111,14 @@ export function VenueTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
     },
   });
   const { reset, formState, control } = form;
+  const dirtyFields = formState.dirtyFields;
+  // The subscription lets react-hook-form preserve dirty values during reset.
+  void dirtyFields;
   const values = useWatch({ control });
   const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, onDirtyChange);
 
   useEffect(() => {
-    if (config) reset(fromConfig(config));
+    if (config) reset(fromConfig(config), { keepDirtyValues: true });
   }, [config, reset]);
 
   function handleCoordinateInput(raw: string, field: { onChange: (value: string) => void }) {
@@ -171,7 +174,7 @@ export function VenueTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
     }
   }
 
-  if (status !== "ready" || !config) {
+  if (!config || status === "error") {
     return <EventConfigLoadState />;
   }
   const venueLatitude = values.venueLatitude ?? "";

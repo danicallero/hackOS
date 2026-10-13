@@ -383,8 +383,8 @@ export function WalletTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Sync local form state from loaded event config; populate inputs when config arrives.
-    if (config) applyFromConfig(config);
-  }, [config, applyFromConfig]);
+    if (config && !dirty) applyFromConfig(config);
+  }, [config, dirty, applyFromConfig]);
 
   function markDirty<T>(setter: (value: T) => void) {
     return (value: T) => {
@@ -423,7 +423,7 @@ export function WalletTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
     }
   }
 
-  if (status !== "ready" || !config) {
+  if (!config || status === "error") {
     return <EventConfigLoadState />;
   }
   const liveEventName = config.name?.trim() ?? "";

@@ -104,7 +104,7 @@ function TagLabelDialog({
           maxLength={LABEL_MAX}
           autoComplete="off"
           autoFocus
-          placeholder="Lanyard Ana"
+          placeholder={t("standTagNamePlaceholder")}
           disabled={pending}
           onChange={(event) => setValue(event.target.value)}
         />

@@ -83,6 +83,14 @@ caches or `useEffect` + `api.get` reads, and never turn a failed read into an
 empty or hard-coded list: expose `error` and render `ContextualError` with a
 retry. `useAutoRefresh` pages are migrated as they are touched.
 
+The food-intolerance dictionary follows this shared pattern through
+`useFoodIntolerances()` for mounted readers and `getFoodIntolerances()` for
+one-shot reads. The libraries manager invalidates and refreshes the shared key
+after edits and logistics updates, then publishes the result to mounted
+readers. The schedule editor and event settings subscribe to the content stream
+and merge new server values into open forms while keeping fields the user has
+changed.
+
 ### Background refresh failures
 
 A page whose `load()` is re-run by `useAutoRefresh` must not treat a failed

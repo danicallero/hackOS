@@ -126,7 +126,7 @@ export function LinkNfcDialog({
             value={label}
             maxLength={LABEL_MAX}
             autoComplete="off"
-            placeholder="Lanyard Ana"
+            placeholder={t("standTagNamePlaceholder")}
             disabled={pending}
             onChange={(event) => setLabel(event.target.value)}
           />

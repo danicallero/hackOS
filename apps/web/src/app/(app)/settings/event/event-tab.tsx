@@ -168,11 +168,14 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
     },
   });
   const { reset, formState, control } = form;
+  const dirtyFields = formState.dirtyFields;
+  // The subscription lets react-hook-form preserve dirty values during reset.
+  void dirtyFields;
   const values = useWatch({ control });
   const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, onDirtyChange);
 
   useEffect(() => {
-    if (config) reset(fromConfig(config));
+    if (config) reset(fromConfig(config), { keepDirtyValues: true });
   }, [config, reset]);
 
   async function onSubmit(values: Values) {
@@ -223,7 +226,7 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
     else if (names.length > 0) setView("schedule");
   }
 
-  if (status !== "ready" || !config) {
+  if (!config || status === "error") {
     return <EventConfigLoadState />;
   }
   const timezone = isValidTimeZone(values.timezone?.trim())

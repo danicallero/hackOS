@@ -32,6 +32,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/surface";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { getFoodIntolerances, useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -49,7 +50,6 @@ import {
   fieldErrorsFromApi,
   fmtDateTime,
   groupFieldsBySections,
-  type IntoleranceOption,
   isConfirmationExpiredError,
   isNotFoundError,
   type MutationKey,
@@ -73,7 +73,7 @@ export default function MyApplicationDetailPage() {
   const lang: Language = language;
   const [form, setForm] = useState<PublicForm | null>(null);
   const [response, setResponse] = useState<MyResponseDetail | null>(null);
-  const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
+  const { intolerances } = useFoodIntolerances();
   const { sizes: shirtSizes } = useShirtSizes();
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [answerRevision, setAnswerRevision] = useState(0);
@@ -100,7 +100,6 @@ export default function MyApplicationDetailPage() {
   const hasLoadedRef = useRef(false);
   const formRef = useRef<PublicForm | null>(null);
   const responseRef = useRef<MyResponseDetail | null>(null);
-  const intolerancesRef = useRef<IntoleranceOption[]>([]);
   const tRef = useRef(t);
   useEffect(() => {
     tRef.current = t;
@@ -138,7 +137,7 @@ export default function MyApplicationDetailPage() {
     const [formRes, respRes, intolRes] = await Promise.allSettled([
       api.get<PublicForm>(`/api/public/applications/${id}`),
       api.get<MyResponseDetail>(`/api/applications/${id}/response`),
-      api.get<{ intolerances: IntoleranceOption[] }>("/api/public/food-intolerances"),
+      getFoodIntolerances(),
     ]);
     const nextForm = formRes.status === "fulfilled" ? formRes.value : formRef.current;
     const nextResponse = respRes.status === "fulfilled" ? respRes.value : responseRef.current;
@@ -159,7 +158,6 @@ export default function MyApplicationDetailPage() {
       responseRef.current = null;
       setConfirmationExpired(false);
     }
-    if (intolRes.status === "fulfilled") intolerancesRef.current = intolRes.value.intolerances;
 
     const nextFormError =
       formRes.status === "rejected" && !isNotFoundError(formRes.reason)
@@ -182,7 +180,6 @@ export default function MyApplicationDetailPage() {
     );
     setForm(formRef.current);
     setResponse(responseRef.current);
-    setIntolerances(intolerancesRef.current);
     // Seed answers from the saved response, then prefill the appended shirt-size
     // and dietary fields from the profile so the applicant doesn't re-enter data
     // the API already knows (H12). Saved values always win over the profile.

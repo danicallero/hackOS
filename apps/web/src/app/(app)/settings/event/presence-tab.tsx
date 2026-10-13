@@ -56,10 +56,13 @@ export function PresenceTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
     defaultValues: { presenceAutoEntryAt: "", presenceCertaintyWindowMinutes: 720 },
   });
   const { reset, formState } = form;
+  const dirtyFields = formState.dirtyFields;
+  // The subscription lets react-hook-form preserve dirty values during reset.
+  void dirtyFields;
   const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, onDirtyChange);
 
   useEffect(() => {
-    if (config) reset(fromConfig(config));
+    if (config) reset(fromConfig(config), { keepDirtyValues: true });
   }, [config, reset]);
 
   async function onSubmit(values: Values) {
@@ -79,7 +82,7 @@ export function PresenceTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
     }
   }
 
-  if (status !== "ready" || !config) {
+  if (!config || status === "error") {
     return <EventConfigLoadState />;
   }
 

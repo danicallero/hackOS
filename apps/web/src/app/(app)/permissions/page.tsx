@@ -1,5 +1,6 @@
 "use client";
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowUUpLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowUUpLeft";
@@ -12,6 +13,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { AccessDenied } from "@/components/common/access-denied";
 import { ActionGroup } from "@/components/common/action-group";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -46,7 +48,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
-import { invalidateServerState, readServerState } from "@/lib/server-state";
+import { readServerState } from "@/lib/server-state";
+import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type {
   PermissionState,
@@ -61,6 +64,7 @@ import { GrantRulesOverviewModal } from "./grant-rules-overview";
 import { permissionTemplateName } from "./helpers";
 import { DrilldownBackButton, RoleEditor } from "./role-editor";
 import { RoleList } from "./role-list";
+import { invalidatePermissionsResources, PERMISSIONS_RESOURCES } from "./server-state";
 
 // H8: one role hierarchy with the selected role persisted in ?role=<id>.
 // Desktop uses two panes; below md, the same state drives a mobile drill-down.
@@ -81,17 +85,16 @@ const createSchema = (t: Translate) =>
 
 type CreateValues = z.infer<ReturnType<typeof createSchema>>;
 
-const PERMISSIONS_RESOURCES = {
-  roles: ["permissions", "roles"],
-  templates: ["permissions", "role-templates"],
-  users: ["permissions", "users", 200],
-} as const;
+export default function PermissionsPage() {
+  const canManage = useCan(CAPABILITIES.PERMISSIONS_MANAGE);
+  const { t } = useLocale();
 
-function invalidatePermissionsResources() {
-  for (const key of Object.values(PERMISSIONS_RESOURCES)) invalidateServerState(key);
+  if (!canManage) return <AccessDenied ask={t("noPermissionsAccessDesc")} />;
+
+  return <PermissionsPageContent />;
 }
 
-export default function PermissionsPage() {
+function PermissionsPageContent() {
   const { t } = useLocale();
   const router = useRouter();
   const pathname = usePathname();
