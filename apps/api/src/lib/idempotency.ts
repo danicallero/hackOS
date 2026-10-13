@@ -31,6 +31,35 @@ import { ConflictError } from "./errors.js";
  */
 const STALE_IN_FLIGHT_MS = 30_000;
 
+/**
+ * Retention (#994, H54 data minimisation). Completed rows are kept 7 days —
+ * longer than the longest legitimate replay (a mobile scanner reconnecting
+ * after an offline shift reuses the scan id as its key) — then purged.
+ * NULL-response rows (never completed, or the H54 pending-removal marker) are
+ * kept 1 day, far past STALE_IN_FLIGHT_MS, so a reclaim is always possible.
+ */
+export const IDEMPOTENCY_RETENTION_DAYS = 7;
+export const IDEMPOTENCY_IN_FLIGHT_RETENTION_DAYS = 1;
+const PURGE_BATCH = 1000;
+
+/** Batched purge of expired rows; returns the number deleted. */
+export async function purgeExpiredIdempotencyKeys(): Promise<number> {
+  let total = 0;
+  for (;;) {
+    const { rowCount } = await pool.query(
+      `DELETE FROM idempotency_keys WHERE ctid IN (
+         SELECT ctid FROM idempotency_keys
+          WHERE (response_status IS NOT NULL AND created_at < now() - make_interval(days => $1))
+             OR (response_status IS NULL AND created_at < now() - make_interval(days => $2))
+          LIMIT $3
+       )`,
+      [IDEMPOTENCY_RETENTION_DAYS, IDEMPOTENCY_IN_FLIGHT_RETENTION_DAYS, PURGE_BATCH],
+    );
+    total += rowCount ?? 0;
+    if ((rowCount ?? 0) < PURGE_BATCH) return total;
+  }
+}
+
 function requestHash(req: FastifyRequest): string {
   return (
     createHash("sha256")
