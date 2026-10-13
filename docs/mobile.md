@@ -802,7 +802,10 @@ star, a native `Stack.Toolbar.Button` (`star` / `star.fill`) drawn as the same
 circle as the search button, sit on the right, with a wallet button after them (`wallet.pass`) that opens the
 badge/ticket wallet in a full-screen modal (`WalletModal` in
 `components/account-wallet.tsx`, the same `WalletScreen` and close button as
-Account's overlay, H28). The wallet button stays on Companies. Android and earlier iOS use
+Account's overlay, H28), opened on the badge (`initialPurpose="badge"`), the
+card someone you meet scans; Account opens on the ticket. The ticket and badge
+cards keep fixed sides (ticket left, badge right): a swipe left goes to the
+badge, and each card's slide follows from its own index. The wallet button stays on Companies. Android and earlier iOS use
 `LegacyScreenHeader`: the title, a glass star toggle, the wallet button and the search button that
 expands into the field. Search and the star apply to People only, and only
 once it has someone to search; on Companies the native search and the star are

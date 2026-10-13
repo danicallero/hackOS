@@ -102,7 +102,8 @@ export function AccountWalletOverlay({ wallet }: { wallet: AccountWalletControll
 /**
  * The same wallet and close button in a full-screen modal, for screens whose
  * native header would cover an in-page overlay (the Diary, #935). The close
- * button sits where the Account one does.
+ * button sits where the Account one does. It opens on the badge, the card
+ * someone you meet scans.
  */
 export function WalletModal({ wallet }: { wallet: AccountWalletController }) {
   return (
@@ -114,7 +115,11 @@ export function WalletModal({ wallet }: { wallet: AccountWalletController }) {
       }}
     >
       <View testID="wallet-modal" style={{ backgroundColor: colors.background, flex: 1 }}>
-        <WalletOverlayContent wallet={wallet} closeTestID="wallet-modal-close" />
+        <WalletOverlayContent
+          wallet={wallet}
+          closeTestID="wallet-modal-close"
+          initialPurpose="badge"
+        />
       </View>
     </Modal>
   );
@@ -122,15 +127,17 @@ export function WalletModal({ wallet }: { wallet: AccountWalletController }) {
 
 function WalletOverlayContent({
   closeTestID,
+  initialPurpose,
   wallet,
 }: {
   closeTestID: string;
+  initialPurpose?: "ticket" | "badge";
   wallet: AccountWalletController;
 }) {
   const chrome = accountWalletChrome(useSafeAreaInsets().top, Platform.OS);
   return (
     <>
-      <WalletScreen contentTopInset={chrome.walletContentTop} />
+      <WalletScreen contentTopInset={chrome.walletContentTop} initialPurpose={initialPurpose} />
       <AndroidStatusBarScrim />
       <WalletToggleButton
         testID={closeTestID}

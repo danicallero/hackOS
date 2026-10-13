@@ -129,7 +129,14 @@ jest.mock("@/components/glass-view", () => ({
   isRealLiquidGlassAvailable: () => mockGlass,
 }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
-jest.mock("@/components/wallet-screen", () => ({ __esModule: true, default: () => null }));
+let mockWalletProps: { initialPurpose?: string } | null = null;
+jest.mock("@/components/wallet-screen", () => ({
+  __esModule: true,
+  default: (props: { initialPurpose?: string }) => {
+    mockWalletProps = props;
+    return null;
+  },
+}));
 jest.mock("react-native-svg", () => {
   const { View } = require("react-native");
   return { __esModule: true, default: View, Path: View, Circle: View };
@@ -305,6 +312,8 @@ describe("Wallet", () => {
     expect(screen.queryByTestId("wallet-modal")).toBeNull();
     await fireEvent.press(screen.getByLabelText("tabWallet"));
     expect(screen.getByTestId("wallet-modal")).toBeTruthy();
+    // The card someone you meet scans comes first.
+    expect(mockWalletProps?.initialPurpose).toBe("badge");
   });
 
   it("keeps the wallet button on Companies, where the star is hidden", async () => {
