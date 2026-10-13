@@ -44,3 +44,15 @@ export const EVENT_WEBSITE_DISPLAY = EVENT_WEBSITE_URL.replace(/^https?:\/\//, "
   /\/$/,
   "",
 );
+
+/**
+ * Where the blocking update screen sends the user (#999). iOS needs the numeric
+ * App Store ID (`EXPO_PUBLIC_IOS_APP_STORE_ID`, same value as `ascAppId`);
+ * without it the event website is the fallback.
+ */
+export function storeUrl(platform: string, iosAppId = process.env.EXPO_PUBLIC_IOS_APP_STORE_ID) {
+  if (platform === "android") return "market://details?id=com.hackudc.os";
+  return iosAppId && /^\d+$/.test(iosAppId)
+    ? `itms-apps://apps.apple.com/app/id${iosAppId}`
+    : EVENT_WEBSITE_URL;
+}

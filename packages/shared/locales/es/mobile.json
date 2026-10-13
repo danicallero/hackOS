@@ -911,5 +911,8 @@
   "networkingLoadError": "No se ha podido cargar el perfil.",
   "networkingSaveError": "No se ha podido guardar el perfil.",
   "networkingInvite": "Los participantes y representantes de empresas que escaneen tu acreditación en el evento verán este perfil, y os añadiréis mutuamente a contactos.",
-  "networkingInviteAction": "Completar perfil"
+  "networkingInviteAction": "Completar perfil",
+  "upgradeRequiredTitle": "Actualización necesaria",
+  "upgradeRequiredBody": "Actualiza hackOS para seguir usando la app.",
+  "upgradeRequiredAction": "Actualizar"
 }

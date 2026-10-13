@@ -48,6 +48,13 @@ export class ConflictError extends AppError {
   }
 }
 
+/** An installed mobile build is older than `MOBILE_MIN_BUILD` and must be updated (#999). */
+export class UpgradeRequiredError extends AppError {
+  constructor(details: { minBuild: number; build: number }) {
+    super(426, "upgrade_required", "This version of the app is no longer supported", details);
+  }
+}
+
 /** A dependent provider/credential isn't configured, e.g. Apple/Google wallet signing (H28). */
 export class ServiceUnavailableError extends AppError {
   constructor(message: string, details?: Record<string, unknown>) {
