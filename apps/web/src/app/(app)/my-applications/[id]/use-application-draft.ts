@@ -1,7 +1,8 @@
 "use client";
 
 import { type MutableRefObject, useCallback, useEffect } from "react";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import type { Translate } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { toast } from "@/lib/toast";
@@ -82,7 +83,7 @@ export function useApplicationDraft({
         return;
       }
       setSaveState("error");
-      const message = error instanceof ApiError ? error.message : t("couldNotSaveDraft");
+      const message = apiErrorText(error, t, t("couldNotSaveDraft"));
       setActionError({ action: "save", message });
       toast.error(message, t("saveDraft"));
     } finally {
@@ -115,7 +116,7 @@ export function useApplicationDraft({
         if (!active) return;
         setActionError({
           action: "save",
-          message: error instanceof ApiError ? error.message : t("couldNotSaveDraft"),
+          message: apiErrorText(error, t, t("couldNotSaveDraft")),
         });
       });
     return () => {

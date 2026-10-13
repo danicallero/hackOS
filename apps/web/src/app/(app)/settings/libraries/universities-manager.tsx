@@ -37,6 +37,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { LibraryToolbar } from "./library-toolbar";
@@ -80,7 +81,7 @@ export function UniversitiesManager() {
       hasLoadedRef.current = true;
       setEntries(universities);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadDirectory");
+      const message = apiErrorText(err, t, t("couldNotLoadDirectory"));
       setLoadError(message);
       toast.error(message, t("universitiesTab"));
     } finally {
@@ -119,10 +120,7 @@ export function UniversitiesManager() {
       setEditing(undefined);
       await load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveUniversity"),
-        t("toastSaveUniversity"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveUniversity")), t("toastSaveUniversity"));
     }
   }
 
@@ -139,9 +137,7 @@ export function UniversitiesManager() {
         err instanceof ApiError &&
           (err.details as { reason?: string } | undefined)?.reason === "university_in_use"
           ? t("universityInUse")
-          : err instanceof ApiError
-            ? err.message
-            : t("couldNotDeleteUniversity"),
+          : apiErrorText(err, t, t("couldNotDeleteUniversity")),
         t("deleteUniversityTitle"),
       );
     } finally {
@@ -169,9 +165,7 @@ export function UniversitiesManager() {
       setNormalizationTargetId("");
       await load();
     } catch (err) {
-      setNormalizationError(
-        err instanceof ApiError ? err.message : t("couldNotNormalizeUniversities"),
-      );
+      setNormalizationError(apiErrorText(err, t, t("couldNotNormalizeUniversities")));
     } finally {
       setNormalizing(false);
     }

@@ -35,7 +35,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api, apiUpload } from "@/lib/api";
+import { api, apiUpload } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
@@ -180,7 +181,7 @@ export default function EnterprisesPage() {
       setSelectedIds(new Set());
     } catch (err) {
       setEnterprises([]);
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadEnterprises");
+      const message = apiErrorText(err, t, t("couldNotLoadEnterprises"));
       setLoadError(message);
       toast.error(message, t("toastCompanies"));
     } finally {
@@ -208,7 +209,7 @@ export default function EnterprisesPage() {
         await load();
       } catch (err) {
         toast.error(
-          err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"),
+          apiErrorText(err, t, t("couldNotUpdateVisibility")),
           t("toastCompanyVisibility"),
         );
       } finally {
@@ -243,7 +244,7 @@ export default function EnterprisesPage() {
       })
       .catch((err) => {
         if (!alive) return;
-        const message = err instanceof ApiError ? err.message : t("couldNotLoadYourEnterprise");
+        const message = apiErrorText(err, t, t("couldNotLoadYourEnterprise"));
         setLoadError(message);
         toast.error(message, t("toastDeleteCompany"));
         setLoading(false);
@@ -449,18 +450,12 @@ function CreateEnterpriseModal({
         if (defaultLogo) await uploadLogo(created.id, defaultLogo, "default");
         if (darkLogo) await uploadLogo(created.id, darkLogo, "negative");
       } catch (err) {
-        toast.error(
-          err instanceof ApiError ? err.message : t("couldNotUploadLogo"),
-          t("uploadLogo"),
-        );
+        toast.error(apiErrorText(err, t, t("couldNotUploadLogo")), t("uploadLogo"));
       }
       toast.success(t("enterpriseCreated"), { compactTitle: t("toastCreateCompany") });
       await onCreated(created);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotCreateEnterprise"),
-        t("toastCreateCompany"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotCreateEnterprise")), t("toastCreateCompany"));
     }
   }
 

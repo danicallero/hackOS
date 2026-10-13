@@ -10,7 +10,8 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -36,10 +37,7 @@ export function EmailCard() {
       setSecondary("");
       await refresh();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSendVerificationEmail"),
-        t("toastVerifyEmail"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSendVerificationEmail")), t("toastVerifyEmail"));
     } finally {
       setSaving(false);
     }
@@ -52,10 +50,7 @@ export function EmailCard() {
       toast.success(t("secondaryEmailRemoved"), { compactTitle: t("toastRemoveEmail") });
       await refresh();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRemoveSecondaryEmail"),
-        t("toastRemoveEmail"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRemoveSecondaryEmail")), t("toastRemoveEmail"));
     } finally {
       setSaving(false);
     }

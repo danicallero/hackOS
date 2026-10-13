@@ -11,11 +11,11 @@ import { Spinner } from "@/components/common/spinner";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import type { Intolerance, UserDetail } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
-
 import { ApplicationTab } from "./application-tab";
 import { LogsTab } from "./logs-tab";
 import { OverviewTab } from "./overview-tab";
@@ -59,7 +59,7 @@ export default function UserProfilePage() {
       setUser(data);
       setStatus("ready");
     } catch (err) {
-      setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadUserProfile"));
+      setErrorMsg(apiErrorText(err, t, t("couldNotLoadUserProfile")));
       setStatus("error");
     }
   }, [userId, t]);

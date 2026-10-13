@@ -158,7 +158,7 @@ export function ReviewForm({
         ? openSession(entryId, roomId ?? undefined).catch(() => null)
         : Promise.resolve(null),
     ])
-      .catch((err) => setSaveError(errorMessage(err, t("couldNotLoadReview"))))
+      .catch((err) => setSaveError(errorMessage(err, t, t("couldNotLoadReview"))))
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -280,7 +280,7 @@ export function ReviewForm({
           });
       } catch (err) {
         const fallback = t("couldNotSaveReview");
-        const message = errorMessage(err, fallback);
+        const message = errorMessage(err, t, fallback);
         setSaveError(message);
       } finally {
         savingRef.current = false;

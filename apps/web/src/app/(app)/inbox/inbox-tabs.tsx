@@ -43,7 +43,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { notifyNotificationsRead } from "@/hooks/use-unread-count";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
@@ -171,10 +171,7 @@ export function MessagesTab() {
       notifyNotificationsRead();
       refetch();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotMarkRead"),
-        t("toastMarkRead"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotMarkRead")), t("toastMarkRead"));
     }
   }
 
@@ -199,7 +196,7 @@ export function MessagesTab() {
       setDeleting(null);
       refetch();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotDeleteNotification");
+      const message = apiErrorText(err, t, t("couldNotDeleteNotification"));
       setDeleteError(message);
       toast.error(message, t("toastDeleteMessage"));
     } finally {
@@ -420,7 +417,7 @@ export function PreferencesTab() {
       setScheduleItems(scheduleRes.items);
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadPreferencesToast"),
+        apiErrorText(err, t, t("couldNotLoadPreferencesToast")),
         t("toastNotificationSettings"),
       );
     } finally {
@@ -441,7 +438,7 @@ export function PreferencesTab() {
       setPrefs(next);
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSavePreference"),
+        apiErrorText(err, t, t("couldNotSavePreference")),
         t("toastNotificationSettings"),
       );
     } finally {
@@ -462,10 +459,7 @@ export function PreferencesTab() {
       setReminderPickerOpen(false);
       toast.success(t("reminderAdded"), { compactTitle: t("addReminder") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotAddReminder"),
-        t("addReminder"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotAddReminder")), t("addReminder"));
     } finally {
       setBusy(false);
     }
@@ -484,10 +478,7 @@ export function PreferencesTab() {
       setReminderPickerOpen(false);
       toast.success(t("reminderAdded"), { compactTitle: t("addReminder") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotAddReminder"),
-        t("addReminder"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotAddReminder")), t("addReminder"));
     } finally {
       setBusy(false);
     }
@@ -515,10 +506,7 @@ export function PreferencesTab() {
         });
       } catch (err) {
         setRemovalStates((current) => ({ ...current, [operation.category]: "failed" }));
-        toast.error(
-          err instanceof ApiError ? err.message : t("couldNotRemoveReminder"),
-          t("toastRemoveReminder"),
-        );
+        toast.error(apiErrorText(err, t, t("couldNotRemoveReminder")), t("toastRemoveReminder"));
       } finally {
         queuedRemovalCategories.current.delete(operation.category);
       }

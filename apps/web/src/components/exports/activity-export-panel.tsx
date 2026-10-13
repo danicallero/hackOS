@@ -10,8 +10,10 @@ import { ExportSensitivityBadge } from "@/components/exports/export-sensitivity-
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
+import type { Translate } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
@@ -27,8 +29,8 @@ interface ActivityExportOption {
 
 type ExportMode = "people" | "scans";
 
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
+function errorMessage(error: unknown, t: Translate, fallback: string): string {
+  return apiErrorText(error, t, fallback);
 }
 
 async function downloadActivityExport(
@@ -88,7 +90,7 @@ export function ActivityExportPanel({ trigger }: { trigger?: ReactNode }) {
           : response.activities.map((activity) => String(activity.id));
       });
     } catch (loadError) {
-      const message = errorMessage(loadError, t("activityExportCatalogFailed"));
+      const message = errorMessage(loadError, t, t("activityExportCatalogFailed"));
       setError(message);
     } finally {
       setLoading(false);
@@ -121,7 +123,7 @@ export function ActivityExportPanel({ trigger }: { trigger?: ReactNode }) {
       await downloadActivityExport(selectedIds.map(Number), mode, language);
       toast.success(t("activityExportDownloaded"), { compactTitle: t("toastExportActivities") });
     } catch (exportError) {
-      const message = errorMessage(exportError, t("activityExportFailed"));
+      const message = errorMessage(exportError, t, t("activityExportFailed"));
       setError(message);
       toast.error(message, t("toastExportActivities"));
     } finally {

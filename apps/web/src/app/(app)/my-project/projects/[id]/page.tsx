@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   addMyProjectChallenge,
@@ -62,11 +63,8 @@ export default function MyProjectDetailPage() {
       setChallenges(catalogue.items);
       setGroup(planned.groups.find((item) => item.linked_repo_id === Number(id)) ?? null);
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
-        t("projectLabel"),
-      );
-      setLoadError(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      toast.error(apiErrorText(error, t, t("couldNotLoadProject")), t("projectLabel"));
+      setLoadError(apiErrorText(error, t, t("couldNotLoadProject")));
     } finally {
       setLoading(false);
     }
@@ -215,11 +213,7 @@ export default function MyProjectDetailPage() {
                           );
                           await load();
                         } catch (error) {
-                          setChangeError(
-                            error instanceof ApiError
-                              ? error.message
-                              : t("couldNotRemoveChallenge"),
-                          );
+                          setChangeError(apiErrorText(error, t, t("couldNotRemoveChallenge")));
                         } finally {
                           setRemovingChallenge(null);
                         }
@@ -279,10 +273,7 @@ function AddChallenge({
       setOpen(false);
       await onAdded();
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotSaveProject"),
-        t("addChallengeLabel"),
-      );
+      toast.error(apiErrorText(error, t, t("couldNotSaveProject")), t("addChallengeLabel"));
     } finally {
       setSaving(false);
     }
@@ -346,10 +337,7 @@ function InviteMember({
           description: t("inviteAcceptedParticipantRequired"),
         });
       } else {
-        toast.error(
-          error instanceof ApiError ? error.message : t("couldNotSendInvite"),
-          t("toastSendInvite"),
-        );
+        toast.error(apiErrorText(error, t, t("couldNotSendInvite")), t("toastSendInvite"));
       }
     } finally {
       setSaving(false);

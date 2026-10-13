@@ -43,7 +43,8 @@ import { Section } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { invalidateServerState, readServerState } from "@/lib/server-state";
 import { toast } from "@/lib/toast";
@@ -176,11 +177,7 @@ export default function PermissionsPage() {
       if (rolesResult.status === "fulfilled") {
         setRoles(rolesResult.value);
       } else {
-        setLoadError(
-          rolesResult.reason instanceof ApiError
-            ? rolesResult.reason.message
-            : t("couldNotLoadRoles"),
-        );
+        setLoadError(apiErrorText(rolesResult.reason, t, t("couldNotLoadRoles")));
       }
       if (templatesResult.status === "fulfilled") setTemplates(templatesResult.value);
       if (usersResult.status === "fulfilled") mergeUsers(usersResult.value.users);
@@ -195,10 +192,7 @@ export default function PermissionsPage() {
       const all = await api.get<RoleSummary[]>("/api/roles", { query: { includeDeleted: true } });
       setDeletedRoles(all.filter((r) => r.deletedAt !== null));
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadRoles"),
-        t("announcementRolesLabel"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLoadRoles")), t("announcementRolesLabel"));
     } finally {
       setTrashLoading(false);
     }
@@ -219,10 +213,7 @@ export default function PermissionsPage() {
       setDeletedRoles((prev) => prev.filter((r) => r.id !== roleId));
       await load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRestoreRole"),
-        t("toastRestoreRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRestoreRole")), t("toastRestoreRole"));
     } finally {
       setRestoringId(null);
     }
@@ -270,7 +261,7 @@ export default function PermissionsPage() {
       setRoles((prev) => [...prev, role]);
       selectRole(role.id);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateRole"), t("createRole"));
+      toast.error(apiErrorText(err, t, t("couldNotCreateRole")), t("createRole"));
     }
   }
 
@@ -285,10 +276,7 @@ export default function PermissionsPage() {
       applyRole(updated);
     } catch (err) {
       setRoles(before);
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotMoveRole"),
-        t("toastMoveRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotMoveRole")), t("toastMoveRole"));
     }
   }
 
@@ -302,10 +290,7 @@ export default function PermissionsPage() {
       applyRole(r);
       toast.success(t("roleUpdated"), { compactTitle: t("toastSaveRole") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveRole"),
-        t("toastSaveRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveRole")), t("toastSaveRole"));
     }
   }
 
@@ -319,10 +304,7 @@ export default function PermissionsPage() {
       applyRole(r);
       toast.success(t("capabilitiesSaved"), { compactTitle: t("toastSavePermissions") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveCapabilities"),
-        t("toastSavePermissions"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveCapabilities")), t("toastSavePermissions"));
     }
   }
 
@@ -334,10 +316,7 @@ export default function PermissionsPage() {
       applyRole(r);
       toast.success(t("memberAdded"), { compactTitle: t("toastAssignRole") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotAddMemberRole"),
-        t("toastAssignRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotAddMemberRole")), t("toastAssignRole"));
     }
   }
 
@@ -347,10 +326,7 @@ export default function PermissionsPage() {
       invalidatePermissionsResources();
       applyRole(r);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRemoveMemberRole"),
-        t("toastRemoveRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRemoveMemberRole")), t("toastRemoveRole"));
     }
   }
 
@@ -398,10 +374,7 @@ export default function PermissionsPage() {
       applyRole(r);
       toast.success(t("resetToDefaultDone"), { compactTitle: t("toastResetRole") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotResetRole"),
-        t("toastResetRole"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotResetRole")), t("toastResetRole"));
     }
   }
 
@@ -413,7 +386,7 @@ export default function PermissionsPage() {
       setRoles((prev) => prev.filter((r) => r.id !== roleId));
       selectRole(null);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteRole"), t("deleteRole"));
+      toast.error(apiErrorText(err, t, t("couldNotDeleteRole")), t("deleteRole"));
     }
   }
 

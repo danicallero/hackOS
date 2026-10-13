@@ -34,6 +34,7 @@ import { Section } from "@/components/ui/surface";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { validationErrorSummary } from "@/lib/application-validation";
 import { pickText, useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
@@ -162,21 +163,15 @@ export default function MyApplicationDetailPage() {
 
     const nextFormError =
       formRes.status === "rejected" && !isNotFoundError(formRes.reason)
-        ? formRes.reason instanceof ApiError
-          ? formRes.reason.message
-          : tRef.current("couldNotLoadApplication")
+        ? apiErrorText(formRes.reason, tRef.current, tRef.current("couldNotLoadApplication"))
         : null;
     const nextResponseError =
       respRes.status === "rejected" && !isNotFoundError(respRes.reason)
-        ? respRes.reason instanceof ApiError
-          ? respRes.reason.message
-          : tRef.current("couldNotLoadApplication")
+        ? apiErrorText(respRes.reason, tRef.current, tRef.current("couldNotLoadApplication"))
         : null;
     const nextIntolerancesError =
       intolRes.status === "rejected"
-        ? intolRes.reason instanceof ApiError
-          ? intolRes.reason.message
-          : tRef.current("couldNotLoadApplication")
+        ? apiErrorText(intolRes.reason, tRef.current, tRef.current("couldNotLoadApplication"))
         : null;
     setFormError(nextFormError);
     setResponseError(nextResponseError);
@@ -335,13 +330,13 @@ export default function MyApplicationDetailPage() {
         showErrorToast(err, t("couldNotSubmitApplication"), {
           ...(summary
             ? {
-                description: `${err.message}\n${summary}`,
+                description: summary,
                 duration: 12_000,
                 autopilot: { expand: 0, collapse: 0 },
               }
             : !isTemplateValidation
               ? {
-                  description: err.message,
+                  description: apiErrorText(err, t, t("couldNotSubmitApplication")),
                   duration: 12_000,
                   autopilot: { expand: 0, collapse: 0 },
                   action: { label: t("retry"), onClick: () => void handleSubmit() },
@@ -350,7 +345,10 @@ export default function MyApplicationDetailPage() {
           compactTitle: t("submitApplication"),
         });
         if (!isTemplateValidation) {
-          setActionError({ action: "submit", message: err.message });
+          setActionError({
+            action: "submit",
+            message: apiErrorText(err, t, t("couldNotSubmitApplication")),
+          });
         }
       } else {
         setActionError({ action: "submit", message: t("couldNotSubmitApplication") });
@@ -390,7 +388,7 @@ export default function MyApplicationDetailPage() {
       } else {
         setActionError({
           action: "confirm",
-          message: err instanceof ApiError ? err.message : t("couldNotConfirmPlace"),
+          message: apiErrorText(err, t, t("couldNotConfirmPlace")),
         });
       }
     } finally {
@@ -423,7 +421,7 @@ export default function MyApplicationDetailPage() {
     } catch (err) {
       setActionError({
         action: "decline",
-        message: err instanceof ApiError ? err.message : t("couldNotReleasePlace"),
+        message: apiErrorText(err, t, t("couldNotReleasePlace")),
       });
     } finally {
       setActing(false);

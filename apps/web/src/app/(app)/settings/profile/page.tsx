@@ -37,7 +37,8 @@ import { Section } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
 import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { languageName, type MessageKey, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -188,11 +189,8 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
       await refresh();
       toast.success(t("profileUpdated"), { compactTitle: t("toastSaveProfile") });
     } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : t("couldNotSaveProfile"));
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveProfile"),
-        t("toastSaveProfile"),
-      );
+      setSaveError(apiErrorText(err, t, t("couldNotSaveProfile")));
+      toast.error(apiErrorText(err, t, t("couldNotSaveProfile")), t("toastSaveProfile"));
     }
   }
 

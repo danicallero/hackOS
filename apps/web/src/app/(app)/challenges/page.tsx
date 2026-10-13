@@ -15,7 +15,8 @@ import { PageLayout } from "@/components/common/page-layout";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
@@ -117,7 +118,7 @@ export default function ChallengesPage() {
       setSelectedIds(new Set());
     } catch (err) {
       setChallenges([]);
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadChallenges");
+      const message = apiErrorText(err, t, t("couldNotLoadChallenges"));
       setLoadError(message);
       toast.error(message, t("challenges"));
     } finally {
@@ -145,7 +146,7 @@ export default function ChallengesPage() {
         await load();
       } catch (err) {
         toast.error(
-          err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"),
+          apiErrorText(err, t, t("couldNotUpdateVisibility")),
           t("toastChallengeVisibility"),
         );
       } finally {

@@ -20,7 +20,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
@@ -74,10 +75,7 @@ export function PresenceTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
       toast.success(t("saved"), { compactTitle: t("attendanceTab") });
     } catch (err) {
       setSaveState("error");
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
-        t("attendanceTab"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveEventSettings")), t("attendanceTab"));
     }
   }
 

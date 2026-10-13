@@ -35,7 +35,8 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
@@ -49,7 +50,6 @@ import {
   grantedRoleNameLabel,
   windowState,
 } from "../lib";
-
 import { ApplicationDangerZone, MetadataCard } from "./metadata-card";
 import { QuestionsCard } from "./questions-card";
 import { ResponsesTab } from "./responses-tab";
@@ -137,7 +137,7 @@ export default function ApplicationDetailPage() {
       // application shell when it fails, so stats, tabs, and the active list
       // never disappear for a transient network error.
       if (loadedFormIdRef.current !== id) {
-        setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadForm"));
+        setErrorMsg(apiErrorText(err, t, t("couldNotLoadForm")));
         setState("error");
       }
     }
@@ -194,7 +194,7 @@ export default function ApplicationDetailPage() {
       await api.delete(`/api/applications/${id}`);
       router.push("/applications");
     } catch (err) {
-      setErrorMsg(err instanceof ApiError ? err.message : t("couldNotDeleteApplication"));
+      setErrorMsg(apiErrorText(err, t, t("couldNotDeleteApplication")));
       setDeleteOpen(false);
     } finally {
       setDeleting(false);

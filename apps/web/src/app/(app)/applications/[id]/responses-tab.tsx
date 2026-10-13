@@ -35,7 +35,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText, errorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
@@ -149,7 +150,7 @@ export function ResponsesTab({
         setSelectedIds(new Set());
         hasLoadedRef.current = true;
       } catch (err) {
-        const message = err instanceof ApiError ? err.message : t("couldNotLoadResponses");
+        const message = apiErrorText(err, t, t("couldNotLoadResponses"));
         setLoadError(message);
         toast.error(message, t("workspaceApplications"));
       } finally {
@@ -322,7 +323,7 @@ export function ResponsesTab({
         toast.success(t("exportFilesDownloaded"), { compactTitle: t("exportFiles") });
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("exportFailed"), t("exportFiles"));
+      toast.error(errorText(err, t, t("exportFailed")), t("exportFiles"));
     } finally {
       setExportingKey(null);
     }
@@ -350,10 +351,7 @@ export function ResponsesTab({
       await load();
       if (skipped.length === 0) toast.success(label, { compactTitle: t("toastDecisions") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("batchActionFailed"),
-        t("toastDecisions"),
-      );
+      toast.error(apiErrorText(err, t, t("batchActionFailed")), t("toastDecisions"));
     } finally {
       setBatchBusy(false);
     }

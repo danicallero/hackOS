@@ -17,7 +17,8 @@ import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
 import { toast } from "@/lib/toast";
@@ -170,7 +171,7 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
       })
       .catch((err) => {
         if (cancelled) return;
-        const message = err instanceof ApiError ? err.message : t("diaryCompaniesCouldNotLoad");
+        const message = apiErrorText(err, t, t("diaryCompaniesCouldNotLoad"));
         if (loaded.current) toast.error(message, t("diaryCompaniesTab"));
         else setLoadError(message);
       });
@@ -217,7 +218,7 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
       return true;
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : t("diaryCouldNotSave"),
+        apiErrorText(err, t, t("diaryCouldNotSave")),
         body.note !== undefined ? t("diaryNote") : t("diaryFavourite"),
       );
       return false;
@@ -245,10 +246,7 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
       setRemoveTarget(null);
       toast.success(t("diaryRemoved"), { compactTitle: t("diaryRemoveTitle") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("diaryCouldNotSave"),
-        t("diaryRemoveTitle"),
-      );
+      toast.error(apiErrorText(err, t, t("diaryCouldNotSave")), t("diaryRemoveTitle"));
     } finally {
       setBusyId(null);
     }

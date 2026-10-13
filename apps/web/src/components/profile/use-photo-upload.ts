@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ApiError, api, apiUpload } from "@/lib/api";
+import { api, apiUpload } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
@@ -39,7 +40,7 @@ export function usePhotoUpload(endpoint: string, onChanged: () => unknown) {
       await onChanged();
       toast.success(t("photoUpdated"), { compactTitle: t("toastUploadPhoto") });
     } catch (err) {
-      fail(err instanceof ApiError ? err.message : t("couldNotUploadPhoto"), t("toastUploadPhoto"));
+      fail(apiErrorText(err, t, t("couldNotUploadPhoto")), t("toastUploadPhoto"));
     } finally {
       setPending(null);
       if (inputRef.current) inputRef.current.value = "";
@@ -54,7 +55,7 @@ export function usePhotoUpload(endpoint: string, onChanged: () => unknown) {
       await onChanged();
       toast.success(t("photoRemoved"), { compactTitle: t("toastRemovePhoto") });
     } catch (err) {
-      fail(err instanceof ApiError ? err.message : t("couldNotRemovePhoto"), t("toastRemovePhoto"));
+      fail(apiErrorText(err, t, t("couldNotRemovePhoto")), t("toastRemovePhoto"));
     } finally {
       setPending(null);
     }

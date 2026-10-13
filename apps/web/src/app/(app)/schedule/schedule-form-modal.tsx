@@ -32,6 +32,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import {
@@ -252,10 +253,7 @@ export function ScheduleFormModal({
       });
       setTranslations((prev) => ({ ...prev, ...result }));
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotTranslate"),
-        t("toastTranslate"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotTranslate")), t("toastTranslate"));
     } finally {
       setTranslating(false);
     }
@@ -278,10 +276,7 @@ export function ScheduleFormModal({
         await logisticsApi.saveScheduleTranslations(result.id, prepared.translations);
       }
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastSaveActivity"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastSaveActivity"));
     } finally {
       setPending(false);
     }
@@ -789,7 +784,7 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
       await loadOwners();
       toast.success(t("userAffiliated"), { compactTitle: t("toastAddOwner") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddUser"), t("toastAddOwner"));
+      toast.error(apiErrorText(err, t, t("couldNotAddUser")), t("toastAddOwner"));
     } finally {
       setBusy(false);
     }
@@ -802,10 +797,7 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
       await loadOwners();
       toast.success(t("affiliationRemoved"), { compactTitle: t("toastRemoveOwner") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRemoveUser"),
-        t("toastRemoveOwner"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRemoveUser")), t("toastRemoveOwner"));
     } finally {
       setBusy(false);
     }

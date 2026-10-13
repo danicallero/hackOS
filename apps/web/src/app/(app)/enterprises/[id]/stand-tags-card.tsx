@@ -24,7 +24,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { ApiError, api, apiDownload } from "@/lib/api";
+import { api, apiDownload } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   LABEL_MAX,
@@ -75,10 +76,7 @@ function TagLabelDialog({
       toast.success(t("standTagLabelSaved"), { compactTitle: t("standTagEditLabel") });
       onSaved(saved);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("standTagCouldNotSaveLabel"),
-        t("standTagEditLabel"),
-      );
+      toast.error(apiErrorText(err, t, t("standTagCouldNotSaveLabel")), t("standTagEditLabel"));
     } finally {
       setPending(false);
     }
@@ -135,10 +133,7 @@ function QrTag({
     try {
       await apiDownload(standQrSvgPath(enterpriseId, tag.id), `${tag.code}.svg`);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("standQrCouldNotDownload"),
-        t("standTagDownloadQr"),
-      );
+      toast.error(apiErrorText(err, t, t("standQrCouldNotDownload")), t("standTagDownloadQr"));
     } finally {
       setDownloading(false);
     }
@@ -204,10 +199,7 @@ export function StandTagsCard({
       onScannableChange?.(true);
       toast.success(t("standScanningOn"), { compactTitle: t("standScannable") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("standCouldNotUpdateScannable"),
-        t("standScannable"),
-      );
+      toast.error(apiErrorText(err, t, t("standCouldNotUpdateScannable")), t("standScannable"));
     } finally {
       setBusy(null);
     }
@@ -220,10 +212,7 @@ export function StandTagsCard({
       );
       setTags(data.tags);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("standTagsCouldNotLoad"),
-        t("standTags"),
-      );
+      toast.error(apiErrorText(err, t, t("standTagsCouldNotLoad")), t("standTags"));
       setTags((current) => current ?? []);
     }
   }, [enterpriseId, t]);
@@ -246,7 +235,7 @@ export function StandTagsCard({
         compactTitle: body.kind === "nfc" ? t("standTagLinkNfc") : t("standTagGenerateQr"),
       });
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("standTagCouldNotAdd");
+      const message = apiErrorText(err, t, t("standTagCouldNotAdd"));
       const inUse = body.kind === "nfc" ? standTagInUseKey(err) : null;
       if (inUse) {
         setUidError(t(inUse));
@@ -278,10 +267,7 @@ export function StandTagsCard({
       setRemoving(null);
       toast.success(t("standTagRemoved"), { compactTitle: t("standTagRemove") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("standTagCouldNotRemove"),
-        t("standTagRemove"),
-      );
+      toast.error(apiErrorText(err, t, t("standTagCouldNotRemove")), t("standTagRemove"));
     } finally {
       setBusy(null);
     }

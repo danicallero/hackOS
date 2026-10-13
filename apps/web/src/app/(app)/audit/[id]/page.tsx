@@ -16,7 +16,8 @@ import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { Badge } from "@/components/ui/badge";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { diffAuditSnapshot, formatDiffValue } from "@/lib/audit-diff";
 import { getActionLabel, getAuditSummary } from "@/lib/audit-labels";
 import { useLocale } from "@/lib/i18n";
@@ -47,7 +48,7 @@ export default function AuditEntryPage() {
         setState("ready");
       })
       .catch((err) => {
-        setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadAuditLog"));
+        setErrorMsg(apiErrorText(err, t, t("couldNotLoadAuditLog")));
         setState("error");
       });
   }, [id, canRead, t]);

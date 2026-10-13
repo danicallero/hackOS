@@ -136,7 +136,7 @@ export default function LogisticsStatsPage() {
         });
         setScopesLoaded(true);
       })
-      .catch((error) => setBeforeError(errorMessage(error, t("couldNotLoadStatistics"))))
+      .catch((error) => setBeforeError(errorMessage(error, t, t("couldNotLoadStatistics"))))
       .finally(() => setScopesLoading(false));
   }, [canStats, setSelectedScopeKeys, t]);
 
@@ -180,7 +180,7 @@ export default function LogisticsStatsPage() {
         if (requestId === beforeRequest.current) setApplicationStats(next);
       } catch (error) {
         if (requestId === beforeRequest.current)
-          setBeforeError(errorMessage(error, t("couldNotLoadStatistics")));
+          setBeforeError(errorMessage(error, t, t("couldNotLoadStatistics")));
       } finally {
         if (requestId === beforeRequest.current) setBeforeLoading(false);
       }
@@ -207,7 +207,7 @@ export default function LogisticsStatsPage() {
     try {
       setHours(await logisticsApi.presenceHours());
     } catch (error) {
-      setAfterError(errorMessage(error, t("couldNotLoadStatistics")));
+      setAfterError(errorMessage(error, t, t("couldNotLoadStatistics")));
     } finally {
       setAfterLoading(false);
     }

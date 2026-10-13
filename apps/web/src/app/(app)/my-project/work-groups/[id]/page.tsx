@@ -20,6 +20,7 @@ import { WorkGroupField as Field, WorkGroupEditor } from "@/components/projects/
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   addWorkGroupChallenge,
@@ -63,11 +64,8 @@ export default function WorkGroupDetailPage() {
         }
       }
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
-        t("projectLabel"),
-      );
-      setLoadError(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      toast.error(apiErrorText(error, t, t("couldNotLoadProject")), t("projectLabel"));
+      setLoadError(apiErrorText(error, t, t("couldNotLoadProject")));
       setGroup(null);
     } finally {
       setLoading(false);
@@ -100,7 +98,7 @@ export default function WorkGroupDetailPage() {
       if (action === "decline") router.replace("/my-project");
       else await load();
     } catch (error) {
-      setLoadError(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
+      setLoadError(apiErrorText(error, t, t("couldNotSaveProject")));
     } finally {
       setResponding(false);
     }
@@ -211,10 +209,7 @@ function Members({
           description: t("inviteAcceptedParticipantRequired"),
         });
       } else {
-        toast.error(
-          error instanceof ApiError ? error.message : t("couldNotSendInvite"),
-          t("toastSendInvite"),
-        );
+        toast.error(apiErrorText(error, t, t("couldNotSendInvite")), t("toastSendInvite"));
       }
     } finally {
       setBusy(false);
@@ -282,9 +277,7 @@ function Members({
                       await removeWorkGroupMember(group.id, member.userId, crypto.randomUUID());
                       await onChanged();
                     } catch (error) {
-                      setMemberError(
-                        error instanceof ApiError ? error.message : t("couldNotSaveProject"),
-                      );
+                      setMemberError(apiErrorText(error, t, t("couldNotSaveProject")));
                     } finally {
                       setBusy(false);
                     }
@@ -328,7 +321,7 @@ function Challenges({
       if (!remove) setAddOpen(false);
       await onChanged();
     } catch (error) {
-      setError(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
+      setError(apiErrorText(error, t, t("couldNotSaveProject")));
     } finally {
       setBusy(false);
     }
@@ -457,7 +450,7 @@ function DeleteGroup({ group, onDeleted }: { group: PlannedWorkGroup; onDeleted:
             setOpen(false);
             onDeleted();
           } catch (error) {
-            setError(error instanceof ApiError ? error.message : t("couldNotDeleteProject"));
+            setError(apiErrorText(error, t, t("couldNotDeleteProject")));
           } finally {
             setPending(false);
           }

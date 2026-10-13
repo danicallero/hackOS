@@ -24,7 +24,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal, getTimeZoneLabel } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import type { Announcement, AnnouncementInput, NotificationChannel } from "@/lib/notifications";
@@ -207,10 +208,7 @@ export function AnnouncementFormModal({
         };
       });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotTranslate"),
-        t("toastTranslate"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotTranslate")), t("toastTranslate"));
     } finally {
       setTranslating(false);
     }
@@ -330,10 +328,7 @@ export function AnnouncementFormModal({
         expiresAt: values.screenPlacement === "none" ? null : expiresAt,
       });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveAnnouncement"),
-        t("publishAnnouncement"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveAnnouncement")), t("publishAnnouncement"));
     } finally {
       setPending(false);
     }

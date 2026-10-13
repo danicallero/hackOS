@@ -63,3 +63,12 @@ export function errorDetailsReason(details: unknown): string | null {
   const code = (details as { code?: unknown } | null | undefined)?.code;
   return typeof code === "string" ? code : null;
 }
+
+/**
+ * Localized copy (`common` namespace) per reason: clients render
+ * `apiError_<reason>` instead of the English `message` (#1013). Add the entry
+ * in all three locales when adding a reason that a user can trigger.
+ */
+export function errorReasonCopyKey(reason: string): string {
+  return `apiError_${reason}`;
+}

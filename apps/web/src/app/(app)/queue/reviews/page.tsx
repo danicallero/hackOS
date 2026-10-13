@@ -18,7 +18,8 @@ import { PageLayout } from "@/components/common/page-layout";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { Button } from "@/components/ui/button";
 
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
@@ -62,7 +63,7 @@ export default function ReviewsOverviewPage() {
       });
       setReviews(data);
     } catch (err) {
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadReviews"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadReviews")));
     } finally {
       setLoading(false);
     }

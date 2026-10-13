@@ -35,7 +35,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { pickText, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { Intolerance } from "@/lib/types";
@@ -106,7 +107,7 @@ export function IntolerancesManager() {
       hasLoadedRef.current = true;
       setEntries(intolerances);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadDictionary");
+      const message = apiErrorText(err, t, t("couldNotLoadDictionary"));
       setLoadError(message);
       toast.error(message, t("toastDietaryNeeds"));
     } finally {
@@ -162,10 +163,7 @@ export function IntolerancesManager() {
       setEditing(undefined);
       await load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveEntry"),
-        t("toastSaveDietaryNeed"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveEntry")), t("toastSaveDietaryNeed"));
     }
   }
 
@@ -178,10 +176,7 @@ export function IntolerancesManager() {
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotDeleteEntry"),
-        t("toastDeleteDietaryNeed"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotDeleteEntry")), t("toastDeleteDietaryNeed"));
     } finally {
       setDeleting(false);
     }

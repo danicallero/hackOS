@@ -318,7 +318,7 @@ describe("synchronizeScanner", () => {
     await synchronizeScanner(OWNER_USER_ID);
 
     expect(mockFailScan).not.toHaveBeenCalled();
-    expect(mockNoteRetryable).toHaveBeenCalledWith("scan-1", "Unauthorized", OWNER_USER_ID);
+    expect(mockNoteRetryable).toHaveBeenCalledWith("scan-1", "http_401", OWNER_USER_ID);
     // The loop breaks: scan-2 is never attempted against a broken session.
     expect(mockApiFetch).not.toHaveBeenCalledWith(
       "/api/accreditation/remove",
@@ -335,7 +335,7 @@ describe("synchronizeScanner", () => {
 
     await synchronizeScanner(OWNER_USER_ID);
 
-    expect(mockFailScan).toHaveBeenCalledWith("scan-1", "No badge to remove", OWNER_USER_ID);
+    expect(mockFailScan).toHaveBeenCalledWith("scan-1", "http_409", OWNER_USER_ID);
     expect(mockApiFetch).toHaveBeenCalledTimes(3);
   });
 
@@ -414,7 +414,7 @@ describe("synchronizeScanner", () => {
     await synchronizeScanner(OWNER_USER_ID);
 
     expect(mockCorrectScanTimestamp).toHaveBeenCalledTimes(1);
-    expect(mockFailScan).toHaveBeenCalledWith("scan-terminal", "No badge to remove", OWNER_USER_ID);
+    expect(mockFailScan).toHaveBeenCalledWith("scan-terminal", "http_409", OWNER_USER_ID);
     expect(mockNoteRetryable).not.toHaveBeenCalled();
   });
 
@@ -429,11 +429,7 @@ describe("synchronizeScanner", () => {
 
     await synchronizeScanner(OWNER_USER_ID);
 
-    expect(mockNoteRetryable).toHaveBeenCalledWith(
-      "scan-transient",
-      "Service unavailable",
-      OWNER_USER_ID,
-    );
+    expect(mockNoteRetryable).toHaveBeenCalledWith("scan-transient", "http_503", OWNER_USER_ID);
     expect(mockFailScan).not.toHaveBeenCalled();
     expect(mockApiFetch).toHaveBeenCalledTimes(3);
   });
@@ -447,7 +443,11 @@ describe("synchronizeScanner", () => {
     await synchronizeScanner(OWNER_USER_ID);
 
     expect(mockFailScan).not.toHaveBeenCalled();
-    expect(mockNoteRetryable).toHaveBeenCalledWith("scan-1", "reworded", OWNER_USER_ID);
+    expect(mockNoteRetryable).toHaveBeenCalledWith(
+      "scan-1",
+      "idempotency_in_flight",
+      OWNER_USER_ID,
+    );
   });
 
   it("fails a scan permanently if it's still rejected as future after a clock-skew correction", async () => {
@@ -461,7 +461,7 @@ describe("synchronizeScanner", () => {
     await synchronizeScanner(OWNER_USER_ID);
 
     expect(mockCorrectScanTimestamp).not.toHaveBeenCalled();
-    expect(mockFailScan).toHaveBeenCalledWith("scan-1", "reworded", OWNER_USER_ID);
+    expect(mockFailScan).toHaveBeenCalledWith("scan-1", "scan_timestamp_in_future", OWNER_USER_ID);
   });
 
   it("clears the in-flight lock after a failed sync so the next call retries the network", async () => {

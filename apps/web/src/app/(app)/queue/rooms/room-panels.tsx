@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import type { RoomAssignments } from "@/lib/queue";
 import { toast } from "@/lib/toast";
@@ -91,7 +91,7 @@ export function AssignmentsEditor({
                     });
                   } catch (err) {
                     toast.error(
-                      err instanceof ApiError ? err.message : t("couldNotAssignEnterprise"),
+                      apiErrorText(err, t, t("couldNotAssignEnterprise")),
                       t("toastAssignCompany"),
                     );
                   } finally {
@@ -118,7 +118,7 @@ export function AssignmentsEditor({
                   });
                 } catch (err) {
                   toast.error(
-                    err instanceof ApiError ? err.message : t("couldNotAssignEnterprise"),
+                    apiErrorText(err, t, t("couldNotAssignEnterprise")),
                     t("toastUnassignCompany"),
                   );
                 } finally {

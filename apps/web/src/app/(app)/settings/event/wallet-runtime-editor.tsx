@@ -25,7 +25,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, api, apiUpload } from "@/lib/api";
+import { api, apiUpload } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { ApplePassOptions, GooglePassOptions } from "./wallet-guided-options";
@@ -237,8 +238,7 @@ export function WalletRuntimeEditor({
         });
       })
       .catch((err) => {
-        if (active)
-          setError(err instanceof ApiError ? err.message : t("couldNotLoadEventSettings"));
+        if (active) setError(apiErrorText(err, t, t("couldNotLoadEventSettings")));
       });
     return () => {
       active = false;
@@ -255,7 +255,7 @@ export function WalletRuntimeEditor({
         })
         .catch((err) => {
           if (active) {
-            setError(err instanceof ApiError ? err.message : t("walletOperationError"));
+            setError(apiErrorText(err, t, t("walletOperationError")));
           }
         });
     }, 5000);
@@ -265,10 +265,7 @@ export function WalletRuntimeEditor({
     };
   }, [operation?.id, operation?.queued, t]);
   const report = (err: unknown) =>
-    toast.error(
-      err instanceof ApiError ? err.message : t("walletOperationError"),
-      t("toastWalletSettings"),
-    );
+    toast.error(apiErrorText(err, t, t("walletOperationError")), t("toastWalletSettings"));
   // H28: the Wallet category owns one Save; artwork and delivery retain their distinct lifecycle.
   useEffect(() => {
     const dirty =

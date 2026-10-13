@@ -26,7 +26,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -79,7 +80,7 @@ export default function NewApplicationFormPage() {
       toast.success(t("formCreated"), { compactTitle: t("createForm") });
       router.push(`/applications/${created.id}`);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateForm"), t("createForm"));
+      toast.error(apiErrorText(err, t, t("couldNotCreateForm")), t("createForm"));
     }
   }
 

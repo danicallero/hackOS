@@ -43,6 +43,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { ApiError, api, apiDownload } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
 import { useCan } from "@/lib/session";
@@ -259,7 +260,7 @@ function StandMobileRow({
 function errorText(err: unknown, t: Translate, fallback: Parameters<Translate>[0]): string {
   if (err instanceof ApiError && err.code === "stand_codes_empty")
     return t("standsNothingToExport");
-  return err instanceof ApiError ? err.message : t(fallback);
+  return apiErrorText(err, t, t(fallback));
 }
 
 export default function CompanyTagsPage() {
@@ -290,7 +291,7 @@ export default function CompanyTagsPage() {
       hasLoaded.current = true;
       setStands(data.stands);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("standsCouldNotLoad");
+      const message = apiErrorText(err, t, t("standsCouldNotLoad"));
       setLoadError(message);
       if (!hasLoaded.current) setStands([]);
       toast.error(message, t("companyTags"));
@@ -339,10 +340,7 @@ export default function CompanyTagsPage() {
           );
         } catch (err) {
           patch(stand.enterpriseId, { scannable: stand.scannable });
-          toast.error(
-            err instanceof ApiError ? err.message : t("standCouldNotUpdateScannable"),
-            t("standScannable"),
-          );
+          toast.error(apiErrorText(err, t, t("standCouldNotUpdateScannable")), t("standScannable"));
         } finally {
           setBusy(null);
         }
@@ -359,10 +357,7 @@ export default function CompanyTagsPage() {
             compactTitle: t("standTagGenerateQr"),
           });
         } catch (err) {
-          toast.error(
-            err instanceof ApiError ? err.message : t("standTagCouldNotAdd"),
-            t("standTagGenerateQr"),
-          );
+          toast.error(apiErrorText(err, t, t("standTagCouldNotAdd")), t("standTagGenerateQr"));
         } finally {
           setBusy(null);
         }
@@ -379,10 +374,7 @@ export default function CompanyTagsPage() {
             `${stand.name}.svg`,
           );
         } catch (err) {
-          toast.error(
-            err instanceof ApiError ? err.message : t("standQrCouldNotDownload"),
-            t("standDownloadQrSvg"),
-          );
+          toast.error(apiErrorText(err, t, t("standQrCouldNotDownload")), t("standDownloadQrSvg"));
         } finally {
           setBusy(null);
         }
@@ -412,10 +404,7 @@ export default function CompanyTagsPage() {
         addTags(result.created);
       }
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("standsCouldNotGenerate"),
-        t("standsGenerateMissingQr"),
-      );
+      toast.error(apiErrorText(err, t, t("standsCouldNotGenerate")), t("standsGenerateMissingQr"));
     } finally {
       setBulkBusy(null);
     }

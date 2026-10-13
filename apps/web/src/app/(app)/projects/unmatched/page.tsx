@@ -34,7 +34,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   type DevpostPrize,
@@ -105,10 +106,7 @@ export default function UnmatchedProjectsPage() {
       setPrizes(devpostPrizes.prizes);
       setChallenges(publicChallenges.items);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadUnmatched"),
-        t("resolveImports"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLoadUnmatched")), t("resolveImports"));
     } finally {
       setLoading(false);
     }
@@ -132,10 +130,7 @@ export default function UnmatchedProjectsPage() {
         toast.success(success, { compactTitle: t("resolveImports") });
         await load();
       } catch (err) {
-        toast.error(
-          err instanceof ApiError ? err.message : t("actionFailedGeneric"),
-          t("resolveImports"),
-        );
+        toast.error(apiErrorText(err, t, t("actionFailedGeneric")), t("resolveImports"));
       } finally {
         setBusy(null);
       }

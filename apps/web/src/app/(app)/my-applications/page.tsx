@@ -22,7 +22,8 @@ import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   fmtDateTime,
@@ -55,17 +56,13 @@ export default function MyApplicationsPage() {
       setResponses(mine.value.responses);
       setResponsesError(null);
     } else {
-      setResponsesError(
-        mine.reason instanceof ApiError ? mine.reason.message : t("couldNotLoadYourApplications"),
-      );
+      setResponsesError(apiErrorText(mine.reason, t, t("couldNotLoadYourApplications")));
     }
     if (open.status === "fulfilled") {
       setForms(open.value.applications);
       setFormsError(null);
     } else {
-      setFormsError(
-        open.reason instanceof ApiError ? open.reason.message : t("couldNotLoadYourApplications"),
-      );
+      setFormsError(apiErrorText(open.reason, t, t("couldNotLoadYourApplications")));
     }
     hasLoadedRef.current =
       hasLoadedRef.current || mine.status === "fulfilled" || open.status === "fulfilled";

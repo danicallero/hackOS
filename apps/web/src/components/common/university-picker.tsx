@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/command";
 import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -166,9 +167,7 @@ export function UniversityPicker({
       toast.error(
         err instanceof ApiError && err.status === 401
           ? t("signIn")
-          : err instanceof ApiError
-            ? err.message
-            : t("couldNotAddUniversity"),
+          : apiErrorText(err, t, t("couldNotAddUniversity")),
         t("toastSaveUniversity"),
       );
     } finally {

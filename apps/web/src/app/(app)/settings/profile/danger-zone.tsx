@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorReason } from "@/lib/api-error-reason";
+import { apiErrorText } from "@/lib/api-error-text";
 import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import {
@@ -223,10 +224,7 @@ export function DangerZoneCard() {
       } else if (apiErrorReason(error) === "removal_reauthentication_invalid") {
         setReauthenticationError(t("accountRemovalPasswordInvalid"));
       } else {
-        toast.error(
-          error instanceof ApiError ? error.message : t("couldNotRemoveAccount"),
-          t("toastCloseAccount"),
-        );
+        toast.error(apiErrorText(error, t, t("couldNotRemoveAccount")), t("toastCloseAccount"));
       }
       setPending(false);
     }

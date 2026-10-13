@@ -31,7 +31,8 @@ import {
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePersistedState } from "@/hooks/use-persisted-state";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { shortDateFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
@@ -470,9 +471,8 @@ export default function UsersPage() {
           if (cancelled) return;
           setUsers([]);
           setTotal(0);
-          const message = err instanceof ApiError ? err.message : t("couldNotLoadUsers");
-          setLoadError(message);
-          toast.error(message, t("columnPeople"));
+          setLoadError(apiErrorText(err, t, t("couldNotLoadUsers")));
+          toast.error(apiErrorText(err, t, t("couldNotLoadUsers")), t("columnPeople"));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);

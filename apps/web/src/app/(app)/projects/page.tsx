@@ -28,7 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { listRepos } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
@@ -149,7 +149,7 @@ export default function ProjectsPage() {
       setRepos(res.repos.map(toProjectRepo));
     } catch (err) {
       setRepos([]);
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadProjects");
+      const message = apiErrorText(err, t, t("couldNotLoadProjects"));
       setLoadError(message);
       toast.error(message, t("projects"));
     } finally {

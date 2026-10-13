@@ -9,12 +9,14 @@ import { EntityCombobox } from "@/components/common/entity-combobox";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
+import type { Translate } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n";
 
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof ApiError ? error.message : fallback;
+function errorMessage(error: unknown, t: Translate, fallback: string): string {
+  return apiErrorText(error, t, fallback);
 }
 
 export function JudgingExportPanel({ trigger }: { trigger?: ReactNode }) {
@@ -32,7 +34,7 @@ export function JudgingExportPanel({ trigger }: { trigger?: ReactNode }) {
       setChallenges(response.challenges);
       setSelectedChallenge((current) => current || String(response.challenges[0]?.id ?? ""));
     } catch (loadError) {
-      setError(errorMessage(loadError, t("judgingExportLoadFailed")));
+      setError(errorMessage(loadError, t, t("judgingExportLoadFailed")));
     } finally {
       setLoading(false);
     }

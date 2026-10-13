@@ -48,10 +48,10 @@ describe("data dashboard model", () => {
     expect(applicationStatusLabel("unknown_status", mockTranslate)).toBe("dataStatusOther");
   });
 
-  it("extracts message from ApiError when available", () => {
+  it("never exposes the ApiError message", () => {
     const apiErr = new ApiError(400, "test_error", "API error message");
-    expect(errorMessage(apiErr, "fallback")).toBe("API error message");
-    expect(errorMessage(new Error("Regular error"), "fallback")).toBe("fallback");
-    expect(errorMessage(null, "fallback")).toBe("fallback");
+    expect(errorMessage(apiErr, (key) => key, "fallback")).toBe("fallback");
+    expect(errorMessage(new Error("Regular error"), (key) => key, "fallback")).toBe("fallback");
+    expect(errorMessage(null, (key) => key, "fallback")).toBe("fallback");
   });
 });

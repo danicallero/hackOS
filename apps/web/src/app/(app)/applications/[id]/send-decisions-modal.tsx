@@ -8,7 +8,8 @@ import { Modal } from "@/components/common/modal";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
@@ -50,10 +51,7 @@ export function SendDecisionsModal({
       toast.success(msg, { compactTitle: t("sendDecisions") });
       onOpenChange(false);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSendDecisions"),
-        t("sendDecisions"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSendDecisions")), t("sendDecisions"));
     } finally {
       setBusy(false);
     }

@@ -8,7 +8,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { setEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import type { EventConfig } from "@/lib/types";
@@ -58,7 +59,7 @@ export function EventConfigProvider({
       setStatus("ready");
     } catch (err) {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
-      setError(err instanceof ApiError ? err.message : t("couldNotLoadEventSettings"));
+      setError(apiErrorText(err, t, t("couldNotLoadEventSettings")));
       setStatus("error");
     }
   }, [t, enabled]);

@@ -28,6 +28,7 @@ import {
 } from "@/components/scanner-transaction-status";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { scanFailureText } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -474,7 +475,7 @@ const ErrorHistoryRow = memo(function ErrorHistoryRow({
         selectable
         style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18, paddingLeft: 25 }}
       >
-        {entry.message}
+        {scanFailureText(entry.message, t)}
       </Text>
       {context ? (
         <Text

@@ -16,7 +16,8 @@ import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
@@ -70,10 +71,7 @@ export function InvitesTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
       toast.success(t("saved"), { compactTitle: t("toastInviteSettings") });
     } catch (err) {
       setSaveState("error");
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
-        t("toastInviteSettings"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveEventSettings")), t("toastInviteSettings"));
     }
   }
 

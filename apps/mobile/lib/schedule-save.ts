@@ -1,7 +1,7 @@
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { Language } from "@hackos/shared/locale";
 import { ApiError } from "./api";
-import { apiErrorReason } from "./api-error-reason";
+import { apiErrorCopy, apiErrorReason } from "./api-error-reason";
 import type { MessageKey } from "./i18n";
 import type { ScheduleInput, ScheduleTranslations } from "./schedule";
 
@@ -71,5 +71,5 @@ export function scheduleSaveError(
   if (error.status === 403) return t("scheduleErrorForbidden");
   if (error.status === 404) return t("scheduleErrorNotFound");
   if (error.status >= 500) return t("requestServerError");
-  return t("scheduleSaveFailedReason", { reason: error.message });
+  return apiErrorCopy(error, t) ?? t("scheduleSaveError");
 }

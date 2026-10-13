@@ -23,12 +23,12 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useCan, useSessionContext } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import { ENTERPRISE_TAB_ALIASES, type Enterprise, enterpriseTabs, initials } from "../shared";
-
 import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterprise-cards";
 import { JudgesCard } from "./judges-card";
 import { StandTagsCard } from "./stand-tags-card";
@@ -66,10 +66,10 @@ export default function EnterpriseDetailPage() {
       setEnterprise(data);
       setStatus("ready");
     } catch (err) {
-      setErrorMsg(err instanceof ApiError ? err.message : "Could not load this enterprise.");
+      setErrorMsg(apiErrorText(err, t, "Could not load this enterprise."));
       setStatus("error");
     }
-  }, [id]);
+  }, [id, t]);
 
   // Soft, in-place refresh instead of a hard reload when another admin edits
   // this enterprise elsewhere.

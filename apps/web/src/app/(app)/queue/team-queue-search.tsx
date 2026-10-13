@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Surface } from "@/components/ui/surface";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
 import {
   collapseRepoQueueMemberships,
@@ -122,7 +122,7 @@ export function TeamQueueSearch({
         setMemberships(collapseRepoQueueMemberships(await getRepoChallenges(repoId)));
       } catch (err) {
         setMemberships([]);
-        setError(err instanceof ApiError ? err.message : t("queueTeamSearchFailed"));
+        setError(apiErrorText(err, t, t("queueTeamSearchFailed")));
       } finally {
         setLoading(false);
       }

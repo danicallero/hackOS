@@ -19,7 +19,8 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -47,7 +48,7 @@ export default function ApplicationsPage() {
       setForms(applications);
       hasLoadedRef.current = true;
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadApplicationForms");
+      const message = apiErrorText(err, t, t("couldNotLoadApplicationForms"));
       setLoadError(message);
       toast.error(message, t("workspaceApplications"));
     } finally {

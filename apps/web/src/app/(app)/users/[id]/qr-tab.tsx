@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { QrCode } from "@/components/common/qr-code";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type TicketQrPayload } from "@/lib/logistics";
 import type { UserDetail } from "@/lib/types";
@@ -29,7 +29,7 @@ export function QrTab({ user }: { user: UserDetail }) {
         if (alive) setPayload(data);
       })
       .catch((err) => {
-        if (alive) setError(err instanceof ApiError ? err.message : t("couldNotLoadQrPayloads"));
+        if (alive) setError(apiErrorText(err, t, t("couldNotLoadQrPayloads")));
       })
       .finally(() => {
         if (alive) setLoading(false);

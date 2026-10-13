@@ -23,7 +23,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import type { UserOption } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import type { Announcement, AnnouncementInput } from "@/lib/notifications";
@@ -99,7 +99,7 @@ export default function AnnouncementsPage() {
       hasLoadedRef.current = true;
       setItems(result.items);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements");
+      const message = apiErrorText(err, t, t("couldNotLoadAnnouncements"));
       setLoadError(message);
       toast.error(message, t("announcements"));
     } finally {
@@ -123,10 +123,7 @@ export default function AnnouncementsPage() {
       const full = await notificationsApi.getAnnouncement(item.id);
       setEditingItem(full);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"),
-        t("announcements"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLoadAnnouncements")), t("announcements"));
     }
   }
 
@@ -139,7 +136,7 @@ export default function AnnouncementsPage() {
       setDeleting(null);
       await load();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotDeleteAnnouncement");
+      const message = apiErrorText(err, t, t("couldNotDeleteAnnouncement"));
       setDeleteError(message);
       toast.error(message, t("deleteAnnouncementAria"));
     } finally {
