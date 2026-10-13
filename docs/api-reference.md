@@ -523,6 +523,36 @@ return silent success or swallow a failure. The global error handler
 | `TooManyRequestsError` | 429 | `too_many_requests` — carries `retryAfterSeconds` |
 | `ServiceUnavailableError` | 503 | `service_unavailable` — a dependent provider/credential isn't configured (e.g. unset Wallet signing keys) |
 
+#### Machine-readable reasons (#996)
+
+`error.code` stays the generic class code above. When a client has to tell
+two failures of the same class apart (retry vs. delete a scan, which form
+message to show), the error carries a stable reason in **`details.code`**.
+Clients branch on `details.code` — never on `message`, which is English copy
+and may be reworded. Reason names live in `packages/shared/src/error-reasons.ts`
+(`ERROR_REASONS`), imported by API, web and mobile; add new ones there. Web and
+mobile read it with `apiErrorReason(err)`, which falls back to the top-level
+code when there is no reason.
+
+| Reason (`details.code`) | Status | Meaning |
+|---|---|---|
+| `idempotency_in_flight` | 409 | Same `Idempotency-Key` still being processed; retry shortly |
+| `idempotency_payload_mismatch` | 409 | `Idempotency-Key` reused with a different request |
+| `scan_timestamp_in_future` | 400 | Offline scan `scannedAt` is ahead of the server clock |
+| `badge_revoked` / `ticket_revoked` | 409 | Also the top-level `code`, kept for installed clients |
+| `team_member_busy` | 409 | A team member is busy in another judging room (H30) |
+| `schedule_ends_before_starts` | 400 | Schedule item ends at or before it starts |
+| `schedule_scan_needs_participants` | 400 | A scan-required item must be participant-visible |
+| `schedule_item_not_found` | 404 | Schedule item does not exist |
+
+Application response validation (`400`, "Response fails template validation")
+returns `details.fieldReasons` (field key → `FIELD_ERROR_REASONS` value such as
+`required`, `must_be_number`, `too_short`) next to the legacy `details.fields`
+message map, which is kept unchanged for installed clients.
+
+Existing English messages are intentionally unchanged until the minimum
+supported mobile build reads reasons.
+
 ### Audit (H53)
 Any sensitive mutation calls `audit(client, { actorId, entityType, entityId,
 action, before?, after? })` from `lib/audit.ts` **inside the same transaction**

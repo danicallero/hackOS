@@ -1,3 +1,4 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -36,7 +37,9 @@ async function assertTicketNotRevoked(
     [scannerCredentialDigest("ticket", token)],
   );
   if (revoked.rows[0]) {
-    throw new AppError(409, "ticket_revoked", "This ticket has been revoked");
+    throw new AppError(409, "ticket_revoked", "This ticket has been revoked", {
+      code: ERROR_REASONS.TICKET_REVOKED,
+    });
   }
 }
 
@@ -158,7 +161,9 @@ async function assertBadgeNotRevoked(client: pg.PoolClient, badgeId: string): Pr
     [scannerCredentialDigest("badge", badgeId)],
   );
   if (revoked.rows.length > 0) {
-    throw new AppError(409, "badge_revoked", "This badge has been revoked");
+    throw new AppError(409, "badge_revoked", "This badge has been revoked", {
+      code: ERROR_REASONS.BADGE_REVOKED,
+    });
   }
 }
 

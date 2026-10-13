@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { pool } from "../db/pool.js";
 import { ConflictError } from "./errors.js";
@@ -113,7 +114,9 @@ export async function idempotencyGuard(req: FastifyRequest, reply: FastifyReply)
   const row = existing.rows[0];
   if (!row) throw new ConflictError("Idempotency record vanished; retry");
   if (row.request_hash !== hash) {
-    throw new ConflictError("Idempotency-Key reused with a different request target or body");
+    throw new ConflictError("Idempotency-Key reused with a different request target or body", {
+      code: ERROR_REASONS.IDEMPOTENCY_PAYLOAD_MISMATCH,
+    });
   }
   if (row.response_status === null) {
     const ageMs = Date.now() - new Date(row.created_at).getTime();
@@ -132,7 +135,9 @@ export async function idempotencyGuard(req: FastifyRequest, reply: FastifyReply)
       }
     }
     reply.header("retry-after", "1");
-    throw new ConflictError("Duplicate request still in flight; retry shortly");
+    throw new ConflictError("Duplicate request still in flight; retry shortly", {
+      code: ERROR_REASONS.IDEMPOTENCY_IN_FLIGHT,
+    });
   }
   req.idempotency = { key, scope, hash, replayed: true };
   // Returning the sent reply is significant: merely calling send() from an
@@ -173,7 +178,9 @@ export async function replayCompletedIdempotency(
   const row = rows[0];
   if (!row) return false;
   if (row.request_hash !== requestHash(req)) {
-    throw new ConflictError("Idempotency-Key reused with a different request target or body");
+    throw new ConflictError("Idempotency-Key reused with a different request target or body", {
+      code: ERROR_REASONS.IDEMPOTENCY_PAYLOAD_MISMATCH,
+    });
   }
   if (row.response_status === null) return false;
   reply.code(row.response_status).header("idempotency-replayed", "true").send(row.response_body);
