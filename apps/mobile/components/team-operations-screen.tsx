@@ -34,12 +34,10 @@ import { isPadIdiom } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
 interface TeamMember {
-  userId: number | null;
+  userId: number;
   email: string;
   name: string | null;
   surname: string | null;
-  source?: "devpost" | "manual";
-  matchType?: "primary_email" | "secondary_email" | "manual" | "unmatched";
 }
 
 interface TeamEntry {
@@ -53,7 +51,6 @@ interface TeamEntry {
   repo_name?: string;
   repo_description?: string | null;
   repo_github_url?: string | null;
-  repo_devpost_url?: string | null;
   repo_demo_url?: string | null;
   repo_members?: TeamMember[];
 }
@@ -97,8 +94,7 @@ type TeamLoadState = "loading" | "ready" | "missing" | "error";
 
 /**
  * Debounced (250ms, 2-char minimum) search against the shared member-candidate
- * endpoint. Used both for adding a team member and for picking who to link a
- * secondary/devpost member to — identical search behavior, different targets.
+ * endpoint, used for adding a team member (H21).
  */
 function useMemberCandidateSearch(t: ReturnType<typeof useLocale>["t"], enabled = true) {
   const [query, setQuery] = useState("");
@@ -197,15 +193,6 @@ export function TeamOperationsScreen() {
     me?.capabilities.includes(CAPABILITIES.ADMIN_ALL) ||
     me?.capabilities.includes(CAPABILITIES.PROJECTS_EDIT) ||
     false;
-  const canLinkProject =
-    me?.capabilities.includes(CAPABILITIES.ADMIN_ALL) ||
-    me?.capabilities.includes(CAPABILITIES.PROJECTS_IMPORT) ||
-    false;
-  const [linkTarget, setLinkTarget] = useState<TeamMember | null>(null);
-  const linkSearch = useMemberCandidateSearch(t, Boolean(linkTarget));
-  const [linkMutation, setLinkMutation] = useState(false);
-  const [linkError, setLinkError] = useState<Error | null>(null);
-  const [linkSuccess, setLinkSuccess] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -318,20 +305,13 @@ export function TeamOperationsScreen() {
 
   const deleteMember = useCallback(
     async (member: TeamMember) => {
-      if (!entry || !member.source) return;
+      if (!entry) return;
       setMemberMutation(member.email);
       setMemberMutationError(null);
       try {
-        if (member.source === "devpost") {
-          await apiFetch(
-            `/api/repos/${entry.repo_id}/devpost-participants/${encodeURIComponent(member.email)}`,
-            { method: "DELETE" },
-          );
-        } else if (member.userId !== null) {
-          await apiFetch(`/api/repos/${entry.repo_id}/members/${member.userId}`, {
-            method: "DELETE",
-          });
-        }
+        await apiFetch(`/api/repos/${entry.repo_id}/members/${member.userId}`, {
+          method: "DELETE",
+        });
         await load();
       } catch (cause) {
         setMemberMutationError(
@@ -346,17 +326,9 @@ export function TeamOperationsScreen() {
 
   const removeMember = useCallback(
     (member: TeamMember) => {
-      if (!member.source) return;
-      const secondaryLinked = isSecondaryLinkedMember(member);
       const name = memberDisplayName(member);
-      const description = secondaryLinked
-        ? t("teamDetailUnlinkSecondaryConfirm", { name })
-        : member.source === "devpost"
-          ? t("teamDetailRemoveImportedMemberConfirm", { name })
-          : t("teamDetailRemoveMemberConfirm", { name });
-      const actionLabel = secondaryLinked
-        ? t("teamDetailUnlinkSecondary")
-        : t("teamDetailRemoveMember");
+      const description = t("teamDetailRemoveMemberConfirm", { name });
+      const actionLabel = t("teamDetailRemoveMember");
       Alert.alert(actionLabel, description, [
         { text: t("cancel"), style: "cancel" },
         {
@@ -367,58 +339,6 @@ export function TeamOperationsScreen() {
       ]);
     },
     [deleteMember, t],
-  );
-
-  const openLinkModal = useCallback(
-    (member: TeamMember) => {
-      setLinkTarget(member);
-      linkSearch.setQuery("");
-      linkSearch.setCandidates([]);
-      linkSearch.setSearched(false);
-      linkSearch.setError(null);
-      setLinkError(null);
-      setLinkSuccess(false);
-    },
-    [linkSearch],
-  );
-
-  const closeLinkModal = useCallback(() => {
-    setLinkTarget(null);
-    linkSearch.setQuery("");
-    linkSearch.setCandidates([]);
-    linkSearch.setSearched(false);
-    linkSearch.setError(null);
-    setLinkError(null);
-    setLinkSuccess(false);
-  }, [linkSearch]);
-
-  const linkParticipant = useCallback(
-    async (candidate: MemberCandidate) => {
-      if (!linkTarget || !entry) return;
-      setLinkMutation(true);
-      setLinkError(null);
-      try {
-        await apiFetch("/api/devpost/imports/link-secondary", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Idempotency-Key": createIdempotencyKey(),
-          },
-          body: JSON.stringify({
-            repoId: entry.repo_id,
-            email: linkTarget.email,
-            userId: candidate.id,
-          }),
-        });
-        setLinkSuccess(true);
-        await load();
-      } catch (cause) {
-        setLinkError(cause instanceof Error ? cause : new Error(t("teamDetailLinkError")));
-      } finally {
-        setLinkMutation(false);
-      }
-    },
-    [linkTarget, entry, load, t],
   );
 
   const selectedQueue = repoChallenges[selectedQueueIndex] ?? null;
@@ -638,7 +558,6 @@ export function TeamOperationsScreen() {
       label: t("teamDetailGithub"),
       url: entry.repo_github_url,
     },
-    { icon: "trophy" as const, label: t("teamDetailDevpost"), url: entry.repo_devpost_url },
     { icon: "play.rectangle" as const, label: t("teamDetailDemo"), url: entry.repo_demo_url },
   ].filter((link) => Boolean(link.url));
 
@@ -682,20 +601,16 @@ export function TeamOperationsScreen() {
 
       <Section title={t("teamDetailMembers")}>
         {members.map((member, index) => (
-          <View key={member.userId ?? member.email}>
+          <View key={member.userId}>
             {index > 0 ? <Separator /> : null}
             <SwipeableMemberRow
-              enabled={canEditProject && Boolean(member.source)}
-              actionLabel={
-                isSecondaryLinkedMember(member)
-                  ? t("teamDetailUnlinkSecondary")
-                  : t("teamDetailRemoveMember")
-              }
+              enabled={canEditProject}
+              actionLabel={t("teamDetailRemoveMember")}
               onAction={() => removeMember(member)}
             >
               <View
                 accessible
-                accessibilityLabel={`${memberDisplayName(member)}, ${member.email}, ${memberLinkLabel(member, t)}`}
+                accessibilityLabel={`${memberDisplayName(member)}, ${member.email}`}
                 style={{
                   flexDirection: "row",
                   gap: 12,
@@ -716,30 +631,6 @@ export function TeamOperationsScreen() {
                     {member.email}
                   </Text>
                 </View>
-                {member.matchType === "unmatched" && canLinkProject ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t("teamDetailLinkToAccount")}
-                    onPress={() => openLinkModal(member)}
-                    disabled={memberMutation !== null}
-                    hitSlop={8}
-                    style={({ pressed }) => ({
-                      alignItems: "center",
-                      justifyContent: "center",
-                      opacity: pressed ? 0.5 : 1,
-                    })}
-                  >
-                    <Text style={{ color: colors.accent, fontSize: 15 }}>
-                      {t("teamDetailLinkToAccount")}
-                    </Text>
-                  </Pressable>
-                ) : (
-                  <View style={{ alignItems: "center", justifyContent: "center" }}>
-                    <StatusPill tone={memberLinkTone(member)}>
-                      {memberLinkLabel(member, t)}
-                    </StatusPill>
-                  </View>
-                )}
               </View>
             </SwipeableMemberRow>
           </View>
@@ -952,200 +843,6 @@ export function TeamOperationsScreen() {
         </Section>
       )}
 
-      {linkTarget ? (
-        <Modal animationType="slide" onRequestClose={closeLinkModal} presentationStyle="pageSheet">
-          <View style={{ backgroundColor: colors.background, flex: 1 }}>
-            <ScrollView
-              contentInsetAdjustmentBehavior="automatic"
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{
-                gap: 22,
-                padding: 16,
-                paddingBottom: Math.max(32, insets.bottom + 16),
-                paddingTop: 16 + sheetTopInset,
-              }}
-            >
-              <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
-                <Text
-                  selectable
-                  style={{
-                    color: colors.label,
-                    fontSize: 20,
-                    fontWeight: "700",
-                    textAlign: "center",
-                  }}
-                >
-                  {t("teamDetailLinkTitle")}
-                </Text>
-              </View>
-
-              <Section>
-                <View style={{ gap: 4, paddingHorizontal: 16, paddingVertical: 10 }}>
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                    {t("teamDetailLinkHint")}
-                  </Text>
-                  <Text style={{ color: colors.label, fontSize: 17 }}>{linkTarget.email}</Text>
-                </View>
-              </Section>
-
-              <Section>
-                <View
-                  accessible
-                  accessibilityLabel={t("teamDetailLinkSearchPlaceholder")}
-                  style={{
-                    alignItems: "center",
-                    flexDirection: "row",
-                    gap: 8,
-                    minHeight: 44,
-                    paddingHorizontal: 16,
-                    paddingVertical: 10,
-                  }}
-                >
-                  <SymbolView
-                    name="magnifyingglass"
-                    tintColor={colors.tertiaryLabel}
-                    size={16}
-                    accessible={false}
-                  />
-                  <TextInput
-                    accessibilityLabel={t("teamDetailLinkSearchPlaceholder")}
-                    editable={!linkMutation}
-                    onChangeText={(value) => {
-                      linkSearch.setQuery(value);
-                      linkSearch.setCandidates([]);
-                      linkSearch.setError(null);
-                      linkSearch.setSearched(false);
-                      setLinkSuccess(false);
-                    }}
-                    onSubmitEditing={() => void linkSearch.search()}
-                    placeholder={t("teamDetailLinkSearchPlaceholder")}
-                    placeholderTextColor={colors.tertiaryLabel}
-                    returnKeyType="search"
-                    value={linkSearch.query}
-                    style={{
-                      color: colors.label,
-                      flex: 1,
-                      fontSize: 17,
-                      minHeight: 44,
-                    }}
-                  />
-                  {linkSearch.query.length > 0 ? (
-                    <Pressable
-                      accessibilityLabel={t("cancel")}
-                      onPress={() => {
-                        linkSearch.setQuery("");
-                        linkSearch.setCandidates([]);
-                        linkSearch.setError(null);
-                        linkSearch.setSearched(false);
-                        setLinkSuccess(false);
-                      }}
-                      hitSlop={8}
-                    >
-                      <SymbolView
-                        name="xmark.circle.fill"
-                        tintColor={colors.tertiaryLabel}
-                        size={16}
-                        accessible={false}
-                      />
-                    </Pressable>
-                  ) : null}
-                </View>
-              </Section>
-
-              {linkSearch.error ? (
-                <RequestFeedback error={linkSearch.error} message={linkSearch.error.message} />
-              ) : null}
-              {linkError ? <RequestFeedback error={linkError} message={linkError.message} /> : null}
-              {linkSuccess ? (
-                <View
-                  style={{
-                    backgroundColor: colors.successSurface,
-                    borderCurve: "continuous",
-                    borderRadius: 14,
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                  }}
-                >
-                  <Text style={{ color: colors.onSuccessSurface, fontSize: 15 }}>
-                    {t("teamDetailLinkSuccess")}
-                  </Text>
-                </View>
-              ) : null}
-
-              {linkSearch.candidates.length > 0 ? (
-                <Section>
-                  {linkSearch.candidates.map((candidate, index) => (
-                    <View key={candidate.id}>
-                      {index > 0 ? <Separator /> : null}
-                      <Pressable
-                        accessibilityRole="button"
-                        disabled={linkMutation}
-                        onPress={() => void linkParticipant(candidate)}
-                        style={({ pressed }) => ({
-                          flexDirection: "row",
-                          gap: 12,
-                          minHeight: 44,
-                          opacity: pressed ? 0.5 : 1,
-                          paddingHorizontal: 16,
-                          paddingVertical: 10,
-                        })}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text numberOfLines={1} style={{ color: colors.label, fontSize: 17 }}>
-                            {memberCandidateName(candidate)}
-                          </Text>
-                          <Text
-                            numberOfLines={1}
-                            style={{ color: colors.secondaryLabel, fontSize: 15 }}
-                          >
-                            {candidate.email}
-                          </Text>
-                        </View>
-                        {linkMutation ? (
-                          <ActivityIndicator size="small" color={colors.accent} />
-                        ) : (
-                          <SymbolView
-                            name="plus.circle"
-                            tintColor={colors.accent}
-                            size={22}
-                            accessible={false}
-                          />
-                        )}
-                      </Pressable>
-                    </View>
-                  ))}
-                </Section>
-              ) : null}
-
-              {!linkSearch.loading &&
-              linkSearch.searched &&
-              linkSearch.candidates.length === 0 &&
-              !linkSuccess ? (
-                <Text
-                  selectable
-                  style={{
-                    color: colors.secondaryLabel,
-                    fontSize: 13,
-                    paddingTop: 4,
-                    textAlign: "center",
-                  }}
-                >
-                  {t("teamDetailNoMemberCandidates")}
-                </Text>
-              ) : null}
-            </ScrollView>
-
-            <FloatingGlassButton
-              top={16 + sheetTopInset}
-              side="left"
-              icon="xmark"
-              accessibilityLabel={t("cancel")}
-              onPress={closeLinkModal}
-            />
-          </View>
-        </Modal>
-      ) : null}
-
       {showAddChallenge ? (
         <Modal
           animationType="slide"
@@ -1268,40 +965,6 @@ function memberDisplayName(member: TeamMember): string {
 
 function memberCandidateName(candidate: MemberCandidate): string {
   return [candidate.name, candidate.surname].filter(Boolean).join(" ") || candidate.email;
-}
-
-function memberLinkLabel(member: TeamMember, t: ReturnType<typeof useLocale>["t"]): string {
-  if (member.source === "manual") return t("teamDetailMemberAddedByStaff");
-  switch (member.matchType) {
-    case "primary_email":
-      return t("teamDetailMemberPrimaryEmail");
-    case "secondary_email":
-      return t("teamDetailMemberSecondaryEmail");
-    case "manual":
-      return t("teamDetailMemberStaffLinked");
-    default:
-      return t("teamDetailMemberUnmatched");
-  }
-}
-
-function isSecondaryLinkedMember(member: TeamMember): boolean {
-  return member.source === "devpost" && member.matchType === "secondary_email";
-}
-
-function memberLinkTone(
-  member: TeamMember,
-): "neutral" | "accent" | "success" | "warning" | "destructive" {
-  if (member.source === "manual") return "accent";
-  switch (member.matchType) {
-    case "primary_email":
-      return "success";
-    case "secondary_email":
-      return "warning";
-    case "manual":
-      return "accent";
-    default:
-      return "neutral";
-  }
 }
 
 function DeleteMemberRevealAction({

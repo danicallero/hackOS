@@ -15,7 +15,7 @@ export interface DirectoryEntry {
   locationNote: string | null;
   socials: { kind: SocialKind; url: string }[];
   cvUrl: string | null;
-  projects: { kind: "project" | "workGroup"; id: number; name: string }[];
+  projects: { kind: "project"; id: number; name: string }[];
   challenges: { id: number; name: string }[];
 }
 

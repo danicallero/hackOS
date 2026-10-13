@@ -22,10 +22,7 @@ const mockT = (key: string, params?: Record<string, string>) =>
     teamDetailMemberCandidateCount: `${params?.count} account candidates`,
     teamDetailAddCandidate: `Add ${params?.name}`,
     teamDetailRemoveMember: "Remove member",
-    teamDetailUnlinkSecondary: "Unlink secondary account",
     teamDetailRemoveMemberConfirm: `Remove ${params?.name}?`,
-    teamDetailUnlinkSecondaryConfirm: `Unlink ${params?.name}'s verified secondary email from this project?`,
-    teamDetailMemberAddedByStaff: "Added by staff",
     teamDetailMemberPrimaryEmail: "Linked automatically by primary email",
     teamDetailMemberSecondaryEmail: "Linked by verified secondary email",
     teamDetailMemberStaffLinked: "Linked by staff",
@@ -69,12 +66,10 @@ import { renderMobile } from "./render";
 
 const mockApiFetch = apiFetch as jest.Mock;
 
-const importedMember = {
-  email: "devpost@example.com",
+const firstMember = {
+  email: "first@example.com",
   name: "Dev",
   surname: "Post",
-  source: "devpost" as const,
-  matchType: "secondary_email" as const,
   userId: 11,
 };
 
@@ -82,12 +77,10 @@ const manualMember = {
   email: "staff-added@example.com",
   name: "Staff",
   surname: "Added",
-  source: "manual" as const,
-  matchType: "manual" as const,
   userId: 12,
 };
 
-function roomView(members = [importedMember, manualMember]) {
+function roomView(members = [firstMember, manualMember]) {
   return {
     room: { id: 4, name: "Aula 3.0", location: null },
     challenge: { id: 7, title: "Retos GPUL", enterprise_name: "GPUL" },
@@ -108,7 +101,7 @@ function roomView(members = [importedMember, manualMember]) {
   };
 }
 
-function arrange(members = [importedMember, manualMember]) {
+function arrange(members = [firstMember, manualMember]) {
   mockApiFetch.mockImplementation((path: string) => {
     if (path === "/api/queue/rooms/4/view") return Promise.resolve(roomView(members));
     if (path === "/api/queue/entries/900/history") return Promise.resolve([]);
@@ -176,27 +169,15 @@ describe("team member controls (H21)", () => {
     );
   });
 
-  it("removes imported and staff-added members through their distinct ownership routes", async () => {
+  it("removes a member through the project roster route", async () => {
     const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
     await renderMobile(<TeamOperationsScreen />);
-    await waitFor(() => expect(screen.getByText("Dev Post")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Staff Added")).toBeTruthy());
 
-    fireEvent.press(screen.getByRole("button", { name: "Unlink secondary account" }));
-    const importedActions = alert.mock.calls[0]?.[2] as Array<{ onPress?: () => Promise<void> }>;
+    fireEvent.press(screen.getAllByRole("button", { name: "Remove member" })[1] as never);
+    const actions = alert.mock.calls[0]?.[2] as Array<{ onPress?: () => Promise<void> }>;
     await act(async () => {
-      await importedActions[1]?.onPress?.();
-    });
-    await waitFor(() =>
-      expect(mockApiFetch).toHaveBeenCalledWith(
-        "/api/repos/44/devpost-participants/devpost%40example.com",
-        { method: "DELETE" },
-      ),
-    );
-
-    fireEvent.press(screen.getByRole("button", { name: "Remove member" }));
-    const manualActions = alert.mock.calls[1]?.[2] as Array<{ onPress?: () => Promise<void> }>;
-    await act(async () => {
-      await manualActions[1]?.onPress?.();
+      await actions[1]?.onPress?.();
     });
     await waitFor(() =>
       expect(mockApiFetch).toHaveBeenCalledWith("/api/repos/44/members/12", { method: "DELETE" }),

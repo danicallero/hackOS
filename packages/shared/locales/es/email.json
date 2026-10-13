@@ -20,7 +20,7 @@
       },
       "verifySecondaryEmail": {
         "subject": "Confirma tu correo secundario para hackOS",
-        "body": "Hola {{name}},\n\nTu cuenta de hackOS ({{primaryEmail}}) ha pedido añadir {{secondaryEmail}} como dirección secundaria, para poder vincular tus proyectos de Devpost a tu cuenta:\n\n[Confirmar {{secondaryEmail}}]({{verifyUrl}})\n\nSi no lo has pedido tú, ignora este mensaje — tu cuenta no cambiará."
+        "body": "Hola {{name}},\n\nTu cuenta de hackOS ({{primaryEmail}}) ha pedido añadir {{secondaryEmail}} como dirección secundaria:\n\n[Confirmar {{secondaryEmail}}]({{verifyUrl}})\n\nSi no lo has pedido tú, ignora este mensaje — tu cuenta no cambiará."
       },
       "reset": {
         "subject": "Restablece tu contraseña de hackOS",

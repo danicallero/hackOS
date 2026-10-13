@@ -9,9 +9,8 @@ import { colors } from "@/theme/colors";
 const ROW_ICON_INSET = 52;
 
 /** Singular and plural row labels per project kind. */
-const PROJECT_KINDS: { kind: "project" | "workGroup"; one: MessageKey; many: MessageKey }[] = [
+const PROJECT_KINDS: { kind: "project"; one: MessageKey; many: MessageKey }[] = [
   { kind: "project", one: "directoryProject", many: "directoryProjects" },
-  { kind: "workGroup", one: "directoryWorkGroup", many: "directoryWorkGroups" },
 ];
 
 export type ProfileCardData = Pick<
