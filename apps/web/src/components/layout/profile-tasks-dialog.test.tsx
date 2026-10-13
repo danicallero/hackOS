@@ -168,16 +168,12 @@ describe("ProfileTasksDialog (#933)", () => {
     expect(container.textContent).toContain('mealPlanLockNotice {"hours":24}');
     await user.click(boxes[0] as HTMLElement);
     await user.click(button("done"));
-    expect(api.put).toHaveBeenCalledWith(
-      "/api/me/meal-plan",
-      {
-        meals: [
-          { activityId: 11, attending: true },
-          { activityId: 12, attending: true },
-        ],
-      },
-      { headers: { "idempotency-key": expect.any(String) } },
-    );
+    expect(api.put).toHaveBeenCalledWith("/api/me/meal-plan", {
+      meals: [
+        { activityId: 11, attending: true },
+        { activityId: 12, attending: true },
+      ],
+    });
     expect(session.refresh).toHaveBeenCalled();
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });

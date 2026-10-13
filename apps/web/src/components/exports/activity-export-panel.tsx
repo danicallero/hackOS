@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
+import { intentKey, settleIntentKey } from "@/lib/intent-key";
 import { toast } from "@/lib/toast";
 
 interface ActivityExportOption {
@@ -36,15 +37,18 @@ async function downloadActivityExport(
   mode: ExportMode,
   language: string,
 ): Promise<void> {
+  const requestBody = JSON.stringify({ activity_ids: activityIds, mode, language });
+  const intent = `POST activities.csv ${requestBody}`;
   const response = await fetch(`${API_URL}/api/exports/activities.csv`, {
     method: "POST",
     credentials: "include",
     headers: {
       "content-type": "application/json",
-      "Idempotency-Key": crypto.randomUUID(),
+      "Idempotency-Key": intentKey(intent),
     },
-    body: JSON.stringify({ activity_ids: activityIds, mode, language }),
+    body: requestBody,
   });
+  settleIntentKey(intent, response.status);
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as {
       error?: { message?: string };

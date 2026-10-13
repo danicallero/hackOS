@@ -42,19 +42,9 @@ export interface Announcement {
   recipients?: AnnouncementRecipient[];
 }
 
-export interface AnnouncementInput {
-  title: string;
-  body: string;
-  translations: AnnouncementTranslationFields;
-  notifyUsers: boolean;
-  screenPlacement: AnnouncementScreenPlacement;
-  publishAt: string | null;
-  expiresAt: string | null;
-  roleIds: number[];
-  intoleranceIds: number[];
-  channels: NotificationChannel[];
-  recipientUserIds: number[];
-}
+export type { AnnouncementFormValues as AnnouncementInput } from "@hackos/shared/announcement-form";
+
+import type { AnnouncementFormValues as AnnouncementInput } from "@hackos/shared/announcement-form";
 
 /** The outbox row itself IS the inbox item; `read_at` doubles as the read marker. */
 export interface InboxItem {

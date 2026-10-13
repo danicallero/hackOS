@@ -127,7 +127,7 @@ export default function QueueOperationsPage() {
   const onGenerate = useCallback(async () => {
     setBusy(true);
     try {
-      const result = await enqueueAllChallengeQueues(crypto.randomUUID());
+      const result = await enqueueAllChallengeQueues();
       toast.success(
         t("queuesGenerated", { inserted: result.inserted, challenges: result.challenges.length }),
         { compactTitle: t("generateQueues") },

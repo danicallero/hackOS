@@ -7,7 +7,7 @@ retry contract.
 | Class | Routes | Contract |
 |---|---|---|
 | Key-protected operational transition | `/api/accreditation/*`, `/api/presence/*`, `/api/activities/*/scan`, `/api/queue/**`, confirmations/declines, exports requests, native/self-service project creation and membership transitions, event diary saves (`POST /api/me/diary/scan`; a re-save also converges on the one `(owner, target)` row, #935) | Client supplies `Idempotency-Key`; the same actor, route, target and payload replays the completed response. A mismatched reuse is `409`; a concurrent in-flight duplicate is `409` with `Retry-After`. |
-| Key-protected durable side effect | Invite create/regenerate/expire/renew/resend, enterprise create/visibility/profile/member/judge/logo/FAQ/stand-tag/stand-scannable writes and bulk stand QR generation, event config, announcement CRUD, statistics access overrides, application uploads | Supported clients attach a key before the write; a replay does not create another token, outbox row, roster change, object reference, audit event, or broadcast. The temporary compatibility path accepts no-key one-shot requests while clients migrate. Upload/logo storage keys derive from the request key, so recovery after an interrupted response overwrites the same object key. |
+| Key-protected durable side effect | Invite create/regenerate/expire/renew/resend, enterprise create/visibility/profile/member/judge/logo/FAQ/stand-tag/stand-scannable writes and bulk stand QR generation, event config, announcement CRUD, statistics access overrides, application uploads | Supported clients attach a key before the write; a replay does not create another token, outbox row, roster change, object reference, audit event, or broadcast. Upload/logo storage keys derive from the request key, so recovery after an interrupted response overwrites the same object key. |
 | Naturally idempotent resource convergence | Profile/UI/notification preferences, public directory profile (`PUT /api/me/public-profile`) and its moderation, event diary favourite/note/removal (`PATCH`/`DELETE /api/me/diary/:entryId`), sponsor meal plan replacement (`PUT /api/me/meal-plan` and the audited staff correction `PUT /api/users/:id/meal-plan`, serialized per user with a row lock; one post-commit `logistics.meal_plan.updated` carrying only changed meals, none when nothing changed), inbox read/delete, push-token registration, the Live Activity device/session registry (`PUT /api/me/live-activities/device`, `PUT`/`DELETE /api/me/live-activities/sessions`, #966), schedule/challenge/room/TV configuration, role and role-grant-rule configuration, university normalization, review score replacement | `PUT`/`PATCH` converges on the supplied resource representation; `DELETE` either removes the exact resource or returns the documented missing-resource conflict. Clients still attach a key automatically, allowing safe response replay while preserving semantic convergence. |
 | State-machine / uniqueness-protected | Invite acceptance, Better Auth session/password/verification operations, Devpost imports and claims, application draft/submission/review decisions, account removal, wallet-device protocols, telemetry | The underlying token lock, unique constraint, or transition lock supplies one winner. These remain explicitly documented exceptions because some are third-party protocol endpoints or have identity/session semantics that cannot replay a generic HTTP response. |
 
@@ -39,9 +39,16 @@ signal by design: Valkey is not a transactional database, so consumers always
 refetch the durable Postgres projection after an event. Replayed responses skip
 the handler and therefore emit no second broadcast.
 
-All web and mobile mutation helpers attach an `Idempotency-Key` when one was
-not supplied. Scanner/offline callers retain their operation key and therefore
-reuse it across transport retries.
+Keys represent user intent (#995). `apiFetch`/`apiUpload` (web) and `apiFetch`
+(mobile) derive the key from method, path and payload: the key minted for the
+first send is reused when the user re-sends the identical request after a
+timeout or lost response, so the server replays the first result. It is
+discarded on any definitive answer (2xx, or 4xx other than 408/409/425/429) and
+after 10 minutes; a changed payload is a new intent with a new key. Call sites
+do not mint keys. Scanner/offline callers and flows that persist a key (profile
+photo, networking profile, confirmations, imports) pass their own, which wins.
+The API treats the header as optional (`idempotencyGuard`): scripted callers
+that omit it run one-shot.
 
 Wallet runtime operations (H28): `POST /api/event/wallet/operations` accepts
 Idempotency-Key and retains a unique actor/request key in its durable operation

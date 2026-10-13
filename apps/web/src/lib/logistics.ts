@@ -352,8 +352,9 @@ export interface ScheduleInput {
   titleLanguage?: Language;
 }
 
-export type ScheduleTranslation = { title?: string; description?: string | null };
-export type ScheduleTranslations = Partial<Record<Language, ScheduleTranslation>>;
+export type { ScheduleTranslation, ScheduleTranslations } from "@hackos/shared/schedule-form";
+
+import type { ScheduleTranslations } from "@hackos/shared/schedule-form";
 
 /**
  * Resolves what a viewer sees for a schedule item's title/description (H50
@@ -361,35 +362,7 @@ export type ScheduleTranslations = Partial<Record<Language, ScheduleTranslation>
  * item's primary (authored) language — never blank, since primaryLanguage's
  * canonical `title`/`description` is always filled.
  */
-export function resolveScheduleText(
-  item: PublicScheduleItem,
-  language: Language,
-): { title: string; description: string | null } {
-  const firstText = (...values: (string | null | undefined)[]) =>
-    values.find((value) => typeof value === "string" && value.trim().length > 0) ?? null;
-  const fallbackLanguage =
-    language === item.primaryLanguage || language === "en" ? undefined : "en";
-  return {
-    // Resolve title and description independently. A translated title must
-    // not hide an available description (or vice versa) when translations
-    // were entered one field at a time (H50).
-    title:
-      firstText(
-        language === item.primaryLanguage ? undefined : item.titleI18n?.[language],
-        fallbackLanguage ? item.titleI18n?.[fallbackLanguage] : undefined,
-        item.title,
-      ) ?? item.title,
-    description: firstText(
-      language === item.primaryLanguage ? undefined : item.descriptionI18n?.[language],
-      fallbackLanguage ? item.descriptionI18n?.[fallbackLanguage] : undefined,
-      item.description,
-    ),
-  };
-}
-
-export function idempotencyHeaders(prefix: string): Record<string, string> {
-  return { "idempotency-key": `${prefix}-${crypto.randomUUID()}` };
-}
+export { resolveScheduleText } from "@hackos/shared/localized-text";
 
 export const logisticsApi = {
   searchPeople: (q: string, fields?: PersonSearchField[]) =>
@@ -402,28 +375,19 @@ export const logisticsApi = {
   accreditationStats: () =>
     api.get<{ byRole: AccreditationRoleCount[] }>("/api/accreditation/stats"),
   checkIn: (body: { ticketToken: string; badgeId: string; method: "qr" | "manual" | "nfc" }) =>
-    api.post<CheckInResult>("/api/accreditation/check-in", body, {
-      headers: idempotencyHeaders("check-in"),
-    }),
+    api.post<CheckInResult>("/api/accreditation/check-in", body),
   checkInUser: (body: { userId: number; badgeId: string; method: "qr" | "manual" | "nfc" }) =>
-    api.post<CheckInResult>("/api/accreditation/check-in-user", body, {
-      headers: idempotencyHeaders("check-in-user"),
-    }),
+    api.post<CheckInResult>("/api/accreditation/check-in-user", body),
   rotate: (body: {
     userId?: number;
     currentBadgeId?: string;
     newBadgeId: string;
     reason: string;
-  }) =>
-    api.post<RotateBadgeResult>("/api/accreditation/rotate", body, {
-      headers: idempotencyHeaders("badge-rotate"),
-    }),
+  }) => api.post<RotateBadgeResult>("/api/accreditation/rotate", body),
   presenceLookup: (badgeId: string) =>
     api.post<PresenceLookup>("/api/presence/lookup", { badgeId }),
   presenceScan: (body: { badgeId: string; kind: "in" | "out"; scannedAt?: string }) =>
-    api.post<PresenceScanResult>("/api/presence/scan", body, {
-      headers: idempotencyHeaders("presence"),
-    }),
+    api.post<PresenceScanResult>("/api/presence/scan", body),
   presenceEstimate: () => api.get<PresenceEstimate>("/api/presence/estimate"),
   presenceHours: () => api.get<PresenceHours[]>("/api/presence/hours"),
   presenceOpenSessions: () => api.get<{ items: OpenPresenceSession[] }>("/api/presence/open"),
@@ -497,10 +461,7 @@ export const logisticsApi = {
   activityScan: (
     activityId: number,
     body: { badgeId: string; allowRepeat?: boolean; scannedAt?: string },
-  ) =>
-    api.post<ActivityScanResult>(`/api/activities/${activityId}/scan`, body, {
-      headers: idempotencyHeaders("activity-scan"),
-    }),
+  ) => api.post<ActivityScanResult>(`/api/activities/${activityId}/scan`, body),
   mealBatch: (
     activityId: number,
     body: {
@@ -512,10 +473,7 @@ export const logisticsApi = {
         scannedAt?: string;
       }>;
     },
-  ) =>
-    api.post<MealScanBatchResult>(`/api/activities/${activityId}/meal-scans/batch`, body, {
-      headers: idempotencyHeaders("meal-batch"),
-    }),
+  ) => api.post<MealScanBatchResult>(`/api/activities/${activityId}/meal-scans/batch`, body),
   myTicket: () => api.get<TicketQrPayload>("/api/me/ticket"),
   googleWalletSaveUrl: (purpose: "ticket" | "badge") =>
     api.get<{ saveUrl: string }>(`/api/me/wallet/google/${purpose}`),

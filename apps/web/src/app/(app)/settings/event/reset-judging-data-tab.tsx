@@ -61,14 +61,10 @@ export function ResetJudgingDataTab({ icon: Icon }: { icon: PhosphorIcon }) {
   async function wipeJudgingData() {
     setPending(true);
     try {
-      await api.post<{ ok: true }>(
-        "/api/queue/admin/reset",
-        {
-          confirmationPhrase: SERVER_CONFIRMATION_PHRASE,
-          acknowledgeIrreversible: true,
-        },
-        { headers: { "Idempotency-Key": crypto.randomUUID() } },
-      );
+      await api.post<{ ok: true }>("/api/queue/admin/reset", {
+        confirmationPhrase: SERVER_CONFIRMATION_PHRASE,
+        acknowledgeIrreversible: true,
+      });
       setPending(false);
       setStage(0);
       setResetComplete(true);

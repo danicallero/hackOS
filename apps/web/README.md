@@ -611,3 +611,9 @@ change the account column's height. A full-width role card starts collapsed
 and shows the visible role. It reveals all assigned role names, marking the
 visible role with a badge. Effective capabilities are grouped by area; each
 group opens on demand and shows capability names without descriptions.
+
+Pure schedule/announcement form models, localized content resolution, presence
+math, role/category labels, timezone-store behavior and account-removal progress
+parsing live in `packages/shared` (#1001). Keep web rendering, storage and
+`datetime-local` conversion here. See [shared client models](../../docs/notifications.md#shared-client-models-1001)
+for drift decisions and fallback orders.

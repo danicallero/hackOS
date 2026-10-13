@@ -7,31 +7,15 @@ import {
   deviceTimeZone,
   formatInZone,
   instantToWallClock,
-  isValidTimeZone,
   wallClockToInstant,
   zoneAbbreviation,
 } from "@hackos/shared/event-time";
+import { createEventTimeZoneStore } from "@hackos/shared/event-time-store";
 import { useSyncExternalStore } from "react";
 
-let eventZone: string | null = null;
-const listeners = new Set<() => void>();
+const { setEventTimeZone, getEventTimeZone, subscribe } = createEventTimeZoneStore();
 
-export function setEventTimeZone(zone: string | null | undefined): void {
-  const next = isValidTimeZone(zone) ? zone : null;
-  if (next === eventZone) return;
-  eventZone = next;
-  for (const listener of listeners) listener();
-}
-
-/** The event's IANA zone, or the device's while it is not yet known. */
-export function getEventTimeZone(): string {
-  return eventZone ?? deviceTimeZone();
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export { getEventTimeZone, setEventTimeZone };
 
 /** Re-renders the caller when the event zone changes. */
 export function useEventTimeZone(): string {

@@ -383,11 +383,7 @@ export function ImportedProjectClaim({
           onClick={async () => {
             setBusy(true);
             try {
-              await api.post(
-                `/api/me/projects/${state.id}/reject-claim`,
-                {},
-                { headers: { "Idempotency-Key": crypto.randomUUID() } },
-              );
+              await api.post(`/api/me/projects/${state.id}/reject-claim`, {});
               router.replace("/my-project");
             } catch (e) {
               setError(e instanceof ApiError ? e.message : t("couldNotSaveProject"));

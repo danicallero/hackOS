@@ -7,10 +7,12 @@ requirement it depends on.
 ## Shared primitive
 
 `apps/api/src/lib/rate-limit.ts` exports `consumeRateLimit(bucket, key, rule)`:
-a Valkey fixed-window counter (`INCR` + `EXPIRE` on the first hit of the
-window, capped at `rule.max`), keyed `ratelimit:<bucket>:<key>`. Because the
-counter lives in Valkey rather than process memory, the limit is shared across
-every API replica — the concrete requirement behind this whole issue.
+a Valkey fixed-window counter, keyed `ratelimit:<bucket>:<key>`, capped at
+`rule.max`. Each hit runs `INCR` and `EXPIRE key window NX` in one `MULTI`:
+the expiry starts a window when the key has no TTL and repairs a counter left
+without one, while `NX` preserves an existing window. Because the counter
+lives in Valkey rather than process memory, the limit is shared across every
+API replica — the concrete requirement behind this whole issue.
 
 `rateLimitGuard(bucket, rule, keyOf)` wraps it as a Fastify preHandler that
 throws `TooManyRequestsError` (429, `retry-after` header) on rejection —

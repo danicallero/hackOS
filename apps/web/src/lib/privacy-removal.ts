@@ -1,13 +1,15 @@
+import {
+  type AccountRemovalAction,
+  type AccountRemovalProgress,
+  parseAccountRemovalProgress,
+} from "@hackos/shared/account-removal";
 import { isOfflineQueueStorageKey, LEGACY_OFFLINE_KEY } from "@/components/logistics/offline-queue";
 
-export type AccountRemovalAction = "delete" | "anonymize";
-
-export type AccountRemovalProgressStatus = "pending_exit" | "processing" | "device_cleanup_pending";
-
-export interface AccountRemovalProgress {
-  action: AccountRemovalAction;
-  status: AccountRemovalProgressStatus;
-}
+export type {
+  AccountRemovalAction,
+  AccountRemovalProgress,
+  AccountRemovalProgressStatus,
+} from "@hackos/shared/account-removal";
 
 const ACCOUNT_REMOVAL_PROGRESS_KEY = "hackos:account-removal-progress";
 
@@ -86,19 +88,7 @@ export function readAccountRemovalProgress(): AccountRemovalProgress | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(ACCOUNT_REMOVAL_PROGRESS_KEY);
-    if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return null;
-    const value = parsed as Record<string, unknown>;
-    if (
-      (value.action !== "delete" && value.action !== "anonymize") ||
-      (value.status !== "pending_exit" &&
-        value.status !== "processing" &&
-        value.status !== "device_cleanup_pending")
-    ) {
-      return null;
-    }
-    return { action: value.action, status: value.status };
+    return parseAccountRemovalProgress(raw);
   } catch {
     return null;
   }

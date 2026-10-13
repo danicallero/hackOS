@@ -182,7 +182,7 @@ export default function QueueRoomsPage({ embedded = false }: { embedded?: boolea
   const createRoomFromDraft = async (name: string, location: string) => {
     setDraftSaving(true);
     try {
-      const created = await createRoom({ name, location: location || null }, crypto.randomUUID());
+      const created = await createRoom({ name, location: location || null });
       toast.success(t("roomCreated"), { compactTitle: t("createRoom") });
       setDraftOpen(false);
       await load();
@@ -197,14 +197,11 @@ export default function QueueRoomsPage({ embedded = false }: { embedded?: boolea
 
   const submitRoomPanel = async (values: RoomFormValues) => {
     if (panelMode === "create") {
-      const created = await createRoom(
-        { name: values.name, location: values.location || null },
-        crypto.randomUUID(),
-      );
+      const created = await createRoom({ name: values.name, location: values.location || null });
       let assignmentError: string | null = null;
       if (values.enterpriseId) {
         try {
-          await assignRoomEnterprise(created.id, Number(values.enterpriseId), crypto.randomUUID());
+          await assignRoomEnterprise(created.id, Number(values.enterpriseId));
         } catch (err) {
           assignmentError = err instanceof ApiError ? err.message : t("couldNotAssignEnterprise");
         }
@@ -230,7 +227,7 @@ export default function QueueRoomsPage({ embedded = false }: { embedded?: boolea
 
   const assignEnterprise = async (room: Room, enterpriseId: number | null) => {
     if (enterpriseId === null) await removeRoomEnterprise(room.id);
-    else await assignRoomEnterprise(room.id, enterpriseId, crypto.randomUUID());
+    else await assignRoomEnterprise(room.id, enterpriseId);
     const enterprise = enterprises.find((item) => item.id === enterpriseId);
     setRooms((current) =>
       current.map((item) =>

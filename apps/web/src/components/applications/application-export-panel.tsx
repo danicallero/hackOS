@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { type I18nText, type MessageKey, pickText, useLocale } from "@/lib/i18n";
+import { intentKey, settleIntentKey } from "@/lib/intent-key";
 import { toast } from "@/lib/toast";
 
 const EXPORT_STATUSES = [
@@ -272,21 +273,24 @@ export function ApplicationExportPanel({
 
     setExporting(true);
     try {
+      const requestBody = JSON.stringify({
+        statuses: selectedStatuses,
+        fields: selected.map((option) => option.selection),
+        ...(applicationId ? { application_ids: [applicationId] } : {}),
+        documents,
+        language,
+      });
+      const intent = `POST applications.zip ${requestBody}`;
       const response = await fetch(`${API_URL}/api/exports/applications.zip`, {
         method: "POST",
         credentials: "include",
         headers: {
           "content-type": "application/json",
-          "Idempotency-Key": crypto.randomUUID(),
+          "Idempotency-Key": intentKey(intent),
         },
-        body: JSON.stringify({
-          statuses: selectedStatuses,
-          fields: selected.map((option) => option.selection),
-          ...(applicationId ? { application_ids: [applicationId] } : {}),
-          documents,
-          language,
-        }),
+        body: requestBody,
       });
+      settleIntentKey(intent, response.status);
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as {
