@@ -91,11 +91,13 @@ export function templateFieldId(fieldKey: string, applicationId?: number): strin
 export function TemplateFieldControl({
   field,
   value,
-  onChange,
+  onChange = () => {},
   disabled,
   lang,
   error,
   applicationId,
+  uploadPath,
+  downloadUrl,
   responseId,
   inDialog = false,
   sharedWithSponsors,
@@ -105,12 +107,14 @@ export function TemplateFieldControl({
 }: {
   field: TemplateFieldLike;
   value: FieldValue;
-  onChange: (value: FieldValue) => void;
+  onChange?: (value: FieldValue) => void;
   disabled?: boolean;
   lang: Language;
   error?: string;
   /** Enables file upload for an applicant response or staff correction. */
   applicationId?: number;
+  uploadPath?: string;
+  downloadUrl?: string;
   /** Existing response being corrected by staff. */
   responseId?: number;
   inDialog?: boolean;
@@ -324,9 +328,11 @@ export function TemplateFieldControl({
       const shareId = `${id}-shared-with-sponsors`;
       control = (
         <div className="space-y-2">
-          {applicationId != null ? (
+          {applicationId != null || uploadPath ? (
             <FileUploadField
               applicationId={applicationId}
+              uploadPath={uploadPath}
+              downloadUrl={downloadUrl}
               responseId={responseId}
               fieldKey={field.key}
               value={typeof value === "string" ? value : ""}
@@ -342,7 +348,7 @@ export function TemplateFieldControl({
               aria-invalid={hasError || undefined}
             />
           ) : value ? (
-            <FileLink value={String(value)} />
+            <FileLink value={downloadUrl ?? String(value)} />
           ) : (
             <p className="text-muted-foreground text-sm">{t("noFileUploadedPeriod")}</p>
           )}

@@ -19,7 +19,7 @@ import { toast } from "@/lib/toast";
 /**
  * Email addresses (H1 verification state, H6 secondary email). Shows the
  * primary email with a verified/unverified badge, and lets the user register a
- * secondary address (used to match their Devpost projects on import, H16) with
+ * secondary address with
  * its own verification flow.
  */
 export function EmailCard() {
@@ -139,11 +139,7 @@ export function EmailCard() {
             type="email"
             value={secondary}
             onChange={(e) => setSecondary(e.target.value)}
-            placeholder={
-              me.secondaryEmail
-                ? t("changeSecondaryEmailPlaceholder")
-                : t("devpostEmailPlaceholder")
-            }
+            placeholder={me.secondaryEmail ? t("changeSecondaryEmailPlaceholder") : t("email")}
           />
           <SubmitButton
             type="button"

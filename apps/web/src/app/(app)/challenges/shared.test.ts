@@ -17,7 +17,6 @@ function baseChallenge(overrides: Partial<Challenge> = {}): Challenge {
     criteria: "Judged on impact",
     criteria_i18n: null,
     prizes: [{ name: "Best overall" }],
-    devpost_tags: [],
     judging_panel_criteria: [
       { key: "impact", label: "Impact", kind: "scale", min: 1, max: 5 },
     ] as never,

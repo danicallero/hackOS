@@ -9,7 +9,6 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
-import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PublicationControls } from "@/components/common/publication-controls";
@@ -41,7 +40,6 @@ import { api } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
-import { type DevpostPrize, listDevpostPrizes } from "@/lib/projects";
 import { toast } from "@/lib/toast";
 import { useUrlTab } from "@/lib/url-tab";
 import { type Challenge, EMPTY_I18N, i18nWithEnglishFallback, type Prize } from "./shared";
@@ -68,13 +66,11 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
   const { t } = useLocale();
   const { tab: step, setTab: setStep } = useUrlTab({ values: STEPS, defaultValue: "basics" });
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
-  const [devpostPrizes, setDevpostPrizes] = useState<DevpostPrize[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [titleI18n, setTitleI18n] = useState<I18nText>(EMPTY_I18N);
   const [descriptionI18n, setDescriptionI18n] = useState<I18nText>(EMPTY_I18N);
   const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(EMPTY_I18N);
-  const [devpostTags, setDevpostTags] = useState<string[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -99,14 +95,10 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingData(true);
     setLoadError(null);
-    Promise.all([
-      api.get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises"),
-      listDevpostPrizes(),
-    ])
-      .then(([enterpriseResult, prizeResult]) => {
+    Promise.all([api.get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises")])
+      .then(([enterpriseResult]) => {
         if (cancelled) return;
         setEnterprises(enterpriseResult.enterprises);
-        setDevpostPrizes(prizeResult.prizes);
       })
       .catch((error) => {
         if (!cancelled) {
@@ -140,7 +132,6 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
         criteria: criteriaI18n.en.trim() || null,
         criteriaI18n: criteriaI18n.en.trim() ? i18nWithEnglishFallback(criteriaI18n) : null,
         prizes: normalizePrizes(prizes),
-        devpostTags,
         judgingPanelCriteria: normalizeQuestions(questions),
         maxPresentationSeconds: values.maxPresentationSeconds
           ? Number(values.maxPresentationSeconds)
@@ -261,21 +252,6 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
             <SectionCard variant="plain" title={t("prizesLabel")}>
               <PrizeBuilder value={prizes} onChange={setPrizes} />
             </SectionCard>
-            <SectionCard variant="plain" title={t("devpostTagsLabel")}>
-              <DevpostTagsField
-                value={devpostTags}
-                onChange={setDevpostTags}
-                options={devpostPrizes.map((prize) => ({
-                  value: prize.name,
-                  label: prize.name,
-                  description:
-                    prize.repoCount === 1
-                      ? t("projectCountOne", { count: prize.repoCount })
-                      : t("projectCountOther", { count: prize.repoCount }),
-                }))}
-                emptyText={t("noImportedPrizes")}
-              />
-            </SectionCard>
           </TabsContent>
 
           <TabsContent value="judging" className="space-y-6 pt-4">
@@ -362,8 +338,7 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
                     descriptionI18n.en.trim() ||
                     criteriaI18n.en.trim() ||
                     prizes.length > 0 ||
-                    questions.length > 0 ||
-                    devpostTags.length > 0
+                    questions.length > 0
                   ? "unsaved"
                   : "saved"
             }

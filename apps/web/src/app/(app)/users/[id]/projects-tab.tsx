@@ -32,7 +32,7 @@ export function buildProjectColumns(t: Translate): Column<RepoWithExtras>[] {
           <div className="flex flex-wrap gap-1">
             {project.challenges.map((challenge) => (
               <StatusBadge key={challenge.id} tone="brand" dot={false}>
-                {challenge.title}
+                {typeof challenge.title === "string" ? challenge.title : challenge.title.en}
               </StatusBadge>
             ))}
           </div>
@@ -41,36 +41,17 @@ export function buildProjectColumns(t: Translate): Column<RepoWithExtras>[] {
         ),
     },
     {
-      id: "prizes",
-      header: t("colPrizes"),
-      sortValue: (project) => (Array.isArray(project.prizes) ? project.prizes.length : 0),
-      cell: (project) => {
-        const prizes = Array.isArray(project.prizes) ? (project.prizes as string[]) : [];
-        return prizes.length ? (
-          <span className="text-muted-foreground text-sm">
-            {prizes.length === 1
-              ? t("prizeCountOne", { count: prizes.length })
-              : t("prizeCountOther", { count: prizes.length })}
-          </span>
-        ) : (
-          <span className="text-muted-foreground text-sm">{t("none")}</span>
-        );
-      },
-    },
-    {
       id: "links",
       header: t("colLinks"),
       cell: (project) => {
-        const devpostUrl = typeof project.devpost_url === "string" ? project.devpost_url : null;
-        const demoUrl = typeof project.demo_url === "string" ? project.demo_url : null;
-        const githubUrl = typeof project.github_url === "string" ? project.github_url : null;
+        const demoUrl = typeof project.demoUrl === "string" ? project.demoUrl : null;
+        const githubUrl = typeof project.githubUrl === "string" ? project.githubUrl : null;
 
         return (
           <div className="flex flex-wrap gap-2">
-            {devpostUrl && <ProjectLink href={devpostUrl} label={t("projectLinkDevpost")} />}
             {demoUrl && <ProjectLink href={demoUrl} label={t("projectLinkDemo")} />}
             {githubUrl && <ProjectLink href={githubUrl} label={t("projectLinkRepository")} />}
-            {!devpostUrl && !demoUrl && !githubUrl && (
+            {!demoUrl && !githubUrl && (
               <span className="text-muted-foreground text-sm">{t("none")}</span>
             )}
           </div>
@@ -162,9 +143,7 @@ export function ProjectsTab({ userId }: { userId: number }) {
       getRowHref={(project) => `/projects/${project.id}`}
       getRowLabel={(project) => project.name}
       searchable={(project) =>
-        `${project.name} ${(project.challenges ?? []).map((challenge) => challenge.title).join(" ")} ${
-          Array.isArray(project.prizes) ? project.prizes.join(" ") : ""
-        }`
+        `${project.name} ${(project.challenges ?? []).map((challenge) => (typeof challenge.title === "string" ? challenge.title : challenge.title.en)).join(" ")}`
       }
       searchPlaceholder={t("searchProjectsPlaceholder")}
       pageSize={10}
