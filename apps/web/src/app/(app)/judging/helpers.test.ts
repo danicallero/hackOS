@@ -24,13 +24,13 @@ describe("judging helpers", () => {
   it("moves H30 details into an automatically expanded toast description", () => {
     expect(
       queueErrorToastContent(
-        new ApiError(409, "conflict", "Team has a member busy in another room (H30)"),
+        new ApiError(409, "conflict", "reworded", { code: "team_member_busy" }),
         "Queue action failed.",
         "Couldn't call team",
         "This team cannot be called yet because one of its members is active in another room.",
       ),
     ).toEqual({
-      message: "Team has a member busy in another room (H30)",
+      message: "reworded",
       title: "Couldn't call team",
       description:
         "This team cannot be called yet because one of its members is active in another room.",

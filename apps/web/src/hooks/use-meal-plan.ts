@@ -1,56 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback } from "react";
 import { api } from "@/lib/api";
 import { apiErrorReason } from "@/lib/api-error-reason";
 import { type MealAnswers, type MealPlan, mealPlanBody } from "@/lib/meal-plan";
+import { invalidateServerState, readServerState } from "@/lib/server-state";
+import { useServerResource } from "./use-server-resource";
 
 /**
  * One meal plan per signed-in user, shared by every caller (#933): the
- * next-entry prompt and My profile read and write the same copy, so saving in
- * one never leaves the other submitting stale answers.
+ * next-entry prompt and My profile read and write the same server-state
+ * resource, so saving in one never leaves the other submitting stale answers.
  */
-interface MealPlanState {
-  userId: number | null;
-  plan: MealPlan | null;
-  status: "idle" | "loading" | "ready" | "error";
-}
-
-const INITIAL: MealPlanState = { userId: null, plan: null, status: "idle" };
-let state = INITIAL;
-let inflight: Promise<void> | null = null;
-const listeners = new Set<() => void>();
-
-function setState(next: MealPlanState) {
-  state = next;
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function load(userId: number): Promise<void> {
-  if (inflight && state.userId === userId) return inflight;
-  const plan = state.userId === userId ? state.plan : null;
-  setState({ userId, plan, status: "loading" });
-  const request: Promise<void> = api
-    .get<MealPlan>("/api/me/meal-plan")
-    .then(
-      (next) => {
-        if (state.userId === userId) setState({ userId, plan: next, status: "ready" });
-      },
-      () => {
-        if (state.userId === userId) setState({ userId, plan, status: "error" });
-      },
-    )
-    .finally(() => {
-      if (inflight === request) inflight = null;
-    });
-  inflight = request;
-  return request;
-}
 
 /** Errors after which the stored plan differs from what the caller submitted. */
 const STALE_PLAN_CODES = new Set(["meal_plan_incomplete", "meal_plan_locked", "meal_not_offered"]);
@@ -64,52 +25,38 @@ export function mealPlanSaveErrorKey(err: unknown) {
   return "couldNotSaveMealPlan";
 }
 
+const mealPlanKey = (userId: number | null) => ["me", "meal-plan", userId] as const;
+const fetchMealPlan = (signal: AbortSignal) => api.get<MealPlan>("/api/me/meal-plan", { signal });
+
 /** The caller's sponsor meal plan (#933); pass `null` for non-sponsors (the API is 403). */
 export function useMealPlan(userId: number | null) {
-  const snapshot = useSyncExternalStore(
-    subscribe,
-    () => state,
-    () => INITIAL,
-  );
-  const current = userId !== null && snapshot.userId === userId ? snapshot : INITIAL;
-
-  useEffect(() => {
-    if (userId === null) return;
-    if (state.userId !== userId || state.status === "idle") void load(userId);
-  }, [userId]);
-
-  const reload = useCallback(() => {
-    if (userId !== null) void load(userId);
-  }, [userId]);
+  const { data, error, reload, mutate } = useServerResource(mealPlanKey(userId), fetchMealPlan, {
+    enabled: userId !== null,
+  });
 
   const save = useCallback(
     async (plan: MealPlan, answers: MealAnswers) => {
       try {
         const next = await api.put<MealPlan>("/api/me/meal-plan", mealPlanBody(plan, answers));
-        if (userId !== null) setState({ userId, plan: next, status: "ready" });
+        if (userId !== null) mutate(next);
         return next;
       } catch (err) {
         // The offered list or a lock changed under the caller: show the current plan.
         if (userId !== null && STALE_PLAN_CODES.has(apiErrorReason(err) ?? "")) {
-          await load(userId);
+          invalidateServerState(mealPlanKey(userId));
+          await readServerState(mealPlanKey(userId), fetchMealPlan).then(mutate, () => reload());
         }
         throw err;
       }
     },
-    [userId],
+    [userId, mutate, reload],
   );
 
   return {
-    plan: current.plan,
-    loading: current.plan === null && current.status !== "error",
-    loadError: current.status === "error",
+    plan: data,
+    loading: userId !== null && data === null && !error,
+    loadError: data === null && Boolean(error),
     reload,
     save,
   };
-}
-
-/** Test seam: forget the shared plan. */
-export function resetMealPlanStore(): void {
-  inflight = null;
-  state = INITIAL;
 }

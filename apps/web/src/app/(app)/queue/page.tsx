@@ -108,7 +108,7 @@ export default function QueueOperationsPage() {
       EVENTS.QUEUE_NOTIFY_ENTER,
       EVENTS.QUEUE_TEAM_CALLED,
     ],
-    { enabled: canViewRooms, onEvent: announceTeamEnter },
+    { enabled: canViewRooms, onEvent: announceTeamEnter, resourceKey: ["queue", "room-views"] },
   );
 
   const rooms = useMemo(() => roomViews.data ?? [], [roomViews.data]);

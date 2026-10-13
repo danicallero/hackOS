@@ -5,7 +5,7 @@
 | Carril | Historias | Dependencias de entrada | Bloqueos que genera |
 |---|---|---|---|
 | WS-A Identidad + Applications | H1-H15 | Ninguna | H16+, H22+, H43+ |
-| WS-B Proyectos + Judging core | H16-H17, H29-H40 | WS-A (auth mínima) | H41-H42, parte de H50-H51 |
+| WS-B Proyectos + Judging core | H16-H21, H29-H40, H60 | WS-A (auth mínima) | H41-H42, parte de H50-H51 |
 | WS-C Logística + Presencia + Wallet | H22-H28 | WS-A, H48 (definición de actividades) | Métricas de operación |
 | WS-D TV + Público | H41-H42, H47-H49 | WS-B (estado de cola) | Visualización de evento |
 | WS-E Sponsors | H43-H46 | WS-A + WS-B | Gestión de retos/jueces sponsor |
