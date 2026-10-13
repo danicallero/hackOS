@@ -221,6 +221,16 @@ export async function createRepoWithTeam(
   return { repoId, memberIds: members };
 }
 
+/** A project's challenge selection (#1006), the input queue generation reads. */
+export async function selectChallenge(repoId: number, ...challengeIds: number[]): Promise<void> {
+  for (const challengeId of challengeIds) {
+    await pool.query(
+      `INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [repoId, challengeId],
+    );
+  }
+}
+
 /** Direct waiting entry, bypassing the enqueue endpoint. */
 export async function enqueueRepo(
   challengeId: number,

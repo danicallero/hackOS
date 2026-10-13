@@ -309,63 +309,47 @@ describe("saved profile reads (#934, #935)", () => {
     expect((await card(me)).json().challenges).toEqual([{ id: kept, name: "Kept" }]);
   });
 
-  it("lists every project and unlinked work group with all their challenges", async () => {
+  it("lists every project with all their challenges, queued or only selected", async () => {
     const first = await publishChallenge("First");
     const second = await publishChallenge("Second");
-    const planned = await publishChallenge("Planned too");
+    const selected = await publishChallenge("Selected too");
     const me = await person("Antía", "Paz");
     const repoA = await activeRepo("Alpha", [me], [first]);
     const repoB = await activeRepo("Beta", [me], [second]);
-    const { rows } = await pool.query(
-      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Side quest', $1) RETURNING id`,
-      [me],
-    );
-    await pool.query(
-      `INSERT INTO planned_work_group_members (group_id, user_id, status, responded_at) VALUES ($1, $2, 'active', now())`,
-      [rows[0].id, me],
-    );
-    await pool.query(
-      `INSERT INTO planned_work_group_challenges (group_id, challenge_id) VALUES ($1, $2)`,
-      [rows[0].id, planned],
-    );
+    const repoC = await activeRepo("Gamma", [me], []);
+    await pool.query(`INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2)`, [
+      repoC,
+      selected,
+    ]);
     await putProfile(me, VISIBLE);
     await save(me);
     const entry = (await card(me)).json();
     expect(entry.projects).toEqual([
       { kind: "project", id: repoA, name: "Alpha" },
       { kind: "project", id: repoB, name: "Beta" },
-      { kind: "workGroup", id: Number(rows[0].id), name: "Side quest" },
+      { kind: "project", id: repoC, name: "Gamma" },
     ]);
     expect(entry.project).toEqual({ kind: "project", id: repoA, name: "Alpha" });
     expect(entry.challenges).toEqual([
       { id: first, name: "First" },
-      { id: planned, name: "Planned too" },
       { id: second, name: "Second" },
+      { id: selected, name: "Selected too" },
     ]);
   });
 
-  it("shows an unlinked planned work group", async () => {
-    const challenge = await publishChallenge("Planned");
+  it("hides projects and their challenges when the person turns them off", async () => {
+    const challenge = await publishChallenge("Selected");
     const me = await person("Lúa", "Souto");
-    const { rows } = await pool.query(
-      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Planners', $1) RETURNING id`,
-      [me],
-    );
-    await pool.query(
-      `INSERT INTO planned_work_group_members (group_id, user_id, status, responded_at) VALUES ($1, $2, 'active', now())`,
-      [rows[0].id, me],
-    );
-    await pool.query(
-      `INSERT INTO planned_work_group_challenges (group_id, challenge_id) VALUES ($1, $2)`,
-      [rows[0].id, challenge],
-    );
+    const repoId = await activeRepo("Draft", [me], []);
+    await pool.query(`INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2)`, [
+      repoId,
+      challenge,
+    ]);
     await putProfile(me, VISIBLE);
     await save(me);
     const entry = (await card(me)).json();
-    expect(entry.projects).toEqual([
-      { kind: "workGroup", id: Number(rows[0].id), name: "Planners" },
-    ]);
-    expect(entry.challenges).toEqual([{ id: challenge, name: "Planned" }]);
+    expect(entry.projects).toEqual([{ kind: "project", id: repoId, name: "Draft" }]);
+    expect(entry.challenges).toEqual([{ id: challenge, name: "Selected" }]);
 
     await putProfile(me, { ...VISIBLE, showProject: false });
     const withoutProject = (await card(me)).json();

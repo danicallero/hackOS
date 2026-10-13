@@ -249,13 +249,12 @@ describe("configured deadline and accreditation timings (H19, H20, H22)", () => 
     const pool = await db();
     const drafter = await participant();
     const group = await pool.query<{ id: number }>(
-      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Rocket', $1) RETURNING id`,
-      [drafter],
+      `INSERT INTO repos (name, submission_status) VALUES ('Rocket', 'draft') RETURNING id`,
     );
-    await pool.query(
-      `INSERT INTO planned_work_group_members (group_id, user_id, status) VALUES ($1, $2, 'active')`,
-      [group.rows[0]!.id, drafter],
-    );
+    await pool.query(`INSERT INTO submissions (repo_id, user_id) VALUES ($1, $2)`, [
+      group.rows[0]!.id,
+      drafter,
+    ]);
     await allowLiveActivities();
     const now = Date.now();
     await pool.query(
@@ -362,16 +361,15 @@ describe("submission deadline (H19, H20)", () => {
   it("tracks the project status and enters closing only for a known draft", async () => {
     const pool = await db();
     const drafter = await participant();
-    const devpostOnly = await participant();
+    const noProject = await participant();
     const submitter = await participant();
     const group = await pool.query<{ id: number }>(
-      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Rocket', $1) RETURNING id`,
-      [drafter],
+      `INSERT INTO repos (name, submission_status) VALUES ('Rocket', 'draft') RETURNING id`,
     );
-    await pool.query(
-      `INSERT INTO planned_work_group_members (group_id, user_id, status) VALUES ($1, $2, 'active')`,
-      [group.rows[0]!.id, drafter],
-    );
+    await pool.query(`INSERT INTO submissions (repo_id, user_id) VALUES ($1, $2)`, [
+      group.rows[0]!.id,
+      drafter,
+    ]);
     const { repoId } = await createRepoWithTeam([submitter], "Shipped");
     await pool.query(`UPDATE repos SET submission_status = 'submitted' WHERE id = $1`, [repoId]);
     await allowLiveActivities();
@@ -407,8 +405,8 @@ describe("submission deadline (H19, H20)", () => {
     expect((await mine(drafter)).deadline?.countdownLastTenSeconds).toBe(false);
     await deadlineIn(0.1);
     expect((await mine(drafter)).deadline?.countdownLastTenSeconds).toBe(true);
-    // Unknown status (Devpost-only, not imported) never claims "not submitted".
-    expect((await mine(devpostOnly)).deadline).toMatchObject({ phase: "open", submission: null });
+    // Unknown status (no project) never claims "not submitted".
+    expect((await mine(noProject)).deadline).toMatchObject({ phase: "open", submission: null });
   });
 });
 

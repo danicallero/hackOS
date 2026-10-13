@@ -198,7 +198,7 @@ describe("concurrent transitions: exactly one winner", () => {
 
   it("H30 backstop: same repo entered in two challenges with NO resolvable members -> only one gets called", async () => {
     // Reproduces the reported bug: the H30 member-lock guard can't serialize
-    // when a repo has zero resolvable members (submissions/devpost rows
+    // when a repo has zero resolvable members (submission rows
     // withdrawn after the queue entry was created). The
     // one_active_entry_per_repo partial index must catch it anyway.
     const ch1 = await createChallenge();
@@ -209,10 +209,11 @@ describe("concurrent transitions: exactly one winner", () => {
     await assignChallengeToRoom(room2, ch2);
 
     const { pool } = await import("../../src/db/pool.js");
-    const { rows } = await pool.query(`INSERT INTO repos (name) VALUES ($1) RETURNING id`, [
-      `repo-no-members-${crypto.randomUUID().slice(0, 8)}`,
-    ]);
-    const repoId = rows[0].id; // no submissions / devpost_participants rows at all
+    const { rows } = await pool.query(
+      `INSERT INTO repos (name, submission_status) VALUES ($1, 'submitted') RETURNING id`,
+      [`repo-no-members-${crypto.randomUUID().slice(0, 8)}`],
+    );
+    const repoId = rows[0].id; // no submissions rows at all
 
     const eA = await enqueueRepo(ch1, repoId, 1);
     const eB = await enqueueRepo(ch2, repoId, 1);

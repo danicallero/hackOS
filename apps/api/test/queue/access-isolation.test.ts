@@ -323,6 +323,16 @@ describe("queue contextual isolation", () => {
     await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [fixtureRepoId]);
     const fixtureRoomId = await createRoom({ name: "Synthetic room" });
     await assignChallengeToRoom(fixtureRoomId, fixtureChallengeId);
+    // The synthetic queue is already generated, so entering it queues at once (H21).
+    const { repoId: generatedRepoId } = await createRepoWithTeam(
+      [fixtureMember],
+      "Synthetic first",
+    );
+    await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [generatedRepoId]);
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position) VALUES ($1, $2, 'completed', NULL)`,
+      [fixtureChallengeId, generatedRepoId],
+    );
 
     await pool.query(
       `INSERT INTO notification_preferences (user_id, category, channel, enabled)
@@ -435,6 +445,11 @@ describe("queue contextual isolation", () => {
 
     const realChallengeId = await createChallenge({ title: "Real queue" });
     const { repoId: realRepoId } = await createRepoWithTeam([realMember], "Real team");
+    const { repoId: realFirstRepoId } = await createRepoWithTeam([], "Real first");
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position) VALUES ($1, $2, 'completed', NULL)`,
+      [realChallengeId, realFirstRepoId],
+    );
     const realQueueBefore = await broadcastCount(SSE_TOPICS.QUEUE);
     const realPublicTvBefore = await broadcastCount(SSE_TOPICS.PUBLIC_TV);
     const realAdd = await app.inject({

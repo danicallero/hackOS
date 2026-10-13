@@ -159,7 +159,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Remove my secondary email",
         description:
-          "Removes the account's secondary identity and revokes project links that depended on it (H6, H16).",
+          "Removes the account's secondary identity (H6).",
         response: { 200: z.object({ status: z.literal(true) }) },
       },
     },
@@ -387,7 +387,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
         params: z.object({ userId: z.coerce.number().int() }),
         summary: "Remove a user's secondary email",
         description:
-          "Removes a secondary identity and revokes automatic project links that depended on it (H6, H16).",
+          "Removes a secondary identity (H6).",
         response: { 200: z.object({ status: z.literal(true) }) },
       },
     },

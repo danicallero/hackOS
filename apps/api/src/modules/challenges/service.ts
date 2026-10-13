@@ -112,9 +112,9 @@ export async function getChallenge(challengeId: number, fixtureMarker = false) {
 }
 
 /**
- * #856: resolve a challenge's active project roster and active planned-work-group
- * roster together. UNION (not UNION ALL) is intentional: a participant who is
- * both planning and already entered receives one alert per selected channel.
+ * #856: resolve the active rosters of projects queued for or entered in a
+ * challenge (#1006). UNION (not UNION ALL) is intentional: a participant on
+ * several such projects receives one alert per selected channel.
  */
 async function alertRecipients(
   db: Queryable,

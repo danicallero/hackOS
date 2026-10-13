@@ -648,13 +648,12 @@ describe("configurable kinds in the worker (#966)", () => {
     const userId = await createUser();
     await assignRole(userId, await createRole([CAPABILITIES.QUEUE_STATUS], { eventAccess: true }));
     const group = await db.query<{ id: number }>(
-      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Rocket', $1) RETURNING id`,
-      [userId],
+      `INSERT INTO repos (name, submission_status) VALUES ('Rocket', 'draft') RETURNING id`,
     );
-    await db.query(
-      `INSERT INTO planned_work_group_members (group_id, user_id, status) VALUES ($1, $2, 'active')`,
-      [group.rows[0]!.id, userId],
-    );
+    await db.query(`INSERT INTO submissions (repo_id, user_id) VALUES ($1, $2)`, [
+      group.rows[0]!.id,
+      userId,
+    ]);
     await db.query(
       `INSERT INTO event_config (id, hacking_starts_at, hacking_ends_at)
        VALUES (1, now() - interval '20 hours', now() + interval '1 hour')

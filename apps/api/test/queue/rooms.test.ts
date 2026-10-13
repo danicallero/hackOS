@@ -11,6 +11,7 @@ import {
   createRoom,
   mergeChallengesIntoOneGroup,
   queueGroupOf,
+  selectChallenge,
 } from "./fixtures.js";
 
 /** Rooms & assignment admin, settings, enqueue (H29 admin surface, QUEUE_ADMIN). */
@@ -597,15 +598,12 @@ describe("enqueue a challenge (H29 admin)", () => {
     expect(rows[0].n).toBe(2); // invariant 1: max one entry per (challenge, repo)
   });
 
-  it("enqueues from the devpost prize mapping when no repo list is given (H16 bridge)", async () => {
-    const challengeId = await createChallenge({ devpostTags: ["Best AI Hack"] });
+  it("enqueues the projects that selected the challenge when no repo list is given (#1006)", async () => {
+    const challengeId = await createChallenge();
     const { repoId: tagged } = await createRepoWithTeam();
     const { repoId: untagged } = await createRepoWithTeam();
     const { pool } = await import("../../src/db/pool.js");
-    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $2)`, [
-      tagged,
-      "Best AI Hack",
-    ]);
+    await selectChallenge(tagged, challengeId);
 
     const res = await app.inject({
       method: "POST",
@@ -641,23 +639,16 @@ describe("enqueue a challenge (H29 admin)", () => {
     expect(rows).toHaveLength(1);
   });
 
-  it("generates queues for all challenges using their devpost tags", async () => {
-    const ch1 = await createChallenge({ devpostTags: ["Best AI Hack"] });
-    const ch2 = await createChallenge({ devpostTags: ["Most Caffeinated"] });
+  it("generates queues for every challenge projects selected", async () => {
+    const ch1 = await createChallenge();
+    const ch2 = await createChallenge();
+    await createChallenge(); // nobody selected it
     const { repoId: r1 } = await createRepoWithTeam();
     const { repoId: r2 } = await createRepoWithTeam();
-    const { repoId: r3 } = await createRepoWithTeam();
+    await createRepoWithTeam(); // selected nothing
     const { pool } = await import("../../src/db/pool.js");
-    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $2), ($3, $4)`, [
-      r1,
-      "Best AI Hack",
-      r2,
-      "Most Caffeinated",
-    ]);
-    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $2)`, [
-      r3,
-      "Unmatched Prize",
-    ]);
+    await selectChallenge(r1, ch1);
+    await selectChallenge(r2, ch2);
 
     const res = await app.inject({
       method: "POST",
@@ -677,15 +668,12 @@ describe("enqueue a challenge (H29 admin)", () => {
   });
 
   it("uses project early, middle and late preferences on first generation", async () => {
-    const challengeId = await createChallenge({ devpostTags: ["Timing"] });
+    const challengeId = await createChallenge();
     const { repoId: late } = await createRepoWithTeam();
     const { repoId: middle } = await createRepoWithTeam();
     const { repoId: early } = await createRepoWithTeam();
     const { pool } = await import("../../src/db/pool.js");
-    await pool.query(
-      `INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $4), ($2, $4), ($3, $4)`,
-      [late, middle, early, "Timing"],
-    );
+    for (const repoId of [late, middle, early]) await selectChallenge(repoId, challengeId);
     await pool.query(
       `UPDATE repos SET presentation_timing_preference = CASE id WHEN $1 THEN 'late' WHEN $2 THEN 'middle' ELSE 'early' END WHERE id=ANY($3::int[])`,
       [late, middle, [late, middle, early]],
@@ -709,15 +697,12 @@ describe("enqueue a challenge (H29 admin)", () => {
   });
 
   it("keeps an existing queue's manual order when a new team prefers early", async () => {
-    const challengeId = await createChallenge({ devpostTags: ["Existing order"] });
+    const challengeId = await createChallenge();
     const { repoId: existing } = await createRepoWithTeam();
     const { repoId: early } = await createRepoWithTeam();
     const { pool } = await import("../../src/db/pool.js");
-    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $3), ($2, $3)`, [
-      existing,
-      early,
-      "Existing order",
-    ]);
+    await selectChallenge(existing, challengeId);
+    await selectChallenge(early, challengeId);
     await pool.query(
       `INSERT INTO queue_entries (challenge_id, repo_id, status, position) VALUES ($1, $2, 'waiting', 1)`,
       [challengeId, existing],
@@ -749,14 +734,8 @@ describe("enqueue a challenge (H29 admin)", () => {
     const { repoId: late } = await createRepoWithTeam();
     const { repoId: early } = await createRepoWithTeam();
     const { pool } = await import("../../src/db/pool.js");
-    await pool.query(
-      `UPDATE challenges SET devpost_tags = '["Shared timing"]'::jsonb WHERE id = ANY($1)`,
-      [challengeIds],
-    );
-    await pool.query(
-      `INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, 'Shared timing'), ($2, 'Shared timing')`,
-      [late, early],
-    );
+    await selectChallenge(late, ...challengeIds);
+    await selectChallenge(early, ...challengeIds);
     await pool.query(
       `UPDATE repos SET presentation_timing_preference=CASE id WHEN $1 THEN 'late' ELSE 'early' END WHERE id=ANY($2::int[])`,
       [late, [late, early]],
@@ -794,15 +773,12 @@ describe("enqueue a challenge (H29 admin)", () => {
   });
 
   it("regenerates one queue incrementally and clears it only before evaluation", async () => {
-    const challengeId = await createChallenge({ devpostTags: ["Best AI Hack"] });
+    const challengeId = await createChallenge();
     const { repoId: first } = await createRepoWithTeam();
     const { repoId: second } = await createRepoWithTeam();
     const { pool } = await import("../../src/db/pool.js");
-    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $2), ($3, $2)`, [
-      first,
-      "Best AI Hack",
-      second,
-    ]);
+    await selectChallenge(first, challengeId);
+    await selectChallenge(second, challengeId);
     const groupId = await queueGroupOf(challengeId);
 
     const generated = await app.inject({
@@ -818,10 +794,7 @@ describe("enqueue a challenge (H29 admin)", () => {
     );
 
     const { repoId: addedLater } = await createRepoWithTeam();
-    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $2)`, [
-      addedLater,
-      "Best AI Hack",
-    ]);
+    await selectChallenge(addedLater, challengeId);
     const regenerated = await app.inject({
       method: "POST",
       url: `/api/queue/groups/${groupId}/generate`,

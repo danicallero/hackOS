@@ -26,7 +26,7 @@ export const SSE_TOPICS = {
   PUBLIC_CONTENT: "public-content",
   /** application and response changes (H11-H15) */
   APPLICATIONS: "applications",
-  /** projects, repositories and imports (H16-H21) */
+  /** projects, teams and challenge entries (H19-H21) */
   PROJECTS: "projects",
   /** identity, invitations and permission graph changes (H7-H10) */
   IDENTITY: "identity",

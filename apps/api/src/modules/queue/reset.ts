@@ -5,7 +5,7 @@ import { audit } from "../../lib/audit.js";
 /**
  * The destructive reset keeps event identity and challenge definitions, but
  * removes every project, queue, and judging artifact so the event can
- * start the Q flow again (H16-H40, H53).
+ * start the Q flow again (H19-H40, H53).
  */
 export interface JudgingDataResetResult {
   ok: true;
@@ -112,7 +112,7 @@ export async function resetJudgingData(
     await client.query(`SET LOCAL statement_timeout = 0`);
 
     // Lock in a stable alphabetical order so two destructive requests cannot
-    // deadlock. These are the Q/project tables touched by H16-H40.
+    // deadlock. These are the Q/project tables touched by H19-H40.
     await client.query(`
       LOCK TABLE
         attempt_review,

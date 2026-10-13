@@ -102,7 +102,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         params: userParams,
         summary: "Read a saved person's public profile",
         description:
-          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared), every project and work group with their challenges (`projects`, when `showProject`; `project` is the first one, deprecated). Only attendees who saved this person in their diary (by scanning their badge or ticket) may read it. A missing or hidden profile, and a person the caller has not saved, all answer 404, so visibility cannot be probed (#934, #935).",
+          "Returns one opted-in person: name, photo route (when shown), headline, bio, location note, social links, CV route (when shared), every project with its challenges (`projects`, when `showProject`; `project` is the first one, deprecated). Only attendees who saved this person in their diary (by scanning their badge or ticket) may read it. A missing or hidden profile, and a person the caller has not saved, all answer 404, so visibility cannot be probed (#934, #935).",
       },
     },
     async (req) => getDirectoryEntry(req.userId as number, req.params.userId),

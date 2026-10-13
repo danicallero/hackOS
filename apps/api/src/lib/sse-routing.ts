@@ -125,7 +125,7 @@ export function publicContentMutationForPath(url: string): boolean {
 
 /**
  * Writes owned by other domains that still change a public profile card: the
- * person's name, surname or photo, account removal, project and work-group
+ * person's name, surname or photo, account removal, project
  * membership, and challenge publication or titles. They also wake the
  * payload-free `directory` topic (#934). Event-access and queue-status
  * changes are rarer; open profile views pick those up when refocused.

@@ -173,7 +173,7 @@ describe("challenge winners (H46)", () => {
     expect(afterRemove.json().winners).toEqual([]);
   });
 
-  it("lets a repo entered only via devpost prize mapping be set as winner (queue opt-out, H46)", async () => {
+  it("lets a repo entered only by its challenge selection be set as winner (queue opt-out, H46)", async () => {
     const server = await getApp();
     const owner = await createUser();
     const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
@@ -184,14 +184,14 @@ describe("challenge winners (H46)", () => {
       [enterprise.rows[0].id, owner],
     );
     const challenge = await pool.query(
-      `INSERT INTO challenges (author, title, devpost_tags) VALUES ($1, 'Devpost-only Challenge', $2) RETURNING id`,
-      [sponsor.rows[0].id, JSON.stringify(["Best Use of X"])],
+      `INSERT INTO challenges (author, title) VALUES ($1, 'Selection-only Challenge') RETURNING id`,
+      [sponsor.rows[0].id],
     );
     const challengeId = challenge.rows[0].id;
-    const repo = await pool.query(`INSERT INTO repos (name) VALUES ('Devpost Team') RETURNING id`);
-    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $2)`, [
+    const repo = await pool.query(`INSERT INTO repos (name) VALUES ('Unqueued Team') RETURNING id`);
+    await pool.query(`INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2)`, [
       repo.rows[0].id,
-      "Best Use of X",
+      challengeId,
     ]);
 
     const res = await server.inject({

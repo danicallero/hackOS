@@ -10,7 +10,12 @@ import {
   truncateAll,
 } from "../helpers.js";
 import { admitParticipant } from "../projects/fixtures.js";
-import { createEnterpriseChallenges, createRepoWithTeam, enqueueRepo } from "../queue/fixtures.js";
+import {
+  createEnterpriseChallenges,
+  createRepoWithTeam,
+  enqueueRepo,
+  selectChallenge,
+} from "../queue/fixtures.js";
 
 describe("challenge alerts (#856)", () => {
   let app: App;
@@ -32,11 +37,11 @@ describe("challenge alerts (#856)", () => {
     },
   };
 
-  it("limits sponsors to their enterprise, deduplicates entered and planned members, and audits the alert", async () => {
+  it("limits sponsors to their enterprise, deduplicates queued and selected members, and audits the alert", async () => {
     const { repId, challengeIds } = await createEnterpriseChallenges(1);
     const challengeId = challengeIds[0]!;
     const participant = await createUser({ email: "alert-recipient@test.local" });
-    const plannedOnly = await createUser({ email: "alert-planned@test.local" });
+    const plannedOnly = await createUser({ email: "alert-selected@test.local" });
     await pool.query(`UPDATE users SET language = 'es' WHERE id = $1`, [participant]);
     await pool.query(`UPDATE users SET language = 'gl' WHERE id = $1`, [plannedOnly]);
     await pool.query(
@@ -47,30 +52,10 @@ describe("challenge alerts (#856)", () => {
     await admitParticipant(plannedOnly);
     const { repoId } = await createRepoWithTeam([participant]);
     await enqueueRepo(challengeId, repoId, 1);
-    const created = await app.inject({
-      method: "POST",
-      url: "/api/me/work-groups",
-      headers: { ...asUser(participant), "idempotency-key": "alert-group" },
-      payload: { name: "Alert planners" },
-    });
-    const groupId = created.json().id;
-    await app.inject({
-      method: "POST",
-      url: `/api/me/work-groups/${groupId}/invites`,
-      headers: { ...asUser(participant), "idempotency-key": "alert-invite" },
-      payload: { email: "alert-planned@test.local" },
-    });
-    await app.inject({
-      method: "POST",
-      url: `/api/me/work-groups/${groupId}/invites/accept`,
-      headers: { ...asUser(plannedOnly), "idempotency-key": "alert-accept" },
-    });
-    await app.inject({
-      method: "POST",
-      url: `/api/me/work-groups/${groupId}/challenges`,
-      headers: { ...asUser(participant), "idempotency-key": "alert-intent" },
-      payload: { challengeId },
-    });
+    // A second project that only selected the challenge (queue not generated
+    // for it yet) shares the queued member, who is alerted once.
+    const { repoId: selectedRepo } = await createRepoWithTeam([participant, plannedOnly]);
+    await selectChallenge(selectedRepo, challengeId);
 
     const sent = await app.inject({
       method: "POST",

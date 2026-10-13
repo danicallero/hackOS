@@ -190,7 +190,7 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
         body: challengeAlertBody,
         summary: "Send a challenge alert",
         description:
-          "Sends an auditable alert to active members of projects entered in this challenge and active members of planned work groups that intend it. Sponsor representatives are limited to their enterprise's challenge; staff may instead target all admitted event participants. Delivery respects each recipient's notification preferences (#856, H51, H53).",
+          "Sends an auditable alert to active members of projects queued for or entered in this challenge. Sponsor representatives are limited to their enterprise's challenge; staff may instead target all admitted event participants. Delivery respects each recipient's notification preferences (#856, H51, H53).",
       },
     },
     async (req) =>
