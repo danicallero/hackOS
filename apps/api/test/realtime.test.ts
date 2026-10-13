@@ -224,7 +224,7 @@ describe("multiplexed authorization and wire contract (#892)", () => {
     await broadcast(SSE_TOPICS.CONTENT, EVENTS.CONTENT_SCHEDULE_CHANGED, { secret: "staff" });
     await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, { secret: "queue" });
     await expect.poll(connection.text).toContain('"topic":"public-content"');
-    expect(connection.text()).toContain('"topic":"public-tv"');
+    await expect.poll(connection.text).toContain('"topic":"public-tv"');
     expect(connection.text()).not.toContain("secret");
     const envelopes = connection
       .text()

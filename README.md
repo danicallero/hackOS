@@ -211,9 +211,13 @@ pnpm schema:check                     # compare a migrated DB with the checked-i
 pnpm infra:down                       # stop local infrastructure
 ```
 
-API tests use real Postgres and Valkey. The test harness resets and migrates
-`hackos_test`, and the suite runs serially to keep state-dependent integration
-tests deterministic.
+API tests use real Postgres and Valkey. The runner discovers every
+`apps/api/test/**/*.test.ts` and checks that each belongs to exactly one of four
+shards before starting Vitest with explicit include lists. Unknown test directories
+fail this check; add them to `apps/api/scripts/test-integration.mjs`. Root-level
+suites belong to the fourth shard. Each shard resets and migrates its own
+`hackos_test_shard_N` database and runs files serially, then drops its database.
+Use `pnpm --filter @hackos/api test:serial test/<file>.test.ts` for focused runs.
 
 Open every pull request as a draft. Feature PRs may target protected `staging`
 or `main`; `staging` is the development branch and `main` is production. Draft
