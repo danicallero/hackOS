@@ -357,7 +357,10 @@ profile produces an AAB by default; preview explicitly produces an installable
 APK. The iOS simulator profile is unsigned and cannot run on an iPhone. The
 production profile uses EAS remote build numbers and increments
 `ios.buildNumber`/`android.versionCode` on each build; the user-facing
-`expo.version` remains a deliberate release value. Review Expo's current
+`expo.version` remains a deliberate release value. The widget extension
+must carry the same build number as the app; `plugins/withWidgetBundleVersion.js`
+makes its `Info.plist` the only version source so the EAS rewrite reaches it.
+Review Expo's current
 [profile schema](https://docs.expo.dev/build/eas-json/) and
 [version management](https://docs.expo.dev/build-reference/app-versions/)
 before changing this strategy.

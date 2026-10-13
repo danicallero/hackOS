@@ -33,8 +33,8 @@ hackOS unifica identidad, inscripciones, proyectos, logística, judging, TV, spo
 
 ## Alcance MVP recomendado
 
-- Incluye H1-H17, H22-H28, H29-H42, H43-H46, H47-H55.
-- Deja como post-MVP explícito: H18-H21 (creación de proyectos nativa y edición caliente avanzada).
+- Incluye H1-H5, H7-H28, H29-H42, H43-H46, H47-H55 (H6 retirada).
+- Envío de proyectos propio de hackOS (H16-H21) dentro del MVP; publicación de ganadores (H60) antes de la ceremonia de clausura.
 
 ## Política de documentación para desarrollo
 
