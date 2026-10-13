@@ -6,10 +6,11 @@ import { colors } from "@/theme/colors";
 
 export interface ScannerActionButtonProps {
   label: string;
-  icon: SFSymbol;
+  icon?: SFSymbol;
   onPress: () => void;
   disabled?: boolean;
   primary?: boolean;
+  size?: "regular" | "large";
   testID?: string;
 }
 
@@ -19,17 +20,18 @@ export function ScannerActionButton({
   onPress,
   disabled = false,
   primary = false,
+  size = "large",
   testID,
 }: ScannerActionButtonProps) {
   return (
     <GlassView
-      colorScheme="dark"
+      colorScheme="auto"
       isInteractive
       glassEffectStyle="regular"
       style={{
-        borderRadius: 28,
+        borderRadius: size === "regular" ? 24 : 28,
         overflow: "hidden",
-        backgroundColor: primary ? colors.accent : undefined,
+        backgroundColor: primary ? colors.primaryAction : undefined,
       }}
     >
       <Pressable
@@ -40,19 +42,26 @@ export function ScannerActionButton({
         disabled={disabled}
         onPress={onPress}
         style={({ pressed }) => ({
-          minHeight: 56,
+          minHeight: size === "regular" ? 48 : 56,
           paddingHorizontal: 20,
-          paddingVertical: 14,
+          paddingVertical: size === "regular" ? 10 : 14,
           opacity: disabled ? 0.45 : pressed ? 0.7 : 1,
         })}
       >
         <View
           style={{ flexDirection: "row", gap: 10, alignItems: "center", justifyContent: "center" }}
         >
-          <SymbolView accessible={false} name={icon} tintColor="white" size={20} />
+          {icon ? (
+            <SymbolView
+              accessible={false}
+              name={icon}
+              tintColor={primary ? colors.primaryActionText : colors.label}
+              size={20}
+            />
+          ) : null}
           <Text
             style={{
-              color: "white",
+              color: primary ? colors.primaryActionText : colors.label,
               fontSize: 17,
               fontWeight: "600",
               flexShrink: 1,

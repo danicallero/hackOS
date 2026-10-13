@@ -9,13 +9,13 @@ export function ScannerActionButton({
   onPress,
   disabled: isDisabled = false,
   primary = false,
+  size = "large",
   testID,
 }: ScannerActionButtonProps) {
   const glass = Number.parseInt(String(Platform.Version), 10) >= 26;
   return (
     <Host
-      colorScheme="dark"
-      style={{ minHeight: 56, width: "100%" }}
+      style={{ minHeight: size === "regular" ? 48 : 56, width: "100%" }}
       matchContents={{ vertical: true }}
     >
       <Button
@@ -31,14 +31,14 @@ export function ScannerActionButton({
                 ? "borderedProminent"
                 : "bordered",
           ),
-          controlSize("large"),
+          controlSize(size),
           disabled(isDisabled),
         ]}
       >
         <Label
           title={label}
           systemImage={icon}
-          modifiers={[frame({ maxWidth: Infinity, minHeight: 28 })]}
+          modifiers={[frame({ maxWidth: Infinity, minHeight: size === "regular" ? 24 : 28 })]}
         />
       </Button>
     </Host>

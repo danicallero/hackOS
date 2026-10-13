@@ -22,6 +22,14 @@ let mockReaderProps: {
 const mockCamera = jest.fn((_props: unknown) =>
   require("react").createElement(require("react-native").View, { testID: "qr-fallback" }),
 );
+let mockRefreshOccupancy: () => void;
+jest.mock("@/lib/server-events", () => ({
+  startLogisticsEventStream: ({ onResync }: { onResync: () => void }) => {
+    mockRefreshOccupancy = onResync;
+    return () => {};
+  },
+  subscribeToServerEvent: () => () => {},
+}));
 
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => mockParams,
@@ -143,6 +151,7 @@ jest.mock("@/theme/colors", () => ({
 }));
 
 import { ActivityScannerScreen } from "@/components/activity-scanner-screen";
+import { apiFetch } from "@/lib/api";
 import {
   enqueueLocalScan,
   findPersonByBadge,
@@ -157,6 +166,30 @@ beforeEach(() => {
   jest.spyOn(AppState, "addEventListener").mockImplementation(() => ({ remove: jest.fn() }));
 });
 afterEach(() => jest.restoreAllMocks());
+
+it("uses server occupancy across roles and falls back to the roster after a failed refresh (H24)", async () => {
+  const originalParams = mockParams;
+  mockParams = { id: "7" };
+  let offline = false;
+  jest.mocked(apiFetch).mockImplementation(async (path) => {
+    if (path === "/api/scanner/role-stats") {
+      if (offline) throw new Error("offline");
+      return { byRole: [{ inside: 5 }, { inside: 14 }] } as never;
+    }
+    return { items: [] } as never;
+  });
+  try {
+    await renderMobile(<ActivityScannerScreen />);
+    expect(await screen.findByText("19")).toBeTruthy();
+    offline = true;
+    await act(() => mockRefreshOccupancy());
+    await waitFor(() => expect(screen.queryByText("19")).toBeNull());
+    expect(screen.getByText("1")).toBeTruthy();
+  } finally {
+    mockParams = originalParams;
+    jest.mocked(apiFetch).mockResolvedValue({ items: [] });
+  }
+});
 
 describe("activity scanner result (H26)", () => {
   it("offers Close after a first scan", async () => {
@@ -256,6 +289,10 @@ describe("manual activity NFC sessions (H25/H26)", () => {
     await renderMobile(<ActivityScannerScreen />);
     await screen.findByText("Workshop");
     expect(mockReaderProps.visible).toBe(false);
+    expect(screen.getAllByRole("button", { name: "scannerNfcStart" })).toHaveLength(1);
+    expect(screen.queryByText("scannerNfcStart")).toBeNull();
+    expect(screen.getByText("scannerNfcIdle")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "scannerViewPeople" })).toBeTruthy();
     expect(mockCamera).not.toHaveBeenCalled();
     expect(screen.getByText("1")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "scannerCamera" }));

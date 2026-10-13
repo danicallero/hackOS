@@ -1,3 +1,7 @@
+jest.mock("@/components/scanner-code-entry-actions", () =>
+  jest.requireActual("@/components/scanner-code-entry-actions.tsx"),
+);
+
 let mockNfcSupported = true;
 jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupported: () => mockNfcSupported }));
 
@@ -692,3 +696,6 @@ describe("Companies", () => {
     expect(screen.queryByTestId("connection-celebration")).toBeNull();
   });
 });
+jest.mock("@/components/scanner-action-button", () =>
+  jest.requireActual("@/components/scanner-action-button.tsx"),
+);

@@ -1288,17 +1288,15 @@ gets a device notification. The layout is one column on phones, two from
 accreditation, badge replacement, door presence, meals, and activities),
 a dedicated primary tab for operators (see `docs/navigation.md`). Its
 person/people drill-down routes live under `app/(tabs)/scan/*`. Screen-level
-scanner routes own dark system-bar chrome as well: iOS 26+ uses an explicit
-dark native header interface style with a transparent header, while Android
-sets light system-button content on the dark camera surface. Both are scoped
-to `/scan` and `/activities/:id` and return to automatic system styling on
-light routes.
+scanner routes follow the system light/dark appearance: backgrounds, native
+headers, glass controls, status/navigation bars and tab icons all use the same
+scheme. Only the explicit camera preview retains its dark surface.
 actions use `AdaptiveToolbarButton`: real Liquid Glass runtimes promote
 navigation actions into UIKit's top toolbar; iOS <26 and Android use the same
 44-point opaque glass buttons inline on the camera surface. The camera preview
 is non-interactive so it cannot steal those hit targets on older iOS. Activity
 scanning keeps queue status and statistics above the input actions; the general
-scanner's queue-sync capsule shares the top controls row, above the statistics. Scanner and activity
+scanner's queue-sync capsule uses the same native toolbar as the activity scanner, with a separate circular filter and an 8-point gap. Both screens reserve the same header height above the statistics. Scanner and activity
 people-directory actions use the same person-with-magnifier symbol. On iOS
 26+, People Finder keeps the native large-title contract: its title starts
 left-aligned, collapses to the centred compact title while scrolling, and uses
@@ -1471,8 +1469,10 @@ with equivalent glass controls on Android. Both operational scanners use the sam
 controls. Checked-in is the general scanner's primary count; confirmed and inside
 remain secondary. Activity/meal scanners lead with total scans/servings, then
 unique people and repeat scans/extra servings. Building occupancy is a separate
-context metric. People Finder sits beside the primary count on both surfaces;
-queue status is at the top right. The general scanner's role-filter trigger is a
+context metric. Both operational surfaces are fixed, non-scrolling layouts: statistics
+stay at the top, the NFC symbol occupies the center of the remaining space, and
+People Finder sits immediately above camera and manual entry at the bottom. Queue
+status is at the top right. The general scanner's role-filter trigger is a
 48 × 48 circular icon beside queue status, with the same symbol tinted blue when
 active. Its native iOS SwiftUI menu disables action dismissal so operators can
 select multiple roles without reopening it; Android keeps its anchored filter
@@ -1482,14 +1482,27 @@ other QR badges. Until that action is chosen, no camera preview is mounted and
 no camera permission is requested. The fallback uses the same full-screen modal camera as badge linking in the
 person details. A single QR read closes the modal and releases the camera;
 canceling returns to NFC without recording a scan. Manual entry remains available without camera permission.
+All manual code inputs use `ScannerCodeEntry`: one opaque system-themed card
+above the keyboard, with a labeled code field and adjacent Cancel/submit actions.
+Manual-dialog actions use the regular control size with a 48-point minimum touch
+target; bottom scanner actions retain the large size. On iOS the shared actions use native Liquid Glass buttons (opaque native buttons
+on older versions); Android uses the same shared action geometry.
+The manual card has a 32-point outer radius and 16-point content inset, matching
+the 16-point field curves. Both iOS actions share one 48-point native HStack/Host
+with safe-area adjustment disabled: the dialog owns keyboard displacement,
+and a measured React Native wrapper supplies explicit native width and height.
+The native row is positioned inside that 48-point wrapper, with equal-width
+actions and an 8-point gap; it does not participate in sizing the card.
+NFC-first and camera scans default to Register scan; Diary, badge linking and
+replacement supply their own action labels. There is no camera-only dark variant.
 
 On iOS, the general scanner opens one Core NFC session per tap. Activities and
-meals never open an iOS session on entry: Start NFC begins a loop, and Stop NFC or
-canceling the system reader ends it. On Android, both operational surfaces enter
+meals never open an iOS session on entry: tapping the central NFC symbol begins a loop;
+tapping it again or canceling the system reader ends it. On Android, both operational surfaces enter
 with NFC enabled once hardware support and the activity are available. They show
 only the tappable NFC symbol, without a session button or reader overlay. A gray
 symbol means disabled; blue means enabled. The symbol toggles reading on both
-platforms, alongside the iOS session button. Android's general reader stays
+platforms; there is no separate NFC session button. Android's general reader stays
 enabled across reads until toggled off or navigation; the activity reader pauses
 for results and operator decisions. Other badge/contact workflows retain the
 Android instructional overlay. Subsequent sessions wait for native session teardown
@@ -1497,8 +1510,23 @@ and operator decisions, including repeat-serving confirmation. Leaving the scree
 or backgrounding the app stops the loop. Activity counters include servings or
 passes, distinct people, repeats and the number currently inside the building;
 server counts are preferred, with the synced roster as the offline fallback.
-The activity result panel uses an opaque semantic content surface with open,
-scrollable dietary details, a labeled per-person count and fixed actions. Liquid
+Activities sums the same `/api/scanner/role-stats` occupancy buckets as Scanner,
+without the Scanner role filter, and refreshes on focus, sync and logistics events.
+A failed refresh clears the server count and uses the roster fallback.
+On iOS 26+, both scanners' queue status lives in a native trailing
+toolbar view, aligned with the native Back button. Its pressable icon and text
+show only Ready or Needs attention (a rejected scan); background sync and pending
+scans do not change the header label. Tapping it opens the Device queue sheet,
+where the detailed queue state remains visible. The NFC symbol is centered between
+the statistics and camera/manual actions. The idle instruction is Tap to scan
+(es/gl: Toca para escanear); the three bottom actions sit just above the tab bar,
+using its published inset once plus 4 points. Earlier iOS and Android place both controls at
+the same safe-area offset in the floating header.
+The activity result panel is centered with equal top/bottom padding and uses an opaque semantic content surface with open,
+scrollable dietary details and separate tinted restriction tags. The per-person
+count has no visible caption (its meaning remains in the accessibility label).
+The count is orange for a repeat awaiting a decision and green only after server confirmation.
+Decision actions sit side by side, stacking for narrow screens or larger text. Liquid
 Glass remains on scanner controls/navigation, following Apple's
 [Adopting Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass)
 guidance to reserve it for the functional layer and avoid overuse.

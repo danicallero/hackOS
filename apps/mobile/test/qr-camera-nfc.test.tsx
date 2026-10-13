@@ -1,3 +1,7 @@
+jest.mock("@/components/scanner-code-entry-actions", () =>
+  jest.requireActual("@/components/scanner-code-entry-actions.tsx"),
+);
+
 jest.mock("@/components/scanner-action-button", () =>
   jest.requireActual("@/components/scanner-action-button.tsx"),
 );
@@ -148,7 +152,7 @@ it("accepts manual entry from the NFC surface without mounting a camera", async 
   const view = await render(<QrCamera nfcFirst onValue={onValue} />);
   await fireEvent.press(view.getByRole("button", { name: "scannerEnterManually" }));
   await fireEvent.changeText(view.getByLabelText("scannerManualEntryTitle"), "BADGE-123");
-  await fireEvent.press(view.getByRole("button", { name: "scannerManualEntrySubmit" }));
+  await fireEvent.press(view.getByRole("button", { name: "scannerRegister" }));
   expect(onValue).toHaveBeenCalledWith("BADGE-123");
   expect(mockUseCameraPermissions).not.toHaveBeenCalled();
 });

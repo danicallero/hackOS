@@ -2,7 +2,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { useFocusEffect, usePathname, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FilterMenu } from "@/components/filter-menu";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
@@ -185,71 +185,74 @@ export function GeneralScannerScreen() {
     [router, sync.serverSnapshot, t],
   );
 
+  const roleFilter = (
+    <ScannerRoleFilter
+      options={roleOptions}
+      groups={groups}
+      onToggle={toggleGroup}
+      onClear={clearGroups}
+    />
+  );
+  const queueStatus = (
+    <ScannerQueueStatus
+      queue={sync.queue}
+      syncing={sync.syncing}
+      onSync={() => void sync.sync()}
+      onRetry={() => void sync.retryFailed()}
+      onRetryOne={(id) => void sync.retryOne(id)}
+      onDelete={(id) => void sync.discardScan(id)}
+      clockSkewMs={sync.clockSkewMs}
+      fillWidth={false}
+      nativeToolbar={glassAvailable}
+      toolbarAccessory={glassAvailable ? roleFilter : undefined}
+    />
+  );
+  const title = (
+    <Text
+      accessibilityRole="header"
+      style={{ color: colors.label, fontSize: 28, fontWeight: "700" }}
+    >
+      {t("tabScan")}
+    </Text>
+  );
+
   return (
-    <View style={{ backgroundColor: "black", flex: 1 }}>
+    <View style={{ backgroundColor: colors.background, flex: 1 }}>
       <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
-      <Text
-        accessibilityRole="header"
-        style={{
-          position: "absolute",
-          left: 24,
-          top: insets.top + 8,
-          color: "white",
-          fontSize: 28,
-          fontWeight: "700",
-        }}
-      >
-        {t("tabScan")}
-      </Text>
-      <View
-        pointerEvents="box-none"
-        style={{
-          left: 0,
-          paddingTop: insets.top + 8,
-          paddingLeft: 16,
-          paddingRight: 16,
-          alignItems: "flex-end",
-          minHeight: insets.top + 56,
-          zIndex: 30,
-        }}
-      >
-        <View style={{ alignSelf: "flex-end", flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <ScannerRoleFilter
-            options={roleOptions}
-            groups={groups}
-            onToggle={toggleGroup}
-            onClear={clearGroups}
-          />
-          <ScannerQueueStatus
-            queue={sync.queue}
-            syncing={sync.syncing}
-            onSync={() => void sync.sync()}
-            onRetry={() => void sync.retryFailed()}
-            onRetryOne={(id) => void sync.retryOne(id)}
-            onDelete={(id) => void sync.discardScan(id)}
-            clockSkewMs={sync.clockSkewMs}
-            fillWidth={false}
-          />
+      {glassAvailable ? (
+        <>
+          <Stack.Toolbar placement="left">
+            <Stack.Toolbar.View hidesSharedBackground>{title}</Stack.Toolbar.View>
+          </Stack.Toolbar>
+          {queueStatus}
+        </>
+      ) : (
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: "absolute",
+            top: insets.top,
+            left: 24,
+            right: 16,
+            height: 48,
+            alignItems: "center",
+            flexDirection: "row",
+            justifyContent: "space-between",
+            zIndex: 30,
+          }}
+        >
+          {title}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {roleFilter}
+            {queueStatus}
+          </View>
         </View>
-      </View>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
-        <ScannerGroupStatistics
-          stats={stats}
-          onOpenPeople={() =>
-            router.push(
-              // Android's legacy (non-Liquid-Glass) header lands on a plain
-              // title with a separate search icon to tap; this jumps straight
-              // into search with the keyboard up instead. iOS uses the native
-              // `headerSearchBarOptions` bar there, unaffected by this param.
-              process.env.EXPO_OS === "android"
-                ? { pathname: "/(tabs)/scan/people", params: { autoSearch: "1" } }
-                : "/(tabs)/scan/people",
-            )
-          }
-        />
+      )}
+      <View style={{ flex: 1, marginTop: insets.top + 56 }}>
+        <ScannerGroupStatistics stats={stats} />
         {error ? (
           <GlassView
-            colorScheme="dark"
+            colorScheme="auto"
             glassEffectStyle="regular"
             style={{
               borderRadius: 14,
@@ -283,7 +286,7 @@ export function GeneralScannerScreen() {
               <Text
                 selectable
                 style={{
-                  color: "white",
+                  color: colors.label,
                   flexShrink: 1,
                   fontSize: 14,
                   fontWeight: "600",
@@ -296,12 +299,23 @@ export function GeneralScannerScreen() {
           </GlassView>
         ) : null}
         <QrCamera
+          onOpenPeople={() =>
+            router.push(
+              // Android's legacy (non-Liquid-Glass) header lands on a plain
+              // title with a separate search icon to tap; this jumps straight
+              // into search with the keyboard up instead. iOS uses the native
+              // `headerSearchBarOptions` bar there, unaffected by this param.
+              process.env.EXPO_OS === "android"
+                ? { pathname: "/(tabs)/scan/people", params: { autoSearch: "1" } }
+                : "/(tabs)/scan/people",
+            )
+          }
           nfcFirst
           hint={null}
           onClose={pathname === "/scan" ? undefined : () => safeBack(router, "/(tabs)/scan")}
           onValue={(value) => void resolve(value)}
         />
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -336,7 +350,7 @@ function ScannerRoleFilter({
 
   return (
     <FilterMenu
-      colorScheme="dark"
+      colorScheme="auto"
       accessibilityLabel={t("scannerFilterGroups")}
       active={groups.length > 0}
       items={rows}
@@ -347,10 +361,8 @@ function ScannerRoleFilter({
 
 function ScannerGroupStatistics({
   stats,
-  onOpenPeople,
 }: {
   stats: { accredited: number; confirmed: number; inside: number };
-  onOpenPeople: () => void;
 }) {
   const { t } = useLocale();
   const items = [
@@ -372,7 +384,7 @@ function ScannerGroupStatistics({
             selectable
             maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
             style={{
-              color: "white",
+              color: colors.label,
               fontSize: 44,
               fontWeight: "700",
               fontVariant: ["tabular-nums"],
@@ -383,42 +395,11 @@ function ScannerGroupStatistics({
           <Text
             selectable
             maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-            style={{ color: "rgba(255,255,255,0.72)", fontSize: 15 }}
+            style={{ color: colors.secondaryLabel, fontSize: 15 }}
           >
             {t("scannerAccredited")}
           </Text>
         </View>
-        <GlassView
-          colorScheme="dark"
-          glassEffectStyle="regular"
-          isInteractive
-          style={{ borderRadius: 24, flexShrink: 1 }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("scannerViewPeople")}
-            onPress={onOpenPeople}
-            style={{
-              minHeight: 48,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-            }}
-          >
-            <SymbolView
-              accessible={false}
-              name="person.crop.badge.magnifyingglass"
-              size={19}
-              tintColor="white"
-            />
-            <Text style={{ color: "white", fontSize: 15, fontWeight: "500", flexShrink: 1 }}>
-              {t("scannerViewPeople")}
-            </Text>
-          </Pressable>
-        </GlassView>
       </View>
       <View
         style={{
@@ -426,7 +407,7 @@ function ScannerGroupStatistics({
           alignItems: "center",
           gap: 16,
           borderBottomWidth: 1,
-          borderBottomColor: "rgba(255,255,255,0.16)",
+          borderBottomColor: colors.separator,
           paddingBottom: 24,
         }}
       >
@@ -436,7 +417,7 @@ function ScannerGroupStatistics({
               selectable
               maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
               style={{
-                color: "white",
+                color: colors.label,
                 fontSize: 28,
                 fontWeight: "600",
                 fontVariant: ["tabular-nums"],
@@ -447,7 +428,7 @@ function ScannerGroupStatistics({
             <Text
               selectable
               maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-              style={{ color: "rgba(255,255,255,0.72)", fontSize: 13 }}
+              style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}
             >
               {item.label}
             </Text>

@@ -1,8 +1,7 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useIsFocused } from "expo-router";
 import { useEffect, useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, Text, View } from "react-native";
 import { ScannerActionButton } from "@/components/scanner-action-button";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SymbolView } from "@/components/symbol";
@@ -15,8 +14,8 @@ export function NfcScannerSurface({
   onValue,
   onNfc,
   onCamera,
+  onOpenPeople,
   onManual,
-  onClose,
   scanningEnabled,
   nfcActive = false,
   nfcStartLabel,
@@ -24,15 +23,14 @@ export function NfcScannerSurface({
   onValue: (value: string) => void;
   onNfc?: () => void;
   onCamera: () => void;
+  onOpenPeople?: () => void;
   onManual?: () => void;
-  onClose?: () => void;
   scanningEnabled: boolean;
   nfcActive?: boolean;
   nfcStartLabel?: string;
 }) {
   const { t } = useLocale();
   const bottomInset = useRouterTabBarBottomInset();
-  const insets = useSafeAreaInsets();
   const focused = useIsFocused();
   const [manualEntryVisible, setManualEntryVisible] = useState(false);
   const nfcLabel = nfcActive ? t("scannerNfcStop") : (nfcStartLabel ?? t("scannerNfcScan"));
@@ -40,16 +38,14 @@ export function NfcScannerSurface({
     if (!focused || !scanningEnabled) setManualEntryVisible(false);
   }, [focused, scanningEnabled]);
   return (
-    <View
-      style={{ flex: 1, paddingHorizontal: 24, paddingBottom: bottomInset + insets.bottom + 20 }}
-    >
+    <View style={{ flex: 1, paddingHorizontal: 24, paddingBottom: bottomInset + 4 }}>
       <View
         style={{
           flex: 1,
-          minHeight: 184,
+          minHeight: 0,
           alignItems: "center",
-          justifyContent: "flex-end",
-          paddingBottom: 32,
+          justifyContent: "center",
+          paddingVertical: 24,
           gap: 16,
         }}
       >
@@ -66,7 +62,7 @@ export function NfcScannerSurface({
           <SymbolView
             accessible={false}
             name="wave.3.right"
-            tintColor={nfcActive ? colors.accent : "rgba(255,255,255,0.55)"}
+            tintColor={nfcActive ? colors.accent : colors.secondaryLabel}
             size={80}
             weight="regular"
           />
@@ -74,7 +70,7 @@ export function NfcScannerSurface({
         <Text
           accessibilityLiveRegion="polite"
           style={{
-            color: "rgba(255,255,255,0.72)",
+            color: colors.secondaryLabel,
             fontSize: 15,
             textAlign: "center",
             maxWidth: 280,
@@ -88,13 +84,11 @@ export function NfcScannerSurface({
         </Text>
       </View>
       <View style={{ gap: 12 }}>
-        {onNfc && Platform.OS !== "android" ? (
+        {onOpenPeople ? (
           <ScannerActionButton
-            primary
-            label={nfcLabel}
-            icon="wave.3.right"
-            disabled={!scanningEnabled}
-            onPress={onNfc}
+            label={t("scannerViewPeople")}
+            icon="person.crop.badge.magnifyingglass"
+            onPress={onOpenPeople}
           />
         ) : null}
         <ScannerActionButton
@@ -114,7 +108,6 @@ export function NfcScannerSurface({
             setManualEntryVisible(true);
           }}
         />
-        {onClose ? <ScannerActionButton label={t("close")} icon="xmark" onPress={onClose} /> : null}
       </View>
       <ScannerCodeEntry
         visible={manualEntryVisible}

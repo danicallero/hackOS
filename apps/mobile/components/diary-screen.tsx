@@ -618,7 +618,6 @@ export function DiaryScreen() {
       />
       <ScannerCodeEntry
         visible={input === "manual"}
-        appearance="system"
         title={t("personEnterBadgeCode")}
         placeholder={null}
         submitLabel={t("save")}

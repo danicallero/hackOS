@@ -30,6 +30,7 @@ export function QrCamera({
   requestCameraOnFocus = true,
   nfcFirst = false,
   hideNfc = false,
+  onOpenPeople,
 }: {
   onValue: (value: string) => void;
   onClose?: () => void;
@@ -40,6 +41,7 @@ export function QrCamera({
   requestCameraOnFocus?: boolean;
   nfcFirst?: boolean;
   hideNfc?: boolean;
+  onOpenPeople?: () => void;
 }) {
   const shouldAutoStartNfc = autoStartNfc || (nfcFirst && Platform.OS === "android");
   const nfcSupportStatus = useNfcSupportStatus();
@@ -83,6 +85,7 @@ export function QrCamera({
     <>
       {nfcFirst ? (
         <NfcScannerSurface
+          onOpenPeople={onOpenPeople}
           onValue={onValue}
           onNfc={openNfc}
           onCamera={() => {
@@ -91,7 +94,6 @@ export function QrCamera({
           }}
           onManual={() => setNfcVisible(false)}
           nfcActive={nfcVisible && focused && scanningEnabled}
-          onClose={onClose}
           scanningEnabled={scanningEnabled}
         />
       ) : (
