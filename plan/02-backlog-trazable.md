@@ -1,4 +1,4 @@
-quie# Backlog trazable a historias (H1..H55)
+# Backlog trazable a historias (H1..H60)
 
 Base única: `historias-hackos.md`.
 
@@ -6,10 +6,10 @@ Base única: `historias-hackos.md`.
 
 | Dominio | Historias | Prioridad | Notas |
 |---|---|---|---|
-| Identidad y permisos | H1-H10 | P0 | Fundacional para todo lo transaccional. |
+| Identidad y permisos | H1-H10 | P0 | Fundacional para todo lo transaccional. H6 retirada. |
 | Inscripción | H11-H15 | P1 | Flujo completo de decisión y confirmación. |
-| Proyectos/Devpost | H16-H17 | P1 | Núcleo MVP para alimentar judging. |
-| Proyectos nativos hackOS | H18-H21 | P3 | Post-MVP explícito. |
+| Proyectos (envío propio de hackOS) | H16-H21 | P1 | Núcleo MVP para alimentar judging; sin importación externa. |
+| Ganadores | H60 | P2 | Publicación programada antes de la ceremonia de clausura. |
 | Acreditación/logística | H22-H28 | P1 | Operativa de evento + presencia + wallet. |
 | Colas y judging | H29-H40 | P0 | Bloque crítico e innegociable. |
 | TV | H41-H42 | P1 | Depende de estado de colas en tiempo real. |
@@ -23,10 +23,11 @@ Base única: `historias-hackos.md`.
 
 1. H1-H10 → habilita H11+ y H43+.
 2. H11-H15 → habilita H22, H28 y analítica de embudo (H27).
-3. H16-H17 → habilita H29-H40.
-4. H29-H40 → habilita H41-H42 y parte operativa de H50-H51.
-5. H48 → define comidas/actividades necesarias para H25-H26.
-6. H53-H54 son transversales: deben instrumentarse desde el inicio.
+3. H16-H21 → habilita H29-H40; H16-H17 habilitan H18-H20.
+4. H29-H40 y H45 (publicación programada) → habilitan H60.
+5. H29-H40 → habilita H41-H42 y parte operativa de H50-H51.
+6. H48 → define comidas/actividades necesarias para H25-H26.
+7. H53-H54 son transversales: deben instrumentarse desde el inicio.
 
 ## Criterio de “listo” por historia (mínimo)
 
