@@ -146,15 +146,15 @@ function Celebration({
     if (reduceMotion) {
       void haptic("success");
     } else {
-      approach.value = withSpring(1, { damping: 11, stiffness: 70, mass: 1.1 });
+      approach.value = withSpring(1, { damping: 13, stiffness: 70, mass: 1.1 });
       pop.value = withDelay(
         MERGE_MS,
         withSequence(
           withTiming(1.18, { duration: 160, easing: Easing.out(Easing.quad) }),
-          withSpring(1, { damping: 6, stiffness: 160 }),
+          withSpring(1, { damping: 15, stiffness: 160 }),
         ),
       );
-      glyph.value = withDelay(MERGE_MS, withSpring(1, { damping: 8, stiffness: 140 }));
+      glyph.value = withDelay(MERGE_MS, withSpring(1, { damping: 14, stiffness: 140 }));
       burst.value = withDelay(
         MERGE_MS,
         withTiming(1, { duration: 1300, easing: Easing.out(Easing.cubic) }),
