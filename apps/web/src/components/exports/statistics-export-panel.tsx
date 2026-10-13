@@ -7,7 +7,8 @@ import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { StatisticsScopeFilterMenu } from "@/components/statistics/statistics-scope-filter-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 
@@ -41,7 +42,7 @@ export function StatisticsExportPanel({ trigger }: { trigger?: ReactNode }) {
           : response.scopes.map((scope) => scope.key);
       });
     } catch (loadError) {
-      setError(loadError instanceof ApiError ? loadError.message : t("statisticsExportLoadFailed"));
+      setError(apiErrorText(loadError, t, t("statisticsExportLoadFailed")));
     } finally {
       setLoading(false);
     }

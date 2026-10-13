@@ -83,12 +83,14 @@ export default function PresencePage() {
   // outage cannot make another operational dataset look empty or unknown.
   const estimateError = queryLoadError(
     estimate.error,
+    t,
     t("attendanceDataUnavailable"),
     estimate.refetch,
   );
-  const hoursError = queryLoadError(hours.error, t("couldNotLoadStatistics"), hours.refetch);
+  const hoursError = queryLoadError(hours.error, t, t("couldNotLoadStatistics"), hours.refetch);
   const openSessionsError = queryLoadError(
     openSessions.error,
+    t,
     t("attendanceDataUnavailable"),
     openSessions.refetch,
   );

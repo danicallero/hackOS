@@ -23,7 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   acceptProjectInvite,
@@ -91,7 +92,7 @@ export default function MyProjectPage() {
       // A failed background refresh keeps the loaded projects; only a failed
       // first load replaces them with an error, never the empty state (#1012).
       if (!failed(error)) return;
-      setLoadError(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      setLoadError(apiErrorText(error, t, t("couldNotLoadProject")));
     } finally {
       setLoading(false);
     }
@@ -186,10 +187,7 @@ function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
       setOpen(false);
       await onCreated();
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotCreateWorkGroup"),
-        t("toastCreateProject"),
-      );
+      toast.error(apiErrorText(error, t, t("couldNotCreateWorkGroup")), t("toastCreateProject"));
     } finally {
       setSaving(false);
     }
@@ -343,10 +341,7 @@ function PendingInvitesCard({
       else await declineProjectInvite(repoId);
       await onChanged();
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
-        t("toastReplyInvite"),
-      );
+      toast.error(apiErrorText(error, t, t("couldNotLoadProject")), t("toastReplyInvite"));
     } finally {
       setBusy(null);
     }

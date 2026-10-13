@@ -94,7 +94,8 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
             body: JSON.stringify({
               error: {
                 code: "conflict",
-                message: "Your editing lease has expired or belongs to another judge",
+                message: "reworded server text",
+                details: { code: "review_field_lease_required" },
               },
             }),
           });
@@ -124,10 +125,10 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
   await page.getByRole("button", { name: "Save draft", exact: true }).click();
   const saveError = page
     .getByRole("alert")
-    .filter({ hasText: "Your editing lease has expired or belongs to another judge" });
+    .filter({ hasText: "Your editing lease has expired or belongs to another judge." });
   await expect(saveError).toBeVisible();
   await expect(
-    page.getByText("Your editing lease has expired or belongs to another judge", { exact: true }),
+    page.getByText("Your editing lease has expired or belongs to another judge.", { exact: true }),
   ).toHaveCount(1);
   await saveError.scrollIntoViewIfNeeded();
   await expect(page.getByText("Draft saved.", { exact: true })).toHaveCount(0);

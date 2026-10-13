@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
+import { errorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { enqueueAllChallengeQueues, getAllRoomViews, type RoomView } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
@@ -159,7 +160,7 @@ export default function QueueOperationsPage() {
         <EmptyState
           icon={TicketIcon}
           title={t("couldNotLoadQueueOps")}
-          description={roomViews.error instanceof Error ? roomViews.error.message : t("tryAgain")}
+          description={errorText(roomViews.error, t, t("tryAgain"))}
         />
       </PageLayout>
     );

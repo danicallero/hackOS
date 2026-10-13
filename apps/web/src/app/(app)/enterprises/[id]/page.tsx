@@ -26,12 +26,12 @@ import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useCan, useSessionContext } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import { ENTERPRISE_TAB_ALIASES, type Enterprise, enterpriseTabs, initials } from "../shared";
-
 import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterprise-cards";
 import { JudgesCard } from "./judges-card";
 import { StandTagsCard } from "./stand-tags-card";
@@ -74,7 +74,7 @@ export default function EnterpriseDetailPage() {
     } catch (err) {
       // A failed background refresh keeps the loaded enterprise (#1012).
       if (!failed(err)) return;
-      setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadEnterprise"));
+      setErrorMsg(apiErrorText(err, t, t("couldNotLoadEnterprise")));
       setNotFound(isNotFoundError(err));
       setStatus("error");
     }

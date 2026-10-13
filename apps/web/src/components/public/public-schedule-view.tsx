@@ -17,7 +17,8 @@ import {
   ScheduleKindFilterPopover,
 } from "@/components/public/schedule-kind-filter";
 import { ScheduleTimeline } from "@/components/public/schedule-timeline";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "@/lib/logistics";
 
@@ -62,7 +63,7 @@ export function PublicScheduleView({
     try {
       setEvent(await api.get<PublicEvent>("/api/public/event"));
     } catch (error) {
-      setEventError(error instanceof ApiError ? error.message : t("publicEventUnavailable"));
+      setEventError(apiErrorText(error, t, t("publicEventUnavailable")));
     } finally {
       setEventLoading(false);
     }
@@ -78,7 +79,7 @@ export function PublicScheduleView({
       // keep reading plain item.title/item.description unchanged.
       setItems(items.map((item) => ({ ...item, ...resolveScheduleText(item, language) })));
     } catch (error) {
-      setScheduleError(error instanceof ApiError ? error.message : t("couldNotLoadSchedule"));
+      setScheduleError(apiErrorText(error, t, t("couldNotLoadSchedule")));
     } finally {
       setScheduleLoading(false);
     }

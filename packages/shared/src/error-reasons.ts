@@ -16,6 +16,8 @@ export const ERROR_REASONS = {
   /** 409: the scanned ticket was revoked. */
   TICKET_REVOKED: "ticket_revoked",
   /** 409: a team member is busy in another judging room. */
+  /** 409: a judge saves a text field without holding its editing lease. */
+  REVIEW_FIELD_LEASE_REQUIRED: "review_field_lease_required",
   TEAM_MEMBER_BUSY: "team_member_busy",
   /** 400: schedule item ends at or before it starts. */
   SCHEDULE_ENDS_BEFORE_STARTS: "schedule_ends_before_starts",
@@ -62,4 +64,13 @@ export type FieldErrorReason = (typeof FIELD_ERROR_REASONS)[keyof typeof FIELD_E
 export function errorDetailsReason(details: unknown): string | null {
   const code = (details as { code?: unknown } | null | undefined)?.code;
   return typeof code === "string" ? code : null;
+}
+
+/**
+ * Localized copy (`common` namespace) per reason: clients render
+ * `apiError_<reason>` instead of the English `message` (#1013). Add the entry
+ * in all three locales when adding a reason that a user can trigger.
+ */
+export function errorReasonCopyKey(reason: string): string {
+  return `apiError_${reason}`;
 }

@@ -1,5 +1,5 @@
 import type { PublicEvent } from "@/components/public/public-types";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import type { I18nText, MessageKey, Translate } from "@/lib/i18n";
 
 export const DATA_PHASES = ["before", "during", "after"] as const;
@@ -51,8 +51,8 @@ export function applicationStatusLabel(status: string, t: Translate): string {
 }
 
 /** Turn an unknown thrown value into a message, preferring ApiError copy. */
-export function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof ApiError ? err.message : fallback;
+export function errorMessage(err: unknown, t: Translate, fallback: string): string {
+  return apiErrorText(err, t, fallback);
 }
 
 /** Use one normalized query for both the visible dataset and its export. */

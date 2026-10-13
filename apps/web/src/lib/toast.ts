@@ -2,6 +2,8 @@
 
 import { createElement, type ReactNode } from "react";
 import { type SileoOptions, type SileoPosition, sileo } from "sileo";
+import { ApiError } from "./api";
+import { apiErrorCopy } from "./api-error-text";
 import { isLanguage, translateMessage } from "./i18n";
 import type { Language } from "./types";
 
@@ -389,7 +391,10 @@ function showPromise<T>(promise: Promise<T> | (() => Promise<T>), options: Toast
           ? {
               ...content,
               compactTitle,
-              title: error instanceof Error ? error.message : content.title,
+              title:
+                error instanceof Error && !(error instanceof ApiError)
+                  ? error.message
+                  : content.title,
             }
           : content,
         "error",
@@ -467,15 +472,26 @@ export const toast: ToastApi = Object.assign(
   },
 );
 
+function errorDescription(error: unknown, title: string): string | undefined {
+  if (error instanceof ApiError) {
+    // Never show the English server message (#1013): resolve the reason in
+    // the active language, or keep just the caller's localized title.
+    const lang = document.documentElement.lang;
+    const language: Language = isLanguage(lang) ? lang : "es";
+    return (
+      apiErrorCopy(error, (key, values) => translateMessage(language, key, values)) ?? undefined
+    );
+  }
+  return error instanceof Error && error.message !== title ? error.message : undefined;
+}
+
 /**
  * Give API errors a useful title without losing the server's recovery detail.
  * Keep this at the adapter boundary so feature code can choose a concise,
  * localized context while Sileo handles the expandable description.
  */
 export function showErrorToast(error: unknown, title: string, options?: ToastOptions) {
-  const description =
-    options?.description ??
-    (error instanceof Error && error.message !== title ? error.message : undefined);
+  const description = options?.description ?? errorDescription(error, title);
   if (options?.description !== undefined) {
     return toast.error(title, {
       ...options,

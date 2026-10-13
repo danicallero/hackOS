@@ -1,6 +1,6 @@
 "use client";
 
-import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
+import type { SseEnvelope } from "@hackos/shared/events";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { API_URL } from "@/lib/env";
 import {

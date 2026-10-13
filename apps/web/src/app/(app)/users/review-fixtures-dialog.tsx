@@ -7,7 +7,8 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { Modal } from "@/components/common/modal";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
@@ -118,7 +119,7 @@ export function ReviewFixturesDialog({
       toast.success(t("reviewFixturesRegenerated"), { compactTitle: t("toastReviewAccounts") });
     } catch (error) {
       toast.error(
-        error instanceof ApiError ? error.message : t("reviewFixturesRegenerateFailed"),
+        apiErrorText(error, t, t("reviewFixturesRegenerateFailed")),
         t("toastReviewAccounts"),
       );
     } finally {

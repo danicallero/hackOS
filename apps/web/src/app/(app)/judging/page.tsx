@@ -71,6 +71,7 @@ import { ReviewForm } from "./review-form";
 function showQueueError(t: Translate, err: unknown, fallbackTitle: string) {
   const copy = queueErrorToastContent(
     err,
+    t,
     fallbackTitle,
     t("couldNotCallTeam"),
     t("teamCallBlockedDescription"),
@@ -191,7 +192,7 @@ export default function QueuePage() {
         setRooms([]);
         setChallenges([]);
       } else {
-        const message = errorMessage(err, t("couldNotLoadQueueSetup"));
+        const message = errorMessage(err, t, t("couldNotLoadQueueSetup"));
         setActionError(message);
         showQueueError(t, err, t("couldNotLoadQueueSetup"));
       }

@@ -263,7 +263,7 @@ describe("PublicProfileCard", () => {
     vi.mocked(api.get).mockRejectedValueOnce(new ApiError(500, "internal", "Server down"));
     await render(<PublicProfileCard />);
 
-    expect(container.querySelector("[role=alert]")?.textContent).toContain("Server down");
+    expect(container.querySelector("[role=alert]")?.textContent).toContain("apiErrorServer");
     expect(toast.error).not.toHaveBeenCalled();
     expect(showErrorToast).not.toHaveBeenCalled();
 

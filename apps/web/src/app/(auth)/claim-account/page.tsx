@@ -37,7 +37,7 @@ import { ApiError, api } from "@/lib/api";
 import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { destinationForKind } from "@/lib/invite-destination";
 import { withReturnPath } from "@/lib/return-path";
-import type { Intolerance, InviteLookup, Language } from "@/lib/types";
+import type { InviteLookup, Language } from "@/lib/types";
 
 function claimSchema(t: Translate) {
   return z

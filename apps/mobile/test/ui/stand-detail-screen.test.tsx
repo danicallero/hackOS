@@ -216,7 +216,7 @@ describe("StandDetailScreen (#935)", () => {
     );
   });
 
-  it("keeps the tag and shows the server's reason when removing fails", async () => {
+  it("keeps the tag and shows the localized fallback when removing fails", async () => {
     mutation = () => Promise.reject(new ApiError("Tag not found", 404, "not_found"));
     await renderMobile(<StandDetailScreen />);
     await fireEvent(await screen.findByLabelText("STAND-ABC"), "accessibilityAction", {
@@ -224,7 +224,7 @@ describe("StandDetailScreen (#935)", () => {
     });
     await confirmAlert();
     await waitFor(() =>
-      expect(Alert.alert).toHaveBeenLastCalledWith("standsRemoveTag", "Tag not found"),
+      expect(Alert.alert).toHaveBeenLastCalledWith("standsRemoveTag", "standsRemoveTagFailed"),
     );
     expect(screen.getByLabelText("STAND-ABC")).toBeTruthy();
   });

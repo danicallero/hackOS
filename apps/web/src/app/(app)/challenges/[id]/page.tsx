@@ -15,7 +15,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { TrackTiming } from "@/components/projects/track-timing";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { listDevpostPrizes } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
@@ -29,6 +29,7 @@ type DevpostPrize = {
   mappedChallengeTitle: string | null;
 };
 
+import { apiErrorText } from "@/lib/api-error-text";
 import { ChallengeAlertDialog } from "./challenge-alert-dialog";
 import { EditCard } from "./challenge-cards";
 
@@ -69,7 +70,7 @@ export default function ChallengeDetailPage() {
     } catch (err) {
       // A failed background refresh keeps the loaded challenge (#1012).
       if (!failed(err)) return;
-      setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadChallenge"));
+      setErrorMsg(apiErrorText(err, t, t("couldNotLoadChallenge")));
       setNotFound(isNotFoundError(err));
       setStatus("error");
     }

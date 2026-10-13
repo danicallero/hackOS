@@ -82,7 +82,7 @@ export function PresenceSection({ userId, refreshKey }: { userId: number; refres
       setData({ timeline });
       setState("ready");
     } catch (err) {
-      setLoadError(errorMessage(err, t("attendanceDataUnavailable")));
+      setLoadError(errorMessage(err, t, t("attendanceDataUnavailable")));
       setState(err instanceof ApiError && err.status === 403 ? "forbidden" : "error");
     }
   }, [userId, canRead, t]);
@@ -308,7 +308,7 @@ export function EditTimeLogModal({
       toast.success(t("scanUpdated"), { compactTitle: t("toastEditScan") });
       onSaved();
     } catch (err) {
-      setError(errorMessage(err, t("couldNotUpdateScan")));
+      setError(errorMessage(err, t, t("couldNotUpdateScan")));
     } finally {
       setPending(false);
     }
@@ -381,7 +381,7 @@ export function DeleteTimeLogModal({
       toast.success(t("scanDeleted"), { compactTitle: t("toastDeleteScan") });
       onDeleted();
     } catch (err) {
-      toast.error(errorMessage(err, t("couldNotDeleteScan")), t("toastDeleteScan"));
+      toast.error(errorMessage(err, t, t("couldNotDeleteScan")), t("toastDeleteScan"));
       setPending(false);
     }
   }
@@ -490,7 +490,7 @@ export function PresenceSignalModal({
       });
       onSaved();
     } catch (err) {
-      setError(errorMessage(err, t("couldNotSavePresenceSignal")));
+      setError(errorMessage(err, t, t("couldNotSavePresenceSignal")));
     } finally {
       setPending(false);
     }
@@ -608,7 +608,7 @@ export function DeletePresenceActivityModal({
       toast.success(t("presenceSignalDeleted"), { compactTitle: t("toastRemovePresence") });
       onDeleted();
     } catch (err) {
-      setError(errorMessage(err, t("couldNotDeletePresenceSignal")));
+      setError(errorMessage(err, t, t("couldNotDeletePresenceSignal")));
       setPending(false);
     }
   }

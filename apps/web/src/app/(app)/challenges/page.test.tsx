@@ -117,7 +117,7 @@ describe("ChallengesPage background refresh (#1012)", () => {
   it("shows the error only when the first load fails", async () => {
     vi.mocked(api.get).mockRejectedValueOnce(new ApiError(429, "rate_limited", "Slow down"));
     await render();
-    expect(container.textContent).toContain("Slow down");
+    expect(container.textContent).toContain("apiErrorRateLimited");
     expect(container.textContent).not.toContain("staleDataNotice");
   });
 });

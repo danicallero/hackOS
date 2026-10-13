@@ -1,6 +1,6 @@
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { ApiError, apiFetch, CLOCK_SKEW_TOLERANCE_MS, getClockSkewMs } from "./api";
-import { apiErrorReason } from "./api-error-reason";
+import { apiErrorReason, scanFailureCode } from "./api-error-reason";
 import { authClient } from "./auth-client";
 import { createIdempotencyKey } from "./idempotency-key";
 import {
@@ -188,22 +188,14 @@ async function attemptClockSkewCorrection(
     // corrected failure returned `true`, which silently left the scan pending
     // on terminal errors and allowed transient failures to advance the queue.
     if (classifyReplayFailure(error) === "retryable") {
-      await noteRetryableError(
-        scan.id,
-        error instanceof Error ? error.message : "Network error",
-        ownerUserId,
-      );
+      await noteRetryableError(scan.id, scanFailureCode(error), ownerUserId);
       return "retryable";
     }
     if (isStaleCredentialRejection(error)) {
       await deleteScan(scan.id, ownerUserId);
       return "terminal";
     }
-    await failScan(
-      scan.id,
-      error instanceof Error ? error.message : "Request rejected",
-      ownerUserId,
-    );
+    await failScan(scan.id, scanFailureCode(error), ownerUserId);
     return "terminal";
   }
 }
@@ -231,11 +223,7 @@ export async function replayPendingScans(
       // activity and presence log until someone finds the retry button. Only
       // genuine business rejections (400/404/409…) are final.
       if (failure === "retryable") {
-        await noteRetryableError(
-          scan.id,
-          error instanceof Error ? error.message : "Network error",
-          ownerUserId,
-        );
+        await noteRetryableError(scan.id, scanFailureCode(error), ownerUserId);
         break;
       }
       // A 404 is terminal for a queued identity-bearing scan: the participant
@@ -258,14 +246,10 @@ export async function replayPendingScans(
         if (correction === "retryable") break;
       }
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
-        await failScan(scan.id, error.message, ownerUserId);
+        await failScan(scan.id, scanFailureCode(error), ownerUserId);
         continue;
       }
-      await noteRetryableError(
-        scan.id,
-        error instanceof Error ? error.message : "Network error",
-        ownerUserId,
-      );
+      await noteRetryableError(scan.id, scanFailureCode(error), ownerUserId);
       break;
     }
   }

@@ -171,7 +171,7 @@ export function DuringPanel({
             loading={stats.loading}
             error={
               stats.error
-                ? { message: errorMessage(stats.error, t("couldNotLoadStatistics")) }
+                ? { message: errorMessage(stats.error, t, t("couldNotLoadStatistics")) }
                 : undefined
             }
             empty={{ icon: BowlFoodIcon, title: t("noMealScansYet") }}
@@ -189,7 +189,7 @@ export function DuringPanel({
             loading={stats.loading}
             error={
               stats.error
-                ? { message: errorMessage(stats.error, t("couldNotLoadStatistics")) }
+                ? { message: errorMessage(stats.error, t, t("couldNotLoadStatistics")) }
                 : undefined
             }
             empty={{ icon: PulseIcon, title: t("noActivityScansYet") }}
@@ -223,7 +223,7 @@ export function StaffRankingSection() {
       const { items } = await logisticsApi.staffScanRanking();
       setRows(items);
     } catch (err) {
-      setError(errorMessage(err, t("couldNotLoadStatistics")));
+      setError(errorMessage(err, t, t("couldNotLoadStatistics")));
     } finally {
       setLoading(false);
     }

@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { type RepoWithExtras, userProjects } from "@/lib/projects";
 
@@ -106,7 +106,7 @@ export function ProjectsTab({ userId }: { userId: number }) {
       setProjects(data.projects);
     } catch (err) {
       setProjects([]);
-      setError(err instanceof ApiError ? err.message : t("couldNotLoadUserProjects"));
+      setError(apiErrorText(err, t, t("couldNotLoadUserProjects")));
     } finally {
       setLoading(false);
     }

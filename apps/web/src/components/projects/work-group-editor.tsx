@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { type PlannedWorkGroup, updateWorkGroup } from "@/lib/projects";
 import { toast } from "@/lib/toast";
@@ -54,7 +54,7 @@ export function WorkGroupEditor({
       setOpen(false);
       await onSaved();
     } catch (error) {
-      setError(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
+      setError(apiErrorText(error, t, t("couldNotSaveProject")));
     } finally {
       setPending(false);
     }

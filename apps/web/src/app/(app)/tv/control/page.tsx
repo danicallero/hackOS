@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useEventSource } from "@/hooks/use-event-source";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { isLanguage, languageName, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
@@ -87,7 +87,7 @@ export default function TvControlPage() {
         if (next.mode === "live") setLiveConfig(liveConfigFrom(next.payload));
       }
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadTvMode");
+      const message = apiErrorText(err, t, t("couldNotLoadTvMode"));
       // A background refresh failure (SSE hiccup) still has data on screen and
       // just toasts; only a failed *initial* load blocks the region. Checking
       // the ref (not `current`, which would make `load` itself unstable and
@@ -119,10 +119,7 @@ export default function TvControlPage() {
       setTvLanguageState(venue.language);
       toast.success(t("tvLanguageUpdated"), { compactTitle: t("toastTvLanguage") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotUpdateTvLanguage"),
-        t("toastTvLanguage"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotUpdateTvLanguage")), t("toastTvLanguage"));
     } finally {
       setLanguageBusy(false);
     }
@@ -136,10 +133,7 @@ export default function TvControlPage() {
       setCurrent(next);
       toast.success(t("tvDisplaysUpdated"), { compactTitle: t("toastTvContent") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotUpdateTvDisplays"),
-        t("toastTvContent"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotUpdateTvDisplays")), t("toastTvContent"));
     } finally {
       setBusy(false);
     }
@@ -157,10 +151,7 @@ export default function TvControlPage() {
       if (isTvControlMode(next.mode)) setMode(next.mode);
       toast.success(t("tvDisplayReset"), { compactTitle: t("toastTvReset") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotUpdateTvDisplays"),
-        t("toastTvReset"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotUpdateTvDisplays")), t("toastTvReset"));
     } finally {
       setBusy(false);
     }

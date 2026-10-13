@@ -18,7 +18,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { fromLocalInputValue } from "@/lib/event-datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -173,10 +173,7 @@ export function JudgingWindowTab({ onDirtyChange }: { onDirtyChange?: (dirty: bo
         setLoaded(true);
       })
       .catch((err) =>
-        toast.error(
-          err instanceof ApiError ? err.message : t("couldNotLoadJudgingWindow"),
-          t("toastJudgingHours"),
-        ),
+        toast.error(apiErrorText(err, t, t("couldNotLoadJudgingWindow")), t("toastJudgingHours")),
       );
   }, [reset, t]);
 
@@ -198,10 +195,7 @@ export function JudgingWindowTab({ onDirtyChange }: { onDirtyChange?: (dirty: bo
       setSaveState("saved");
     } catch (err) {
       setSaveState("error");
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveJudgingWindow"),
-        t("toastJudgingHours"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveJudgingWindow")), t("toastJudgingHours"));
     }
   }
 

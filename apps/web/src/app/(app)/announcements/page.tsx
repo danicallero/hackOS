@@ -25,7 +25,7 @@ import type { UserOption } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import type { Announcement, AnnouncementInput } from "@/lib/notifications";
@@ -103,7 +103,7 @@ export default function AnnouncementsPage() {
     } catch (err) {
       // A failed background refresh keeps the list (#1012).
       if (!failed(err)) return;
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadAnnouncements")));
     } finally {
       setLoading(false);
     }
@@ -125,10 +125,7 @@ export default function AnnouncementsPage() {
       const full = await notificationsApi.getAnnouncement(item.id);
       setEditingItem(full);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"),
-        t("announcements"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLoadAnnouncements")), t("announcements"));
     }
   }
 
@@ -141,7 +138,7 @@ export default function AnnouncementsPage() {
       setDeleting(null);
       await load();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotDeleteAnnouncement");
+      const message = apiErrorText(err, t, t("couldNotDeleteAnnouncement"));
       setDeleteError(message);
       toast.error(message, t("deleteAnnouncementAria"));
     } finally {

@@ -1,7 +1,8 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AppState, Image, Modal, Platform, Pressable, Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
-import { ApiError, apiFetch } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
+import { apiErrorCopy } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { startNfcRead } from "@/lib/nfc-reader";
@@ -78,11 +79,9 @@ export function useStandTagLink(onLinked: (stand: LinkTarget, tag: StandTag) => 
       void haptic("error");
       const key = err instanceof Error && NFC_ERRORS.has(err.message) ? err.message : null;
       const message = t(key ? (key as MessageKey) : standLinkErrorKey(err));
-      // Unmapped API errors keep the server's explicit reason visible.
+      // Unmapped API errors show the localized reason when there is one.
       const reason =
-        !key && err instanceof ApiError && standLinkErrorKey(err) === "standsLinkFailed"
-          ? err.message
-          : null;
+        !key && standLinkErrorKey(err) === "standsLinkFailed" ? apiErrorCopy(err, t) : null;
       Alert.alert(t("standsLinkNfc"), reason ? `${message}\n\n${reason}` : message);
     } finally {
       if (session.current === current) session.current = null;

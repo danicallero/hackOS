@@ -100,9 +100,9 @@ describe("scheduleSaveError", () => {
     );
   });
 
-  it("surfaces the server's reason for validation errors", () => {
+  it("never shows the server's English message for unmapped validation errors", () => {
     expect(
       scheduleSaveError(new ApiError("body/title must be shorter", 400, "validation"), t),
-    ).toBe("scheduleSaveFailedReason:body/title must be shorter");
+    ).toBe("scheduleSaveError");
   });
 });

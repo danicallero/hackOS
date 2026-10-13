@@ -119,7 +119,7 @@ export function ScanTab({
         else setPresCard(null);
       } catch (err) {
         setAccCard(null);
-        setError(errorMessage(err, t("userLookupFailed")));
+        setError(errorMessage(err, t, t("userLookupFailed")));
       } finally {
         setBusy(false);
       }
@@ -171,7 +171,7 @@ export function ScanTab({
       }
     } catch (err) {
       setResults(null);
-      setError(errorMessage(err, t("userSearchFailed")));
+      setError(errorMessage(err, t, t("userSearchFailed")));
     } finally {
       setBusy(false);
     }
@@ -195,7 +195,7 @@ export function ScanTab({
       setAssignBadgeId("");
       if (canPresence) await loadPresenceByBadge(result.badgeId);
     } catch (err) {
-      setError(errorMessage(err, t("checkInFailed")));
+      setError(errorMessage(err, t, t("checkInFailed")));
     } finally {
       setBusy(false);
     }
@@ -219,7 +219,7 @@ export function ScanTab({
       setReason("");
       if (canPresence) await loadPresenceByBadge(result.newBadge);
     } catch (err) {
-      setError(errorMessage(err, t("badgeRotationFailed")));
+      setError(errorMessage(err, t, t("badgeRotationFailed")));
     } finally {
       setBusy(false);
     }
@@ -238,7 +238,7 @@ export function ScanTab({
       reset();
       onPresenceScanned();
     } catch (err) {
-      setError(errorMessage(err, t("presenceScanFailed")));
+      setError(errorMessage(err, t, t("presenceScanFailed")));
     } finally {
       setBusy(false);
     }
@@ -260,7 +260,7 @@ export function ScanTab({
       reset();
       onPresenceScanned();
     } catch (err) {
-      setError(errorMessage(err, t("couldNotSaveManualRecord")));
+      setError(errorMessage(err, t, t("couldNotSaveManualRecord")));
     } finally {
       setBusy(false);
     }

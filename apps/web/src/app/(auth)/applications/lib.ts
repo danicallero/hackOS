@@ -9,6 +9,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
+import { useLocale } from "@/lib/i18n";
 
 export type TokenActionState = "loading" | "done" | "error" | "expired";
 
@@ -36,6 +38,7 @@ export function useTokenAction<T>({
   invalidLinkMessage,
   fallbackMessage,
 }: UseTokenActionOptions): UseTokenActionResult<T> {
+  const { t } = useLocale();
   const [state, setState] = useState<TokenActionState>("loading");
   const [result, setResult] = useState<T | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
@@ -71,11 +74,11 @@ export function useTokenAction<T>({
         setLinkInvalid(true);
         setErrorMsg(invalidLinkMessage);
       } else {
-        setErrorMsg(err instanceof ApiError ? err.message : fallbackMessage);
+        setErrorMsg(apiErrorText(err, t, fallbackMessage));
       }
       setState("error");
     }
-  }, [token, endpoint, isExpired, invalidLinkMessage, fallbackMessage]);
+  }, [token, endpoint, isExpired, invalidLinkMessage, fallbackMessage, t]);
 
   useEffect(() => {
     if (ran.current) return;

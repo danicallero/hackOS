@@ -473,7 +473,6 @@
   "scheduleErrorScanNeedsParticipants": "An activity that requires a scan must be visible to participants.",
   "scheduleErrorNotFound": "This activity no longer exists.",
   "scheduleErrorForbidden": "You don't have permission to edit the schedule.",
-  "scheduleSaveFailedReason": "Couldn't save the activity: {reason}",
   "scheduleDeleteError": "Couldn't delete the activity. Check your connection and try again.",
   "translationsAndSettings": "Translations and technical settings",
   "scheduleTitleLabel": "Title",
