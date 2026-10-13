@@ -7,6 +7,7 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type ViewStyle,
 } from "react-native";
 import Animated, {
   Easing,
@@ -56,14 +57,14 @@ const MergeCanvas: typeof import("./connection-celebration-skia").ConnectionMerg
 const AVATAR = 92;
 const OVERLAP = AVATAR * 0.3;
 const PARTICLES = 10;
-const MERGE_MS = 420;
-const MOTION_MS = 1600;
-const REDUCED_MS = 1100;
+const MERGE_MS = 650;
+const MOTION_MS = 2800;
+const REDUCED_MS = 1600;
 
 /**
  * #935: the moment two people connect. A full-screen overlay where both photos
  * fly in, fuse like metaballs with an elastic spring (Skia blur + alpha
- * threshold), and burst into a ring, particles and a link glyph (about 1.6 s).
+ * threshold), and burst into a ring, particles and a link glyph (about 2.8 s).
  * Everything is a shared-value driven, so the frames run on the UI thread. If
  * Skia is unavailable or throws, the same beats play as Reanimated transforms
  * with a squash instead of the goo. Under reduced motion it is a short
@@ -74,11 +75,24 @@ export function ConnectionCelebration({
   target,
   self,
   onDone,
+  inline = false,
 }: {
   target: ConnectionCelebrationTarget | null;
   self: ConnectionCelebrationSelf;
   onDone: () => void;
+  /**
+   * Render as an overlay inside the caller (the QR scanner's own modal), so it
+   * starts at once instead of waiting for that modal to dismiss.
+   */
+  inline?: boolean;
 }) {
+  if (inline) {
+    return target ? (
+      <View style={{ bottom: 0, left: 0, position: "absolute", right: 0, top: 0 }}>
+        <Celebration key={target.key} target={target} self={self} onDone={onDone} />
+      </View>
+    ) : null;
+  }
   return (
     <Modal
       visible={target !== null}
@@ -125,28 +139,28 @@ function Celebration({
   useEffect(() => {
     const total = reduceMotion ? REDUCED_MS : MOTION_MS;
     fade.value = withSequence(
-      withTiming(1, { duration: 180 }),
-      withDelay(total - 180 - 260, withTiming(0, { duration: 260 })),
+      withTiming(1, { duration: 140 }),
+      withDelay(total - 140 - 320, withTiming(0, { duration: 320 })),
     );
     const timers: ReturnType<typeof setTimeout>[] = [];
     if (reduceMotion) {
       void haptic("success");
     } else {
-      approach.value = withSpring(1, { damping: 9, stiffness: 140, mass: 0.9 });
+      approach.value = withSpring(1, { damping: 11, stiffness: 70, mass: 1.1 });
       pop.value = withDelay(
         MERGE_MS,
         withSequence(
-          withTiming(1.16, { duration: 110, easing: Easing.out(Easing.quad) }),
-          withSpring(1, { damping: 6, stiffness: 240 }),
+          withTiming(1.18, { duration: 160, easing: Easing.out(Easing.quad) }),
+          withSpring(1, { damping: 6, stiffness: 160 }),
         ),
       );
-      glyph.value = withDelay(MERGE_MS, withSpring(1, { damping: 7, stiffness: 200 }));
+      glyph.value = withDelay(MERGE_MS, withSpring(1, { damping: 8, stiffness: 140 }));
       burst.value = withDelay(
         MERGE_MS,
-        withTiming(1, { duration: 800, easing: Easing.out(Easing.cubic) }),
+        withTiming(1, { duration: 1300, easing: Easing.out(Easing.cubic) }),
       );
-      timers.push(setTimeout(() => void haptic("light"), 120));
-      timers.push(setTimeout(() => void haptic("medium"), 300));
+      timers.push(setTimeout(() => void haptic("light"), 200));
+      timers.push(setTimeout(() => void haptic("medium"), 450));
       timers.push(setTimeout(() => void haptic("success"), MERGE_MS));
     }
     timers.push(setTimeout(finish, total));
@@ -322,7 +336,7 @@ class MergeBoundary extends Component<
   }
 }
 
-type AnimatedStyle = ReturnType<typeof useAnimatedStyle>;
+type AnimatedStyle = ReturnType<typeof useAnimatedStyle<ViewStyle>>;
 
 /** The photos, ring and particles as Reanimated transforms (no Skia). */
 function SpringStage({

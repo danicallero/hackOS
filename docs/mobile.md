@@ -1073,14 +1073,18 @@ badge (`diary.md`).
 
 **Meeting someone.** A scan that adds a person who was not yet in the loaded
 diary (never a re-scan, never a stand) plays `components/connection-celebration.tsx`:
-a transparent full-screen `Modal` where the viewer's photo (from `useMeContext`)
+a transparent full-screen `Modal` (or, for a QR scan, an overlay inside the
+scanner's own modal, which stays up until the result arrives so the animation
+starts at once instead of waiting for the camera to slide away) where the viewer's photo (from `useMeContext`)
 and the scanned person's fly in from opposite sides and fuse like metaballs
 (`components/connection-celebration-skia.tsx`, `@shopify/react-native-skia`): the
 two accent blobs behind the photos go through a Skia blur plus an alpha-threshold
 `ColorMatrix` layer, so a neck of goo stretches between them and settles into a
 shared accent rim as the photos overlap with a spring overshoot. Then a ring,
 ten particles in the accent color and a link glyph burst from the join (about
-1.6 s), fading out onto the pinned card. The photo routes are authenticated, so
+2.8 s; a tap skips it). The new person joins the list only when it ends, so
+the card does not appear before the animation; then their profile
+(`/people/[id]`) opens over the diary with the card pinned behind it. The photo routes are authenticated, so
 the bytes come from `loadApiImage` (session cookie) and are decoded with
 `Skia.Image.MakeImageFromEncoded`; until they arrive, or without a photo, the
 circle shows initials. Frames are driven by Reanimated shared values that Skia

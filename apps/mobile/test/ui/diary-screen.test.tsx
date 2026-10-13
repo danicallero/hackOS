@@ -340,6 +340,7 @@ describe("People", () => {
       mockNfc?.onValue("04A1B2C3D4E5F6");
       mockNfc?.onClose();
     });
+    await fireEvent.press(await screen.findByTestId("connection-celebration"));
     await waitFor(() => expect(screen.getByText("diarySaved")).toBeTruthy());
     expect(screen.getByText("Bea R.")).toBeTruthy();
     const [, init] = calls("/api/me/diary/scan")[0] ?? [];
@@ -367,19 +368,39 @@ describe("People", () => {
     expect(screen.getByTestId("connection-celebration-skia")).toBeTruthy();
     expect(announce).toHaveBeenCalledWith("diaryConnected:Bea R.");
     expect(haptic).toHaveBeenCalledWith("success");
+    // The list does not spoil it: the person joins only when it ends.
+    expect(screen.queryByText("Bea R.")).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByTestId("connection-celebration"));
     await waitFor(() => expect(screen.queryByTestId("connection-celebration")).toBeNull());
-    // The pinned card stays behind it.
     expect(screen.getByText("diarySaved")).toBeTruthy();
     expect(screen.getByText("Bea R.")).toBeTruthy();
+    // Then the person's profile opens.
+    expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } });
   });
 
-  it("dismisses the celebration by itself", async () => {
+  it("dismisses the celebration by itself and opens the profile", async () => {
     await scanWithNfc();
     await screen.findByTestId("connection-celebration");
     await waitFor(() => expect(screen.queryByTestId("connection-celebration")).toBeNull(), {
-      timeout: 3000,
+      timeout: 4000,
     });
+    expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } });
+  });
+
+  it("celebrates over the QR camera without closing it first", async () => {
+    mockNfcSupported = false;
+    await renderMobile(<DiaryScreen />);
+    await screen.findByText("Ana S.");
+    await fireEvent.press(screen.getByRole("button", { name: "personScanBadgeCode" }));
+    await fireEvent.press(screen.getByRole("button", { name: "qr fixture" }));
+    await screen.findByTestId("connection-celebration");
+    // The camera is still mounted underneath; a second read is ignored.
+    await fireEvent.press(screen.getByRole("button", { name: "qr fixture", hidden: true }));
+    expect(calls("/api/me/diary/scan")).toHaveLength(1);
+    await fireEvent.press(screen.getByTestId("connection-celebration"));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "qr fixture" })).toBeNull());
+    expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } });
   });
 
   it("uses a still crossfade under reduced motion", async () => {
