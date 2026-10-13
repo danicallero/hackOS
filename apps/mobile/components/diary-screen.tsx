@@ -295,18 +295,24 @@ export function DiaryScreen() {
     }
   }
 
-  /** After the celebration: the person joins the list and their profile opens. */
-  function finishCelebration() {
+  /**
+   * While the celebration covers the screen, the person joins the list and
+   * their profile opens underneath, so it is already there when it fades.
+   */
+  function revealMet() {
     const entry = metEntry.current;
-    metEntry.current = null;
-    setCelebration(null);
-    setInput(null);
     if (!entry) return;
     scrollToTop();
     applyEntry(entry);
     setSavedId(entry.id);
     setSection("people");
     if (entry.person) openPerson(entry.person.userId);
+  }
+
+  function finishCelebration() {
+    metEntry.current = null;
+    setCelebration(null);
+    setInput(null);
   }
 
   async function mutate(key: string, action: () => Promise<void>) {
@@ -606,6 +612,7 @@ export function DiaryScreen() {
       <ConnectionCelebration
         target={input === "qr" ? null : celebration}
         self={celebrationSelf}
+        onCovered={revealMet}
         onDone={finishCelebration}
       />
       <WalletModal wallet={wallet} />
@@ -634,6 +641,7 @@ export function DiaryScreen() {
           inline
           target={input === "qr" ? celebration : null}
           self={celebrationSelf}
+          onCovered={revealMet}
           onDone={finishCelebration}
         />
       </Modal>

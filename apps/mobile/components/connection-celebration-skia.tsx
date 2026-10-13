@@ -110,7 +110,8 @@ export function ConnectionMergeCanvas({
   const rightX = useDerivedValue(() => cx + apart + (1 - approach.value) * travel);
   const blobR = useDerivedValue(() => (radius + RIM) * pop.value);
   const ringR = useDerivedValue(() => radius * (0.5 + burst.value * 2.4));
-  const ringOpacity = useDerivedValue(() => (1 - burst.value) * 0.7);
+  // Nothing shows at the join until the burst starts.
+  const ringOpacity = useDerivedValue(() => (burst.value > 0 ? (1 - burst.value) * 0.7 : 0));
 
   return (
     <View testID="connection-celebration-burst" pointerEvents="none" style={{ height, width }}>
@@ -188,7 +189,7 @@ function Particle({
   const x = useDerivedValue(() => cx + Math.cos(angle) * reach * burst.value);
   const y = useDerivedValue(() => cy + Math.sin(angle) * reach * burst.value);
   const r = useDerivedValue(() => size * (1 - burst.value * 0.7));
-  const opacity = useDerivedValue(() => 1 - burst.value);
+  const opacity = useDerivedValue(() => (burst.value > 0 ? 1 - burst.value : 0));
   return <Circle cx={x} cy={y} r={r} color={color} opacity={opacity} />;
 }
 

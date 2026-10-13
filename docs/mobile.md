@@ -1083,9 +1083,11 @@ two accent blobs behind the photos go through a Skia blur plus an alpha-threshol
 `ColorMatrix` layer, so a neck of goo stretches between them and settles into a
 shared accent rim as the photos overlap with a single spring overshoot (damping ratio about 0.6, no repeated wobble). Then a ring,
 ten particles in the accent color burst from the join (about
-3 s; a tap skips it). The new person joins the list only when it ends, so
-the card does not appear before the animation; then their profile
-(`/people/[id]`) opens over the diary with the card pinned behind it. The photo routes are authenticated, so
+3 s; a tap skips it). The ring and particles stay hidden until the burst.
+The new person joins the list, and their profile (`/people/[id]`) opens, only
+once the overlay covers the screen (about 0.2 s in, or on an earlier skip), so
+the card never shows before the animation and the profile is already open
+underneath when it fades. The photo routes are authenticated, so
 the bytes come from `loadApiImage` (session cookie) and are decoded with
 `Skia.Image.MakeImageFromEncoded`; until they arrive, or without a photo, the
 circle shows initials. Frames are driven by Reanimated shared values that Skia

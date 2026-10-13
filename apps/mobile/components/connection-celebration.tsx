@@ -57,6 +57,7 @@ const AVATAR = 92;
 const OVERLAP = AVATAR * 0.3;
 const PARTICLES = 10;
 /** Lets the overlay and the Skia canvas paint before the photos move. */
+const FADE_IN_MS = 140;
 const ENTER_DELAY_MS = 220;
 const ENTER_MS = 700;
 const MERGE_MS = ENTER_DELAY_MS + ENTER_MS;
@@ -77,11 +78,17 @@ export function ConnectionCelebration({
   target,
   self,
   onDone,
+  onCovered,
   inline = false,
 }: {
   target: ConnectionCelebrationTarget | null;
   self: ConnectionCelebrationSelf;
   onDone: () => void;
+  /**
+   * Once the overlay hides the screen (or on an earlier skip): the caller
+   * changes what is underneath, so it is already in place when this fades.
+   */
+  onCovered?: () => void;
   /**
    * Render as an overlay inside the caller (the QR scanner's own modal), so it
    * starts at once instead of waiting for that modal to dismiss.
@@ -91,7 +98,13 @@ export function ConnectionCelebration({
   if (inline) {
     return target ? (
       <View style={{ bottom: 0, left: 0, position: "absolute", right: 0, top: 0 }}>
-        <Celebration key={target.key} target={target} self={self} onDone={onDone} />
+        <Celebration
+          key={target.key}
+          target={target}
+          self={self}
+          onDone={onDone}
+          onCovered={onCovered}
+        />
       </View>
     ) : null;
   }
@@ -103,7 +116,15 @@ export function ConnectionCelebration({
       statusBarTranslucent
       onRequestClose={onDone}
     >
-      {target ? <Celebration key={target.key} target={target} self={self} onDone={onDone} /> : null}
+      {target ? (
+        <Celebration
+          key={target.key}
+          target={target}
+          self={self}
+          onDone={onDone}
+          onCovered={onCovered}
+        />
+      ) : null}
     </Modal>
   );
 }
@@ -112,10 +133,12 @@ function Celebration({
   target,
   self,
   onDone,
+  onCovered,
 }: {
   target: ConnectionCelebrationTarget;
   self: ConnectionCelebrationSelf;
   onDone: () => void;
+  onCovered?: () => void;
 }) {
   const { t } = useLocale();
   const reduceMotion = useReducedMotion();
@@ -130,9 +153,18 @@ function Celebration({
   const finished = useRef(false);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+  const onCoveredRef = useRef(onCovered);
+  onCoveredRef.current = onCovered;
+  const covered = useRef(false);
+  const cover = useRef(() => {
+    if (covered.current) return;
+    covered.current = true;
+    onCoveredRef.current?.();
+  }).current;
   const finish = useRef(() => {
     if (finished.current) return;
     finished.current = true;
+    cover();
     onDoneRef.current();
   }).current;
 
@@ -140,8 +172,8 @@ function Celebration({
   useEffect(() => {
     const total = reduceMotion ? REDUCED_MS : MOTION_MS;
     fade.value = withSequence(
-      withTiming(1, { duration: 140 }),
-      withDelay(total - 140 - 320, withTiming(0, { duration: 320 })),
+      withTiming(1, { duration: FADE_IN_MS }),
+      withDelay(total - FADE_IN_MS - 320, withTiming(0, { duration: 320 })),
     );
     const timers: ReturnType<typeof setTimeout>[] = [];
     if (reduceMotion) {
@@ -168,6 +200,7 @@ function Celebration({
       timers.push(setTimeout(() => void haptic("medium"), ENTER_DELAY_MS + ENTER_MS * 0.6));
       timers.push(setTimeout(() => void haptic("success"), MERGE_MS));
     }
+    timers.push(setTimeout(cover, FADE_IN_MS + 60));
     timers.push(setTimeout(finish, total));
     void AccessibilityInfo.announceForAccessibility(message);
     return () => {
@@ -185,7 +218,7 @@ function Celebration({
     transform: [{ translateX: apart + (1 - approach.value) * travel }, { scale: pop.value }],
   }));
   const ring = useAnimatedStyle(() => ({
-    opacity: (1 - burst.value) * 0.7,
+    opacity: burst.value > 0 ? (1 - burst.value) * 0.7 : 0,
     transform: [{ scale: 0.5 + burst.value * 2.4 }],
   }));
 
@@ -282,7 +315,7 @@ function Particle({ index, burst }: { index: number; burst: SharedValue<number> 
   const reach = index % 2 === 0 ? 150 : 110;
   const size = index % 2 === 0 ? 10 : 7;
   const style = useAnimatedStyle(() => ({
-    opacity: 1 - burst.value,
+    opacity: burst.value > 0 ? 1 - burst.value : 0,
     transform: [
       { translateX: Math.cos(angle) * reach * burst.value },
       { translateY: Math.sin(angle) * reach * burst.value },

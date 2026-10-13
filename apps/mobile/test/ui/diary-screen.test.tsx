@@ -368,15 +368,17 @@ describe("People", () => {
     expect(screen.getByTestId("connection-celebration-skia")).toBeTruthy();
     expect(announce).toHaveBeenCalledWith("diaryConnected:Bea R.");
     expect(haptic).toHaveBeenCalledWith("success");
-    // The list does not spoil it: the person joins only when it ends.
-    expect(screen.queryByText("Bea R.")).toBeNull();
-    expect(mockPush).not.toHaveBeenCalled();
+    // Once it covers the screen, the person joins the list and their profile
+    // opens underneath, so both are in place when it fades.
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } }),
+    );
+    expect(screen.getByTestId("connection-celebration")).toBeTruthy();
+    expect(screen.getByText("Bea R.")).toBeTruthy();
     await fireEvent.press(screen.getByTestId("connection-celebration"));
     await waitFor(() => expect(screen.queryByTestId("connection-celebration")).toBeNull());
     expect(screen.getByText("diarySaved")).toBeTruthy();
-    expect(screen.getByText("Bea R.")).toBeTruthy();
-    // Then the person's profile opens.
-    expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } });
+    expect(mockPush).toHaveBeenCalledTimes(1);
   });
 
   it("dismisses the celebration by itself and opens the profile", async () => {
