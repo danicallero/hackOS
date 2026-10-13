@@ -115,6 +115,12 @@ const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
   },
 };
 
+/** The label of the tab that owns a `(tabs)` route segment, e.g. "diary". */
+export function tabLabelKeyForSegment(segment: string | undefined): TabLabelKey | null {
+  const definition = Object.values(TAB_DEFINITIONS).find((tab) => tab.triggerName === segment);
+  return definition?.labelKey ?? null;
+}
+
 const REGISTERED_TAB_ROUTES: RouterTabRoute[] = [
   { href: "/(tabs)/schedule", name: "schedule" },
   { href: "/(tabs)/queue", name: "queue" },

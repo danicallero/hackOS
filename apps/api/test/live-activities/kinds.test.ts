@@ -189,6 +189,111 @@ describe("attendee activity (H59)", () => {
   });
 });
 
+describe("configured lead time (H25, H26, H59)", () => {
+  async function setLead(minutes: number | null) {
+    const pool = await db();
+    await pool.query(`UPDATE live_activity_settings SET lead_minutes = $1 WHERE id = 1`, [minutes]);
+  }
+
+  it("moves when attendee and staff activities appear, without a deploy", async () => {
+    const attendee = await createUser();
+    const staff = await createUserWithCapabilities([CAPABILITIES.ACTIVITY_SCAN]);
+    const talk = await scheduleItem({ startsInMinutes: 40 });
+    await createScannableActivity({ startsInMinutes: 40 });
+    await allowLiveActivities();
+
+    // No override: the deployment default (15 min) applies.
+    expect((await mine(attendee)).attendeeActivities).toEqual([]);
+    expect((await mine(staff)).activities).toEqual([]);
+
+    await setLead(60);
+    expect((await mine(attendee)).attendeeActivities.map((a) => a.scheduleId)).toEqual([talk]);
+    expect((await mine(staff)).activities).toHaveLength(1);
+
+    await setLead(5);
+    const near = await scheduleItem({ title: "Soon", startsInMinutes: 10 });
+    expect((await mine(attendee)).attendeeActivities.map((a) => a.scheduleId)).not.toContain(near);
+
+    // 0: only items that already started.
+    await setLead(0);
+    const started = await scheduleItem({ title: "Started", startsInMinutes: -1 });
+    expect((await mine(attendee)).attendeeActivities.map((a) => a.scheduleId)).toEqual([started]);
+  });
+});
+
+describe("configured deadline and accreditation timings (H19, H20, H22)", () => {
+  async function setTimings(columns: Record<string, number | null>) {
+    const pool = await db();
+    await pool.query(`INSERT INTO live_activity_settings (id) VALUES (1) ON CONFLICT DO NOTHING`);
+    for (const [column, value] of Object.entries(columns)) {
+      await pool.query(`UPDATE live_activity_settings SET ${column} = $1 WHERE id = 1`, [value]);
+    }
+  }
+
+  it("moves when the deadline activity appears without a hacking start", async () => {
+    const pool = await db();
+    const userId = await participant();
+    await allowLiveActivities();
+    await pool.query(
+      `UPDATE event_config SET hacking_starts_at = NULL,
+              hacking_ends_at = now() + interval '400 minutes' WHERE id = 1`,
+    );
+    expect((await mine(userId)).deadline).toBeNull();
+    await setTimings({ deadline_lead_minutes: 500 });
+    expect((await mine(userId)).deadline).toMatchObject({ kind: "deadline" });
+    await setTimings({ deadline_lead_minutes: 30 });
+    expect((await mine(userId)).deadline).toBeNull();
+  });
+
+  it("moves when an unsubmitted team's deadline activity turns urgent", async () => {
+    const pool = await db();
+    const drafter = await participant();
+    const group = await pool.query<{ id: number }>(
+      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Rocket', $1) RETURNING id`,
+      [drafter],
+    );
+    await pool.query(
+      `INSERT INTO planned_work_group_members (group_id, user_id, status) VALUES ($1, $2, 'active')`,
+      [group.rows[0]!.id, drafter],
+    );
+    await allowLiveActivities();
+    const now = Date.now();
+    await pool.query(
+      `UPDATE event_config SET hacking_starts_at = $1, hacking_ends_at = $2 WHERE id = 1`,
+      [new Date(now - 3_600_000), new Date(now + 40 * 60_000)],
+    );
+    expect((await mine(drafter)).deadline?.phase).toBe("open");
+    await setTimings({ deadline_closing_minutes: 60 });
+    expect((await mine(drafter)).deadline?.phase).toBe("closing");
+    await setTimings({ deadline_closing_minutes: 5 });
+    expect((await mine(drafter)).deadline?.phase).toBe("open");
+  });
+
+  it("moves the accreditation desk window on both sides", async () => {
+    const pool = await db();
+    const desk = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
+    await allowLiveActivities();
+    // Event opens in 3 h, hacking starts in 4 h: closed under the default 60 min lead.
+    await pool.query(
+      `UPDATE event_config SET event_starts_at = now() + interval '3 hours',
+              hacking_starts_at = now() + interval '4 hours' WHERE id = 1`,
+    );
+    expect((await mine(desk)).accreditation).toBeNull();
+    await setTimings({ accreditation_lead_minutes: 240 });
+    expect((await mine(desk)).accreditation).toMatchObject({ kind: "accreditation" });
+
+    // Hacking started 90 min ago: closed under the default 60 min tail.
+    await setTimings({ accreditation_lead_minutes: null });
+    await pool.query(
+      `UPDATE event_config SET event_starts_at = now() - interval '3 hours',
+              hacking_starts_at = now() - interval '90 minutes' WHERE id = 1`,
+    );
+    expect((await mine(desk)).accreditation).toBeNull();
+    await setTimings({ accreditation_tail_minutes: 120 });
+    expect((await mine(desk)).accreditation).toMatchObject({ kind: "accreditation" });
+  });
+});
+
 describe("submission deadline (H19, H20)", () => {
   async function deadlineIn(minutes: number) {
     const pool = await db();

@@ -410,7 +410,14 @@ test("queue administrator edits judging hours without reading private event sett
     return route.fulfill({ status: 403, json: { message: "Forbidden" } });
   });
   await page.route("**/api/queue/settings", (route) =>
-    route.fulfill({ json: { schedule_start_at: null, schedule_end_at: null } }),
+    route.fulfill({
+      json: {
+        schedule_start_at: null,
+        schedule_end_at: null,
+        pre_call_notification_eta_minutes: 10,
+        called_too_long_threshold_minutes: 10,
+      },
+    }),
   );
   await page.goto("/settings/event?tab=judging");
   await page.locator('aside[aria-labelledby="cookie-notice-title"] button').first().click();
@@ -424,7 +431,12 @@ test("queue administrator edits judging hours without reading private event sett
       request.method() === "PATCH" && new URL(request.url()).pathname === "/api/queue/settings",
   );
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
-  expect((await write).postDataJSON()).toEqual({ scheduleStartAt: null, scheduleEndAt: null });
+  expect((await write).postDataJSON()).toEqual({
+    scheduleStartAt: null,
+    scheduleEndAt: null,
+    preCallNotificationEtaMinutes: 10,
+    calledTooLongThresholdMinutes: 10,
+  });
   expect(eventReads).toBe(0);
 });
 

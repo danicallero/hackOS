@@ -80,6 +80,7 @@ export interface QueueSettings {
   schedule_start_at: string | null;
   schedule_end_at: string | null;
   pre_call_notification_eta_minutes: number;
+  called_too_long_threshold_minutes: number;
   requeue_prompt_default: "top" | "bottom" | "ask";
 }
 
@@ -532,6 +533,7 @@ export const updateQueueSettings = (body: {
   scheduleStartAt?: string | null;
   scheduleEndAt?: string | null;
   preCallNotificationEtaMinutes?: number;
+  calledTooLongThresholdMinutes?: number;
   requeuePromptDefault?: QueueSettings["requeue_prompt_default"];
 }) => api.patch<QueueSettings>("/api/queue/settings", body);
 /** Every queue the caller may manage, across enterprises. */

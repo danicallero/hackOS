@@ -417,12 +417,34 @@ distributed to other Expo Router apps without importing hackOS code.
   action buttons.
   "Edit networking profile" (#934, #935), always shown in the same section, opens the
   `app/networking-profile.tsx` modal (`components/networking-profile-screen.tsx`,
-  `lib/networking-profile.ts`): the opt-in switch, the surname/photo/project
-  switches (once shared), headline, where-to-find-you and bio (the same photo
-  control as Account sits above them), saved with
-  `PUT /api/me/public-profile` under one `Idempotency-Key` per change set. It omits
-  `socials` and `shareCv`, which the API then keeps; links and the CV are edited
-  on web ([`directory.md`](./directory.md)).
+  `lib/networking-profile.ts`). It opens on a **preview**: the card exactly as
+  people who scan the owner see it (`preview` from `GET /api/me/public-profile`,
+  rendered by the same `components/profile-card.tsx` the diary's person screen
+  uses), under an always-visible "Share my profile" switch. In the preview that
+  switch saves on its own (optimistic, rolled back with a localized error if the
+  PUT fails); a card that is not shared yet is drawn at half opacity and the
+  sheet starts in edit mode. The header follows the other form sheets
+  (`FloatingGlassButton`): X closes, pencil enters edit mode; while editing, X
+  discards the changes (back to the preview) and the checkmark saves.
+  **Edit mode** keeps the layout and edits in place: headline under the name,
+  bio and where-to-find-you as inputs, the account photo through
+  `ProfilePhotoMenu`. Small eyes (`VisibilityToggle`, a `switch` role) sit on
+  the name (full surname), the photo, the project and challenges rows and the CV
+  tile; closed (`eye.slash`) means scanners do not get it, and the element stays
+  on screen greyed instead of disappearing (while projects are hidden the card
+  carries none, so the last ones seen, or a placeholder row, are shown greyed).
+  Saving is `PUT /api/me/public-profile` under one `Idempotency-Key` per change
+  set; the response replaces the preview. It omits `socials` (links stay on web)
+  and sends `shareCv` only when a CV exists.
+  **CV** (the side tile): a CV taken from the application (`cv.source:
+  "application"`) always wins and is read-only here, with only the eye. With no
+  application CV the phone manages the upload with `expo-document-picker`
+  (`lib/profile-cv.ts`): with no CV the tile reads "Upload CV"; an uploaded CV
+  shows the tile with its eye plus Replace CV and Remove CV (confirmed) rows.
+  A PDF over 5 MB or a non-PDF is refused before sending, and the API's
+  400/413/409 answers map to localized errors. Upload and removal save on their
+  own (`POST`/`DELETE /api/me/public-profile/cv`, one `Idempotency-Key` per
+  attempt, a spinner on the tile) like the photo; only sharing waits for Save.
   Sponsor representatives (`isSponsorRep`) also
   see a Meals section listing `GET /api/me/meal-plan`, reloaded on every focus
   and cached under `user:<id>:meal-plan` so sign-out and 401 invalidation clear
@@ -759,7 +781,9 @@ is direct and `app/(tabs)/others/diary.tsx` inside Others (`diary` is an
 segmented control splits it into **People** | **Companies**. There is no
 directory to browse: people get into the diary only by a badge scan. The
 `?view=people` / `?view=companies` route parameter opens a segment directly.
-Pull-to-refresh, focus and foregrounding refetch. Nothing is written to the
+Pull-to-refresh, focus and foregrounding refetch, which is also how a person
+who was scanned sees the scanner appear (scans are mutual when the scanner
+shares a profile, `diary.md`). Nothing is written to the
 offline cache, so a profile hidden later cannot reappear from device storage.
 
 The diary uses the system header, laid out like Activities. On iOS 26
@@ -778,7 +802,10 @@ star, a native `Stack.Toolbar.Button` (`star` / `star.fill`) drawn as the same
 circle as the search button, sit on the right, with a wallet button after them (`wallet.pass`) that opens the
 badge/ticket wallet in a full-screen modal (`WalletModal` in
 `components/account-wallet.tsx`, the same `WalletScreen` and close button as
-Account's overlay, H28). The wallet button stays on Companies. Android and earlier iOS use
+Account's overlay, H28), opened on the badge (`initialPurpose="badge"`), the
+card someone you meet scans; Account opens on the ticket. The ticket and badge
+cards keep fixed sides (ticket left, badge right): a swipe left goes to the
+badge, and each card's slide follows from its own index. The wallet button stays on Companies. Android and earlier iOS use
 `LegacyScreenHeader`: the title, a glass star toggle, the wallet button and the search button that
 expands into the field. Search and the star apply to People only, and only
 once it has someone to search; on Companies the native search and the star are
@@ -1046,6 +1073,43 @@ for an account without event access, 429) maps to its own localized alert
 (`lib/diary.ts`); none names a person. Badges, stand tags and the staff
 scanners share the NFC-A UID encoding, so a stand tag is never accepted as a
 badge (`diary.md`).
+
+**Meeting someone.** A scan that adds a person who was not yet in the loaded
+diary (never a re-scan, never a stand) plays `components/connection-celebration.tsx`:
+a transparent full-screen `Modal` (or, for a QR scan, an overlay inside the
+scanner's own modal, which stays up until the result arrives so the animation
+starts at once instead of waiting for the camera to slide away) where the viewer's photo (from `useMeContext`)
+and the scanned person's slide in from opposite edges (a 0.85 s ease-in that keeps accelerating until they meet, which
+starts after about 0.2 s, once the overlay and canvas have painted) and fuse like metaballs
+(`components/connection-celebration-skia.tsx`, `@shopify/react-native-skia`): the
+two accent blobs behind the photos go through a Skia blur plus an alpha-threshold
+`ColorMatrix` layer, so a neck of goo stretches between them and settles into a
+shared accent rim as the photos overlap with a single spring overshoot (damping ratio about 0.6, no repeated wobble). Then a ring,
+ten particles in the accent color burst from the join (about
+3.2 s; a tap skips it). The ring and particles stay hidden until the burst.
+The new person joins the list, and their profile (`/people/[id]`) opens, only
+once the overlay covers the screen (about 0.2 s in, or on an earlier skip), so
+the card never shows before the animation and the profile is already open
+underneath when it fades. The photo routes are authenticated, so
+the bytes come from `loadApiImage` (session cookie) and are decoded with
+`Skia.Image.MakeImageFromEncoded`; until they arrive, or without a photo, the
+circle shows initials. Frames are driven by Reanimated shared values that Skia
+reads directly, so they stay on the UI thread. Skia paints with color strings,
+so the scene carries the light/dark systemBlue and ground hex values instead of
+the dynamic `colors` tokens. Where Skia cannot load (web) or throws while
+rendering (an error boundary), the earlier Reanimated version plays instead: the
+same beats as spring transforms with a squash, no goo. Skia is a native module
+(no config plugin; the `ios/`/`android/` projects are generated), so adding it
+needed a new native build, not an OTA update. Haptics through
+`lib/haptics.ts`: light and medium as the photos approach, success at the
+merge (the lib has no user setting; it is best-effort and silent where there is
+no engine). A tap anywhere skips it; it never outlasts its timer. Under
+reduced motion it is a 1.1 s crossfade of the two photos and the glyph, with no
+Skia canvas, travel, ring or particles and only the success haptic. It announces
+`diaryConnected` ("You are now connected with {name}") to screen readers and
+labels the overlay with it. The API reports `created` only as the status code
+(201 vs 200), which `apiFetch` does not expose, so "new" is decided against the
+loaded diary entries. Not verified on a device.
 
 `apiFetch` returns API timestamps as `Date` objects (Better Auth's client JSON
 parser revives ISO strings), so diary ordering goes through `timestampOf`
@@ -2080,7 +2144,8 @@ rendered through `renderMobile`, including the shared H4 sign-in contract.
 `GestureHandlerRootView` and a `SafeAreaProvider` with fixed test insets, so
 components using `useSafeAreaInsets()` or gesture-handler's
 `GestureDetector`/`Swipeable` don't need a per-test workaround. `jest.setup.js`
-mocks `react-native-reanimated`, `react-native-worklets`, and
+mocks `react-native-reanimated`, `react-native-worklets`, `@shopify/react-native-skia`
+(a plain-view `Canvas`, drawing primitives render nothing) and
 `react-native-gesture-handler` at the root — real gesture recognition and
 worklet scheduling aren't meaningful under jest, so `Gesture`/`GestureDetector`
 are no-op pass-throughs and `Swipeable` renders its `renderLeftActions`/

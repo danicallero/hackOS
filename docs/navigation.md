@@ -303,7 +303,11 @@ Every native Stack, including the root one that hosts `schedule/[id]` and
 `people/[id]`, spreads `nativeStackScreenOptions` from `lib/navigation.ts`
 (`headerBackButtonDisplayMode: "minimal"`). On iOS 26 a chevron-only back item
 is a circular Liquid Glass button; a back title widens it into a capsule.
-Pushed screens keep that native item. A route opened from a cold deep link has
+The long-press back menu is off (`headerBackButtonMenuEnabled: false`): it
+lists previous screens by title, and a detail pushed over the tab navigator
+would offer the route group's name, "(tabs)". So that name never surfaces,
+`app/(tabs)/_layout.tsx` also titles its root-stack screen after the active
+tab (`tabLabelKeyForSegment`). Pushed screens keep that native item. A route opened from a cold deep link has
 nothing to pop, so it hides the native item and sets `headerLeft` to
 `components/header-back-button.tsx`, which calls `safeBack`. UIKit pads a
 custom bar item horizontally: a 44 pt-wide view becomes a capsule, while the

@@ -13,6 +13,7 @@
     "./events": "./src/events.ts",
     "./live-activities": "./src/live-activities.ts",
     "./locale": "./src/locale.ts",
+    "./notification-automation": "./src/notification-automation.ts",
     "./locales/*": "./locales/*",
     "./questions": "./src/questions.ts",
     "./role-grant-triggers": "./src/role-grant-triggers.ts",

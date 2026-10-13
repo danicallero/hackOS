@@ -544,12 +544,15 @@ export function EditableScannableCell({
   disabled,
   disabledHint,
   fieldLabel,
+  errorTitle,
   onSave,
 }: {
   checked: boolean;
   disabled: boolean;
   disabledHint?: string;
   fieldLabel: string;
+  /** Toast heading naming the edited field; defaults to the scanning one. */
+  errorTitle?: string;
   onSave: (next: boolean) => Promise<CellSaveResult>;
 }) {
   const { t } = useLocale();
@@ -563,7 +566,7 @@ export function EditableScannableCell({
     } catch (err) {
       toast.error(
         err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastActivityScanning"),
+        errorTitle ?? t("toastActivityScanning"),
       );
     } finally {
       setSaving(false);

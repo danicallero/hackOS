@@ -48,6 +48,8 @@ export interface AdminScheduleItem extends ScheduleItem {
   contactNote: string | null;
   notes: string | null;
   owners: ScheduleOwner[];
+  /** Whether the item's audience gets an attendee Live Activity (#966). */
+  liveActivityAudience?: boolean;
 }
 
 /**
@@ -76,6 +78,8 @@ export interface ScheduleInput {
   audiences: ScheduleAudience[];
   contactNote: string | null;
   notes: string | null;
+  /** Opt-in attendee Live Activity; only an item with an audience can have it (#966). */
+  liveActivityAudience?: boolean;
   /** Language `title`/`description` are written in, when it isn't the editor's own (single-language entry). */
   titleLanguage?: Language;
 }

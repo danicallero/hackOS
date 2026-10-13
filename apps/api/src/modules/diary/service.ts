@@ -180,11 +180,11 @@ export async function listSponsorCollection(owner: number): Promise<{
  * Insert-or-return: the partial unique indexes make a concurrent double save
  * converge on one row, and a re-scan returns the existing entry untouched.
  */
-async function save(
+async function insertEntry(
   db: pg.PoolClient,
   owner: number,
   target: { userId: number } | { enterpriseId: number },
-): Promise<{ created: boolean; entry: DiaryEntry }> {
+): Promise<{ created: boolean; row: EntryRow }> {
   const [column, value] =
     "userId" in target ? ["target_user_id", target.userId] : ["enterprise_id", target.enterpriseId];
   const inserted = await db.query<EntryRow>(
@@ -202,8 +202,39 @@ async function save(
       )
     ).rows[0];
   if (!row) throw new ConflictError("The diary entry could not be saved");
+  return { created: inserted.rows[0] !== undefined, row };
+}
+
+async function save(
+  db: pg.PoolClient,
+  owner: number,
+  target: { userId: number } | { enterpriseId: number },
+): Promise<{ created: boolean; entry: DiaryEntry }> {
+  const { created, row } = await insertEntry(db, owner, target);
   const [entry] = await present(db, [row]);
-  return { created: inserted.rows[0] !== undefined, entry: entry as DiaryEntry };
+  return { created, entry: entry as DiaryEntry };
+}
+
+/**
+ * Locks the scanner and the scanned person in ascending id order, so two
+ * people scanning each other at once cannot deadlock. Returns whether the
+ * scanned person can receive a diary entry right now: an active account with
+ * event access (an account being removed is skipped, not refused).
+ */
+async function lockPair(db: pg.PoolClient, owner: number, target: number): Promise<boolean> {
+  let targetUsable = false;
+  for (const id of [owner, target].sort((a, b) => a - b)) {
+    if (id === owner) {
+      await lockOwner(db, owner);
+      continue;
+    }
+    const { rows } = await db.query<{ account_state: string }>(
+      `SELECT account_state FROM users WHERE id = $1 AND anonymized_at IS NULL FOR NO KEY UPDATE`,
+      [id],
+    );
+    targetUsable = rows[0]?.account_state === "active" && (await hasEventAccess(db, id));
+  }
+  return targetUsable;
 }
 
 /** A badge (current NFC UID or badge QR) or a ticket QR, to its holder. */
@@ -249,15 +280,21 @@ export function codeFromScan(raw: string): string {
  * or a person's badge or ticket. A person's badge only ever saves that person
  * (a sponsor rep's badge never grants their company). Nothing about a person
  * is revealed unless their profile is visible right now; otherwise the answer
- * is `profile_not_shared` and nothing is stored. The scanned person is never
- * notified.
+ * is `profile_not_shared` and nothing is stored. A person scan is mutual
+ * (#935): in the same transaction the scanned person's diary also gets the
+ * scanner, but only while the scanner's own profile is visible (the scanned
+ * person must never learn who did not opt in). No notification is pushed;
+ * the scanned person's diary shows the entry on its next refetch.
  */
 export async function saveScanned(owner: number, scanned: string) {
   const code = codeFromScan(scanned);
   return withTransaction(async (db) => {
-    await lockOwner(db, owner);
+    // Resolve the code before locking: a person scan locks both accounts in
+    // id order, which needs the target's id first.
+    await assertAttendee(db, owner);
     const stand = await standEnterpriseForCode(db, code);
     if (stand !== null) {
+      await lockOwner(db, owner);
       const { enterpriseId } = stand;
       // Staff decide which stands can be collected (0703); a stand that is
       // not scannable answers like an unrevealed sponsor and names no one.
@@ -273,11 +310,16 @@ export async function saveScanned(owner: number, scanned: string) {
     if (userId === owner) {
       throw new AppError(409, "diary_self", "This is your own badge");
     }
-    const people = await visibleDirectoryEntries(db, [userId]);
+    const targetUsable = await lockPair(db, owner, userId);
+    const people = await visibleDirectoryEntries(db, [userId, owner]);
     if (!people.has(userId)) {
       throw new AppError(409, "profile_not_shared", "This person does not share a profile");
     }
-    return save(db, owner, { userId });
+    const saved = await save(db, owner, { userId });
+    if (targetUsable && people.has(owner)) {
+      await insertEntry(db, userId, { userId: owner });
+    }
+    return saved;
   });
 }
 

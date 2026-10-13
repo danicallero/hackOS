@@ -74,6 +74,7 @@ function emptyForm(): ScheduleInput {
     // New items default to reaching participants — staff-only (empty) is an
     // explicit opt-out, not the common case.
     audiences: ["participant"],
+    liveActivityAudience: false,
     contactNote: null,
     notes: null,
   };
@@ -109,6 +110,7 @@ export function scheduleItemToForm(
     visibility: item.visibility,
     publishAt: item.publishAt,
     audiences: item.audiences ?? [],
+    liveActivityAudience: item.liveActivityAudience ?? false,
     contactNote: item.contactNote,
     notes: item.notes,
   };
@@ -270,6 +272,10 @@ export function ScheduleFormModal({
         {
           ...prepared.values,
           publishAt: scheduledPublish ? prepared.values.publishAt : null,
+          // #966: only an item with an audience can show it a Live Activity.
+          liveActivityAudience:
+            (prepared.values.audiences ?? []).length > 0 &&
+            prepared.values.liveActivityAudience === true,
         },
         owners.map((owner) =>
           owner.userId !== null
@@ -663,6 +669,18 @@ export function ScheduleFormModal({
                 label={t("scheduleRequiresScanLabel")}
                 value={values.requiresScan}
                 onChange={(requiresScan) => setValues((current) => ({ ...current, requiresScan }))}
+              />
+            </Section>
+          ) : null}
+
+          {hasAudience ? (
+            <Section>
+              <ToggleRow
+                label={t("scheduleLiveActivityLabel")}
+                value={values.liveActivityAudience === true}
+                onChange={(liveActivityAudience) =>
+                  setValues((current) => ({ ...current, liveActivityAudience }))
+                }
               />
             </Section>
           ) : null}

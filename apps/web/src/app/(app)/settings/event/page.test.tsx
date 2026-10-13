@@ -37,6 +37,7 @@ vi.mock("./wallet-tab", () => ({ WalletTab: () => <div data-testid="wallet-form"
 vi.mock("./presence-tab", () => ({ PresenceTab: () => null }));
 vi.mock("./invites-tab", () => ({ InvitesTab: () => null }));
 vi.mock("./live-activities-tab", () => ({ LiveActivitiesTab: () => null }));
+vi.mock("./notifications-tab", () => ({ NotificationsTab: () => null }));
 vi.mock("./reset-judging-data-tab", () => ({ ResetJudgingDataTab: () => null }));
 vi.mock("../../queue/rooms/judging-window-tab", () => ({ JudgingWindowTab: () => null }));
 
@@ -81,6 +82,7 @@ describe("EventSettingsPage", () => {
       "/settings/event?tab=event",
       "/settings/event?tab=wallet",
       "/settings/event?tab=liveActivities",
+      "/settings/event?tab=notifications",
     ]);
     expect(container.querySelector("[data-testid]")).toBeNull();
   });
@@ -96,7 +98,7 @@ describe("EventSettingsPage", () => {
     search = "tab=venue";
     await render();
     expect(container.querySelector("[data-testid=venue-form]")).toBeNull();
-    expect(links()).toHaveLength(3);
+    expect(links()).toHaveLength(4);
     expect(replace).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
