@@ -1,3 +1,4 @@
+import { errorDetailsReason } from "@hackos/shared/error-reasons";
 import { ApiError } from "@/lib/api";
 
 /**
@@ -8,6 +9,5 @@ import { ApiError } from "@/lib/api";
  */
 export function apiErrorReason(err: unknown): string | null {
   if (!(err instanceof ApiError)) return null;
-  const reason = (err.details as { code?: unknown } | null | undefined)?.code;
-  return typeof reason === "string" ? reason : err.code;
+  return errorDetailsReason(err.details) ?? err.code;
 }
