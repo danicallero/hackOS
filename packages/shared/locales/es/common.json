@@ -84,5 +84,6 @@
   "apiErrorSessionExpired": "Tu sesión ha caducado. Inicia sesión de nuevo.",
   "apiErrorForbidden": "No tienes permiso para hacer esto.",
   "apiErrorRateLimited": "Demasiados intentos. Espera un momento e inténtalo de nuevo.",
-  "apiErrorServer": "Algo ha fallado por nuestra parte. Inténtalo de nuevo o avisa al staff si persiste."
+  "apiErrorServer": "Algo ha fallado por nuestra parte. Inténtalo de nuevo o avisa al staff si persiste.",
+  "apiError_review_field_lease_required": "Tu bloqueo de edición ha caducado o pertenece a otro jurado."
 }

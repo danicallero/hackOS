@@ -16,6 +16,8 @@ export const ERROR_REASONS = {
   /** 409: the scanned ticket was revoked. */
   TICKET_REVOKED: "ticket_revoked",
   /** 409: a team member is busy in another judging room. */
+  /** 409: a judge saves a text field without holding its editing lease. */
+  REVIEW_FIELD_LEASE_REQUIRED: "review_field_lease_required",
   TEAM_MEMBER_BUSY: "team_member_busy",
   /** 400: schedule item ends at or before it starts. */
   SCHEDULE_ENDS_BEFORE_STARTS: "schedule_ends_before_starts",
