@@ -69,6 +69,19 @@ old-cookie profile response; `useLiveQuery` retains its bounded one-trailing-
 refetch behavior for SSE bursts. The cache is only a browser deduplication
 layer: API reads remain the authoritative Postgres projection.
 
+### Background refresh failures
+
+A page whose `load()` is re-run by `useAutoRefresh` must not treat a failed
+background refetch like a failed first load (event-day 429s would blank the
+screen). Use `hooks/use-background-refresh.ts`: call `succeeded()` after a load
+and `failed(err)` in its `catch`. `failed` returns true only for a first-load
+failure or a 404, so only then show `ContextualError` (or "not found" for a
+404). Otherwise keep the data and user-local state such as selections
+(reconcile selections against the new rows, never clear them), render
+`StaleDataNotice`, and add `retryNonce` to the load effect for the built-in
+exponential-backoff retry. No toast per failed refetch. Call `reset()` when the
+page switches to a different resource.
+
 ## Toasts
 
 Use `@/lib/toast` rather than importing Sileo directly. Toasts live in the
