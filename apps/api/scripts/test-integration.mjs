@@ -55,7 +55,7 @@ function databaseUrlFor(shardNumber) {
 
 function runShard(paths, shardNumber) {
   return new Promise((resolve, reject) => {
-    const child = spawn("pnpm", ["exec", "vitest", "run"], {
+    const child = spawn("pnpm", ["exec", "vitest", "run", "--reporter=verbose"], {
       env: {
         ...process.env,
         API_TEST_SHARD_FILES: JSON.stringify(paths),
