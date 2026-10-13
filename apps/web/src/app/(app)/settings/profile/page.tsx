@@ -121,9 +121,6 @@ function valuesFromMe(me: Me): Values {
 
 export default function ProfileSettingsPage() {
   const { me } = useSessionContext();
-  // Dictionary options for the picker (H12/H25).
-  const intolerances = useFoodIntolerances();
-
   if (!me) return null;
 
   // Keyed by user id so the form (and its Radix Selects) mounts fresh with
@@ -131,15 +128,19 @@ export default function ProfileSettingsPage() {
   // — a post-mount value change on a Select whose options were never
   // rendered (dropdown never opened) gets silently clobbered back to "" by
   // Radix's hidden native-select sync (H-web settings prefill fix).
-  return <ProfileForm key={me.id} me={me} intolerances={intolerances} />;
+  return <ProfileForm key={me.id} me={me} />;
 }
 
-function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[] }) {
+function ProfileForm({ me }: { me: Me }) {
   const { refresh } = useSessionContext();
   const { t } = useLocale();
   const lang = (me.language as Language) ?? "es";
   const schema = useMemo(() => profileSchema(t), [t]);
-  const shirtSizes = useShirtSizes();
+  // Dictionary options for the pickers (H12/H25).
+  const dictionary = useFoodIntolerances();
+  const intolerances = dictionary.intolerances;
+  const shirtSizeList = useShirtSizes();
+  const shirtSizes = shirtSizeList.sizes;
 
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -280,6 +281,12 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t("shirtSize")}</FormLabel>
+                      {shirtSizeList.error ? (
+                        <ContextualError
+                          message={t("couldNotLoadDictionary")}
+                          onRetry={shirtSizeList.reload}
+                        />
+                      ) : null}
                       <Select onValueChange={field.onChange} value={field.value} disabled={locked}>
                         <FormControl>
                           <SelectTrigger className="w-full">
@@ -306,6 +313,12 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t("foodIntolerances")}</FormLabel>
+                    {dictionary.error ? (
+                      <ContextualError
+                        message={t("couldNotLoadDictionary")}
+                        onRetry={dictionary.reload}
+                      />
+                    ) : null}
                     <FormControl>
                       <MultiSelect
                         options={intoleranceOptions}

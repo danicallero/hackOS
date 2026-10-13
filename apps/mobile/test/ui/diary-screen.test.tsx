@@ -363,9 +363,6 @@ describe("People", () => {
     expect(screen.getByText("Bea R.")).toBeTruthy();
     const [, init] = calls("/api/me/diary/scan")[0] ?? [];
     expect(JSON.parse(String(init?.body))).toEqual({ code: "04A1B2C3D4E5F6" });
-    expect((init?.headers as Record<string, string>)["Idempotency-Key"]).toEqual(
-      expect.any(String),
-    );
   });
 
   async function scanWithNfc() {

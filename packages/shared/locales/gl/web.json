@@ -232,6 +232,8 @@
   "paginationSummary": "{start}–{end} de {total}. Páxina {page} de {pages}.",
   "selectionCount": "{count} filas seleccionadas",
   "retry": "Tentar de novo",
+  "staleDataNotice": "Mostrando os últimos datos cargados. Non se puido actualizar.",
+  "couldNotLoadEnterprise": "Non se puido cargar esta empresa.",
   "nothingToShow": "Non hai nada que mostrar",
   "anyMoment": "en calquera momento",
   "yourRoom": "a túa sala",

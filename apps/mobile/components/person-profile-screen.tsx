@@ -29,7 +29,6 @@ import type { DiaryEntry } from "@/lib/diary";
 import type { DirectoryEntry } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { safeBack } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 
@@ -132,7 +131,7 @@ export function PersonProfileScreen() {
     void run(kind, async () => {
       const updated = await apiFetch<DiaryEntry>(`/api/me/diary/${entry.id}`, {
         method: "PATCH",
-        headers: { "content-type": "application/json", "Idempotency-Key": createIdempotencyKey() },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
       setEntry(updated);
@@ -151,7 +150,6 @@ export function PersonProfileScreen() {
           void run("remove", async () => {
             await apiFetch(`/api/me/diary/${entry.id}`, {
               method: "DELETE",
-              headers: { "Idempotency-Key": createIdempotencyKey() },
             });
             setEntry(null);
             // Only people in the diary have a profile here; saving again

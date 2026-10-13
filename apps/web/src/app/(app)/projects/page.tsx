@@ -12,13 +12,14 @@ import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,11 +29,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { listRepos } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
-import { toast } from "@/lib/toast";
 import { ProjectFormDialog } from "./project-form-dialog";
 import { type ProjectRepo, toProjectRepo } from "./shared";
 
@@ -133,7 +134,7 @@ export default function ProjectsPage() {
     Boolean(me?.isSponsorRep);
   const [repos, setRepos] = useState<ProjectRepo[]>([]);
   const [loading, setLoading] = useState(true);
-  const hasLoadedRef = useRef(false);
+  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -141,21 +142,21 @@ export default function ProjectsPage() {
       setLoading(false);
       return;
     }
-    if (!hasLoadedRef.current) setLoading(true);
-    setLoadError(null);
+    if (!hasLoaded()) setLoading(true);
     try {
       const res = await listRepos();
-      hasLoadedRef.current = true;
+      succeeded();
+      setLoadError(null);
       setRepos(res.repos.map(toProjectRepo));
     } catch (err) {
+      // A failed background refresh keeps the list (#1012).
+      if (!failed(err)) return;
       setRepos([]);
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadProjects");
-      setLoadError(message);
-      toast.error(message, t("projects"));
+      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadProjects"));
     } finally {
       setLoading(false);
     }
-  }, [canView, t]);
+  }, [canView, t, succeeded, failed, hasLoaded]);
 
   // Soft, in-place refresh instead of a hard reload when a project changes
   // elsewhere.
@@ -169,7 +170,7 @@ export default function ProjectsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching from API is a legitimate external-system sync
     void load();
-  }, [load, liveRefresh, queueRefresh, challengeRefresh]);
+  }, [load, liveRefresh, queueRefresh, challengeRefresh, retryNonce]);
 
   if (!canView) {
     return <AccessDenied ask={t("projectAccessDeniedDesc")} />;
@@ -177,6 +178,7 @@ export default function ProjectsPage() {
 
   return (
     <PageLayout>
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         className="flex-row items-center justify-between gap-2 md:items-center [&>[data-slot=action-group]]:shrink-0 [&>[data-slot=action-group]]:flex-nowrap"
         title={t("projects")}
@@ -220,7 +222,7 @@ export default function ProjectsPage() {
         columns={columns}
         data={repos}
         getRowId={(r) => String(r.id)}
-        loading={loading && !hasLoadedRef.current}
+        loading={loading && !hasLoaded()}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         getRowHref={(r) => `/projects/${r.id}`}
         getRowLabel={(r) => r.name}

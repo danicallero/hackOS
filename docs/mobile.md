@@ -2249,3 +2249,13 @@ demand from the grouped search action. All toolbar actions stay mounted while
 searching; blur or cancel ends search without rebuilding the toolbar. Legacy headers use the same
 grouping with their existing search field. People/Companies switching, saved
 contacts, favourites and wallet actions retain their existing behavior.
+
+## Shared client models (#1001)
+
+Schedule and announcement forms use the framework-free models in
+`packages/shared`; schedule and scanner localized text use the same resolver.
+Presence math, role/category labels, timezone-store behavior and account-removal
+progress parsing are shared too. Native rendering, ISO date inputs and
+SecureStore access stay in this app. See
+[shared client models](./notifications.md#shared-client-models-1001) for the
+trimming/null decisions and the unchanged announcement fallback policy.

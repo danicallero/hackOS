@@ -93,7 +93,7 @@ it("shows one inline error and preserves edits for retry (H36)", async () => {
   queue.saveReview.mockRejectedValueOnce(new Error("Save failed"));
   await act(async () => fireEvent.click(getByRole(container, "button", { name: "6" })));
   await act(async () => fireEvent.click(getByRole(container, "button", { name: "saveDraft" })));
-  expect(getByRole(container, "alert").textContent).toBe("couldNotSaveReview");
+  expect(getByRole(container, "alert").textContent).toContain("couldNotSaveReview");
   expect(toast.error).not.toHaveBeenCalled();
   await act(async () => fireEvent.click(getByRole(container, "button", { name: "saveDraft" })));
   expect(queue.saveReview).toHaveBeenLastCalledWith(501, { scores: { score: 6 }, submit: false });
@@ -144,4 +144,110 @@ it("submits displayed numeric defaults without claiming untouched text (H36)", a
   await act(async () => fireEvent.click(getByRole(container, "button", { name: "submitReview" })));
   expect(queue.saveReview).toHaveBeenCalledWith(501, { scores: { score: 0 }, submit: true });
   expect(queue.acquireReviewFieldLease).not.toHaveBeenCalled();
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+const waitPastAutosave = () => act(() => new Promise((done) => setTimeout(done, 900)));
+
+it.each([
+  ["reusing the form", undefined],
+  ["remounting the form by entry key", 502],
+])("saves edits from the debounce window when switching entries by %s (#1014)", async (_, key) => {
+  await act(async () => fireEvent.click(getByRole(container, "button", { name: "6" })));
+  await act(async () =>
+    root.render(
+      <ReviewForm
+        key={key}
+        entry={{ id: 502 } as QueueEntry}
+        challenge={null}
+        panel={panel}
+        roomId={7}
+        canJudge
+      />,
+    ),
+  );
+  await waitPastAutosave();
+  expect(queue.saveReview).toHaveBeenCalledTimes(1);
+  expect(queue.saveReview).toHaveBeenCalledWith(501, { scores: { score: 6 }, submit: false });
+  expect(queue.closeSession).toHaveBeenCalledWith(501);
+});
+
+it("reports a flush that another judge's lease blocks instead of retrying it (#1014)", async () => {
+  const notes = getByLabelText(container, "notesLabel");
+  await act(async () => fireEvent.focusIn(notes));
+  await act(async () => fireEvent.change(notes, { target: { value: "Pending notes" } }));
+  queue.acquireReviewFieldLease.mockRejectedValueOnce(new Error("Another judge owns this field"));
+  await act(async () =>
+    root.render(
+      <ReviewForm
+        entry={{ id: 502 } as QueueEntry}
+        challenge={null}
+        panel={panel}
+        roomId={7}
+        canJudge
+      />,
+    ),
+  );
+  await waitPastAutosave();
+  expect(queue.saveReview).not.toHaveBeenCalled();
+  expect(toast.error).toHaveBeenCalledTimes(1);
+});
+
+it("ignores a late review response for a previous entry (#1014)", async () => {
+  const first = deferred<object>();
+  const second = deferred<object>();
+  queue.getReview.mockImplementation((id: number) => (id === 502 ? first.promise : second.promise));
+  const show = (id: number) =>
+    act(async () =>
+      root.render(
+        <ReviewForm
+          entry={{ id } as QueueEntry}
+          challenge={null}
+          panel={panel}
+          roomId={7}
+          canJudge
+        />,
+      ),
+    );
+  await show(502);
+  await show(503);
+  await act(async () => second.resolve({ scores: {}, notes: "Team B", status: "draft" }));
+  await act(async () => first.resolve({ scores: { score: 9 }, notes: "Team A", status: "draft" }));
+  expect((getByLabelText(container, "notesLabel") as HTMLTextAreaElement).value).toBe("Team B");
+  await act(async () => fireEvent.click(getByRole(container, "button", { name: "submitReview" })));
+  expect(queue.saveReview).toHaveBeenCalledWith(503, { scores: { score: 0 }, submit: true });
+});
+
+it("keeps a failed autosave visible with a retry until a save succeeds (#1014)", async () => {
+  const atRisk = vi.fn();
+  await act(async () =>
+    root.render(
+      <ReviewForm
+        entry={entry}
+        challenge={null}
+        panel={panel}
+        roomId={7}
+        canJudge
+        onUnsavedEditsAtRisk={atRisk}
+      />,
+    ),
+  );
+  queue.saveReview.mockRejectedValueOnce(new Error("Save failed"));
+  await act(async () => fireEvent.click(getByRole(container, "button", { name: "6" })));
+  await waitPastAutosave();
+  await act(async () => fireEvent.click(getByRole(container, "button", { name: "7" })));
+  await waitPastAutosave();
+  expect(queue.saveReview).toHaveBeenCalledTimes(1);
+  expect(getByRole(container, "alert").textContent).toContain("couldNotSaveReview");
+  expect(atRisk).toHaveBeenLastCalledWith(true);
+  await act(async () => fireEvent.click(getByRole(container, "button", { name: "retry" })));
+  expect(queue.saveReview).toHaveBeenLastCalledWith(501, { scores: { score: 7 }, submit: false });
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(atRisk).toHaveBeenLastCalledWith(false);
 });

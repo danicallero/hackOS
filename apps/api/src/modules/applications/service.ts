@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { sponsorShareKey } from "@hackos/shared/applications";
+import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type pg from "pg";
 import { config } from "../../config.js";
@@ -208,6 +209,31 @@ const SIMPLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // type it themselves for this to count as a URL, just a domain-shaped value.
 const SIMPLE_URL_RE = /^(https?:\/\/)?[^\s/$.?#][^\s]*\.[^\s]{2,}$/i;
 
+// Legacy `details.fields` messages → stable `details.fieldReasons` (#996).
+const FIELD_ERROR_REASON_BY_MESSAGE: Record<string, string> = {
+  required: FIELD_ERROR_REASONS.REQUIRED,
+  "invalid option": FIELD_ERROR_REASONS.INVALID_OPTION,
+  "must be a number": FIELD_ERROR_REASONS.MUST_BE_NUMBER,
+  "must be a birth year": FIELD_ERROR_REASONS.MUST_BE_BIRTH_YEAR,
+  "must be a boolean": FIELD_ERROR_REASONS.MUST_BE_BOOLEAN,
+  "must be an array": FIELD_ERROR_REASONS.MUST_BE_ARRAY,
+  "must be a string": FIELD_ERROR_REASONS.MUST_BE_STRING,
+  "must be a university id": FIELD_ERROR_REASONS.MUST_BE_UNIVERSITY_ID,
+  "must be a degree id": FIELD_ERROR_REASONS.MUST_BE_DEGREE_ID,
+  "must include city, province, and country": FIELD_ERROR_REASONS.MUST_BE_CITY,
+  "too short": FIELD_ERROR_REASONS.TOO_SHORT,
+  "too long": FIELD_ERROR_REASONS.TOO_LONG,
+  "invalid format": FIELD_ERROR_REASONS.INVALID_FORMAT,
+  "too small": FIELD_ERROR_REASONS.TOO_SMALL,
+  "too large": FIELD_ERROR_REASONS.TOO_LARGE,
+  "too few selected": FIELD_ERROR_REASONS.TOO_FEW_SELECTED,
+  "too many selected": FIELD_ERROR_REASONS.TOO_MANY_SELECTED,
+  "must contain text": FIELD_ERROR_REASONS.MUST_CONTAIN_TEXT,
+  "must not contain text": FIELD_ERROR_REASONS.MUST_NOT_CONTAIN_TEXT,
+  "invalid email": FIELD_ERROR_REASONS.INVALID_EMAIL,
+  "invalid url": FIELD_ERROR_REASONS.INVALID_URL,
+};
+
 function checkFieldValidation(field: TemplateField, value: unknown): string | null {
   const v = field.validation;
   if (!v) return null;
@@ -337,7 +363,15 @@ export function validateResponses(
     }
   }
   if (Object.keys(errors).length > 0) {
-    throw new BadRequestError("Response fails template validation", { fields: errors });
+    throw new BadRequestError("Response fails template validation", {
+      fields: errors,
+      fieldReasons: Object.fromEntries(
+        Object.entries(errors).map(([key, message]) => [
+          key,
+          FIELD_ERROR_REASON_BY_MESSAGE[message] ?? message,
+        ]),
+      ),
+    });
   }
 }
 

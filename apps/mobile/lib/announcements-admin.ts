@@ -43,19 +43,9 @@ export interface AdminAnnouncement {
   recipients?: AnnouncementRecipient[];
 }
 
-export interface AnnouncementInput {
-  title: string;
-  body: string;
-  translations: AnnouncementTranslations;
-  notifyUsers: boolean;
-  screenPlacement: AnnouncementScreenPlacement;
-  publishAt: string | null;
-  expiresAt: string | null;
-  roleIds: number[];
-  intoleranceIds: number[];
-  channels: AnnouncementChannel[];
-  recipientUserIds: number[];
-}
+export type { AnnouncementInput } from "@hackos/shared/announcement-form";
+
+import type { AnnouncementInput } from "@hackos/shared/announcement-form";
 
 export async function fetchAdminAnnouncements(): Promise<AdminAnnouncement[]> {
   const response = await apiFetch<{ items: AdminAnnouncement[] }>("/api/announcements");

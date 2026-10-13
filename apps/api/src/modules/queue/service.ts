@@ -1,3 +1,4 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -913,6 +914,7 @@ async function assertEntryCanMove(
     {
       entryId: entry.id,
       repoId: entry.repo_id,
+      code: ERROR_REASONS.TEAM_MEMBER_BUSY,
       ...(busy.roomName ? { roomName: busy.roomName } : {}),
       status: busy.status,
     },
@@ -1122,7 +1124,10 @@ export async function manualCall(
         fixtureMarker,
       })
     ) {
-      throw new ConflictError("Team has a member busy in another room (H30)", { entryId });
+      throw new ConflictError("Team has a member busy in another room (H30)", {
+        entryId,
+        code: ERROR_REASONS.TEAM_MEMBER_BUSY,
+      });
     }
     let updated: QueueEntryRow;
     try {
@@ -1138,7 +1143,10 @@ export async function manualCall(
     } catch (err) {
       const pgErr = err as { code?: string; constraint?: string };
       if (pgErr.code === PG_UNIQUE_VIOLATION && pgErr.constraint === "one_active_entry_per_repo") {
-        throw new ConflictError("Team has a member busy in another room (H30)", { entryId });
+        throw new ConflictError("Team has a member busy in another room (H30)", {
+          entryId,
+          code: ERROR_REASONS.TEAM_MEMBER_BUSY,
+        });
       }
       if (pgErr.code === PG_UNIQUE_VIOLATION) {
         throw new ConflictError("Room already has an active team", { roomId });

@@ -103,7 +103,6 @@ export function ReviewFixturesDialog({
       const response = await api.post<RegenerateResponse>(
         "/api/admin/review-fixtures/regenerate",
         {},
-        { headers: { "Idempotency-Key": crypto.randomUUID() } },
       );
       setResult(response);
       setStatus({

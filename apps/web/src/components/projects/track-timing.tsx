@@ -69,14 +69,10 @@ export function TrackTiming({
               setBusy(true);
               setError(null);
               try {
-                await api.patch(
-                  `/api/queue/challenges/${challengeId}/timing`,
-                  {
-                    targetSeconds: Math.round(Number(target) * 60),
-                    preparationSeconds: Math.round(Number(preparation) * 60),
-                  },
-                  { headers: { "Idempotency-Key": crypto.randomUUID() } },
-                );
+                await api.patch(`/api/queue/challenges/${challengeId}/timing`, {
+                  targetSeconds: Math.round(Number(target) * 60),
+                  preparationSeconds: Math.round(Number(preparation) * 60),
+                });
                 await load();
                 onSaved?.();
                 setOpen(false);

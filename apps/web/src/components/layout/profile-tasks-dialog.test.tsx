@@ -61,9 +61,8 @@ vi.mock("@/components/common/modal", () => ({
 }));
 vi.mock("@/components/common/multi-select", () => ({ MultiSelect: () => <div /> }));
 
-import { resetFoodIntolerancesCache } from "@/hooks/use-food-intolerances";
-import { resetMealPlanStore } from "@/hooks/use-meal-plan";
 import { ApiError, api } from "@/lib/api";
+import { resetServerStateForTests } from "@/lib/server-state";
 import { ProfileTasksDialog } from "./profile-tasks-dialog";
 
 const baseMe = {
@@ -114,8 +113,8 @@ describe("ProfileTasksDialog (#933)", () => {
         setItem: (key: string, value: string) => storage.set(key, value),
       },
     });
-    resetMealPlanStore();
-    resetFoodIntolerancesCache();
+
+    resetServerStateForTests();
     session.me = { ...baseMe };
     vi.mocked(api.get).mockImplementation(async (path: string) =>
       path === "/api/me/meal-plan" ? plan : { intolerances: [] },
@@ -169,16 +168,12 @@ describe("ProfileTasksDialog (#933)", () => {
     expect(container.textContent).toContain('mealPlanLockNotice {"hours":24}');
     await user.click(boxes[0] as HTMLElement);
     await user.click(button("done"));
-    expect(api.put).toHaveBeenCalledWith(
-      "/api/me/meal-plan",
-      {
-        meals: [
-          { activityId: 11, attending: true },
-          { activityId: 12, attending: true },
-        ],
-      },
-      { headers: { "idempotency-key": expect.any(String) } },
-    );
+    expect(api.put).toHaveBeenCalledWith("/api/me/meal-plan", {
+      meals: [
+        { activityId: 11, attending: true },
+        { activityId: 12, attending: true },
+      ],
+    });
     expect(session.refresh).toHaveBeenCalled();
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });

@@ -1859,11 +1859,10 @@ function DecisionMenu({
                     void run(
                       t("returnedToDraft"),
                       () =>
-                        api.post(
-                          `/api/responses/${responseId}/return-to-draft`,
-                          { allow_resubmit_after_close: false, auto_accept_on_resubmit: false },
-                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
-                        ),
+                        api.post(`/api/responses/${responseId}/return-to-draft`, {
+                          allow_resubmit_after_close: false,
+                          auto_accept_on_resubmit: false,
+                        }),
                       { refresh: false, nextStatus: "draft" },
                     )
                   }
@@ -1876,11 +1875,10 @@ function DecisionMenu({
                     void run(
                       t("returnedToDraft"),
                       () =>
-                        api.post(
-                          `/api/responses/${responseId}/return-to-draft`,
-                          { allow_resubmit_after_close: true, auto_accept_on_resubmit: false },
-                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
-                        ),
+                        api.post(`/api/responses/${responseId}/return-to-draft`, {
+                          allow_resubmit_after_close: true,
+                          auto_accept_on_resubmit: false,
+                        }),
                       { refresh: false, nextStatus: "draft" },
                     )
                   }
@@ -1893,11 +1891,10 @@ function DecisionMenu({
                     void run(
                       t("returnedToDraft"),
                       () =>
-                        api.post(
-                          `/api/responses/${responseId}/return-to-draft`,
-                          { allow_resubmit_after_close: true, auto_accept_on_resubmit: true },
-                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
-                        ),
+                        api.post(`/api/responses/${responseId}/return-to-draft`, {
+                          allow_resubmit_after_close: true,
+                          auto_accept_on_resubmit: true,
+                        }),
                       { refresh: false, nextStatus: "draft" },
                     )
                   }
@@ -1947,10 +1944,7 @@ function DecisionMenu({
                 onSelect={() =>
                   void run(
                     t("reaccepted"),
-                    () =>
-                      api.post(`/api/responses/${responseId}/re-accept`, undefined, {
-                        headers: { "Idempotency-Key": crypto.randomUUID() },
-                      }),
+                    () => api.post(`/api/responses/${responseId}/re-accept`, undefined),
                     { refresh: false, nextStatus: "accepted" },
                   )
                 }

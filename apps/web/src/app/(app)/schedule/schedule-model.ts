@@ -1,15 +1,13 @@
 import {
   type ActivityKind,
-  activityKindLabelKey,
   DEFAULT_ACTIVITY_KIND,
   toActivityKind,
 } from "@hackos/shared/activity-kinds";
 import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
 import { getEventTimeZone } from "@/lib/event-time";
 import { LOCALE_CODES, type Translate } from "@/lib/i18n";
-import type { PublicScheduleItem, ScheduleInput, ScheduleTranslations } from "@/lib/logistics";
+import type { PublicScheduleItem } from "@/lib/logistics";
 import type { Tone } from "@/lib/tones";
-import type { Language } from "@/lib/types";
 
 export type ScheduleStatus = "draft" | "scheduled" | "public" | "staffOnly";
 
@@ -20,9 +18,7 @@ export const SCHEDULE_STATUS_TONES: Record<ScheduleStatus, Tone> = {
   staffOnly: "neutral",
 };
 
-export function scheduleTypeLabel(type: string | null | undefined, t: Translate): string {
-  return t(activityKindLabelKey(toActivityKind(type) ?? DEFAULT_ACTIVITY_KIND));
-}
+export { scheduleTypeLabel } from "@hackos/shared/display-labels";
 
 /**
  * A programme item's status is purely *who can see it*: shown, hidden, or
@@ -485,8 +481,6 @@ export function filterScheduleItems(
   return [...list].sort(compareScheduleItems);
 }
 
-const SUBMISSION_LANGUAGES: Language[] = ["es", "gl", "en"];
-
 /**
  * Title and description only need to exist in ONE language (H48, H50
  * extension): every viewer falls back to English, then the authored language.
@@ -494,35 +488,4 @@ const SUBMISSION_LANGUAGES: Language[] = ["es", "gl", "en"];
  * becomes the canonical text and `titleLanguage` tells the API which language
  * that is. Returns null when no language has a title.
  */
-export function prepareScheduleSubmission(
-  values: ScheduleInput,
-  translations: ScheduleTranslations,
-): { values: ScheduleInput; translations: ScheduleTranslations } | null {
-  const cleaned: ScheduleTranslations = {};
-  for (const language of SUBMISSION_LANGUAGES) {
-    const title = translations[language]?.title?.trim();
-    const description = translations[language]?.description?.trim();
-    // The API rejects empty strings; a blank field simply isn't sent.
-    if (title || description) {
-      cleaned[language] = {
-        ...(title ? { title } : {}),
-        ...(description ? { description } : {}),
-      };
-    }
-  }
-
-  if (values.title.trim()) return { values, translations: cleaned };
-
-  const source = SUBMISSION_LANGUAGES.find((language) => cleaned[language]?.title);
-  if (!source) return null;
-  const { [source]: promoted, ...rest } = cleaned;
-  return {
-    values: {
-      ...values,
-      title: promoted?.title ?? "",
-      description: promoted?.description ?? null,
-      titleLanguage: source,
-    },
-    translations: rest,
-  };
-}
+export { prepareScheduleSubmission } from "@hackos/shared/schedule-form";

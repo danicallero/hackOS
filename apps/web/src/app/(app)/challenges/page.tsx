@@ -7,14 +7,16 @@ import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { ApiError, api } from "@/lib/api";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
@@ -97,7 +99,7 @@ export default function ChallengesPage() {
   const columns = useMemo(() => buildColumns(t, LOCALE_CODES[language]), [t, language]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
-  const hasLoadedRef = useRef(false);
+  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -107,23 +109,28 @@ export default function ChallengesPage() {
       setLoading(false);
       return;
     }
-    if (!hasLoadedRef.current) setLoading(true);
-    setLoadError(null);
+    if (!hasLoaded()) setLoading(true);
     try {
       const path = canAdmin ? "/api/challenges" : "/api/challenges/mine";
       const res = await api.get<{ challenges: Challenge[] }>(path);
-      hasLoadedRef.current = true;
+      succeeded();
+      setLoadError(null);
       setChallenges(res.challenges);
-      setSelectedIds(new Set());
+      // Keep the admin's selection across live refreshes; drop deleted rows (#1012).
+      const remaining = new Set(res.challenges.map((c) => String(c.id)));
+      setSelectedIds((current) => {
+        const next = new Set([...current].filter((id) => remaining.has(id)));
+        return next.size === current.size ? current : next;
+      });
     } catch (err) {
+      // A failed background refresh keeps the list and selection (#1012).
+      if (!failed(err)) return;
       setChallenges([]);
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadChallenges");
-      setLoadError(message);
-      toast.error(message, t("challenges"));
+      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadChallenges"));
     } finally {
       setLoading(false);
     }
-  }, [canAdmin, canSee, t]);
+  }, [canAdmin, canSee, t, succeeded, failed, hasLoaded]);
 
   const bulkVisibility = useCallback(
     async (visible: boolean) => {
@@ -142,6 +149,7 @@ export default function ChallengesPage() {
               : t("hidCountOther", { count: ids.length }),
           { compactTitle: t("toastChallengeVisibility") },
         );
+        setSelectedIds(new Set());
         await load();
       } catch (err) {
         toast.error(
@@ -164,7 +172,7 @@ export default function ChallengesPage() {
     // fetching challenges list from the API on mount/refresh is a legitimate external-system sync
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load, liveRefresh]);
+  }, [load, liveRefresh, retryNonce]);
 
   if (!canSee) {
     return <AccessDenied ask={t("challengesAccessDeniedDesc")} />;
@@ -172,6 +180,7 @@ export default function ChallengesPage() {
 
   return (
     <PageLayout>
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         title={canAdmin ? t("challenges") : t("myChallenges")}
         primaryAction={
@@ -196,7 +205,7 @@ export default function ChallengesPage() {
         }
         searchPlaceholder={t("searchChallengesPlaceholder")}
         pageSize={15}
-        loading={loading && !hasLoadedRef.current}
+        loading={loading && !hasLoaded()}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         selectable={canAdmin}
         selectedIds={selectedIds}

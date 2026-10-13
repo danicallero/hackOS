@@ -78,6 +78,27 @@ describe("idempotencyGuard staleness reclaim", () => {
       payload: { ticketToken: token, badgeId: "B-STALE", method: "qr" },
     });
     expect(res.statusCode).toBe(409);
+    expect(res.json().error.details.code).toBe("idempotency_in_flight");
+  });
+
+  it("reports a reused key with another body as a payload mismatch", async () => {
+    const uid = await createUser();
+    const token = await issueTicket(uid);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `INSERT INTO idempotency_keys (key, scope, request_hash)
+       VALUES ($1, $2, $3)`,
+      ["mismatch-key", `POST /api/accreditation/check-in u:${staff}`, "other-hash"],
+    );
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in",
+      headers: { ...asUser(staff), "idempotency-key": "mismatch-key" },
+      payload: { ticketToken: token, badgeId: "B-X", method: "qr" },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.details.code).toBe("idempotency_payload_mismatch");
   });
 
   it("reclaims and re-executes an abandoned in-flight key older than the staleness window", async () => {

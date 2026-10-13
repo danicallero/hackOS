@@ -73,7 +73,7 @@ export default function MyApplicationDetailPage() {
   const [form, setForm] = useState<PublicForm | null>(null);
   const [response, setResponse] = useState<MyResponseDetail | null>(null);
   const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
-  const shirtSizes = useShirtSizes();
+  const { sizes: shirtSizes } = useShirtSizes();
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [answerRevision, setAnswerRevision] = useState(0);
   const [loading, setLoading] = useState(true);

@@ -354,9 +354,9 @@ export interface ProjectSubmission {
 export const projectSubmission = (id: number) =>
   api.get<ProjectSubmission>(`/api/me/projects/${id}/submission`);
 export const submitProject = (id: number, stage: "projects" | "work-groups") =>
-  api.post<{ repoId: number }>(`/api/me/${stage}/${id}/submit`, {}, idem(crypto.randomUUID()));
+  api.post<{ repoId: number }>(`/api/me/${stage}/${id}/submit`, {});
 export const requestProjectEdits = (id: number, reason: string) =>
-  api.post(`/api/me/projects/${id}/edit-requests`, { reason }, idem(crypto.randomUUID()));
+  api.post(`/api/me/projects/${id}/edit-requests`, { reason });
 export const claimProject = (
   id: number,
   groupId?: number,
@@ -366,7 +366,6 @@ export const claimProject = (
   api.post<{ confirmed: boolean; repoId?: number }>(
     `${admin ? "/api/projects" : "/api/me/projects"}/${id}/claim`,
     kind === "repo" ? { targetRepoId: groupId } : { groupId },
-    idem(crypto.randomUUID()),
   );
 export interface LinkCandidate {
   kind?: "group" | "repo";
@@ -390,7 +389,7 @@ export const decideProjectEdits = (
   id: number,
   decision: "approve" | "deny" | "unlock",
   reason: string,
-) => api.post(`/api/projects/${id}/unlock`, { decision, reason }, idem(crypto.randomUUID()));
+) => api.post(`/api/projects/${id}/unlock`, { decision, reason });
 export const resolveProjectException = (
   id: number,
   body: {
@@ -399,7 +398,7 @@ export const resolveProjectException = (
     teamSizeException?: boolean;
     eligibilityOverride?: boolean | null;
   },
-) => api.post(`/api/projects/${id}/resolve`, body, idem(crypto.randomUUID()));
+) => api.post(`/api/projects/${id}/resolve`, body);
 
 export const unlinkDevpostProject = (id: number, reason: string) =>
   api.post(`/api/projects/${id}/unlink`, { reason });

@@ -10,7 +10,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
-import { requireIdempotencyKey } from "../../lib/idempotency.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
 import { isSyntheticOperator } from "./review-fixture-scope.js";
 import { createWalletOperation, operationSummary } from "./wallet-operations.js";
@@ -156,7 +156,7 @@ export function registerWalletAdminRoutes(app: FastifyInstance): void {
     "/api/event/wallet/artwork/:slot",
     {
       ...access(capability),
-      preHandler: requireIdempotencyKey,
+      preHandler: idempotencyGuard,
       schema: {
         params: slotParams,
         summary: "Upload Wallet artwork",
@@ -231,7 +231,7 @@ export function registerWalletAdminRoutes(app: FastifyInstance): void {
     "/api/event/wallet/operations",
     {
       ...access(capability),
-      preHandler: requireIdempotencyKey,
+      preHandler: idempotencyGuard,
       schema: {
         body: z.discriminatedUnion("kind", [
           z.object({ kind: z.literal("refresh") }).strict(),

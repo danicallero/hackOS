@@ -1,23 +1,11 @@
-export interface CertaintyWindowLike {
-  start: string;
-  deadline: string;
-  securedUntil: string | null;
-}
+export {
+  type CertaintyWindowLike,
+  durationMinutes,
+  guaranteedMinutes as guaranteedMinutesTotal,
+  securedWindowFraction,
+} from "@hackos/shared/presence-timeline";
 
-export function durationMinutes(start: string, end: string): number {
-  const duration = Date.parse(end) - Date.parse(start);
-  return Number.isFinite(duration) ? Math.max(0, Math.round(duration / 60_000)) : 0;
-}
-
-/** Time already secured by a later checkpoint, summed across every window. */
-export function guaranteedMinutesTotal(windows: CertaintyWindowLike[]): number {
-  return windows.reduce(
-    (sum, window) =>
-      sum + (window.securedUntil ? durationMinutes(window.start, window.securedUntil) : 0),
-    0,
-  );
-}
-
+import type { CertaintyWindowLike } from "@hackos/shared/presence-timeline";
 export interface CertaintyWindowFull extends CertaintyWindowLike {
   status: "secured" | "provisional" | "invalid";
   openedBy: "in" | "activity";
