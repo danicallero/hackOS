@@ -143,7 +143,7 @@ hops. The shared SQL fragments and helpers live in
 | `ROOM_CHALLENGE_IDS_SQL` / `roomChallengeIds` | which challenges a room can call from |
 | `CHALLENGE_ROOM_IDS_SQL` | which rooms serve a challenge's queue |
 | `GROUP_SIBLING_CHALLENGE_IDS_SQL` | which challenges share a challenge's queue (includes itself only when the challenge has a group) |
-| `roomEnterpriseId` / `queueGroupEnterpriseId` | which enterprise a room/group belongs to |
+| `queueGroupEnterpriseId` | which enterprise a queue group belongs to |
 
 Consumers: `queue/reads.ts`, `queue/rooms.routes.ts`, `queue/entries.routes.ts`,
 `queue/notify.ts`, `queue/service.ts`, `queue/contextual-access.ts` and

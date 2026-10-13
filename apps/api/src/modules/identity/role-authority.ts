@@ -228,15 +228,6 @@ export async function assertActiveWildcardHolder(
   }
 }
 
-/** Returns whether a user holds any effective capability at all (any ALLOW anywhere in their chain). */
-export async function userHasAnyCapability(
-  client: RoleGraphClient,
-  userId: number,
-): Promise<boolean> {
-  const capabilities = await getEffectiveCapabilities(createAuthorizationContext(userId, client));
-  return capabilities.size > 0;
-}
-
 /**
  * Resolves the actor's full effective capability set ONCE (rather than one
  * userResolvesCapability query per candidate capability), then asserts every

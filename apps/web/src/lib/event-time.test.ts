@@ -1,7 +1,6 @@
 import {
   instantToWallClock,
   isValidTimeZone,
-  todayInZone,
   wallClockToInstant,
   zoneAbbreviation,
   zoneOffsetMinutes,
@@ -69,12 +68,6 @@ describe("event-time helpers", () => {
 
   it("accepts a date-only value as midnight", () => {
     expect(wallClockToInstant("2026-07-10", MADRID)).toBe("2026-07-09T22:00:00.000Z");
-  });
-
-  it("reports today in the zone, not the device", () => {
-    const ms = Date.parse("2026-07-10T23:30:00Z");
-    expect(todayInZone(MADRID, ms)).toBe("2026-07-11");
-    expect(todayInZone("America/New_York", ms)).toBe("2026-07-10");
   });
 
   it("validates zones and names them tersely", () => {

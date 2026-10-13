@@ -53,7 +53,6 @@ export {
 export const MAX_DIRECT_TABS = 4;
 export const MAX_TABS_WITHOUT_OVERFLOW = MAX_DIRECT_TABS + 1;
 export const ROUTER_TAB_BAR_HEIGHT = TAB_BAR_HEIGHT;
-export const ROUTER_TAB_OVERFLOW_WIDTH = ROUTER_TAB_BAR_HEIGHT;
 const ROUTER_TAB_BAR_HORIZONTAL_PADDING = 16;
 const TAB_SELECTION_SPRING = { damping: 20, mass: 0.8, stiffness: 220 };
 

@@ -489,16 +489,11 @@ export const getRepoChallenges = (repoId: number) =>
   api.get<RepoChallenge[]>(`/api/queue/repos/${repoId}/challenges`);
 export const getMyQueue = () => api.get<MyQueueEntry[]>("/api/queue/me");
 export const listRooms = () => api.get<Room[]>("/api/queue/rooms");
-/** GET /api/queue/rooms/:id → room fields + attached queue state (not a RoomView). */
-export const getRoom = (roomId: number) =>
-  api.get<Room & { queueState: RoomQueueState | null }>(`/api/queue/rooms/${roomId}`);
 export const getQueueSettings = () => api.get<QueueSettings>("/api/queue/settings");
 
 // ── room control (H29, H35) ────────────────────────────────────────────────
 const idem = (key?: string) => (key ? { headers: { "Idempotency-Key": key } } : undefined);
 
-export const callNext = (roomId: number, idempotencyKey?: string, force?: boolean) =>
-  api.post(`/api/queue/rooms/${roomId}/call-next`, force ? { force } : {}, idem(idempotencyKey));
 export const pauseRoom = (roomId: number, idempotencyKey?: string) =>
   api.post(`/api/queue/rooms/${roomId}/pause`, {}, idem(idempotencyKey));
 export const resumeRoom = (roomId: number, idempotencyKey?: string) =>
@@ -512,10 +507,6 @@ export const updateRoom = (
   body: Partial<Pick<Room, "name" | "location" | "status">>,
 ) => api.patch<Room>(`/api/queue/rooms/${roomId}`, body);
 export const deleteRoom = (roomId: number) => api.delete(`/api/queue/rooms/${roomId}`);
-export const updateRoomState = (
-  roomId: number,
-  body: { maxInWaitingArea?: number; desiredMinutesPerTeam?: number },
-) => api.patch<RoomQueueState>(`/api/queue/rooms/${roomId}/state`, body);
 export const updateQueueSettings = (body: {
   handoffBufferMinutes?: number;
   scheduleStartAt?: string | null;
@@ -604,9 +595,6 @@ export const moveQueueEntryToPosition = (
     { position, ...(reason ? { reason } : {}) },
     idem(idempotencyKey),
   );
-export const getEntryHistory = (entryId: number) =>
-  api.get(`/api/queue/entries/${entryId}/history`);
-
 // ── judging / evaluation (H36-H37) ─────────────────────────────────────────
 export interface AttemptReview {
   attempt_id: number;

@@ -128,7 +128,6 @@ export async function allowedStatisticsPanels(
     }),
   );
 }
-
 export async function applicationStats(
   applicationId: number,
   field?: string,

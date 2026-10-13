@@ -164,10 +164,3 @@ the request also accepts an `Idempotency-Key` so a retried browser request
 cannot repeat the reset. The reset transaction opts out of the normal
 statement timeout so large deletes can finish, but it still needs an available
 database connection and should be run during a quiet operational window.
-
-## Integration boundary
-
-When this branch is combined with `danicallero/shared-queue-merge`, keep the
-`Queues` tab and replace only the Rooms-tab `RoomQueueCard` grid with
-`QueueOperatorConsole`. The shared-queue field required by this screen is
-`RoomView.challenge.queue_group_id`.

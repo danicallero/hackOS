@@ -129,16 +129,17 @@ describe("dense 1..N positions", () => {
   });
 
   it("closes the gap when a team leaves the queue", async () => {
-    const { removeRepoFromChallenge } = await import("../../src/modules/queue/service.js");
+    const { removeRepoChallenge } = await import("../../src/modules/projects/service.js");
     const { challengeIds } = await createEnterpriseChallenges(1);
     const challengeId = challengeIds[0]!;
 
-    const entries: number[] = [];
+    const repoIds: number[] = [];
     for (let i = 0; i < 4; i++) {
       const { repoId } = await createRepoWithTeam();
-      entries.push(await enqueueRepo(challengeId, repoId, i + 1));
+      await enqueueRepo(challengeId, repoId, i + 1);
+      repoIds.push(repoId);
     }
-    await removeRepoFromChallenge(entries[1]!, actorId, "withdrew");
+    await removeRepoChallenge(actorId, repoIds[1]!, challengeId);
     expectDense(await positions(challengeId));
     expect(await positions(challengeId)).toHaveLength(3);
   });

@@ -22,16 +22,6 @@ export function initials(u: Pick<UserDetail, "name" | "surname" | "email">): str
   return u.email.slice(0, 2).toUpperCase();
 }
 
-export const TAB_VALUES = [
-  "overview",
-  "qr",
-  "permissions",
-  "presence",
-  "activity",
-  "application",
-  "projects",
-] as const;
-
 /** Shared clock format for every timestamp on this profile (logs, presence, activity). */
 export function formatUserDate(value: string | Date, language: "es" | "gl" | "en"): string {
   return new Intl.DateTimeFormat(LOCALE_CODES[language], {

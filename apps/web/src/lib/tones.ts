@@ -26,13 +26,3 @@ export const TONE_DOT: Record<Tone, string> = {
   danger: "bg-destructive",
   info: "bg-info",
 };
-
-/** Foreground/fill color for a tone (charts, meters, icons). */
-export const TONE_FG: Record<Tone, string> = {
-  neutral: "var(--muted-foreground)",
-  brand: "var(--primary)",
-  success: "var(--success)",
-  warning: "var(--warning)",
-  danger: "var(--destructive)",
-  info: "var(--info)",
-};

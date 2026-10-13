@@ -1,6 +1,5 @@
 import { ALL_CAPABILITIES } from "@hackos/shared/capabilities";
 import { ALL_TRIGGER_EVENTS, TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
-import type { MultiSelectOption } from "@/components/common/multi-select";
 import type { MessageKey, Translate } from "@/lib/i18n";
 import type { RoleGrantRule, RoleTemplate, UserListItem } from "@/lib/types";
 
@@ -112,15 +111,6 @@ const CAPABILITY_DESCRIPTION_KEYS: Partial<Record<string, MessageKey>> = {
 export function capabilityDescription(cap: string, t: Translate): string {
   const key = CAPABILITY_DESCRIPTION_KEYS[cap];
   return key ? t(key) : "";
-}
-
-/** Options for the capabilities MultiSelect: raw string value + prettified label. */
-export function capabilityOptions(t: Translate): MultiSelectOption[] {
-  return selectableCapabilities().map((cap) => ({
-    value: cap,
-    label: cap,
-    description: prettifyCapability(cap, t),
-  }));
 }
 
 /** All capabilities grouped by domain, preserving catalogue order. */

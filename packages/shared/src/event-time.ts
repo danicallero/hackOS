@@ -125,11 +125,6 @@ export function wallClockToInstant(value: string, timeZone: string): string | nu
   return new Date(picked).toISOString();
 }
 
-/** Wall-clock "today" (yyyy-MM-dd) in `timeZone`. */
-export function todayInZone(timeZone: string, nowMs: number = Date.now()): string {
-  return instantToWallClock(new Date(nowMs).toISOString(), timeZone).slice(0, 10);
-}
-
 /** Formats an instant in `timeZone`; "" when the value is not a date. */
 export function formatInZone(
   value: string | number | Date | null | undefined,

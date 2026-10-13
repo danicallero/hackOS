@@ -4,14 +4,6 @@ export type OperatorQueueFilter = "all" | "attention" | "waiting" | "called" | "
 
 export type OperatorEntryKind = "active" | "called" | "waiting";
 
-export interface OperatorQueueStats {
-  activeRooms: number;
-  pausedRooms: number;
-  presenting: number;
-  called: number;
-  waiting: number;
-}
-
 export interface OperatorEntryRow {
   entry: QueueEntry;
   kind: OperatorEntryKind;
@@ -23,30 +15,6 @@ export interface OperatorEntryRow {
 function queueKey(room: RoomView): string {
   const challenge = room.challenge as (RoomView["challenge"] & { queue_group_id?: number }) | null;
   return `queue:${challenge?.queue_group_id ?? challenge?.id ?? room.room.id}`;
-}
-
-/**
- * The operator's first question is operational, not analytical: how many
- * teams need a hand and which rooms are currently moving? Keep this derived
- * model independent from rendering so the board and its tests share one
- * definition of the counters (H29-H35, H41).
- */
-export function operatorQueueStats(rooms: RoomView[]): OperatorQueueStats {
-  const waiting = new Set<string>();
-  const stats = { activeRooms: 0, pausedRooms: 0, presenting: 0, called: 0, waiting: 0 };
-  for (const room of rooms) {
-    stats.activeRooms += room.state?.is_paused ? 0 : 1;
-    stats.pausedRooms += room.state?.is_paused ? 1 : 0;
-    stats.presenting += room.active ? 1 : 0;
-    stats.called += room.called.length;
-    for (const entry of room.next) waiting.add(`${queueKey(room)}:${entry.repo_id}`);
-  }
-  stats.waiting = waiting.size;
-  return stats;
-}
-
-export function roomNeedsAttention(room: RoomView): boolean {
-  return room.called.length > 0 || room.next.length > 0;
 }
 
 /**
@@ -99,22 +67,6 @@ export function operatorRowsForRooms(
       return true;
     }),
   );
-}
-
-export function filterOperatorRows(rows: OperatorEntryRow[], query: string): OperatorEntryRow[] {
-  const needle = query.trim().toLocaleLowerCase();
-  if (!needle) return rows;
-  return rows.filter((row) => {
-    const rooms = row.destinationRooms ?? [row.room];
-    const challengeNames = rooms.map((item) => item.challenge?.title ?? "");
-    return [
-      row.entry.repo_name ?? "",
-      String(row.entry.repo_id),
-      String(row.entry.id),
-      ...rooms.map((item) => item.room.name),
-      ...challengeNames,
-    ].some((value) => value.toLocaleLowerCase().includes(needle));
-  });
 }
 
 export function sortOperatorRows(rows: OperatorEntryRow[]): OperatorEntryRow[] {

@@ -32,8 +32,8 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done · 🔵 review needed
   `useLiveQuery(fetcher, streamPath, eventNames)` (fetch + debounced refetch on SSE).
 - `@/lib/queue` → types (`RoomView`, `ChallengeProgress`, `RoomPace`,
   `MyQueueEntry`, `QueueEntry`, `Room`, `QueueStatus`, …) + wrappers
-  (`getRoomView`, `getChallengeProgress`, `getMyQueue`, `callNext`,
-  `pauseRoom`/`resumeRoom`, `entryAction(entryId, action, body?, idemKey?)`,
+  (`getRoomView`, `getChallengeProgress`, `getMyQueue`, the room call-next
+  endpoint, `pauseRoom`/`resumeRoom`, `entryAction(entryId, action, body?, idemKey?)`,
   `getReview`/`saveReview`/`openSession`/`searchTeams`, `exportUrls`, …).
 - `@/lib/projects` → `ImportPlan`, `RepoWithExtras`, wrappers (`previewImport`,
   `confirmImport`, `listUnmatched`, `linkParticipant`, `listRepos`, …).
@@ -81,8 +81,7 @@ Model your code on `apps/web/src/app/(app)/challenges/page.tsx` and
   `ApiError` with `.code`/`.message`; surface `.message` verbatim in a
   `toast.error(...)` (Sileo adapter).
 - **Capability gating:** `useSessionContext()` (`@/lib/session`) exposes the
-  user's capabilities; use `<CapabilityGate capability={...}>` from
-  `@/components/common/capability-gate` and/or nav gating. Capability constants:
+  user's capabilities; use `useCan(cap)` and/or nav gating. Capability constants:
   `@hackos/shared/capabilities` → `CAPABILITIES.*`.
 - **Shared UI:** prefer existing pieces before making new ones —
   `@/components/common/{page-header,section-card,stat-card,status-badge,
@@ -338,8 +337,8 @@ Decide + record in §9.
   call-next/notify/bring-in/requeue/no-show/skip/manual-call actions, search,
   presentation start/complete/send-back, review draft/submit with session
   presence, progress counts and CSV export links. Also corrected `@/lib/queue`
-  wrappers for `callNext`, pause/resume idempotency headers, typed reviews,
-  sessions and search results. Remaining WS-B follow-up: dedicated room-admin
+  call-next payload, pause/resume idempotency headers, typed reviews, sessions
+  and search results. Remaining WS-B follow-up: dedicated room-admin
   CRUD/assignment/settings screens (QUEUE_ADMIN).
 - `2026-07-06` codex: added `/queue/rooms` admin page and queue admin wrappers
   for room CRUD, room queue state, queue settings, and assignment mutations.

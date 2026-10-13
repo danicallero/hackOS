@@ -88,15 +88,6 @@ export async function challengeQueueGroupId(
   return rows[0] ? Number(rows[0].queue_group_id) : null;
 }
 
-/** The queue_group a room serves, or null when the room is unassigned. */
-export async function roomQueueGroupId(client: Queryable, roomId: number): Promise<number | null> {
-  const { rows } = await client.query(
-    `SELECT queue_group_id FROM room_queue_groups WHERE room_id = $1`,
-    [roomId],
-  );
-  return rows[0] ? Number(rows[0].queue_group_id) : null;
-}
-
 /** The enterprise a queue_group belongs to (groups never span enterprises). */
 export async function queueGroupEnterpriseId(
   client: Queryable,
@@ -105,14 +96,5 @@ export async function queueGroupEnterpriseId(
   const { rows } = await client.query(`SELECT enterprise_id FROM queue_groups WHERE id = $1`, [
     queueGroupId,
   ]);
-  return rows[0] ? Number(rows[0].enterprise_id) : null;
-}
-
-/** The enterprise a room's pool belongs to, or null when unassigned. */
-export async function roomEnterpriseId(client: Queryable, roomId: number): Promise<number | null> {
-  const { rows } = await client.query(
-    `SELECT enterprise_id FROM room_enterprises WHERE room_id = $1`,
-    [roomId],
-  );
   return rows[0] ? Number(rows[0].enterprise_id) : null;
 }

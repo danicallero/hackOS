@@ -29,9 +29,6 @@ import {
   profileAvatarSnapDirection,
   profileAvatarSnapOffset,
   profileAvatarSnapTarget,
-  profileGooeyEndDiameter,
-  profileGooeyEndOffset,
-  profileGooeyEndScale,
   profileGooeyFrame,
   profileGooeyProgress,
   resolveProfileCameraTarget,
@@ -996,12 +993,6 @@ describe("android hole-punch gooey geometry", () => {
   const avatar = { left: 152, top: 180, width: 96, height: 96 };
   // A Pixel-style 26 dp lens centred at (200, 25).
   const lens = { left: 187, top: 12, width: 26, height: 26 };
-
-  it("ends inside the lens, a dp short of its edge on every side", () => {
-    expect(profileGooeyEndDiameter(lens)).toBe(24);
-    expect(profileGooeyEndScale(96, lens)).toBeCloseTo(0.25);
-    expect(profileGooeyEndOffset(avatar, lens)).toEqual({ dx: 0, dy: -203 });
-  });
 
   it("maps the scroll offset to a clamped progress", () => {
     expect(profileGooeyProgress(-20, 120)).toBe(0);

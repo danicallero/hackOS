@@ -285,7 +285,7 @@ work in the **event's** timezone (`GET /api/me` `eventTimezone`, published by
 Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `EmptyState`, `DataTable`, `TabBar`, `Modal`, `AlertModal`, `ContextualError`,
 `FullPageError`,
-`CapabilityGate`, `AccessDenied`, `Spinner`, `SubmitButton`, `PasswordInput`,
+`AccessDenied`, `Spinner`, `SubmitButton`, `PasswordInput`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
 `EntityCombobox`, `ActionGroup`, `IconButton`, `UserAvatar`.
 
@@ -548,7 +548,7 @@ list turns into a dumping ground and the guard stops meaning anything.
 - **Trace stories.** Reference the story id (`H7`) in commit messages and
   non-obvious comments, exactly like the API.
 - **Gate by capability, never role (H8/H55).** Use `useCan(cap)` /
-  `<CapabilityGate>` / `nav.ts` entries. `me.role` is illustrative display
+  `nav.ts` entries. `me.role` is illustrative display
   only. The API still enforces every route — UI gating just hides what a user
   can't use.
 - **Capabilities & events live in `@hackos/shared`.** Never inline capability
@@ -579,7 +579,7 @@ list turns into a dumping ground and the guard stops meaning anything.
 3. Add DTO types to `lib/types.ts`; call the API via `lib/api.ts`.
 4. Compose from `components/ui` + `components/common`; extract anything reused
    twice into `components/common`.
-5. Gate controls with `<CapabilityGate>` / `useCan`.
+5. Gate controls with `useCan(cap)`.
 
 ## Sortable builders
 
