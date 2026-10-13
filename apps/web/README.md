@@ -257,6 +257,12 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
 `EntityCombobox`, `ActionGroup`, `IconButton`, `UserAvatar`.
 
+The schedule's fixed-layout table sets its minimum width to the sum of its
+visible column widths, including selection/actions for editors. Avoid intrinsic
+`min-width: max-content` with percentage-width fixed tables: Firefox can inflate
+columns and push their content outside the viewport (H59). The browser regression
+in `e2e/browser/schedule-layout.spec.ts` covers geometry, resizing and scrolling.
+
 `UserAvatar` renders a person's account photo from the authenticated
 `/api/users/:id/photo` route (`Me.image`, `UserListItem.image`). Text-first
 surfaces (sidebar account row, user tables) render it only when a photo exists;

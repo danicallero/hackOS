@@ -207,11 +207,11 @@ export default function SchedulePage() {
   const visibleColumns = tableConfig.order.filter(
     (id) => REQUIRED_COLUMNS.includes(id) || !tableConfig.hidden.includes(id),
   );
+  // H59: intrinsic min-width with fixed layout inflates columns in Firefox.
+  const minWidth = visibleColumns.reduce((sum, id) => sum + columnWidths[id], canEdit ? 160 : 0);
 
-  // The row being typed into the table but not created yet (H59 inline row
-  // creation). `index` is the slot *between* rows it was inserted at, so the
-  // draft renders exactly where the "+" was clicked; a day key with no group
-  // yet is a brand-new date section.
+  // H59: the draft's index is the slot between rows where "+" was clicked;
+  // a day key without an existing group creates a new date section.
   const [draft, setDraft] = useState<ScheduleDraft | null>(null);
   const [newDayOpen, setNewDayOpen] = useState(false);
   const draftIsNewDay = draft !== null && !groups.some((group) => group.date === draft.dayKey);
@@ -422,7 +422,7 @@ export default function SchedulePage() {
             collisionDetection={closestCenter}
             onDragEnd={onRowDragEnd}
           >
-            <Table className="table-fixed min-w-max">
+            <Table className="table-fixed" style={{ minWidth }}>
               <colgroup>
                 {canEdit && <col style={{ width: 64 }} />}
                 {visibleColumns.map((id) => (
