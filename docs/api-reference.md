@@ -27,7 +27,7 @@ If this page disagrees with either, they win.
 | "What does module X own, module by module?" | this page, § Modules |
 | "Which capability guards which route?" | [`access-control-route-ledger.md`](./access-control-route-ledger.md) (generated) |
 | "How does background work / retries / the outbox work?" | [`background-workers.md`](./background-workers.md) |
-| "What changed recently, and why — a specific bug fix's rationale?" | [`audits/implementation-notes.md`](./audits/implementation-notes.md) (historical), [`challenges-devpost.md`](./challenges-devpost.md) |
+| "What changed recently, and why — a specific bug fix's rationale?" | [`audits/implementation-notes.md`](./audits/implementation-notes.md) (historical), [`projects.md`](./projects.md) |
 
 ## Shape of the system
 
@@ -216,7 +216,7 @@ stages rows in `devpost_participants` (`unmatched` / `auto_matched` /
 `manually_linked`) and reconciles them against primary/verified-secondary
 emails without ever silently merging identities. Challenge↔project linkage is
 indirect, through `repo_devpost_prizes.prize` matching a challenge's
-`devpost_tags`. Full detail: [`challenges-devpost.md`](./challenges-devpost.md).
+`devpost_tags`. Full detail: [`projects.md`](./projects.md).
 
 ### diary (#935)
 The caller's private event diary under `/api/me/diary`: people saved by
