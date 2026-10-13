@@ -5,7 +5,7 @@
 // Staff with sponsors:manage define them; the company's own reps only see
 // them. Tags belong to the company, never to a rep's profile.
 
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ContactlessPaymentIcon } from "@phosphor-icons/react/dist/csr/ContactlessPayment";
 import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
@@ -228,7 +228,7 @@ export function StandTagsCard({
     }
   }, [enterpriseId, t]);
 
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

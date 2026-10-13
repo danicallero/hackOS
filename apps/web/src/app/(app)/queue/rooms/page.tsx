@@ -3,7 +3,7 @@
 // Queue admin surface for rooms and assignments (H29, H46).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useRouter } from "next/navigation";
@@ -123,7 +123,7 @@ export default function QueueRoomsPage({ embedded = false }: { embedded?: boolea
     editingRef.current = panelMode === "edit";
   }, [panelMode]);
 
-  const liveRefresh = useAutoRefresh("/api/queue/stream", [
+  const liveRefresh = useAutoRefresh(REALTIME_SCOPES.QUEUE, [
     EVENTS.QUEUE_ENTRY_CHANGED,
     EVENTS.QUEUE_ROOM_CHANGED,
   ]);

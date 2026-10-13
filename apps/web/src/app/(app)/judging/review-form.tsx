@@ -4,7 +4,7 @@
 // conflict reconciliation, judge presence and offline handling. The rules it
 // shares with the reviews-overview detail live in lib/attempt-review.ts.
 
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, reviewScope } from "@hackos/shared/events";
 import type { Question } from "@hackos/shared/questions";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
@@ -220,7 +220,7 @@ export function ReviewForm({
     return () => window.clearInterval(timer);
   }, [acquireField, entryId, focusedField, ownedFields]);
 
-  useEventSource(entry ? `/api/queue/entries/${entryId}/stream` : "", {
+  useEventSource(entry && entryId ? reviewScope(entryId) : "", {
     events: [EVENTS.QUEUE_REVIEW_CHANGED],
     enabled: entry != null,
     onEvent: () => void loadRemote(true),

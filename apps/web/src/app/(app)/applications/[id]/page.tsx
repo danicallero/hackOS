@@ -18,7 +18,7 @@
 // the judging questionSchema. i18n labels carry {en,es,gl} (plan/07 §2).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
@@ -145,9 +145,7 @@ export default function ApplicationDetailPage() {
 
   // Soft, in-place refresh instead of a hard reload when someone else edits
   // this form, its questions, or a response changes its stats elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=applications", [
-    EVENTS.DOMAIN_CHANGED,
-  ]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

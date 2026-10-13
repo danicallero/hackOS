@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
@@ -424,7 +424,7 @@ export default function UsersPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits a user elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=identity", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.IDENTITY), [EVENTS.DOMAIN_CHANGED]);
 
   // Live occupancy for the optional Presence column — only fetched for staff
   // who could otherwise see it via the presence/stats panels anyway.

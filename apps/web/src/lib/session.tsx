@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import {
   createContext,
   useCallback,
@@ -138,7 +138,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   // inbox updates. Session changes are addressed to that same user topic,
   // rather than making every signed-in tab subscribe to the global identity
   // and sponsors domains. This keeps the normal shell to one SSE connection.
-  useEventSource("/api/queue/me/stream", {
+  useEventSource(REALTIME_SCOPES.PERSONAL, {
     events: [
       EVENTS.USER_SESSION_CHANGED,
       EVENTS.USER_QUEUE_CHANGED,

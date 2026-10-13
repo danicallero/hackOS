@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   observeRefetch,
   type RealtimeTelemetryScope,
+  telemetryScopeForRealtimeScope,
   telemetryScopeForStream,
 } from "./realtime-telemetry";
 
@@ -31,15 +32,31 @@ describe("browser realtime telemetry (H38, #544)", () => {
     });
   });
 
-  it("maps only allowlisted streams and strips identifiers from the scope", () => {
-    expect(telemetryScopeForStream("/api/queue/me/stream?userId=123")).toEqual({
+  it("maps only allowlisted scopes and strips identifiers from the scope", () => {
+    expect(telemetryScopeForRealtimeScope("personal")).toEqual({
       surface: "participant-queue",
       topic: "user",
     });
-    expect(telemetryScopeForStream("/api/queue/entries/123/stream")).toEqual({
+    expect(telemetryScopeForRealtimeScope("review:123")).toEqual({
       surface: "judging",
       topic: "queue-review",
     });
-    expect(telemetryScopeForStream("/api/events/stream?topic=identity")).toBeNull();
+    expect(telemetryScopeForRealtimeScope("domain:logistics")).toEqual({
+      surface: "logistics",
+      topic: "logistics",
+    });
+    expect(telemetryScopeForRealtimeScope("domain:identity")).toBeNull();
+  });
+
+  it("maps only the physical multiplexed and public stream URLs", () => {
+    expect(telemetryScopeForStream("/api/realtime/stream?scopes=personal")).toEqual({
+      surface: "participant-queue",
+      topic: "multiplexed",
+    });
+    expect(telemetryScopeForStream("/api/tv/stream")).toEqual({
+      surface: "public-tv",
+      topic: "public-tv",
+    });
+    expect(telemetryScopeForStream("/api/queue/me/stream?userId=123")).toBeNull();
   });
 });

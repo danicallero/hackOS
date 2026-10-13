@@ -6,7 +6,7 @@
 // admin GET — we list via the public endpoint — and mutate via the guarded
 // POST/PATCH/DELETE /api/food-intolerances (capability INTOLERANCES_MANAGE).
 
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { ForkKnifeIcon } from "@phosphor-icons/react/dist/csr/ForkKnife";
@@ -118,7 +118,7 @@ export function IntolerancesManager() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // edits the intolerances library elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=logistics", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.LOGISTICS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

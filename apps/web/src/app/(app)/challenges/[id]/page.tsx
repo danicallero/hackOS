@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -77,7 +77,7 @@ export default function ChallengeDetailPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin edits
   // this challenge elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

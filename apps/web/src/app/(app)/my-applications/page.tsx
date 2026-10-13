@@ -8,7 +8,7 @@
 //   GET /api/me/applications      → { responses } (my responses, masked status)
 //   GET /api/public/applications  → { applications } (open forms w/ template)
 
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { FilePlusIcon } from "@phosphor-icons/react/dist/csr/FilePlus";
 import { TrayIcon } from "@phosphor-icons/react/dist/csr/Tray";
@@ -74,9 +74,7 @@ export default function MyApplicationsPage() {
 
   // Soft, in-place refresh instead of a hard reload when staff decides on
   // one of your applications elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=applications", [
-    EVENTS.DOMAIN_CHANGED,
-  ]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

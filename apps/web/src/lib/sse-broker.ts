@@ -1,4 +1,4 @@
-import { realtimeScopeForPath } from "@hackos/shared/events";
+import { REALTIME_SCOPES } from "@hackos/shared/events";
 import {
   RealtimeClient,
   type RealtimeConsumer,
@@ -36,27 +36,26 @@ export const subscribeSseIdentity = (listener: () => void) => {
   };
 };
 
-/** All authenticated reader paths join the session owner's union, independent of component keys (#892). */
-export function subscribeToSse(url: string, subscriber: Subscriber): () => void {
-  const parsed = new URL(
-    url,
-    typeof window === "undefined" ? "http://sse.invalid" : window.location.origin,
-  );
-  const scope = realtimeScopeForPath(parsed.toString());
-  if (!scope) throw new Error(`Unknown realtime reader: ${parsed.pathname}`);
-  const apiOrigin = parsed.origin === "http://sse.invalid" ? "" : parsed.origin;
+const PUBLIC_STREAM_PATHS: Record<string, string> = {
+  [REALTIME_SCOPES.PUBLIC_TV]: "/api/tv/stream",
+  [REALTIME_SCOPES.PUBLIC_CONTENT]: "/api/content/stream",
+};
+
+/** Every authenticated scope joins the session owner's union, independent of component keys (#892). */
+export function subscribeToSse(scope: string, apiUrl: string, subscriber: Subscriber): () => void {
+  if (!scope) throw new Error("Realtime scope is required");
+  const apiOrigin = apiUrl
+    ? new URL(apiUrl, typeof window === "undefined" ? undefined : window.location.origin).origin
+    : "";
   if (apiOrigin !== origin) setSseIdentity(identity, apiOrigin);
-  const isPublic = scope === "public-tv" || scope === "public-content";
+  const publicPath = PUBLIC_STREAM_PATHS[scope];
   let client = authenticated;
-  if (isPublic && identity === null) {
+  if (publicPath && identity === null) {
     client =
-      publicClients.get(parsed.pathname) ??
-      new RealtimeClient({
-        publicPath: parsed.pathname,
-        onPhysicalConnection: observePhysicalSseConnection,
-      });
+      publicClients.get(publicPath) ??
+      new RealtimeClient({ publicPath, onPhysicalConnection: observePhysicalSseConnection });
     client.setIdentity(null, apiOrigin);
-    publicClients.set(parsed.pathname, client);
+    publicClients.set(publicPath, client);
   } else if (identity === null) return () => undefined;
   return client.subscribe({ ...subscriber, scope });
 }

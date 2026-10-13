@@ -1,6 +1,6 @@
 "use client";
 
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowUUpLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowUUpLeft";
 import { KeyIcon } from "@phosphor-icons/react/dist/csr/Key";
@@ -230,7 +230,7 @@ export default function PermissionsPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits a role elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=identity", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.IDENTITY), [EVENTS.DOMAIN_CHANGED]);
 
   // Only the very first run is a real (spinner-showing) load; every
   // subsequent retrigger is the liveRefresh nonce bumping, which must stay

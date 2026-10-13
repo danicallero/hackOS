@@ -11,7 +11,7 @@
 //   POST /api/me/responses/:responseId/confirm   → confirm my place (H15)
 //   POST /api/me/responses/:responseId/decline   → decline my place (H15)
 import { sponsorShareKey } from "@hackos/shared/applications";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { ShieldWarningIcon } from "@phosphor-icons/react/dist/csr/ShieldWarning";
 import Link from "next/link";
@@ -218,9 +218,7 @@ export default function MyApplicationDetailPage() {
   // discard an in-progress draft (it's only saved client-side until
   // "Save draft"/submit).
   const editableRef = useRef(false);
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=applications", [
-    EVENTS.DOMAIN_CHANGED,
-  ]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED]);
   const isFirstLiveRefresh = useRef(true);
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

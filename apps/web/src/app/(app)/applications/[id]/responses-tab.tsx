@@ -3,7 +3,7 @@
 // Submitted responses (H13/H14): filtering, review, scoring and decisions.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { ChecksIcon } from "@phosphor-icons/react/dist/csr/Checks";
@@ -168,9 +168,7 @@ export function ResponsesTab({
 
   // Soft, in-place refresh instead of a hard reload when a response changes
   // (submitted, reviewed, decided) elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=applications", [
-    EVENTS.DOMAIN_CHANGED,
-  ]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED]);
 
   // Coalesce live refreshes; categorical filters and search share the loaded snapshot.
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.

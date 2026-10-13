@@ -1,6 +1,6 @@
 "use client";
 
-import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
@@ -48,9 +48,7 @@ function PersonReader({ userId }: { userId: number }) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [retryNonce, setRetryNonce] = useState(0);
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
-  const liveRefresh = useAutoRefresh(`/api/events/stream?topic=${SSE_TOPICS.DIRECTORY}`, [
-    EVENTS.DOMAIN_CHANGED,
-  ]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.DIRECTORY), [EVENTS.DOMAIN_CHANGED]);
 
   useEffect(() => {
     let cancelled = false;

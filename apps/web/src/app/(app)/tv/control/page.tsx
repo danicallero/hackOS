@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { GlobeIcon } from "@phosphor-icons/react/dist/csr/Globe";
 import { MonitorArrowUpIcon } from "@phosphor-icons/react/dist/csr/MonitorArrowUp";
 import { RadioIcon } from "@phosphor-icons/react/dist/csr/Radio";
@@ -104,7 +104,7 @@ export default function TvControlPage() {
 
   // Authenticated TV stream keeps every operator's control page in sync. The
   // public wall gets the same invalidation through its payload-free mirror.
-  const { connected } = useEventSource("/api/events/stream?topic=tv", {
+  const { connected } = useEventSource(domainScope(SSE_TOPICS.TV), {
     events: [EVENTS.TV_MODE_CHANGED, EVENTS.TV_CONFIG_CHANGED],
     onEvent: () => {
       void load();

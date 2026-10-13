@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -58,19 +58,19 @@ export default function PresencePage() {
 
   const estimate = useLiveQuery<PresenceEstimate>(
     logisticsApi.presenceEstimate,
-    "/api/logistics/stream",
+    REALTIME_SCOPES.LOGISTICS,
     PRESENCE_EVENTS,
     { enabled: canPresence, debounceMs: 400 },
   );
   const hours = useLiveQuery<PresenceHours[]>(
     logisticsApi.presenceHours,
-    "/api/logistics/stream",
+    REALTIME_SCOPES.LOGISTICS,
     PRESENCE_EVENTS,
     { enabled: canPresence, debounceMs: 400 },
   );
   const openSessions = useLiveQuery<OpenPresenceSession[]>(
     async () => (await logisticsApi.presenceOpenSessions()).items,
-    "/api/logistics/stream",
+    REALTIME_SCOPES.LOGISTICS,
     PRESENCE_EVENTS,
     { enabled: canPresence, debounceMs: 400 },
   );

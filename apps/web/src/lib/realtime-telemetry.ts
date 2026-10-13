@@ -1,3 +1,4 @@
+import { domainScope, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 import { API_URL } from "./env";
 
 /**
@@ -59,42 +60,37 @@ function streamUrl(streamPath: string): URL | null {
 }
 
 /**
- * Map only known stream paths to the server's bounded metric dimensions. The
- * path is used locally and the path itself is never included in a report.
+ * Map a logical realtime scope to the server's bounded metric dimensions.
+ * Entry IDs and topic names are never included in a report.
  */
+export function telemetryScopeForRealtimeScope(scope: string): RealtimeTelemetryScope | null {
+  if (scope === REALTIME_SCOPES.PERSONAL) return { surface: "participant-queue", topic: "user" };
+  if (scope === REALTIME_SCOPES.QUEUE) return { surface: "judging", topic: "queue" };
+  if (scope.startsWith(REALTIME_SCOPES.REVIEW_PREFIX)) {
+    return { surface: "judging", topic: "queue-review" };
+  }
+  if (scope === REALTIME_SCOPES.LOGISTICS || scope === domainScope(SSE_TOPICS.LOGISTICS)) {
+    return { surface: "logistics", topic: "logistics" };
+  }
+  if (scope === REALTIME_SCOPES.PUBLIC_TV) return { surface: "public-tv", topic: "public-tv" };
+  if (scope === REALTIME_SCOPES.PUBLIC_CONTENT) {
+    return { surface: "content", topic: "public-content" };
+  }
+  // Other domain scopes stay out until the API adds matching telemetry enums
+  // rather than being mislabeled as another surface.
+  return null;
+}
+
+/** Map the physical stream URL (multiplexed or public) to metric dimensions. */
 export function telemetryScopeForStream(streamPath: string): RealtimeTelemetryScope | null {
   const url = streamUrl(streamPath);
   if (!url) return null;
-
   if (url.pathname === "/api/realtime/stream") {
     return { surface: "participant-queue", topic: "multiplexed" };
   }
-  if (url.pathname === "/api/queue/me/stream") {
-    return { surface: "participant-queue", topic: "user" };
-  }
-  if (url.pathname.startsWith("/api/queue/entries/") && url.pathname.endsWith("/stream")) {
-    return { surface: "judging", topic: "queue-review" };
-  }
-  if (url.pathname === "/api/queue/stream") {
-    return { surface: "judging", topic: "queue" };
-  }
-  if (url.pathname === "/api/logistics/stream") {
-    return { surface: "logistics", topic: "logistics" };
-  }
-  if (url.pathname === "/api/tv/stream") {
-    return { surface: "public-tv", topic: "public-tv" };
-  }
-  if (url.pathname === "/api/content/stream") {
-    return { surface: "content", topic: "public-content" };
-  }
-
-  // The generic domain stream has a bounded contract only for logistics. The
-  // other domain names intentionally stay out until the API adds matching
-  // telemetry enums rather than being mislabeled as another surface.
-  if (url.pathname === "/api/events/stream" && url.searchParams.get("topic") === "logistics") {
-    return { surface: "logistics", topic: "logistics" };
-  }
-
+  if (url.pathname === "/api/tv/stream") return telemetryScopeForRealtimeScope("public-tv");
+  if (url.pathname === "/api/content/stream")
+    return telemetryScopeForRealtimeScope("public-content");
   return null;
 }
 
