@@ -76,7 +76,7 @@ function card(id: number, as = reader) {
 }
 
 async function publishChallenge(title: string) {
-  const id = await createChallenge(title, []);
+  const id = await createChallenge(title);
   await pool.query(`UPDATE challenges SET visibility = 'visible' WHERE id = $1`, [id]);
   return id;
 }
@@ -256,7 +256,7 @@ describe("public profile owner routes (#934)", () => {
 describe("saved profile reads (#934, #935)", () => {
   it("shows a saved person's card with project and published challenges, without private fields", async () => {
     const challenge = await publishChallenge("Green AI");
-    const hidden = await createChallenge("Draft challenge", []);
+    const hidden = await createChallenge("Draft challenge");
     const jose = await person("José", "Álvarez");
     const teammate = await person("Hidden", "Mate");
     await activeRepo("Neural Beans", [jose, teammate], [challenge, hidden]);

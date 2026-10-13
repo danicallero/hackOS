@@ -35,9 +35,9 @@ async function createRepo(name: string): Promise<number> {
 }
 
 describe("POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove (H21)", () => {
-  it("enrolls every repo, skipping ones already actively queued, idempotently", async () => {
+  it("enters every repo, skipping ones already entered, idempotently", async () => {
     const server = await getApp();
-    const challengeId = await createChallenge("Bulk Challenge", []);
+    const challengeId = await createChallenge("Bulk Challenge");
     const repoA = await createRepo("Repo A");
     const repoB = await createRepo("Repo B");
     const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_EDIT]);
@@ -58,12 +58,16 @@ describe("POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove (H21)", (
     expect(bulk.statusCode).toBe(200);
     expect(bulk.json()).toEqual({ total: 2, added: 1, alreadyEnrolled: 1 });
 
-    const entries = await pool.query(
-      `SELECT repo_id, status FROM queue_entries WHERE challenge_id = $1`,
+    // The queue is not generated yet, so both projects only gain the selection.
+    const selections = await pool.query(
+      `SELECT repo_id FROM project_challenges WHERE challenge_id = $1`,
       [challengeId],
     );
-    expect(entries.rows).toHaveLength(2);
-    expect(entries.rows.every((r: { status: string }) => r.status === "waiting")).toBe(true);
+    expect(selections.rows).toHaveLength(2);
+    const queued = await pool.query(`SELECT 1 FROM queue_entries WHERE challenge_id = $1`, [
+      challengeId,
+    ]);
+    expect(queued.rowCount).toBe(0);
 
     // Calling again is a full no-op: no duplicates, nothing newly added.
     const again = await server.inject({
@@ -72,7 +76,7 @@ describe("POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove (H21)", (
       headers: asUser(operator),
     });
     expect(again.json()).toEqual({ total: 2, added: 0, alreadyEnrolled: 2 });
-    const stillTwo = await pool.query(`SELECT id FROM queue_entries WHERE challenge_id = $1`, [
+    const stillTwo = await pool.query(`SELECT 1 FROM project_challenges WHERE challenge_id = $1`, [
       challengeId,
     ]);
     expect(stillTwo.rows).toHaveLength(2);
@@ -93,7 +97,7 @@ describe("POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove (H21)", (
 
   it("bulk-removes every active entry, disqualifying in-progress ones instead of just cancelling", async () => {
     const server = await getApp();
-    const challengeId = await createChallenge("Bulk Challenge", []);
+    const challengeId = await createChallenge("Bulk Challenge");
     const repoA = await createRepo("Repo A");
     const repoB = await createRepo("Repo B");
     const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_EDIT]);
@@ -103,6 +107,14 @@ describe("POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove (H21)", (
       url: `/api/challenges/${challengeId}/repos/bulk-add`,
       headers: asUser(operator),
     });
+    const queueAdmin = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const generated = await server.inject({
+      method: "POST",
+      url: `/api/queue/challenges/${challengeId}/enqueue`,
+      headers: { ...asUser(queueAdmin), "idempotency-key": "bulk-generate" },
+      payload: {},
+    });
+    expect(generated.json().inserted).toHaveLength(2);
     // Simulate repoB being mid-presentation when the operator bulk-removes.
     await pool.query(
       `UPDATE queue_entries SET status = 'in_room' WHERE challenge_id = $1 AND repo_id = $2`,
@@ -127,6 +139,11 @@ describe("POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove (H21)", (
     expect(byRepo[repoA]).toBe("cancelled");
     expect(byRepo[repoB]).toBe("disqualified");
 
+    expect(
+      (await pool.query(`SELECT 1 FROM project_challenges WHERE challenge_id = $1`, [challengeId]))
+        .rowCount,
+    ).toBe(0);
+
     // Calling again is a no-op — both entries are already terminal.
     const again = await server.inject({
       method: "POST",
@@ -138,7 +155,7 @@ describe("POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove (H21)", (
 
   it("requires PROJECTS_EDIT", async () => {
     const server = await getApp();
-    const challengeId = await createChallenge("Bulk Challenge", []);
+    const challengeId = await createChallenge("Bulk Challenge");
     const bystander = await createUserWithCapabilities([]);
     const res = await server.inject({
       method: "POST",

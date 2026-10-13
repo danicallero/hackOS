@@ -61,14 +61,6 @@ async function seedRepo(name: string, memberUserIds: number[]): Promise<number> 
   return res.json().repo.id as number;
 }
 
-async function addDevpostMember(repoId: number, userId: number, email: string): Promise<void> {
-  await pool.query(
-    `INSERT INTO devpost_participants (repo_id, email, user_id, import_batch, merge_status)
-     VALUES ($1, $2, $3, 'test', 'auto_matched')`,
-    [repoId, email, userId],
-  );
-}
-
 describe("PATCH /api/me/projects/:id (H19/H20 self-edit)", () => {
   it("lets an active member edit metadata, audited (source: participant)", async () => {
     const server = await getApp();
@@ -92,11 +84,10 @@ describe("PATCH /api/me/projects/:id (H19/H20 self-edit)", () => {
     expect(audit.rows).toEqual([{ source: "participant" }]);
   });
 
-  it("lets a Devpost-matched member edit too", async () => {
+  it("keeps a submitted project editable for its members (#1006)", async () => {
     const server = await getApp();
     const owner = await createUser();
-    const repoId = await seedRepo("Devpost Team", []);
-    await addDevpostMember(repoId, owner, "owner@devpost.test");
+    const repoId = await seedRepo("Submitted Team", [owner]);
     await setHackingWindow(true);
 
     const res = await server.inject({
@@ -106,7 +97,7 @@ describe("PATCH /api/me/projects/:id (H19/H20 self-edit)", () => {
       payload: { name: "Renamed" },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().name).toBe("Renamed");
+    expect(res.json()).toMatchObject({ name: "Renamed", submission_status: "submitted" });
   });
 
   it("403s for a non-member", async () => {
@@ -484,7 +475,7 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     const server = await getApp();
     const owner = await createUser();
     const repoId = await seedRepo("Solo in queue", [owner]);
-    const challengeId = await createChallenge("Queue challenge", []);
+    const challengeId = await createChallenge("Queue challenge");
     const { rows: groupRows } = await pool.query(
       `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
       [challengeId],
@@ -538,7 +529,7 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     const server = await getApp();
     const owner = await createUser();
     const repoId = await seedRepo("Mixed marker project", [owner]);
-    const challengeId = await createChallenge("Synthetic queue challenge", []);
+    const challengeId = await createChallenge("Synthetic queue challenge");
     await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [challengeId]);
     const { rows: entryRows } = await pool.query(
       `INSERT INTO queue_entries (challenge_id, repo_id, status, position)

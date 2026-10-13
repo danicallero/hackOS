@@ -52,12 +52,12 @@ async function makeVisible(challengeId: number): Promise<void> {
 }
 
 describe("POST /api/repos (H18 native creation)", () => {
-  it("creates a repo with members and enqueues chosen challenges at the bottom", async () => {
+  it("creates a submitted repo with members and its challenge selection, queued once generated", async () => {
     const server = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const editor = await createUserWithCapabilities([CAPABILITIES.PROJECTS_EDIT]);
     const member = await createUser();
-    const challengeId = await createChallenge("AI Challenge", []);
+    const challengeId = await createChallenge("AI Challenge");
 
     const first = await server.inject({
       method: "POST",
@@ -73,12 +73,26 @@ describe("POST /api/repos (H18 native creation)", () => {
     });
     expect(first.statusCode).toBe(200);
     const created = first.json();
-    expect(created.repo.name).toBe("Handmade Rocket");
-    expect(created.repo.source).toBe("native");
-    expect(created.challenges).toHaveLength(1);
-    expect(created.challenges[0]).toMatchObject({ challengeId, position: 1 });
+    expect(created.repo).toMatchObject({
+      name: "Handmade Rocket",
+      submission_status: "submitted",
+      submitted_via: "admin",
+    });
+    // No queue exists yet: the challenge is only recorded as the selection.
+    expect(created.challenges).toEqual([]);
 
-    // A second native team on the same challenge lands BELOW the first.
+    // Generating the challenge's queue turns the selection into an entry.
+    const queueAdmin = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const generated = await server.inject({
+      method: "POST",
+      url: `/api/queue/challenges/${challengeId}/enqueue`,
+      headers: { ...asUser(queueAdmin), "idempotency-key": "generate-ai" },
+      payload: {},
+    });
+    expect(generated.statusCode).toBe(200);
+    expect(generated.json().inserted).toHaveLength(1);
+
+    // A second team on the generated challenge lands BELOW the first.
     const second = await server.inject({
       method: "POST",
       url: "/api/repos",
@@ -115,6 +129,7 @@ describe("POST /api/repos (H18 native creation)", () => {
     expect(audits.rows).toEqual(
       expect.arrayContaining([
         { entity_type: "repo", action: "create" },
+        { entity_type: "repo", action: "challenge.enter" },
         { entity_type: "queue_entry", action: "add_challenge" },
       ]),
     );
@@ -263,13 +278,13 @@ describe("POST /api/me/projects (H19 policy/eligibility/window-gated self-creati
     expect(res.statusCode).toBe(403);
   });
 
-  it("creates the caller's project with them as sole member and enqueues visible challenges", async () => {
+  it("creates the caller's draft project with them as sole member and selects visible challenges", async () => {
     const server = await getApp();
     await enableSelfCreation();
     await setHackingWindow(true);
     const participant = await createUser();
     await admitParticipant(participant);
-    const challengeId = await createChallenge("Open Challenge", []);
+    const challengeId = await createChallenge("Open Challenge");
     await makeVisible(challengeId);
 
     const res = await server.inject({
@@ -280,8 +295,8 @@ describe("POST /api/me/projects (H19 policy/eligibility/window-gated self-creati
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.repo.source).toBe("native");
-    expect(body.challenges).toEqual([expect.objectContaining({ challengeId, position: 1 })]);
+    expect(body.repo).toMatchObject({ submission_status: "draft", submitted_at: null });
+    expect(body.challenges).toEqual([]);
 
     // H20 self-view: team + challenges, and canCreate now stays true — a
     // participant may hold more than one project under self-service.
@@ -297,7 +312,7 @@ describe("POST /api/me/projects (H19 policy/eligibility/window-gated self-creati
     expect(view.projects[0].members.map((m: { userId: number }) => m.userId)).toEqual([
       participant,
     ]);
-    expect(view.projects[0].challenges[0]).toMatchObject({ id: challengeId, status: "waiting" });
+    expect(view.projects[0].challenges[0]).toMatchObject({ id: challengeId, status: null });
   });
 
   it("allows creating more than one project (multi-membership, no more 409)", async () => {
@@ -336,7 +351,7 @@ describe("POST /api/me/projects (H19 policy/eligibility/window-gated self-creati
     await setHackingWindow(true);
     const participant = await createUser();
     await admitParticipant(participant);
-    const hidden = await createChallenge("Hidden Challenge", []);
+    const hidden = await createChallenge("Hidden Challenge");
 
     const res = await server.inject({
       method: "POST",

@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { asUser, buildTestApp, createUserWithCapabilities, truncateAll } from "../helpers.js";
-import { createChallenge, participantsCsv, projectsCsv } from "./fixtures.js";
+import { createChallenge, createProject } from "./fixtures.js";
 
 let app: App;
 
@@ -28,14 +28,13 @@ async function getApp(): Promise<App> {
 }
 
 describe("mandatory challenge participation (issue #851)", () => {
-  it("enrolls existing projects once when enabled and prevents a later withdrawal", async () => {
+  it("enters existing projects once when enabled and prevents a later withdrawal", async () => {
     const server = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const manager = await createUserWithCapabilities([CAPABILITIES.CHALLENGES_MANAGE]);
-    const challengeId = await createChallenge("Required", []);
-    const repos = await pool.query(
-      `INSERT INTO repos (name) VALUES ('Existing A'), ('Existing B') RETURNING id`,
-    );
+    const challengeId = await createChallenge("Required");
+    const existingA = await createProject([], { name: "Existing A" });
+    const existingB = await createProject([], { name: "Existing B" });
 
     const enabled = await server.inject({
       method: "PATCH",
@@ -46,13 +45,15 @@ describe("mandatory challenge participation (issue #851)", () => {
     expect(enabled.statusCode).toBe(200);
     expect(enabled.json().mandatory).toBe(true);
 
+    // Before generation, mandatory participation is recorded as each project's selection.
     const entries = await pool.query(
-      `SELECT repo_id FROM queue_entries WHERE challenge_id = $1 ORDER BY repo_id`,
+      `SELECT repo_id FROM project_challenges WHERE challenge_id = $1 ORDER BY repo_id`,
       [challengeId],
     );
-    expect(entries.rows.map((row: { repo_id: number }) => row.repo_id)).toEqual(
-      repos.rows.map((row: { id: number }) => row.id),
-    );
+    expect(entries.rows.map((row: { repo_id: number }) => row.repo_id)).toEqual([
+      existingA,
+      existingB,
+    ]);
 
     const repeated = await server.inject({
       method: "PATCH",
@@ -62,49 +63,50 @@ describe("mandatory challenge participation (issue #851)", () => {
     });
     expect(repeated.statusCode).toBe(200);
     expect(
-      (await pool.query(`SELECT id FROM queue_entries WHERE challenge_id = $1`, [challengeId]))
+      (await pool.query(`SELECT 1 FROM project_challenges WHERE challenge_id = $1`, [challengeId]))
         .rows,
     ).toHaveLength(2);
 
     const remove = await server.inject({
       method: "DELETE",
-      url: `/api/repos/${repos.rows[0].id}/challenges/${challengeId}`,
+      url: `/api/repos/${existingA}/challenges/${challengeId}`,
       headers: asUser(await createUserWithCapabilities([CAPABILITIES.PROJECTS_EDIT])),
     });
     expect(remove.statusCode).toBe(409);
   });
 
-  it("enrolls every Devpost import and native project without a selected tag", async () => {
+  it("enters every new project and queues them once the queue is generated", async () => {
     const server = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const manager = await createUserWithCapabilities([
       CAPABILITIES.CHALLENGES_MANAGE,
-      CAPABILITIES.PROJECTS_IMPORT,
       CAPABILITIES.PROJECTS_EDIT,
+      CAPABILITIES.QUEUE_ADMIN,
     ]);
-    const challengeId = await createChallenge("Required", []);
+    const challengeId = await createChallenge("Required");
     await server.inject({
       method: "PATCH",
       url: `/api/challenges/${challengeId}`,
       headers: asUser(manager),
       payload: { mandatory: true },
     });
+    await createProject([], { name: "Existing without selection" });
 
-    const imported = await server.inject({
-      method: "POST",
-      url: "/api/devpost/imports/confirm",
-      headers: { ...asUser(manager), "idempotency-key": "mandatory-import" },
-      payload: { projectsCsv: projectsCsv(), participantsCsv: participantsCsv() },
-    });
-    expect(imported.statusCode).toBe(200);
-
-    const native = await server.inject({
+    const created = await server.inject({
       method: "POST",
       url: "/api/repos",
       headers: { ...asUser(manager), "idempotency-key": "mandatory-native" },
-      payload: { name: "Native mandatory", description: "", memberUserIds: [], challengeIds: [] },
+      payload: { name: "Created mandatory", description: "", memberUserIds: [], challengeIds: [] },
     });
-    expect(native.statusCode).toBe(200);
+    expect(created.statusCode).toBe(200);
+
+    const generated = await server.inject({
+      method: "POST",
+      url: `/api/queue/challenges/${challengeId}/enqueue`,
+      headers: { ...asUser(manager), "idempotency-key": "mandatory-generate" },
+      payload: {},
+    });
+    expect(generated.statusCode).toBe(200);
 
     const entrants = await pool.query(
       `SELECT r.name FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
@@ -112,9 +114,17 @@ describe("mandatory challenge participation (issue #851)", () => {
       [challengeId],
     );
     expect(entrants.rows.map((row: { name: string }) => row.name)).toEqual([
-      "Native mandatory",
-      "Neural Beans",
-      "Rustacean Station",
+      "Created mandatory",
+      "Existing without selection",
     ]);
+
+    // After generation a new project joins the queue immediately.
+    const late = await server.inject({
+      method: "POST",
+      url: "/api/repos",
+      headers: { ...asUser(manager), "idempotency-key": "mandatory-late" },
+      payload: { name: "Late mandatory", description: "", memberUserIds: [], challengeIds: [] },
+    });
+    expect(late.json().challenges).toEqual([expect.objectContaining({ challengeId })]);
   });
 });

@@ -9,15 +9,9 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import {
-  createChallenge,
-  EMAILS,
-  participantsCsv,
-  projectsCsv,
-  seedMatchableUsers,
-} from "./fixtures.js";
+import { createChallenge, createProject } from "./fixtures.js";
 
-/** PROJECTS_READ views + participant self-view + prize->challenge mapping. */
+/** PROJECTS_READ views + participant self-view (H20, H21, #1006). */
 
 let app: App;
 
@@ -43,15 +37,32 @@ async function getApp(): Promise<App> {
   return app;
 }
 
-async function importFixtures(operator: number): Promise<void> {
-  const server = await getApp();
-  const res = await server.inject({
-    method: "POST",
-    url: "/api/devpost/imports/confirm",
-    headers: asUser(operator),
-    payload: { projectsCsv: projectsCsv(), participantsCsv: participantsCsv() },
+interface SeededProjects {
+  aliceId: number;
+  bobId: number;
+  carolId: number;
+  beansId: number;
+  rustaceanId: number;
+  caffeineId: number;
+  aiId: number;
+}
+
+/** Two projects: Neural Beans (Alice, Bob) entered in Caffeine and AI; Rustacean Station (Carol) in AI. */
+async function seedProjects(): Promise<SeededProjects> {
+  const aliceId = await createUser({ email: "alice@primary.test", name: "Alice" });
+  const bobId = await createUser({ email: "bob@primary.test", name: "Bob" });
+  const carolId = await createUser({ email: "carol@primary.test", name: "Carol" });
+  const caffeineId = await createChallenge("Caffeine");
+  const aiId = await createChallenge("AI Challenge");
+  const beansId = await createProject([aliceId, bobId], {
+    name: "Neural Beans",
+    challengeIds: [caffeineId, aiId],
   });
-  expect(res.statusCode).toBe(200);
+  const rustaceanId = await createProject([carolId], {
+    name: "Rustacean Station",
+    challengeIds: [aiId],
+  });
+  return { aliceId, bobId, carolId, beansId, rustaceanId, caffeineId, aiId };
 }
 
 describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
@@ -59,10 +70,8 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
     const server = await getApp();
     const owner = await createUser();
     const outsider = await createUser();
-    const challengeId = await createChallenge("Optional", []);
-    const repo = (await pool.query(`INSERT INTO repos(name) VALUES('My project') RETURNING id`))
-      .rows[0].id;
-    await pool.query(`INSERT INTO submissions(repo_id,user_id) VALUES($1,$2)`, [repo, owner]);
+    const challengeId = await createChallenge("Optional");
+    const repo = await createProject([owner], { name: "My project", challengeIds: [challengeId] });
     await pool.query(
       `INSERT INTO queue_entries(repo_id,challenge_id,status,position) VALUES($1,$2,'waiting',1)`,
       [repo, challengeId],
@@ -102,13 +111,12 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
   });
   it("projects logical queue rank, ETA and every possible room", async () => {
     const server = await getApp();
-    const challengeId = await createChallenge("Presentation", []);
-    const repos = await pool.query(
-      `INSERT INTO repos(name) VALUES ('First'),('Second') RETURNING id`,
-    );
+    const challengeId = await createChallenge("Presentation");
+    const first = await createProject([], { name: "First" });
+    const second = await createProject([], { name: "Second" });
     await pool.query(
       `INSERT INTO queue_entries(repo_id,challenge_id,status,position) VALUES($1,$3,'waiting',10),($2,$3,'waiting',20)`,
-      [repos.rows[0].id, repos.rows[1].id, challengeId],
+      [first, second, challengeId],
     );
     const rooms = await pool.query(
       `INSERT INTO rooms(name) VALUES ('Room A'),('Room B') RETURNING id`,
@@ -130,7 +138,7 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
     const reader = await createUserWithCapabilities([CAPABILITIES.PROJECTS_READ]);
     const result = await server.inject({
       method: "GET",
-      url: `/api/repos/${repos.rows[1].id}`,
+      url: `/api/repos/${second}`,
       headers: asUser(reader),
     });
     expect(result.statusCode).toBe(200);
@@ -140,12 +148,9 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
       rooms: [{ name: "Room A" }, { name: "Room B" }],
     });
   });
-  it("lists repos with members, prizes and challenges mapped via devpost_tags", async () => {
+  it("lists repos with members and selected challenges before any queue exists", async () => {
     const server = await getApp();
-    await seedMatchableUsers();
-    const challengeId = await createChallenge("AI Challenge", ["Best AI Hack"]);
-    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
-    await importFixtures(operator);
+    const { beansId, caffeineId, aiId } = await seedProjects();
 
     const forbidden = await server.inject({
       method: "GET",
@@ -161,35 +166,21 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
     expect(repos).toHaveLength(2);
 
     const beans = repos.find((r: { name: string }) => r.name === "Neural Beans");
-    expect(beans.members).toHaveLength(3);
-    expect(beans.prizes.sort()).toEqual(["Best AI Hack", "Most Caffeinated"]);
-    expect(beans.challenges).toEqual([
-      {
-        id: challengeId,
-        title: "AI Challenge",
-        mandatory: false,
-        status: null,
-        position: null,
-        assignedRoomId: null,
-        assignedRoomName: null,
-        etaMinutes: null,
-        rooms: [],
-        mappedPrizes: ["Best AI Hack"],
-        source: "prize",
-        reviewStatus: null,
-        nota: null,
-      },
-    ]);
-    expect(beans.unmappedPrizes).toEqual(["Most Caffeinated"]);
+    expect(beans).toMatchObject({ id: beansId, submission_status: "submitted" });
+    expect(beans.members).toHaveLength(2);
+    expect(beans.challenges.map((c: { id: number }) => c.id).sort()).toEqual(
+      [caffeineId, aiId].sort(),
+    );
+    expect(beans.challenges[0]).toMatchObject({ status: null, position: null, rooms: [] });
 
     const single = await server.inject({
       method: "GET",
-      url: `/api/repos/${beans.id}`,
+      url: `/api/repos/${beansId}`,
       headers: asUser(reader),
     });
     expect(single.statusCode).toBe(200);
     expect(single.json().name).toBe("Neural Beans");
-    expect(single.json().members).toHaveLength(3);
+    expect(single.json().members).toHaveLength(2);
 
     const missing = await server.inject({
       method: "GET",
@@ -199,53 +190,77 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
     expect(missing.statusCode).toBe(404);
   });
 
-  it("shows directly-added queue challenges after Add to Challenge", async () => {
+  it("lists every mandatory challenge as entered without a selection", async () => {
     const server = await getApp();
-    await seedMatchableUsers();
-    const challengeId = await createChallenge("Live Queue", []);
+    const owner = await createUser();
+    const mandatory = await createChallenge("Everyone", { mandatory: true });
+    const repo = await createProject([owner]);
+    const reader = await createUserWithCapabilities([CAPABILITIES.PROJECTS_READ]);
+    const res = await server.inject({
+      method: "GET",
+      url: `/api/repos/${repo}`,
+      headers: asUser(reader),
+    });
+    expect(res.json().challenges).toEqual([
+      expect.objectContaining({ id: mandatory, mandatory: true, status: null }),
+    ]);
+  });
+
+  it("adds a challenge as a selection before generation and to the queue after (H21)", async () => {
+    const server = await getApp();
+    const { beansId, rustaceanId } = await seedProjects();
+    const challengeId = await createChallenge("Live Queue");
     const operator = await createUserWithCapabilities([
-      CAPABILITIES.PROJECTS_IMPORT,
       CAPABILITIES.PROJECTS_READ,
       CAPABILITIES.PROJECTS_EDIT,
     ]);
-    await importFixtures(operator);
 
-    const repos = await server.inject({
-      method: "GET",
-      url: "/api/repos",
-      headers: asUser(operator),
-    });
-    const beans = repos.json().repos.find((r: { name: string }) => r.name === "Neural Beans");
-
-    const add = await server.inject({
+    const before = await server.inject({
       method: "POST",
-      url: `/api/repos/${beans.id}/challenges`,
+      url: `/api/repos/${beansId}/challenges`,
       headers: asUser(operator),
       payload: { challengeId },
     });
-    expect(add.statusCode).toBe(200);
+    expect(before.statusCode).toBe(200);
+    expect(before.json()).toMatchObject({ entry: null });
+    const selection = await pool.query(
+      `SELECT 1 FROM project_challenges WHERE repo_id = $1 AND challenge_id = $2`,
+      [beansId, challengeId],
+    );
+    expect(selection.rowCount).toBe(1);
+    expect(
+      (await pool.query(`SELECT 1 FROM queue_entries WHERE challenge_id = $1`, [challengeId]))
+        .rowCount,
+    ).toBe(0);
+
+    // Once the queue exists, entering appends at the bottom immediately.
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position) VALUES ($1, $2, 'waiting', 1)`,
+      [challengeId, beansId],
+    );
+    const after = await server.inject({
+      method: "POST",
+      url: `/api/repos/${rustaceanId}/challenges`,
+      headers: asUser(operator),
+      payload: { challengeId },
+    });
+    expect(after.statusCode).toBe(200);
+    expect(after.json().entry).toMatchObject({ repo_id: rustaceanId, status: "waiting" });
 
     const single = await server.inject({
       method: "GET",
-      url: `/api/repos/${beans.id}`,
+      url: `/api/repos/${rustaceanId}`,
       headers: asUser(operator),
     });
-    expect(single.statusCode).toBe(200);
     expect(single.json().challenges).toContainEqual(
-      expect.objectContaining({
-        id: challengeId,
-        title: "Live Queue",
-        status: "waiting",
-        mappedPrizes: [],
-        source: "queue",
-      }),
+      expect.objectContaining({ id: challengeId, title: "Live Queue", status: "waiting" }),
     );
   });
 
   it("scopes evaluation status/nota to full-access staff and the owning sponsor only", async () => {
     const server = await getApp();
-    await seedMatchableUsers();
-    const challengeId = await createChallenge("Judged Challenge", []);
+    const { beansId } = await seedProjects();
+    const challengeId = await createChallenge("Judged Challenge");
     await pool.query(`UPDATE challenges SET judging_panel_criteria = $1::jsonb WHERE id = $2`, [
       JSON.stringify([
         {
@@ -266,29 +281,16 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
     ).rows[0].user_id;
 
     const operator = await createUserWithCapabilities([
-      CAPABILITIES.PROJECTS_IMPORT,
       CAPABILITIES.PROJECTS_READ,
       CAPABILITIES.PROJECTS_EDIT,
     ]);
-    await importFixtures(operator);
-    const repos = await server.inject({
-      method: "GET",
-      url: "/api/repos",
-      headers: asUser(operator),
-    });
-    const beans = repos.json().repos.find((r: { name: string }) => r.name === "Neural Beans");
-    const add = await server.inject({
-      method: "POST",
-      url: `/api/repos/${beans.id}/challenges`,
-      headers: asUser(operator),
-      payload: { challengeId },
-    });
-    expect(add.statusCode).toBe(200);
+    const beans = { id: beansId };
     const entryId = (
-      await pool.query(`SELECT id FROM queue_entries WHERE challenge_id = $1 AND repo_id = $2`, [
-        challengeId,
-        beans.id,
-      ])
+      await pool.query(
+        `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
+         VALUES ($1, $2, 'completed', NULL) RETURNING id`,
+        [challengeId, beans.id],
+      )
     ).rows[0].id;
     await pool.query(
       `INSERT INTO attempt_review (attempt_id, scores, status) VALUES ($1, $2::jsonb, 'submitted')`,
@@ -319,7 +321,7 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
     // have any scope onto this repo at all unless linked to that challenge).
     // Instead, verify a sponsor of a DIFFERENT challenge that also judges this
     // same repo cannot see this challenge's evaluation.
-    const otherChallengeId = await createChallenge("Other Challenge", []);
+    const otherChallengeId = await createChallenge("Other Challenge");
     const otherOwner = (
       await pool.query(
         `SELECT s.user_id FROM challenges c JOIN sponsors s ON s.id = c.author WHERE c.id = $1`,
@@ -347,41 +349,6 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
       .challenges.find((c: { id: number }) => c.id === otherChallengeId);
     expect(ownEntry.reviewStatus).toBeNull(); // not yet evaluated, but visible (not hidden)
   });
-
-  it("removes an imported prize from a project", async () => {
-    const server = await getApp();
-    await seedMatchableUsers();
-    const operator = await createUserWithCapabilities([
-      CAPABILITIES.PROJECTS_IMPORT,
-      CAPABILITIES.PROJECTS_READ,
-      CAPABILITIES.PROJECTS_EDIT,
-    ]);
-    await createChallenge("AI Challenge", ["Best AI Hack"]);
-    await importFixtures(operator);
-
-    const repos = await server.inject({
-      method: "GET",
-      url: "/api/repos",
-      headers: asUser(operator),
-    });
-    const beans = repos.json().repos.find((r: { name: string }) => r.name === "Neural Beans");
-
-    const remove = await server.inject({
-      method: "DELETE",
-      url: `/api/repos/${beans.id}/prizes/${encodeURIComponent("Most Caffeinated")}`,
-      headers: asUser(operator),
-    });
-    expect(remove.statusCode).toBe(200);
-    expect(remove.json()).toEqual({ repoId: beans.id, prize: "Most Caffeinated", removed: true });
-
-    const single = await server.inject({
-      method: "GET",
-      url: `/api/repos/${beans.id}`,
-      headers: asUser(operator),
-    });
-    expect(single.json().prizes).toEqual(["Best AI Hack"]);
-    expect(single.json().unmappedPrizes).toEqual([]);
-  });
 });
 
 describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
@@ -402,7 +369,6 @@ describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
   async function createSponsorChallenge(
     sponsorUserId: number,
     title: string,
-    devpostTags: string[],
   ): Promise<number> {
     const { pool } = await import("../../src/db/pool.js");
     const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
@@ -413,20 +379,16 @@ describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
       [enterprise.rows[0].id, sponsorUserId],
     );
     const challenge = await pool.query(
-      `INSERT INTO challenges (author, title, devpost_tags) VALUES ($1, $2, $3::jsonb) RETURNING id`,
-      [sponsor.rows[0].id, title, JSON.stringify(devpostTags)],
+      `INSERT INTO challenges (author, title) VALUES ($1, $2) RETURNING id`,
+      [sponsor.rows[0].id, title],
     );
     return challenge.rows[0].id;
   }
 
   it("a judge sees only repos of their assigned challenge; a full reader sees all", async () => {
     const server = await getApp();
-    await seedMatchableUsers();
-    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
-    await importFixtures(operator);
-    // "Most Caffeinated" maps only Neural Beans; "Best AI Hack" maps both repos.
-    const caffeine = await createChallenge("Caffeine", ["Most Caffeinated"]);
-    await createChallenge("AI", ["Best AI Hack"]);
+    // Caffeine has only Neural Beans; AI has both projects.
+    const { caffeineId: caffeine } = await seedProjects();
 
     // Relationship scope is sufficient; it must not widen to every project.
     const judge = await createUser();
@@ -449,9 +411,7 @@ describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
 
   it("a sponsor relationship with no challenge gets an empty list, not a 403", async () => {
     const server = await getApp();
-    await seedMatchableUsers();
-    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
-    await importFixtures(operator);
+    await seedProjects();
 
     const sponsor = await createUser();
     const enterprise = await pool.query(
@@ -468,12 +428,14 @@ describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
 
   it("a sponsor rep sees only their enterprise's challenges' repos", async () => {
     const server = await getApp();
-    await seedMatchableUsers();
-    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
-    await importFixtures(operator);
+    const { beansId } = await seedProjects();
 
     const sponsorUser = await createUser();
-    await createSponsorChallenge(sponsorUser, "Sponsor Caffeine", ["Most Caffeinated"]);
+    const own = await createSponsorChallenge(sponsorUser, "Sponsor Caffeine");
+    await pool.query(`INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2)`, [
+      beansId,
+      own,
+    ]);
 
     const res = await server.inject({
       method: "GET",
@@ -493,10 +455,7 @@ describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
 
   it("rejects anonymous and foreign repository probes while allowing wildcard access", async () => {
     const server = await getApp();
-    await seedMatchableUsers();
-    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
-    await importFixtures(operator);
-    const caffeine = await createChallenge("Caffeine", ["Most Caffeinated"]);
+    const { caffeineId: caffeine } = await seedProjects();
     const judge = await createUser();
     await assignJudge(judge, caffeine);
 
@@ -538,9 +497,12 @@ describe("GET /api/repos scoping for judges & sponsors (H8, H44/H46)", () => {
 describe("GET /api/me/projects (participant self-view)", () => {
   it("returns only repos where I have a submission; requires auth", async () => {
     const server = await getApp();
-    const { aliceId, bobId } = await seedMatchableUsers();
-    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
-    await importFixtures(operator);
+    const { aliceId, bobId } = await seedProjects();
+    await pool.query(
+      `INSERT INTO submissions (repo_id, user_id, status)
+       SELECT id, $1, 'invited' FROM repos WHERE name = 'Rustacean Station'`,
+      [aliceId],
+    );
 
     const anon = await server.inject({ method: "GET", url: "/api/me/projects" });
     expect(anon.statusCode).toBe(401);
@@ -553,18 +515,11 @@ describe("GET /api/me/projects (participant self-view)", () => {
     expect(res.statusCode).toBe(200);
     const { projects } = res.json();
     expect(projects).toHaveLength(1);
+    // A pending invite to Rustacean Station is not a membership yet.
     expect(projects[0].name).toBe("Neural Beans");
-    expect(projects[0].prizes.sort()).toEqual(["Best AI Hack", "Most Caffeinated"]);
-
-    // A verified secondary email is matched during import and gets the same
-    // project self-view as a primary-email participant.
-    const secondaryMatch = await server.inject({
-      method: "GET",
-      url: "/api/me/projects",
-      headers: asUser(bobId),
-    });
-    expect(secondaryMatch.statusCode).toBe(200);
-    expect(secondaryMatch.json().projects).toMatchObject([{ name: "Neural Beans" }]);
+    expect(projects[0].challenges).toHaveLength(2);
+    const teammate = projects[0].members.find((m: { userId: number }) => m.userId === bobId);
+    expect(teammate.email).toBeNull();
 
     const stranger = await createUser();
     const empty = await server.inject({
@@ -577,9 +532,7 @@ describe("GET /api/me/projects (participant self-view)", () => {
 
   it("lets staff list projects for a selected user in the admin profile", async () => {
     const server = await getApp();
-    const { aliceId, bobId } = await seedMatchableUsers();
-    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
-    await importFixtures(operator);
+    const { aliceId, bobId } = await seedProjects();
 
     const pleb = await createUser();
     const forbidden = await server.inject({
@@ -597,10 +550,7 @@ describe("GET /api/me/projects (participant self-view)", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().projects).toHaveLength(1);
-    expect(res.json().projects[0]).toMatchObject({
-      name: "Neural Beans",
-      prizes: ["Best AI Hack", "Most Caffeinated"],
-    });
+    expect(res.json().projects[0]).toMatchObject({ name: "Neural Beans" });
 
     const bob = await server.inject({
       method: "GET",
@@ -620,21 +570,17 @@ describe("GET /api/me/projects (participant self-view)", () => {
     expect(missing.statusCode).toBe(404);
   });
 
-  it("removes an imported roster member from project, queue, and profile views", async () => {
+  it("removes a roster member from project, queue, and profile views", async () => {
     const server = await getApp();
-    const { aliceId } = await seedMatchableUsers();
+    const { aliceId, beansId: beans } = await seedProjects();
     const operator = await createUserWithCapabilities([
-      CAPABILITIES.PROJECTS_IMPORT,
       CAPABILITIES.PROJECTS_EDIT,
       CAPABILITIES.PROJECTS_READ,
       CAPABILITIES.USERS_READ,
       CAPABILITIES.QUEUE_ADMIN,
     ]);
-    await importFixtures(operator);
 
-    const { pool } = await import("../../src/db/pool.js");
-    const beans = (await pool.query(`SELECT id FROM repos WHERE name = 'Neural Beans'`)).rows[0].id;
-    const challengeId = await createChallenge("Beans queue", []);
+    const challengeId = await createChallenge("Beans queue");
     const room = await pool.query(`INSERT INTO rooms (name) VALUES ('Beans room') RETURNING id`);
     const roomId = room.rows[0].id;
     await pool.query(
@@ -658,7 +604,7 @@ describe("GET /api/me/projects (participant self-view)", () => {
 
     const removed = await server.inject({
       method: "DELETE",
-      url: `/api/repos/${beans}/devpost-participants/${encodeURIComponent(EMAILS.alice)}`,
+      url: `/api/repos/${beans}/members/${aliceId}`,
       headers: asUser(operator),
     });
     expect(removed.statusCode).toBe(200);
@@ -668,16 +614,10 @@ describe("GET /api/me/projects (participant self-view)", () => {
       aliceId,
     ]);
     expect(sub.rows).toHaveLength(0);
-    const dp = await pool.query(
-      `SELECT email, user_id, merge_status FROM devpost_participants
-        WHERE repo_id = $1 AND email = $2`,
-      [beans, EMAILS.alice],
-    );
-    expect(dp.rows).toEqual([]);
     const audit = await pool.query(
       `SELECT before FROM audit_log
-        WHERE entity_type = 'devpost_participant' AND entity_id = $1 AND action = 'delete'`,
-      [`${beans}:${EMAILS.alice}`],
+        WHERE entity_type = 'submission' AND entity_id = $1 AND action = 'remove_member'`,
+      [`${beans}:${aliceId}`],
     );
     expect(audit.rows[0].before).toMatchObject({ userId: aliceId });
 
@@ -687,11 +627,8 @@ describe("GET /api/me/projects (participant self-view)", () => {
       headers: asUser(operator),
     });
     expect(
-      (roster.json().members as { userId: number | null }[]).some((m) => m.userId === aliceId),
+      (roster.json().members as { userId: number }[]).some((m) => m.userId === aliceId),
     ).toBe(false);
-    expect(roster.json().members.some((m: { email: string }) => m.email === EMAILS.alice)).toBe(
-      false,
-    );
 
     const queue = await server.inject({
       method: "GET",
@@ -716,13 +653,11 @@ describe("GET /api/me/projects (participant self-view)", () => {
 describe("POST /api/repos/:repoId/members (PROJECTS_EDIT)", () => {
   it("adds an existing internal user and returns them in project detail", async () => {
     const server = await getApp();
-    await seedMatchableUsers();
+    await seedProjects();
     const operator = await createUserWithCapabilities([
-      CAPABILITIES.PROJECTS_IMPORT,
       CAPABILITIES.PROJECTS_EDIT,
       CAPABILITIES.PROJECTS_READ,
     ]);
-    await importFixtures(operator);
 
     const reposRes = await server.inject({
       method: "GET",
@@ -753,7 +688,6 @@ describe("POST /api/repos/:repoId/members (PROJECTS_EDIT)", () => {
           userId: member,
           email: "late-signup@test.local",
           name: "Late Signup",
-          mergeStatus: "manual",
         }),
       ]),
     );
@@ -765,103 +699,5 @@ describe("POST /api/repos/:repoId/members (PROJECTS_EDIT)", () => {
     });
     expect(mine.statusCode).toBe(200);
     expect(mine.json().projects.map((p: { id: number }) => p.id)).toEqual([repo.id]);
-  });
-});
-
-describe("POST /api/devpost/prizes/:prizeName/map", () => {
-  it("appends the prize to challenges.devpost_tags and reports affected repos without enqueuing", async () => {
-    const server = await getApp();
-    await seedMatchableUsers();
-    const challengeId = await createChallenge("Caffeine Challenge", []);
-    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
-    await importFixtures(operator);
-
-    const res = await server.inject({
-      method: "POST",
-      url: `/api/devpost/prizes/${encodeURIComponent("Most Caffeinated")}/map`,
-      headers: asUser(operator),
-      payload: { challengeId },
-    });
-    expect(res.statusCode).toBe(200);
-    const result = res.json();
-    expect(result.challengeId).toBe(challengeId);
-    expect(result.prize).toBe("Most Caffeinated");
-    expect(result.repoCount).toBe(1);
-    expect(result.repoIds).toHaveLength(1);
-
-    const { pool } = await import("../../src/db/pool.js");
-    const challenge = await pool.query(`SELECT devpost_tags FROM challenges WHERE id = $1`, [
-      challengeId,
-    ]);
-    expect(challenge.rows[0].devpost_tags).toEqual(["Most Caffeinated"]);
-
-    // queue is NOT touched — that's the queue workstream's job
-    const entries = await pool.query(`SELECT count(*)::int AS n FROM queue_entries`);
-    expect(entries.rows[0].n).toBe(0);
-
-    // idempotent: mapping again doesn't duplicate the tag
-    const again = await server.inject({
-      method: "POST",
-      url: `/api/devpost/prizes/${encodeURIComponent("Most Caffeinated")}/map`,
-      headers: asUser(operator),
-      payload: { challengeId },
-    });
-    expect(again.statusCode).toBe(200);
-    const after = await pool.query(`SELECT devpost_tags FROM challenges WHERE id = $1`, [
-      challengeId,
-    ]);
-    expect(after.rows[0].devpost_tags).toEqual(["Most Caffeinated"]);
-
-    const auditRows = await pool.query(
-      `SELECT * FROM audit_log WHERE action = 'map_devpost_prize'`,
-    );
-    expect(auditRows.rows).toHaveLength(2);
-
-    // members with the fixture emails still line up (sanity on fixture reuse)
-    expect(EMAILS.alice).toContain("@");
-  });
-
-  it("404s for a missing challenge", async () => {
-    const server = await getApp();
-    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
-    const res = await server.inject({
-      method: "POST",
-      url: `/api/devpost/prizes/${encodeURIComponent("Ghost Prize")}/map`,
-      headers: asUser(operator),
-      payload: { challengeId: 424242 },
-    });
-    expect(res.statusCode).toBe(404);
-  });
-});
-
-describe("GET /api/devpost/prizes", () => {
-  it("is readable by PROJECTS_IMPORT (H17: importers must see unmapped prizes), not just QUEUE_ADMIN", async () => {
-    const server = await getApp();
-    await seedMatchableUsers();
-    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
-    await importFixtures(operator);
-
-    const res = await server.inject({
-      method: "GET",
-      url: "/api/devpost/prizes",
-      headers: asUser(operator),
-    });
-    expect(res.statusCode).toBe(200);
-    const { prizes } = res.json();
-    expect(prizes.map((p: { name: string }) => p.name)).toContain("Most Caffeinated");
-    expect(
-      prizes.every((p: { mappedChallengeId: number | null }) => p.mappedChallengeId === null),
-    ).toBe(true);
-  });
-
-  it("403s for a caller without PROJECTS_IMPORT or QUEUE_ADMIN", async () => {
-    const server = await getApp();
-    const bystander = await createUser();
-    const res = await server.inject({
-      method: "GET",
-      url: "/api/devpost/prizes",
-      headers: asUser(bystander),
-    });
-    expect(res.statusCode).toBe(403);
   });
 });
