@@ -82,7 +82,10 @@ test("keeps one participant project from draft to submission, with live presenta
     else if (path === "/api/me/projects")
       body = {
         projects: multipleProjects
-          ? [currentProject(), { ...currentProject(), id: 11, name: "Second project", challenges: [] }]
+          ? [
+              currentProject(),
+              { ...currentProject(), id: 11, name: "Second project", challenges: [] },
+            ]
           : [currentProject()],
         canCreate: true,
       };
