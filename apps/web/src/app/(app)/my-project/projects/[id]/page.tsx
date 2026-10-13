@@ -208,11 +208,7 @@ export default function MyProjectDetailPage() {
                         setRemovingChallenge(challenge.id);
                         setChangeError(null);
                         try {
-                          await removeMyProjectChallenge(
-                            project.id,
-                            challenge.id,
-                            crypto.randomUUID(),
-                          );
+                          await removeMyProjectChallenge(project.id, challenge.id);
                           await load();
                         } catch (error) {
                           setChangeError(
@@ -274,7 +270,7 @@ function AddChallenge({
   async function add() {
     setSaving(true);
     try {
-      await addMyProjectChallenge(project.id, Number(selected), crypto.randomUUID());
+      await addMyProjectChallenge(project.id, Number(selected));
       setSelected("");
       setOpen(false);
       await onAdded();
@@ -336,7 +332,7 @@ function InviteMember({
   async function invite() {
     setSaving(true);
     try {
-      await inviteProjectMember(projectId, email.trim(), crypto.randomUUID());
+      await inviteProjectMember(projectId, email.trim());
       setEmail("");
       await onInvited();
     } catch (error) {

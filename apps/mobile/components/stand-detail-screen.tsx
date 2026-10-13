@@ -23,7 +23,6 @@ import { SymbolView } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import type { StandSummary, StandTag } from "@/lib/stands";
@@ -102,7 +101,6 @@ export function StandDetailScreen() {
         method: "PUT",
         headers: {
           "content-type": "application/json",
-          "Idempotency-Key": createIdempotencyKey(),
         },
         body: JSON.stringify({ scannable }),
       });
@@ -125,7 +123,6 @@ export function StandDetailScreen() {
     try {
       await apiFetch(`/api/enterprises/${stand.enterpriseId}/stand-tags/${tag.id}`, {
         method: "DELETE",
-        headers: { "Idempotency-Key": createIdempotencyKey() },
       });
       void haptic("success");
       setStand((current) =>

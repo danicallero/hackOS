@@ -387,10 +387,6 @@ export function resolveScheduleText(
   };
 }
 
-export function idempotencyHeaders(prefix: string): Record<string, string> {
-  return { "idempotency-key": `${prefix}-${crypto.randomUUID()}` };
-}
-
 export const logisticsApi = {
   searchPeople: (q: string, fields?: PersonSearchField[]) =>
     api.post<{ results: PersonSearchResult[] }>("/api/logistics/people/search", { q, fields }),
@@ -402,28 +398,19 @@ export const logisticsApi = {
   accreditationStats: () =>
     api.get<{ byRole: AccreditationRoleCount[] }>("/api/accreditation/stats"),
   checkIn: (body: { ticketToken: string; badgeId: string; method: "qr" | "manual" | "nfc" }) =>
-    api.post<CheckInResult>("/api/accreditation/check-in", body, {
-      headers: idempotencyHeaders("check-in"),
-    }),
+    api.post<CheckInResult>("/api/accreditation/check-in", body),
   checkInUser: (body: { userId: number; badgeId: string; method: "qr" | "manual" | "nfc" }) =>
-    api.post<CheckInResult>("/api/accreditation/check-in-user", body, {
-      headers: idempotencyHeaders("check-in-user"),
-    }),
+    api.post<CheckInResult>("/api/accreditation/check-in-user", body),
   rotate: (body: {
     userId?: number;
     currentBadgeId?: string;
     newBadgeId: string;
     reason: string;
-  }) =>
-    api.post<RotateBadgeResult>("/api/accreditation/rotate", body, {
-      headers: idempotencyHeaders("badge-rotate"),
-    }),
+  }) => api.post<RotateBadgeResult>("/api/accreditation/rotate", body),
   presenceLookup: (badgeId: string) =>
     api.post<PresenceLookup>("/api/presence/lookup", { badgeId }),
   presenceScan: (body: { badgeId: string; kind: "in" | "out"; scannedAt?: string }) =>
-    api.post<PresenceScanResult>("/api/presence/scan", body, {
-      headers: idempotencyHeaders("presence"),
-    }),
+    api.post<PresenceScanResult>("/api/presence/scan", body),
   presenceEstimate: () => api.get<PresenceEstimate>("/api/presence/estimate"),
   presenceHours: () => api.get<PresenceHours[]>("/api/presence/hours"),
   presenceOpenSessions: () => api.get<{ items: OpenPresenceSession[] }>("/api/presence/open"),
@@ -497,10 +484,7 @@ export const logisticsApi = {
   activityScan: (
     activityId: number,
     body: { badgeId: string; allowRepeat?: boolean; scannedAt?: string },
-  ) =>
-    api.post<ActivityScanResult>(`/api/activities/${activityId}/scan`, body, {
-      headers: idempotencyHeaders("activity-scan"),
-    }),
+  ) => api.post<ActivityScanResult>(`/api/activities/${activityId}/scan`, body),
   mealBatch: (
     activityId: number,
     body: {
@@ -512,10 +496,7 @@ export const logisticsApi = {
         scannedAt?: string;
       }>;
     },
-  ) =>
-    api.post<MealScanBatchResult>(`/api/activities/${activityId}/meal-scans/batch`, body, {
-      headers: idempotencyHeaders("meal-batch"),
-    }),
+  ) => api.post<MealScanBatchResult>(`/api/activities/${activityId}/meal-scans/batch`, body),
   myTicket: () => api.get<TicketQrPayload>("/api/me/ticket"),
   googleWalletSaveUrl: (purpose: "ticket" | "badge") =>
     api.get<{ saveUrl: string }>(`/api/me/wallet/google/${purpose}`),

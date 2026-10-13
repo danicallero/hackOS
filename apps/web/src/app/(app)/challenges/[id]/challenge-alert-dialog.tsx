@@ -55,7 +55,6 @@ export function ChallengeAlertDialog({
           body,
           target: allParticipants ? "participants" : "challenge",
         },
-        { headers: { "idempotency-key": crypto.randomUUID() } },
       );
       toast.success(t("challengeAlertSent", { count: result.recipients }), {
         compactTitle: t("sendChallengeAlert"),

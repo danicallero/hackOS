@@ -85,9 +85,7 @@ export function useMealPlan(userId: number | null) {
   const save = useCallback(
     async (plan: MealPlan, answers: MealAnswers) => {
       try {
-        const next = await api.put<MealPlan>("/api/me/meal-plan", mealPlanBody(plan, answers), {
-          headers: { "idempotency-key": crypto.randomUUID() },
-        });
+        const next = await api.put<MealPlan>("/api/me/meal-plan", mealPlanBody(plan, answers));
         if (userId !== null) setState({ userId, plan: next, status: "ready" });
         return next;
       } catch (err) {

@@ -265,7 +265,7 @@ export default function ProjectDetailPage() {
                 repoId={repo.id}
                 currentMembers={repo.members}
                 onAdd={async (userId) => {
-                  await addRepoMember(repo.id, userId, crypto.randomUUID());
+                  await addRepoMember(repo.id, userId);
                   await load();
                 }}
               />
@@ -393,7 +393,7 @@ export default function ProjectDetailPage() {
               repoId={repo.id}
               challenges={availableChallenges}
               onAdd={async (challengeId) => {
-                await addRepoChallenge(repo.id, challengeId, crypto.randomUUID());
+                await addRepoChallenge(repo.id, challengeId);
                 await load();
               }}
             />

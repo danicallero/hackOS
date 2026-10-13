@@ -205,7 +205,6 @@ describe("StandsScreen (#935)", () => {
       method: "POST",
       body: JSON.stringify({ kind: "nfc", uid: "04A1B2C3D4E5F6" }),
     });
-    expect((call?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
     expect(screen.getByText("standsCounts:1/1")).toBeTruthy();
     expect(Alert.alert).not.toHaveBeenCalled();
   });

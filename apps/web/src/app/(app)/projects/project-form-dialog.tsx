@@ -94,9 +94,7 @@ export function ProjectFormDialog({
           challengeIds: challengeIds.map(Number),
         };
         const created =
-          mode.kind === "create"
-            ? await createRepo(input, crypto.randomUUID())
-            : await createMyProject(input, crypto.randomUUID());
+          mode.kind === "create" ? await createRepo(input) : await createMyProject(input);
         toast.success(t("projectCreated"), { compactTitle: t("toastCreateProject") });
         setOpen(false);
         resetToInitial();

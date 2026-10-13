@@ -4,7 +4,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError } from "../../lib/errors.js";
-import { idempotencyGuard, requireIdempotencyKey } from "../../lib/idempotency.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import {
   CV_MAX_BYTES,
   deleteReplacedObject,
@@ -214,7 +214,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
     "/api/me/public-profile/cv",
     {
       config: authenticated,
-      preHandler: [requireAuth, requireIdempotencyKey],
+      preHandler: [requireAuth, idempotencyGuard],
       schema: {
         summary: "Upload my CV",
         description:

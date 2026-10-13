@@ -96,7 +96,7 @@ export default function WorkGroupDetailPage() {
     if (!group) return;
     setResponding(true);
     try {
-      await respondWorkGroupInvite(group.id, action, crypto.randomUUID());
+      await respondWorkGroupInvite(group.id, action);
       if (action === "decline") router.replace("/my-project");
       else await load();
     } catch (error) {
@@ -201,7 +201,7 @@ function Members({
   async function invite() {
     setBusy(true);
     try {
-      await inviteWorkGroupMember(group.id, email, crypto.randomUUID());
+      await inviteWorkGroupMember(group.id, email);
       setEmail("");
       await onChanged();
     } catch (error) {
@@ -279,7 +279,7 @@ function Members({
                     setBusy(true);
                     setMemberError(null);
                     try {
-                      await removeWorkGroupMember(group.id, member.userId, crypto.randomUUID());
+                      await removeWorkGroupMember(group.id, member.userId);
                       await onChanged();
                     } catch (error) {
                       setMemberError(
@@ -322,8 +322,8 @@ function Challenges({
     setBusy(true);
     setError(null);
     try {
-      if (remove) await removeWorkGroupChallenge(group.id, challengeId, crypto.randomUUID());
-      else await addWorkGroupChallenge(group.id, challengeId, crypto.randomUUID());
+      if (remove) await removeWorkGroupChallenge(group.id, challengeId);
+      else await addWorkGroupChallenge(group.id, challengeId);
       setSelected("");
       if (!remove) setAddOpen(false);
       await onChanged();
@@ -453,7 +453,7 @@ function DeleteGroup({ group, onDeleted }: { group: PlannedWorkGroup; onDeleted:
         onConfirm={async () => {
           setPending(true);
           try {
-            await deleteWorkGroup(group.id, crypto.randomUUID());
+            await deleteWorkGroup(group.id);
             setOpen(false);
             onDeleted();
           } catch (error) {

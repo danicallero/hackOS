@@ -229,12 +229,11 @@ export default function QueuePage() {
       mutate(
         `manual-${entry.id}`,
         () =>
-          entryAction(
-            entry.id,
-            "manual-call",
-            { targetStatus, roomId: activeRoomId, reason: "Manual queue selection" },
-            crypto.randomUUID(),
-          ),
+          entryAction(entry.id, "manual-call", {
+            targetStatus,
+            roomId: activeRoomId,
+            reason: "Manual queue selection",
+          }),
         targetStatus === "in_room" ? t("teamBroughtIn") : t("teamCalled"),
       ),
     [activeRoomId, mutate, t],
@@ -339,12 +338,7 @@ export default function QueuePage() {
               <Button
                 disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
                 onClick={() =>
-                  activeRoomId &&
-                  mutate(
-                    "pause",
-                    () => resumeRoom(activeRoomId, crypto.randomUUID()),
-                    t("roomResumed"),
-                  )
+                  activeRoomId && mutate("pause", () => resumeRoom(activeRoomId), t("roomResumed"))
                 }
                 loading={busy === "pause"}
               >
@@ -359,12 +353,7 @@ export default function QueuePage() {
                 confirmLabel={t("pause")}
                 autoClose
                 onConfirm={() =>
-                  activeRoomId &&
-                  mutate(
-                    "pause",
-                    () => pauseRoom(activeRoomId, crypto.randomUUID()),
-                    t("roomPaused"),
-                  )
+                  activeRoomId && mutate("pause", () => pauseRoom(activeRoomId), t("roomPaused"))
                 }
                 trigger={
                   <Button
@@ -466,11 +455,7 @@ export default function QueuePage() {
               onQuery={setSearch}
               onManualCall={handleManualCall}
               onEntryAction={(entry, action, body, label) =>
-                mutate(
-                  `${action}-${entry.id}`,
-                  () => entryAction(entry.id, action, body, crypto.randomUUID()),
-                  label,
-                )
+                mutate(`${action}-${entry.id}`, () => entryAction(entry.id, action, body), label)
               }
               onMoveToPosition={(entry, position) =>
                 mutate(
@@ -480,7 +465,6 @@ export default function QueuePage() {
                       entry.id,
                       position,
                       "Judging panel: moved team to position",
-                      crypto.randomUUID(),
                     ),
                   t("queueTeamMoved"),
                 )
@@ -489,12 +473,7 @@ export default function QueuePage() {
                 mutate(
                   `move-top-${entry.id}`,
                   () =>
-                    entryAction(
-                      entry.id,
-                      "move-top",
-                      { reason: "Search: moved to top of queue" },
-                      crypto.randomUUID(),
-                    ),
+                    entryAction(entry.id, "move-top", { reason: "Search: moved to top of queue" }),
                   t("teamMovedTop"),
                 )
               }
@@ -503,16 +482,11 @@ export default function QueuePage() {
                 mutate(
                   `add-waiting-${entry.id}`,
                   () =>
-                    entryAction(
-                      entry.id,
-                      "manual-call",
-                      {
-                        targetStatus: "called",
-                        roomId: activeRoomId,
-                        reason: "Search: to waiting room",
-                      },
-                      crypto.randomUUID(),
-                    ),
+                    entryAction(entry.id, "manual-call", {
+                      targetStatus: "called",
+                      roomId: activeRoomId,
+                      reason: "Search: to waiting room",
+                    }),
                   t("teamAddedWaiting"),
                 )
               }
@@ -520,12 +494,10 @@ export default function QueuePage() {
                 mutate(
                   `re-enter-${entry.id}-${position}`,
                   () =>
-                    entryAction(
-                      entry.id,
-                      "re-enter",
-                      { position, reason: "Recovered from manual search" },
-                      crypto.randomUUID(),
-                    ),
+                    entryAction(entry.id, "re-enter", {
+                      position,
+                      reason: "Recovered from manual search",
+                    }),
                   t("teamReentered"),
                 )
               }
@@ -546,11 +518,7 @@ export default function QueuePage() {
                 canOperate={canOperate}
                 busy={busy}
                 onEntryAction={(entry, action, body, label) =>
-                  mutate(
-                    `${action}-${entry.id}`,
-                    () => entryAction(entry.id, action, body, crypto.randomUUID()),
-                    label,
-                  )
+                  mutate(`${action}-${entry.id}`, () => entryAction(entry.id, action, body), label)
                 }
               />
             </div>
