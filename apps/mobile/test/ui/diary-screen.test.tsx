@@ -469,10 +469,10 @@ describe("People", () => {
     expect(screen.getByText("Bea R.")).toBeTruthy();
     expect(screen.queryByText("José P.")).toBeNull();
     await act(async () => nativeSearch()?.onBlur());
-    expect(mockSetOptions.mock.calls.at(-1)?.[0].headerSearchBarOptions).toBeUndefined();
+    expect(nativeSearch()).toEqual(expect.objectContaining({ placement: "stacked" }));
     await fireEvent.press(screen.getByLabelText("scheduleSearch"));
     await act(async () => nativeSearch()?.onCancelButtonPress());
-    expect(mockSetOptions.mock.calls.at(-1)?.[0].headerSearchBarOptions).toBeUndefined();
+    expect(nativeSearch()).toEqual(expect.objectContaining({ placement: "stacked" }));
     expect(screen.getByText("José P.")).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("diaryShowFavourites"));
     expect(screen.getByText("José P.")).toBeTruthy();

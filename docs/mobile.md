@@ -2150,8 +2150,8 @@ track with a white thumb and a neutral off track, in both themes.
 Contacts orders the actions Ticket, Favourites, Search from left to right,
 groups Favourites and Search together, and keeps the wallet/ticket button
 on a separate native background (`separateBackground`). Search still opens the
-native iOS search controller, mounted and focused on demand from the grouped
-search action. All toolbar actions stay mounted while searching; blur or cancel
-closes the search controller and restores the normal header. Legacy headers use the same
+native iOS search controller, kept mounted in stacked placement and focused on
+demand from the grouped search action. All toolbar actions stay mounted while
+searching; blur or cancel ends search without rebuilding the toolbar. Legacy headers use the same
 grouping with their existing search field. People/Companies switching, saved
 contacts, favourites and wallet actions retain their existing behavior.

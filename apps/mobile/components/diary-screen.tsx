@@ -421,26 +421,25 @@ export function DiaryScreen() {
       headerTransparent: true,
       headerShadowVisible: false,
       // Removed on Companies: the native bar has no inert state.
-      headerSearchBarOptions:
-        searchable && searchOpen
-          ? {
-              ref: nativeSearch,
-              placeholder: t("diarySearchPlaceholder"),
-              autoCapitalize: "none",
-              hideWhenScrolling: true,
-              allowToolbarIntegration: false,
-              placement: "stacked",
-              onChangeText: (event: { nativeEvent: { text: string } }) =>
-                setQuery(event.nativeEvent.text),
-              onBlur: () => setSearchOpen(false),
-              onCancelButtonPress: () => {
-                setQuery("");
-                setSearchOpen(false);
-              },
-            }
-          : undefined,
+      headerSearchBarOptions: searchable
+        ? {
+            ref: nativeSearch,
+            placeholder: t("diarySearchPlaceholder"),
+            autoCapitalize: "none",
+            hideWhenScrolling: true,
+            allowToolbarIntegration: false,
+            placement: "stacked",
+            onChangeText: (event: { nativeEvent: { text: string } }) =>
+              setQuery(event.nativeEvent.text),
+            onBlur: () => setSearchOpen(false),
+            onCancelButtonPress: () => {
+              setQuery("");
+              setSearchOpen(false);
+            },
+          }
+        : undefined,
     });
-  }, [glassAvailable, navigation, searchable, searchOpen, t]);
+  }, [glassAvailable, navigation, searchable, t]);
 
   useEffect(() => {
     if (!glassAvailable || !searchOpen) return;
