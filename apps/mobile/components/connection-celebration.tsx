@@ -59,7 +59,7 @@ const PARTICLES = 10;
 /** Lets the overlay and the Skia canvas paint before the photos move. */
 const FADE_IN_MS = 140;
 const ENTER_DELAY_MS = 220;
-const ENTER_MS = 950;
+const ENTER_MS = 850;
 const MERGE_MS = ENTER_DELAY_MS + ENTER_MS;
 const MOTION_MS = 3200;
 const REDUCED_MS = 1600;
@@ -179,11 +179,12 @@ function Celebration({
     if (reduceMotion) {
       void haptic("success");
     } else {
-      // A timed slide, so the entry from both edges reads; the bounce is
+      // A timed slide that keeps accelerating, as if pulled together, so the
+      // entry from both edges reads and the photos hit at full speed; the bounce is
       // saved for the merge (pop).
       approach.value = withDelay(
         ENTER_DELAY_MS,
-        withTiming(1, { duration: ENTER_MS, easing: Easing.bezier(0.45, 0, 0.25, 1) }),
+        withTiming(1, { duration: ENTER_MS, easing: Easing.in(Easing.cubic) }),
       );
       pop.value = withDelay(
         MERGE_MS,

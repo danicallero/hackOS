@@ -1076,7 +1076,7 @@ diary (never a re-scan, never a stand) plays `components/connection-celebration.
 a transparent full-screen `Modal` (or, for a QR scan, an overlay inside the
 scanner's own modal, which stays up until the result arrives so the animation
 starts at once instead of waiting for the camera to slide away) where the viewer's photo (from `useMeContext`)
-and the scanned person's slide in from opposite edges (a 0.95 s gentle ease-in-out that
+and the scanned person's slide in from opposite edges (a 0.85 s ease-in that keeps accelerating until they meet, which
 starts after about 0.2 s, once the overlay and canvas have painted) and fuse like metaballs
 (`components/connection-celebration-skia.tsx`, `@shopify/react-native-skia`): the
 two accent blobs behind the photos go through a Skia blur plus an alpha-threshold
