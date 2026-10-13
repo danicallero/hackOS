@@ -218,6 +218,9 @@ fail this check; add them to `apps/api/scripts/test-integration.mjs`. Root-level
 suites belong to the fourth shard. Each shard resets and migrates its own
 `hackos_test_shard_N` database and runs files serially, then drops its database.
 Use `pnpm --filter @hackos/api test:serial test/<file>.test.ts` for focused runs.
+Valkey test database indices must stay within its default 0–15 range. The
+rate-limit TTL regression uses DB 4, separate from identity's DB 11, so other
+suites' `FLUSHDB` calls cannot remove its counter mid-window (#1035).
 
 Open every pull request as a draft. Feature PRs may target protected `staging`
 or `main`; `staging` is the development branch and `main` is production. Draft

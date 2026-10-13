@@ -4,7 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // Other identity suites use FLUSHDB on DB 11. Keep this primitive-only test
 // isolated because local workers share one Valkey instance.
-process.env.VALKEY_URL = process.env.TEST_VALKEY_URL ?? "redis://localhost:6379/19";
+// #1035: DB 4 is unclaimed and within Valkey's default 0–15 database range.
+process.env.VALKEY_URL = process.env.TEST_VALKEY_URL ?? "redis://localhost:6379/4";
 
 let valkey: typeof import("../../src/lib/valkey.js")["valkey"];
 let consumeRateLimit: typeof import("../../src/lib/rate-limit.js")["consumeRateLimit"];
