@@ -59,15 +59,15 @@ const PARTICLES = 10;
 /** Lets the overlay and the Skia canvas paint before the photos move. */
 const FADE_IN_MS = 140;
 const ENTER_DELAY_MS = 220;
-const ENTER_MS = 700;
+const ENTER_MS = 950;
 const MERGE_MS = ENTER_DELAY_MS + ENTER_MS;
-const MOTION_MS = 3000;
+const MOTION_MS = 3200;
 const REDUCED_MS = 1600;
 
 /**
  * #935: the moment two people connect. A full-screen overlay where both photos
  * fly in, fuse like metaballs with an elastic spring (Skia blur + alpha
- * threshold), and burst into a ring, and particles (about 3 s).
+ * threshold), and burst into a ring and particles (about 3.2 s).
  * Everything is a shared-value driven, so the frames run on the UI thread. If
  * Skia is unavailable or throws, the same beats play as Reanimated transforms
  * with a squash instead of the goo. Under reduced motion it is a short
@@ -183,7 +183,7 @@ function Celebration({
       // saved for the merge (pop).
       approach.value = withDelay(
         ENTER_DELAY_MS,
-        withTiming(1, { duration: ENTER_MS, easing: Easing.out(Easing.cubic) }),
+        withTiming(1, { duration: ENTER_MS, easing: Easing.bezier(0.45, 0, 0.25, 1) }),
       );
       pop.value = withDelay(
         MERGE_MS,
