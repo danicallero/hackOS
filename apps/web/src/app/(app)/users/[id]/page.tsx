@@ -14,6 +14,7 @@ import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { Intolerance, UserDetail } from "@/lib/types";
@@ -51,11 +52,11 @@ export default function UserProfilePage() {
   });
 
   const [user, setUser] = useState<UserDetail | null>(null);
-  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [notFound, setNotFound] = useState(false);
 
+  const { intolerances, error: dictionaryError, reload: reloadDictionary } = useFoodIntolerances();
   const { succeeded, failed, reset, stale, retryNonce } = useBackgroundRefresh();
 
   const load = useCallback(async () => {
@@ -91,13 +92,6 @@ export default function UserProfilePage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: a different user is a different resource, so its first load may show an error.
   useEffect(() => reset(), [userId, reset]);
 
-  useEffect(() => {
-    api
-      .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
-      .then((r) => setIntolerances(r.intolerances))
-      .catch(() => setIntolerances([]));
-  }, []);
-
   if (status === "loading") {
     return (
       <div className="flex items-center justify-center py-20">
@@ -129,6 +123,9 @@ export default function UserProfilePage() {
   return (
     <PageLayout>
       {stale && <StaleDataNotice onRetry={() => void load()} />}
+      {dictionaryError ? (
+        <ContextualError message={t("couldNotLoadDictionary")} onRetry={reloadDictionary} />
+      ) : null}
       <ProfileHeader user={user} onPhotoChanged={load} />
 
       <Tabs value={tab} onValueChange={setTab}>

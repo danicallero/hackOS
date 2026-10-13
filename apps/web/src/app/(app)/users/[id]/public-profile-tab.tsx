@@ -53,7 +53,10 @@ export function PublicProfileTab({
     },
     domainScope(SSE_TOPICS.IDENTITY),
     [EVENTS.DOMAIN_CHANGED],
-    { queryKey: [user.id, user.image] },
+    {
+      queryKey: [user.id, user.image],
+      resourceKey: ["users", user.id, "public-profile", user.image],
+    },
   );
   const [saved, setSaved] = useState<{ generation: number; profile: PublicProfile } | null>(null);
   const [edits, setEdits] = useState<Settings | null>(null);

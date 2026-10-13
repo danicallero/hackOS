@@ -128,12 +128,13 @@ export function useEventSource(
  *     () => getRoomView(roomId),
  *     REALTIME_SCOPES.QUEUE,
  *     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
+ *     { resourceKey: ["queue", "room-view", roomId] },
  *   );
  */
 export function useLiveQuery<T>(
   fetcher: (signal?: AbortSignal) => Promise<T>,
   scope: string,
-  eventNames: readonly string[] = Object.values(EVENTS),
+  eventNames: readonly string[],
   {
     enabled = true,
     debounceMs = 150,
@@ -146,13 +147,13 @@ export function useLiveQuery<T>(
     enabled?: boolean;
     debounceMs?: number;
     queryKey?: readonly unknown[];
-    /** Identity-scoped shared read-model key. Omit for legacy local queries. */
-    resourceKey?: ServerStateKey;
+    /** Identity-scoped shared read-model key; include every parameter the fetcher uses. */
+    resourceKey: ServerStateKey;
     identityKey?: string | number | null;
     /** Optional side effect for a matching event (for example an operational alert). */
     onEvent?: (event: SseEnvelope) => void;
     onResync?: (context: SseResyncContext) => void;
-  } = {},
+  },
 ): {
   data: T | null;
   error: unknown;
@@ -163,9 +164,9 @@ export function useLiveQuery<T>(
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
-  const resourceKeyValue = JSON.stringify(requestedResourceKey ?? null);
+  const resourceKeyValue = JSON.stringify(requestedResourceKey);
   // The key is a value contract, so equal inline arrays must not restart a read.
-  const resourceKey = stableResourceKey(resourceKeyValue);
+  const resourceKey = stableResourceKey(resourceKeyValue) as ServerStateKey;
 
   const fetcherRef = useRef(fetcher);
   useEffect(() => {
@@ -187,7 +188,7 @@ export function useLiveQuery<T>(
       const current = requestRef.current;
       // Recovery reads must bypass the short-lived deduplication value: a
       // disconnected stream or resumed tab has no event to invalidate it.
-      if (resourceKey && (trigger === "poll" || trigger === "visibility" || trigger === "retry")) {
+      if (trigger === "poll" || trigger === "visibility" || trigger === "retry") {
         invalidateServerState(resourceKey);
         if (current) current.cancelled = true;
       }
@@ -206,10 +207,7 @@ export function useLiveQuery<T>(
       requestRef.current = request;
       observeRefetch(telemetryScope, trigger);
 
-      (resourceKey
-        ? readServerState(resourceKey, (signal) => fetcherRef.current(signal))
-        : fetcherRef.current()
-      )
+      readServerState(resourceKey, (signal) => fetcherRef.current(signal))
         .then((d) => {
           if (!request.cancelled) {
             dataRef.current = d;
@@ -271,13 +269,11 @@ export function useLiveQuery<T>(
   const onEvent = useCallback(
     (event: SseEnvelope) => {
       onMatchingEventRef.current?.(event);
-      if (resourceKey) {
-        invalidateServerState(resourceKey);
-        // A fetch implementation may resolve despite AbortSignal (tests and
-        // older wrappers sometimes do). Do not let that superseded payload
-        // paint while the debounced authoritative read is queued.
-        if (requestRef.current) requestRef.current.cancelled = true;
-      }
+      invalidateServerState(resourceKey);
+      // A fetch implementation may resolve despite AbortSignal (tests and
+      // older wrappers sometimes do). Do not let that superseded payload
+      // paint while the debounced authoritative read is queued.
+      if (requestRef.current) requestRef.current.cancelled = true;
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => refetch("sse"), debounceMs);
     },
@@ -296,10 +292,8 @@ export function useLiveQuery<T>(
     identityKey,
     onResync: (context) => {
       onResyncRef.current?.(context);
-      if (resourceKey) {
-        invalidateServerState(resourceKey);
-        if (requestRef.current) requestRef.current.cancelled = true;
-      }
+      invalidateServerState(resourceKey);
+      if (requestRef.current) requestRef.current.cancelled = true;
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => refetch("sse"), debounceMs);
     },
@@ -356,5 +350,18 @@ export function useLiveQuery<T>(
     [],
   );
 
-  return { data, error, loading, connected, refetch };
+  // A caller's own refetch follows a local mutation or retry: no SSE event
+  // invalidated the shared value, so drop it before reading.
+  const refetchFresh = useCallback(
+    (trigger: RealtimeRefetchTrigger = "manual") => {
+      if (trigger === "manual") {
+        invalidateServerState(resourceKey);
+        if (requestRef.current) requestRef.current.cancelled = true;
+      }
+      refetch(trigger);
+    },
+    [refetch, resourceKey],
+  );
+
+  return { data, error, loading, connected, refetch: refetchFresh };
 }

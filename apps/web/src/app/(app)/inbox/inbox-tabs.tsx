@@ -162,7 +162,7 @@ export function MessagesTab() {
     fetcher,
     PERSONAL_STREAM,
     [EVENTS.USER_NOTIFICATION],
-    { queryKey: [unreadOnly, offset] },
+    { queryKey: [unreadOnly, offset], resourceKey: ["notifications", "inbox", unreadOnly, offset] },
   );
 
   async function markRead(item: InboxItem) {

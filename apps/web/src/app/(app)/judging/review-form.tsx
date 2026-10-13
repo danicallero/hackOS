@@ -39,12 +39,48 @@ import {
   saveReview,
 } from "@/lib/queue";
 import { toast } from "@/lib/toast";
+import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import type { Challenge } from "../challenges/shared";
 import { EMPTY_PANEL, errorMessage } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
 
 function isTextQuestion(question: Question): boolean {
   return question.kind === "short_text" || question.kind === "long_text";
+}
+
+/** Fields whose save needs a lease: notes and free-text criteria (H36, #850). */
+function leasedFields(pending: Map<string, unknown>, panel: Question[]): string[] {
+  return [...pending.keys()].filter(
+    (field) =>
+      field === "notes" ||
+      panel.some((question) => isTextQuestion(question) && field === `scores.${question.key}`),
+  );
+}
+
+/**
+ * Saves edits still pending when the form leaves an entry (#1014), so moving
+ * to another team never drops them. One attempt only: a field leased by
+ * another judge rejects it, and the caller reports that instead of retrying.
+ */
+async function flushPendingEdits(
+  entryId: number,
+  pending: Map<string, unknown>,
+  panel: Question[],
+) {
+  const textFields = leasedFields(pending, panel);
+  for (const field of textFields) await acquireReviewFieldLease(entryId, field);
+  const scores: Answers = {};
+  for (const [field, value] of pending) {
+    if (field.startsWith("scores.")) scores[field.slice(7)] = value as Answers[string];
+  }
+  await saveReview(entryId, {
+    scores,
+    ...(pending.has("notes") ? { notes: pending.get("notes") } : {}),
+    submit: false,
+  });
+  for (const field of textFields) {
+    await releaseReviewFieldLease(entryId, field).catch(() => undefined);
+  }
 }
 
 export function ReviewForm({
@@ -54,6 +90,7 @@ export function ReviewForm({
   roomId,
   canJudge,
   onCloseExisting,
+  onUnsavedEditsAtRisk,
 }: {
   entry: QueueEntry | null;
   challenge: Challenge | null;
@@ -67,6 +104,11 @@ export function ReviewForm({
   roomId: number | null;
   canJudge: boolean;
   onCloseExisting?: () => void;
+  /**
+   * Reports edits that cannot be saved right now (failed save, conflict or
+   * offline), so the page can confirm before switching entries (#1014).
+   */
+  onUnsavedEditsAtRisk?: (atRisk: boolean) => void;
 }) {
   const { t } = useLocale();
   const entryId = entry?.id;
@@ -87,6 +129,11 @@ export function ReviewForm({
   const pendingFieldsRef = useRef(new Map<string, unknown>());
   const savingRef = useRef(false);
   const reviewStampRef = useRef<string | null>(null);
+  // The entry this instance currently shows; async results requested for any
+  // other entry are dropped (#1014).
+  const currentEntryRef = useRef<number | undefined>(undefined);
+  const panelRef = useRef(panel);
+  panelRef.current = panel;
   const [conflict, setConflict] = useState(false);
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -114,6 +161,7 @@ export function ReviewForm({
         getReviewVersions(entryId),
         getReviewFieldLeases(entryId),
       ]);
+      if (currentEntryRef.current !== entryId) return;
       setSessions(activeSessions);
       setVersions(reviewVersions);
       setLeases(activeLeases);
@@ -147,26 +195,50 @@ export function ReviewForm({
   useEffect(() => {
     if (!entryId) return;
     let cancelled = false;
+    currentEntryRef.current = entryId;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Data-fetch-on-mount.
     setLoading(true);
     setSaveError(null);
     setOwnedFields(new Set());
     setFocusedField(null);
+    dirtyRef.current = false;
+    setDirty(false);
+    setConflict(false);
+    setExternalUpdate(null);
     void Promise.all([
       loadInitialReview(),
       canJudge
         ? openSession(entryId, roomId ?? undefined).catch(() => null)
         : Promise.resolve(null),
     ])
-      .catch((err) => setSaveError(errorMessage(err, t("couldNotLoadReview"))))
+      .catch((err) => {
+        if (!cancelled) setSaveError(errorMessage(err, t("couldNotLoadReview")));
+      })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
-      if (canJudge) void closeSession(entryId).catch(() => undefined);
+      currentEntryRef.current = undefined;
+      // #1014: leaving the entry (switch or unmount) saves what the autosave
+      // debounce or a failed save still holds instead of discarding it.
+      const pending = new Map(pendingFieldsRef.current);
+      pendingFieldsRef.current.clear();
+      dirtyRef.current = false;
+      const flushed =
+        canJudge && pending.size > 0
+          ? flushPendingEdits(entryId, pending, panelRef.current).catch(() => {
+              toast.error(t("couldNotSaveReview"), { compactTitle: t("saveReview") });
+            })
+          : Promise.resolve();
+      if (canJudge) void flushed.then(() => closeSession(entryId)).catch(() => undefined);
     };
   }, [entryId, canJudge, roomId, t]);
+
+  const refreshLeases = useCallback(async (id: number) => {
+    const activeLeases = await getReviewFieldLeases(id).catch(() => null);
+    if (activeLeases && currentEntryRef.current === id) setLeases(activeLeases);
+  }, []);
 
   const acquireField = useCallback(
     async (field: string) => {
@@ -174,20 +246,20 @@ export function ReviewForm({
       setFocusedField(field);
       try {
         const lease = await acquireReviewFieldLease(entryId, field);
+        if (currentEntryRef.current !== entryId) return;
         setLeases((current) => [...current.filter((item) => item.field !== field), lease]);
         setOwnedFields((current) => new Set(current).add(field));
       } catch {
+        if (currentEntryRef.current !== entryId) return;
         setOwnedFields((current) => {
           const next = new Set(current);
           next.delete(field);
           return next;
         });
-        void getReviewFieldLeases(entryId)
-          .then(setLeases)
-          .catch(() => undefined);
+        void refreshLeases(entryId);
       }
     },
-    [canJudge, entryId],
+    [canJudge, entryId, refreshLeases],
   );
 
   const releaseField = useCallback(
@@ -204,12 +276,10 @@ export function ReviewForm({
       try {
         await releaseReviewFieldLease(entryId, field);
       } finally {
-        void getReviewFieldLeases(entryId)
-          .then(setLeases)
-          .catch(() => undefined);
+        void refreshLeases(entryId);
       }
     },
-    [entryId],
+    [entryId, refreshLeases],
   );
 
   // Refresh only the focused lease. PostgreSQL owns expiry, so this stops on
@@ -245,13 +315,7 @@ export function ReviewForm({
             }
           }
         }
-        const textFields = [...pending.keys()].filter(
-          (field) =>
-            field === "notes" ||
-            panel.some(
-              (question) => isTextQuestion(question) && field === `scores.${question.key}`,
-            ),
-        );
+        const textFields = leasedFields(pending, panel);
         for (const field of textFields) await acquireReviewFieldLease(entryId, field);
         for (const [field, value] of pending) {
           if (field.startsWith("scores.")) scorePatch[field.slice(7)] = value as Answers[string];
@@ -261,6 +325,7 @@ export function ReviewForm({
           ...(pending.has("notes") ? { notes: pending.get("notes") } : {}),
           submit,
         });
+        if (currentEntryRef.current !== entryId) return;
         for (const [field, value] of pending) {
           if (pendingFieldsRef.current.get(field) === value) pendingFieldsRef.current.delete(field);
         }
@@ -273,12 +338,15 @@ export function ReviewForm({
         for (const field of textFields) {
           if (field !== focusedField) await releaseField(field);
         }
-        setVersions(await getReviewVersions(entryId));
+        const reviewVersions = await getReviewVersions(entryId);
+        if (currentEntryRef.current !== entryId) return;
+        setVersions(reviewVersions);
         if (announce)
           toast.success(submit ? t("reviewSubmitted") : t("draftSaved"), {
             compactTitle: t("saveReview"),
           });
       } catch (err) {
+        if (currentEntryRef.current !== entryId) return;
         const fallback = t("couldNotSaveReview");
         const message = errorMessage(err, fallback);
         setSaveError(message);
@@ -296,6 +364,16 @@ export function ReviewForm({
     const timer = window.setTimeout(() => void save(false, false), 800);
     return () => window.clearTimeout(timer);
   }, [canJudge, conflict, dirty, online, save, saveError, saving, notes]);
+
+  // #1014: a failed save stays visible (and pauses autosave) until a save
+  // succeeds, rather than clearing on the next keystroke and retrying silently.
+  const atRisk = dirty && (saveError != null || conflict || !online);
+  useEffect(() => {
+    if (!onUnsavedEditsAtRisk) return;
+    onUnsavedEditsAtRisk(atRisk);
+    return () => onUnsavedEditsAtRisk(false);
+  }, [atRisk, onUnsavedEditsAtRisk]);
+  useUnsavedChangesGuard(canJudge && dirty);
 
   const syncState = collaborationState({ online, saving, conflict, dirty });
   const syncLabel = {
@@ -400,9 +478,19 @@ export function ReviewForm({
           {saveError && (
             <div
               role="alert"
-              className="border-destructive/40 bg-destructive/5 text-destructive rounded-md border p-3 text-sm"
+              className="border-destructive/40 bg-destructive/5 text-destructive flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm"
             >
-              {saveError}
+              <span>{saveError}</span>
+              {dirty && canJudge && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!online || saving}
+                  onClick={() => void save(false)}
+                >
+                  {t("retry")}
+                </Button>
+              )}
             </div>
           )}
           {syncState === "offline" && (
@@ -477,7 +565,6 @@ export function ReviewForm({
               onChange={(value) => {
                 setScores((current) => ({ ...current, [question.key]: value }));
                 pendingFieldsRef.current.set(`scores.${question.key}`, value);
-                setSaveError(null);
                 dirtyRef.current = true;
                 setDirty(true);
                 setExternalUpdate(null);
@@ -495,7 +582,6 @@ export function ReviewForm({
               onChange={(event) => {
                 setNotes(event.target.value);
                 pendingFieldsRef.current.set("notes", event.target.value);
-                setSaveError(null);
                 dirtyRef.current = true;
                 setDirty(true);
               }}

@@ -1,11 +1,15 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
+
 jest.mock("./api", () => ({
   ApiError: class ApiError extends Error {
     status: number;
     code?: string;
-    constructor(message: string, status: number, code?: string) {
+    details?: unknown;
+    constructor(message: string, status: number, code?: string, details?: unknown) {
       super(message);
       this.status = status;
       this.code = code;
+      this.details = details;
     }
   },
 }));
@@ -76,11 +80,21 @@ describe("scheduleSaveError", () => {
 
   it("maps known business errors to localized messages", () => {
     expect(
-      scheduleSaveError(new ApiError("endsAt must be after startsAt", 400, "bad_request"), t),
+      scheduleSaveError(
+        new ApiError("reworded", 400, "bad_request", {
+          code: ERROR_REASONS.SCHEDULE_ENDS_BEFORE_STARTS,
+        }),
+        t,
+      ),
     ).toBe("scheduleErrorEndBeforeStart");
-    expect(scheduleSaveError(new ApiError("Schedule item not found", 404, "not_found"), t)).toBe(
-      "scheduleErrorNotFound",
-    );
+    expect(
+      scheduleSaveError(
+        new ApiError("reworded", 404, "not_found", {
+          code: ERROR_REASONS.SCHEDULE_ITEM_NOT_FOUND,
+        }),
+        t,
+      ),
+    ).toBe("scheduleErrorNotFound");
     expect(scheduleSaveError(new ApiError("Missing capability", 403, "forbidden"), t)).toBe(
       "scheduleErrorForbidden",
     );

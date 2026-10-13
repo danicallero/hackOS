@@ -36,7 +36,7 @@ describe("participant application presentation", () => {
 
   it("maps API field validation to localized field messages", () => {
     const error = new ApiError(400, "validation_error", "Invalid response", {
-      fields: { name: "required", age: "must be a number", link: "other" },
+      fieldReasons: { name: "required", age: "must_be_number", link: "other" },
     });
     expect(fieldErrorsFromApi(error, translate)).toEqual({
       name: "fieldRequired",

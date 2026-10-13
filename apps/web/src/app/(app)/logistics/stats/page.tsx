@@ -99,7 +99,7 @@ export default function LogisticsStatsPage() {
     logisticsApi.stats,
     REALTIME_SCOPES.LOGISTICS,
     LOGISTICS_EVENTS,
-    { enabled: canGeneralStats && activePhase !== "before" },
+    { enabled: canGeneralStats && activePhase !== "before", resourceKey: ["logistics", "stats"] },
   );
   const mealPlans = useLiveQuery(
     logisticsApi.mealPlans,
@@ -107,6 +107,7 @@ export default function LogisticsStatsPage() {
     MEAL_PLAN_EVENTS,
     {
       enabled: canGeneralStats && activePhase === "during",
+      resourceKey: ["logistics", "meal-plans"],
     },
   );
 

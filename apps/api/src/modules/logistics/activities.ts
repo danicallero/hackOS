@@ -1,4 +1,5 @@
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
@@ -66,7 +67,9 @@ export async function activityScan(
     ? await resolveByTicket(pool, input.ticketToken)
     : await resolveByBadge(pool, input.badgeId!);
   if (input.scannedAt && isImplausiblyFuture(input.scannedAt)) {
-    throw new BadRequestError("Offline scan timestamp must be in the past");
+    throw new BadRequestError("Offline scan timestamp must be in the past", {
+      code: ERROR_REASONS.SCAN_TIMESTAMP_IN_FUTURE,
+    });
   }
 
   const result = await withTransaction(async (client) => {
@@ -98,7 +101,9 @@ export async function activityScan(
       }
     } else {
       if (lockedUser.badge_id !== input.badgeId) {
-        throw new AppError(409, "badge_revoked", "This badge has been revoked");
+        throw new AppError(409, "badge_revoked", "This badge has been revoked", {
+          code: ERROR_REASONS.BADGE_REVOKED,
+        });
       }
       assertBadgeScanTimestamp(input.scannedAt, lockedUser.badge_assigned_at);
     }

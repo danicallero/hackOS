@@ -29,6 +29,7 @@ export function useUnreadCount(enabled = true): number {
   );
   const { data, refetch } = useLiveQuery(fetcher, PERSONAL_STREAM, [EVENTS.USER_NOTIFICATION], {
     enabled,
+    resourceKey: ["notifications", "unread-count"],
   });
 
   useEffect(() => {
