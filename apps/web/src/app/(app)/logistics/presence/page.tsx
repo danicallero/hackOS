@@ -60,19 +60,23 @@ export default function PresencePage() {
     logisticsApi.presenceEstimate,
     "/api/logistics/stream",
     PRESENCE_EVENTS,
-    { enabled: canPresence, debounceMs: 400 },
+    { enabled: canPresence, debounceMs: 400, resourceKey: ["logistics", "presence", "estimate"] },
   );
   const hours = useLiveQuery<PresenceHours[]>(
     logisticsApi.presenceHours,
     "/api/logistics/stream",
     PRESENCE_EVENTS,
-    { enabled: canPresence, debounceMs: 400 },
+    { enabled: canPresence, debounceMs: 400, resourceKey: ["logistics", "presence", "hours"] },
   );
   const openSessions = useLiveQuery<OpenPresenceSession[]>(
     async () => (await logisticsApi.presenceOpenSessions()).items,
     "/api/logistics/stream",
     PRESENCE_EVENTS,
-    { enabled: canPresence, debounceMs: 400 },
+    {
+      enabled: canPresence,
+      debounceMs: 400,
+      resourceKey: ["logistics", "presence", "open-sessions"],
+    },
   );
 
   // H24/H27: each read model keeps its own failure and retry path so one

@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { ContextualError } from "@/components/common/contextual-error";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
@@ -30,12 +31,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { destinationForKind } from "@/lib/invite-destination";
 import { withReturnPath } from "@/lib/return-path";
-import type { Intolerance, InviteLookup, Language } from "@/lib/types";
+import type { InviteLookup, Language } from "@/lib/types";
 
 function claimSchema(t: Translate) {
   return z
@@ -89,9 +91,9 @@ function ClaimInner() {
   const token = useSearchParams().get("token");
   const router = useRouter();
   const [lookup, setLookup] = useState<InviteLookup | null | "error">(null);
-  const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [done, setDone] = useState(false);
-  const shirtSizes = useShirtSizes();
+  const { sizes: shirtSizes, error: shirtSizesError, reload: reloadShirtSizes } = useShirtSizes();
+  const { intolerances, error: dictionaryError, reload: reloadDictionary } = useFoodIntolerances();
 
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -126,10 +128,6 @@ function ClaimInner() {
       })
       .then(setLookup)
       .catch(() => setLookup("error"));
-    api
-      .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
-      .then((r) => setIntolerances(r.intolerances))
-      .catch(() => setIntolerances([]));
   }, [token]);
 
   async function onSubmit(values: Values) {
@@ -360,6 +358,12 @@ function ClaimInner() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t("shirtSize")}</FormLabel>
+                    {shirtSizesError ? (
+                      <ContextualError
+                        message={t("couldNotLoadDictionary")}
+                        onRetry={reloadShirtSizes}
+                      />
+                    ) : null}
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="w-full">
@@ -388,6 +392,12 @@ function ClaimInner() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t("foodIntolerances")}</FormLabel>
+                      {dictionaryError ? (
+                        <ContextualError
+                          message={t("couldNotLoadDictionary")}
+                          onRetry={reloadDictionary}
+                        />
+                      ) : null}
                       <FormControl>
                         <MultiSelect
                           options={intoleranceOptions}

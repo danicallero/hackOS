@@ -65,7 +65,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
     () => logisticsApi.scannableActivities(category),
     "/api/logistics/stream",
     SCAN_EVENTS,
-    { debounceMs: 400 },
+    { debounceMs: 400, resourceKey: ["logistics", "scannable-activities", category] },
   );
   const items = useMemo(() => activities.data?.items ?? [], [activities.data]);
 

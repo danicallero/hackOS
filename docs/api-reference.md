@@ -271,6 +271,16 @@ lease owner before changing a text field, so the browser's read-only state is
 not the concurrency boundary. Numeric and choice answers retain the existing
 field-level merge behavior.
 
+The web panel (`judging/review-form.tsx`) mounts one form per queue entry.
+Leaving an entry — switching teams or navigating elsewhere in the app — makes one save
+attempt for edits still in the 800 ms autosave window or held after a failed
+save; a field leased by another judge rejects it with an error toast rather
+than retrying. Responses requested for a previous entry are dropped. A failed
+autosave stays visible with a retry action and pauses autosave until a save
+succeeds; while edits cannot be saved (failed save, conflict, offline),
+switching teams asks for confirmation, and leaving with any unsaved edits
+triggers the shared unsaved-changes guard (#1014).
+
 ### live-activities (#966 · H38, H25, H26, H59, H19, H22)
 The device/session registry (`PUT /api/me/live-activities/device`,
 `PUT`/`DELETE /api/me/live-activities/sessions`), the read model

@@ -6,14 +6,20 @@
  */
 export type ServerStateKey = readonly unknown[];
 
+/** Settled data is reusable for this long; a later mount re-reads the API. */
+const DATA_TTL_MS = 30_000;
+
 type Entry = {
   data?: unknown;
+  at?: number;
   request?: Promise<unknown>;
   controller?: AbortController;
 };
 
 let identity: string | number | null = null;
 let epoch = 0;
+const identityListeners = new Set<() => void>();
+const writeListeners = new Set<(serializedKey: string, data: unknown) => void>();
 const entries = new Map<string, Entry>();
 
 function serialize(key: ServerStateKey): string {
@@ -31,6 +37,37 @@ export function setServerStateIdentity(nextIdentity: string | number | null): vo
   epoch += 1;
   for (const entry of entries.values()) entry.controller?.abort();
   entries.clear();
+  for (const listener of identityListeners) listener();
+}
+
+/** Identity epoch snapshot for `useSyncExternalStore`; changes with every identity switch. */
+export function serverStateEpoch(): number {
+  return epoch;
+}
+
+export function subscribeServerStateEpoch(listener: () => void): () => void {
+  identityListeners.add(listener);
+  return () => {
+    identityListeners.delete(listener);
+  };
+}
+
+/** Replace an exact resource with data a mutation already returned. */
+export function writeServerState<T>(key: ServerStateKey, data: T): void {
+  const k = scopedKey(key);
+  entries.get(k)?.controller?.abort();
+  entries.set(k, { data, at: Date.now() });
+  for (const listener of writeListeners) listener(serialize(key), data);
+}
+
+/** Observe `writeServerState` so every reader of a key follows a mutation's result. */
+export function subscribeServerStateWrites(
+  listener: (serializedKey: string, data: unknown) => void,
+): () => void {
+  writeListeners.add(listener);
+  return () => {
+    writeListeners.delete(listener);
+  };
 }
 
 /** Abort and forget an exact resource, so its next read is authoritative. */
@@ -51,7 +88,9 @@ export function readServerState<T>(
 ): Promise<T> {
   const keyAtStart = scopedKey(key);
   const existing = entries.get(keyAtStart);
-  if (existing?.data !== undefined) return Promise.resolve(existing.data as T);
+  if (existing?.data !== undefined && Date.now() - (existing.at ?? 0) < DATA_TTL_MS) {
+    return Promise.resolve(existing.data as T);
+  }
   if (existing?.request) return existing.request as Promise<T>;
 
   const controller = new AbortController();
@@ -59,7 +98,10 @@ export function readServerState<T>(
   const requestEpoch = epoch;
   const request = fetcher(controller.signal)
     .then((data) => {
-      if (epoch === requestEpoch && entries.get(keyAtStart) === entry) entry.data = data;
+      if (epoch === requestEpoch && entries.get(keyAtStart) === entry) {
+        entry.data = data;
+        entry.at = Date.now();
+      }
       return data;
     })
     .finally(() => {

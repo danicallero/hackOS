@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
+import { ContextualError } from "@/components/common/contextual-error";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -157,7 +158,7 @@ export function StaffEditForm({
 }) {
   const { t } = useLocale();
   const lang = (LANGS.includes(user.language as Language) ? user.language : "es") as Language;
-  const shirtSizes = useShirtSizes();
+  const { sizes: shirtSizes, error: shirtSizesError, reload: reloadShirtSizes } = useShirtSizes();
 
   const localizedEditSchema = useMemo(
     () =>
@@ -330,6 +331,12 @@ export function StaffEditForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>{t("shirtSize")}</FormLabel>
+                {shirtSizesError ? (
+                  <ContextualError
+                    message={t("couldNotLoadDictionary")}
+                    onRetry={reloadShirtSizes}
+                  />
+                ) : null}
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger className="w-full">

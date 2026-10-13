@@ -123,7 +123,10 @@ export function PublicProfileCard() {
     },
     "/api/queue/me/stream",
     [EVENTS.USER_SESSION_CHANGED],
-    { queryKey: [me?.name, me?.surname, me?.image] },
+    {
+      queryKey: [me?.name, me?.surname, me?.image],
+      resourceKey: ["me", "public-profile", me?.name, me?.surname, me?.image],
+    },
   );
   const [saved, setSaved] = useState<Snapshot | null>(null);
   // Unsaved edits; null means the form shows the stored settings.
