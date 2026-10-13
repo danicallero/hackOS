@@ -1,5 +1,4 @@
-import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { useNavigation, useRouter } from "expo-router";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import {
   type ReactNode,
@@ -35,7 +34,10 @@ import {
   StatusPill,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { type AudienceFilterValue, ScheduleFilterPanel } from "@/components/schedule-filter-button";
+import {
+  type AudienceFilterValue,
+  ScheduleFilterButton,
+} from "@/components/schedule-filter-button";
 import {
   ScheduleFormModal,
   scheduleItemToForm,
@@ -44,6 +46,7 @@ import {
 import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -59,13 +62,14 @@ import {
   fetchAdminSchedule,
   fetchPublicSchedule,
   resolveScheduleText,
+  SCHEDULE_POLL_MS,
   type ScheduleInput,
   type ScheduleItem,
   scheduleTypeLabel,
   updateScheduleItem,
   upsertScheduleItem,
 } from "@/lib/schedule";
-import { has } from "@/lib/tabs";
+import { canManageSchedule, canReadFullSchedule } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
@@ -155,13 +159,20 @@ export default function ScheduleScreen() {
   const insets = useSafeAreaInsets();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const tabBarScrollBottomInset = useRouterTabBarScrollBottomInset();
-  const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
+  const canManage = canManageSchedule(me?.capabilities ?? []);
+  const canReadFull = canReadFullSchedule(me?.capabilities ?? []);
   const scheduleScrollGuardEnabled = process.env.EXPO_OS === "android" && canManage;
   const scheduleScrollGesture = useNativeGesture({ enabled: scheduleScrollGuardEnabled });
 
+  // The schedule has no push channel on mobile, so edits by others arrive by
+  // refetching on focus, on foreground (useCachedApi) and every minute while
+  // this tab is the one on screen.
+  const focusedRef = useRef(false);
+  const whileFocused = useCallback(() => focusedRef.current, []);
   const { data, loading, error, staleSince, load, setData } = useCachedApi(
     "schedule",
     fetchPublicSchedule,
+    { pollMs: SCHEDULE_POLL_MS, pollWhen: whileFocused },
   );
   // H50 extension: resolve each item's title/description into the viewer's
   // language here so every downstream renderer keeps reading plain
@@ -174,7 +185,6 @@ export default function ScheduleScreen() {
 
   const [selectedKinds, setSelectedKinds] = useState<string[]>([]);
   const [selectedAudiences, setSelectedAudiences] = useState<AudienceFilterValue[]>([]);
-  const [filterOpen, setFilterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [legacySearchOpen, setLegacySearchOpen] = useState(false);
   const unreadCount = useUnreadNotificationCount();
@@ -183,7 +193,6 @@ export default function ScheduleScreen() {
     unreadCount > 0 ? t("alertsOpenUnread", { count: String(unreadCount) }) : t("tabNotifications");
   const [formTarget, setFormTarget] = useState<"create" | ScheduleItem | null>(null);
 
-  const filterActive = selectedKinds.length > 0 || selectedAudiences.length > 0;
   // Real Liquid Glass (iOS 26+) gets the native header below: the OS owns the
   // toolbar grouping and integrated search behavior. Earlier iOS and Android
   // keep the original hand-rolled header because it supports the shared
@@ -191,9 +200,6 @@ export default function ScheduleScreen() {
   const glassAvailable = isRealLiquidGlassAvailable();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
-  const filterAnchor = glassAvailable
-    ? { top: insets.top + 52, right: 16 }
-    : { top: legacyTopInset + 60, right: 16 };
 
   // Keep the native search on the glass path. The custom header below is the
   // fallback for platforms where the native header cannot express the old
@@ -224,10 +230,19 @@ export default function ScheduleScreen() {
     });
   }, [navigation, t, glassAvailable]);
 
+  useFocusEffect(
+    useCallback(() => {
+      focusedRef.current = true;
+      void load();
+      return () => {
+        focusedRef.current = false;
+      };
+    }, [load]),
+  );
+
   useEffect(() => {
-    void load();
     void notifications.load();
-  }, [load, notifications.load]);
+  }, [notifications.load]);
 
   // Keeps the "now" line accurate without a full data reload.
   useEffect(() => {
@@ -256,14 +271,15 @@ export default function ScheduleScreen() {
     [items, selectedKinds, selectedAudiences, normalizedQuery],
   );
 
-  const todayKey = useMemo(() => new Date(now).toLocaleDateString("en-CA"), [now]);
+  const eventZone = useEventTimeZone();
+  const todayKey = useMemo(() => eventDayKey(now, eventZone), [now, eventZone]);
 
   const sections = useMemo<ScheduleSection[]>(() => {
     const grouped = new Map<string, ScheduleItem[]>();
     for (const item of [...filteredItems].sort(
       (a, b) => safeTimestamp(a.startsAt) - safeTimestamp(b.startsAt),
     )) {
-      const key = new Date(item.startsAt).toLocaleDateString("en-CA");
+      const key = eventDayKey(item.startsAt, eventZone);
       grouped.set(key, [...(grouped.get(key) ?? []), item]);
     }
     return [...grouped.entries()].map(([key, dayItems]) => {
@@ -286,14 +302,15 @@ export default function ScheduleScreen() {
       return {
         key,
         data: rows,
-        title: new Date(dayItems[0].startsAt).toLocaleDateString(language, {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-        }),
+        title: formatEventTime(
+          dayItems[0].startsAt,
+          language,
+          { weekday: "long", month: "long", day: "numeric" },
+          eventZone,
+        ),
       };
     });
-  }, [filteredItems, language, now, todayKey]);
+  }, [filteredItems, language, now, todayKey, eventZone]);
 
   // Jumps straight to "what's happening now" (or the marker between cards)
   // instead of opening at the beginning of a multi-day schedule. Reused below
@@ -452,6 +469,21 @@ export default function ScheduleScreen() {
     setFormTarget(null);
   }
 
+  const scheduleFilter = (
+    <ScheduleFilterButton
+      kinds={kinds}
+      selectedKinds={selectedKinds}
+      onToggleKind={toggleKind}
+      showAudience={canReadFull}
+      selectedAudiences={selectedAudiences}
+      onToggleAudience={toggleAudience}
+      onClear={() => {
+        setSelectedKinds([]);
+        setSelectedAudiences([]);
+      }}
+    />
+  );
+
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       {glassAvailable ? (
@@ -463,46 +495,27 @@ export default function ScheduleScreen() {
               </Stack.Toolbar.Badge>
             ) : null}
           </Stack.Toolbar.Button>
-          <Stack.Toolbar.Button
-            icon={
-              filterActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease"
-            }
-            accessibilityLabel={t("scheduleFilter")}
-            selected={filterOpen}
-            tintColor={filterActive ? colors.accent : undefined}
-            onPress={() => setFilterOpen((current) => !current)}
-          />
+          <Stack.Toolbar.View hidesSharedBackground>{scheduleFilter}</Stack.Toolbar.View>
         </Stack.Toolbar>
       ) : (
         <LegacyScreenHeader
           actions={
-            <GlassView
-              colorScheme="auto"
-              glassEffectStyle="regular"
-              isInteractive
-              style={{ alignItems: "center", borderRadius: 22, flexDirection: "row", height: 44 }}
-            >
-              <LegacyHeaderIconButton
-                icon={bellIcon}
-                accessibilityLabel={bellLabel}
-                tintColor={unreadCount > 0 ? colors.accent : colors.label}
-                onPress={openAlerts}
-              />
-              <View
-                style={{ backgroundColor: colors.separator, height: 20, opacity: 0.6, width: 1 }}
-              />
-              <LegacyHeaderIconButton
-                icon={
-                  filterActive
-                    ? "line.3.horizontal.decrease.circle.fill"
-                    : "line.3.horizontal.decrease"
-                }
-                accessibilityLabel={t("scheduleFilter")}
-                accessibilityState={{ expanded: filterOpen, selected: filterActive }}
-                tintColor={filterActive ? colors.accent : colors.label}
-                onPress={() => setFilterOpen((current) => !current)}
-              />
-            </GlassView>
+            <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+              <GlassView
+                colorScheme="auto"
+                glassEffectStyle="regular"
+                isInteractive
+                style={{ alignItems: "center", borderRadius: 22, flexDirection: "row", height: 44 }}
+              >
+                <LegacyHeaderIconButton
+                  icon={bellIcon}
+                  accessibilityLabel={bellLabel}
+                  tintColor={unreadCount > 0 ? colors.accent : colors.label}
+                  onPress={openAlerts}
+                />
+              </GlassView>
+              {scheduleFilter}
+            </View>
           }
           cancelLabel={t("cancel")}
           onCloseSearch={() => {
@@ -677,22 +690,6 @@ export default function ScheduleScreen() {
           onSubmit={submitForm}
         />
       ) : null}
-
-      <ScheduleFilterPanel
-        open={filterOpen}
-        anchor={filterAnchor}
-        onClose={() => setFilterOpen(false)}
-        kinds={kinds}
-        selectedKinds={selectedKinds}
-        onToggleKind={toggleKind}
-        showAudience={canManage}
-        selectedAudiences={selectedAudiences}
-        onToggleAudience={toggleAudience}
-        onClear={() => {
-          setSelectedKinds([]);
-          setSelectedAudiences([]);
-        }}
-      />
     </View>
   );
 }
@@ -757,10 +754,7 @@ function safeTimestamp(value: string) {
 }
 
 function formatTime(timestamp: number, locale: string) {
-  return new Date(timestamp).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatEventTime(timestamp, locale, { hour: "2-digit", minute: "2-digit" });
 }
 
 // Space between a time label and the line that follows it — kept tight so
@@ -843,14 +837,9 @@ function ScheduleCard({
   const audienceBadge = scheduleAudienceOnlyBadge(item, t);
   const startsAt = new Date(item.startsAt);
   const endsAt = new Date(item.endsAt);
-  const time = startsAt.toLocaleTimeString(language, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const end = endsAt.toLocaleTimeString(language, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  useEventTimeZone();
+  const time = formatEventTime(startsAt, language, { hour: "2-digit", minute: "2-digit" });
+  const end = formatEventTime(endsAt, language, { hour: "2-digit", minute: "2-digit" });
 
   function toggleReminder(event: GestureResponderEvent) {
     event.stopPropagation();
@@ -967,20 +956,28 @@ function ScheduleCard({
             </Pressable>
           ) : null}
           <View style={{ gap: 11, padding: 18, paddingRight: 40 }}>
-            <View style={{ alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {/* A non-wrapping row: a wrapping row measured the title at its
+                single-line height and clipped it as soon as it wrapped. */}
+            <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 8 }}>
               <Text
                 selectable
                 numberOfLines={truncated ? COLLAPSED_TITLE_LINES : undefined}
-                style={{ color: colors.label, flexShrink: 1, fontSize: 17, fontWeight: "700" }}
+                style={{
+                  color: colors.label,
+                  flex: 1,
+                  fontSize: 17,
+                  fontWeight: "700",
+                  lineHeight: 22,
+                }}
               >
                 {item.title}
               </Text>
               {audienceBadge ? (
-                <StatusPill tone="neutral" style={{ alignSelf: "center" }}>
+                <StatusPill tone="neutral" style={{ flexShrink: 0 }}>
                   {audienceBadge}
                 </StatusPill>
               ) : item.visibility === "hidden" ? (
-                <StatusPill tone="warning" style={{ alignSelf: "center" }}>
+                <StatusPill tone="warning" style={{ flexShrink: 0 }}>
                   {t("scheduleDraftBadge")}
                 </StatusPill>
               ) : null}

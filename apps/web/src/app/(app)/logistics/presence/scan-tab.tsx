@@ -30,6 +30,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { fromDatetimeLocal } from "@/lib/datetime";
+import { getEventTimeZone } from "@/lib/event-time";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import {
   type AccreditationLookup,
@@ -55,7 +57,10 @@ export function ScanTab({
   onPresenceScanned: () => void;
 }) {
   const { language, t } = useLocale();
-  const timeFmt = new Intl.DateTimeFormat(LOCALE_CODES[language], TIME_FORMAT_OPTIONS);
+  const timeFmt = new Intl.DateTimeFormat(LOCALE_CODES[language], {
+    ...TIME_FORMAT_OPTIONS,
+    timeZone: getEventTimeZone(),
+  });
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PersonSearchResult[] | null>(null);
@@ -248,7 +253,7 @@ export function ScanTab({
       const result = await logisticsApi.presenceScan({
         badgeId: presCard.badgeId,
         kind,
-        scannedAt: new Date(manualScannedAt).toISOString(),
+        scannedAt: fromDatetimeLocal(manualScannedAt) as string,
       });
       setRecentScan({ kind, person: personName(presCard), at: result.scannedAt });
       toast.success(t("manualRecordAdded"), { compactTitle: t("toastRecordPresence") });

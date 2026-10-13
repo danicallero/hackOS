@@ -58,7 +58,7 @@ describe("liveActivityApnsPayload", () => {
     const { liveActivityApnsPayload } = await import("../../src/modules/live-activities/apns.js");
     const now = new Date("2026-10-11T10:00:00Z");
     const end = liveActivityApnsPayload({ event: "end", kind: "queue", props: queueProps, now });
-    expect(end.aps).toMatchObject({ event: "end", "dismissal-date": 1_791_712_800 + 900 });
+    expect(end.aps).toMatchObject({ event: "end", "dismissal-date": 1_791_712_800 });
     const update = liveActivityApnsPayload({
       event: "update",
       kind: "queue",

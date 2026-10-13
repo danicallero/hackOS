@@ -6,14 +6,19 @@ CV and, if they choose, their projects and their challenges. There is no
 browsable people directory: the product owner retired it on #935 ("al final
 queremos que sea dinámico"), so a person enters someone's event diary only by
 a scan ([`diary.md`](./diary.md)), and only then can that attendee read their
-profile. The module and routes keep their `directory` names. There is no Hxx
+profile. A scan is mutual: if the scanner also shares a profile, the scanned
+person's diary gets the scanner too (one scan, both contacts); a scanner who
+shares nothing saves the person one-way, and stands are always one-way
+([`diary.md`](./diary.md), Mutual scan). The module and routes keep their `directory` names. There is no Hxx
 story; code and commits reference `#934` and `#935`.
 
 People manage their public profile (opt-in, surname/photo/project, headline,
 location note, bio, links, CV and preview) from My profile
 (`/settings/profile`); there is no separate settings page. The account photo
 is uploaded in the same page's Personal details section, because it is the
-account's photo everywhere, not only on the public profile.
+account's photo everywhere, not only on the public profile. The mobile app
+edits the same photo from the Account avatar and the networking profile editor
+(`docs/mobile.md`).
 
 The "Public profile" section (`settings/profile/public-profile-card.tsx`)
 shows only the opt-in switch ("Share my profile"), with one line saying that
@@ -49,6 +54,24 @@ Module: `apps/api/src/modules/directory/` (the photo routes live in
 `identity/routes/photo.ts`; shared storage helpers in `lib/profile-files.ts`).
 Tests: `apps/api/test/directory/api.test.ts` and
 `apps/api/test/directory/profile-files.test.ts`.
+
+## Mobile and the confirmation invite
+
+The mobile app edits the same profile from Account ("Edit networking profile",
+see [`mobile.md`](./mobile.md)): it opens on the `preview` card exactly as
+scanners see it, with the opt-in switch always available, and a pencil edits it
+in place (headline, location note, bio, and an eye on the surname, photo,
+project and CV that greys what is hidden). Links stay on web. The CV follows
+the same source rules: an application CV is read-only; without one the phone
+can upload (PDF, 5 MB), replace and remove the CV through
+`POST`/`DELETE /api/me/public-profile/cv`, and the eye toggles `shareCv`. After a
+participant confirms their spot (H15), the web "place confirmed" card, the
+public confirmation page (only for the token holder's own session) and the
+mobile wallet banner show `NetworkingProfileInvite` / `NetworkingInvite`: one
+sentence saying other participants and company representatives they network
+with will read this profile, and a button to the editor. It appears only while
+`consentedAt` is `null` (the profile was never created) and is hidden when
+`GET /api/me/public-profile` fails.
 
 ## Model
 

@@ -1,6 +1,14 @@
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { Platform, Pressable, Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
+import {
+  eventZoneHint,
+  formatEventTime,
+  fromPickerDate,
+  toPickerDate,
+  useEventTimeZone,
+} from "@/lib/event-time";
+import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
 export interface DateTimeFieldProps {
@@ -12,16 +20,20 @@ export interface DateTimeFieldProps {
   timeAccessibilityLabel: string;
 }
 
-function withDatePart(base: Date, patch: Date): Date {
-  const next = new Date(base);
+// Props are real instants. The native pickers only speak the phone's zone, so
+// they are fed an event-clock picker date (see `toPickerDate`) and what they
+// return is converted back; the date and time halves are merged on the
+// event's wall clock, so a DST change between them cannot skew either.
+function withDatePart(base: Date, patch: Date, timeZone: string): Date {
+  const next = toPickerDate(base, timeZone);
   next.setFullYear(patch.getFullYear(), patch.getMonth(), patch.getDate());
-  return next;
+  return fromPickerDate(next, timeZone);
 }
 
-function withTimePart(base: Date, patch: Date): Date {
-  const next = new Date(base);
+function withTimePart(base: Date, patch: Date, timeZone: string): Date {
+  const next = toPickerDate(base, timeZone);
   next.setHours(patch.getHours(), patch.getMinutes());
-  return next;
+  return fromPickerDate(next, timeZone);
 }
 
 /**
@@ -42,16 +54,25 @@ export function DateTimeField({
   dateAccessibilityLabel,
   timeAccessibilityLabel,
 }: DateTimeFieldProps) {
+  const timeZone = useEventTimeZone();
+  const { language } = useLocale();
+  const pickerValue = toPickerDate(value, timeZone);
+  const pickerMin = minimumDate ? toPickerDate(minimumDate, timeZone) : undefined;
+  const pickerMax = maximumDate ? toPickerDate(maximumDate, timeZone) : undefined;
   if (Platform.OS === "android") {
     const openPicker = (mode: "date" | "time") => {
       DateTimePickerAndroid.open({
-        value,
+        value: pickerValue,
         mode,
-        minimumDate,
-        maximumDate,
+        minimumDate: pickerMin,
+        maximumDate: pickerMax,
         onValueChange: (_, date) => {
           if (!date) return;
-          onChange(mode === "date" ? withDatePart(value, date) : withTimePart(value, date));
+          onChange(
+            mode === "date"
+              ? withDatePart(value, date, timeZone)
+              : withTimePart(value, date, timeZone),
+          );
         },
       });
     };
@@ -60,13 +81,18 @@ export function DateTimeField({
         <DateTimeChip
           accessibilityLabel={dateAccessibilityLabel}
           icon="calendar.badge.clock"
-          label={value.toLocaleDateString()}
+          label={formatEventTime(value, language, { dateStyle: "short" }, timeZone)}
           onPress={() => openPicker("date")}
         />
         <DateTimeChip
           accessibilityLabel={timeAccessibilityLabel}
           icon="clock"
-          label={value.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          label={[
+            formatEventTime(value, language, { hour: "2-digit", minute: "2-digit" }, timeZone),
+            eventZoneHint(language, timeZone, value.getTime()),
+          ]
+            .filter(Boolean)
+            .join(" ")}
           onPress={() => openPicker("time")}
         />
       </View>
@@ -75,11 +101,11 @@ export function DateTimeField({
 
   return (
     <DateTimePicker
-      value={value}
+      value={pickerValue}
       mode="datetime"
-      minimumDate={minimumDate}
-      maximumDate={maximumDate}
-      onValueChange={(_, date) => date && onChange(date)}
+      minimumDate={pickerMin}
+      maximumDate={pickerMax}
+      onValueChange={(_, date) => date && onChange(fromPickerDate(date, timeZone))}
     />
   );
 }

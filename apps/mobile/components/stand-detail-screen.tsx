@@ -6,13 +6,12 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  Switch,
   Text,
   useColorScheme,
   View,
 } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
+import { ActionButton, AppSwitch, EmptyState, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import {
   StandLinkResult,
@@ -219,7 +218,7 @@ export function StandDetailScreen() {
               <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>
                 {t("standsScannable")}
               </Text>
-              <Switch
+              <AppSwitch
                 accessibilityLabel={t("standsScannableFor", { name: stand.name })}
                 disabled={scanBusy}
                 onValueChange={(value) => void setScannable(value)}

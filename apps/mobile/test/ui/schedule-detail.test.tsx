@@ -30,6 +30,10 @@ const mockActivity: MockScheduleItem = {
 let mockSchedule: MockScheduleItem[] = [mockActivity];
 
 jest.mock("expo-router", () => ({
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const { useEffect } = jest.requireActual("react");
+    useEffect(callback, [callback]);
+  },
   useLocalSearchParams: () => ({ id: "1" }),
   useRouter: () => mockRouter,
 }));
@@ -95,7 +99,11 @@ jest.mock("@/lib/schedule", () => ({
   updateScheduleItem: jest.fn(),
   upsertScheduleItem: jest.fn(),
 }));
-jest.mock("@/lib/tabs", () => ({ has: () => false }));
+jest.mock("@/lib/tabs", () => ({
+  has: () => false,
+  canManageSchedule: () => false,
+  canReadFullSchedule: () => false,
+}));
 jest.mock("@/lib/use-cached-api", () => ({
   useCachedApi: () => ({
     data: mockSchedule,

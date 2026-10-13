@@ -6,6 +6,7 @@ import {
   useLayoutEffect,
   useMemo,
 } from "react";
+import { setEventTimeZone } from "./event-time";
 import { setServerEventIdentity } from "./server-events";
 import { registerSignOutListener } from "./sign-out-events";
 import type { Me } from "./types";
@@ -40,6 +41,10 @@ export function MeProvider({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     setServerEventIdentity(value.me?.id ?? null);
   }, [value.me?.id]);
+  // H45/H47: every shown and typed time is the event's clock, not the phone's.
+  useLayoutEffect(() => {
+    setEventTimeZone(value.me?.eventTimezone ?? null);
+  }, [value.me?.eventTimezone]);
   const actions = useMemo(
     () => ({ clear: value.clear, refetch: value.refetch }),
     [value.clear, value.refetch],

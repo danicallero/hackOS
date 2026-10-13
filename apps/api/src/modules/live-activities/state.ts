@@ -3,9 +3,7 @@ import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import {
   type ActivityLiveProps,
   activityLiveLabels,
-  countdownLastFiveMinutes,
-  countdownLastMinute,
-  countdownUnderHour,
+  countdownFlags,
   LIVE_ACTIVITY_PROPS_VERSION,
   type LiveActivityProps,
   type QueueLiveProps,
@@ -15,6 +13,7 @@ import type { Language } from "@hackos/shared/locale";
 import { config } from "../../config.js";
 import { pool, type Queryable } from "../../db/pool.js";
 import { hasMyQueueItems, myQueueStatus } from "../queue/reads.js";
+import { readLeadMinutes } from "./settings.js";
 
 /**
  * Live Activity state builders (#966; H38 queue, H25/H26 staff activities).
@@ -160,13 +159,14 @@ export interface LiveScannableActivity {
 /**
  * H25/H26: scannable activities (meal kinds are always scannable; others
  * need `requires_scan`, the same rule as the scanner's activity list in
- * logistics/stats.ts) whose linked schedule row starts within the lead time
+ * logistics/stats.ts) whose linked schedule row starts within the configured lead time (`readLeadMinutes`)
  * or is still running.
  */
 export async function loadLiveScannableActivities(
   db: Queryable = pool,
-  leadMinutes: number = config.LIVE_ACTIVITY_LEAD_MINUTES,
+  leadMinutes?: number,
 ): Promise<LiveScannableActivity[]> {
+  const lead = leadMinutes ?? (await readLeadMinutes(db));
   const { rows } = await db.query<{
     id: number;
     name: string;
@@ -183,7 +183,7 @@ export async function loadLiveScannableActivities(
         AND s.starts_at <= now() + make_interval(mins => $2)
         AND now() < s.ends_at
       ORDER BY s.starts_at ASC, a.id ASC`,
-    [[...MEAL_ACTIVITY_KINDS], leadMinutes],
+    [[...MEAL_ACTIVITY_KINDS], lead],
   );
   return rows.map((r) => ({
     id: r.id,
@@ -253,12 +253,7 @@ export function buildActivityLiveProps(
     url: link,
     labels: activityLiveLabels(language),
     // #966: precision flags trigger one re-render at each native timer format boundary.
-    countdownUnderHour: countdownUnderHour(live ? activity.endsAt : activity.startsAt, now),
-    countdownLastMinute: countdownLastMinute(live ? activity.endsAt : activity.startsAt, now),
-    countdownLastFiveMinutes: countdownLastFiveMinutes(
-      live ? activity.endsAt : activity.startsAt,
-      now,
-    ),
+    ...countdownFlags(live ? activity.endsAt : activity.startsAt, now),
     updatedAt: now.toISOString(),
   };
 }

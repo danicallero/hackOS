@@ -46,6 +46,57 @@ it("shows a cancelable Android overlay and submits one UID", async () => {
   expect(onClose).toHaveBeenCalledTimes(1);
 });
 
+it("reads on Android without an overlay when the operational screen owns the controls", async () => {
+  const onValue = jest.fn();
+  const onClose = jest.fn();
+  const view = await render(
+    <NfcReader visible showAndroidOverlay={false} onValue={onValue} onClose={onClose} />,
+  );
+  expect(view.queryByRole("header")).toBeNull();
+  expect(view.queryByRole("button", { name: "cancel" })).toBeNull();
+  expect(startNfcRead).toHaveBeenCalledTimes(1);
+  await act(() => resolveRead("04AB12CD34EF56"));
+  expect(onValue).toHaveBeenCalledWith("04AB12CD34EF56", { claimFailed: false });
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+it("keeps Android reading after a UID and cancels the next read when switched off", async () => {
+  jest.useFakeTimers();
+  try {
+    const onValue = jest.fn();
+    const onClose = jest.fn();
+    const view = await render(
+      <NfcReader
+        visible
+        continuous
+        showAndroidOverlay={false}
+        onValue={onValue}
+        onClose={onClose}
+      />,
+    );
+    await act(() => resolveRead("04AB12CD34EF56"));
+    expect(onValue).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    await act(() => jest.advanceTimersByTime(500));
+    expect(startNfcRead).toHaveBeenCalledTimes(2);
+    await view.rerender(
+      <NfcReader
+        visible={false}
+        continuous
+        showAndroidOverlay={false}
+        onValue={onValue}
+        onClose={onClose}
+      />,
+    );
+    await act(() => resolveRead("04AB12CD34EF56"));
+    await act(() => jest.advanceTimersByTime(1000));
+    expect(startNfcRead).toHaveBeenCalledTimes(2);
+    expect(onValue).toHaveBeenCalledTimes(1);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 it("cancels without delivering a late tag after dismissing the overlay", async () => {
   const onValue = jest.fn();
   const onClose = jest.fn();

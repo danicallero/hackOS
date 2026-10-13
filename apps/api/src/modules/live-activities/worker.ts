@@ -1,9 +1,11 @@
 import {
   type AndroidLiveUpdateMessage,
+  COUNTDOWN_FLAG_KEYS,
   LIVE_ACTIVITY_OPEN_ENDED_STALE_MS,
   type LiveActivityKind,
   type LiveActivityProps,
   liveActivityStaleDate,
+  nextCountdownBoundary,
   relevanceForRank,
 } from "@hackos/shared/live-activities";
 import type { Language } from "@hackos/shared/locale";
@@ -49,7 +51,8 @@ import { liveStateHash } from "./state.js";
  * - desired, open session, visible state changed → update (counter updates
  *   of staff/attendee activities, the deadline and the accreditation desk
  *   are throttled to one per 30 s per session; queue changes, phase changes
- *   and rescheduling go out immediately);
+ *   and rescheduling go out immediately, and so do the countdown format
+ *   flags (#966), which exist to re-render the widget on time);
  * - desired, open iOS session near ActivityKit's 8-hour limit → end it at
  *   once and push-start a fresh one, so a long window (the hacking period)
  *   stays on screen;
@@ -222,13 +225,32 @@ function updateAlert(props: LiveActivityProps, previousPhase: string | null): bo
 }
 
 /**
- * The next instant a desired staff or attendee activity changes phase on its
- * own: the start while upcoming, the end while live (H25, H26, H59).
+ * The next instants a desired activity changes on its own: the start while
+ * upcoming, the end while live (H25, H26, H59), and the next countdown format
+ * boundary (#966: one-digit minutes or seconds, colon notation, the hour), so
+ * the precision flags flip, and the widget re-renders, on time.
  */
-function phaseBoundary(props: LiveActivityProps, now: Date): Date | null {
-  if (props.kind !== "activity" && props.kind !== "attendee_activity") return null;
-  const at = new Date(props.phase === "upcoming" ? props.startsAt : props.endsAt);
-  return Number.isFinite(at.getTime()) && at > now ? at : null;
+function boundaryInstants(props: LiveActivityProps, now: Date): Date[] {
+  if (props.kind !== "activity" && props.kind !== "attendee_activity" && props.kind !== "deadline")
+    return [];
+  const out: Date[] = [];
+  if (props.kind !== "deadline") {
+    const phaseAt = new Date(props.phase === "upcoming" ? props.startsAt : props.endsAt);
+    if (Number.isFinite(phaseAt.getTime()) && phaseAt > now) out.push(phaseAt);
+  }
+  const target =
+    props.kind !== "deadline" && props.phase === "upcoming" ? props.startsAt : props.endsAt;
+  const precisionAt = nextCountdownBoundary(target, now);
+  if (precisionAt !== null) out.push(new Date(precisionAt));
+  return out;
+}
+
+/** Whether a countdown format flag changed: its update must not wait out the counter throttle. */
+function precisionChanged(previous: LiveActivityProps | null, next: LiveActivityProps): boolean {
+  if (!previous || previous.kind !== next.kind) return false;
+  const before = previous as unknown as Record<string, unknown>;
+  const after = next as unknown as Record<string, unknown>;
+  return COUNTDOWN_FLAG_KEYS.some((key) => (before[key] ?? false) !== (after[key] ?? false));
 }
 
 async function loadDevices(): Promise<DeviceRow[]> {
@@ -359,8 +381,9 @@ async function tick(deps: LiveActivityTickDeps, summary: LiveActivityTickSummary
 
       const desiredKeys = new Set<string>();
       for (const want of desired) {
-        const boundary = phaseBoundary(want.props, now);
-        if (boundary) boundaries.set(boundary.getTime(), boundary);
+        for (const boundary of boundaryInstants(want.props, now)) {
+          boundaries.set(boundary.getTime(), boundary);
+        }
         const key = sessionKey(device.id, want.kind, want.subject);
         desiredKeys.add(key);
         const session = sessions.get(key);
@@ -598,7 +621,11 @@ async function updateSession(
   const previousPhase = session.props?.phase ?? null;
   const phaseChanged = previousPhase !== want.props.phase;
   const moved = rescheduled(session.props, want.props);
-  const urgent = URGENT_KINDS.has(want.kind) || phaseChanged || moved;
+  const urgent =
+    URGENT_KINDS.has(want.kind) ||
+    phaseChanged ||
+    moved ||
+    precisionChanged(session.props, want.props);
   const { rows } = await pool.query<{ id: number }>(
     `UPDATE live_activity_sessions
         SET state_hash = $2, props = $3, last_sent_at = now()

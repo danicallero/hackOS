@@ -58,11 +58,11 @@ export const queueSettingsBody = z.object({
   handoffBufferMinutes: z.coerce.number().int().min(0).optional(),
   scheduleStartAt: z.coerce.date().optional().nullable(),
   scheduleEndAt: z.coerce.date().optional().nullable(),
-  preCallNotificationEtaMinutes: z.coerce.number().int().min(0).optional(),
+  preCallNotificationEtaMinutes: z.coerce.number().int().min(0).max(240).optional(),
   requeuePromptDefault: z.enum(["top", "bottom", "ask"]).optional(),
   // H34/H203: configurable called-too-long warning threshold, replacing the
   // frontend's temporary max(10 min, 2x desired minutes/team) fallback.
-  calledTooLongThresholdMinutes: z.coerce.number().int().min(1).optional(),
+  calledTooLongThresholdMinutes: z.coerce.number().int().min(1).max(240).optional(),
 });
 
 export const enqueueChallengeBody = z.object({

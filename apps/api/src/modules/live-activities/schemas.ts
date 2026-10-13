@@ -1,11 +1,16 @@
 import {
   ACCREDITATION_LIVE_ACTIVITY_SUBJECT,
+  COUNTDOWN_FLAG_KEYS,
   DEADLINE_LIVE_ACTIVITY_SUBJECT,
   LIVE_ACTIVITY_CONFIG_KINDS,
   LIVE_ACTIVITY_KINDS,
+  LIVE_ACTIVITY_LEAD_MINUTES_MAX,
+  LIVE_ACTIVITY_LEAD_MINUTES_MIN,
   LIVE_ACTIVITY_MAX_CONCURRENT_MAX,
   LIVE_ACTIVITY_MAX_CONCURRENT_MIN,
   LIVE_ACTIVITY_PROPS_VERSION,
+  LIVE_ACTIVITY_TIMING_KEYS,
+  LIVE_ACTIVITY_TIMING_RANGES,
   QUEUE_LIVE_ACTIVITY_SUBJECT,
 } from "@hackos/shared/live-activities";
 import { LANGS } from "@hackos/shared/locale";
@@ -146,6 +151,14 @@ const queueLivePropsSchema = z.object({
   updatedAt: isoString,
 });
 
+/**
+ * Countdown format flags (#966): without them in the response the app's
+ * foreground refresh would see an unchanged state at each format boundary.
+ */
+const countdownFlagsShape = Object.fromEntries(
+  COUNTDOWN_FLAG_KEYS.map((key) => [key, z.boolean().optional()]),
+) as Record<(typeof COUNTDOWN_FLAG_KEYS)[number], z.ZodOptional<z.ZodBoolean>>;
+
 const activityLivePropsSchema = z.object({
   v: z.literal(LIVE_ACTIVITY_PROPS_VERSION),
   kind: z.literal("activity"),
@@ -167,6 +180,7 @@ const activityLivePropsSchema = z.object({
     endsIn: z.string().optional(),
     live: z.string().optional(),
   }),
+  ...countdownFlagsShape,
   rank,
   updatedAt: isoString,
 });
@@ -188,6 +202,7 @@ const attendeeActivityLivePropsSchema = z.object({
     endsIn: z.string(),
     live: z.string().optional(),
   }),
+  ...countdownFlagsShape,
   rank,
   updatedAt: isoString,
 });
@@ -207,6 +222,7 @@ const deadlineLivePropsSchema = z.object({
     submitted: z.string(),
     notSubmitted: z.string(),
   }),
+  ...countdownFlagsShape,
   rank,
   updatedAt: isoString,
 });
@@ -247,6 +263,20 @@ const configKindSchema = z.enum(LIVE_ACTIVITY_CONFIG_KINDS);
 
 export const liveActivitySettingsSchema = z.object({
   maxConcurrent: z.number().int(),
+  leadMinutes: z.number().int(),
+  defaultLeadMinutes: z.number().int(),
+  leadMinutesCustom: z.boolean(),
+  timings: z.object(
+    Object.fromEntries(
+      LIVE_ACTIVITY_TIMING_KEYS.map((key) => [
+        key,
+        z.object({ value: z.number().int(), default: z.number().int(), custom: z.boolean() }),
+      ]),
+    ) as Record<
+      (typeof LIVE_ACTIVITY_TIMING_KEYS)[number],
+      z.ZodObject<{ value: z.ZodNumber; default: z.ZodNumber; custom: z.ZodBoolean }>
+    >,
+  ),
   kinds: z.array(
     z.object({
       kind: configKindSchema,
@@ -267,6 +297,33 @@ export const putLiveActivitySettingsBodySchema = z
       .int()
       .min(LIVE_ACTIVITY_MAX_CONCURRENT_MIN)
       .max(LIVE_ACTIVITY_MAX_CONCURRENT_MAX),
+    leadMinutes: z
+      .number()
+      .int()
+      .min(LIVE_ACTIVITY_LEAD_MINUTES_MIN)
+      .max(LIVE_ACTIVITY_LEAD_MINUTES_MAX)
+      .nullable()
+      .optional(),
+    timings: z
+      .object(
+        Object.fromEntries(
+          LIVE_ACTIVITY_TIMING_KEYS.map((key) => [
+            key,
+            z
+              .number()
+              .int()
+              .min(LIVE_ACTIVITY_TIMING_RANGES[key].min)
+              .max(LIVE_ACTIVITY_TIMING_RANGES[key].max)
+              .nullable()
+              .optional(),
+          ]),
+        ) as Record<
+          (typeof LIVE_ACTIVITY_TIMING_KEYS)[number],
+          z.ZodOptional<z.ZodNullable<z.ZodNumber>>
+        >,
+      )
+      .strict()
+      .optional(),
     kinds: z
       .array(
         z

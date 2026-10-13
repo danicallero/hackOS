@@ -9,6 +9,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { ContextualError } from "@/components/common/contextual-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, api } from "@/lib/api";
+import { setEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import type { EventConfig } from "@/lib/types";
 
@@ -67,7 +68,10 @@ export function EventConfigProvider({
     void load();
   }, [load]);
 
-  const applyConfig = useCallback((next: EventConfig) => setConfig(next), []);
+  const applyConfig = useCallback((next: EventConfig) => {
+    setConfig(next);
+    setEventTimeZone(next.timezone);
+  }, []);
   const retry = useCallback(() => void load(), [load]);
 
   return (

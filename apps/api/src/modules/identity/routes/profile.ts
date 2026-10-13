@@ -18,6 +18,7 @@ import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/erro
 import { idempotencyGuard, replayCompletedIdempotency } from "../../../lib/idempotency.js";
 import { photoUrl } from "../../../lib/profile-files.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
+import { getEventTimezone } from "../../event/service.js";
 import { assertFixtureSubjectScope } from "../../logistics/review-fixture-scope.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { enqueueWalletSync } from "../../logistics/wallet-sync.js";
@@ -472,7 +473,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "the single highest-visible `visibleRoleName` shown elsewhere. `pendingProfileTasks` " +
           "(#933) lists what to ask for on next entry: `dietary` when the caller has event access " +
           "but never gave an explicit dietary answer and the profile is not locked (H7), `meal_plan` when a sponsor representative " +
-          "has an open offered meal without an answer. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
+          "has an open offered meal without an answer. `eventTimezone` (H45/H47) is the event's IANA timezone: web and mobile show and accept every date and time in that zone, not the device's. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
@@ -516,6 +517,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             hasStatisticsPanels: z.boolean(),
             // #933: profile data the client should ask for on next entry.
             pendingProfileTasks: z.array(z.enum(PENDING_PROFILE_TASKS)),
+            // H45/H47: the event's IANA timezone. Every datetime web and mobile
+            // show or accept is this wall clock, never the device's; readable by
+            // any signed-in account (no capability), unlike GET /api/event.
+            eventTimezone: z.string(),
           }),
         },
       },
@@ -536,6 +541,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           removalStatus,
           roles,
           eventAccess,
+          eventTimezone,
         ] = await Promise.all([
           getEffectiveCapabilities(createAuthorizationContext(userId, client)),
           computeMembershipFlags(client, userId),
@@ -569,6 +575,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             : getPendingAccountRemovalStatus(client, userId),
           getAssignedRoles(client, userId),
           hasEventAccess(client, userId),
+          getEventTimezone(client),
         ]);
         const pendingProfileTasks: (typeof PENDING_PROFILE_TASKS)[number][] = [];
         // H7: a locked profile cannot change its dietary data, so don't ask for it.
@@ -591,6 +598,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           profileLocked,
           hasStatisticsPanels,
           pendingProfileTasks,
+          eventTimezone,
         };
       });
       return profile;

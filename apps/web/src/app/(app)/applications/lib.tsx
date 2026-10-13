@@ -9,6 +9,7 @@
 // applications form uses FIELD_KINDS below and i18n labels {en,es,gl}
 // (plan/07 §2). Types are declared locally per module conventions.
 
+import { fromDatetimeLocal, shortDateTimeFmt, toDatetimeLocal } from "@/lib/datetime";
 import type { Translate } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
 
@@ -242,35 +243,16 @@ export function grantedRoleNameLabel(roleName: string | null | undefined, t: Tra
 
 // ── datetime-local <-> ISO helpers ────────────────────────────────────────────
 
-const pad = (n: number) => String(n).padStart(2, "0");
+/** ISO string (from the API) -> event-zone value for a datetime input (H45/H47). */
+export const toLocalInput = (iso: string | null | undefined): string =>
+  toDatetimeLocal(iso ?? null);
 
-/** ISO string (from the API) -> value for an <input type="datetime-local">. */
-export function toLocalInput(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/** datetime-local value -> ISO string (UTC) or null when blank. */
-export function fromLocalInput(v: string): string | null {
-  if (!v) return null;
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
-const dateTimeFmt = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+/** Event-zone datetime input value -> ISO string (UTC) or null when blank. */
+export const fromLocalInput = fromDatetimeLocal;
 
 export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : dateTimeFmt.format(d);
+  return shortDateTimeFmt.format(new Date(iso)) || "—";
 }
 
 /** avg_score may be a numeric string; render to 1 decimal or a dash. */

@@ -88,7 +88,7 @@ workspace never over-grants access.
 | Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
 | Live judging | Queue operations (tabs: All rooms overview · Judging queues · Room configuration), Judging, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); The Room configuration tab is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from room administration |
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
-| Programme | Manage schedule, TV control, Announcements | `schedule:manage`, `tv:control`, or `announcements:manage` |
+| Programme | Manage schedule, TV control, Announcements | `schedule:read` (view-only schedule), `schedule:manage`, `tv:control`, or `announcements:manage` |
 | Sponsors | Enterprises, Challenges, Company tags (`/company-tags`), Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Company tags: `sponsors:manage` only — reps see their company's tags on its Tags tab, #935; Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
 | Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours) (each tab within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
 | Access and audit | Users, Permissions, Audit log | `users:read`, `permissions:manage`, `audit:read` |
@@ -184,7 +184,7 @@ hidden destinations stay routable:
   selection follows the pathname to Account.
 - **Operator** (any of `accredit:scan`, `presence:scan`, `activity:scan`, or
   the admin wildcard): the daily shift tools take the bar — schedule,
-  **Scanner**, Activities (`activity:scan` holders only) —
+  **Scanner** (NFC waves icon, with explicit camera fallback), Activities (`activity:scan` holders only) —
   scanning must never sit behind an ellipsis. The separate
   **"Others" overflow selector** (only when more than five destinations)
   holds eligible personal Queue, Diary, Account, and any queue operations destination as pseudo-tabs. Account's
@@ -303,7 +303,11 @@ Every native Stack, including the root one that hosts `schedule/[id]` and
 `people/[id]`, spreads `nativeStackScreenOptions` from `lib/navigation.ts`
 (`headerBackButtonDisplayMode: "minimal"`). On iOS 26 a chevron-only back item
 is a circular Liquid Glass button; a back title widens it into a capsule.
-Pushed screens keep that native item. A route opened from a cold deep link has
+The long-press back menu is off (`headerBackButtonMenuEnabled: false`): it
+lists previous screens by title, and a detail pushed over the tab navigator
+would offer the route group's name, "(tabs)". So that name never surfaces,
+`app/(tabs)/_layout.tsx` also titles its root-stack screen after the active
+tab (`tabLabelKeyForSegment`). Pushed screens keep that native item. A route opened from a cold deep link has
 nothing to pop, so it hides the native item and sets `headerLeft` to
 `components/header-back-button.tsx`, which calls `safeBack`. UIKit pads a
 custom bar item horizontally: a 44 pt-wide view becomes a capsule, while the

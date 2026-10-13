@@ -95,6 +95,7 @@ const CAPABILITY_DESCRIPTION_KEYS: Partial<Record<string, MessageKey>> = {
   "judging:export": "capabilityDescriptionJudgingExport",
   "sponsors:manage": "capabilityDescriptionSponsorsManage",
   "challenges:manage": "capabilityDescriptionChallengesManage",
+  "schedule:read": "capabilityDescriptionScheduleRead",
   "schedule:manage": "capabilityDescriptionScheduleManage",
   "announcements:manage": "capabilityDescriptionAnnouncementsManage",
   "tv:control": "capabilityDescriptionTvControl",

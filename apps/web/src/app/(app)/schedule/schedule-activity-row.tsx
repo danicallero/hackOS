@@ -174,6 +174,8 @@ export function ActivityRow({
       const updated = await logisticsApi.updateSchedule(item.id, {
         audiences: next,
         requiresScan,
+        // #966: an item without an audience cannot show a Live Activity.
+        ...(next.length === 0 && item.liveActivityAudience ? { liveActivityAudience: false } : {}),
       });
       onUpdate(updated);
       return true;
@@ -195,6 +197,20 @@ export function ActivityRow({
       toast.error(
         err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
         t("toastActivityScanning"),
+      );
+      return false;
+    }
+  }
+
+  async function saveLiveActivity(next: boolean): Promise<boolean> {
+    try {
+      const updated = await logisticsApi.updateSchedule(item.id, { liveActivityAudience: next });
+      onUpdate(updated);
+      return true;
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastActivityLiveActivity"),
       );
       return false;
     }
@@ -341,6 +357,23 @@ export function ActivityRow({
             onSave={saveScannable}
           />
         ) : item.requiresScan ? (
+          t("yesLabel")
+        ) : (
+          t("noLabel")
+        );
+      case "liveActivity":
+        return canEdit ? (
+          <EditableScannableCell
+            checked={item.liveActivityAudience === true}
+            disabled={(item.audiences ?? []).length === 0 && item.liveActivityAudience !== true}
+            disabledHint={
+              (item.audiences ?? []).length === 0 ? t("liveActivityRequiresAudience") : undefined
+            }
+            fieldLabel={t("scheduleLiveActivityColumn")}
+            errorTitle={t("toastActivityLiveActivity")}
+            onSave={saveLiveActivity}
+          />
+        ) : item.liveActivityAudience ? (
           t("yesLabel")
         ) : (
           t("noLabel")

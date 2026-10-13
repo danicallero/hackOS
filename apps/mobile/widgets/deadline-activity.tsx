@@ -21,7 +21,8 @@ import { createLiveActivity, type LiveActivityEnvironment } from "expo-widgets";
  * H19/H20 submission deadline Live Activity (#966). Open answers "how long
  * do we have?" (countdown hero, blue, with a bar of the hacking window and
  * the team's status when known); closing — the last minutes of a known
- * draft — turns the same layout red with "Not submitted"; submitted is the
+ * draft — marks only the symbol and "Not submitted" red (never the
+ * countdown or bar); submitted is the
  * calm state: a green "Submitted" hero, the time left kept small. A `null`
  * submission is unknown (e.g. a Devpost team not imported yet) and shows no
  * status at all, never "not submitted".
@@ -117,6 +118,11 @@ export const DeadlineActivityLayout = (
   const tone = submitted ? "green" : closing ? "red" : "blue";
   const islandColor = island[tone];
   const bannerColor = reduced ? null : lock[tone];
+  // Closing is urgent, not alarming: red marks only the symbol and the
+  // "Not submitted" status. The countdown and the bar keep the primary and
+  // neutral colours, so one glance still finds the number.
+  const valueIsland = closing ? null : islandColor;
+  const valueBanner = closing ? null : bannerColor;
   const colorMods = (color: string | null) => (color ? [foregroundStyle(color)] : []);
   const secondary = foregroundStyle({ type: "hierarchical", style: "secondary" });
   const symbol = submitted
@@ -141,7 +147,7 @@ export const DeadlineActivityLayout = (
     ),
   );
 
-  // #966: minute precision normally; seconds only in the last five minutes.
+  // #966: unit values carry no leading zero (`1h 5m`, `9m`, `9s`); the last five minutes use colon notation (`4:05`).
   // The native timer removes seconds and their spacing in Always-On.
   const countdown = (
     size: number,
@@ -250,7 +256,7 @@ export const DeadlineActivityLayout = (
   const compactLeading = glyph(islandColor, 15);
   const compactTrailing = countdown(
     12,
-    submitted ? neutral : islandColor,
+    submitted ? neutral : valueIsland,
     56,
     "semibold",
     "leading",
@@ -270,7 +276,7 @@ export const DeadlineActivityLayout = (
       {submitted
         ? countdown(17, neutral, 140, "semibold", "trailing", "long")
         : // Same hero scale as the other kinds; width fitting handles long hours.
-          (countdown(28, islandColor, 180, "bold", "trailing", "long") ?? <Text> </Text>)}
+          (countdown(28, valueIsland, 180, "bold", "trailing", "long") ?? <Text> </Text>)}
     </VStack>
   );
   const expandedBottom = (
@@ -290,7 +296,7 @@ export const DeadlineActivityLayout = (
         {status(12, true)}
       </HStack>
       {caption(props.projectName)}
-      {bar(islandColor)}
+      {bar(valueIsland)}
     </VStack>
   );
 
@@ -334,47 +340,90 @@ export const DeadlineActivityLayout = (
           ) : (
             <VStack alignment="trailing" spacing={0}>
               {caption(labels.closesIn, "trailing")}
-              {countdown(28, bannerColor, 220, "bold", "trailing", "long")}
+              {countdown(28, valueBanner, 220, "bold", "trailing", "long")}
             </VStack>
           )}
         </VStack>
       </HStack>
-      {bar(bannerColor)}
+      {bar(valueBanner)}
     </VStack>
   );
 
-  // watchOS Smart Stack and CarPlay: the title, then the countdown (with
-  // "Not submitted" while closing) or "Submitted".
+  // watchOS Smart Stack and CarPlay (`.small` family, #966): glyph + title in
+  // secondary, then one hero value (the countdown, or "Submitted"), then at
+  // most one short status line. Colour is sparing: the glyph carries the
+  // phase accent; red marks a single element, the "Not submitted" line, and
+  // only in the last minutes. Always-On drops every accent.
+  const watchRed = reduced ? null : "#FF6961";
+  const watchGlyph = reduced || closing ? null : submitted ? island.green : island.blue;
+  const watchTimer = (size: number, weight: "semibold" | "bold", muted = false) =>
+    validEnd ? (
+      <Text
+        timerInterval={{ lower, upper: endsAt }}
+        countsDown
+        compactCountdown="full"
+        compactCountdownSize={size}
+        compactCountdownWeight={weight}
+        modifiers={[
+          lineLimit(1),
+          minimumScaleFactor(0.6),
+          frame({ maxWidth: 10000, alignment: "leading" }),
+          ...(muted ? [secondary] : []),
+        ]}
+      />
+    ) : null;
+  const watchStatus =
+    statusText && !submitted ? (
+      <HStack spacing={4} modifiers={[fixedSize({ horizontal: true })]}>
+        {closing ? (
+          <Image systemName="exclamationmark.circle.fill" color={watchRed ?? neutral} size={12} />
+        ) : null}
+        <Text
+          modifiers={[
+            font({ size: 13, weight: "semibold" }),
+            lineLimit(1),
+            ...(closing ? colorMods(watchRed) : [secondary]),
+          ]}
+        >
+          {statusText}
+        </Text>
+      </HStack>
+    ) : null;
   const bannerSmall = (
-    <VStack alignment="leading" spacing={2} modifiers={[padding({ all: 8 })]}>
-      <HStack spacing={4}>
-        <Image systemName={symbol} color={bannerColor ?? neutral} size={12} />
+    <VStack
+      alignment="leading"
+      spacing={2}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ horizontal: 10, vertical: 8 }),
+        dynamicTypeSize({ max: "xLarge" }),
+      ]}
+    >
+      <HStack spacing={5}>
+        <Image
+          systemName={submitted ? "checkmark.circle.fill" : "hourglass"}
+          color={watchGlyph ?? neutral}
+          size={13}
+        />
         <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
           {labels.title}
         </Text>
       </HStack>
       {submitted ? (
         <Text
-          modifiers={[font({ size: 20, weight: "bold" }), lineLimit(1), ...colorMods(bannerColor)]}
+          modifiers={[
+            font({ size: 24, weight: "bold" }),
+            lineLimit(1),
+            minimumScaleFactor(0.6),
+            ...colorMods(watchGlyph),
+          ]}
         >
           {labels.submitted}
         </Text>
       ) : (
-        <HStack spacing={6} alignment="firstTextBaseline">
-          {countdown(20, bannerColor, null)}
-          {closing && props.submission === "draft" ? (
-            <Text
-              modifiers={[
-                font({ size: 13, weight: "semibold" }),
-                lineLimit(1),
-                ...colorMods(bannerColor),
-              ]}
-            >
-              {labels.notSubmitted}
-            </Text>
-          ) : null}
-        </HStack>
+        watchTimer(26, "bold")
       )}
+      {submitted ? watchTimer(13, "semibold", true) : watchStatus}
     </VStack>
   );
 

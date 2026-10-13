@@ -110,6 +110,11 @@ mix values from different authorization moments. Ticket QR/wallet exposure, scan
 eligibility, and physical check-in use the same live query; role transitions
 reconcile wallet passes and retain the historical ticket row.
 
+`/api/me` also returns `eventTimezone` (H45/H47), the event's IANA timezone,
+readable by any signed-in account (`GET /api/event` needs `event:manage`). Web
+and mobile show and accept every date and time as that zone's wall clock, never
+the device's; see [Event time](./DESIGN.md#event-time).
+
 `/api/me` also returns `pendingProfileTasks` (#933): `dietary` until an
 event-access account gives an explicit dietary answer (its own `PATCH /api/me`
 with `foodIntolerances`/`foodIntoleranceNotes`, an empty list included; an
@@ -270,7 +275,8 @@ field-level merge behavior.
 The device/session registry (`PUT /api/me/live-activities/device`,
 `PUT`/`DELETE /api/me/live-activities/sessions`), the read model
 `GET /api/me/live-activities`, the organizer configuration
-(`GET`/`PUT /api/live-activities/settings`, `event:manage`, audited), and the
+(`GET`/`PUT /api/live-activities/settings`, `event:manage`, audited; it also carries the lead, deadline and accreditation timings), the automatic notification
+switch and lead (`GET`/`PUT /api/notifications/automation`, `event:manage`, audited), and the
 `live-activities` worker that pushes iOS ActivityKit updates over APNs (token
 auth) and Android Live Updates as data-only Expo pushes. `candidates.ts`
 gates and ranks the kinds (queue, staff activity, attendee activity,
@@ -337,11 +343,22 @@ one — every item regardless of state, including drafts and items still
 scheduled to reveal, each with its owners, contactNote, notes, and its own
 `visibility` (staff-only field, lets a client tell a draft apart from a live
 item) — previewing a draft on the run-of-show doesn't require publishing it
-first. The `SCHEDULE_MANAGE`-gated `GET /api/schedule` is the same full
+first. The `GET /api/schedule` listing (and `GET /api/schedule/:id/owners`),
+gated by `SCHEDULE_READ` or `SCHEDULE_MANAGE` — `schedule:read` is view-only,
+and `schedule:manage` implies it — is the same full
 listing plus bulk-management concerns and is what the web "Manage Schedule"
 table uses. A linked sponsor rep instead only sees *live* items explicitly
 tagged `sponsor`, with owners/contactNote but never the (staff-internal)
 notes/visibility. One feed, not three parallel endpoints.
+
+The Manage Schedule table's optional "Live Activity" column reads the listing's
+`liveActivityAudience` (#966), and its "Export CSV" action (any
+`schedule:read`/`schedule:manage` holder) builds the file client-side from the
+rows already on screen — search and filters applied, the chosen columns in the
+table's current order, localized dates/audiences/yes-no, UTF-8 BOM for Excel,
+`schedule-YYYY-MM-DD.csv`. There is no server export run (`EXPORTS_RUN`) or
+audit entry: it adds no data beyond what the listing already returns (H53).
+Times are the event's clock (the timezone in event settings), like the table itself, not the browser's.
 
 ### notifications (H50–H53)
 The in-app inbox, scheduled announcements (with translations and a

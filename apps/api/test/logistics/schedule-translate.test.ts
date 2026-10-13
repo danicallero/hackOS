@@ -305,3 +305,60 @@ describe("editing re-anchors primary_language to the editor's account language",
     expect(edited.json().title).toBe("Ceremonia de apertura");
   });
 });
+
+describe("single-language entries (H48, H50 extension)", () => {
+  const window = () => ({
+    startsAt: new Date(Date.now() + 3_600_000).toISOString(),
+    endsAt: new Date(Date.now() + 7_200_000).toISOString(),
+  });
+
+  it("creates an item written in one language other than the author's own", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    await pool.query(`UPDATE users SET language = 'es' WHERE id = $1`, [adminId]);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/schedule",
+      headers: asUser(adminId),
+      payload: { title: "Opening", titleLanguage: "en", ...window(), audiences: [] },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().primaryLanguage).toBe("en");
+    expect(res.json().title).toBe("Opening");
+  });
+
+  it("re-anchors an edit to the named language and keeps the old text as a translation", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    await pool.query(`UPDATE users SET language = 'es' WHERE id = $1`, [adminId]);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/schedule",
+      headers: asUser(adminId),
+      payload: { title: "Apertura", ...window(), audiences: [] },
+    });
+    const id = created.json().id;
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/schedule/${id}`,
+      headers: asUser(adminId),
+      payload: { title: "Abertura", titleLanguage: "gl" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.primaryLanguage).toBe("gl");
+    expect(body.title).toBe("Abertura");
+    expect(body.titleI18n).toEqual({ es: "Apertura" });
+  });
+
+  it("still rejects an empty title", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/schedule",
+      headers: asUser(adminId),
+      payload: { title: "", ...window(), audiences: [] },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

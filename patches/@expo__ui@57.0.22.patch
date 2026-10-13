@@ -7,10 +7,10 @@ index a8843b7..5369090 100644
       */
      pauseTime?: Date;
 +    /**
-+     * Live unit countdown: `2h 34m`, then `34m`, with seconds only in the
-+     * last five minutes (`4m 59s`). Under a minute: `48s` / `<1m` in Always-On.
-+     * All legacy forms share this precision policy. Size defaults to 12;
-+     * weight defaults to semibold. (hackOS patch, #966)
++     * Live countdown, no leading zero beside a unit: `2h 34m`, `1h 5m`, `34m`,
++     * `9m`; `4:05` (colon, zero-padded) in the last five minutes; `48s`, `9s`
++     * under a minute; `4m` / `<1m` in Always-On. Size defaults to 12; weight
++     * defaults to semibold; legacy forms share this policy. (hackOS patch, #966)
 +     */
 +    compactCountdown?: 'full' | 'short' | 'long';
 +    compactCountdownSize?: number;
@@ -55,15 +55,18 @@ index 7dfe0a9..6b7caa1 100644
    }
  
    internal func buildText(applyModifiers: Bool = true) -> Text {
-@@ -73,3 +87,89 @@ public struct TextView: ExpoSwiftUI.View {
+@@ -73,3 +87,94 @@
      return result
    }
  }
 +
-+/// #966: live units, minute precision until the last five minutes. The API
-+/// sends an update at hour/five-minute boundaries; only timer Text ticks in
++/// #966: live countdown, minute precision until the last five minutes. A unit
++/// never carries a leading zero (`1h 5m`, `9m`, `9s`); only colon notation is
++/// zero-padded (`4:05`), which the native timer draws itself. The API and the
++/// app send an update at each width boundary (hour, minutes-of-hour 10, ten
++/// minutes, five minutes, a minute, ten seconds); only timer Text ticks in
 +/// Live Activities, so each numeric field is clipped from that live source.
-+/// Reduced luminance removes the seconds field and its unit entirely.
++/// Reduced luminance removes the seconds and their unit entirely.
 +struct CompactCountdown: View {
 +  let end: Date
 +  let size: Double
@@ -99,9 +102,10 @@ index 7dfe0a9..6b7caa1 100644
 +  }
 +  private var digit: CGFloat { advance("0000000000") / 10 }
 +  private var colon: CGFloat { advance(":") }
++  private func digitsWidth(_ count: Int) -> CGFloat { ceil(CGFloat(count) * digit) }
 +
 +  /// One field of the live timer: `skip` is the width that follows it.
-+  private func field(skip: CGFloat, digits: Int) -> some View {
++  private func field(skip: CGFloat, width: CGFloat) -> some View {
 +    Text(timerInterval: Date.now...max(Date.now, end), countsDown: true)
 +      .font(font)
 +      .monospacedDigit()
@@ -109,7 +113,7 @@ index 7dfe0a9..6b7caa1 100644
 +      .multilineTextAlignment(.trailing)
 +      .frame(width: 400, alignment: .trailing)
 +      .offset(x: skip)
-+      .frame(width: ceil(CGFloat(digits) * digit), alignment: .trailing)
++      .frame(width: width, alignment: .trailing)
 +      .clipped()
 +  }
 +
@@ -119,27 +123,28 @@ index 7dfe0a9..6b7caa1 100644
 +
 +  var body: some View {
 +    let left = max(0, end.timeIntervalSinceNow)
-+    let seconds = left <= 300 && !reduced
 +    HStack(spacing: 0) {
 +      if left >= 3600 {
-+        field(skip: 2 * colon + 4 * digit, digits: left >= 36000 ? 2 : 1)
++        // `2h 34m`; minutes-of-hour under ten drop their zero: `1h 5m`.
++        let shortMinutes = (Int(left) % 3600) / 60 < 10
++        field(skip: 2 * colon + 4 * digit, width: digitsWidth(left >= 36000 ? 2 : 1))
 +        unit("h ")
-+        field(skip: colon + 2 * digit, digits: 2)
++        field(skip: colon + 2 * digit, width: digitsWidth(shortMinutes ? 1 : 2))
 +        unit("m")
 +      } else if left < 60 {
 +        if reduced {
 +          unit("<1m")
 +        } else {
-+          field(skip: 0, digits: 2)
++          field(skip: 0, width: digitsWidth(left >= 10 ? 2 : 1))
 +          unit("s")
 +        }
++      } else if left <= 300 && !reduced {
++        // Colon notation (`4:05`) is where the zero padding belongs; the
++        // native timer text is already `M:SS` here.
++        field(skip: 0, width: ceil(3 * digit + colon))
 +      } else {
-+        field(skip: colon + 2 * digit, digits: left >= 600 ? 2 : 1)
-+        unit(seconds ? "m " : "m")
-+        if seconds {
-+          field(skip: 0, digits: 2)
-+          unit("s")
-+        }
++        field(skip: colon + 2 * digit, width: digitsWidth(left >= 600 ? 2 : 1))
++        unit("m")
 +      }
 +    }
 +    .fixedSize()
@@ -154,10 +159,10 @@ index 2351ee8..00432b5 100644
     */
    pauseTime?: Date;
 +  /**
-+   * Live unit countdown: `2h 34m`, then `34m`, with seconds only in the
-+   * last five minutes (`4m 59s`). Under a minute: `48s` / `<1m` in Always-On.
-+   * All legacy forms share this precision policy. Size defaults to 12;
-+   * weight defaults to semibold. (hackOS patch, #966)
++   * Live countdown, no leading zero beside a unit: `2h 34m`, `1h 5m`, `34m`,
++   * `9m`; `4:05` (colon, zero-padded) in the last five minutes; `48s`, `9s`
++   * under a minute; `4m` / `<1m` in Always-On. Size defaults to 12; weight
++   * defaults to semibold; legacy forms share this policy. (hackOS patch, #966)
 +   */
 +  compactCountdown?: 'full' | 'short' | 'long';
 +  compactCountdownSize?: number;

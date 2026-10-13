@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api";
-import { formatScheduledDateTime, toDatetimeLocal } from "@/lib/datetime";
+import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
 import { toast } from "@/lib/toast";
@@ -66,7 +66,7 @@ export function StatusPill({
     <StatusBadge tone={SCHEDULE_STATUS_TONES[status]}>{scheduleStatusLabel(status, t)}</StatusBadge>
   );
   if (status === "scheduled" && item.publishAt) {
-    return <span title={new Date(item.publishAt).toLocaleString()}>{badge}</span>;
+    return <span title={formatScheduledDateTime(item.publishAt)}>{badge}</span>;
   }
   return badge;
 }
@@ -544,12 +544,15 @@ export function EditableScannableCell({
   disabled,
   disabledHint,
   fieldLabel,
+  errorTitle,
   onSave,
 }: {
   checked: boolean;
   disabled: boolean;
   disabledHint?: string;
   fieldLabel: string;
+  /** Toast heading naming the edited field; defaults to the scanning one. */
+  errorTitle?: string;
   onSave: (next: boolean) => Promise<CellSaveResult>;
 }) {
   const { t } = useLocale();
@@ -563,7 +566,7 @@ export function EditableScannableCell({
     } catch (err) {
       toast.error(
         err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastActivityScanning"),
+        errorTitle ?? t("toastActivityScanning"),
       );
     } finally {
       setSaving(false);
@@ -612,9 +615,8 @@ export function EditablePublishDateCell({
 
   async function commit(nextDraft = draft): Promise<boolean> {
     if (saving) return false;
-    const parsed = nextDraft ? new Date(nextDraft) : null;
-    if (parsed && Number.isNaN(parsed.getTime())) return false;
-    const next = parsed ? parsed.toISOString() : null;
+    const next = nextDraft ? fromDatetimeLocal(nextDraft) : null;
+    if (nextDraft && next === null) return false;
     if (next === value) {
       setEditing(false);
       return true;

@@ -156,7 +156,7 @@ describe("queue Live Activity (H38)", () => {
     const end = apns.sent.at(-1)!;
     const aps = end.payload.aps as Record<string, number | string>;
     expect(aps.event).toBe("end");
-    expect(Number(aps["dismissal-date"]) - Number(aps.timestamp)).toBe(15 * 60);
+    expect(Number(aps["dismissal-date"]) - Number(aps.timestamp)).toBe(0);
     const [session] = await sessionsOf(device.id);
     expect(session).toMatchObject({ end_reason: "finished" });
     expect(session.ended_at).not.toBeNull();
@@ -802,6 +802,46 @@ describe("configurable kinds in the worker (#966)", () => {
     expect(JSON.parse((live["content-state"] as { props: string }).props).phase).toBe("live");
     expect(live["stale-date"]).toBe(Math.floor(endsAt.getTime() / 1000));
     expect(await queue.getJob(liveActivityBoundaryJobId(endsAt))).toBeTruthy();
+  });
+
+  it("schedules a tick at the next countdown width change and sends its flag change unthrottled (#966)", async () => {
+    const db = await pool();
+    const { getQueue } = await import("../../src/lib/queues.js");
+    const { LIVE_ACTIVITIES_QUEUE, liveActivityBoundaryJobId } = await import(
+      "../../src/modules/live-activities/kick.js"
+    );
+    const queue = getQueue(LIVE_ACTIVITIES_QUEUE);
+    await queue.obliterate({ force: true });
+    const attendee = await createUser();
+    // 10 min 5 s to the start: the minutes field has two places until it drops below 10 min.
+    const { rows } = await db.query<{ id: number; starts_at: Date }>(
+      `INSERT INTO schedule (title, type, starts_at, ends_at, visibility, audiences,
+                             live_activity_audience)
+       VALUES ('Keynote', 'talk', now() + interval '10 minutes 5 seconds', now() + interval '2 hours',
+               'shown', '{participant}', true) RETURNING id, starts_at`,
+    );
+    const startsAt = rows[0]!.starts_at;
+    await registerDevice(attendee, { platform: "android" });
+
+    expect(await tick()).toMatchObject({ started: 1 });
+    expect(android.sent[0]!.message.hackosLiveUpdate.props).toMatchObject({
+      countdownUnderTenMinutes: false,
+      countdownLastFiveMinutes: false,
+    });
+    // The next width change, ten minutes before the start, has its own tick.
+    const tenMinutes = new Date(startsAt.getTime() - 600_000);
+    expect((await queue.getJob(liveActivityBoundaryJobId(tenMinutes)))?.name).toBe("boundary");
+
+    // The session last saw the other side of the flag, right after its previous
+    // send: the flag change is not held by the 30 s counter throttle.
+    await db.query(
+      `UPDATE live_activity_sessions
+          SET state_hash = 'stale', props = jsonb_set(props, '{countdownUnderTenMinutes}', 'true')`,
+    );
+    expect(await tick()).toMatchObject({ updated: 1 });
+    expect(android.sent[1]!.message.hackosLiveUpdate.props).toMatchObject({
+      countdownUnderTenMinutes: false,
+    });
   });
 
   it("a higher-priority kind displaces a running lower one beyond maxConcurrent", async () => {

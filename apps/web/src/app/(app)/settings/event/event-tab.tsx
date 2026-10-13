@@ -5,12 +5,13 @@
 // window, and the hacking window that drives the public countdown (H47,
 // H49) and TV panels (H42). Merged from the former separate Event/Schedule
 // tabs — both are edited by the same "event lead" persona and now share one
-// capability and one save scope. Each date/time field shows both the
-// browser-local instant being edited and its event-timezone reading, and the
+// capability and one save scope. Date/time fields are the event's wall clock
+// in the zone chosen on this form, not the browser's, and the
 // section previews exactly what the public countdown will show once saved
 // (H45's "reveal, no manual toggling" idea applied to the countdown handoff)
 // by reusing the same phase logic the public site and TV run.
 
+import { isValidTimeZone, wallClockToInstant } from "@hackos/shared/event-time";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useId, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
@@ -35,12 +36,12 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
+import { getEventTimeZone } from "@/lib/event-time";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";
-import { ZonedTimePreview } from "./zoned-time-preview";
 
 const createSchema = (t: Translate) =>
   z
@@ -68,12 +69,13 @@ const createSchema = (t: Translate) =>
         });
         return;
       }
-      const sendAt = new Date(values.eventReminderScheduledAt).getTime();
-      if (
-        !Number.isFinite(sendAt) ||
-        sendAt <= Date.now() ||
-        sendAt >= new Date(values.eventStartsAt).getTime()
-      ) {
+      // Both are wall clocks in the zone chosen on this form.
+      const zone = isValidTimeZone(values.timezone.trim())
+        ? values.timezone.trim()
+        : getEventTimeZone();
+      const sendAt = Date.parse(wallClockToInstant(values.eventReminderScheduledAt, zone) ?? "");
+      const startsAt = Date.parse(wallClockToInstant(values.eventStartsAt, zone) ?? "");
+      if (!Number.isFinite(sendAt) || sendAt <= Date.now() || !(sendAt < startsAt)) {
         ctx.addIssue({
           code: "custom",
           path: ["eventReminderScheduledAt"],
@@ -90,30 +92,33 @@ const EQUAL_SPLIT = "pr-9";
 type Values = z.infer<ReturnType<typeof createSchema>>;
 
 function fromConfig(cfg: EventConfig): Values {
+  const zone = cfg.timezone || "Europe/Madrid";
   return {
     eventReminderScheduledAt:
       cfg.eventReminder?.status === "scheduled"
-        ? toLocalInputValue(cfg.eventReminder.scheduled_at)
+        ? toLocalInputValue(cfg.eventReminder.scheduled_at, zone)
         : "",
     name: cfg.name ?? "",
     tagline: cfg.tagline ?? "",
     timezone: cfg.timezone || "Europe/Madrid",
     participantsCanCreateProjects: cfg.participantsCanCreateProjects,
-    participantSelfServiceStartsAt: toLocalInputValue(cfg.participantSelfServiceStartsAt),
-    participantSelfServiceEndsAt: toLocalInputValue(cfg.participantSelfServiceEndsAt),
-    eventStartsAt: toLocalInputValue(cfg.eventStartsAt),
-    eventEndsAt: toLocalInputValue(cfg.eventEndsAt),
-    hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt),
-    hackingEndsAt: toLocalInputValue(cfg.hackingEndsAt),
+    participantSelfServiceStartsAt: toLocalInputValue(cfg.participantSelfServiceStartsAt, zone),
+    participantSelfServiceEndsAt: toLocalInputValue(cfg.participantSelfServiceEndsAt, zone),
+    eventStartsAt: toLocalInputValue(cfg.eventStartsAt, zone),
+    eventEndsAt: toLocalInputValue(cfg.eventEndsAt, zone),
+    hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt, zone),
+    hackingEndsAt: toLocalInputValue(cfg.hackingEndsAt, zone),
     showStartCountdown: cfg.showStartCountdown,
   };
 }
 
 function CountdownPreview({
   values,
+  timeZone,
   judgingStartsAt,
   judgingEndsAt,
 }: {
+  timeZone: string;
   values: Pick<Values, "hackingStartsAt" | "hackingEndsAt" | "showStartCountdown">;
   judgingStartsAt: string | null;
   judgingEndsAt: string | null;
@@ -122,8 +127,8 @@ function CountdownPreview({
     name: null,
     tagline: null,
     timezone: "",
-    hackingStartsAt: fromLocalInputValue(values.hackingStartsAt),
-    hackingEndsAt: fromLocalInputValue(values.hackingEndsAt),
+    hackingStartsAt: fromLocalInputValue(values.hackingStartsAt, timeZone),
+    hackingEndsAt: fromLocalInputValue(values.hackingEndsAt, timeZone),
     showStartCountdown: values.showStartCountdown,
     judgingStartsAt,
     judgingEndsAt,
@@ -171,21 +176,32 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
 
   async function onSubmit(values: Values) {
     setSaveState("saving");
+    const zone = isValidTimeZone(values.timezone.trim())
+      ? values.timezone.trim()
+      : getEventTimeZone();
     try {
       const next = await api.put<EventConfig>("/api/event", {
         ...(form.formState.dirtyFields.eventReminderScheduledAt
-          ? { eventReminderScheduledAt: fromLocalInputValue(values.eventReminderScheduledAt) }
+          ? {
+              eventReminderScheduledAt: fromLocalInputValue(values.eventReminderScheduledAt, zone),
+            }
           : {}),
         name: values.name.trim() || null,
         tagline: values.tagline.trim() || null,
         timezone: values.timezone.trim(),
         participantsCanCreateProjects: values.participantsCanCreateProjects,
-        participantSelfServiceStartsAt: fromLocalInputValue(values.participantSelfServiceStartsAt),
-        participantSelfServiceEndsAt: fromLocalInputValue(values.participantSelfServiceEndsAt),
-        eventStartsAt: fromLocalInputValue(values.eventStartsAt),
-        eventEndsAt: fromLocalInputValue(values.eventEndsAt),
-        hackingStartsAt: fromLocalInputValue(values.hackingStartsAt),
-        hackingEndsAt: fromLocalInputValue(values.hackingEndsAt),
+        participantSelfServiceStartsAt: fromLocalInputValue(
+          values.participantSelfServiceStartsAt,
+          zone,
+        ),
+        participantSelfServiceEndsAt: fromLocalInputValue(
+          values.participantSelfServiceEndsAt,
+          zone,
+        ),
+        eventStartsAt: fromLocalInputValue(values.eventStartsAt, zone),
+        eventEndsAt: fromLocalInputValue(values.eventEndsAt, zone),
+        hackingStartsAt: fromLocalInputValue(values.hackingStartsAt, zone),
+        hackingEndsAt: fromLocalInputValue(values.hackingEndsAt, zone),
         showStartCountdown: values.showStartCountdown,
       });
       applyConfig(next);
@@ -212,7 +228,9 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
   if (status !== "ready" || !config) {
     return <EventConfigLoadState />;
   }
-  const timezone = values.timezone ?? config.timezone;
+  const timezone = isValidTimeZone(values.timezone?.trim())
+    ? values.timezone.trim()
+    : config.timezone;
 
   return (
     <Form {...form}>
@@ -310,7 +328,6 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
                             className={EQUAL_SPLIT}
                           />
                         </FormControl>
-                        <ZonedTimePreview value={field.value} timezone={timezone} />
                         {"description" in date && (
                           <FormDescription>{t(date.description)}</FormDescription>
                         )}
@@ -339,6 +356,7 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
                 )}
               />
               <CountdownPreview
+                timeZone={timezone}
                 values={{
                   hackingStartsAt: values.hackingStartsAt ?? "",
                   hackingEndsAt: values.hackingEndsAt ?? "",
@@ -364,10 +382,12 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
                                 Math.max(
                                   Date.now() + 3600000,
                                   new Date(
-                                    fromLocalInputValue(values.eventStartsAt ?? "") ?? Date.now(),
+                                    fromLocalInputValue(values.eventStartsAt ?? "", timezone) ??
+                                      Date.now(),
                                   ).getTime() - 86400000,
                                 ),
                               ).toISOString(),
+                              timezone,
                             )
                           : "",
                         { shouldDirty: true, shouldValidate: true },
@@ -392,7 +412,6 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
                               className={EQUAL_SPLIT}
                             />
                           </FormControl>
-                          <ZonedTimePreview value={field.value} timezone={timezone} />
                           <FormMessage />
                         </FormItem>
                       )}
@@ -455,7 +474,6 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
                           className={EQUAL_SPLIT}
                         />
                       </FormControl>
-                      <ZonedTimePreview value={field.value} timezone={timezone} />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -473,7 +491,6 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
                           className={EQUAL_SPLIT}
                         />
                       </FormControl>
-                      <ZonedTimePreview value={field.value} timezone={timezone} />
                       <FormMessage />
                     </FormItem>
                   )}

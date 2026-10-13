@@ -249,6 +249,8 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | POST | `/api/me/work-groups/:id/invites/decline` | authenticated + email-verification:caller |
 | DELETE | `/api/me/work-groups/:id/members/:userId` | authenticated + email-verification:caller |
 | POST | `/api/me/work-groups/:id/submit` | authenticated + email-verification:caller |
+| GET | `/api/notifications/automation` | capability:event:manage |
+| PUT | `/api/notifications/automation` | capability:event:manage + email-verification:caller |
 | DELETE | `/api/presence/activity-logs/:id` | capability:presence:scan + email-verification:caller |
 | PATCH | `/api/presence/activity-logs/:id` | capability:presence:scan + email-verification:caller |
 | GET | `/api/presence/estimate` | capability:anyOf(presence:scan,logistics:stats) |
@@ -403,11 +405,11 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | GET | `/api/roles/capability-catalogue` | capability:permissions:manage |
 | GET | `/api/scanner/role-stats` | capability:anyOf(accredit:scan,presence:scan,activity:scan,logistics:stats,schedule:manage) |
 | GET | `/api/scanner/snapshot` | capability:anyOf(accredit:scan,presence:scan,activity:scan,logistics:stats,schedule:manage) |
-| GET | `/api/schedule` | capability:schedule:manage |
+| GET | `/api/schedule` | capability:anyOf(schedule:read,schedule:manage) |
 | POST | `/api/schedule` | capability:schedule:manage + email-verification:caller |
 | DELETE | `/api/schedule/:id` | capability:schedule:manage + email-verification:caller |
 | PATCH | `/api/schedule/:id` | capability:schedule:manage + email-verification:caller |
-| GET | `/api/schedule/:id/owners` | capability:schedule:manage |
+| GET | `/api/schedule/:id/owners` | capability:anyOf(schedule:read,schedule:manage) |
 | POST | `/api/schedule/:id/owners` | capability:schedule:manage + email-verification:caller |
 | DELETE | `/api/schedule/:id/owners/:ownerId` | capability:schedule:manage + email-verification:caller |
 | PUT | `/api/schedule/:id/translations` | capability:schedule:manage + email-verification:caller |

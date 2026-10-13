@@ -40,6 +40,8 @@ export interface Me {
   visibleRoleName: string | null;
   /** True when the account has at least one assigned role with event_access. */
   hasEventAccess: boolean;
+  /** H45/H47: the event's IANA timezone; every shown and typed time is this clock, not the phone's. */
+  eventTimezone: string;
   hasQueueItems: boolean;
   capabilities: string[];
   // Optional: an offline profile cached by an older build lacks these (#933).

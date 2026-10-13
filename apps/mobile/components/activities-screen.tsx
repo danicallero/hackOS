@@ -1,18 +1,12 @@
-import { MenuView } from "@expo/ui/community/menu";
-import { type ActivityKindSymbolName, isMealActivityKind } from "@hackos/shared/activity-kinds";
+import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
-import {
-  AndroidFilterMenu,
-  EmptyState,
-  LegacyScreenHeader,
-  MenuTriggerIcon,
-  StatusPill,
-} from "@/components/native-ui";
+import { FilterMenu } from "@/components/filter-menu";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { EmptyState, LegacyScreenHeader, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
@@ -22,6 +16,7 @@ import {
   filterActivities,
   sameActivities,
 } from "@/lib/activity-list";
+import { formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerActivities } from "@/lib/scanner-db";
@@ -45,7 +40,7 @@ export function ActivitiesScreen() {
   const sync = useScannerSync();
   const [items, setItems] = useState<ScannerActivity[]>([]);
   const [query, setQuery] = useState("");
-  const [kind, setKind] = useState<string | null>(null);
+  const [selectedKinds, setSelectedKinds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -124,45 +119,51 @@ export function ActivitiesScreen() {
 
   const kinds = useMemo(() => activityKinds(scannableDirectory), [scannableDirectory]);
   const filtered = useMemo(
-    () => filterActivities(scannableDirectory, { query, kind }),
-    [scannableDirectory, kind, query],
+    () => filterActivities(scannableDirectory, { query, kinds: selectedKinds }),
+    [scannableDirectory, selectedKinds, query],
   );
   const marker = useMemo(() => closestActivity(filtered, now), [filtered, now]);
-  const filtering = query.trim().length > 0 || kind !== null;
+  const filtering = query.trim().length > 0 || selectedKinds.length > 0;
+
+  const selectKind = useCallback((id: string) => {
+    setSelectedKinds((current) =>
+      id === "all"
+        ? []
+        : current.includes(id)
+          ? current.filter((kind) => kind !== id)
+          : [...current, id],
+    );
+  }, []);
+  const filterItems = useMemo(
+    () => [
+      { id: "all", label: t("scheduleFilterAll"), selected: selectedKinds.length === 0 },
+      ...kinds.map((value) => ({
+        id: value,
+        label: scheduleTypeLabel(value, t),
+        icon: activityKindSymbol(value),
+        selected: selectedKinds.includes(value),
+      })),
+    ],
+    [kinds, selectedKinds, t],
+  );
+  const filterMenu = useMemo(
+    () => (
+      <FilterMenu
+        accessibilityLabel={t("scheduleFilter")}
+        active={selectedKinds.length > 0}
+        items={filterItems}
+        onSelect={selectKind}
+      />
+    ),
+    [filterItems, selectKind, selectedKinds.length, t],
+  );
 
   // This is intentionally the same native composition as Schedule. In
   // particular, the search affordance must remain `headerSearchBarOptions`;
   // putting a magnifying-glass Pressable inside GlassView produces a static
   // surface on iOS 26 and loses UIKit's Liquid Glass search transition.
   useLayoutEffect(() => {
-    const headerRight = () => (
-      <MenuView
-        actions={[
-          {
-            id: "all",
-            title: t("scheduleFilterAll"),
-            state: (kind === null ? "on" : "off") as "on" | "off",
-          },
-          ...kinds.map((value) => ({
-            id: value,
-            title: scheduleTypeLabel(value, t),
-            image: activityKindSymbol(value) as ActivityKindSymbolName,
-            state: (kind === value ? "on" : "off") as "on" | "off",
-          })),
-        ]}
-        onPressAction={({ nativeEvent }) =>
-          setKind(nativeEvent.event === "all" ? null : nativeEvent.event)
-        }
-      >
-        <SymbolView
-          name={
-            kind === null ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill"
-          }
-          tintColor={kind === null ? colors.label : colors.accent}
-          size={19}
-        />
-      </MenuView>
-    );
+    const headerRight = () => filterMenu;
 
     if (!glassAvailable) {
       // Keep the options available to the fallback/native test harness while
@@ -205,7 +206,7 @@ export function ActivitiesScreen() {
           setQuery(event.nativeEvent.text),
       },
     });
-  }, [glassAvailable, kind, kinds, navigation, t]);
+  }, [glassAvailable, filterMenu, navigation, t]);
 
   // Forces the FlatList back to the top on focus so the native large-title
   // header re-syncs its collapsed/expanded state with the actual scroll
@@ -269,92 +270,12 @@ export function ActivitiesScreen() {
             </Stack.Toolbar.View>
           </Stack.Toolbar>
           <Stack.Toolbar placement="right">
-            <Stack.Toolbar.Menu
-              accessibilityLabel={t("scheduleFilter")}
-              icon={
-                kind === null
-                  ? "line.3.horizontal.decrease"
-                  : "line.3.horizontal.decrease.circle.fill"
-              }
-              tintColor={kind === null ? colors.label : colors.accent}
-            >
-              <Stack.Toolbar.MenuAction isOn={kind === null} onPress={() => setKind(null)}>
-                {t("scheduleFilterAll")}
-              </Stack.Toolbar.MenuAction>
-              {kinds.map((value) => (
-                <Stack.Toolbar.MenuAction
-                  isOn={kind === value}
-                  key={value}
-                  onPress={() => setKind(value)}
-                >
-                  {scheduleTypeLabel(value, t)}
-                </Stack.Toolbar.MenuAction>
-              ))}
-            </Stack.Toolbar.Menu>
+            <Stack.Toolbar.View hidesSharedBackground>{filterMenu}</Stack.Toolbar.View>
           </Stack.Toolbar>
         </>
       ) : (
         <LegacyScreenHeader
-          actions={
-            process.env.EXPO_OS === "android" ? (
-              <GlassView
-                colorScheme="auto"
-                glassEffectStyle="regular"
-                isInteractive
-                style={{ borderRadius: 22, height: 44, width: 44 }}
-              >
-                <AndroidFilterMenu
-                  accessibilityLabel={t("scheduleFilter")}
-                  items={[
-                    { id: "all", label: t("scheduleFilterAll"), selected: kind === null },
-                    ...kinds.map((value) => ({
-                      id: value,
-                      label: scheduleTypeLabel(value, t),
-                      selected: kind === value,
-                    })),
-                  ]}
-                  onSelect={(id) => setKind(id === "all" ? null : id)}
-                />
-              </GlassView>
-            ) : (
-              <GlassView
-                colorScheme="auto"
-                glassEffectStyle="regular"
-                isInteractive
-                style={{ borderRadius: 22, height: 44, width: 44 }}
-              >
-                <MenuView
-                  actions={[
-                    {
-                      id: "all",
-                      title: t("scheduleFilterAll"),
-                      state: (kind === null ? "on" : "off") as "on" | "off",
-                    },
-                    ...kinds.map((value) => ({
-                      id: value,
-                      title: scheduleTypeLabel(value, t),
-                      image: activityKindSymbol(value) as ActivityKindSymbolName,
-                      state: (kind === value ? "on" : "off") as "on" | "off",
-                    })),
-                  ]}
-                  onPressAction={({ nativeEvent }) =>
-                    setKind(nativeEvent.event === "all" ? null : nativeEvent.event)
-                  }
-                >
-                  <MenuTriggerIcon
-                    icon={
-                      kind === null
-                        ? "line.3.horizontal.decrease"
-                        : "line.3.horizontal.decrease.circle.fill"
-                    }
-                    accessibilityLabel={t("scheduleFilter")}
-                    accessibilityState={{ selected: kind !== null }}
-                    tintColor={kind === null ? colors.label : colors.accent}
-                  />
-                </MenuView>
-              </GlassView>
-            )
-          }
+          actions={filterMenu}
           cancelLabel={t("cancel")}
           onCloseSearch={() => {
             setSearchOpen(false);
@@ -432,7 +353,7 @@ export function ActivitiesScreen() {
             />
           ) : (
             <EmptyState
-              icon="qrcode.viewfinder"
+              icon="wave.3.right"
               title={t("scannerActivitiesEmpty")}
               description={t("scannerActivitiesEmptyBody")}
             />
@@ -458,6 +379,7 @@ const ActivityRow = memo(function ActivityRow({
   onPress: (item: ScannerActivity) => void;
   t: ReturnType<typeof useLocale>["t"];
 }) {
+  useEventTimeZone();
   const startsAt = item.startsAt ? new Date(item.startsAt) : null;
   return (
     <Pressable
@@ -519,7 +441,7 @@ const ActivityRow = memo(function ActivityRow({
                 numberOfLines={1}
                 style={{ color: colors.secondaryLabel, fontSize: 13 }}
               >
-                {startsAt.toLocaleString(language, {
+                {formatEventTime(startsAt, language, {
                   weekday: "short",
                   hour: "2-digit",
                   minute: "2-digit",

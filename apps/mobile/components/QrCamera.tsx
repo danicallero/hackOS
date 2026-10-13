@@ -2,12 +2,13 @@ import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from "expo-camera";
 import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { GlassView } from "@/components/glass-view";
 import { NfcReader } from "@/components/nfc-reader";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
+import { NfcScannerSurface } from "@/components/scanner-nfc-surface";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -27,6 +28,9 @@ export function QrCamera({
   autoStartNfc = false,
   nfcSessionKey = 0,
   requestCameraOnFocus = true,
+  nfcFirst = false,
+  hideNfc = false,
+  onOpenPeople,
 }: {
   onValue: (value: string) => void;
   onClose?: () => void;
@@ -35,44 +39,99 @@ export function QrCamera({
   autoStartNfc?: boolean;
   nfcSessionKey?: number;
   requestCameraOnFocus?: boolean;
+  nfcFirst?: boolean;
+  hideNfc?: boolean;
+  onOpenPeople?: () => void;
 }) {
+  const shouldAutoStartNfc = autoStartNfc || (nfcFirst && Platform.OS === "android");
   const nfcSupportStatus = useNfcSupportStatus();
-  const nfcSupported = nfcSupportStatus === "supported";
+  const nfcSupported = !hideNfc && nfcSupportStatus === "supported";
   const [nfcVisible, setNfcVisible] = useState(false);
+  const [cameraVisible, setCameraVisible] = useState(false);
   const autoStarted = useRef(false);
   const lastNfcSessionKey = useRef(0);
   const focused = useIsFocused();
   const nfcSessionPending =
     focused &&
     scanningEnabled &&
+    !hideNfc &&
     nfcSupportStatus !== "unsupported" &&
-    ((autoStartNfc && !autoStarted.current) || nfcSessionKey !== lastNfcSessionKey.current);
+    ((shouldAutoStartNfc && !autoStarted.current) || nfcSessionKey !== lastNfcSessionKey.current);
   useEffect(() => {
     if (
       nfcSupported &&
       focused &&
       scanningEnabled &&
-      ((autoStartNfc && !autoStarted.current) || nfcSessionKey !== lastNfcSessionKey.current)
+      ((shouldAutoStartNfc && !autoStarted.current) || nfcSessionKey !== lastNfcSessionKey.current)
     ) {
       autoStarted.current = true;
       lastNfcSessionKey.current = nfcSessionKey;
       setNfcVisible(true);
+      if (nfcFirst) setCameraVisible(false);
     }
-    if (!focused) setNfcVisible(false);
-  }, [focused, autoStartNfc, scanningEnabled, nfcSessionKey, nfcSupported]);
+    if (!focused) {
+      if (nfcFirst && Platform.OS === "android") autoStarted.current = false;
+      setNfcVisible(false);
+      setCameraVisible(false);
+    }
+  }, [focused, shouldAutoStartNfc, scanningEnabled, nfcSessionKey, nfcSupported, nfcFirst]);
+  const openNfc = nfcSupported
+    ? () => {
+        if (nfcFirst) setCameraVisible(false);
+        setNfcVisible((visible) => !visible);
+      }
+    : undefined;
   return (
     <>
-      <CameraPreview
-        onValue={onValue}
-        onClose={onClose}
-        hint={hint}
-        scanningEnabled={scanningEnabled && !nfcVisible}
-        nfcSessionPending={nfcSessionPending}
-        requestCameraOnFocus={requestCameraOnFocus}
-        onNfc={nfcSupported ? () => setNfcVisible(true) : undefined}
-      />
+      {nfcFirst ? (
+        <NfcScannerSurface
+          onOpenPeople={onOpenPeople}
+          onValue={onValue}
+          onNfc={openNfc}
+          onCamera={() => {
+            setNfcVisible(false);
+            setCameraVisible(true);
+          }}
+          onManual={() => setNfcVisible(false)}
+          nfcActive={nfcVisible && focused && scanningEnabled}
+          scanningEnabled={scanningEnabled}
+        />
+      ) : (
+        <CameraPreview
+          onValue={onValue}
+          onClose={nfcFirst ? () => setCameraVisible(false) : onClose}
+          hint={hint}
+          scanningEnabled={scanningEnabled && !nfcVisible}
+          nfcSessionPending={nfcSessionPending}
+          requestCameraOnFocus={nfcFirst || requestCameraOnFocus}
+          onNfc={openNfc}
+        />
+      )}
+      {nfcFirst ? (
+        <Modal
+          visible={cameraVisible}
+          animationType="slide"
+          onRequestClose={() => setCameraVisible(false)}
+        >
+          {cameraVisible ? (
+            <CameraPreview
+              onValue={(value) => {
+                setCameraVisible(false);
+                onValue(value);
+              }}
+              onClose={() => setCameraVisible(false)}
+              hint={hint}
+              scanningEnabled={scanningEnabled}
+              nfcSessionPending={false}
+              requestCameraOnFocus
+            />
+          ) : null}
+        </Modal>
+      ) : null}
       <NfcReader
         visible={nfcSupported && nfcVisible && scanningEnabled}
+        showAndroidOverlay={!nfcFirst}
+        continuous={nfcFirst && Platform.OS === "android"}
         onValue={onValue}
         onClose={() => setNfcVisible(false)}
       />

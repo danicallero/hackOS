@@ -330,12 +330,18 @@ export const scheduleBody = z.object({
   audiences: z.array(scheduleAudience).max(3).default([]),
   contactNote: z.string().max(300).nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
+  titleLanguage: languageSchema
+    .optional()
+    .describe(
+      "Language `title`/`description` are written in. Defaults to the editor's account language; " +
+        "send it when only a single, different language was filled in (H50).",
+    ),
   liveActivityAudience: z
     .boolean()
     .optional()
     .describe(
       "Opt-in (#966): the item's audience gets an attendee Live Activity (countdown from " +
-        "LIVE_ACTIVITY_LEAD_MINUTES before the start, then 'now, ends in'). Defaults to false.",
+        "the event's Live Activity lead time before the start, then 'now, ends in'). Defaults to false.",
     ),
 });
 

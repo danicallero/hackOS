@@ -178,11 +178,13 @@ Las Live Activities (#966) son opcionales: `APNS_KEY_ID` y `APNS_AUTH_KEY_P8`
 (base64 del fichero `.p8`, secreto; en staging va en `hackos.secrets`) se
 configuran juntas y requieren `APPLE_TEAM_IDENTIFIER`. `APNS_BUNDLE_ID`
 (por defecto `com.hackudc.os`), `LIVE_ACTIVITY_LEAD_MINUTES` (por defecto
-`15`), `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` (por defecto `180`; solo se
+`15`; valor inicial del ajuste del evento, que lo sobrescribe), `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` (por defecto `180`; solo se
 aplica si no hay inicio del hacking),
 `LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES` (por defecto `60`) y
 `LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES` (por defecto `60`) son
-configuración no secreta. Sin clave, el worker sigue enviando las
+configuración no secreta y solo el valor por defecto: cada una puede
+sobrescribirse desde los ajustes del evento sin redesplegar, y borrar la
+sobrescritura devuelve este valor. Sin clave, el worker sigue enviando las
 Live Updates de Android y omite iOS con un aviso. Alta de la clave y
 credenciales EAS: [docs/live-activities.md](../docs/live-activities.md).
 

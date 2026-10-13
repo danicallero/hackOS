@@ -3,9 +3,8 @@ import {
   type AttendeeActivityLiveProps,
   accreditationLiveLabels,
   attendeeActivityLiveLabels,
-  countdownLastFiveMinutes,
-  countdownLastMinute,
-  countdownUnderHour,
+  countdownFlags,
+  DEADLINE_CLOSING_MINUTES_DEFAULT,
   type DeadlineLiveProps,
   deadlineLiveLabels,
   LIVE_ACTIVITY_PROPS_VERSION,
@@ -14,6 +13,7 @@ import type { Language } from "@hackos/shared/locale";
 import { config } from "../../config.js";
 import { pool, type Queryable } from "../../db/pool.js";
 import { scannerSubjectScope } from "../logistics/review-fixture-scope.js";
+import { readLeadMinutes, readLiveActivityTimings } from "./settings.js";
 
 /**
  * Loaders and builders for the attendee, deadline and accreditation Live
@@ -41,12 +41,13 @@ export interface LiveAttendeeItem {
  * Opted-in schedule items (`live_activity_audience`) that are live for their
  * audience — shown and published, the same visibility rule as the
  * audience-aware schedule feed (`listScheduleForAudiences`) — and start
- * within `LIVE_ACTIVITY_LEAD_MINUTES` or are still running.
+ * within the configured lead time (`readLeadMinutes`) or are still running.
  */
 export async function loadLiveAttendeeItems(
   db: Queryable = pool,
-  leadMinutes: number = config.LIVE_ACTIVITY_LEAD_MINUTES,
+  leadMinutes?: number,
 ): Promise<LiveAttendeeItem[]> {
+  const lead = leadMinutes ?? (await readLeadMinutes(db));
   const { rows } = await db.query<{
     id: number;
     title: string;
@@ -66,7 +67,7 @@ export async function loadLiveAttendeeItems(
         AND starts_at <= now() + make_interval(mins => $1)
         AND now() < ends_at
       ORDER BY starts_at ASC, id ASC`,
-    [leadMinutes],
+    [lead],
   );
   return rows.map((r) => ({
     id: r.id,
@@ -102,23 +103,18 @@ export function buildAttendeeActivityLiveProps(
     url: scheduleDeepLink(item.id),
     labels: attendeeActivityLiveLabels(language),
     // #966: precision flags trigger one re-render at each native timer format boundary.
-    countdownUnderHour: countdownUnderHour(now < item.startsAt ? item.startsAt : item.endsAt, now),
-    countdownLastMinute: countdownLastMinute(
-      now < item.startsAt ? item.startsAt : item.endsAt,
-      now,
-    ),
-    countdownLastFiveMinutes: countdownLastFiveMinutes(
-      now < item.startsAt ? item.startsAt : item.endsAt,
-      now,
-    ),
+    ...countdownFlags(now < item.startsAt ? item.startsAt : item.endsAt, now),
     updatedAt: now.toISOString(),
   };
 }
 
 // ── Submission deadline (H19, H20) ─────────────────────────────────────────
 
-/** Unsubmitted teams get one alerting update when this little time is left. */
-export const DEADLINE_CLOSING_MINUTES = 15;
+/**
+ * Unsubmitted teams get one alerting update when this little time is left
+ * (default; the event setting `deadlineClosing` overrides it).
+ */
+export const DEADLINE_CLOSING_MINUTES = DEADLINE_CLOSING_MINUTES_DEFAULT;
 
 export interface DeadlineWindow {
   startsAt: Date | null;
@@ -130,20 +126,22 @@ export interface DeadlineWindow {
  * `projects/lifecycle.ts` enforces ("The submission deadline has passed")
  * and Devpost imports lock at. Decision (H19): the activity runs for the
  * whole hacking period, from `hacking_starts_at` until the deadline passes;
- * only without a start does it fall back to
- * `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES` before the deadline.
+ * only without a start does it fall back to the configured deadline lead
+ * (`deadlineLead`, default `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES`) before the
+ * deadline.
  */
 export async function readDeadlineWindow(
   db: Queryable = pool,
-  leadMinutes: number = config.LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES,
+  leadMinutes?: number,
 ): Promise<DeadlineWindow | null> {
+  const lead = leadMinutes ?? (await readLiveActivityTimings(db)).deadlineLead;
   const { rows } = await db.query<{ hacking_starts_at: Date | null; hacking_ends_at: Date }>(
     `SELECT hacking_starts_at, hacking_ends_at
        FROM event_config
       WHERE id = 1 AND hacking_ends_at IS NOT NULL
         AND now() < hacking_ends_at
         AND COALESCE(hacking_starts_at, hacking_ends_at - make_interval(mins => $1)) <= now()`,
-    [leadMinutes],
+    [lead],
   );
   const row = rows[0];
   return row ? { startsAt: row.hacking_starts_at, endsAt: row.hacking_ends_at } : null;
@@ -214,9 +212,10 @@ export function buildDeadlineLiveProps(
   fact: SubmissionFact | undefined,
   language: Language,
   now: Date,
+  closingMinutes: number = DEADLINE_CLOSING_MINUTES,
 ): DeadlineLiveProps {
   const submission = fact?.submission ?? null;
-  const closing = window.endsAt.getTime() - now.getTime() <= DEADLINE_CLOSING_MINUTES * 60_000;
+  const closing = window.endsAt.getTime() - now.getTime() <= closingMinutes * 60_000;
   return {
     v: LIVE_ACTIVITY_PROPS_VERSION,
     kind: "deadline",
@@ -232,9 +231,7 @@ export function buildDeadlineLiveProps(
     projectName: fact?.projectName ?? null,
     url: projectDeepLink(),
     labels: deadlineLiveLabels(language),
-    countdownUnderHour: countdownUnderHour(window.endsAt, now),
-    countdownLastMinute: countdownLastMinute(window.endsAt, now),
-    countdownLastFiveMinutes: countdownLastFiveMinutes(window.endsAt, now),
+    ...countdownFlags(window.endsAt, now),
     updatedAt: now.toISOString(),
   };
 }
@@ -245,16 +242,20 @@ export const ACCREDITATION_RECENT_MINUTES = 10;
 
 /**
  * Decision: event_config has no check-in window, so the desk's window is
- * derived. It opens `LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES` before the
- * event starts (`event_starts_at`, else `hacking_starts_at`) and closes
- * `LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES` after hacking starts (else the
- * event start): the arrival rush. Late arrivals are still scanned in the app.
+ * derived. It opens `accreditationLead` minutes (default
+ * `LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES`) before the event starts
+ * (`event_starts_at`, else `hacking_starts_at`) and closes `accreditationTail`
+ * minutes (default `LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES`) after hacking
+ * starts (else the event start): the arrival rush. Late arrivals are still scanned in the app.
  */
 export async function readAccreditationWindow(
   db: Queryable = pool,
-  leadMinutes: number = config.LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES,
-  tailMinutes: number = config.LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES,
+  leadMinutes?: number,
+  tailMinutes?: number,
 ): Promise<{ endsAt: Date } | null> {
+  const timings = await readLiveActivityTimings(db);
+  const lead = leadMinutes ?? timings.accreditationLead;
+  const tail = tailMinutes ?? timings.accreditationTail;
   const { rows } = await db.query<{ ends_at: Date }>(
     `SELECT ends_at FROM (
        SELECT COALESCE(event_starts_at, hacking_starts_at) - make_interval(mins => $1) AS starts_at,
@@ -262,7 +263,7 @@ export async function readAccreditationWindow(
          FROM event_config WHERE id = 1
      ) w
      WHERE starts_at <= now() AND now() < ends_at`,
-    [leadMinutes, tailMinutes],
+    [lead, tail],
   );
   return rows[0] ? { endsAt: rows[0].ends_at } : null;
 }

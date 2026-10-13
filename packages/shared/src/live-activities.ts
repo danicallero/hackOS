@@ -61,6 +61,21 @@ export interface LiveActivityKindSetting {
 export interface LiveActivitySettings {
   /** Most Live Activities one device shows at once (1–5). */
   maxConcurrent: number;
+  /**
+   * Minutes before a schedule item starts that its staff or attendee Live
+   * Activity appears (H25, H26, H59): the organizer override, else the
+   * deployment default.
+   */
+  leadMinutes: number;
+  /** The deployment default (`LIVE_ACTIVITY_LEAD_MINUTES`) used without an override. */
+  defaultLeadMinutes: number;
+  /** True when an organizer override is stored. */
+  leadMinutesCustom: boolean;
+  /**
+   * The other organizer-set timings (deadline and accreditation windows),
+   * each the override or, without one, the default.
+   */
+  timings: Record<LiveActivityTimingKey, LiveActivityTiming>;
   /** Sorted by priority. */
   kinds: LiveActivityKindSetting[];
   /**
@@ -85,6 +100,46 @@ export interface MyLiveActivityPreferences {
 /** Bounds of `LiveActivitySettings.maxConcurrent`. */
 export const LIVE_ACTIVITY_MAX_CONCURRENT_MIN = 1;
 export const LIVE_ACTIVITY_MAX_CONCURRENT_MAX = 5;
+
+/**
+ * Event-set Live Activity timings besides the schedule lead (H19, H20, H22).
+ * `deadlineLead`: minutes before submissions close that the deadline activity
+ * appears when `hacking_starts_at` is unset; `deadlineClosing`: minutes left
+ * when an unsubmitted team's activity turns urgent; `accreditationLead` and
+ * `accreditationTail`: minutes before the event starts / after hacking starts
+ * that the desk activity is open.
+ */
+export const LIVE_ACTIVITY_TIMING_KEYS = [
+  "deadlineLead",
+  "deadlineClosing",
+  "accreditationLead",
+  "accreditationTail",
+] as const;
+export type LiveActivityTimingKey = (typeof LIVE_ACTIVITY_TIMING_KEYS)[number];
+
+export const LIVE_ACTIVITY_TIMING_RANGES: Record<
+  LiveActivityTimingKey,
+  { min: number; max: number }
+> = {
+  deadlineLead: { min: 15, max: 1440 },
+  deadlineClosing: { min: 1, max: 240 },
+  accreditationLead: { min: 0, max: 1440 },
+  accreditationTail: { min: 0, max: 1440 },
+};
+
+/** Default of `deadlineClosing` (there is no deployment variable for it). */
+export const DEADLINE_CLOSING_MINUTES_DEFAULT = 15;
+
+export interface LiveActivityTiming {
+  /** The override when `custom`, else the default. */
+  value: number;
+  default: number;
+  custom: boolean;
+}
+
+/** Bounds of `LiveActivitySettings.leadMinutes`. */
+export const LIVE_ACTIVITY_LEAD_MINUTES_MIN = 0;
+export const LIVE_ACTIVITY_LEAD_MINUTES_MAX = 240;
 
 /** Subject key of the single queue Live Activity a participant can have. */
 export const QUEUE_LIVE_ACTIVITY_SUBJECT = "judging";
@@ -168,6 +223,14 @@ export type ActivityLivePhase = "upcoming" | "live";
 /** One hour, the boundary between the two countdown forms. */
 export const LIVE_COUNTDOWN_HOUR_MS = 3_600_000;
 
+/** Ten minutes, where the minutes field drops to one digit. */
+export const LIVE_COUNTDOWN_TEN_MINUTES_MS = 600_000;
+
+function countdownMsLeft(target: string | Date, now: Date | number): number {
+  const at = typeof target === "string" ? Date.parse(target) : target.getTime();
+  return at - (typeof now === "number" ? now : now.getTime());
+}
+
 /**
  * Whether the countdown to `target` is under an hour (#966). The iOS widget
  * shows `2h 34m` from an hour and `34m` below it, and picks the form only
@@ -183,16 +246,92 @@ export function countdownUnderHour(target: string | Date, now: Date | number): b
 
 /** #966: re-render once when seconds become relevant on iOS countdowns. */
 export function countdownLastFiveMinutes(target: string | Date, now: Date | number): boolean {
-  const at = typeof target === "string" ? Date.parse(target) : target.getTime();
-  const from = typeof now === "number" ? now : now.getTime();
-  return at - from <= 300_000;
+  return countdownMsLeft(target, now) <= 300_000;
 }
 
 /** #966: re-render below a minute; active shows `48s`, Always-On shows `<1m`. */
 export function countdownLastMinute(target: string | Date, now: Date | number): boolean {
+  return countdownMsLeft(target, now) < 60_000;
+}
+
+/** #966: re-render under ten minutes, when the minutes field shrinks to one digit (`9m`). */
+export function countdownUnderTenMinutes(target: string | Date, now: Date | number): boolean {
+  return countdownMsLeft(target, now) < LIVE_COUNTDOWN_TEN_MINUTES_MS;
+}
+
+/** #966: re-render under ten seconds, when the seconds field shrinks to one digit (`9s`). */
+export function countdownLastTenSeconds(target: string | Date, now: Date | number): boolean {
+  return countdownMsLeft(target, now) < 10_000;
+}
+
+/**
+ * #966: from an hour up, the minutes-of-hour are a single digit (`1h 5m`, not
+ * `1h 05m`). It flips off at each full hour (`2h 0m` to `1h 59m`) and on ten
+ * minutes later, so the widget re-renders with the field width that fits.
+ */
+export function countdownShortMinutes(target: string | Date, now: Date | number): boolean {
+  const left = countdownMsLeft(target, now);
+  return (
+    left >= LIVE_COUNTDOWN_HOUR_MS && left % LIVE_COUNTDOWN_HOUR_MS < LIVE_COUNTDOWN_TEN_MINUTES_MS
+  );
+}
+
+/** The precision flags carried by every countdown-bearing Live Activity props. */
+export interface CountdownFlags {
+  countdownUnderHour: boolean;
+  countdownShortMinutes: boolean;
+  countdownUnderTenMinutes: boolean;
+  countdownLastFiveMinutes: boolean;
+  countdownLastMinute: boolean;
+  countdownLastTenSeconds: boolean;
+}
+
+export const COUNTDOWN_FLAG_KEYS = [
+  "countdownUnderHour",
+  "countdownShortMinutes",
+  "countdownUnderTenMinutes",
+  "countdownLastFiveMinutes",
+  "countdownLastMinute",
+  "countdownLastTenSeconds",
+] as const satisfies readonly (keyof CountdownFlags)[];
+
+export function countdownFlags(target: string | Date, now: Date | number): CountdownFlags {
+  return {
+    countdownUnderHour: countdownUnderHour(target, now),
+    countdownShortMinutes: countdownShortMinutes(target, now),
+    countdownUnderTenMinutes: countdownUnderTenMinutes(target, now),
+    countdownLastFiveMinutes: countdownLastFiveMinutes(target, now),
+    countdownLastMinute: countdownLastMinute(target, now),
+    countdownLastTenSeconds: countdownLastTenSeconds(target, now),
+  };
+}
+
+const SMALL_COUNTDOWN_THRESHOLDS_MS = [10_000, 60_000, 300_000, LIVE_COUNTDOWN_TEN_MINUTES_MS];
+
+/**
+ * The next instant (epoch ms) at which a countdown to `target` crosses a
+ * format boundary after `now`: ten seconds, a minute, five minutes, ten
+ * minutes, and from an hour up every full hour and ten minutes past it. A
+ * `countdown*` flag has flipped shortly after it, so the surface re-renders
+ * then (#966). Null when none is left (the target itself is the caller's).
+ */
+export function nextCountdownBoundary(target: string | Date, now: Date | number): number | null {
   const at = typeof target === "string" ? Date.parse(target) : target.getTime();
-  const from = typeof now === "number" ? now : now.getTime();
-  return at - from < 60_000;
+  const left = countdownMsLeft(target, now);
+  if (!Number.isFinite(at) || !Number.isFinite(left)) return null;
+  const candidates = [...SMALL_COUNTDOWN_THRESHOLDS_MS];
+  if (left > LIVE_COUNTDOWN_HOUR_MS) {
+    const hours = Math.floor(left / LIVE_COUNTDOWN_HOUR_MS);
+    for (const k of [hours, hours - 1]) {
+      candidates.push(
+        k * LIVE_COUNTDOWN_HOUR_MS,
+        k * LIVE_COUNTDOWN_HOUR_MS + LIVE_COUNTDOWN_TEN_MINUTES_MS,
+      );
+    }
+  }
+  let best = 0;
+  for (const threshold of candidates) if (threshold < left && threshold > best) best = threshold;
+  return best > 0 ? at - best : null;
 }
 
 export interface ActivityLiveLabels {
@@ -238,10 +377,16 @@ export interface ActivityLiveProps {
   labels: ActivityLiveLabels;
   /** The countdown shown is under an hour (`countdownUnderHour`). Optional (post-v1). */
   countdownUnderHour?: boolean;
-  /** Re-render at five minutes remaining; seconds hide again in Always-On. */
+  /** From an hour up, minutes-of-hour are one digit (`1h 5m`); see `countdownShortMinutes`. */
+  countdownShortMinutes?: boolean;
+  /** Under ten minutes the minutes field is one digit (`9m`). */
+  countdownUnderTenMinutes?: boolean;
+  /** Re-render at five minutes remaining (`4:05`); minutes only in Always-On. */
   countdownLastFiveMinutes?: boolean;
   /** Re-render below a minute, with seconds alone or `<1m` in Always-On. */
   countdownLastMinute?: boolean;
+  /** Under ten seconds the seconds field is one digit (`9s`). */
+  countdownLastTenSeconds?: boolean;
   /** Device rank among the Live Activities it shows (0 = most important). Optional (post-v1). */
   rank?: number;
   updatedAt: string;
@@ -295,10 +440,16 @@ export interface AttendeeActivityLiveProps {
   labels: AttendeeActivityLiveLabels;
   /** The countdown shown is under an hour (`countdownUnderHour`). Optional (post-v1). */
   countdownUnderHour?: boolean;
-  /** Re-render at five minutes remaining; seconds hide again in Always-On. */
+  /** From an hour up, minutes-of-hour are one digit (`1h 5m`); see `countdownShortMinutes`. */
+  countdownShortMinutes?: boolean;
+  /** Under ten minutes the minutes field is one digit (`9m`). */
+  countdownUnderTenMinutes?: boolean;
+  /** Re-render at five minutes remaining (`4:05`); minutes only in Always-On. */
   countdownLastFiveMinutes?: boolean;
   /** Re-render below a minute, with seconds alone or `<1m` in Always-On. */
   countdownLastMinute?: boolean;
+  /** Under ten seconds the seconds field is one digit (`9s`). */
+  countdownLastTenSeconds?: boolean;
   /** Device rank among the Live Activities it shows (0 = most important). */
   rank?: number;
   updatedAt: string;
@@ -348,10 +499,16 @@ export interface DeadlineLiveProps {
   labels: DeadlineLiveLabels;
   /** The countdown shown is under an hour (`countdownUnderHour`). Optional (post-v1). */
   countdownUnderHour?: boolean;
-  /** Re-render at five minutes remaining; seconds hide again in Always-On. */
+  /** From an hour up, minutes-of-hour are one digit (`1h 5m`); see `countdownShortMinutes`. */
+  countdownShortMinutes?: boolean;
+  /** Under ten minutes the minutes field is one digit (`9m`). */
+  countdownUnderTenMinutes?: boolean;
+  /** Re-render at five minutes remaining (`4:05`); minutes only in Always-On. */
   countdownLastFiveMinutes?: boolean;
   /** Re-render below a minute, with seconds alone or `<1m` in Always-On. */
   countdownLastMinute?: boolean;
+  /** Under ten seconds the seconds field is one digit (`9s`). */
+  countdownLastTenSeconds?: boolean;
   rank?: number;
   updatedAt: string;
 }

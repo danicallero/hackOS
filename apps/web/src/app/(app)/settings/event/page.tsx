@@ -9,6 +9,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { BellIcon } from "@phosphor-icons/react/dist/csr/Bell";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { DeviceMobileIcon } from "@phosphor-icons/react/dist/csr/DeviceMobile";
@@ -33,6 +34,7 @@ import { EventConfigProvider } from "./event-config-context";
 import { EventTab } from "./event-tab";
 import { InvitesTab } from "./invites-tab";
 import { LiveActivitiesTab } from "./live-activities-tab";
+import { NotificationsTab } from "./notifications-tab";
 import { PresenceTab } from "./presence-tab";
 import { ResetJudgingDataTab } from "./reset-judging-data-tab";
 import { VenueTab } from "./venue-tab";
@@ -46,6 +48,7 @@ const CATEGORIES = [
   "invites",
   "judging",
   "liveActivities",
+  "notifications",
   "danger",
 ] as const;
 type Category = (typeof CATEGORIES)[number];
@@ -58,6 +61,7 @@ const CATEGORY_ICONS = {
   invites: EnvelopeSimpleIcon,
   judging: ClockIcon,
   liveActivities: DeviceMobileIcon,
+  notifications: BellIcon,
   danger: WarningIcon,
 } as const;
 
@@ -70,6 +74,7 @@ const SECTIONS: Record<Category, (onDirtyChange: (dirty: boolean) => void) => Re
   invites: (onDirtyChange) => <InvitesTab onDirtyChange={onDirtyChange} />,
   judging: (onDirtyChange) => <JudgingWindowTab onDirtyChange={onDirtyChange} />,
   liveActivities: (onDirtyChange) => <LiveActivitiesTab onDirtyChange={onDirtyChange} />,
+  notifications: (onDirtyChange) => <NotificationsTab onDirtyChange={onDirtyChange} />,
   danger: () => <ResetJudgingDataTab icon={WarningIcon} />,
 };
 
@@ -93,6 +98,7 @@ export default function EventSettingsPage() {
     invites: canInvites,
     judging: canJudging,
     liveActivities: canEvent,
+    notifications: canEvent,
     danger: canDanger,
   };
   const visibleCategories = CATEGORIES.filter((c) => canByCategory[c]);
@@ -104,6 +110,7 @@ export default function EventSettingsPage() {
     invites: t("invitesSectionTitle"),
     judging: t("judgingWindowTitle"),
     liveActivities: t("liveActivitiesTitle"),
+    notifications: t("notificationsAutomationTitle"),
     danger: t("dangerZone"),
   };
 

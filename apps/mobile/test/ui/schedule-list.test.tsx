@@ -5,7 +5,11 @@ const mockPush = jest.fn();
 
 jest.mock("@/lib/use-unread-notifications", () => ({ useUnreadNotificationCount: () => 0 }));
 jest.mock("expo-router", () => ({
-  useFocusEffect: () => {},
+  // Focus is always on in these tests, so run the effect on mount.
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const { useEffect } = jest.requireActual("react");
+    useEffect(callback, [callback]);
+  },
   useNavigation: () => ({
     addListener: () => () => {},
     isFocused: () => true,
@@ -16,6 +20,7 @@ jest.mock("expo-router", () => ({
 jest.mock("expo-router/stack", () => {
   const Toolbar = Object.assign(({ children }: { children?: unknown }) => children ?? null, {
     Button: () => null,
+    View: ({ children }: { children?: unknown }) => children ?? null,
   });
   return { __esModule: true, default: { Screen: () => null, Toolbar } };
 });

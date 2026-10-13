@@ -1,11 +1,14 @@
 import Stack from "expo-router/stack";
-import { type ReactNode, useState } from "react";
+import { Fragment, type ReactNode, useRef, useState } from "react";
 import {
   ActivityIndicator,
   type ColorValue,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   Switch,
+  type SwitchProps,
   Text,
   TextInput,
   type TextStyle,
@@ -111,6 +114,23 @@ export function Separator({
 export const SWITCH_IN_ROW_STYLE: ViewStyle = { alignSelf: "center" };
 
 /**
+ * The app's one Switch. iOS keeps the native control; Android's Material
+ * default is teal/green, so it is recoloured with the accent token (white
+ * thumb on an accent track when on, neutral track when off, both themes).
+ * Use this instead of react-native's Switch.
+ */
+export function AppSwitch(props: SwitchProps) {
+  if (Platform.OS !== "android") return <Switch {...props} />;
+  return (
+    <Switch
+      thumbColor={colors.accentText}
+      trackColor={{ false: colors.tertiaryLabel, true: colors.accent }}
+      {...props}
+    />
+  );
+}
+
+/**
  * A settings row with a trailing switch. `detail` adds a secondary line;
  * `onPress` makes the label side open a detail screen (with a disclosure
  * chevron), set apart from the switch by a hairline (two targets in one row). `busy` blocks the switch
@@ -188,7 +208,7 @@ export function ToggleRow({
           }}
         />
       ) : null}
-      <Switch
+      <AppSwitch
         accessibilityLabel={accessibilityLabel ?? label}
         disabled={disabled || busy}
         onValueChange={onChange}
@@ -447,6 +467,7 @@ export function LegacyScreenHeader({
   leading,
   actions,
   searchEnabled = true,
+  showSearchButton = true,
 }: {
   topInset: number;
   title: string;
@@ -462,6 +483,7 @@ export function LegacyScreenHeader({
   actions: ReactNode;
   /** False hides the search button, for a segment the search does not apply to. */
   searchEnabled?: boolean;
+  showSearchButton?: boolean;
 }) {
   const reducedMotion = useReducedMotion();
   const headerTransition = reducedMotion ? undefined : LinearTransition.duration(180);
@@ -543,7 +565,7 @@ export function LegacyScreenHeader({
             </View>
             <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
               {actions}
-              {searchEnabled ? (
+              {searchEnabled && showSearchButton ? (
                 <GlassView
                   colorScheme="auto"
                   glassEffectStyle="regular"
@@ -663,21 +685,41 @@ export function AndroidFilterMenu({
   accessibilityLabel,
   items,
   onSelect,
+  children,
+  align = "right",
+  closeOnSelect = true,
 }: {
   accessibilityLabel: string;
-  items: Array<{ id: string; label: string; selected: boolean }>;
+  items: Array<{ id: string; label: string; selected: boolean; section?: string }>;
   onSelect: (id: string) => void;
+  children?: ReactNode;
+  align?: "left" | "right";
+  closeOnSelect?: boolean;
 }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
+  const trigger = useRef<View>(null);
+  const topInset = useAndroidTopInset();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null);
 
   return (
     <>
       <Pressable
+        ref={trigger}
         accessibilityLabel={accessibilityLabel}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        onPress={() => setOpen(true)}
+        onPress={() => {
+          trigger.current?.measureInWindow((x, y, width, height) => {
+            const left = align === "left" ? x : x + width - 240;
+            setAnchor({
+              left: Math.max(16, Math.min(windowWidth - 256, left)),
+              top: y + height + 8,
+            });
+          });
+          setOpen(true);
+        }}
         style={({ pressed }) => ({
           alignItems: "center",
           flex: 1,
@@ -685,20 +727,18 @@ export function AndroidFilterMenu({
           opacity: pressed ? 0.65 : 1,
         })}
       >
-        <SymbolView
-          name={
-            items.some((item) => item.selected) && !items[0]?.selected
-              ? "line.3.horizontal.decrease.circle.fill"
-              : "line.3.horizontal.decrease"
-          }
-          tintColor={
-            items.some((item) => item.selected) && !items[0]?.selected
-              ? colors.accent
-              : colors.label
-          }
-          size={19}
-          weight="semibold"
-        />
+        {children ?? (
+          <SymbolView
+            name="line.3.horizontal.decrease"
+            tintColor={
+              items.some((item) => item.selected) && !items[0]?.selected
+                ? colors.accent
+                : colors.label
+            }
+            size={19}
+            weight="semibold"
+          />
+        )}
       </Pressable>
       <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable
@@ -716,34 +756,54 @@ export function AndroidFilterMenu({
             elevation: 12,
             overflow: "hidden",
             position: "absolute",
-            right: 16,
-            top: useAndroidTopInset() + 58,
+            ...(anchor ? { left: anchor.left } : { right: 16 }),
+            top: anchor?.top ?? topInset + 58,
             width: 240,
+            maxHeight: windowHeight - (anchor?.top ?? topInset + 58) - 16,
           }}
         >
-          {items.map((item) => (
-            <Pressable
-              accessibilityRole="menuitem"
-              accessibilityState={{ selected: item.selected }}
-              key={item.id}
-              onPress={() => {
-                onSelect(item.id);
-                setOpen(false);
-              }}
-              style={({ pressed }) => ({
-                alignItems: "center",
-                backgroundColor: pressed ? colors.surface : "transparent",
-                flexDirection: "row",
-                minHeight: 48,
-                paddingHorizontal: 16,
-              })}
-            >
-              <Text style={{ color: colors.label, flex: 1, fontSize: 16 }}>{item.label}</Text>
-              {item.selected ? (
-                <SymbolView name="checkmark" tintColor={colors.accent} size={16} />
-              ) : null}
-            </Pressable>
-          ))}
+          <ScrollView>
+            {items.map((item, index) => (
+              <Fragment key={item.id}>
+                {item.section && item.section !== items[index - 1]?.section ? (
+                  <Text
+                    accessibilityRole="header"
+                    style={{
+                      color: colors.secondaryLabel,
+                      fontSize: 13,
+                      fontWeight: "600",
+                      paddingHorizontal: 16,
+                      paddingTop: 12,
+                      paddingBottom: 4,
+                    }}
+                  >
+                    {item.section}
+                  </Text>
+                ) : null}
+                <Pressable
+                  accessibilityRole="menuitem"
+                  accessibilityState={{ selected: item.selected }}
+                  key={item.id}
+                  onPress={() => {
+                    onSelect(item.id);
+                    if (closeOnSelect) setOpen(false);
+                  }}
+                  style={({ pressed }) => ({
+                    alignItems: "center",
+                    backgroundColor: pressed ? colors.surface : "transparent",
+                    flexDirection: "row",
+                    minHeight: 48,
+                    paddingHorizontal: 16,
+                  })}
+                >
+                  <Text style={{ color: colors.label, flex: 1, fontSize: 16 }}>{item.label}</Text>
+                  {item.selected ? (
+                    <SymbolView name="checkmark" tintColor={colors.accent} size={16} />
+                  ) : null}
+                </Pressable>
+              </Fragment>
+            ))}
+          </ScrollView>
         </View>
       </Modal>
     </>

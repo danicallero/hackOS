@@ -4,11 +4,13 @@ import type { Href, ImperativeRouter } from "expo-router";
  * Shared `screenOptions` for every native Stack. iOS 26 draws a chevron-only
  * back item as a circular Liquid Glass button; any back title (the default
  * mode shows the previous screen's title, e.g. a root-level detail pushed over
- * the tab navigator) widens it into a capsule. The previous title remains in
- * the long-press back menu.
+ * the tab navigator) widens it into a capsule. The long-press back menu is
+ * off too: it lists previous screens by title, and a detail pushed over the
+ * tab navigator would offer the route group's name, "(tabs)".
  */
 export const nativeStackScreenOptions = {
   headerBackButtonDisplayMode: "minimal",
+  headerBackButtonMenuEnabled: false,
 } as const;
 
 /**
@@ -17,6 +19,7 @@ export const nativeStackScreenOptions = {
  */
 export const transparentDetailHeaderOptions = {
   headerBackButtonDisplayMode: "minimal",
+  headerBackButtonMenuEnabled: false,
   headerBackTitle: "",
   headerBlurEffect: "none",
   headerLargeTitle: false,
@@ -26,21 +29,6 @@ export const transparentDetailHeaderOptions = {
   headerTitle: "",
   headerTransparent: true,
   title: "",
-} as const;
-
-/**
- * Native header options for camera surfaces. The explicit native interface
- * style keeps iOS 26's Liquid Glass back button/header dark even when the app
- * theme is light; the transparent header lets the camera remain edge-to-edge.
- */
-export const darkScannerHeaderOptions = {
-  headerStyle: { backgroundColor: "transparent" },
-  headerTintColor: "white",
-  unstable_nativeProps: {
-    headerConfig: {
-      experimental_userInterfaceStyle: "dark",
-    },
-  },
 } as const;
 
 /**

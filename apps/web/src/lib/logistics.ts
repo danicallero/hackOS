@@ -348,6 +348,8 @@ export interface ScheduleInput {
   liveActivityAudience?: boolean;
   contactNote?: string | null;
   notes?: string | null;
+  /** Language `title`/`description` are written in, when it isn't the editor's own (single-language entry). */
+  titleLanguage?: Language;
 }
 
 export type ScheduleTranslation = { title?: string; description?: string | null };

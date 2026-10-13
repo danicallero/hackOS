@@ -242,12 +242,26 @@ re-implementing. Each is a **single canonical component configured by props**
 — never fork a second version. Representative primitives and widgets with
 variations are previewed at `/design-system` in the running app.
 
+Date and time inputs (`DateTimeInput`) and every formatter in `lib/datetime.ts`
+work in the **event's** timezone (`GET /api/me` `eventTimezone`, published by
+`SessionProvider` to `lib/event-time.ts`), not the browser's. Convert with
+`toDatetimeLocal` / `fromDatetimeLocal` (DST-safe, from
+`@hackos/shared/event-time`); never `new Date(localString)` or
+`getHours()` on a typed value. When the browser sits in another zone,
+`DateTimeInput` and the schedule's time columns add a terse zone name.
+
 Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `EmptyState`, `DataTable`, `TabBar`, `Modal`, `AlertModal`, `ContextualError`,
 `FullPageError`,
 `CapabilityGate`, `AccessDenied`, `Spinner`, `SubmitButton`, `PasswordInput`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
 `EntityCombobox`, `ActionGroup`, `IconButton`, `UserAvatar`.
+
+The schedule's fixed-layout table sets its minimum width to the sum of its
+visible column widths, including selection/actions for editors. Avoid intrinsic
+`min-width: max-content` with percentage-width fixed tables: Firefox can inflate
+columns and push their content outside the viewport (H59). The browser regression
+in `e2e/browser/schedule-layout.spec.ts` covers geometry, resizing and scrolling.
 
 `UserAvatar` renders a person's account photo from the authenticated
 `/api/users/:id/photo` route (`Me.image`, `UserListItem.image`). Text-first

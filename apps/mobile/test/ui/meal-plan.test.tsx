@@ -84,6 +84,24 @@ jest.mock("@/components/native-ui", () => {
         ReactLib.createElement(Native.Text, null, label),
       ),
     AndroidStatusBarScrim: () => null,
+    FloatingGlassButton: ({
+      accessibilityLabel,
+      accessibilityState,
+      disabled,
+      onPress,
+    }: {
+      accessibilityLabel: string;
+      accessibilityState?: { busy?: boolean };
+      disabled?: boolean;
+      onPress: () => void;
+    }) =>
+      ReactLib.createElement(Native.Pressable, {
+        accessibilityLabel,
+        accessibilityRole: "button",
+        accessibilityState: { ...accessibilityState, disabled },
+        disabled,
+        onPress,
+      }),
     InfoRow: ({ label, value }: { label: string; value: string }) =>
       ReactLib.createElement(
         Native.View,
@@ -389,6 +407,28 @@ describe("Profile tasks sheet", () => {
     });
     expect(await screen.findByText("dietarySaveError")).toBeTruthy();
     expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  it("sends trimmed dietary notes and keeps the field read-only under No restrictions", async () => {
+    mockParams = { tasks: "dietary" };
+    await renderMobile(<ProfileTasksScreen />);
+    const notes = await screen.findByLabelText("accountDietaryNotes");
+    expect(notes.props.editable).toBe(true);
+    await act(async () => fireEvent.changeText(notes, " no peanuts "));
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
+    expect(bodyOf("PATCH", "/api/me")).toEqual({
+      foodIntolerances: [],
+      foodIntoleranceNotes: "no peanuts",
+    });
+  });
+
+  it("locks the notes field once No restrictions is chosen", async () => {
+    mockParams = { tasks: "dietary" };
+    await renderMobile(<ProfileTasksScreen />);
+    await act(async () =>
+      fireEvent(await screen.findByLabelText("noRestrictions"), "valueChange", true),
+    );
+    expect(screen.getByLabelText("accountDietaryNotes").props.editable).toBe(false);
   });
 
   it("defers with Later without saving", async () => {

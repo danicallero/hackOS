@@ -143,7 +143,7 @@ export const AttendeeActivityLayout = (
       : startsAt.getTime() - 3_600_000,
   );
 
-  // #966: minute precision normally; seconds only in the last five minutes.
+  // #966: unit values carry no leading zero (`1h 5m`, `9m`, `9s`); the last five minutes use colon notation (`4:05`).
   // The native timer removes seconds and their spacing in Always-On.
   const timer = (
     size: number,
@@ -176,7 +176,7 @@ export const AttendeeActivityLayout = (
     ) : null;
 
   // Countdown with its caption above: "Starts in" with the seconds, or
-  // "Ends in" (`1h 05m` / `34m 21s`).
+  // "Ends in" (`1h 5m` / `34m` / `4:21`).
   const countdownStat = (size: number, color: string | null, width: number) => {
     const value = timer(size, color, width, "bold", live ? "full" : "long");
     return value ? (
@@ -320,35 +320,61 @@ export const AttendeeActivityLayout = (
     </VStack>
   );
 
-  // watchOS Smart Stack and CarPlay: name plus the countdown (or "Live").
+  // watchOS Smart Stack and CarPlay (`.small` family, #966, H59): glyph and
+  // title in secondary, one hero value, at most one status line. The accent
+  // tints the glyph only; Always-On drops it.
+  const watchGlyph = environment.isLuminanceReduced ? null : islandAccent;
+  const watchTimer = (size: number, weight: "semibold" | "bold", muted: boolean) =>
+    (live ? validEnd : validStart) ? (
+      <Text
+        timerInterval={live ? { lower: startsAt, upper: endsAt } : { lower, upper: startsAt }}
+        countsDown
+        compactCountdown="full"
+        compactCountdownSize={size}
+        compactCountdownWeight={weight}
+        modifiers={[
+          lineLimit(1),
+          minimumScaleFactor(0.6),
+          frame({ maxWidth: 10000, alignment: "leading" }),
+          ...(muted ? [secondary] : []),
+        ]}
+      />
+    ) : null;
   const bannerSmall = (
-    <VStack alignment="leading" spacing={2} modifiers={[padding({ all: 8 })]}>
-      <HStack spacing={4}>
-        <Image systemName={symbol} color={bannerAccent ?? neutral} size={12} />
+    <VStack
+      alignment="leading"
+      spacing={2}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ horizontal: 10, vertical: 8 }),
+        dynamicTypeSize({ max: "xLarge" }),
+      ]}
+    >
+      <HStack spacing={5}>
+        <Image systemName={symbol} color={watchGlyph ?? neutral} size={13} />
         <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
           {props.name}
         </Text>
       </HStack>
-      {live ? (
-        <HStack spacing={6} alignment="firstTextBaseline">
-          {liveLabel ? (
-            <Text
-              modifiers={[
-                font({ size: 20, weight: "bold" }),
-                lineLimit(1),
-                fixedSize({ horizontal: true }),
-                ...colorMods(bannerAccent),
-              ]}
-            >
-              {liveLabel}
+      {live && liveLabel ? (
+        <Text
+          modifiers={[font({ size: 24, weight: "bold" }), lineLimit(1), minimumScaleFactor(0.6)]}
+        >
+          {liveLabel}
+        </Text>
+      ) : (
+        watchTimer(26, "bold", false)
+      )}
+      {live && liveLabel ? (
+        <HStack alignment="firstTextBaseline" spacing={4}>
+          {labels.endsIn ? (
+            <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
+              {labels.endsIn}
             </Text>
           ) : null}
-          <Spacer />
-          {timer(15, null, 72)}
+          {watchTimer(13, "semibold", true)}
         </HStack>
-      ) : (
-        timer(20, bannerAccent, null)
-      )}
+      ) : null}
     </VStack>
   );
 

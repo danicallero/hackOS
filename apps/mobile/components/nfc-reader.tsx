@@ -1,5 +1,5 @@
 import { useIsFocused } from "expo-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, AppState, Modal, Platform, Pressable, Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
@@ -9,16 +9,21 @@ import { colors } from "@/theme/colors";
 export function NfcReader({
   visible,
   claimBadge = false,
+  showAndroidOverlay = true,
+  continuous = false,
   onValue,
   onClose,
 }: {
   visible: boolean;
   claimBadge?: boolean;
+  showAndroidOverlay?: boolean;
+  continuous?: boolean;
   onValue: (uid: string, info: { claimFailed: boolean }) => void;
   onClose: () => void;
 }) {
   const { t } = useLocale();
   const focused = useIsFocused();
+  const [readKey, setReadKey] = useState(0);
   const callbacks = useRef({ onValue, onClose });
   callbacks.current = { onValue, onClose };
   const message = t("scannerNfcPrompt");
@@ -29,6 +34,7 @@ export function NfcReader({
       return;
     }
     let active = true;
+    let repeat: ReturnType<typeof setTimeout> | undefined;
     const session = startNfcRead(message, { claimBadge });
     const background = AppState.addEventListener("change", (state) => {
       if (state === "background") {
@@ -41,7 +47,11 @@ export function NfcReader({
       .then((uid) => {
         if (!active) return;
         if (uid) callbacks.current.onValue(uid, { claimFailed: session.claimFailed() });
-        callbacks.current.onClose();
+        if (uid && continuous && Platform.OS === "android") {
+          repeat = setTimeout(() => {
+            if (active) setReadKey(readKey + 1);
+          }, 500);
+        } else callbacks.current.onClose();
       })
       .catch((error: unknown) => {
         if (!active) return;
@@ -57,16 +67,17 @@ export function NfcReader({
       });
     return () => {
       active = false;
+      if (repeat) clearTimeout(repeat);
       background.remove();
       session.cancel();
     };
-  }, [visible, focused, claimBadge, message, t]);
+  }, [visible, focused, claimBadge, message, t, continuous, readKey]);
 
   return (
     <Modal
       transparent
       animationType="fade"
-      visible={visible && focused && Platform.OS === "android"}
+      visible={visible && focused && showAndroidOverlay && Platform.OS === "android"}
       onRequestClose={onClose}
     >
       <View

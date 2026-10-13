@@ -43,7 +43,6 @@ import {
   routerTabBarMaxTabsWithoutOverflowForWidth,
   useRouterTabBarInsets,
 } from "@/lib/router-tabs-inset";
-import { isDarkScannerSurface } from "@/lib/scanner-surface";
 import { overflowTabs, primaryTabs, type TabKey } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
@@ -95,7 +94,7 @@ const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
   },
   scan: {
     href: "/(tabs)/scan",
-    icon: "qrcode.viewfinder",
+    icon: "wave.3.right",
     labelKey: "tabScan",
     triggerName: "scan",
   },
@@ -114,6 +113,12 @@ const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
     triggerName: "others",
   },
 };
+
+/** The label of the tab that owns a `(tabs)` route segment, e.g. "diary". */
+export function tabLabelKeyForSegment(segment: string | undefined): TabLabelKey | null {
+  const definition = Object.values(TAB_DEFINITIONS).find((tab) => tab.triggerName === segment);
+  return definition?.labelKey ?? null;
+}
 
 const REGISTERED_TAB_ROUTES: RouterTabRoute[] = [
   { href: "/(tabs)/schedule", name: "schedule" },
@@ -175,15 +180,9 @@ function AccountTabAvatar({
  */
 export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: OpaqueRouterTabsProps) {
   const { t } = useLocale();
-  const pathname = usePathname();
   const systemColorScheme = useColorScheme();
   const { width } = useWindowDimensions();
-  const darkScannerSurface = isDarkScannerSurface(pathname);
-  const fallbackColorScheme: "dark" | "light" = darkScannerSurface
-    ? "dark"
-    : systemColorScheme === "dark"
-      ? "dark"
-      : "light";
+  const fallbackColorScheme: "dark" | "light" = systemColorScheme === "dark" ? "dark" : "light";
   const tabIconColor = fallbackColorScheme === "dark" ? "#ffffff" : "#000000";
   const tabSelectedColor = fallbackColorScheme === "dark" ? "#0a84ff" : "#007aff";
   const personalTabContext = { hasQueueItems };
@@ -260,12 +259,8 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
 
   return (
     <>
-      <StatusBar style={darkScannerSurface ? "light" : "auto"} />
-      {Platform.OS === "android" ? (
-        // expo-navigation-bar's `light` style means light system-button
-        // content, keeping Android's navigation surface dark for the camera.
-        <NavigationBar style={darkScannerSurface ? "light" : "auto"} />
-      ) : null}
+      <StatusBar style="auto" />
+      {Platform.OS === "android" ? <NavigationBar style="auto" /> : null}
       <RouterTabs
         colorScheme={fallbackColorScheme}
         onTabPress={() => void haptic("selection")}

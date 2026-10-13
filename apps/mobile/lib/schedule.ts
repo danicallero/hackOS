@@ -12,6 +12,9 @@ import { durationMinutes } from "./presence-timeline";
 
 type Translate = ReturnType<typeof useLocale>["t"];
 
+/** The schedule has no push channel on mobile: screens refetch this often while focused. */
+export const SCHEDULE_POLL_MS = 60_000;
+
 /** `sponsor`/`participant`/`mentor` (H59) — empty on an item means staff-only, never stored literally. */
 export type ScheduleAudience = "sponsor" | "participant" | "mentor";
 export const SCHEDULE_AUDIENCES: ScheduleAudience[] = ["sponsor", "participant", "mentor"];
@@ -45,6 +48,8 @@ export interface AdminScheduleItem extends ScheduleItem {
   contactNote: string | null;
   notes: string | null;
   owners: ScheduleOwner[];
+  /** Whether the item's audience gets an attendee Live Activity (#966). */
+  liveActivityAudience?: boolean;
 }
 
 /**
@@ -73,6 +78,10 @@ export interface ScheduleInput {
   audiences: ScheduleAudience[];
   contactNote: string | null;
   notes: string | null;
+  /** Opt-in attendee Live Activity; only an item with an audience can have it (#966). */
+  liveActivityAudience?: boolean;
+  /** Language `title`/`description` are written in, when it isn't the editor's own (single-language entry). */
+  titleLanguage?: Language;
 }
 
 export type ScheduleTranslation = { title?: string; description?: string | null };
@@ -162,7 +171,7 @@ export async function fetchPublicSchedule(): Promise<ScheduleItem[]> {
   return response.items;
 }
 
-/** Full run-of-show, `SCHEDULE_MANAGE` only — includes drafts and staff-only fields. */
+/** Full run-of-show, `SCHEDULE_READ` or `SCHEDULE_MANAGE` — includes drafts and staff-only fields. */
 export async function fetchAdminSchedule(): Promise<AdminScheduleItem[]> {
   const response = await apiFetch<{ items: AdminScheduleItem[] }>("/api/schedule");
   return response.items;

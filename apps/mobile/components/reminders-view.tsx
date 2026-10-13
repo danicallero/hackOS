@@ -1,7 +1,8 @@
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Pressable, ScrollView, Switch, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import {
+  AppSwitch,
   EmptyState,
   InfoRow,
   Section,
@@ -12,6 +13,7 @@ import {
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import {
@@ -255,22 +257,24 @@ export function ReminderPickerScreen({
     if (notifications.isEntrySubscribed(item)) shownSubscribed.current.add(item.id);
     return shownSubscribed.current.has(item.id);
   });
+  const eventZone = useEventTimeZone();
   const days = useMemo(() => {
     const groups = new Map<string, ScheduleItem[]>();
     for (const item of visible) {
-      const key = new Date(item.startsAt).toLocaleDateString("en-CA");
+      const key = eventDayKey(item.startsAt, eventZone);
       groups.set(key, [...(groups.get(key) ?? []), item]);
     }
     return [...groups.entries()].map(([key, dayItems]) => ({
       key,
-      title: new Date(dayItems[0].startsAt).toLocaleDateString(language, {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      }),
+      title: formatEventTime(
+        dayItems[0].startsAt,
+        language,
+        { weekday: "long", month: "long", day: "numeric" },
+        eventZone,
+      ),
       items: dayItems,
     }));
-  }, [visible, language]);
+  }, [visible, language, eventZone]);
 
   return (
     <ScrollView
@@ -343,8 +347,9 @@ function ReminderRow({
   const { t, language } = useLocale();
   const router = useRouter();
   const startsAt = new Date(item.startsAt);
-  const time = startsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
-  const day = startsAt.toLocaleDateString(language, { weekday: "short" });
+  useEventTimeZone();
+  const time = formatEventTime(startsAt, language, { hour: "2-digit", minute: "2-digit" });
+  const day = formatEventTime(startsAt, language, { weekday: "short" });
   const meta = [item.type ? scheduleTypeLabel(item.type, t) : null, item.location]
     .filter(Boolean)
     .join(" · ");
@@ -410,7 +415,7 @@ function ReminderRow({
           ) : null}
         </View>
       </Pressable>
-      <Switch
+      <AppSwitch
         accessibilityLabel={
           subscribed
             ? t("scheduleReminderOn", { name: item.title })

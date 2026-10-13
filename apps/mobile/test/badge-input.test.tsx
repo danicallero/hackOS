@@ -1,4 +1,10 @@
 jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupported: () => mockNfcSupported }));
+jest.mock("@/components/scanner-code-entry-actions", () =>
+  jest.requireActual("@/components/scanner-code-entry-actions.tsx"),
+);
+jest.mock("@/components/scanner-action-button", () =>
+  jest.requireActual("@/components/scanner-action-button.tsx"),
+);
 
 import { act, fireEvent, render } from "@testing-library/react-native";
 import { StyleSheet } from "react-native";
