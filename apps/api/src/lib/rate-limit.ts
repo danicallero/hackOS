@@ -5,10 +5,11 @@ import { register } from "./metrics.js";
 import { valkey } from "./valkey.js";
 
 /**
- * Shared distributed rate-limit primitive (#538). Fixed-window counter in
- * Valkey (`INCR` + `EXPIRE` on the first hit of a window, capped at `max`),
- * shared across every API replica since the counter lives in Valkey, not
- * process memory. On any Valkey error the request is allowed through
+ * Shared distributed rate-limit primitive (#538, #993). Fixed-window counter in
+ * Valkey (`INCR` + `EXPIRE NX` in one `MULTI`, capped at `max`), shared across
+ * every API replica since the counter lives in Valkey, not process memory.
+ * The expiry is installed on the first hit and repairs counters left without
+ * a TTL. On any Valkey error the request is allowed through
  * (fail-open, per explicit decision on #538: a Valkey outage must not become
  * a full auth/scanner outage) and counted on `hackos_rate_limit_store_errors_total`
  * so ops can see rate limiting is degraded.
@@ -47,9 +48,22 @@ export async function consumeRateLimit(
 ): Promise<RateLimitResult> {
   const redisKey = `ratelimit:${bucket}:${key}`;
   try {
-    const count = await valkey.incr(redisKey);
-    if (count === 1) {
-      await valkey.expire(redisKey, rule.windowSeconds);
+    const transaction = await valkey
+      .multi()
+      .incr(redisKey)
+      .expire(redisKey, rule.windowSeconds, "NX")
+      .exec();
+    const incrementResult = transaction?.[0];
+    const expirationResult = transaction?.[1];
+    if (!incrementResult || incrementResult[0]) {
+      throw incrementResult?.[0] ?? new Error("Rate-limit increment returned no result");
+    }
+    if (!expirationResult || expirationResult[0]) {
+      throw expirationResult?.[0] ?? new Error("Rate-limit expiry returned no result");
+    }
+    const count = Number(incrementResult[1]);
+    if (!Number.isInteger(count)) {
+      throw new Error("Rate-limit increment returned an invalid count");
     }
     if (count > rule.max) {
       rejections.inc({ bucket });
