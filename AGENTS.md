@@ -68,8 +68,9 @@ out because agents skip them under time pressure:
 ## Skills, rules and reflections
 
 - **Skills** (`.claude/skills/<name>/SKILL.md`) are specialized, executable
-  workflows — currently just `verify` (build/launch/drive hackOS locally to
-  check a change end-to-end). Before a non-trivial task, check whether a skill
+  workflows — `verify` (build/launch/drive hackOS locally to check a change
+  end-to-end) and `handoff` (wrap up a task for another agent; see
+  "Handoff notes"). Before a non-trivial task, check whether a skill
   already covers it; if one does, follow its `SKILL.md` instead of
   reinventing the workflow.
 - **Rules** (`.claude/rules/`) hold operational policies that don't fit
@@ -163,7 +164,9 @@ must be able to continue with no other context. Include:
 - gotchas: infra state, env vars, decisions made and why.
 
 `HANDOFF.md` is a working note, not documentation: never commit it (add it to
-`.git/info/exclude`). A new agent picking up a worktree reads it first.
+`.git/info/exclude`). A new agent picking up a worktree reads it first. The
+`handoff` skill (`.claude/skills/handoff/SKILL.md`, `/handoff` in Claude Code)
+is the step-by-step checklist.
 
 ## Before you finish
 
