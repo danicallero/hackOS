@@ -22,7 +22,6 @@ import { getEventTimezone } from "../../event/service.js";
 import { assertFixtureSubjectScope } from "../../logistics/review-fixture-scope.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { enqueueWalletSync } from "../../logistics/wallet-sync.js";
-import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
 import { getBetterAuthSessionToken } from "../auth.js";
@@ -200,9 +199,7 @@ const userProjectSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   github_url: z.string().nullable(),
-  devpost_url: z.string().nullable(),
   demo_url: z.string().nullable(),
-  prizes: z.array(z.string()),
   challenges: z.array(
     z.object({
       id: z.number(),
@@ -1227,7 +1224,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           `UPDATE users SET email = $2, email_verified = true WHERE id = $1 RETURNING *`,
           [targetId, email],
         );
-        await reconcileDevpostParticipantsForUser(client, targetId);
         await audit(client, {
           actorId: req.userId,
           entityType: "user",

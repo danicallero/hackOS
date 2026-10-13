@@ -27,9 +27,8 @@ export const CAPABILITIES = {
   APPLICATIONS_EDIT_RESPONSE: "applications:edit-response", // edit any response's form data
   STATISTICS_MANAGE: "statistics:manage", // configure per-panel statistics visibility
 
-  // projects / devpost (H16-H17, H21)
+  // projects (H19-H21)
   PROJECTS_READ: "projects:read",
-  PROJECTS_IMPORT: "projects:import",
   PROJECTS_EDIT: "projects:edit",
 
   // accreditation & logistics (H22-H26)
@@ -110,9 +109,8 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "applications:confirm-override": "Override a participant's confirm/decline as an admin",
   "applications:edit-response": "Edit any applicant's form responses",
   "statistics:manage": "Configure who can view each statistics panel",
-  "projects:read": "Read project and Devpost submissions",
-  "projects:import": "Import projects from Devpost",
-  "projects:edit": "Edit project and Devpost submissions",
+  "projects:read": "Read projects, teams and submissions",
+  "projects:edit": "Create and correct projects, teams and challenge entries",
   "accredit:scan": "Check participants in and assign or rotate badges",
   "presence:scan": "Scan door entry and exit",
   "activity:scan": "Scan meals and registrable activities",

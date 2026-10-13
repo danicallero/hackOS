@@ -4,7 +4,7 @@ import { audit } from "../../lib/audit.js";
 
 /**
  * The destructive reset keeps event identity and challenge definitions, but
- * removes every project/import, queue, and judging artifact so the event can
+ * removes every project, queue, and judging artifact so the event can
  * start the Q flow again (H16-H40, H53).
  */
 export interface JudgingDataResetResult {
@@ -12,9 +12,7 @@ export interface JudgingDataResetResult {
   counts: {
     projects: number;
     projectMembers: number;
-    importedParticipants: number;
-    importedPrizes: number;
-    projectPrizeLinks: number;
+    projectChallenges: number;
     queueEntries: number;
     queueHistory: number;
     reviews: number;
@@ -29,11 +27,8 @@ export interface JudgingDataResetResult {
     roomEnterpriseAssignments: number;
     queueNotifications: number;
     projectNotifications: number;
-    devpostClaimNotifications: number;
     queuePreferences: number;
     queueIdempotencyKeys: number;
-    devpostClaimTokens: number;
-    challengeMappingsReset: number;
   };
 }
 
@@ -47,7 +42,6 @@ const Q_IDEMPOTENCY_SCOPE = `(
   OR scope LIKE '% /api/repos%'
   OR scope LIKE '% /api/projects%'
   OR scope LIKE '% /api/me/projects%'
-  OR scope LIKE '% /api/devpost%'
   OR scope LIKE '% /api/enterprises/%/queue-groups%'
 )`;
 
@@ -125,9 +119,6 @@ export async function resetJudgingData(
         attempt_review_versions,
         challenge_winners,
         challenges,
-        devpost_participants,
-        devpost_prizes,
-        email_verification_tokens,
         enterprise_judges,
         idempotency_keys,
         judging_session,
@@ -138,7 +129,7 @@ export async function resetJudgingData(
         queue_groups,
         queue_history,
         queue_settings,
-        repo_devpost_prizes,
+        project_challenges,
         repos,
         room_enterprises,
         room_queue_groups,
@@ -155,9 +146,7 @@ export async function resetJudgingData(
     const counts: JudgingDataResetResult["counts"] = {
       projects: await countRows(client, "repos"),
       projectMembers: await countRows(client, "submissions"),
-      importedParticipants: await countRows(client, "devpost_participants"),
-      importedPrizes: await countRows(client, "devpost_prizes"),
-      projectPrizeLinks: await countRows(client, "repo_devpost_prizes"),
+      projectChallenges: await countRows(client, "project_challenges"),
       queueEntries: await countRows(client, "queue_entries"),
       queueHistory: await countRows(client, "queue_history"),
       reviews: await countRows(client, "attempt_review"),
@@ -176,11 +165,6 @@ export async function resetJudgingData(
         `category IN ('queue', 'queue.staff')`,
       ),
       projectNotifications: await countWhere(client, "notification_outbox", `category = 'project'`),
-      devpostClaimNotifications: await countWhere(
-        client,
-        "notification_outbox",
-        `category = 'devpost'`,
-      ),
       queuePreferences: await countWhere(
         client,
         "notification_preferences",
@@ -192,17 +176,6 @@ export async function resetJudgingData(
         qIdempotencyWhere,
         idempotencyParams,
       ),
-      devpostClaimTokens: await countWhere(
-        client,
-        "email_verification_tokens",
-        `type = 'account_claim'
-         AND EXISTS (
-           SELECT 1 FROM notification_outbox n
-            WHERE n.category = 'devpost'
-              AND n.payload->>'token' = email_verification_tokens.token
-         )`,
-      ),
-      challengeMappingsReset: await countWhere(client, "challenges", `devpost_tags <> '[]'::jsonb`),
     };
 
     // Review and queue history tables have no delete cascade by design: the
@@ -219,30 +192,16 @@ export async function resetJudgingData(
     await client.query(`DELETE FROM room_enterprises`);
     await client.query(`DELETE FROM queue_groups`);
 
-    // Challenge definitions remain event configuration. Their Devpost tags
-    // are the project-to-challenge import mapping, so reset those mappings
-    // while rebuilding a clean one-queue-per-challenge baseline below.
-    await client.query(`UPDATE challenges SET devpost_tags = '[]'::jsonb`);
-
+    // Challenge definitions remain event configuration; a clean
+    // one-queue-per-challenge baseline is rebuilt below.
+    await client.query(`DELETE FROM project_challenges`);
     await client.query(`DELETE FROM submissions`);
-    await client.query(`DELETE FROM devpost_participants`);
-    await client.query(`DELETE FROM repo_devpost_prizes`);
-    await client.query(`DELETE FROM devpost_prizes`);
     await client.query(`DELETE FROM repos`);
 
     // Remove queued/inbox project and queue messages. An email already
     // delivered by a provider cannot be recalled; the audit trail remains.
-    await client.query(`
-      DELETE FROM email_verification_tokens
-       WHERE type = 'account_claim'
-         AND EXISTS (
-           SELECT 1 FROM notification_outbox n
-            WHERE n.category = 'devpost'
-              AND n.payload->>'token' = email_verification_tokens.token
-         )
-    `);
     await client.query(
-      `DELETE FROM notification_outbox WHERE category IN ('queue', 'queue.staff', 'project', 'devpost')`,
+      `DELETE FROM notification_outbox WHERE category IN ('queue', 'queue.staff', 'project')`,
     );
     await client.query(
       `DELETE FROM notification_preferences WHERE category IN ('queue', 'queue.staff')`,

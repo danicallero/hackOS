@@ -101,11 +101,16 @@ export async function repositoryIdsForScope(scope: RepositoryAccessScope): Promi
          WHERE qe.challenge_id = ANY($1::int[])
            AND c.is_test_account = $2
         UNION
-        SELECT rdp.repo_id
-          FROM repo_devpost_prizes rdp
-          JOIN challenges c ON c.devpost_tags ? rdp.prize
-         WHERE c.id = ANY($1::int[]) AND c.is_test_account = $2
-           AND rdp.repo_id IN (SELECT id FROM repos WHERE is_test_account = $2)
+        SELECT pc.repo_id
+          FROM project_challenges pc
+          JOIN repos r ON r.id = pc.repo_id AND r.is_test_account = $2
+          JOIN challenges c ON c.id = pc.challenge_id
+         WHERE pc.challenge_id = ANY($1::int[]) AND c.is_test_account = $2
+        UNION
+        SELECT r.id
+          FROM repos r
+          JOIN challenges c ON c.mandatory AND c.id = ANY($1::int[]) AND c.is_test_account = $2
+         WHERE r.is_test_account = $2
        ) visible_repos`,
     [scope.challengeIds, scope.fixtureMarker === true],
   );

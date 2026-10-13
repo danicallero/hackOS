@@ -37,17 +37,13 @@ async function targets(req: FastifyRequest): Promise<number[]> {
     /^\/api\/me\/projects\/invites\/([1-9]\d*)(?:$|\/)/.exec(path);
   if (repo) {
     await query(
-      `SELECT user_id FROM submissions WHERE repo_id = $1
-      UNION SELECT user_id FROM devpost_participants WHERE repo_id = $1 AND user_id IS NOT NULL`,
+      `SELECT user_id FROM submissions WHERE repo_id = $1`,
       [repo[1]],
     );
   }
   if (path === "/api/repos" || /^\/api\/repos\/\d+\/members$/.test(path)) {
     add(body.userId);
     if (Array.isArray(body.memberUserIds)) for (const id of body.memberUserIds) add(id);
-  }
-  if (path.startsWith("/api/devpost/")) {
-    await query(`SELECT DISTINCT user_id FROM devpost_participants WHERE user_id IS NOT NULL`);
   }
 
   const response = /^\/api\/responses\/([1-9]\d*)(?:$|\/)/.exec(path);

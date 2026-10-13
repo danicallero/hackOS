@@ -237,8 +237,9 @@ async function configureFixtureQueue(
   if (!challengeId) throw new Error("Review fixture challenge was not created");
 
   const repo = await client.query<{ id: number }>(
-    `INSERT INTO repos (name, description, source, created_by, is_test_account)
-     VALUES ($1, $2, 'native', $3, true)
+    `INSERT INTO repos (name, description, created_by, is_test_account,
+                        submission_status, submitted_via, submitted_at)
+     VALUES ($1, $2, $3, true, 'submitted', 'admin', now())
      RETURNING id`,
     ["Synthetic participant project", "Synthetic queue project for review.", actorId],
   );
@@ -246,8 +247,8 @@ async function configureFixtureQueue(
   if (!repoId) throw new Error("Review fixture project was not created");
 
   await client.query(
-    `INSERT INTO submissions (repo_id, user_id, imported_from, status)
-     VALUES ($1, $2, 'manual', 'active')`,
+    `INSERT INTO submissions (repo_id, user_id, status)
+     VALUES ($1, $2, 'active')`,
     [repoId, userId],
   );
   const entry = await client.query<{ id: number }>(

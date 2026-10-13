@@ -86,7 +86,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
         params: repoIdParam,
         summary: "List a team's queue memberships",
         description:
-          "Every non-cancelled queue entry of the team with its waiting rank, ETA, assigned room and the rooms serving its queue. `busy_room_id`/`busy_room_name`/`busy_status` report where a team member (shared-member relation of the H30 guard, test fixtures excluded) is `called`, `in_room` or `presenting` in another room; an evaluation blocks moves, any of them blocks calls to any other room (#931). Completed and disqualified rows never carry it. `eligible` is false when the project is excluded from judging (H38): it can be reordered but never called. A Devpost import is excluded only by an explicit organizer override (H21).",
+          "Every non-cancelled queue entry of the team with its waiting rank, ETA, assigned room and the rooms serving its queue. `busy_room_id`/`busy_room_name`/`busy_status` report where a team member (shared-member relation of the H30 guard, test fixtures excluded) is `called`, `in_room` or `presenting` in another room; an evaluation blocks moves, any of them blocks calls to any other room (#931). Completed and disqualified rows never carry it. `eligible` is false when the project is excluded from judging (H38): it can be reordered but never called. A project is eligible once submitted, within the team-size rule, unless an organizer override says otherwise (H21).",
       },
     },
     async (req) => repoChallenges(req.params.repoId),

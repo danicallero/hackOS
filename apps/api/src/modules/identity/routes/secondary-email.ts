@@ -10,12 +10,11 @@ import { audit } from "../../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
-import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { enqueueAuthEmail } from "../outbox.js";
 
 /**
- * Secondary email (H6): lets a participant register the address they used on
- * Devpost so the import (H16) can match their projects. Flow:
+ * Secondary email (H6, retired in plan; removal tracked separately): a
+ * second verified address on the account. Flow:
  *   POST /api/me/secondary-email          -> issues an email_verification_tokens
  *                                            row (type 'secondary_email') and
  *                                            queues the verification email
@@ -25,8 +24,7 @@ import { enqueueAuthEmail } from "../outbox.js";
  * Admin route:
  *   POST /api/users/:userId/secondary-email -> admin sets secondary email for
  *                                              a user; triggers verification.
- *   DELETE /api/users/:userId/secondary-email -> admin removes it and revokes
- *                                                automatic project matches.
+ *   DELETE /api/users/:userId/secondary-email -> admin removes it.
  *
  * Uniqueness rule (H6: "cada dirección identifica a una única cuenta"):
  * a secondary email may not equal ANY user's primary email, nor another
@@ -119,7 +117,6 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
           [userId, email],
         );
-        await reconcileDevpostParticipantsForUser(client, userId);
         await audit(client, {
           actorId: userId,
           entityType: "user",
@@ -287,7 +284,6 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           `UPDATE users SET secondary_email = $2, secondary_email_verified_at = now() WHERE id = $1`,
           [userId, row.email],
         );
-        await reconcileDevpostParticipantsForUser(client, userId);
         await audit(client, {
           actorId: userId,
           entityType: "user",
@@ -358,7 +354,6 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
           [targetId, email],
         );
-        await reconcileDevpostParticipantsForUser(client, targetId);
         await enqueueAuthEmail(client, targetId, "auth.verifySecondaryEmail", {
           recipient: email,
           name: [tgt.name, tgt.surname].filter(Boolean).join(" ") || tgt.email,
@@ -427,7 +422,6 @@ async function removeSecondaryEmail(
       `UPDATE users SET secondary_email = NULL, secondary_email_verified_at = NULL WHERE id = $1`,
       [targetId],
     );
-    await reconcileDevpostParticipantsForUser(client, targetId);
     await audit(client, {
       actorId,
       entityType: "user",

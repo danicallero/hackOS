@@ -57,8 +57,8 @@ export async function setChallengeWinner(
 
     // H46: a sponsor may opt out of the queue system entirely, so a repo can
     // be a legitimate winner candidate either through a queue entry or
-    // through the devpost prize-tag mapping (repo_devpost_prizes / challenge
-    // devpost_tags), same "entered" test loadEligibleRepos uses on the web.
+    // through its challenge selection (`project_challenges`, or a mandatory
+    // challenge), the same "entered" test the project read model uses (#1006).
     //
     // Eligibility is scoped to the challenge's *queue group*, not the bare
     // challenge id: challenges merged into one shared queue are judged
@@ -89,9 +89,13 @@ export async function setChallengeWinner(
          JOIN group_challenges g ON g.challenge_id = q.challenge_id
         WHERE q.repo_id = $2
        UNION
-       SELECT 1 FROM repo_devpost_prizes p
-         JOIN challenges c ON c.id IN (SELECT challenge_id FROM group_challenges)
-        WHERE p.repo_id = $2 AND p.prize IN (SELECT jsonb_array_elements_text(c.devpost_tags))`,
+       SELECT 1 FROM project_challenges pc
+         JOIN group_challenges g ON g.challenge_id = pc.challenge_id
+        WHERE pc.repo_id = $2
+       UNION
+       SELECT 1 FROM challenges c
+         JOIN group_challenges g ON g.challenge_id = c.id
+        WHERE c.mandatory AND EXISTS (SELECT 1 FROM repos WHERE id = $2)`,
       [challengeId, repoId],
     );
     if (entrant.rowCount === 0) {

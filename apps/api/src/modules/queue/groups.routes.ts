@@ -187,7 +187,7 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
         params: queueGroupIdParam,
         summary: "Generate one judging queue",
         description:
-          "Adds eligible projects for every challenge in this queue group. On its first population, a linked work group's early, middle or late timing preference is a soft ordering input; existing waiting, called and evaluated teams keep their current positions, and repeated generation only appends projects not already queued.",
+          "Adds the projects that entered each challenge in this queue group (their own selection, or every project for a mandatory challenge). On its first population, each project's early, middle or late timing preference is a soft ordering input; existing waiting, called and evaluated teams keep their current positions, and repeated generation only appends projects not already queued.",
       },
     },
     async (req) => {

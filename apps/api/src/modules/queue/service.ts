@@ -1312,10 +1312,14 @@ async function enqueueQueueRepo(
   challengeId: number,
 ): Promise<QueueGenerationOutcome | null> {
   // Keep the shared queue-group path subject to the same marker boundary as
-  // the explicit challenge endpoint. Prize-derived repo ids are global, so a
-  // tag lookup can otherwise mix real and synthetic graphs.
+  // the explicit challenge endpoint; caller-supplied repo ids are global.
   await assertQueueChallengeScope(client, actorId, challengeId);
   await assertQueueRepoScope(client, actorId, repoId);
+  // Every queue entry is also part of the project's challenge selection (#1006).
+  await client.query(
+    `INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [repoId, challengeId],
+  );
   const existing = await client.query(
     `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
     [repoId, challengeId],
@@ -1388,23 +1392,29 @@ async function enqueueQueueRepo(
   return { entry: positioned.rows[0] ?? entry, inserted: true, revived: false };
 }
 
-async function challengePrizeRepoIds(
+/**
+ * #1006: the projects that entered a challenge — by their own selection
+ * (`project_challenges`) or, for a mandatory challenge, every project with
+ * the same fixture marker. Queue generation turns this set into entries.
+ */
+async function challengeEnteredRepoIds(
   client: pg.PoolClient,
   challengeId: number,
   fixtureMarker = false,
 ): Promise<number[]> {
-  const challenge = await client.query(`SELECT devpost_tags FROM challenges WHERE id = $1`, [
+  const challenge = await client.query(`SELECT mandatory FROM challenges WHERE id = $1`, [
     challengeId,
   ]);
   if (challenge.rowCount === 0) throw new NotFoundError("Challenge not found", { challengeId });
-  const tags: string[] = challenge.rows[0].devpost_tags ?? [];
-  if (tags.length === 0) return [];
   const { rows } = await client.query(
-    `SELECT DISTINCT rdp.repo_id
-       FROM repo_devpost_prizes rdp
-       JOIN repos r ON r.id = rdp.repo_id AND r.is_test_account = $2
-      WHERE rdp.prize = ANY($1)`,
-    [tags, fixtureMarker],
+    `SELECT r.id AS repo_id
+       FROM repos r
+      WHERE r.is_test_account = $2
+        AND ($3 OR EXISTS (
+          SELECT 1 FROM project_challenges pc WHERE pc.repo_id = r.id AND pc.challenge_id = $1
+        ))
+      ORDER BY r.id`,
+    [challengeId, fixtureMarker, challenge.rows[0].mandatory === true],
   );
   return rows.map((row: { repo_id: number }) => Number(row.repo_id));
 }
@@ -1419,11 +1429,11 @@ export async function enqueueChallenge(
     // capability check alone is not enough to keep synthetic queue graphs
     // out of ordinary operators' writes. Validate the challenge and every
     // repo before creating any entry; the same transaction also covers the
-    // prize-derived repo list used when the body omits repoIds.
+    // selection-derived repo list used when the body omits repoIds.
     const fixtureMarker = await assertQueueChallengeScope(client, actorId, challengeId);
     let ids = repoIds;
     if (!ids || ids.length === 0) {
-      ids = await challengePrizeRepoIds(client, challengeId, fixtureMarker);
+      ids = await challengeEnteredRepoIds(client, challengeId, fixtureMarker);
     }
     for (const repoId of ids) {
       await assertQueueRepoScope(client, actorId, repoId);
@@ -1492,7 +1502,7 @@ export async function enqueueQueueGroup(
     const candidates = new Map<number, number[]>();
     for (const challenge of challenges as Array<{ id: number }>) {
       const challengeId = Number(challenge.id);
-      const repoIds = await challengePrizeRepoIds(client, challengeId, fixtureMarker);
+      const repoIds = await challengeEnteredRepoIds(client, challengeId, fixtureMarker);
       for (const repoId of repoIds) {
         const challengeIds = candidates.get(repoId) ?? [];
         challengeIds.push(challengeId);

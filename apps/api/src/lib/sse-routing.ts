@@ -27,14 +27,12 @@ export function mutationDomainForPath(url: string): string | null {
     return SSE_TOPICS.APPLICATIONS;
   }
 
-  // Devpost/projects and queue membership edits are project read-model writes
-  // even when the URL is nested under a challenge (H16-H21).
+  // Project and challenge-entry edits are project read-model writes even
+  // when the URL is nested under a challenge (H19-H21).
   if (
     matches("/api/projects") ||
     matches("/api/repos") ||
-    matches("/api/devpost") ||
     matches("/api/me/projects") ||
-    matches("/api/me/work-groups") ||
     /^\/api\/challenges\/[^/]+\/repos(?:\/|$)/.test(path)
   ) {
     return SSE_TOPICS.PROJECTS;
@@ -121,8 +119,7 @@ export function publicContentMutationForPath(url: string): boolean {
     path === "/api/challenges" ||
     path === "/api/challenges/visibility" ||
     singleResource("/api/challenges") ||
-    /^\/api\/challenges\/[^/]+\/(?:publish|unpublish)$/.test(path) ||
-    /^\/api\/devpost\/prizes\/[^/]+\/map$/.test(path)
+    /^\/api\/challenges\/[^/]+\/(?:publish|unpublish)$/.test(path)
   );
 }
 

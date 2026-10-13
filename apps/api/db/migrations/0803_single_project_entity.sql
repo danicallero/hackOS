@@ -63,16 +63,18 @@ ALTER TABLE repos
 UPDATE repos SET submission_status = 'draft' WHERE submission_status = 'not_submitted';
 UPDATE repos SET submitted_via = CASE submitted_via WHEN 'native' THEN 'participant' ELSE 'admin' END
  WHERE submitted_via IS NOT NULL;
-UPDATE repos SET lock_reason = CASE lock_reason WHEN 'native_submission' THEN 'submission' ELSE 'organizer_lock' END
- WHERE lock_reason IS NOT NULL;
+-- Submitting no longer locks a project (members edit until the window
+-- closes); only an organizer lock remains.
+UPDATE repos SET locked_at = NULL, lock_reason = NULL WHERE lock_reason = 'native_submission';
+UPDATE repos SET lock_reason = 'organizer_lock' WHERE lock_reason IS NOT NULL;
 ALTER TABLE repos
   ALTER COLUMN submission_status SET DEFAULT 'draft',
   ALTER COLUMN submitted_via DROP DEFAULT,
   ADD CONSTRAINT repos_submission_status_check CHECK (submission_status IN ('draft', 'submitted')),
   ADD CONSTRAINT repos_submitted_via_check CHECK (submitted_via IN ('participant', 'admin')),
-  ADD CONSTRAINT repos_lock_reason_check CHECK (lock_reason IN ('submission', 'organizer_lock'));
+  ADD CONSTRAINT repos_lock_reason_check CHECK (lock_reason IN ('organizer_lock'));
 COMMENT ON TABLE repos IS
-  'A project and its team (#1006). Created as a draft by participants or staff; submitted projects are locked until an organizer reopens them. Deliberately independent from application_responses.';
+  'A project and its team (#1006). Participants create drafts and may edit and resubmit until the window closes; organizers can lock and reopen. Deliberately independent from application_responses.';
 
 DELETE FROM project_submission_versions WHERE source = 'devpost';
 ALTER TABLE project_submission_versions DROP CONSTRAINT project_submission_versions_source_check;

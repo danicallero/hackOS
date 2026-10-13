@@ -2,12 +2,9 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool } from "../../db/pool.js";
-import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
+import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import type { RouteAccessPolicy } from "../../lib/route-policy.js";
-import { listDevpostPrizes } from "../challenges/service.js";
-import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import {
   repositoryScopeFor,
   requireRepositoryAccess,
@@ -15,21 +12,14 @@ import {
 } from "./access.js";
 import {
   challengeIdOnlyParamsSchema,
-  claimEmailBodySchema,
   createMyProjectBodySchema,
   createRepoBodySchema,
-  importCsvBodySchema,
   inviteProjectMemberBodySchema,
-  linkParticipantBodySchema,
-  mapPrizeBodySchema,
-  prizeParamsSchema,
   repoChallengeBodySchema,
   repoChallengeParamsSchema,
-  repoDevpostParticipantParamsSchema,
   repoIdParamsSchema,
   repoMemberBodySchema,
   repoMemberParamsSchema,
-  repoPrizeParamsSchema,
   updateRepoBodySchema,
 } from "./schemas.js";
 import {
@@ -40,7 +30,7 @@ import {
   bulkAddRepoChallenge,
   bulkRemoveRepoChallenge,
   canCreateMyProject,
-  confirmImport,
+  challengeEstimates,
   createMyProject,
   createRepoNative,
   declineProjectInvite,
@@ -49,31 +39,23 @@ import {
   getRepoForScope,
   inviteProjectMember,
   leaveMyProject,
-  linkParticipant,
-  linkParticipantSecondary,
   listProjectMemberCandidates,
   listPublicChallenges,
   listReposForScope,
-  listUnmatchedParticipants,
-  mapPrizeToChallenge,
   myPendingInvites,
   myProjects,
-  previewImport,
-  removeDevpostParticipant,
   removeMyProjectChallenge,
   removeRepoChallenge,
   removeRepoMember,
-  removeRepoPrize,
-  sendClaimEmail,
   updateMyProject,
   updateRepo,
 } from "./service.js";
 
 /**
- * Projects routes: Devpost intake (H16-H17), the PROJECTS_READ views the
- * queue workstream consumes, hot edits (H21), and the native lifecycle —
- * org-side creation/metadata edits (H18) plus policy-gated participant
- * self-creation (H19) and the participant self-view (H20).
+ * Projects routes (#1006): the PROJECTS_READ views the queue workstream
+ * consumes, staff creation and hot edits (H21), and participant
+ * self-service — policy-gated creation and team (H19), editing and the
+ * participant self-view (H20).
  */
 const access = (routeAccessPolicy: RouteAccessPolicy) => ({ config: { routeAccessPolicy } });
 const repoParam = { source: "params", field: "id" } as const;
@@ -130,157 +112,6 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       removeMyProjectChallenge(q.userId as number, q.params.repoId, q.params.challengeId),
   );
 
-  // ── H16: import ──────────────────────────────────────────────────────────
-
-  // Pure/read-only preview: parses both CSVs and reports what confirm would do.
-  r.post(
-    "/api/devpost/imports/preview",
-    {
-      ...access({
-        kind: "capability",
-        capability: CAPABILITIES.PROJECTS_IMPORT,
-        emailVerification: "none",
-      }),
-      preHandler: requireCapability(CAPABILITIES.PROJECTS_IMPORT),
-      schema: {
-        body: importCsvBodySchema,
-        summary: "Preview Devpost import",
-        description: "Computes a read-only Devpost import plan (H16).",
-      },
-    },
-    async (req) => previewImport(req.body.projectsCsv, req.body.participantsCsv),
-  );
-
-  // Idempotent write; same payload again updates rather than duplicates.
-  r.post(
-    "/api/devpost/imports/confirm",
-    {
-      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
-      preHandler: [requireCapability(CAPABILITIES.PROJECTS_IMPORT), idempotencyGuard],
-      schema: {
-        body: importCsvBodySchema,
-        summary: "Confirm Devpost import",
-        description: "Commits an idempotent Devpost import transaction (H16).",
-      },
-    },
-    async (req) => {
-      // requireCapability guarantees userId is set
-      return confirmImport(
-        req.userId as number,
-        req.body.projectsCsv,
-        req.body.participantsCsv,
-        req.body.tagMappings,
-      );
-    },
-  );
-
-  // ── H17: resolve unmatched participants ──────────────────────────────────
-
-  r.get(
-    "/api/devpost/imports/unmatched",
-    {
-      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
-      preHandler: requireCapability(CAPABILITIES.PROJECTS_IMPORT),
-      schema: {
-        summary: "List unmatched participants",
-        description: "Lists imported Devpost people requiring reconciliation (H17).",
-      },
-    },
-    async () => ({ participants: await listUnmatchedParticipants() }),
-  );
-
-  r.post(
-    "/api/devpost/imports/link",
-    {
-      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
-      preHandler: requireCapability(CAPABILITIES.PROJECTS_IMPORT),
-      schema: {
-        body: linkParticipantBodySchema,
-        summary: "Link imported participant",
-        description: "Links an imported participant to an account (H17).",
-      },
-    },
-    async (req) => {
-      const { repoId, email, userId } = req.body;
-      return linkParticipant(req.userId as number, repoId, email, userId);
-    },
-  );
-
-  // Link an unmatched email to an account by adding it as a verified-secondary
-  // (H6): reuses identity's secondary-email verification flow.
-  r.post(
-    "/api/devpost/imports/link-secondary",
-    {
-      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
-      preHandler: [requireCapability(CAPABILITIES.PROJECTS_IMPORT), idempotencyGuard],
-      schema: {
-        body: linkParticipantBodySchema,
-        summary: "Link participant secondary email",
-        description:
-          "Starts secondary-email verification for an imported participant; project membership is created only after verification (H6, H17).",
-      },
-    },
-    async (req) => {
-      const { repoId, email, userId } = req.body;
-      return linkParticipantSecondary(req.userId as number, repoId, email, userId);
-    },
-  );
-
-  r.post(
-    "/api/devpost/imports/claim-email",
-    {
-      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
-      preHandler: [requireCapability(CAPABILITIES.PROJECTS_IMPORT), idempotencyGuard],
-      schema: {
-        body: claimEmailBodySchema,
-        summary: "Send project claim invite",
-        description: "Sends an idempotent claim invitation for an imported participant (H17).",
-      },
-    },
-    async (req) => {
-      const { repoId, email } = req.body;
-      return sendClaimEmail(req.userId as number, repoId, email);
-    },
-  );
-
-  // ── prize -> challenge mapping helper ─────────────────────────────────────
-
-  r.post(
-    "/api/devpost/prizes/:prizeName/map",
-    {
-      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
-      preHandler: requireCapability(CAPABILITIES.PROJECTS_IMPORT),
-      schema: {
-        params: prizeParamsSchema,
-        body: mapPrizeBodySchema,
-        summary: "Map Devpost prize",
-        description: "Maps one Devpost prize name to an exact challenge (H16).",
-      },
-    },
-    async (req) =>
-      mapPrizeToChallenge(req.userId as number, req.params.prizeName, req.body.challengeId),
-  );
-
-  // H17: importers also need this list to see which imported prizes still
-  // need mapping on the conflict-resolution screen, not just queue admins.
-  r.get(
-    "/api/devpost/prizes",
-    {
-      ...access({
-        kind: "capability",
-        anyOf: [CAPABILITIES.QUEUE_ADMIN, CAPABILITIES.PROJECTS_IMPORT],
-      }),
-      preHandler: requireAnyCapability(CAPABILITIES.QUEUE_ADMIN, CAPABILITIES.PROJECTS_IMPORT),
-      schema: {
-        summary: "List Devpost prizes",
-        description: "Lists imported prize names for queue and import operators (H16).",
-      },
-    },
-    async (req) => ({
-      prizes: await listDevpostPrizes(await isSyntheticOperator(pool, req.userId as number)),
-    }),
-  );
-
   // ── PROJECTS_READ views ───────────────────────────────────────────────────
 
   // H8/H44/H46: full-access sees all repos; judges/sponsors see only the
@@ -322,11 +153,8 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.get(
     "/api/projects/member-candidates",
     {
-      ...access({
-        kind: "capability",
-        anyOf: [CAPABILITIES.PROJECTS_EDIT, CAPABILITIES.PROJECTS_IMPORT],
-      }),
-      preHandler: requireAnyCapability(CAPABILITIES.PROJECTS_EDIT, CAPABILITIES.PROJECTS_IMPORT),
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
+      preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
       schema: {
         querystring: z.object({
           q: z.string().trim().min(2),
@@ -334,7 +162,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         }),
         summary: "Search project member candidates",
         description:
-          "Returns minimal searchable account identity fields for project editors and Devpost import operators resolving unmatched people (H17, H21).",
+          "Returns minimal searchable account identity fields for project editors adding team members (H21).",
         response: {
           200: z.object({
             users: z.array(
@@ -354,7 +182,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     }),
   );
 
-  // ── H18: native creation + metadata edits ────────────────────────────────
+  // ── H21: staff creation + metadata edits ─────────────────────────────────
 
   r.post(
     "/api/repos",
@@ -362,9 +190,9 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: [requireCapability(CAPABILITIES.PROJECTS_EDIT), idempotencyGuard],
       schema: {
-        summary: "Create a project natively (H18), no Devpost involved.",
+        summary: "Create a project on a team's behalf (H21).",
         description:
-          "Creates a repo with title/description/links, initial team members and challenge lineup in one transaction. Each challenge enqueues the team at the bottom of that challenge's queue, exactly like a hot edit (H21). Audited; idempotent via Idempotency-Key.",
+          "Creates a submitted project with title/description/links, initial team members and challenge lineup in one transaction. Challenges are recorded as the project's selection; where a challenge's queue is already generated the team is appended to its bottom, exactly like a hot edit. Audited; idempotent via Idempotency-Key.",
         body: createRepoBodySchema,
       },
     },
@@ -377,7 +205,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
       schema: {
-        summary: "Edit a project's metadata and judging preference (H18).",
+        summary: "Edit a project's metadata and judging preference (H21).",
         description:
           "Updates only the fields present in the body. Judging preference cannot change after queue generation. Team membership and challenge lineup have their own H21 routes. Audited with before/after.",
         params: repoIdParamsSchema,
@@ -412,7 +240,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         params: repoIdParamsSchema,
         summary: "Delete a project",
         description:
-          "A project editor can permanently delete any project and its dependent queue, judging, roster and Devpost rows in one audited transaction.",
+          "A project editor can permanently delete any project and its dependent queue, judging and roster rows in one audited transaction (H21).",
       },
     },
     async (req) => deleteRepo(req.userId as number, req.params.id),
@@ -432,21 +260,6 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     async (req) => removeRepoMember(req.userId as number, req.params.repoId, req.params.userId),
   );
 
-  r.delete(
-    "/api/repos/:repoId/devpost-participants/:email",
-    {
-      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
-      preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
-      schema: {
-        params: repoDevpostParticipantParamsSchema,
-        summary: "Remove imported project member",
-        description: "Detaches an exact imported participant from an exact project (H21).",
-      },
-    },
-    async (req) =>
-      removeDevpostParticipant(req.userId as number, req.params.repoId, req.params.email),
-  );
-
   r.post(
     "/api/repos/:repoId/challenges",
     {
@@ -456,7 +269,8 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         params: repoChallengeParamsSchema.pick({ repoId: true }),
         body: repoChallengeBodySchema,
         summary: "Enter project in challenge",
-        description: "Adds one exact project to one exact challenge queue (H21).",
+        description:
+          "Enters one exact project in one exact challenge. Where the challenge's queue is already generated the team joins its bottom; otherwise queue generation adds it (H21).",
       },
     },
     async (req) => addRepoChallenge(req.userId as number, req.params.repoId, req.body.challengeId),
@@ -470,7 +284,8 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: {
         params: repoChallengeParamsSchema,
         summary: "Withdraw project from challenge",
-        description: "Removes the exact project from the exact challenge queue (H21).",
+        description:
+          "Withdraws the exact project from the exact challenge and, if queued, from its queue; the rest move up (H21).",
       },
     },
     async (req) =>
@@ -509,20 +324,6 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     async (req) => bulkRemoveRepoChallenge(req.userId as number, req.params.challengeId),
   );
 
-  r.delete(
-    "/api/repos/:repoId/prizes/:prizeName",
-    {
-      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
-      preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
-      schema: {
-        params: repoPrizeParamsSchema,
-        summary: "Remove project prize",
-        description: "Removes one exact prize from one exact project (H21).",
-      },
-    },
-    async (req) => removeRepoPrize(req.userId as number, req.params.repoId, req.params.prizeName),
-  );
-
   // ── H19-H20: participant self-view + policy-gated self-creation ──────────
 
   r.get(
@@ -533,7 +334,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: {
         summary: "My projects (H19/H20): team roster, challenges and queue status.",
         description:
-          "Projects the caller is an ACTIVE member of (a pending invite doesn't count — see GET .../invites), with team members, challenge lineup and live queue positions. Teammate emails come back as null — only the caller's own address is included. `canCreate` reflects the event's H19 policy AND the caller's own eligibility (admitted participant) AND whether the hacking window is currently open; it no longer requires the caller to have zero projects, since self-service now allows more than one.",
+          "Projects the caller is an ACTIVE member of (a pending invite doesn't count — see GET .../invites), with submission state, team members, challenge lineup and live queue positions. Teammate emails come back as null — only the caller's own address is included. `canCreate` reflects the event's H19 policy, the caller's eligibility (admitted participant) and whether the participant window is open; a participant may belong to more than one project.",
       },
     },
     async (req) => ({
@@ -550,17 +351,15 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create my own project (H19) — policy, eligibility and window gated.",
         description:
-          "403 unless event settings enable participant project creation, the caller is an admitted participant, and the event's hacking window is open. A participant may now belong to more than one project — there is no longer a 409 for already belonging to one. The caller becomes the first team member; chosen (publicly visible) challenges enqueue the team at the bottom of their queues. Audited; idempotent via Idempotency-Key.",
+          "Creates a draft project. 403 unless event settings enable participant project creation, the caller is an admitted participant, and the participant window is open. A participant may belong to more than one project. The caller becomes the first team member; chosen (publicly visible) challenges are recorded and, where a queue is already generated, the team joins its bottom. Audited; idempotent via Idempotency-Key.",
         body: createMyProjectBodySchema,
       },
     },
     async (req) => createMyProject(req.userId as number, req.body),
   );
 
-  // ── H19/H20: policy-gated participant self-service (edit, invites, leave,
-  // delete) — product decision superseding H20's literal read-only text
-  // while the event's H19 policy is on; recorded in docs/challenges-devpost.md.
-  // Every mutation here is additionally gated by the hacking window and by
+  // ── H19/H20: participant self-service (edit, invites, leave, delete).
+  // Every mutation here is gated by the participant window and by
   // "admitted participant" eligibility (assertWithinHackingWindow /
   // isAdmittedParticipant in service.ts).
 
@@ -574,7 +373,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         body: updateRepoBodySchema,
         summary: "Edit my own project (H19/H20) — active members only.",
         description:
-          "Updates only the fields present in the body, including judging preference until queue generation. 403 if the caller isn't an active member of this project or the hacking window is closed. Audited (source: participant).",
+          "Updates only the fields present in the body, including judging preference until queue generation, for drafts and submitted projects alike. 403 if the caller isn't an active member of this project or the participant window is closed; 409 if organizers locked it. Audited (source: participant).",
       },
     },
     async (req) => updateMyProject(req.userId as number, req.params.id, req.body),
@@ -606,7 +405,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         body: repoChallengeBodySchema,
         summary: "Enter my project in a challenge.",
         description:
-          "An active project member can add one published challenge until judging starts. The project is appended to that challenge's queue; the transition is audited and idempotent.",
+          "An active project member can add one published challenge until judging starts. Where the challenge's queue is already generated the project joins its bottom. Audited and idempotent.",
       },
     },
     async (req) => addMyProjectChallenge(req.userId as number, req.params.id, req.body.challengeId),
@@ -684,5 +483,31 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => deleteMyProject(req.userId as number, req.params.id),
+  );
+
+  r.get(
+    "/api/projects/estimates",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "Read challenge participation estimates",
+        description:
+          "Staff with project-read access see every challenge; sponsor representatives see only their enterprise's challenges. Counts the projects entered in each challenge (selection, mandatory participation or queue entry) and their distinct active members.",
+        response: {
+          200: z.object({
+            estimates: z.array(
+              z.object({
+                challengeId: z.number().int(),
+                title: z.string(),
+                projectCount: z.number().int(),
+                participantCount: z.number().int(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (req) => ({ estimates: await challengeEstimates(req.userId as number) }),
   );
 }

@@ -75,7 +75,7 @@ export const PERMISSION_GROUP_TEMPLATES: readonly PermissionGroupTemplate[] = [
     "project-operator",
     "permissionTemplateProjectOperator",
     "permissionTemplateProjectOperatorDescription",
-    [CAPABILITIES.PROJECTS_READ, CAPABILITIES.PROJECTS_IMPORT, CAPABILITIES.PROJECTS_EDIT],
+    [CAPABILITIES.PROJECTS_READ, CAPABILITIES.PROJECTS_EDIT],
   ),
   template(
     "queue-operator",

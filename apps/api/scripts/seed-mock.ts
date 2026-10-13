@@ -682,7 +682,6 @@ function fieldValue(
       return dniFor(index);
     if (field.validation?.text_condition === "url" || label.includes("github")) {
       if (label.includes("github")) return `https://github.com/${slug(p.first)}${slug(p.last)}`;
-      if (label.includes("devpost")) return `https://devpost.com/${slug(p.first)}-${slug(p.last)}`;
       if (label.includes("linkedin"))
         return `https://www.linkedin.com/in/${slug(p.first)}-${slug(p.last)}`;
       if (label.includes("site")) return `https://${slug(p.first)}${slug(p.last)}.example`;
@@ -952,8 +951,8 @@ async function seedProjects(): Promise<void> {
       .rows[0]?.id;
     if (!repoId) {
       const repo = await client.query(
-        `INSERT INTO repos (name, description, github_url)
-         VALUES ($1, $2, $3)
+        `INSERT INTO repos (name, description, github_url, submission_status, submitted_via, submitted_at)
+         VALUES ($1, $2, $3, 'submitted', 'admin', now())
          RETURNING id`,
         [project.name, project.tagline, `https://github.com/hackudc-demo/${project.repoSlug}`],
       );

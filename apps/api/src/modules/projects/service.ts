@@ -1,16 +1,14 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { firstNumericQuestionKey, type Question } from "@hackos/shared/questions";
-import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { createAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
+import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assertWithinHackingWindow } from "../../lib/hacking-window.js";
 import { broadcast } from "../../lib/sse.js";
-import { enqueueAuthEmail } from "../identity/outbox.js";
 import { hasEventAccess } from "../identity/role.js";
-import { assertSecondaryEmailAvailable } from "../identity/routes/secondary-email.js";
 import {
   assertFixtureQueueScope,
   assertFixtureSubjectScope,
@@ -25,456 +23,11 @@ import {
 import { assertQueueChallengeScope, assertQueueRepoScope } from "../queue/fixture-scope.js";
 import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged, repoMemberIds } from "../queue/notify.js";
+import { GROUP_SIBLING_CHALLENGE_IDS_SQL } from "../queue/groups.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
 import { RESET_PRESENTATION_CLOCK_SQL } from "../queue/presentation-clock.js";
-import { linkDevpostImports } from "../work-groups/service.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
-import { resolveDevpostUrls } from "./devpost-url.js";
-import { finalizeDevpostImport } from "./lifecycle.js";
-import { buildImportPlan, type ImportPlan } from "./plan.js";
-import { reconcileDevpostParticipantsForUser } from "./reconciliation.js";
 import { assertProjectEditable, assertProjectParticipantWindow } from "./submission-state.js";
-
-const CLAIM_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** Read-only: parse + join + match, no writes (H16 "preview must be pure"). */
-export async function previewImport(
-  projectsCsv: string,
-  participantsCsv: string,
-): Promise<ImportPlan> {
-  return buildImportPlan(pool, projectsCsv, participantsCsv);
-}
-
-export interface ConfirmImportResult {
-  batchId: string;
-  counts: {
-    reposCreated: number;
-    reposUpdated: number;
-    participantsMatched: number;
-    participantsUnmatched: number;
-    prizesSeen: number;
-    prizesUnmapped: number;
-  };
-  repos: Array<{ id: number; title: string; action: "create" | "update" }>;
-}
-
-/**
- * Writes the import (H16). Idempotent: repos dedupe on devpost_url,
- * devpost_participants on (repo_id, email), repo_devpost_prizes on
- * (repo_id, prize) — re-running with the same files updates rather than
- * duplicates. A row already `manually_linked` (H17) is never overwritten by
- * a later re-import.
- */
-export async function confirmImport(
-  actorId: number,
-  projectsCsv: string,
-  participantsCsv: string,
-  tagMappings: Array<{ tag: string; challengeId: number }> = [],
-): Promise<ConfirmImportResult> {
-  const preview = await buildImportPlan(pool, projectsCsv, participantsCsv);
-  const groups = await pool.query<{ devpost_url: string | null }>(
-    `SELECT devpost_url FROM planned_work_groups WHERE linked_repo_id IS NULL AND devpost_canonical_url IS NULL`,
-  );
-  const identities = await resolveDevpostUrls([
-    ...preview.repos.map((repo) => repo.url),
-    ...groups.rows.map((group) => group.devpost_url),
-  ]);
-  const result = await withTransaction(async (client) => {
-    if (await isSyntheticOperator(client, actorId)) {
-      throw new ForbiddenError("Review-fixture operators cannot run real Devpost imports", {
-        code: "review_fixture_scope",
-      });
-    }
-    const plan = await buildImportPlan(client, projectsCsv, participantsCsv);
-    for (const [url, canonical] of identities) {
-      if (canonical)
-        await client.query(
-          `UPDATE planned_work_groups SET devpost_canonical_url = $2 WHERE devpost_url = $1`,
-          [url, canonical],
-        );
-    }
-    for (const repo of plan.repos) {
-      if (
-        !repo.projectCode ||
-        !repo.url ||
-        plan.repos.filter((p) => p.projectCode === repo.projectCode).length !== 1
-      )
-        continue;
-      const known = await client.query(
-        `SELECT id FROM repos WHERE devpost_import_url=$1 FOR UPDATE`,
-        [repo.url],
-      );
-      if (known.rows[0]) continue;
-      const target = await client.query(
-        `SELECT id,devpost_import_url FROM repos WHERE reconciliation_code=$1 AND is_test_account=false AND NOT EXISTS(SELECT 1 FROM audit_log a WHERE a.entity_type='repo' AND a.entity_id=repos.id::text AND a.action='unlink_project') FOR UPDATE`,
-        [repo.projectCode],
-      );
-      if (target.rows[0] && !target.rows[0].devpost_import_url) {
-        await client.query(`UPDATE repos SET devpost_url=$2,devpost_import_url=$2 WHERE id=$1`, [
-          target.rows[0].id,
-          repo.url,
-        ]);
-        await audit(client, {
-          actorId,
-          entityType: "repo",
-          entityId: target.rows[0].id,
-          action: "link_project_code",
-          after: { devpostUrl: repo.url },
-          source: "admin",
-        });
-      }
-    }
-    const batchId = `dp_${randomUUID()}`;
-
-    await persistPreviewTagMappings(client, actorId, plan, tagMappings);
-
-    let reposCreated = 0;
-    let reposUpdated = 0;
-    let participantsMatched = 0;
-    let participantsUnmatched = 0;
-    const repoIds = new Map<number, number>();
-    const repoActions = new Map<number, "create" | "update">();
-    const reposWithUrl = plan.repos
-      .map((repo, ordinal) => ({ ordinal, ...repo }))
-      .filter((repo) => repo.url !== null);
-    if (reposWithUrl.length > 0) {
-      const { rows } = await client.query(
-        `WITH incoming AS (
-           SELECT * FROM jsonb_to_recordset($1::jsonb)
-             AS v(ordinal int, name text, description text, devpost_url text, demo_url text, github_url text, devpost_canonical_url text, imported_project_code text)
-         )
-         INSERT INTO repos (name, description, devpost_url, devpost_import_url, demo_url, github_url, devpost_canonical_url, imported_project_code)
-         SELECT name, description, devpost_url, devpost_url, demo_url, github_url, devpost_canonical_url, imported_project_code FROM incoming
-         ON CONFLICT (devpost_import_url) WHERE devpost_import_url IS NOT NULL DO UPDATE
-           SET name = CASE WHEN repos.submitted_via='native' THEN repos.name ELSE EXCLUDED.name END,
-               description = CASE WHEN repos.submitted_via='native' THEN repos.description ELSE EXCLUDED.description END,
-               demo_url = CASE WHEN repos.submitted_via='native' THEN repos.demo_url ELSE EXCLUDED.demo_url END,
-               github_url = CASE WHEN repos.submitted_via='native' THEN repos.github_url ELSE COALESCE(EXCLUDED.github_url, repos.github_url) END,
-               imported_project_code=COALESCE(repos.imported_project_code,EXCLUDED.imported_project_code),
-               devpost_canonical_url = COALESCE(EXCLUDED.devpost_canonical_url, repos.devpost_canonical_url),
-               updated_at = now()
-           WHERE repos.is_test_account = false
-         RETURNING id, devpost_import_url AS devpost_url, (xmax = 0) AS was_insert`,
-        [
-          JSON.stringify(
-            reposWithUrl.map((repo) => ({
-              ordinal: repo.ordinal,
-              name: repo.title,
-              description: repo.description,
-              devpost_url: repo.url,
-              demo_url: repo.demoUrl,
-              github_url: repo.githubUrl,
-              devpost_canonical_url: identities.get(repo.url as string) ?? null,
-              imported_project_code: repo.projectCode,
-            })),
-          ),
-        ],
-      );
-      const idsByUrl = new Map<string, { id: number; wasInsert: boolean }>();
-      for (const row of rows as Array<{ id: number; devpost_url: string; was_insert: boolean }>) {
-        idsByUrl.set(row.devpost_url, { id: row.id, wasInsert: row.was_insert });
-      }
-      for (const repo of reposWithUrl) {
-        const result = idsByUrl.get(repo.url as string);
-        if (!result) throw new ConflictError("Import cannot overwrite a review-fixture project");
-        repoIds.set(repo.ordinal, result.id);
-        repoActions.set(repo.ordinal, result.wasInsert ? "create" : "update");
-      }
-    }
-
-    // URL-less Devpost rows retain their documented name-based dedupe, but do
-    // it in two set-based statements instead of a select/update/insert per row.
-    const reposWithoutUrl = plan.repos
-      .map((repo, ordinal) => ({ ordinal, ...repo }))
-      .filter((repo) => repo.url === null);
-    if (reposWithoutUrl.length > 0) {
-      const input = JSON.stringify(
-        reposWithoutUrl.map((repo) => ({
-          ordinal: repo.ordinal,
-          name: repo.title,
-          description: repo.description,
-          demo_url: repo.demoUrl,
-          github_url: repo.githubUrl,
-        })),
-      );
-      const updated = await client.query(
-        `WITH incoming AS (
-           SELECT * FROM jsonb_to_recordset($1::jsonb)
-             AS v(ordinal int, name text, description text, demo_url text, github_url text)
-         )
-         UPDATE repos AS r SET description = i.description, demo_url = i.demo_url,
-             github_url = COALESCE(i.github_url, r.github_url), updated_at = now()
-         FROM incoming i
-         WHERE r.devpost_url IS NULL AND r.source = 'devpost' AND r.is_test_account = false
-           AND r.name = i.name
-         RETURNING r.id, i.ordinal`,
-        [input],
-      );
-      for (const row of updated.rows as Array<{ id: number; ordinal: number }>) {
-        repoIds.set(row.ordinal, row.id);
-        repoActions.set(row.ordinal, "update");
-      }
-      const inserted = await client.query(
-        `WITH incoming AS (
-           SELECT * FROM jsonb_to_recordset($1::jsonb)
-             AS v(ordinal int, name text, description text, demo_url text, github_url text)
-         )
-         INSERT INTO repos (name, description, demo_url, github_url)
-         SELECT i.name, i.description, i.demo_url, i.github_url
-         FROM incoming i
-         WHERE NOT EXISTS (
-           SELECT 1 FROM repos r WHERE r.devpost_url IS NULL AND r.source = 'devpost'
-             AND r.is_test_account = false AND r.name = i.name
-         )
-         RETURNING id, name`,
-        [input],
-      );
-      const insertedByName = new Map<string, number>();
-      for (const row of inserted.rows as Array<{ id: number; name: string }>)
-        insertedByName.set(row.name, row.id);
-      for (const repo of reposWithoutUrl) {
-        if (repoIds.has(repo.ordinal)) continue;
-        const id = insertedByName.get(repo.title);
-        if (!id) throw new ConflictError("Import could not create a URL-less project");
-        repoIds.set(repo.ordinal, id);
-        repoActions.set(repo.ordinal, "create");
-      }
-    }
-
-    const repoResults = plan.repos.map((repo, ordinal) => {
-      const action = repoActions.get(ordinal);
-      const id = repoIds.get(ordinal);
-      if (!action || !id) throw new ConflictError("Import could not resolve a project");
-      if (action === "create") reposCreated++;
-      else reposUpdated++;
-      return { id, title: repo.title, action };
-    });
-
-    const prizeNamesSeen = new Set(plan.prizes.map((prize) => prize.name));
-    if (prizeNamesSeen.size > 0) {
-      await client.query(
-        `INSERT INTO devpost_prizes (name, last_batch)
-         SELECT name, $2 FROM unnest($1::text[]) AS name
-         ON CONFLICT (name) DO UPDATE SET last_batch = EXCLUDED.last_batch`,
-        [[...prizeNamesSeen], batchId],
-      );
-    }
-
-    const prizeRows = plan.repos.flatMap((repo, ordinal) =>
-      [...new Set(repo.prizes)].map((prize) => ({ repo_id: repoIds.get(ordinal), prize })),
-    );
-    if (prizeRows.length > 0) {
-      await client.query(
-        `INSERT INTO repo_devpost_prizes (repo_id, prize)
-         SELECT repo_id, prize FROM jsonb_to_recordset($1::jsonb) AS v(repo_id int, prize text)
-         ON CONFLICT (repo_id, prize) DO NOTHING`,
-        [JSON.stringify(prizeRows)],
-      );
-    }
-
-    const participantRows = plan.repos.flatMap((repo, ordinal) =>
-      repo.members.map((member) => ({
-        repo_id: repoIds.get(ordinal),
-        email: member.email,
-        name: member.firstName,
-        surname: member.lastName,
-        devpost_username: member.username,
-        user_id: member.matchedUserId,
-      })),
-    );
-    if (participantRows.length > 0) {
-      const { rows } = await client.query(
-        `WITH incoming AS (
-           SELECT * FROM jsonb_to_recordset($1::jsonb) AS v(
-             repo_id int, email text, name text, surname text, devpost_username text, user_id int
-           )
-         ), upserted AS (
-           INSERT INTO devpost_participants
-             (repo_id, email, name, surname, devpost_username, user_id, import_batch, merge_status)
-           SELECT repo_id, email, name, surname, devpost_username, user_id, $2,
-             CASE WHEN user_id IS NOT NULL THEN 'auto_matched' ELSE 'unmatched' END
-           FROM incoming
-           ON CONFLICT (repo_id, email) DO UPDATE SET
-             name = EXCLUDED.name, surname = EXCLUDED.surname,
-             devpost_username = EXCLUDED.devpost_username, import_batch = EXCLUDED.import_batch,
-             user_id = CASE WHEN devpost_participants.merge_status = 'manually_linked'
-               THEN devpost_participants.user_id ELSE EXCLUDED.user_id END,
-             merge_status = CASE WHEN devpost_participants.merge_status = 'manually_linked'
-               THEN devpost_participants.merge_status ELSE EXCLUDED.merge_status END
-           RETURNING repo_id, email, user_id
-         ), inserted_submissions AS (
-           INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
-           SELECT u.repo_id, u.user_id, 'devpost', i.devpost_username
-           FROM upserted u JOIN incoming i USING (repo_id, email)
-           WHERE u.user_id IS NOT NULL
-           ON CONFLICT (repo_id, user_id) DO NOTHING
-         )
-         SELECT count(*) FILTER (WHERE user_id IS NOT NULL)::int AS matched,
-                count(*) FILTER (WHERE user_id IS NULL)::int AS unmatched
-         FROM upserted`,
-        [JSON.stringify(participantRows), batchId],
-      );
-      participantsMatched = rows[0].matched;
-      participantsUnmatched = rows[0].unmatched;
-    }
-
-    // H16: updated exports replace only automatic external staging data.
-    // Explicit operator identity corrections remain stable; internal members
-    // are never overwritten. Snapshot/audit retain the prior import roster.
-    const importedIds = repoResults.map((r) => r.id);
-    const stale = await client.query(
-      `DELETE FROM devpost_participants WHERE repo_id=ANY($1::int[]) AND import_batch<>$2 AND merge_status<>'manually_linked' RETURNING *`,
-      [importedIds, batchId],
-    );
-    if (stale.rows.length)
-      await audit(client, {
-        actorId,
-        entityType: "devpost_import",
-        entityId: batchId,
-        action: "refresh_external_roster",
-        before: stale.rows,
-        source: "admin",
-      });
-    await client.query(
-      `DELETE FROM submissions s WHERE s.repo_id=ANY($1::int[]) AND s.imported_from='devpost' AND NOT EXISTS(SELECT 1 FROM devpost_participants dp WHERE dp.repo_id=s.repo_id AND dp.user_id=s.user_id)`,
-      [importedIds],
-    );
-
-    // #854 runs after both the roster and prize-to-challenge data are durable.
-    // The matcher itself accepts only exact valid URLs or one unambiguous,
-    // complete roster plus intended-challenge match.
-    await linkDevpostImports(
-      client,
-      actorId,
-      repoResults.map((repo) => repo.id),
-    );
-
-    await finalizeDevpostImport(
-      client,
-      actorId,
-      repoResults.map((r) => r.id),
-    );
-
-    // H17: surface how many of the prizes this import saw still have no
-    // reto mapping, so the "done" screen can point back at the resolution
-    // screen even when every participant matched.
-    let prizesUnmapped = 0;
-    if (prizeNamesSeen.size > 0) {
-      const { rows: mappedRows } = await client.query(
-        `SELECT devpost_tags FROM challenges WHERE devpost_tags ?| $1::text[]`,
-        [[...prizeNamesSeen]],
-      );
-      const mappedPrizeNames = new Set<string>();
-      for (const row of mappedRows as Array<{ devpost_tags: string[] }>) {
-        for (const tag of row.devpost_tags) mappedPrizeNames.add(tag);
-      }
-      prizesUnmapped = [...prizeNamesSeen].filter((name) => !mappedPrizeNames.has(name)).length;
-    }
-
-    const counts = {
-      reposCreated,
-      reposUpdated,
-      participantsMatched,
-      participantsUnmatched,
-      prizesSeen: prizeNamesSeen.size,
-      prizesUnmapped,
-    };
-    const mandatoryOutcomes = await enrollReposInMandatoryChallenges(
-      client,
-      actorId,
-      repoResults.map((repo) => repo.id),
-    );
-
-    await audit(client, {
-      actorId,
-      entityType: "devpost_import",
-      entityId: batchId,
-      action: "confirm",
-      after: counts,
-      source: "admin",
-    });
-
-    return { batchId, counts, repos: repoResults, mandatoryOutcomes };
-  });
-  await announceQueueOutcomes(result.mandatoryOutcomes);
-  return { batchId: result.batchId, counts: result.counts, repos: result.repos };
-}
-
-/**
- * Persists only choices made against the current preview. This is deliberately
- * part of the import transaction: #854 may later consume the saved tag
- * relation to create queue entries, but importing/mapping itself never does.
- */
-async function persistPreviewTagMappings(
-  client: Queryable,
-  actorId: number,
-  plan: ImportPlan,
-  tagMappings: Array<{ tag: string; challengeId: number }>,
-): Promise<void> {
-  const detectedTags = new Set(plan.prizes.map((prize) => prize.name));
-  const mappingByTag = new Map<string, number>();
-  for (const mapping of tagMappings) {
-    if (!detectedTags.has(mapping.tag)) {
-      throw new BadRequestError(`Tag ${mapping.tag} was not detected in this import`);
-    }
-    const prior = mappingByTag.get(mapping.tag);
-    if (prior !== undefined && prior !== mapping.challengeId) {
-      throw new BadRequestError(`Tag ${mapping.tag} has conflicting challenge mappings`);
-    }
-    mappingByTag.set(mapping.tag, mapping.challengeId);
-  }
-  if (mappingByTag.size === 0) return;
-
-  for (const [tag, challengeId] of mappingByTag) {
-    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
-    const { rows } = await client.query(
-      `SELECT id, devpost_tags FROM challenges
-        WHERE id = $1 AND is_test_account = false FOR UPDATE`,
-      [challengeId],
-    );
-    const challenge = rows[0] as { id: number; devpost_tags: string[] } | undefined;
-    if (!challenge) throw new NotFoundError(`Challenge ${challengeId} not found`);
-    if (!challenge.devpost_tags.includes(tag)) {
-      await client.query(
-        `UPDATE challenges SET devpost_tags = devpost_tags || $2::jsonb WHERE id = $1`,
-        [challengeId, JSON.stringify([tag])],
-      );
-      await audit(client, {
-        actorId,
-        entityType: "challenge",
-        entityId: challengeId,
-        action: "map_devpost_prize",
-        after: { prize: tag, source: "import_preview" },
-        source: "admin",
-      });
-    }
-  }
-}
-
-export interface UnmatchedParticipant {
-  repo_id: number;
-  repo_name: string;
-  email: string;
-  name: string | null;
-  surname: string | null;
-  devpost_username: string | null;
-  import_batch: string;
-  claim_email_sent_at: Date | null;
-  created_at: Date;
-}
-
-/** H17: participants Devpost brought in whose email matched no account. */
-export async function listUnmatchedParticipants(): Promise<UnmatchedParticipant[]> {
-  const { rows } = await pool.query(
-    `SELECT dp.repo_id, r.name AS repo_name, dp.email, dp.name, dp.surname, dp.devpost_username,
-            dp.import_batch, dp.claim_email_sent_at, dp.created_at
-     FROM devpost_participants dp
-     JOIN repos r ON r.id = dp.repo_id AND r.is_test_account = false
-     WHERE dp.merge_status = 'unmatched'
-     ORDER BY r.name, dp.email`,
-  );
-  return rows;
-}
 
 export interface ProjectMemberCandidate {
   id: number;
@@ -504,379 +57,39 @@ export async function listProjectMemberCandidates(
   return rows;
 }
 
-export interface LinkResult {
-  repoId: number;
-  email: string;
-  userId: number;
-  mergeStatus: "manually_linked";
-}
-
-/** H17: operator manually links an unrecognized participant to an account. */
-export async function linkParticipant(
-  actorId: number,
-  repoId: number,
-  email: string,
-  userId: number,
-): Promise<LinkResult> {
-  return withTransaction(async (client) => {
-    await assertFixtureQueueScope(client, actorId, "repo", repoId);
-    const existing = await client.query(
-      `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
-      [repoId, email],
-    );
-    if (existing.rows.length === 0) {
-      throw new NotFoundError(`No devpost participant ${email} for repo ${repoId}`);
-    }
-    if (existing.rows[0].merge_status !== "unmatched") {
-      throw new ConflictError("Only an unmatched imported participant can be linked", {
-        repoId,
-        email,
-        mergeStatus: existing.rows[0].merge_status,
-      });
-    }
-    const user = await client.query(
-      `SELECT id FROM users
-        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
-        FOR UPDATE`,
-      [userId],
-    );
-    if (user.rows.length === 0) throw new NotFoundError(`User ${userId} not found`);
-    await assertFixtureSubjectScope(client, actorId, userId);
-
-    const before = existing.rows[0];
-    await client.query(
-      `UPDATE devpost_participants
-       SET user_id = $1, merge_status = 'manually_linked', linked_by = $2, linked_at = now()
-       WHERE repo_id = $3 AND email = $4`,
-      [userId, actorId, repoId, email],
-    );
-    await client.query(
-      `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
-       VALUES ($1, $2, 'devpost', $3)
-       ON CONFLICT (repo_id, user_id) DO NOTHING`,
-      [repoId, userId, before.devpost_username],
-    );
-    await audit(client, {
-      actorId,
-      entityType: "devpost_participant",
-      entityId: `${repoId}:${email}`,
-      action: "manual_link",
-      before: { mergeStatus: before.merge_status, userId: before.user_id },
-      after: { mergeStatus: "manually_linked", userId },
-      source: "admin",
-    });
-    return { repoId, email, userId, mergeStatus: "manually_linked" as const };
-  });
-}
-
-export interface LinkSecondaryResult {
-  repoId: number;
-  email: string;
-  userId: number;
-  /** False when the Devpost address is already the account's primary address. */
-  secondaryEmailSent: boolean;
-  /** Membership is only active once the address is a verified identity. */
-  linked: boolean;
-  mergeStatus: "auto_matched" | "unmatched";
-}
-
-const SECONDARY_EMAIL_TTL_HOURS = 24;
-
-/**
- * H6/H16: link an unmatched Devpost email to a hackOS account by registering
- * it as that account's SECONDARY email and firing the platform's normal
- * secondary-email verification (identity, H6) — we do NOT invent a new flow.
- * The participant stays unmatched until the account holder verifies the new
- * address. Verification invokes reconciliation and creates the membership.
- * This makes the link revocable when the secondary address is replaced or
- * removed. An address that is already the account's primary identity is
- * reconciled immediately and remains an automatic match.
- */
-export async function linkParticipantSecondary(
-  actorId: number,
-  repoId: number,
-  email: string,
-  userId: number,
-): Promise<LinkSecondaryResult> {
-  let secondaryEmailSent = false;
-  let linked = false;
-  await withTransaction(async (client) => {
-    await assertFixtureQueueScope(client, actorId, "repo", repoId);
-    const participant = await client.query(
-      `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
-      [repoId, email],
-    );
-    if (participant.rows.length === 0) {
-      throw new NotFoundError(`No devpost participant ${email} for repo ${repoId}`);
-    }
-    if (participant.rows[0].merge_status !== "unmatched") {
-      throw new ConflictError("Only an unmatched imported participant can start identity linking", {
-        repoId,
-        email,
-        mergeStatus: participant.rows[0].merge_status,
-      });
-    }
-    const userRes = await client.query(
-      `SELECT id, email, name FROM users
-        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
-        FOR UPDATE`,
-      [userId],
-    );
-    const user = userRes.rows[0] as { id: number; email: string; name: string | null } | undefined;
-    if (!user) throw new NotFoundError(`User ${userId} not found`);
-    await assertFixtureSubjectScope(client, actorId, userId);
-
-    const isPrimaryEmail = user.email.toLowerCase() === email;
-    secondaryEmailSent = !isPrimaryEmail;
-    if (!isPrimaryEmail) {
-      // Uniqueness rule (H6), checked before we touch anything — explicit 409.
-      await assertSecondaryEmailAvailable(email, userId, client);
-      const token = randomBytes(32).toString("base64url");
-
-      // A new request supersedes any pending unverified token for this user.
-      await client.query(
-        `UPDATE email_verification_tokens SET used_at = now()
-         WHERE user_id = $1 AND type = 'secondary_email' AND used_at IS NULL`,
-        [userId],
-      );
-      await client.query(
-        `INSERT INTO email_verification_tokens (token, type, email, user_id, expires_at)
-         VALUES ($1, 'secondary_email', $2, $3, now() + make_interval(hours => $4))`,
-        [token, email, userId, SECONDARY_EMAIL_TTL_HOURS],
-      );
-      // Pending (not yet verified) address is stored so /me can show it.
-      await client.query(
-        `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
-        [userId, email],
-      );
-      await reconcileDevpostParticipantsForUser(client, userId);
-      await enqueueAuthEmail(
-        client,
-        userId,
-        "auth.verify",
-        {
-          name: user.name ?? "",
-          verifyUrl: `${config.WEB_URL}/verify-secondary-email?token=${token}`,
-        },
-        // H6: the verification MUST reach the newly added secondary address.
-        { recipient: email },
-      );
-    }
-
-    const before = participant.rows[0];
-    if (isPrimaryEmail) {
-      await reconcileDevpostParticipantsForUser(client, userId);
-      linked = true;
-    }
-    await audit(client, {
-      actorId,
-      entityType: "devpost_participant",
-      entityId: `${repoId}:${email}`,
-      action: "secondary_email_link_requested",
-      before: { mergeStatus: before.merge_status, userId: before.user_id },
-      after: {
-        mergeStatus: isPrimaryEmail ? "auto_matched" : "unmatched",
-        userId: isPrimaryEmail ? userId : null,
-        secondaryEmailSent: !isPrimaryEmail,
-      },
-      source: "admin",
-    });
-  });
-
-  return {
-    repoId,
-    email,
-    userId,
-    secondaryEmailSent,
-    linked,
-    mergeStatus: linked ? "auto_matched" : "unmatched",
-  };
-}
-
-export interface ClaimEmailResult {
-  repoId: number;
-  email: string;
-  sent: true;
-  expiresAt: Date;
-}
-
-/**
- * H17: fires an account-claim invite for an unmatched participant. Creates
- * the email_verification_tokens row + a notification_outbox email job. The
- * actual claim-completion endpoint (setting a password, finishing the
- * account) belongs to the identity workstream — not implemented here.
- *
- * notification_outbox.user_id is NOT NULL, and this participant has no
- * account yet, so a bare-bones `users` stub row (email only, unverified) is
- * created to hang the notification off — mirroring how H10's admin-invited
- * accounts exist before the invitee ever logs in. If the participant later
- * shows up again in a re-import with the same email, they'll now
- * auto-match to this stub (which is the desired outcome: claiming finishes
- * the same account instead of forking a second one).
- */
-export async function sendClaimEmail(
-  actorId: number,
-  repoId: number,
-  email: string,
-): Promise<ClaimEmailResult> {
-  return withTransaction(async (client) => {
-    await assertFixtureQueueScope(client, actorId, "repo", repoId);
-    const fixtureMarker = await isSyntheticOperator(client, actorId);
-    const participant = await client.query(
-      `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
-      [repoId, email],
-    );
-    if (participant.rows.length === 0) {
-      throw new NotFoundError(`No devpost participant ${email} for repo ${repoId}`);
-    }
-    if (participant.rows[0].merge_status !== "unmatched") {
-      throw new ConflictError(
-        `Participant ${email} is already ${participant.rows[0].merge_status}, not unmatched`,
-      );
-    }
-
-    let userId: number;
-    const existingUser = await client.query(
-      `SELECT id, account_state, is_test_account FROM users WHERE email = $1 FOR UPDATE`,
-      [email],
-    );
-    if (existingUser.rows[0]) {
-      if (existingUser.rows[0].account_state !== "active") {
-        throw new ConflictError("This account is already being removed", { email });
-      }
-      await assertFixtureSubjectScope(client, actorId, Number(existingUser.rows[0].id));
-      userId = existingUser.rows[0].id;
-    } else {
-      const created = await client.query(
-        `INSERT INTO users (email, email_verified, is_test_account)
-         VALUES ($1, false, $2) RETURNING id`,
-        [email, fixtureMarker],
-      );
-      userId = created.rows[0].id;
-    }
-
-    const token = randomBytes(24).toString("hex");
-    const expiresAt = new Date(Date.now() + CLAIM_TOKEN_TTL_MS);
-    await client.query(
-      `INSERT INTO email_verification_tokens (token, type, email, user_id, expires_at)
-       VALUES ($1, 'account_claim', $2, $3, $4)`,
-      [token, email, userId, expiresAt],
-    );
-    await client.query(
-      `INSERT INTO notification_outbox (user_id, category, channel, payload)
-       VALUES ($1, 'devpost', 'email', $2::jsonb)`,
-      [
-        userId,
-        JSON.stringify({ template: "devpost_account_claim", recipient: email, token, repoId }),
-      ],
-    );
-    await client.query(
-      `UPDATE devpost_participants SET claim_email_sent_at = now() WHERE repo_id = $1 AND email = $2`,
-      [repoId, email],
-    );
-    await audit(client, {
-      actorId,
-      entityType: "devpost_participant",
-      entityId: `${repoId}:${email}`,
-      action: "claim_email_sent",
-      after: { email, userId, expiresAt },
-      source: "admin",
-    });
-
-    return { repoId, email, sent: true, expiresAt };
-  });
-}
-
-export interface MapPrizeResult {
-  challengeId: number;
-  prize: string;
-  repoCount: number;
-  repoIds: number[];
-}
-
-/**
- * Prize -> challenge mapping helper. Appends to challenges.devpost_tags and
- * reports how many already-imported repos carry that prize — but does NOT
- * create queue_entries (that's the queue workstream's call once they decide
- * to enqueue these repos).
- */
-export async function mapPrizeToChallenge(
-  actorId: number,
-  prizeName: string,
-  challengeId: number,
-): Promise<MapPrizeResult> {
-  return withTransaction(async (client) => {
-    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
-    const challenge = await client.query(
-      `SELECT id, devpost_tags, is_test_account FROM challenges WHERE id = $1 FOR UPDATE`,
-      [challengeId],
-    );
-    if (challenge.rows.length === 0) throw new NotFoundError(`Challenge ${challengeId} not found`);
-
-    const tags: string[] = challenge.rows[0].devpost_tags ?? [];
-    if (!tags.includes(prizeName)) {
-      await client.query(
-        `UPDATE challenges SET devpost_tags = devpost_tags || $2::jsonb WHERE id = $1`,
-        [challengeId, JSON.stringify([prizeName])],
-      );
-    }
-
-    const repos = await client.query(
-      `SELECT rdp.repo_id
-         FROM repo_devpost_prizes rdp
-         JOIN repos r ON r.id = rdp.repo_id
-        WHERE rdp.prize = $1 AND r.is_test_account = $2`,
-      [prizeName, challenge.rows[0].is_test_account === true],
-    );
-    const repoIds = repos.rows.map((r: { repo_id: number }) => r.repo_id);
-
-    await audit(client, {
-      actorId,
-      entityType: "challenge",
-      entityId: challengeId,
-      action: "map_devpost_prize",
-      after: { prize: prizeName, repoCount: repoIds.length },
-      source: "admin",
-    });
-
-    return { challengeId, prize: prizeName, repoCount: repoIds.length, repoIds };
-  });
-}
-
 interface RepoRow {
   id: number;
   name: string;
   description: string;
   github_url: string | null;
-  devpost_url: string | null;
   demo_url: string | null;
-  source: "devpost" | "native";
   presentation_timing_preference: string;
+  submission_status: "draft" | "submitted";
+  submitted_at: Date | null;
+  submitted_via: "participant" | "admin" | null;
+  locked_at: Date | null;
+  lock_reason: "organizer_lock" | null;
 }
 
 interface RepoMember {
-  userId: number | null;
+  userId: number;
   /** null when the caller is not entitled to a teammate's address (H20). */
   email: string | null;
   name: string | null;
   surname: string | null;
-  mergeStatus: string;
-  matchType: "primary_email" | "secondary_email" | "manual" | "unmatched";
-  devpostUsername: string | null;
 }
 
 interface RepoChallenge {
   id: number;
   title: string;
   mandatory: boolean;
+  /** Queue status; null until this challenge's queue is generated (H21). */
   status: string | null;
   position: number | null;
   assignedRoomId: number | null;
   assignedRoomName: string | null;
   etaMinutes: number | null;
   rooms: { id: number; name: string; location: string | null }[];
-  mappedPrizes: string[];
-  source: "queue" | "prize" | "queue_and_prize";
   /** H36 evaluation status — null both when unevaluated AND when the caller
    * has no visibility into this challenge (see visibleChallengeIds below). */
   reviewStatus: "draft" | "submitted" | null;
@@ -885,17 +98,13 @@ interface RepoChallenge {
 
 interface RepoWithExtras extends RepoRow {
   members: RepoMember[];
-  prizes: string[];
-  unmappedPrizes: string[];
   challenges: RepoChallenge[];
 }
 
 /**
- * PROJECTS_READ attachments (H16). Members are EVERY imported Devpost
- * participant — matched and unmatched alike (req: "store ALL member emails")
- * — so operators can see who still needs linking. Challenges include both
- * prize-mapped participation and live queue membership so project detail hot
- * edits are visible immediately after adding a challenge.
+ * PROJECTS_READ attachments: the active roster and the challenges a project
+ * enters — its own selection (`project_challenges`) plus every mandatory
+ * challenge — with live queue state where the queue is generated (#1006).
  *
  * `visibleChallengeIds` gates the H36 evaluation fields (reviewStatus/nota)
  * per challenge entry: "all" for full-access staff, or the exact set of
@@ -905,7 +114,7 @@ interface RepoWithExtras extends RepoRow {
  * "not evaluated yet" — so a sponsor can't infer anything about another
  * company's judging progress from their own project view.
  */
-async function attachMembersAndPrizes(
+async function attachMembersAndChallenges(
   repoRows: RepoRow[],
   visibleChallengeIds: number[] | "all" = "all",
   fixtureMarker = false,
@@ -915,88 +124,30 @@ async function attachMembersAndPrizes(
   const visibleSet = visibleChallengeIds === "all" ? null : new Set(visibleChallengeIds);
 
   const membersRes = await pool.query(
-    `SELECT dp.repo_id, dp.email, dp.name, dp.surname, dp.devpost_username,
-            dp.user_id, dp.merge_status,
-            CASE
-              WHEN dp.user_id IS NULL THEN 'unmatched'
-              WHEN lower(dp.email) = lower(u.email) THEN 'primary_email'
-              WHEN u.secondary_email_verified_at IS NOT NULL
-                AND lower(dp.email) = lower(u.secondary_email) THEN 'secondary_email'
-              ELSE 'manual'
-            END AS match_type
-       FROM devpost_participants dp
-       LEFT JOIN users u ON u.id = dp.user_id
-      WHERE repo_id = ANY($1::int[])
-        AND (u.id IS NULL OR (u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = $2))
-      ORDER BY repo_id, name ASC NULLS LAST, surname ASC NULLS LAST, email ASC`,
-    [ids, fixtureMarker],
-  );
-  const manualMembersRes = await pool.query(
     `SELECT s.repo_id, u.id AS user_id, u.email, u.name, u.surname
        FROM submissions s
        JOIN users u ON u.id = s.user_id
       WHERE s.repo_id = ANY($1::int[])
-        -- H19/H20: a pending invite (status='invited') is not yet a member
-        -- of the roster — it only shows up via myPendingInvites/GET
-        -- /api/me/projects/invites until accepted.
+        -- H19: a pending invite is not yet a member of the roster.
         AND s.status = 'active'
         AND u.account_state = 'active' AND u.anonymized_at IS NULL
         AND u.is_test_account = $2
-        AND NOT EXISTS (
-          SELECT 1
-            FROM devpost_participants dp
-           WHERE dp.repo_id = s.repo_id
-             AND dp.user_id = s.user_id
-        )
       ORDER BY s.repo_id, u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC`,
     [ids, fixtureMarker],
   );
-  const planningMembers = await pool.query(
-    `SELECT g.linked_repo_id AS repo_id,u.id AS user_id,u.email,u.name,u.surname
-    FROM planned_work_groups g JOIN planned_work_group_members m ON m.group_id=g.id AND m.status='active'
-    JOIN users u ON u.id=m.user_id JOIN repos r ON r.id=g.linked_repo_id
-    WHERE g.linked_repo_id=ANY($1::int[]) AND r.membership_resolution IS DISTINCT FROM 'devpost'
-      AND u.account_state='active' AND u.anonymized_at IS NULL AND u.is_test_account=$2`,
+  const enteredRes = await pool.query(
+    `SELECT r.id AS repo_id, c.id, c.title, c.mandatory
+       FROM repos r
+       JOIN challenges c ON c.is_test_account = $2 AND (
+         c.mandatory
+         OR EXISTS (SELECT 1 FROM project_challenges pc WHERE pc.repo_id = r.id AND pc.challenge_id = c.id)
+         OR EXISTS (SELECT 1 FROM queue_entries qe WHERE qe.repo_id = r.id AND qe.challenge_id = c.id
+                     AND qe.status NOT IN ('cancelled', 'disqualified'))
+       )
+      WHERE r.id = ANY($1::int[])
+      ORDER BY r.id, c.title, c.id`,
     [ids, fixtureMarker],
   );
-  manualMembersRes.rows.push(...planningMembers.rows);
-  const prizesRes = await pool.query(
-    `SELECT p.repo_id, p.prize
-       FROM repo_devpost_prizes p
-       JOIN repos r ON r.id = p.repo_id AND r.is_test_account = $2
-      WHERE p.repo_id = ANY($1::int[])
-      ORDER BY p.repo_id, p.prize ASC`,
-    [ids, fixtureMarker],
-  );
-  const prizeNames = [...new Set(prizesRes.rows.map((r: { prize: string }) => r.prize))];
-  const challengesRes = prizeNames.length
-    ? await pool.query(
-        `SELECT id, title, mandatory, devpost_tags FROM challenges
-          WHERE devpost_tags ?| $1::text[] AND is_test_account = $2`,
-        [prizeNames, fixtureMarker],
-      )
-    : { rows: [] as Array<{ id: number; title: string; devpost_tags: string[] }> };
-
-  const challengesByPrize = new Map<
-    string,
-    Array<{ id: number; title: string; mandatory: boolean }>
-  >();
-  const mappedPrizes = new Set<string>();
-  for (const c of challengesRes.rows as Array<{
-    id: number;
-    title: string;
-    devpost_tags: string[];
-    mandatory: boolean;
-  }>) {
-    for (const tag of c.devpost_tags) {
-      if (!prizeNames.includes(tag)) continue;
-      const arr = challengesByPrize.get(tag) ?? [];
-      arr.push({ id: c.id, title: c.title, mandatory: c.mandatory });
-      challengesByPrize.set(tag, arr);
-      mappedPrizes.add(tag);
-    }
-  }
-
   const queueRes = await pool.query(
     `WITH waiting AS (
        SELECT DISTINCT ON (qgc.queue_group_id, e.repo_id)
@@ -1051,101 +202,31 @@ async function attachMembersAndPrizes(
   const membersByRepo = new Map<number, RepoMember[]>();
   for (const row of membersRes.rows as Array<{
     repo_id: number;
-    email: string;
-    name: string | null;
-    surname: string | null;
-    devpost_username: string | null;
-    user_id: number | null;
-    merge_status: string;
-    match_type: RepoMember["matchType"];
-  }>) {
-    const arr = membersByRepo.get(row.repo_id) ?? [];
-    arr.push({
-      userId: row.user_id,
-      email: row.email,
-      name: row.name,
-      surname: row.surname,
-      mergeStatus: row.merge_status,
-      matchType: row.match_type,
-      devpostUsername: row.devpost_username,
-    });
-    membersByRepo.set(row.repo_id, arr);
-  }
-  for (const row of manualMembersRes.rows as Array<{
-    repo_id: number;
     user_id: number;
     email: string;
     name: string | null;
     surname: string | null;
   }>) {
     const arr = membersByRepo.get(row.repo_id) ?? [];
-    arr.push({
-      userId: row.user_id,
-      email: row.email,
-      name: row.name,
-      surname: row.surname,
-      mergeStatus: "manual",
-      matchType: "manual",
-      devpostUsername: null,
-    });
+    arr.push({ userId: row.user_id, email: row.email, name: row.name, surname: row.surname });
     membersByRepo.set(row.repo_id, arr);
   }
-  for (const [repoId, members] of membersByRepo) {
-    const seen = new Set<string>();
-    membersByRepo.set(
-      repoId,
-      members.filter((m) => {
-        const key = m.userId === null ? `email:${m.email}` : `user:${m.userId}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      }),
-    );
-  }
 
-  const resolvedRosters = await pool.query(
-    `SELECT id,internal_ids,external_ids,membership_resolution FROM project_reconciliation_state WHERE id=ANY($1::int[])`,
-    [ids],
-  );
-  for (const r of resolvedRosters.rows) {
-    if (!r.membership_resolution) continue;
-    const selected: number[] =
-      r.membership_resolution === "internal" ? r.internal_ids : r.external_ids;
-    membersByRepo.set(
-      r.id,
-      (membersByRepo.get(r.id) ?? []).filter((m) =>
-        m.userId !== null ? selected.includes(m.userId) : r.membership_resolution === "devpost",
-      ),
-    );
-  }
-  const prizesByRepo = new Map<number, string[]>();
-  for (const p of prizesRes.rows as Array<{ repo_id: number; prize: string }>) {
-    const arr = prizesByRepo.get(p.repo_id) ?? [];
-    arr.push(p.prize);
-    prizesByRepo.set(p.repo_id, arr);
-  }
-
-  const queueChallengesByRepo = new Map<number, RepoChallenge[]>();
-  const withdrawnChallenges = new Set<string>();
+  const queueByKey = new Map<string, Omit<RepoChallenge, "id" | "title" | "mandatory">>();
   for (const row of queueRes.rows as Array<{
     repo_id: number;
     id: number;
-    title: string;
     status: string;
     position: number | null;
     assigned_room_id: number | null;
     assigned_room_name: string | null;
     eta_minutes: number | null;
     possible_rooms: RepoChallenge["rooms"];
-    mandatory: boolean;
     judging_panel_criteria: unknown;
     review_status: "draft" | "submitted" | null;
     review_scores: Record<string, unknown> | null;
   }>) {
-    if (["cancelled", "disqualified"].includes(row.status)) {
-      withdrawnChallenges.add(`${row.repo_id}:${row.id}`);
-      continue;
-    }
+    if (row.status === "cancelled") continue;
     const canSeeReview = visibleSet === null || visibleSet.has(row.id);
     let nota: number | null = null;
     if (canSeeReview && row.review_scores && Array.isArray(row.judging_panel_criteria)) {
@@ -1153,91 +234,59 @@ async function attachMembersAndPrizes(
       const value = notaKey ? row.review_scores[notaKey] : undefined;
       if (typeof value === "number") nota = value;
     }
-    const arr = queueChallengesByRepo.get(row.repo_id) ?? [];
-    arr.push({
-      id: row.id,
-      title: row.title,
-      mandatory: row.mandatory,
+    queueByKey.set(`${row.repo_id}:${row.id}`, {
       status: row.status,
       position: row.position,
       assignedRoomId: row.assigned_room_id,
       assignedRoomName: row.assigned_room_name,
       etaMinutes: row.eta_minutes,
       rooms: row.possible_rooms,
-      mappedPrizes: [],
-      source: "queue",
       reviewStatus: canSeeReview ? (row.review_status ?? null) : null,
       nota,
     });
-    queueChallengesByRepo.set(row.repo_id, arr);
   }
 
-  return repoRows.map((repo) => {
-    const prizes = prizesByRepo.get(repo.id) ?? [];
-    const challengesSeen = new Map<number, RepoChallenge>();
-    for (const prize of prizes) {
-      for (const c of challengesByPrize.get(prize) ?? []) {
-        if (withdrawnChallenges.has(`${repo.id}:${c.id}`)) continue;
-        const existing = challengesSeen.get(c.id);
-        if (existing) {
-          existing.mappedPrizes.push(prize);
-          continue;
-        }
-        challengesSeen.set(c.id, {
-          id: c.id,
-          title: c.title,
-          mandatory: c.mandatory,
-          status: null,
-          position: null,
-          assignedRoomId: null,
-          assignedRoomName: null,
-          etaMinutes: null,
-          rooms: [],
-          mappedPrizes: [prize],
-          source: "prize",
-          reviewStatus: null,
-          nota: null,
-        });
-      }
-    }
-    for (const c of queueChallengesByRepo.get(repo.id) ?? []) {
-      const existing = challengesSeen.get(c.id);
-      if (existing) {
-        challengesSeen.set(c.id, {
-          ...existing,
-          status: c.status,
-          position: c.position,
-          assignedRoomId: c.assignedRoomId,
-          assignedRoomName: c.assignedRoomName,
-          etaMinutes: c.etaMinutes,
-          rooms: c.rooms,
-          source: "queue_and_prize",
-          reviewStatus: c.reviewStatus,
-          nota: c.nota,
-        });
-        continue;
-      }
-      challengesSeen.set(c.id, c);
-    }
-    return {
-      ...repo,
-      members: membersByRepo.get(repo.id) ?? [],
-      prizes,
-      unmappedPrizes: prizes.filter((prize) => !mappedPrizes.has(prize)),
-      challenges: [...challengesSeen.values()],
-    };
-  });
+  const challengesByRepo = new Map<number, RepoChallenge[]>();
+  for (const row of enteredRes.rows as Array<{
+    repo_id: number;
+    id: number;
+    title: string;
+    mandatory: boolean;
+  }>) {
+    const arr = challengesByRepo.get(row.repo_id) ?? [];
+    arr.push({
+      id: row.id,
+      title: row.title,
+      mandatory: row.mandatory,
+      status: null,
+      position: null,
+      assignedRoomId: null,
+      assignedRoomName: null,
+      etaMinutes: null,
+      rooms: [],
+      reviewStatus: null,
+      nota: null,
+      ...queueByKey.get(`${row.repo_id}:${row.id}`),
+    });
+    challengesByRepo.set(row.repo_id, arr);
+  }
+
+  return repoRows.map((repo) => ({
+    ...repo,
+    members: membersByRepo.get(repo.id) ?? [],
+    challenges: challengesByRepo.get(repo.id) ?? [],
+  }));
 }
 
-const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url, source, presentation_timing_preference, reconciliation_code, submission_status, submitted_at, submitted_via, locked_at, lock_reason FROM repos`;
+const REPO_COLUMNS = `id, name, description, github_url, demo_url, presentation_timing_preference, submission_status, submitted_at, submitted_via, locked_at, lock_reason`;
+const REPO_SELECT = `SELECT ${REPO_COLUMNS} FROM repos`;
 
-/** PROJECTS_READ: repos with members, prizes, and mapped challenges. */
+/** PROJECTS_READ: projects with roster and challenges. */
 export async function listRepos(fixtureMarker = false): Promise<RepoWithExtras[]> {
-  const { rows } = await pool.query(
-    `${REPO_SELECT} WHERE is_test_account = $1 AND reconciled_into_repo_id IS NULL ORDER BY name`,
-    [fixtureMarker],
-  );
-  return attachMembersAndPrizes(rows, "all", fixtureMarker);
+  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = $1 ORDER BY name`, [
+    fixtureMarker,
+  ]);
+  return attachMembersAndChallenges(rows, "all", fixtureMarker);
 }
 
 export async function getRepo(id: number, fixtureMarker = false): Promise<RepoWithExtras> {
@@ -1246,7 +295,7 @@ export async function getRepo(id: number, fixtureMarker = false): Promise<RepoWi
     fixtureMarker,
   ]);
   if (rows.length === 0) throw new NotFoundError(`Repo ${id} not found`);
-  const [withExtras] = await attachMembersAndPrizes(rows, "all", fixtureMarker);
+  const [withExtras] = await attachMembersAndChallenges(rows, "all", fixtureMarker);
   if (!withExtras) throw new NotFoundError(`Repo ${id} not found`);
   return withExtras;
 }
@@ -1262,7 +311,7 @@ export async function listReposForScope(scope: RepositoryAccessScope): Promise<R
   );
   // Evaluation visibility is capped to this caller's own challenges (their
   // sponsor enterprise's, or the ones they judge) — never another sponsor's.
-  return attachMembersAndPrizes(rows, scope.challengeIds, scope.fixtureMarker === true);
+  return attachMembersAndChallenges(rows, scope.challengeIds, scope.fixtureMarker === true);
 }
 
 /** A repository already authorized by the shared contextual policy. */
@@ -1276,7 +325,7 @@ export async function getRepoForScope(
     scope.fixtureMarker === true,
   ]);
   if (!rows[0]) throw new NotFoundError(`Repo ${id} not found`);
-  const [repo] = await attachMembersAndPrizes(
+  const [repo] = await attachMembersAndChallenges(
     rows,
     scope.challengeIds,
     scope.fixtureMarker === true,
@@ -1285,19 +334,6 @@ export async function getRepoForScope(
   return repo;
 }
 
-/**
- * Participant self-view (H20): repos this user is a member of, WITH the team
- * roster and challenge lineup — the story is "ver mi proyecto, su equipo y a
- * qué retos se presenta". Read-only: any correction goes through queue
- * management (H21) or, when the event enables it, self-creation (H19).
- *
- * Membership must match what every other project/queue roster surfaces via
- * attachMembersAndPrizes — a user counts as a member if they have a submission
- * OR are a matched Devpost participant (`devpost_participants.user_id`).
- * `removeRepoMember` clears that link when it removes the corresponding
- * submission, so all membership surfaces stop agreeing that the user belongs to
- * the project at the same time.
- */
 /**
  * H55/nav: cheap existence check backing the "My project" nav item — same
  * membership definition as {@link myProjects}, without the roster join.
@@ -1310,17 +346,17 @@ export async function hasMyProject(userId: number, db: Queryable = pool): Promis
         JOIN users u ON u.id = s.user_id
         WHERE s.user_id = $1 AND s.status = 'active'
           AND r.is_test_account = u.is_test_account
-       UNION
-       SELECT 1 FROM devpost_participants dp
-        JOIN repos r ON r.id = dp.repo_id
-        JOIN users u ON u.id = dp.user_id
-        WHERE dp.user_id = $1 AND r.is_test_account = u.is_test_account
      ) AS exists`,
     [userId],
   );
   return rows[0].exists as boolean;
 }
 
+/**
+ * Participant self-view (H20): projects this user is an active member of,
+ * with roster, challenges and queue status. A pending invite only shows via
+ * {@link myPendingInvites} until accepted.
+ */
 export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
   const { rows: userRows } = await pool.query<{ is_test_account: boolean }>(
     `SELECT is_test_account FROM users WHERE id = $1`,
@@ -1328,27 +364,15 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
   );
   const fixtureMarker = userRows[0]?.is_test_account === true;
   const { rows } = await pool.query(
-    `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url, r.source,
-            r.presentation_timing_preference, r.reconciliation_code, r.submission_status, r.submitted_at, r.submitted_via, r.locked_at, r.lock_reason
-     FROM repos r
-     WHERE r.is_test_account = $2 AND r.reconciled_into_repo_id IS NULL
-       AND (NOT EXISTS(SELECT 1 FROM project_claim_decisions pc WHERE pc.repo_id=r.id AND pc.user_id=$1 AND pc.status='rejected')
-         OR EXISTS(SELECT 1 FROM submissions s WHERE s.repo_id=r.id AND s.user_id=$1 AND s.status='active' AND s.imported_from<>'devpost')
-         OR EXISTS(SELECT 1 FROM planned_work_groups g JOIN planned_work_group_members m ON m.group_id=g.id AND m.status='active' WHERE g.linked_repo_id=r.id AND m.user_id=$1))
-       AND r.id IN (
-       -- H19/H20: a project the caller was merely invited to (status='invited')
-       -- is not "my project" yet — it only shows via myPendingInvites until
-       -- they accept it.
-       SELECT repo_id FROM submissions WHERE user_id = $1 AND status = 'active'
-       UNION
-       SELECT repo_id FROM devpost_participants WHERE user_id = $1
-       UNION SELECT g.linked_repo_id FROM planned_work_groups g JOIN planned_work_group_members m ON m.group_id=g.id WHERE m.user_id=$1 AND m.status='active' AND g.linked_repo_id IS NOT NULL
-     )
-     ORDER BY r.name`,
+    `SELECT ${REPO_COLUMNS}
+       FROM repos r
+      WHERE r.is_test_account = $2
+        AND r.id IN (SELECT repo_id FROM submissions WHERE user_id = $1 AND status = 'active')
+      ORDER BY r.name`,
     [userId, fixtureMarker],
   );
-  // H20 is read-only self-view — participants never see judging internals.
-  const repos = await attachMembersAndPrizes(rows, [], fixtureMarker);
+  // Participants never see judging internals.
+  const repos = await attachMembersAndChallenges(rows, [], fixtureMarker);
   // A teammate's address is not the participant's to read: only the caller's
   // own email survives the self-view (H20).
   return repos.map((repo) => ({
@@ -1358,69 +382,44 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
 }
 
 /**
- * H19/H20 self-service eligibility: reuses the role-derived event-access
- * check verbatim rather than reimplementing the underlying SQL. Holding any
- * assigned, non-deleted event-bearing role is the admission signal for the
- * app, ticket and participant self-service surfaces.
+ * H19 self-service eligibility: reuses the role-derived event-access check
+ * verbatim. Holding any assigned, non-deleted event-bearing role is the
+ * admission signal for the app, ticket and participant self-service surfaces.
  */
 export async function isAdmittedParticipant(db: Queryable, userId: number): Promise<boolean> {
   return hasEventAccess(db, userId);
 }
 
-/**
- * True when userId is a non-invited member of repoId — either an 'active'
- * `submissions` row or a matched Devpost participant. Mirrors the membership
- * definition `myProjects`/`attachMembersAndPrizes` already use, minus rows
- * still awaiting an invite response (H19/H20).
- */
+/** True when userId is an active (not merely invited) member of repoId (H19/H20). */
 export async function isActiveProjectMember(
   db: Queryable,
   repoId: number,
   userId: number,
 ): Promise<boolean> {
   const { rows } = await db.query(
-    `SELECT (
-       EXISTS (
-         SELECT 1 FROM submissions s
-          JOIN repos r ON r.id = s.repo_id
-          JOIN users u ON u.id = s.user_id
-          WHERE s.repo_id = $1 AND s.user_id = $2 AND s.status = 'active'
-            AND u.account_state = 'active' AND u.anonymized_at IS NULL
-            AND r.is_test_account = u.is_test_account
-       )
-       OR EXISTS (
-         SELECT 1 FROM devpost_participants dp
-          JOIN repos r ON r.id = dp.repo_id
-          JOIN users u ON u.id = dp.user_id
-          WHERE dp.repo_id = $1 AND dp.user_id = $2
-            AND u.account_state = 'active' AND u.anonymized_at IS NULL
-            AND r.is_test_account = u.is_test_account
-       )
-       OR EXISTS (SELECT 1 FROM planned_work_groups g JOIN planned_work_group_members m ON m.group_id=g.id WHERE g.linked_repo_id=$1 AND m.user_id=$2 AND m.status='active')
+    `SELECT EXISTS (
+       SELECT 1 FROM submissions s
+        JOIN repos r ON r.id = s.repo_id
+        JOIN users u ON u.id = s.user_id
+        WHERE s.repo_id = $1 AND s.user_id = $2 AND s.status = 'active'
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND r.is_test_account = u.is_test_account
      ) AS member`,
     [repoId, userId],
   );
   return rows[0]?.member === true;
 }
 
-/** Distinct active-member count for repoId; used by leave/delete to detect "last member" (H19/H20). */
+/** Active-member count for repoId; used by leave/delete to detect "last member" (H19/H20). */
 export async function activeProjectMemberCount(db: Queryable, repoId: number): Promise<number> {
   const { rows } = await db.query(
-    `SELECT count(*)::int AS n FROM (
-       SELECT s.user_id FROM submissions s
-        JOIN repos r ON r.id = s.repo_id
-        JOIN users u ON u.id = s.user_id
-        WHERE s.repo_id = $1 AND s.status = 'active'
-          AND u.account_state = 'active' AND u.anonymized_at IS NULL
-          AND r.is_test_account = u.is_test_account
-       UNION
-       SELECT dp.user_id FROM devpost_participants dp
-        JOIN repos r ON r.id = dp.repo_id
-        JOIN users u ON u.id = dp.user_id
-        WHERE dp.repo_id = $1 AND dp.user_id IS NOT NULL
-          AND u.account_state = 'active' AND u.anonymized_at IS NULL
-          AND r.is_test_account = u.is_test_account
-     ) members`,
+    `SELECT count(*)::int AS n
+       FROM submissions s
+       JOIN repos r ON r.id = s.repo_id
+       JOIN users u ON u.id = s.user_id
+      WHERE s.repo_id = $1 AND s.status = 'active'
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND r.is_test_account = u.is_test_account`,
     [repoId],
   );
   return rows[0]?.n ?? 0;
@@ -1441,9 +440,10 @@ export async function addRepoMember(actorId: number, repoId: number, userId: num
     if (!repo.rows[0]) throw new NotFoundError(`Repo ${repoId} not found`);
 
     const inserted = await client.query(
-      `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
-       VALUES ($1, $2, 'manual', NULL)
-       ON CONFLICT (repo_id, user_id) DO NOTHING
+      `INSERT INTO submissions (repo_id, user_id, status, responded_at)
+       VALUES ($1, $2, 'active', now())
+       ON CONFLICT (repo_id, user_id) DO UPDATE SET status = 'active', responded_at = now()
+         WHERE submissions.status = 'invited'
        RETURNING repo_id, user_id`,
       [repoId, userId],
     );
@@ -1478,127 +478,20 @@ export async function removeRepoMember(actorId: number, repoId: number, userId: 
     );
     if (!existing.rows[0]) throw new NotFoundError(`Repo member ${repoId}:${userId} not found`);
 
-    const importedIdentity = await client.query(
-      `SELECT email FROM devpost_participants WHERE repo_id = $1 AND user_id = $2 LIMIT 1`,
-      [repoId, userId],
-    );
-    if (importedIdentity.rows[0]) {
-      throw new ConflictError(
-        "Imported project members must be removed by their exact roster email",
-        { repoId, userId, email: importedIdentity.rows[0].email },
-      );
-    }
-
     await client.query(`DELETE FROM submissions WHERE repo_id = $1 AND user_id = $2`, [
       repoId,
       userId,
     ]);
 
-    await client.query(
-      `DELETE FROM planned_work_group_members m USING planned_work_groups g WHERE m.group_id=g.id AND g.linked_repo_id=$1 AND m.user_id=$2`,
-      [repoId, userId],
-    );
     await audit(client, {
       actorId,
       entityType: "submission",
       entityId: `${repoId}:${userId}`,
       action: "remove_member",
       before: { repoId, userId },
-      after: {
-        repoId,
-        userId,
-        detachedDevpostParticipants: [],
-      },
       source: "admin",
     });
     return { repoId, userId, removed: true };
-  });
-}
-
-export async function removeDevpostParticipant(actorId: number, repoId: number, email: string) {
-  return withTransaction(async (client) => {
-    await assertFixtureQueueScope(client, actorId, "repo", repoId);
-    const linked = await client.query<{ user_id: number | null }>(
-      `SELECT user_id FROM devpost_participants WHERE repo_id = $1 AND email = $2`,
-      [repoId, email],
-    );
-    const linkedUserId = linked.rows[0]?.user_id;
-    if (linkedUserId != null) {
-      const user = await client.query(
-        `SELECT id FROM users
-          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
-          FOR UPDATE`,
-        [linkedUserId],
-      );
-      if (!user.rows[0]) throw new NotFoundError(`User ${linkedUserId} not found`);
-      await assertFixtureSubjectScope(client, actorId, linkedUserId);
-    }
-    const existing = await client.query(
-      `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
-      [repoId, email],
-    );
-    const participant = existing.rows[0] as
-      | { repo_id: number; email: string; user_id: number | null; merge_status: string }
-      | undefined;
-    if (!participant) {
-      throw new NotFoundError(`No devpost participant ${email} for repo ${repoId}`);
-    }
-
-    if (participant.user_id !== null) {
-      await client.query(
-        `DELETE FROM submissions
-          WHERE repo_id = $1 AND user_id = $2 AND imported_from = 'devpost'
-          AND NOT EXISTS (
-            SELECT 1 FROM devpost_participants
-             WHERE repo_id = $1 AND user_id = $2 AND email <> $3
-          )`,
-        [repoId, participant.user_id, email],
-      );
-    }
-    await client.query(`DELETE FROM devpost_participants WHERE repo_id = $1 AND email = $2`, [
-      repoId,
-      email,
-    ]);
-    await audit(client, {
-      actorId,
-      entityType: "devpost_participant",
-      entityId: `${repoId}:${email}`,
-      action: "delete",
-      before: {
-        repoId,
-        email,
-        userId: participant.user_id,
-        mergeStatus: participant.merge_status,
-      },
-      source: "admin",
-    });
-    return { repoId, email, removed: true };
-  });
-}
-
-export async function removeRepoPrize(actorId: number, repoId: number, prizeName: string) {
-  return withTransaction(async (client) => {
-    await assertFixtureQueueScope(client, actorId, "repo", repoId);
-    const existing = await client.query(
-      `SELECT * FROM repo_devpost_prizes WHERE repo_id = $1 AND prize = $2 FOR UPDATE`,
-      [repoId, prizeName],
-    );
-    if (!existing.rows[0])
-      throw new NotFoundError(`Repo ${repoId} is not linked to prize ${prizeName}`);
-
-    await client.query(`DELETE FROM repo_devpost_prizes WHERE repo_id = $1 AND prize = $2`, [
-      repoId,
-      prizeName,
-    ]);
-    await audit(client, {
-      actorId,
-      entityType: "repo_devpost_prize",
-      entityId: `${repoId}:${prizeName}`,
-      action: "remove_prize",
-      before: { repoId, prize: prizeName },
-      source: "admin",
-    });
-    return { repoId, prize: prizeName, removed: true };
   });
 }
 
@@ -1609,29 +502,28 @@ interface EnqueueOutcome {
 }
 
 /**
- * Core of H21's "apuntar un equipo a un reto": appends the repo at the
- * BOTTOM of the challenge's queue, reviving a terminal (cancelled /
- * disqualified / completed) entry instead of duplicating it. Writes exactly
- * one queue_history row + one audit row per mutation (plan/07 invariant 5).
- * Returns null when the repo is already actively queued (no-op). The caller
- * owns the transaction and must broadcast QUEUE_ENTRY_CHANGED + notify the
- * challenge AFTER commit for every non-null outcome.
- *
- * `challengeMarker`/`allocatePosition` let a bulk caller (H21 "enroll ALL
- * projects") hoist the challenge-scope check and the queue's bottom-position
- * lock out of the per-repo loop instead of re-running both once per repo —
- * see `bulkAddRepoChallenge`. Single-repo callers omit them and get the
- * original per-call behavior unchanged.
+ * #1006: a challenge's queue counts as generated once any entry exists in
+ * the queue group serving it. Before that, a project's challenge selection is
+ * only recorded in `project_challenges`; generation turns it into entries.
  */
-export async function enqueueRepoOnChallenge(
+async function isChallengeQueueGenerated(client: Queryable, challengeId: number) {
+  const { rows } = await client.query<{ generated: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM queue_entries
+        WHERE challenge_id = $1 OR challenge_id IN (${GROUP_SIBLING_CHALLENGE_IDS_SQL})
+     ) AS generated`,
+    [challengeId],
+  );
+  return rows[0]?.generated === true;
+}
+
+async function assertMatchingMarkers(
   client: Queryable,
   actorId: number,
   repoId: number,
   challengeId: number,
-  auditSource: string,
   challengeMarker?: boolean,
-  allocatePosition: () => Promise<number> = () => nextBottomPosition(client, challengeId),
-): Promise<EnqueueOutcome | null> {
+) {
   const repoMarker = await assertQueueRepoScope(client, actorId, repoId);
   const resolvedChallengeMarker =
     challengeMarker ?? (await assertQueueChallengeScope(client, actorId, challengeId));
@@ -1642,6 +534,36 @@ export async function enqueueRepoOnChallenge(
       challengeId,
     });
   }
+}
+
+/**
+ * Appends the repo at the BOTTOM of the challenge's queue, reviving a
+ * terminal (cancelled / disqualified / completed) entry instead of
+ * duplicating it, and records the challenge in the project's selection.
+ * Writes exactly one queue_history row + one audit row per mutation (plan/07
+ * invariant 5). Returns null when the repo is already actively queued
+ * (no-op). The caller owns the transaction and must broadcast
+ * QUEUE_ENTRY_CHANGED + notify the challenge AFTER commit for every non-null
+ * outcome.
+ *
+ * `challengeMarker`/`allocatePosition` let a bulk caller hoist the
+ * challenge-scope check and the queue's bottom-position lock out of the
+ * per-repo loop — see `bulkAddRepoChallenge`.
+ */
+export async function enqueueRepoOnChallenge(
+  client: Queryable,
+  actorId: number,
+  repoId: number,
+  challengeId: number,
+  auditSource: string,
+  challengeMarker?: boolean,
+  allocatePosition: () => Promise<number> = () => nextBottomPosition(client, challengeId),
+): Promise<EnqueueOutcome | null> {
+  await assertMatchingMarkers(client, actorId, repoId, challengeId, challengeMarker);
+  await client.query(
+    `INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [repoId, challengeId],
+  );
   const existing = await client.query(
     `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
     [repoId, challengeId],
@@ -1706,36 +628,70 @@ export async function enqueueRepoOnChallenge(
   return { entry, inserted: true, revived: false };
 }
 
+/**
+ * The single write path for a project entering a challenge (#1006, H21):
+ * records the selection and, when the challenge's queue is already
+ * generated, appends the project to it at once. Before generation the
+ * selection alone is audited and queue generation creates the entry.
+ */
+export async function enterChallenge(
+  client: Queryable,
+  actorId: number,
+  repoId: number,
+  challengeId: number,
+  auditSource: string,
+  challengeMarker?: boolean,
+  allocatePosition?: () => Promise<number>,
+): Promise<EnqueueOutcome | null> {
+  if (await isChallengeQueueGenerated(client, challengeId)) {
+    return enqueueRepoOnChallenge(
+      client,
+      actorId,
+      repoId,
+      challengeId,
+      auditSource,
+      challengeMarker,
+      allocatePosition,
+    );
+  }
+  await assertMatchingMarkers(client, actorId, repoId, challengeId, challengeMarker);
+  const inserted = await client.query(
+    `INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2)
+     ON CONFLICT DO NOTHING RETURNING repo_id`,
+    [repoId, challengeId],
+  );
+  if (inserted.rows[0]) {
+    await audit(client, {
+      actorId,
+      entityType: "repo",
+      entityId: repoId,
+      action: "challenge.enter",
+      after: { challengeId },
+      source: auditSource,
+    });
+  }
+  return null;
+}
+
+async function announceEntered(result: { entry: EnqueueOutcome["entry"] | null }) {
+  if (!result.entry) return;
+  await broadcastQueueEvent(pool, "entry", result.entry.id, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
+  await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
+}
+
 export async function addRepoChallenge(actorId: number, repoId: number, challengeId: number) {
   const result = await withTransaction(async (client) => {
-    const repoMarker = await assertQueueRepoScope(client, actorId, repoId);
-    const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
-    if (repoMarker !== challengeMarker) {
-      throw new ConflictError("Queue fixture markers must match", {
-        code: "review_fixture_scope",
-        repoId,
-        challengeId,
-      });
-    }
+    await assertMatchingMarkers(client, actorId, repoId, challengeId);
     const repo = await client.query(`SELECT id FROM repos WHERE id = $1 FOR UPDATE`, [repoId]);
     if (!repo.rows[0]) throw new NotFoundError(`Repo ${repoId} not found`);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
 
-    const outcome = await enqueueRepoOnChallenge(client, actorId, repoId, challengeId, "admin");
+    const outcome = await enterChallenge(client, actorId, repoId, challengeId, "admin");
     if (!outcome) return { repoId, challengeId, entry: null, inserted: false, revived: false };
     return { repoId, challengeId, ...outcome };
   });
-  if (result.entry) {
-    await broadcastQueueEvent(
-      pool,
-      "entry",
-      result.entry.id,
-      EVENTS.QUEUE_ENTRY_CHANGED,
-      result.entry,
-    );
-    await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
-  }
+  await announceEntered(result);
   return result;
 }
 
@@ -1766,26 +722,11 @@ export async function addMyProjectChallenge(userId: number, repoId: number, chal
       [challengeId],
     );
     if (!challenge.rows[0]) throw new NotFoundError("Challenge not found");
-    const outcome = await enqueueRepoOnChallenge(
-      client,
-      userId,
-      repoId,
-      challengeId,
-      "participant",
-    );
+    const outcome = await enterChallenge(client, userId, repoId, challengeId, "participant");
     if (!outcome) return { repoId, challengeId, entry: null, inserted: false, revived: false };
     return { repoId, challengeId, ...outcome };
   });
-  if (result.entry) {
-    await broadcastQueueEvent(
-      pool,
-      "entry",
-      result.entry.id,
-      EVENTS.QUEUE_ENTRY_CHANGED,
-      result.entry,
-    );
-    await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
-  }
+  await announceEntered(result);
   return result;
 }
 
@@ -1844,45 +785,37 @@ export async function removeRepoChallenge(
         throw new ForbiddenError("Not a member of this project");
       await assertJudgingHasNotStarted(client);
     }
-    const repoMarker = await assertQueueRepoScope(client, actorId, repoId);
-    const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
-    if (repoMarker !== challengeMarker) {
-      throw new ConflictError("Queue fixture markers must match", {
-        code: "review_fixture_scope",
-        repoId,
-        challengeId,
-      });
-    }
+    await assertMatchingMarkers(client, actorId, repoId, challengeId);
     await assertChallengeIsOptional(client, challengeId);
+    const source = participant ? "participant" : "admin";
+    const intent = await client.query(
+      `DELETE FROM project_challenges WHERE repo_id = $1 AND challenge_id = $2 RETURNING repo_id`,
+      [repoId, challengeId],
+    );
     const entryRes = await client.query(
-      `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
+      `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2
+          AND status NOT IN ('cancelled', 'disqualified')
+        FOR UPDATE`,
       [repoId, challengeId],
     );
     const entry = entryRes.rows[0];
-    if (!entry && participant) {
-      const withdrawn = await client.query(
-        `DELETE FROM repo_devpost_prizes rp USING challenges c
-          WHERE rp.repo_id=$1 AND c.id=$2 AND c.devpost_tags ? rp.prize RETURNING rp.prize`,
-        [repoId, challengeId],
-      );
-      if (!withdrawn.rowCount) throw new NotFoundError("Project is not entered in this challenge");
+    if (!entry) {
+      if (!intent.rows[0]) throw new NotFoundError("Project is not entered in this challenge");
       await audit(client, {
         actorId,
         entityType: "repo",
         entityId: repoId,
         action: "challenge.withdraw",
-        before: { challengeId, prizes: withdrawn.rows },
-        source: "participant",
+        before: { challengeId },
+        source,
       });
       return { repoId, challengeId, entry: null, removed: true };
     }
-    if (!entry)
-      throw new NotFoundError(`Repo ${repoId} is not assigned to challenge ${challengeId}`);
 
     const updatedEntry = await terminateQueueEntry(client, entry, actorId, {
       challengeId,
       reason: "Removed from challenge",
-      source: participant ? "participant" : "admin",
+      source,
     });
     await compactQueueGroupPositions(client, challengeId);
     return { repoId, challengeId, entry: updatedEntry, removed: true };
@@ -1920,19 +853,23 @@ export interface BulkRemoveResult {
   alreadySkipped: number;
 }
 
+const ENTERED_REPO_IDS_SQL = `
+  SELECT repo_id FROM project_challenges WHERE challenge_id = $1
+  UNION
+  SELECT repo_id FROM queue_entries
+   WHERE challenge_id = $1 AND status NOT IN ('cancelled', 'disqualified')`;
+
 /**
- * H21 "apuntar TODOS los proyectos a un reto" — enrolls every existing repo
- * into `challengeId` in one transaction, reusing the same per-repo enqueue
- * logic as the single add (`enqueueRepoOnChallenge`), so idempotency (the
- * unique challenge_id/repo_id index) and the revive-vs-insert behavior are
- * identical to the single-repo path. Repos already actively queued are
- * skipped, not duplicated.
+ * H21 "apuntar TODOS los proyectos a un reto" — enters every existing repo
+ * into `challengeId` in one transaction through the same per-repo path as the
+ * single add (`enterChallenge`), so idempotency and the queue-generated
+ * behavior are identical. Repos already entered are skipped.
  */
 export async function bulkAddRepoChallenge(
   actorId: number,
   challengeId: number,
 ): Promise<BulkAddResult> {
-  const { outcomes, total } = await withTransaction(async (client) => {
+  const { outcomes, total, added } = await withTransaction(async (client) => {
     const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
@@ -1942,18 +879,23 @@ export async function bulkAddRepoChallenge(
       [await isSyntheticOperator(client, actorId)],
     );
     const repoIds = repos.rows.map((r: { id: number }) => r.id);
+    const entered = new Set(
+      (await client.query(ENTERED_REPO_IDS_SQL, [challengeId])).rows.map(
+        (r: { repo_id: number }) => r.repo_id,
+      ),
+    );
 
     // One locked read of the group's current bottom position instead of one
     // per repo: the FOR UPDATE lock it takes is held for the rest of this
-    // transaction, so serialization against a concurrent bulk-add on the same
-    // queue_group is unchanged, but each subsequent repo just takes the next
-    // in-memory slot instead of re-scanning the (growing) active set.
+    // transaction, so each subsequent repo just takes the next in-memory slot.
     let nextPosition = await nextBottomPosition(client, challengeId);
     const allocatePosition = async () => nextPosition++;
 
     const outcomes: EnqueueOutcome[] = [];
+    let added = 0;
     for (const repoId of repoIds) {
-      const outcome = await enqueueRepoOnChallenge(
+      if (entered.has(repoId)) continue;
+      const outcome = await enterChallenge(
         client,
         actorId,
         repoId,
@@ -1963,6 +905,7 @@ export async function bulkAddRepoChallenge(
         allocatePosition,
       );
       if (outcome) outcomes.push(outcome);
+      added += 1;
     }
 
     await audit(client, {
@@ -1970,44 +913,61 @@ export async function bulkAddRepoChallenge(
       entityType: "challenge",
       entityId: challengeId,
       action: "bulk_add_repos",
-      after: { total: repoIds.length, added: outcomes.length },
+      after: { total: repoIds.length, added },
       source: "admin",
     });
 
-    return { outcomes, total: repoIds.length };
+    return { outcomes, total: repoIds.length, added };
   });
 
   await announceQueueOutcomes(outcomes);
-  return { total, added: outcomes.length, alreadyEnrolled: total - outcomes.length };
+  return { total, added, alreadyEnrolled: total - added };
 }
 
 /**
- * H21 "dar de baja TODOS los proyectos de un reto" — mirrors
- * `removeRepoChallenge`'s per-entry transition (waiting/called -> cancelled,
- * anything else in progress -> disqualified, same as a live correction is
- * allowed to force) but applies it to every active entry of the challenge in
- * one transaction, with a single position compaction at the end instead of
- * one per entry.
+ * H21 "dar de baja TODOS los proyectos de un reto" — clears the challenge
+ * from every project's selection and applies `removeRepoChallenge`'s
+ * per-entry transition (waiting/called -> cancelled, anything else in
+ * progress -> disqualified) to every active entry in one transaction, with a
+ * single position compaction at the end.
  */
 export async function bulkRemoveRepoChallenge(
   actorId: number,
   challengeId: number,
 ): Promise<BulkRemoveResult> {
-  const { updatedEntries, total } = await withTransaction(async (client) => {
-    await assertQueueChallengeScope(client, actorId, challengeId);
+  const { updatedEntries, total, removed } = await withTransaction(async (client) => {
+    const fixtureMarker = await assertQueueChallengeScope(client, actorId, challengeId);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
     await assertChallengeIsOptional(client, challengeId);
 
+    const total = (
+      await client.query(
+        `SELECT count(*)::int AS n FROM repos WHERE is_test_account = $2 AND id IN (
+           SELECT repo_id FROM project_challenges WHERE challenge_id = $1
+           UNION SELECT repo_id FROM queue_entries WHERE challenge_id = $1)`,
+        [challengeId, fixtureMarker],
+      )
+    ).rows[0].n as number;
+    const withdrawn = new Set<number>(
+      (
+        await client.query(
+          `DELETE FROM project_challenges WHERE challenge_id = $1 RETURNING repo_id`,
+          [challengeId],
+        )
+      ).rows.map((r: { repo_id: number }) => r.repo_id),
+    );
     const entriesRes = await client.query(
-      `SELECT * FROM queue_entries WHERE challenge_id = $1 FOR UPDATE`,
+      `SELECT * FROM queue_entries WHERE challenge_id = $1
+          AND status NOT IN ('cancelled', 'disqualified')
+        FOR UPDATE`,
       [challengeId],
     );
-    const entries = entriesRes.rows as Array<{ id: number; repo_id: number; status: string }>;
-    const removable = entries.filter((e) => !["cancelled", "disqualified"].includes(e.status));
+    const removable = entriesRes.rows as Array<{ id: number; repo_id: number; status: string }>;
 
     const updatedEntries: Array<Record<string, unknown> & { challenge_id: number }> = [];
     for (const entry of removable) {
+      withdrawn.add(entry.repo_id);
       const updatedEntry = await terminateQueueEntry(client, entry, actorId, {
         challengeId,
         reason: "Removed from challenge (bulk)",
@@ -2021,11 +981,11 @@ export async function bulkRemoveRepoChallenge(
       entityType: "challenge",
       entityId: challengeId,
       action: "bulk_remove_repos",
-      after: { total: entries.length, removed: removable.length },
+      after: { total, removed: withdrawn.size },
       source: "admin",
     });
 
-    return { updatedEntries, total: entries.length };
+    return { updatedEntries, total, removed: withdrawn.size };
   });
 
   for (const entry of updatedEntries) {
@@ -2033,7 +993,7 @@ export async function bulkRemoveRepoChallenge(
   }
   if (updatedEntries.length > 0) await notifyChallengeQueueChanged(pool, challengeId);
 
-  return { total, removed: updatedEntries.length, alreadySkipped: total - updatedEntries.length };
+  return { total, removed, alreadySkipped: total - removed };
 }
 
 async function assertChallengeIsOptional(client: Queryable, challengeId: number): Promise<void> {
@@ -2047,7 +1007,7 @@ async function assertChallengeIsOptional(client: Queryable, challengeId: number)
   }
 }
 
-// ── native project lifecycle (H18-H19) ─────────────────────────────────────
+// ── project lifecycle (H19-H21) ────────────────────────────────────────────
 
 export interface NativeRepoInput {
   name: string;
@@ -2141,7 +1101,7 @@ export async function enrollReposInMandatoryChallenges(
     let nextPosition = await nextBottomPosition(client, challengeId);
     const allocatePosition = async () => nextPosition++;
     for (const repoId of uniqueRepoIds) {
-      const outcome = await enqueueRepoOnChallenge(
+      const outcome = await enterChallenge(
         client,
         actorId,
         repoId,
@@ -2156,26 +1116,30 @@ export async function enrollReposInMandatoryChallenges(
   return outcomes;
 }
 
-async function insertNativeRepo(
+/** Staff-created projects start submitted; participant projects start as drafts (#1006). */
+async function insertRepo(
   client: Queryable,
   input: NativeRepoInput,
   createdBy: number,
-  fixtureMarker = false,
+  fixtureMarker: boolean,
+  status: "draft" | "submitted",
 ): Promise<RepoRow> {
   const { rows } = await client.query(
-    `INSERT INTO repos (name, description, github_url, demo_url, source, created_by, is_test_account,submitted_via,submitted_at)
-     VALUES ($1, $2, $3, $4, 'native', $5, $6,'admin',now())
-     RETURNING id, name, description, github_url, devpost_url, demo_url, source, presentation_timing_preference`,
-    [input.name, input.description, input.githubUrl, input.demoUrl, createdBy, fixtureMarker],
+    `INSERT INTO repos (name, description, github_url, demo_url, created_by, is_test_account,
+                        submission_status, submitted_via, submitted_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7,
+             CASE WHEN $7 = 'submitted' THEN 'admin' END,
+             CASE WHEN $7 = 'submitted' THEN now() END)
+     RETURNING ${REPO_COLUMNS}`,
+    [input.name, input.description, input.githubUrl, input.demoUrl, createdBy, fixtureMarker, status],
   );
   return rows[0];
 }
 
 /**
- * H18: organization creates a project natively (no Devpost involved), with
- * team members and challenge lineup in ONE transaction — challenges are
- * appended at the bottom of any already-generated queues exactly like a hot
- * edit (H21), so an event can run entirely without imports.
+ * H21: staff create a project on a team's behalf, with team members and
+ * challenge lineup in ONE transaction — challenges are appended at the bottom
+ * of any already-generated queues exactly like a hot edit.
  */
 export async function createRepoNative(
   actorId: number,
@@ -2203,23 +1167,17 @@ export async function createRepoNative(
     }
     await assertChallengesExist(client, challengeIds, false, fixtureMarker);
 
-    const created = await insertNativeRepo(client, input, actorId, fixtureMarker);
+    const created = await insertRepo(client, input, actorId, fixtureMarker, "submitted");
     for (const userId of memberUserIds) {
       await client.query(
-        `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
-         VALUES ($1, $2, 'manual', NULL)`,
+        `INSERT INTO submissions (repo_id, user_id, status, responded_at)
+         VALUES ($1, $2, 'active', now())`,
         [created.id, userId],
       );
     }
     const enqueued: EnqueueOutcome[] = [];
     for (const challengeId of challengeIds) {
-      const outcome = await enqueueRepoOnChallenge(
-        client,
-        actorId,
-        created.id,
-        challengeId,
-        "admin",
-      );
+      const outcome = await enterChallenge(client, actorId, created.id, challengeId, "admin");
       if (outcome) enqueued.push(outcome);
     }
     enqueued.push(...(await enrollReposInMandatoryChallenges(client, actorId, [created.id])));
@@ -2228,7 +1186,7 @@ export async function createRepoNative(
       entityType: "repo",
       entityId: created.id,
       action: "create",
-      after: { name: created.name, source: "native", memberUserIds, challengeIds },
+      after: { name: created.name, memberUserIds, challengeIds },
       source: "admin",
     });
     return { repo: created, outcomes: enqueued };
@@ -2246,13 +1204,12 @@ export interface UpdateRepoPatch {
   description?: string;
   githubUrl?: string | null;
   demoUrl?: string | null;
-  devpostUrl?: string | null;
   presentationTimingPreference?: string;
 }
 
 /**
- * Shared metadata-update core for both the staff PATCH (`updateRepo`, H18)
- * and the participant self-edit (`updateMyProject`, H19/H20) — same fields,
+ * Shared metadata-update core for both the staff PATCH (`updateRepo`, H21)
+ * and the participant self-edit (`updateMyProject`, H20) — same fields,
  * different callers audit it with their own actor/source. Locks the row
  * first so a concurrent edit can't interleave with the read-modify-write.
  */
@@ -2280,22 +1237,20 @@ async function applyRepoUpdate(
     description: patch.description ?? before.description,
     github_url: patch.githubUrl === undefined ? before.github_url : patch.githubUrl,
     demo_url: patch.demoUrl === undefined ? before.demo_url : patch.demoUrl,
-    devpost_url: patch.devpostUrl === undefined ? before.devpost_url : patch.devpostUrl,
     presentation_timing_preference:
       patch.presentationTimingPreference ?? before.presentation_timing_preference,
   };
   const { rows } = await client.query(
-    `UPDATE repos SET name = $2, description = $3, github_url = $4, demo_url = $5, devpost_url=$6, presentation_timing_preference=$7,
-      devpost_canonical_url = CASE WHEN devpost_url IS DISTINCT FROM $6 THEN NULL ELSE devpost_canonical_url END
+    `UPDATE repos SET name = $2, description = $3, github_url = $4, demo_url = $5,
+            presentation_timing_preference = $6
       WHERE id = $1
-      RETURNING id, name, description, github_url, devpost_url, demo_url, source, presentation_timing_preference`,
+      RETURNING ${REPO_COLUMNS}`,
     [
       repoId,
       next.name,
       next.description,
       next.github_url,
       next.demo_url,
-      next.devpost_url,
       next.presentation_timing_preference,
     ],
   );
@@ -2308,33 +1263,11 @@ function repoAuditFields(repo: RepoRow) {
     description: repo.description,
     githubUrl: repo.github_url,
     demoUrl: repo.demo_url,
-    devpostUrl: repo.devpost_url,
     presentationTimingPreference: repo.presentation_timing_preference,
   };
 }
 
-/** H20/#854: linked planning edits use the project metadata core and its roster boundary. */
-export async function updateLinkedWorkGroupProject(
-  client: Queryable,
-  userId: number,
-  repoId: number,
-  patch: UpdateRepoPatch,
-) {
-  if (!(await isActiveProjectMember(client, repoId, userId))) return;
-  await assertProjectEditable(client, repoId);
-  const { before, after } = await applyRepoUpdate(client, repoId, patch);
-  await audit(client, {
-    actorId: userId,
-    entityType: "repo",
-    entityId: repoId,
-    action: "update_from_work_group",
-    before: repoAuditFields(before),
-    after: repoAuditFields(after),
-    source: "participant",
-  });
-}
-
-/** H18: edit a project's own metadata (title, description, links). Audited. */
+/** H21: staff edit any project's metadata (title, description, links). Audited. */
 export async function updateRepo(actorId: number, repoId: number, patch: UpdateRepoPatch) {
   return withTransaction(async (client) => {
     await assertFixtureQueueScope(client, actorId, "repo", repoId);
@@ -2353,10 +1286,9 @@ export async function updateRepo(actorId: number, repoId: number, patch: UpdateR
 }
 
 /**
- * H19/H20: a participant edits their own project's metadata — only while
- * within the hacking window and only for a project they're an active member
- * of. Product decision superseding H20's literal "read-only" text (see
- * docs/challenges-devpost.md); plan/historias-hackos.md is left unedited.
+ * H20: a member edits their own project's metadata while the participant
+ * window is open, whether the project is a draft or already submitted; a
+ * resubmission records the new version (#1006).
  */
 export async function updateMyProject(
   userId: number,
@@ -2431,17 +1363,11 @@ export async function canCreateMyProject(userId: number, db: Queryable = pool): 
 }
 
 /**
- * H19: a participant creates THEIR OWN project — only while the event policy
- * (event_config.participants_can_create_projects) is enabled. Product
- * decision (see docs/challenges-devpost.md) now also allows a participant to
- * belong to more than one project — H20's original "singular mi proyecto"
- * framing assumed the read-only surface; self-service supersedes it, so
- * there is no longer a "you already belong to a project" check here.
- * Self-creation is further gated to admitted participants (the same
- * role-derived event-access check as app entry) and to the configured
- * hacking window. The creator becomes
- * the project's first member; chosen challenges enqueue exactly like a hot
- * edit.
+ * H19: a participant creates their own project as a draft — only while the
+ * event policy (event_config.participants_can_create_projects) is enabled,
+ * for admitted participants, inside the participant window. A person may
+ * belong to more than one project. The creator becomes the first member;
+ * chosen challenges are entered exactly like a hot edit.
  */
 export async function createMyProject(
   userId: number,
@@ -2475,15 +1401,15 @@ export async function createMyProject(
 
     await assertChallengesExist(client, challengeIds, true, fixtureMarker);
 
-    const created = await insertNativeRepo(client, input, userId, fixtureMarker);
+    const created = await insertRepo(client, input, userId, fixtureMarker, "draft");
     await client.query(
-      `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
-       VALUES ($1, $2, 'manual', NULL)`,
+      `INSERT INTO submissions (repo_id, user_id, status, responded_at)
+       VALUES ($1, $2, 'active', now())`,
       [created.id, userId],
     );
     const enqueued: EnqueueOutcome[] = [];
     for (const challengeId of challengeIds) {
-      const outcome = await enqueueRepoOnChallenge(client, userId, created.id, challengeId, "web");
+      const outcome = await enterChallenge(client, userId, created.id, challengeId, "web");
       if (outcome) enqueued.push(outcome);
     }
     enqueued.push(...(await enrollReposInMandatoryChallenges(client, userId, [created.id])));
@@ -2492,7 +1418,7 @@ export async function createMyProject(
       entityType: "repo",
       entityId: created.id,
       action: "create",
-      after: { name: created.name, source: "native", createdBy: userId, challengeIds },
+      after: { name: created.name, createdBy: userId, challengeIds },
       source: "web",
     });
     return { repo: created, outcomes: enqueued };
@@ -2568,8 +1494,8 @@ export async function inviteProjectMember(
     // not an error — ON CONFLICT DO NOTHING covers the (repo_id, user_id)
     // primary key without a duplicate row or a spurious 409.
     await client.query(
-      `INSERT INTO submissions (repo_id, user_id, imported_from, status, invited_by)
-       VALUES ($1, $2, 'manual', 'invited', $3)
+      `INSERT INTO submissions (repo_id, user_id, status, invited_by)
+       VALUES ($1, $2, 'invited', $3)
        ON CONFLICT (repo_id, user_id) DO NOTHING
        RETURNING repo_id`,
       [repoId, inviteeId, userId],
@@ -2678,12 +1604,6 @@ export async function acceptProjectInvite(
       [repoId, userId],
     );
     if (!rows[0]) throw new NotFoundError(`No pending invite to repo ${repoId}`);
-    await client.query(
-      `INSERT INTO planned_work_group_members(group_id,user_id,status,responded_at)
-      SELECT id,$2,'active',now() FROM planned_work_groups WHERE linked_repo_id=$1
-      ON CONFLICT(group_id,user_id) DO UPDATE SET status='active',responded_at=now()`,
-      [repoId, userId],
-    );
     await audit(client, {
       actorId: userId,
       entityType: "repo",
@@ -2757,19 +1677,8 @@ export async function leaveMyProject(userId: number, repoId: number): Promise<{ 
       throw new ConflictError("You are the last member; delete the project instead");
     }
 
-    const removed = await client.query(
-      `DELETE FROM submissions WHERE repo_id = $1 AND user_id = $2 AND status = 'active'`,
-      [repoId, userId],
-    );
-    if ((removed.rowCount ?? 0) === 0) {
-      await client.query(`DELETE FROM devpost_participants WHERE repo_id = $1 AND user_id = $2`, [
-        repoId,
-        userId,
-      ]);
-    }
-
     await client.query(
-      `DELETE FROM planned_work_group_members m USING planned_work_groups g WHERE m.group_id=g.id AND g.linked_repo_id=$1 AND m.user_id=$2`,
+      `DELETE FROM submissions WHERE repo_id = $1 AND user_id = $2 AND status = 'active'`,
       [repoId, userId],
     );
     await audit(client, {
@@ -2884,8 +1793,6 @@ async function deleteRepoCascade(
   await client.query(`DELETE FROM challenge_winners WHERE repo_id = $1`, [repoId]);
   await client.query(`DELETE FROM queue_entries WHERE repo_id = $1`, [repoId]);
   await client.query(`DELETE FROM submissions WHERE repo_id = $1`, [repoId]);
-  await client.query(`DELETE FROM devpost_participants WHERE repo_id = $1`, [repoId]);
-  await client.query(`DELETE FROM repo_devpost_prizes WHERE repo_id = $1`, [repoId]);
   await client.query(`DELETE FROM repos WHERE id = $1`, [repoId]);
   return { queueEntries, memberIds };
 }
@@ -2984,7 +1891,7 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
   return { deleted: true };
 }
 
-/** H18/H21: project editors can remove any project, even after judging has
+/** H21: project editors can remove any project, even after judging has
  * started. The cascade and subsequent queue invalidations intentionally match
  * the participant delete path, but no membership/window rule applies. */
 export async function deleteRepo(actorId: number, repoId: number): Promise<{ deleted: true }> {
@@ -3035,6 +1942,46 @@ export async function deleteRepo(actorId: number, repoId: number): Promise<{ del
   );
   for (const challengeId of challengeIds) await notifyChallengeQueueChanged(pool, challengeId);
   return { deleted: true };
+}
+
+/**
+ * Expected participation per challenge for staff with project-read access and
+ * for sponsor representatives (their own enterprise's challenges only): every
+ * project that entered the challenge, by selection, mandatory participation
+ * or a live queue entry, and the distinct active members behind them (#1006).
+ */
+export async function challengeEstimates(userId: number) {
+  const staff = await userHasCapability(
+    createAuthorizationContext(userId),
+    CAPABILITIES.PROJECTS_READ,
+  );
+  const sponsor = await pool.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [userId]);
+  if (!staff && !sponsor.rows[0])
+    throw new ForbiddenError("Not allowed to read challenge participation estimates");
+  const { rows } = await pool.query(
+    `WITH allowed AS (
+       SELECT c.id, c.title, c.mandatory FROM challenges c JOIN sponsors author ON author.id = c.author
+        WHERE c.is_test_account = false AND ($2 OR EXISTS (
+          SELECT 1 FROM sponsors mine WHERE mine.enterprise_id = author.enterprise_id AND mine.user_id = $1
+        ))
+     ), entered AS (
+       SELECT c.id AS challenge_id, r.id AS repo_id
+         FROM allowed c JOIN repos r ON r.is_test_account = false AND (
+           c.mandatory
+           OR EXISTS (SELECT 1 FROM project_challenges pc WHERE pc.repo_id = r.id AND pc.challenge_id = c.id)
+           OR EXISTS (SELECT 1 FROM queue_entries qe WHERE qe.repo_id = r.id AND qe.challenge_id = c.id
+                       AND qe.status NOT IN ('cancelled', 'disqualified'))
+         )
+     )
+     SELECT c.id AS "challengeId", c.title,
+       (SELECT count(*)::int FROM entered e WHERE e.challenge_id = c.id) AS "projectCount",
+       (SELECT count(DISTINCT s.user_id)::int FROM entered e
+          JOIN submissions s ON s.repo_id = e.repo_id AND s.status = 'active'
+         WHERE e.challenge_id = c.id) AS "participantCount"
+       FROM allowed c ORDER BY c.title`,
+    [userId, staff],
+  );
+  return rows;
 }
 
 export interface PublicChallenge {

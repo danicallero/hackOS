@@ -3,9 +3,8 @@ import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
 /**
  * H30 hard invariant: never call a team if any of its members is already
- * `called`, `in_room` or `presenting` in ANOTHER room. Membership includes the
- * authoritative submission row, a linked Devpost participant, and the primary
- * or verified-secondary email fallback used by the project/queue roster.
+ * `called`, `in_room` or `presenting` in ANOTHER room. Membership is the
+ * project's active roster (REPO_MEMBER_RELATION_SQL).
  * This includes another entry for the same repo when that project competes in
  * more than one challenge: a team cannot physically wait at two room doors at
  * once.
@@ -20,8 +19,7 @@ import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
  *
  * The member-id lock alone is not sufficient on its own: if a repo has no
  * resolvable members at check time (e.g. its active submission was withdrawn
- * after the queue entry was created, or a Devpost email match briefly fails
- * to resolve), the member query returns zero rows, no lock is acquired, and
+ * after the queue entry was created), the member query returns zero rows, no lock is acquired, and
  * two rooms calling the SAME repo's two different challenge entries could
  * both pass. We additionally lock on the repo id itself (separate
  * namespace) and check the repo's own active entries directly, independent
@@ -37,7 +35,7 @@ export async function isRepoIneligibleForJudging(
   repoId: number,
 ): Promise<boolean> {
   const { rows } = await client.query(
-    `SELECT eligible FROM project_reconciliation_state WHERE id=$1`,
+    `SELECT eligible FROM project_eligibility WHERE id=$1`,
     [repoId],
   );
   return rows[0]?.eligible === false;

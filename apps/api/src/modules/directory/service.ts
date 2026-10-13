@@ -29,7 +29,7 @@ export interface DirectoryEntry {
   socials: SocialLink[];
   /** Authenticated CV route, only while the person shares it. */
   cvUrl: string | null;
-  /** Repositories first, then unlinked work groups, each by id (#935). */
+  /** The person's projects, by id (#935). */
   projects: DirectoryProject[];
   /** Deprecated: the first of `projects`, kept for app builds that predate it. */
   project: DirectoryProject | null;
@@ -37,7 +37,7 @@ export interface DirectoryEntry {
 }
 
 export interface DirectoryProject {
-  kind: "project" | "workGroup";
+  kind: "project";
   id: number;
   name: string;
 }
@@ -57,11 +57,10 @@ interface EntryRow {
 
 /**
  * Fragments over `p` (user_public_profiles) and `u` (users). The projects are
- * every active repository submission plus every unlinked planned work group
- * the person belongs to (#935: a person can work on several); challenges are
- * the published ones any of them still takes part in (cancelled/disqualified
- * queue entries excluded, as in projects/lifecycle.ts). Both are suppressed
- * when show_project is off.
+ * every project the person is an active member of (#935: a person can work on
+ * several); challenges are the published ones any of them entered — by
+ * selection, mandatory participation or a live queue entry (#1006). Both are
+ * suppressed when show_project is off.
  */
 const SHOWN_REPOS_SQL = `
   SELECT r.id, r.name
@@ -72,16 +71,7 @@ const SHOWN_REPOS_SQL = `
      AND s.status = 'active'
      AND r.is_test_account = false`;
 
-const SHOWN_GROUPS_SQL = `
-  SELECT g.id, g.name
-    FROM planned_work_group_members m
-    JOIN planned_work_groups g ON g.id = m.group_id
-   WHERE p.show_project
-     AND m.user_id = u.id
-     AND m.status = 'active'
-     AND g.linked_repo_id IS NULL`;
-
-/** `c` is a published challenge one of the shown repos or groups takes part in. */
+/** `c` is a published challenge one of the shown projects entered. */
 const CHALLENGE_OF_PROJECTS = `c.visibility = 'visible'
     AND c.is_test_account = false
     AND (
@@ -92,10 +82,11 @@ const CHALLENGE_OF_PROJECTS = `c.visibility = 'visible'
            AND qe.status NOT IN ('cancelled', 'disqualified')
       )
       OR EXISTS (
-        SELECT 1 FROM planned_work_group_challenges gc
-         WHERE gc.challenge_id = c.id
-           AND gc.group_id IN (SELECT id FROM (${SHOWN_GROUPS_SQL}) sg)
+        SELECT 1 FROM project_challenges pc
+         WHERE pc.challenge_id = c.id
+           AND pc.repo_id IN (SELECT id FROM (${SHOWN_REPOS_SQL}) sr)
       )
+      OR (c.mandatory AND EXISTS (SELECT 1 FROM (${SHOWN_REPOS_SQL}) sr))
     )`;
 
 /**
@@ -183,12 +174,8 @@ function entrySql(profiles: string): string {
          p.socials,
          (p.share_cv AND COALESCE(fcv.key, p.cv_key) IS NOT NULL) AS has_cv,
          COALESCE((
-           SELECT jsonb_agg(jsonb_build_object('kind', x.kind, 'id', x.id, 'name', x.name) ORDER BY x.ord, x.id)
-             FROM (
-               SELECT 'project' AS kind, 0 AS ord, id, name FROM (${SHOWN_REPOS_SQL}) sr
-               UNION ALL
-               SELECT 'workGroup', 1, id, name FROM (${SHOWN_GROUPS_SQL}) sg
-             ) x
+           SELECT jsonb_agg(jsonb_build_object('kind', 'project', 'id', x.id, 'name', x.name) ORDER BY x.id)
+             FROM (${SHOWN_REPOS_SQL}) x
          ), '[]'::jsonb) AS projects,
          COALESCE((
            SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.title) ORDER BY c.title, c.id)

@@ -1296,10 +1296,6 @@ async function deleteOrphanedProjects(
     await client.query(`DELETE FROM queue_entries WHERE id = ANY($1::int[])`, [queueIds]);
   }
   await client.query(`DELETE FROM challenge_winners WHERE repo_id = ANY($1::int[])`, [orphanIds]);
-  await client.query(`DELETE FROM repo_devpost_prizes WHERE repo_id = ANY($1::int[])`, [orphanIds]);
-  await client.query(`DELETE FROM devpost_participants WHERE repo_id = ANY($1::int[])`, [
-    orphanIds,
-  ]);
   await client.query(`DELETE FROM submissions WHERE repo_id = ANY($1::int[])`, [orphanIds]);
   await client.query(`DELETE FROM repos WHERE id = ANY($1::int[])`, [orphanIds]);
   return deletedQueueEntries;
@@ -1398,15 +1394,10 @@ async function scrubRelationships(
   }
 
   // No project membership is an audit requirement. Capture every repository
-  // linked to the subject before removing either the submission or Devpost
-  // participant row; a matched Devpost member may have no submission yet.
+  // linked to the subject before removing the submission rows.
   const { rows: membershipRows } = await client.query<{ repo_id: number }>(
-    `SELECT repo_id FROM submissions WHERE user_id = $1
-     UNION
-     SELECT repo_id FROM devpost_participants
-      WHERE user_id = $1 OR lower(email) = ANY($2::text[])
-     ORDER BY repo_id`,
-    [userId, emails.map((email) => email.toLowerCase())],
+    `SELECT repo_id FROM submissions WHERE user_id = $1 ORDER BY repo_id`,
+    [userId],
   );
   const repoIds = membershipRows.map((row) => row.repo_id);
   const submissionAuditEntityIds = repoIds.map((repoId) => `${repoId}:${userId}`);
@@ -1426,12 +1417,6 @@ async function scrubRelationships(
     userId,
   ]);
   await client.query(`DELETE FROM submissions WHERE user_id = $1`, [userId]);
-  await client.query(
-    `DELETE FROM devpost_participants
-      WHERE user_id = $1
-         OR lower(email) = ANY($2::text[])`,
-    [userId, emails.map((email) => email.toLowerCase())],
-  );
   // Invite redemption rows denormalize the invitee's email/name even when the
   // user FK is configured ON DELETE SET NULL. They are not part of the
   // anonymous audit set, so remove the subject's rows before deleting users;
@@ -1498,9 +1483,6 @@ async function scrubRelationships(
     userId,
   ]);
   await client.query(`UPDATE judging_session SET judge_id = NULL WHERE judge_id = $1`, [userId]);
-  await client.query(`UPDATE devpost_participants SET linked_by = NULL WHERE linked_by = $1`, [
-    userId,
-  ]);
   await client.query(`UPDATE food_intolerances SET proposed_by = NULL WHERE proposed_by = $1`, [
     userId,
   ]);

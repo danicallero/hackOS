@@ -53,7 +53,7 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   auth: "Better Auth session lifecycle (sign up/in/out, verification, password reset).",
   identity: "Users, invites, permissions and the caller's own profile (H1–H10).",
   applications: "Application forms, review, decisions and confirmations (H11–H15).",
-  projects: "Devpost import/sync and project/repo records (H16–H21, H44–H46).",
+  projects: "Projects, teams, submissions and challenge entries (H19–H21, H44–H46).",
   queue: "Judging queue, TV displays and their realtime streams (H29–H42).",
   logistics: "Accreditation, badge/presence scanning and on-site activities (H22–H27).",
   notifications: "Announcements and the notification outbox (H47–H51).",
@@ -79,7 +79,7 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
     return "identity";
   if (url.startsWith("/api/invites") || url.startsWith("/api/profile")) return "identity";
   if (url.startsWith("/api/applications")) return "applications";
-  if (url.startsWith("/api/devpost") || url.startsWith("/api/repos")) return "projects";
+  if (url.startsWith("/api/projects") || url.startsWith("/api/repos")) return "projects";
   if (url.startsWith("/api/queue") || url.startsWith("/api/tv") || url.startsWith("/api/stream"))
     return "queue";
   if (url.startsWith("/api/accreditation") || url.startsWith("/api/activities")) return "logistics";

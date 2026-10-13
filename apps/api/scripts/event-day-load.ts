@@ -495,8 +495,8 @@ async function prepareFixture(options: Options): Promise<Fixture> {
     );
 
     const repoRows = await client.query<{ id: number }>(
-      `INSERT INTO repos (name)
-       SELECT 'Event-day Team ' || id FROM users WHERE id = ANY($1::int[])
+      `INSERT INTO repos (name, submission_status, submitted_via, submitted_at)
+       SELECT 'Event-day Team ' || id, 'submitted', 'admin', now() FROM users WHERE id = ANY($1::int[])
        ORDER BY id RETURNING id`,
       [participantIds],
     );
