@@ -105,6 +105,7 @@ export function QueueOperationsScreen() {
       headerLargeTitle: !usesListTitle,
       headerRight: () => (
         <FilterMenu
+          embedded
           accessibilityLabel={t("scheduleFilter")}
           active={roomFilters.length > 0}
           items={[

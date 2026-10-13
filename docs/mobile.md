@@ -392,6 +392,8 @@ distributed to other Expo Router apps without importing hackOS code.
   cache. A persistent recovery error still shows retry and one local
   `Back to sign in` action.
 
+Mobile filter triggers draw one background: standalone `FilterMenu` owns its circular glass surface; native `Stack.Toolbar.View` callers hide the shared toolbar background, while Queue Operations uses `embedded` to let its native header item own the background.
+
 ## Participant screens
 
 - `app/(tabs)/schedule.tsx`, `queue.tsx`, `schedule/alerts.tsx` (inbox sheet),
@@ -778,7 +780,7 @@ star, a native `Stack.Toolbar.Button` (`star` / `star.fill`) drawn as the same
 circle as the search button, sit on the right, with a wallet button after them (`wallet.pass`) that opens the
 badge/ticket wallet in a full-screen modal (`WalletModal` in
 `components/account-wallet.tsx`, the same `WalletScreen` and close button as
-Account's overlay, H28). The wallet button stays on Companies. On iOS 26, opening search places the native field below the toolbar (`stacked`), keeping a single search button. Android and earlier iOS use
+Account's overlay, H28). The wallet button stays on Companies. On iOS 26, search uses the same native `integratedButton` as Schedule: expanding it replaces the toolbar actions, and cancelling restores them. Android and earlier iOS use
 `LegacyScreenHeader`: the title, a glass star toggle, the wallet button and the search button that
 expands into the field. Search and the star apply to People only, and only
 once it has someone to search; on Companies the native search and the star are

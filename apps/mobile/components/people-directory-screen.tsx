@@ -5,6 +5,7 @@ import {
   usePathname,
   useRouter,
 } from "expo-router";
+import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -189,9 +190,9 @@ export function PeopleDirectoryScreen() {
         onChangeText: (event: { nativeEvent: { text: string } }) =>
           setQuery(event.nativeEvent.text),
       },
-      headerRight: () => filterMenu,
+      headerRight: undefined,
     });
-  }, [glassAvailable, navigation, filterMenu, t, usesListTitle]);
+  }, [glassAvailable, navigation, t, usesListTitle]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().replace(/\s+/g, " ").toLocaleLowerCase();
@@ -347,7 +348,15 @@ export function PeopleDirectoryScreen() {
     />
   );
 
-  if (glassAvailable) return list;
+  if (glassAvailable)
+    return (
+      <>
+        {list}
+        <Stack.Toolbar placement="right">
+          <Stack.Toolbar.View hidesSharedBackground>{filterMenu}</Stack.Toolbar.View>
+        </Stack.Toolbar>
+      </>
+    );
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       {legacyHeader}

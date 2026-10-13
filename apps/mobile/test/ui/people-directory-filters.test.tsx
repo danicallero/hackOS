@@ -3,6 +3,21 @@ import { act, screen, waitFor } from "@testing-library/react-native";
 const mockSetOptions = jest.fn();
 const mockListPeople = jest.fn();
 const mockPush = jest.fn();
+let mockFilterActive = false;
+let mockFilterSelect: (id: string) => void;
+jest.mock("@/components/filter-menu", () => ({
+  FilterMenu: ({ onSelect, active }: { onSelect: (id: string) => void; active: boolean }) => {
+    mockFilterSelect = onSelect;
+    mockFilterActive = active;
+    return null;
+  },
+}));
+jest.mock("expo-router/stack", () => {
+  const Toolbar = Object.assign(({ children }: { children: unknown }) => children, {
+    View: ({ children }: { children: unknown }) => children,
+  });
+  return { __esModule: true, default: { Toolbar } };
+});
 let mockActivityId: string | undefined;
 
 jest.mock("expo-router", () => ({
@@ -82,7 +97,7 @@ const PEOPLE = [
 ];
 
 async function select(id: string) {
-  await act(async () => mockSetOptions.mock.calls.at(-1)?.[0].headerRight().props.onSelect(id));
+  await act(async () => mockFilterSelect(id));
 }
 
 describe("people directory role filters", () => {
@@ -105,7 +120,7 @@ describe("people directory role filters", () => {
     expect(screen.queryByText("Ada")).toBeNull();
     await select("all");
     expect(screen.getByText("Linus")).toBeTruthy();
-    expect(mockSetOptions.mock.calls.at(-1)?.[0].headerRight().props.active).toBe(false);
+    expect(mockFilterActive).toBe(false);
   });
 
   it("preserves the activity badge restriction and search within selected roles", async () => {

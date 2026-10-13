@@ -12,6 +12,7 @@ export function FilterMenu({
   active,
   onSelect,
   colorScheme = "auto",
+  embedded = false,
 }: FilterMenuProps) {
   const sections = items.reduce<
     Array<{ title: string | undefined; items: FilterMenuProps["items"] }>
@@ -32,13 +33,8 @@ export function FilterMenu({
         modifiers={[menuActionDismissBehavior("disabled")]}
       />
     ));
-  return (
-    <GlassView
-      colorScheme={colorScheme}
-      glassEffectStyle="regular"
-      isInteractive
-      style={{ width: 48, height: 48, borderRadius: 24 }}
-    >
+  const content = (
+    <View style={{ width: 48, height: 48 }}>
       <Host
         colorScheme={colorScheme === "auto" ? undefined : colorScheme}
         matchContents
@@ -79,6 +75,18 @@ export function FilterMenu({
           )}
         </Menu>
       </Host>
+    </View>
+  );
+  return embedded ? (
+    content
+  ) : (
+    <GlassView
+      colorScheme={colorScheme}
+      glassEffectStyle="regular"
+      isInteractive
+      style={{ width: 48, height: 48, borderRadius: 24 }}
+    >
+      {content}
     </GlassView>
   );
 }

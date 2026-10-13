@@ -1,3 +1,4 @@
+import { View } from "react-native";
 import { GlassView, type GlassViewProps } from "@/components/glass-view";
 import { AndroidFilterMenu } from "@/components/native-ui";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
@@ -12,6 +13,8 @@ export interface FilterMenuProps {
     section?: string;
   }>;
   colorScheme?: GlassViewProps["colorScheme"];
+  /** Use the surrounding native toolbar background instead of adding another surface. */
+  embedded?: boolean;
   accessibilityLabel: string;
   active: boolean;
   onSelect: (id: string) => void;
@@ -23,14 +26,10 @@ export function FilterMenu({
   active,
   onSelect,
   colorScheme = "auto",
+  embedded = false,
 }: FilterMenuProps) {
-  return (
-    <GlassView
-      colorScheme={colorScheme}
-      glassEffectStyle="regular"
-      isInteractive
-      style={{ width: 48, height: 48, borderRadius: 24 }}
-    >
+  const content = (
+    <View style={{ width: 48, height: 48 }}>
       <AndroidFilterMenu
         accessibilityLabel={accessibilityLabel}
         items={items}
@@ -44,6 +43,18 @@ export function FilterMenu({
           tintColor={active ? colors.accent : colorScheme === "dark" ? "white" : colors.label}
         />
       </AndroidFilterMenu>
+    </View>
+  );
+  return embedded ? (
+    content
+  ) : (
+    <GlassView
+      colorScheme={colorScheme}
+      glassEffectStyle="regular"
+      isInteractive
+      style={{ width: 48, height: 48, borderRadius: 24 }}
+    >
+      {content}
     </GlassView>
   );
 }

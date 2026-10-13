@@ -461,18 +461,15 @@ describe("People", () => {
       expect.objectContaining({ headerLargeTitle: false, title: "" }),
     );
     expect(screen.getByRole("header", { name: "tabDiary" })).toBeTruthy();
-    await fireEvent.press(screen.getByLabelText("scheduleSearch"));
+    expect(screen.queryByLabelText("scheduleSearch")).toBeNull();
     expect(nativeSearch()).toEqual(
-      expect.objectContaining({ placement: "stacked", allowToolbarIntegration: false }),
+      expect.objectContaining({ placement: "integratedButton", allowToolbarIntegration: false }),
     );
     await act(async () => nativeSearch()?.onChangeText({ nativeEvent: { text: "bea" } }));
     expect(screen.getByText("Bea R.")).toBeTruthy();
     expect(screen.queryByText("José P.")).toBeNull();
-    await act(async () => nativeSearch()?.onBlur());
-    expect(nativeSearch()).toEqual(expect.objectContaining({ placement: "stacked" }));
-    await fireEvent.press(screen.getByLabelText("scheduleSearch"));
     await act(async () => nativeSearch()?.onCancelButtonPress());
-    expect(nativeSearch()).toEqual(expect.objectContaining({ placement: "stacked" }));
+    expect(nativeSearch()).toEqual(expect.objectContaining({ placement: "integratedButton" }));
     expect(screen.getByText("José P.")).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("diaryShowFavourites"));
     expect(screen.getByText("José P.")).toBeTruthy();

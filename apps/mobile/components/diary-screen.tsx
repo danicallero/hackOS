@@ -13,7 +13,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { SearchBarCommands } from "react-native-screens";
 import { useAccountWallet, WalletModal } from "@/components/account-wallet";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
 import { CompanyAlbum, CompanySheet } from "@/components/company-album";
@@ -93,7 +92,6 @@ export function DiaryScreen() {
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const wallet = useAccountWallet();
   const scrollRef = useRef<ScrollView>(null);
-  const nativeSearch = useRef<SearchBarCommands>(null);
   // iOS rests at a negative offset under `contentInsetAdjustmentBehavior=
   // "automatic"`, so `y: 0` would leave the first rows under the status bar.
   // Only scroll when the list has moved from its true top.
@@ -423,34 +421,20 @@ export function DiaryScreen() {
       // Removed on Companies: the native bar has no inert state.
       headerSearchBarOptions: searchable
         ? {
-            ref: nativeSearch,
             placeholder: t("diarySearchPlaceholder"),
             autoCapitalize: "none",
             hideWhenScrolling: true,
             allowToolbarIntegration: false,
-            placement: "stacked",
+            placement: "integratedButton",
             onChangeText: (event: { nativeEvent: { text: string } }) =>
               setQuery(event.nativeEvent.text),
-            onBlur: () => setSearchOpen(false),
             onCancelButtonPress: () => {
               setQuery("");
-              setSearchOpen(false);
             },
           }
         : undefined,
     });
   }, [glassAvailable, navigation, searchable, t]);
-
-  useEffect(() => {
-    if (!glassAvailable || !searchOpen) return;
-    let frame: number;
-    const focus = () => {
-      if (nativeSearch.current) nativeSearch.current.focus();
-      else frame = requestAnimationFrame(focus);
-    };
-    frame = requestAnimationFrame(focus);
-    return () => cancelAnimationFrame(frame);
-  }, [glassAvailable, searchOpen]);
 
   const noteInitial =
     noteTarget?.kind === "person"
@@ -647,13 +631,6 @@ export function DiaryScreen() {
               selected={favouritesOnly}
               tintColor={favouritesOnly ? colors.warning : undefined}
               onPress={toggleFavourites}
-            />
-          ) : null}
-          {searchable ? (
-            <Stack.Toolbar.Button
-              icon="magnifyingglass"
-              accessibilityLabel={t("scheduleSearch")}
-              onPress={() => setSearchOpen(true)}
             />
           ) : null}
         </Stack.Toolbar>

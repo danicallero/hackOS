@@ -116,6 +116,7 @@ describe("queue operations search (H29-H31)", () => {
       placement: "integratedButton",
     });
     expect(mockSetOptions.mock.calls.at(-1)?.[0].headerRight).toEqual(expect.any(Function));
+    expect(mockSetOptions.mock.calls.at(-1)?.[0].headerRight().props.embedded).toBe(true);
 
     await search("daniel ca");
 
