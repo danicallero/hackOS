@@ -11,7 +11,7 @@ let fixture: ReturnType<typeof mockRealtimeFetch>;
 const fetcher = vi.fn<() => Promise<{ version: number }>>();
 
 function Harness() {
-  useLiveQuery(fetcher, "/api/queue/stream", ["queue.changed"], {
+  useLiveQuery(fetcher, "queue", ["queue.changed"], {
     resourceKey: ["test", "queue"],
   });
   return null;

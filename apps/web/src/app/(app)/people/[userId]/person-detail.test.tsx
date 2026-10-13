@@ -121,9 +121,7 @@ describe("PersonDetail (#934, #935)", () => {
     expect(document.querySelector("[role=dialog]")?.textContent).toContain("cvViewerTitle");
     vi.unstubAllGlobals();
     expect(container.querySelector("a[href='/people']")?.textContent).toBe("backToPeople");
-    expect(env.autoRefresh).toHaveBeenCalledWith("/api/events/stream?topic=directory", [
-      "domain.changed",
-    ]);
+    expect(env.autoRefresh).toHaveBeenCalledWith("domain:directory", ["domain.changed"]);
   });
 
   it("lists every project and work group the person is in", async () => {

@@ -1,3 +1,4 @@
+import { domainScope, REALTIME_SCOPES, reviewScope } from "@hackos/shared/events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { physicalSseConnectionStats } from "./realtime-telemetry";
 import { setSseIdentity, subscribeToSse } from "./sse-broker";
@@ -7,8 +8,8 @@ const origin = "https://api.test";
 const mux = `${origin}/api/realtime/stream`;
 let fixture: ReturnType<typeof mockRealtimeFetch>;
 const disposers: (() => void)[] = [];
-const subscribe = (path: string, options: Parameters<typeof subscribeToSse>[1] = {}) => {
-  const dispose = subscribeToSse(`${origin}${path}`, options);
+const subscribe = (scope: string, options: Parameters<typeof subscribeToSse>[2] = {}) => {
+  const dispose = subscribeToSse(scope, origin, options);
   disposers.push(dispose);
   return dispose;
 };
@@ -34,9 +35,9 @@ describe("multiplexed SSE broker (#892)", () => {
     const personal = vi.fn();
     const queue = vi.fn();
     const sponsors = vi.fn();
-    const first = subscribe("/api/queue/me/stream", { identityKey: "shell", onEvent: personal });
-    subscribe("/api/queue/stream", { identityKey: 101, onEvent: queue });
-    subscribe("/api/events/stream?topic=sponsors", { onEvent: sponsors });
+    const first = subscribe(REALTIME_SCOPES.PERSONAL, { identityKey: "shell", onEvent: personal });
+    subscribe(REALTIME_SCOPES.QUEUE, { identityKey: 101, onEvent: queue });
+    subscribe(domainScope("sponsors"), { onEvent: sponsors });
     await vi.advanceTimersByTimeAsync(100);
     expect(fixture.fetcher).toHaveBeenCalledOnce();
     expect(fixture.connections[0].url).toBe(`${mux}?scopes=domain%3Asponsors%2Cpersonal%2Cqueue`);
@@ -53,8 +54,8 @@ describe("multiplexed SSE broker (#892)", () => {
   });
 
   it("reference counts identical subscriptions and releases the final reader", async () => {
-    const first = subscribe("/api/queue/stream");
-    const second = subscribe("/api/queue/stream");
+    const first = subscribe(REALTIME_SCOPES.QUEUE);
+    const second = subscribe(REALTIME_SCOPES.QUEUE);
     await vi.advanceTimersByTimeAsync(100);
     first();
     expect(fixture.connections[0].signal.aborted).toBe(false);
@@ -68,12 +69,12 @@ describe("multiplexed SSE broker (#892)", () => {
     const sponsorEvent = vi.fn();
     const queueResync = vi.fn();
     const sponsorResync = vi.fn();
-    subscribe("/api/queue/stream", {
+    subscribe(REALTIME_SCOPES.QUEUE, {
       events: ["queue.changed"],
       onEvent: queueEvent,
       onResync: queueResync,
     });
-    subscribe("/api/events/stream?topic=sponsors", {
+    subscribe(domainScope("sponsors"), {
       onEvent: sponsorEvent,
       onResync: sponsorResync,
     });
@@ -97,7 +98,7 @@ describe("multiplexed SSE broker (#892)", () => {
 
   it("recovers once after reconnect without sending a misleading global cursor", async () => {
     const resync = vi.fn();
-    subscribe("/api/queue/stream", { onResync: resync });
+    subscribe(REALTIME_SCOPES.QUEUE, { onResync: resync });
     await vi.advanceTimersByTimeAsync(100);
     fixture.connections[0].emit("queue", 10);
     await settle();
@@ -117,12 +118,12 @@ describe("multiplexed SSE broker (#892)", () => {
 
   it("drops delayed old-account frames and old listeners after account switching", async () => {
     const old = vi.fn();
-    subscribe("/api/queue/me/stream", { onEvent: old });
+    subscribe(REALTIME_SCOPES.PERSONAL, { onEvent: old });
     await vi.advanceTimersByTimeAsync(100);
     const source = fixture.connections[0];
     setSseIdentity(202, origin);
     const next = vi.fn();
-    subscribe("/api/queue/me/stream", { onEvent: next });
+    subscribe(REALTIME_SCOPES.PERSONAL, { onEvent: next });
     source.emit("personal", 1);
     await vi.advanceTimersByTimeAsync(100);
     fixture.connections[1].emit("personal", 2);
@@ -134,11 +135,11 @@ describe("multiplexed SSE broker (#892)", () => {
 
   it("joins participant, projects, scanner, queue and collaborative review readers", async () => {
     for (const path of [
-      "/api/queue/me/stream",
-      "/api/events/stream?topic=projects",
-      "/api/logistics/stream",
-      "/api/queue/stream",
-      "/api/queue/entries/42/stream",
+      REALTIME_SCOPES.PERSONAL,
+      domainScope("projects"),
+      REALTIME_SCOPES.LOGISTICS,
+      REALTIME_SCOPES.QUEUE,
+      reviewScope(42),
     ])
       subscribe(path);
     await vi.advanceTimersByTimeAsync(100);
@@ -150,11 +151,13 @@ describe("multiplexed SSE broker (#892)", () => {
 
   it("origin switching and sign-out discard the old reader and listeners", async () => {
     const old = vi.fn();
-    subscribe("/api/queue/me/stream", { onEvent: old });
+    subscribe(REALTIME_SCOPES.PERSONAL, { onEvent: old });
     await vi.advanceTimersByTimeAsync(100);
     setSseIdentity(101, "https://next.test");
     const next = vi.fn();
-    disposers.push(subscribeToSse("https://next.test/api/queue/me/stream", { onEvent: next }));
+    disposers.push(
+      subscribeToSse(REALTIME_SCOPES.PERSONAL, "https://next.test", { onEvent: next }),
+    );
     await vi.advanceTimersByTimeAsync(100);
     expect(fixture.connections[0].signal.aborted).toBe(true);
     expect(fixture.connections[1].url).toContain("https://next.test/");
@@ -172,7 +175,7 @@ describe("multiplexed SSE broker (#892)", () => {
   it("disconnects an oversized UTF-8 frame and recovers with one scoped resync", async () => {
     const event = vi.fn();
     const resync = vi.fn();
-    subscribe("/api/queue/stream", { onEvent: event, onResync: resync });
+    subscribe(REALTIME_SCOPES.QUEUE, { onEvent: event, onResync: resync });
     await vi.advanceTimersByTimeAsync(100);
     // Under 64 KiB in characters, over the byte bound: measure UTF-8 bytes.
     fixture.connections[0].raw(`data: ${"é".repeat(33_000)}`);
@@ -190,8 +193,8 @@ describe("multiplexed SSE broker (#892)", () => {
 
   it("keeps anonymous TV on one payload-free legacy stream", async () => {
     setSseIdentity(null, origin);
-    subscribe("/api/tv/stream");
-    subscribe("/api/tv/stream");
+    subscribe(REALTIME_SCOPES.PUBLIC_TV);
+    subscribe(REALTIME_SCOPES.PUBLIC_TV);
     await vi.advanceTimersByTimeAsync(100);
     expect(fixture.fetcher).toHaveBeenCalledOnce();
     expect(fixture.connections[0].url).toBe(`${origin}/api/tv/stream`);
@@ -207,7 +210,7 @@ describe("multiplexed SSE broker (#892)", () => {
     });
     const status = vi.fn();
     const resync = vi.fn();
-    subscribe("/api/queue/stream", { onConnectionChange: status, onResync: resync });
+    subscribe(REALTIME_SCOPES.QUEUE, { onConnectionChange: status, onResync: resync });
     await vi.advanceTimersByTimeAsync(5000);
     expect(cancel).toHaveBeenCalled();
     expect(status).not.toHaveBeenCalledWith(true);
@@ -223,7 +226,7 @@ describe("multiplexed SSE broker (#892)", () => {
       body: null as never,
       headers: new Headers({ "retry-after": "120" }),
     });
-    subscribe("/api/queue/stream");
+    subscribe(REALTIME_SCOPES.QUEUE);
     await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersByTimeAsync(119_000);
     expect(fixture.fetcher).toHaveBeenCalledOnce();

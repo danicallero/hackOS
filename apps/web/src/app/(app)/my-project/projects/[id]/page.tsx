@@ -1,5 +1,5 @@
 "use client";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useParams } from "next/navigation";
@@ -74,8 +74,8 @@ export default function MyProjectDetailPage() {
       setLoading(false);
     }
   }, [id, t, succeeded, failed]);
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
-  const queueRefresh = useAutoRefresh("/api/queue/me/stream", [
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
+  const queueRefresh = useAutoRefresh(REALTIME_SCOPES.PERSONAL, [
     EVENTS.USER_QUEUE_CHANGED,
     EVENTS.USER_QUEUE_CALLED,
   ]);

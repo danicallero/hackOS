@@ -5,7 +5,7 @@
 // uses this app's shared API wrappers, cards, tabs and form controls.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
@@ -118,7 +118,7 @@ export default function QueuePage() {
 
   const roomView = useLiveQuery<RoomView>(
     (signal) => (activeRoomId ? getRoomView(activeRoomId, signal) : Promise.resolve(null as never)),
-    "/api/queue/stream",
+    REALTIME_SCOPES.QUEUE,
     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED, EVENTS.QUEUE_NOTIFY_ENTER],
     {
       enabled: canUse && activeRoomId != null,
@@ -143,7 +143,7 @@ export default function QueuePage() {
       activeRoomId
         ? getRoomPace(activeRoomId, signal, effectiveChallengeId)
         : Promise.resolve(null as never),
-    "/api/queue/stream",
+    REALTIME_SCOPES.QUEUE,
     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
     {
       enabled: canUse && activeRoomId != null,
@@ -158,7 +158,7 @@ export default function QueuePage() {
       effectiveChallengeId
         ? getChallengeProgress(effectiveChallengeId, signal)
         : Promise.resolve(null as never),
-    "/api/queue/stream",
+    REALTIME_SCOPES.QUEUE,
     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
     {
       enabled: canUse && effectiveChallengeId != null,

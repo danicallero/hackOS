@@ -1,6 +1,6 @@
 "use client";
 
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
@@ -974,7 +974,7 @@ export function TvDisplay() {
   // stay on the operational-only channel.
   const refreshPublicProjection = useCallback(() => void load(), [load]);
 
-  useEventSource("/api/tv/stream", {
+  useEventSource(REALTIME_SCOPES.PUBLIC_TV, {
     events: [EVENTS.DATA_CHANGED],
     onEvent: refreshPublicProjection,
   });

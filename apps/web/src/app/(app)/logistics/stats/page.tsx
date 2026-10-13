@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import type { StatisticsParticipantStatus } from "@hackos/shared/statistics";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/csr/SquaresFour";
@@ -97,13 +97,13 @@ export default function LogisticsStatsPage() {
 
   const liveStats = useLiveQuery<LogisticsStats>(
     logisticsApi.stats,
-    "/api/logistics/stream",
+    REALTIME_SCOPES.LOGISTICS,
     LOGISTICS_EVENTS,
     { enabled: canGeneralStats && activePhase !== "before", resourceKey: ["logistics", "stats"] },
   );
   const mealPlans = useLiveQuery(
     logisticsApi.mealPlans,
-    "/api/logistics/stream",
+    REALTIME_SCOPES.LOGISTICS,
     MEAL_PLAN_EVENTS,
     {
       enabled: canGeneralStats && activePhase === "during",

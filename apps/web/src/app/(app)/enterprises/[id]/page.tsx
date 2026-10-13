@@ -6,7 +6,7 @@
 // sets logo_url to the resulting public URL server-side, so we just reload.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
@@ -82,7 +82,7 @@ export default function EnterpriseDetailPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin edits
   // this enterprise elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

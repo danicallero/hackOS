@@ -1,6 +1,6 @@
 "use client";
 
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { BowlFoodIcon } from "@phosphor-icons/react/dist/csr/BowlFood";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { HardDriveIcon } from "@phosphor-icons/react/dist/csr/HardDrive";
@@ -63,7 +63,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
   }
   const activities = useLiveQuery(
     () => logisticsApi.scannableActivities(category),
-    "/api/logistics/stream",
+    REALTIME_SCOPES.LOGISTICS,
     SCAN_EVENTS,
     { debounceMs: 400, resourceKey: ["logistics", "scannable-activities", category] },
   );

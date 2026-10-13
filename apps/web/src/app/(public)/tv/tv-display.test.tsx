@@ -61,11 +61,11 @@ describe("TvDisplay public realtime boundary", () => {
 
     expect(useEventSource).toHaveBeenCalledOnce();
     expect(useEventSource).toHaveBeenCalledWith(
-      "/api/tv/stream",
+      "public-tv",
       expect.objectContaining({ events: [EVENTS.DATA_CHANGED] }),
     );
-    expect(useEventSource).not.toHaveBeenCalledWith("/api/content/stream", expect.anything());
-    expect(useEventSource).not.toHaveBeenCalledWith("/api/queue/stream", expect.anything());
+    expect(useEventSource).not.toHaveBeenCalledWith("public-content", expect.anything());
+    expect(useEventSource).not.toHaveBeenCalledWith("queue", expect.anything());
   });
 });
 

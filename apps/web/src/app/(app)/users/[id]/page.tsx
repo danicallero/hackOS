@@ -1,6 +1,6 @@
 "use client";
 
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useParams } from "next/navigation";
@@ -77,7 +77,7 @@ export default function UserProfilePage() {
 
   // Soft, in-place refresh instead of a hard reload when this user's profile
   // changes elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=identity", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.IDENTITY), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

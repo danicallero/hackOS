@@ -13,6 +13,7 @@ jest.mock("./auth-client", () => ({
   authClient: { getCookie: jest.fn(() => "session=restored") },
 }));
 jest.mock("./env", () => ({ API_URL: "https://api.hackos.test" }));
+jest.mock("expo-application", () => ({ nativeBuildVersion: "42" }));
 
 import { EVENTS } from "@hackos/shared/events";
 import {
@@ -102,7 +103,11 @@ describe("multiplexed native events (#892)", () => {
     expect(fetch).toHaveBeenCalledWith(
       "https://api.hackos.test/api/realtime/stream?scopes=logistics%2Cpersonal%2Cqueue",
       expect.objectContaining({
-        headers: { accept: "text/event-stream", cookie: "session=restored" },
+        headers: {
+          accept: "text/event-stream",
+          cookie: "session=restored",
+          "X-HackOS-Build": "42",
+        },
       }),
     );
     expect(mockAppStateListeners.size).toBe(1);

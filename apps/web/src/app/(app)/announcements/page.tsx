@@ -5,7 +5,7 @@
 // consumes the CRUD API in apps/api/src/modules/notifications/routes/announcements.ts.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
@@ -111,7 +111,7 @@ export default function AnnouncementsPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // publishes/edits/deletes an announcement elsewhere (H50).
-  const liveRefresh = useAutoRefresh("/api/content/stream", [EVENTS.CONTENT_ANNOUNCEMENT]);
+  const liveRefresh = useAutoRefresh(REALTIME_SCOPES.PUBLIC_CONTENT, [EVENTS.CONTENT_ANNOUNCEMENT]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
