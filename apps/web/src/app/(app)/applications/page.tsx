@@ -10,19 +10,20 @@ import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText"
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ApplicationExportPanel } from "@/components/applications/application-export-panel";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
-import { toast } from "@/lib/toast";
 import { type ApplicationForm, fmtDateTime, grantedRoleNameLabel, windowState } from "./lib";
 
 export default function ApplicationsPage() {
@@ -33,11 +34,10 @@ export default function ApplicationsPage() {
   const [forms, setForms] = useState<ApplicationForm[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const hasLoadedRef = useRef(false);
+  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
 
   const load = useCallback(async () => {
-    if (!hasLoadedRef.current) setLoading(true);
-    setLoadError(null);
+    if (!hasLoaded()) setLoading(true);
     try {
       // The API admits manage, review, and decide holders. It never infers
       // builder permission merely from access to this directory.
@@ -45,15 +45,16 @@ export default function ApplicationsPage() {
         "/api/applications",
       );
       setForms(applications);
-      hasLoadedRef.current = true;
+      succeeded();
+      setLoadError(null);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadApplicationForms");
-      setLoadError(message);
-      toast.error(message, t("workspaceApplications"));
+      // A failed background refresh keeps the list (#1012).
+      if (!failed(err)) return;
+      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadApplicationForms"));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, succeeded, failed, hasLoaded]);
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits a form elsewhere.
@@ -65,7 +66,7 @@ export default function ApplicationsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching the applications list from the API on mount is a legitimate external-system sync
     load();
-  }, [load, liveRefresh]);
+  }, [load, liveRefresh, retryNonce]);
 
   const columns: Column<ApplicationForm>[] = [
     {
@@ -126,6 +127,7 @@ export default function ApplicationsPage() {
 
   return (
     <PageLayout>
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         title={t("applications")}
         secondaryActions={
@@ -161,13 +163,8 @@ export default function ApplicationsPage() {
         data={forms}
         getRowId={(f) => String(f.id)}
         stateKey="applications-list"
-        loading={loading && !hasLoadedRef.current}
-        error={
-          !hasLoadedRef.current && loadError ? { message: loadError, onRetry: load } : undefined
-        }
-        mutationError={
-          hasLoadedRef.current && loadError ? { message: loadError, onRetry: load } : undefined
-        }
+        loading={loading && !hasLoaded()}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         getRowHref={(f) => `/applications/${f.id}`}
         getRowLabel={(f) => f.name}
         searchable={(f) => `${f.name} ${grantedRoleNameLabel(f.granted_role_name, t)}`}

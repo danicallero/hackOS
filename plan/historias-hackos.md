@@ -55,11 +55,10 @@ is the same whether the email exists or not (the form can't be used to discover
 registered users). The link is sent via the configurable async email system.
 When I set a new password all my old sessions are closed.
 
-**H6. Secondary email**
-As a participant I want to add and verify a second email address, because I
-registered on Devpost with a different account and this lets the system
-recognize my projects on import. That secondary email can't match anyone's
-primary or another secondary: each address identifies exactly one account.
+**H6. Secondary email** — *Retired (2026-10-13).*
+Its only purpose was matching Devpost imports, and Devpost is no longer used
+(section 3). Each account has exactly one email address; nothing, including
+the accreditation lookup, identifies a person by a second address.
 
 **H7. Edit my profile**
 As a user I want to view my data (name, phone, shirt size, language, dietary
@@ -143,46 +142,69 @@ stay restricted to whoever holds decision-making access.
 
 ## 3. Teams and projects
 
-Projects are mainly submitted via Devpost (FastTrack). hackOS imports that
-information to build the judging queues without manual data entry. The hackOS
-database is the source of truth; any external import only feeds that model and
-doesn't create a parallel truth.
+Projects are created and submitted inside hackOS; no external platform is
+involved. The organization defines what a project must contain and when each
+step happens; participants write their project as a draft, the event can show
+a project gallery, and winners are published at a scheduled time. The project
+and its team are what the judging queues are built from (section 5).
 
-**H16. Import Devpost projects**
-As a queue operator I want to upload the two Devpost export files, see a
-preview of what will be created (teams, members, selected challenges) and
-confirm the import. The system recognizes people by their email (the account
-email or the secondary from H6) and shows me separately who it couldn't match.
+**H16. Define the project form**
+As the organization I want to define the fields every project fills in —
+short text, long text, links, images, files and single or multiple choice —
+with their order, limits and whether each one is required, so the event asks
+for exactly what judging and the gallery need. Required fields only block
+submission, never saving a draft. Changing the form after projects exist
+never deletes answers already given.
 
-**H17. Resolve unmatched people**
-As an operator I want to manually link people Devpost brings with an email
-that doesn't match any account, so nobody loses their project for having
-registered with a different address.
+**H17. Configure project phases and visibility**
+As the organization I want to set, in event settings, when participants can
+create projects, until when they can edit them, when submissions close and when
+the gallery opens, and whether drafts are visible only to their own team, to
+other participants or to the public. Each window opens and closes on time by
+itself, with no manual buttons, and the server enforces them: a request outside
+a window is rejected with a clear reason, not silently ignored.
 
-These next two stories are post-MVP extensions, once the Devpost import is
-stable and the project model lives inside hackOS.
+**H18. Browse the project gallery**
+As an attendee or visitor I want to browse the event's projects with their
+fields, challenges and team once the gallery is open, to see what was built.
+What appears depends on H17: submitted projects, and drafts only if the event
+allows it for my audience. Team members appear by name; a member's photo
+appears only if that person agreed to share their photo publicly. Winners
+appear in the gallery only once published (H60).
 
-**H18. Create projects inside hackOS**
-As the organization I want to create projects directly in hackOS, attach people
-and fill in all their information — title, description, links, challenges and
-other data — so the system can function as an internal Devpost clone when the
-event no longer depends only on external imports.
+**H19. Create my project and build my team**
+As a participant I want to create my project while creation is open and invite
+teammates by email; an invitation only adds someone once they accept, and any
+member can leave. The event may set a maximum team size. Only admitted
+participants can create projects or join a team, and a person may belong to
+more than one project.
 
-**H19. Let participants create projects**
-As the organization I want to toggle in event settings whether participants can
-create their own projects without Devpost, so this flow is available only when
-the event decides.
+**H20. Edit and submit my project**
+As a member of a project I want to see it — its fields, team, challenges and
+queue status — and fill in its fields as a draft that saves automatically, so
+closing the laptop loses nothing. While editing is open any member can edit it
+and choose the challenges it enters. Submitting requires every required field
+and keeps a snapshot of what was submitted; I can still change the project
+until editing closes, and when it closes the last submitted version is the one
+that counts. On mobile this lives in a My Projects tab together with my queue
+status (H38).
 
-**H20. View my project**
-As a participant I want to see my project, its team and which challenges it's
-entered. I can't modify any of this myself: if something needs correcting I ask
-queue management or administration.
+**H21. Correct projects, teams and challenges, even live**
+As a queue operator or administrator I want to create a project on a team's
+behalf, edit any project's fields, add or remove people from a team and enter
+or withdraw a team from a challenge, regardless of the participant windows and
+even while judging is running. If queues are already generated, entering a team
+adds them to the end of that challenge's queue; withdrawing removes them and the
+rest move up one position. All audited.
 
-**H21. Correct teams and challenges, even live**
-As a queue operator I want to add or remove people from a team and enter or
-withdraw a team from a challenge, even while judging is running. If queues are
-already generated, entering a team adds them to the end of that challenge's
-queue; withdrawing removes them and the rest move up one position. All audited.
+**H60. Choose winners and schedule their publication**
+As the organization, or as a sponsor for my own challenge, I want to record the
+winning projects of each challenge (with their prize or position) and schedule
+when they are announced, for example at the closing ceremony. Until that time
+no API response, gallery page, screen, notification or export available to
+participants or the public reveals a winner, and the result appears
+automatically on time, as with challenge reveals (H45). Recording, changing and
+scheduling winners is audited.
 
 ---
 
@@ -477,8 +499,9 @@ The queue block is non-negotiable. FastTrack must improve; the rest is optional.
 
 1. **Account, identity and permissions** (section 1)
 2. **Queues, judging and screens** (sections 5 and 6)
-3. **Enrollment** (section 2) and **teams/Devpost** (section 3) can run in
-   parallel with the above.
+3. **Enrollment** (section 2) and **teams and projects** (section 3) can run
+   in parallel with the above; winner publication (H60) can come later, before
+   the closing ceremony.
 4. **Accreditation and logistics** (section 4) and **public content and
    schedule** (section 8).
 5. **Sponsors** (section 7), depending on company invitations (H9) and judging
