@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  emptyAnnouncementForm,
+  type TargetingMode,
+  targetingModeOf,
+} from "@hackos/shared/announcement-form";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
@@ -27,7 +32,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, getTimeZoneLabel } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
-import type { Announcement, AnnouncementInput, NotificationChannel } from "@/lib/notifications";
+import type { AnnouncementInput, NotificationChannel } from "@/lib/notifications";
 import { notificationsApi } from "@/lib/notifications";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -43,51 +48,9 @@ function channelLabel(channel: NotificationChannel, t: Translate): string {
   return map[channel];
 }
 
-type TargetingMode = "everyone" | "roles" | "specific";
+export const EMPTY_ANNOUNCEMENT_FORM: AnnouncementInput = emptyAnnouncementForm();
 
-function targetingModeOf(values: AnnouncementInput): TargetingMode {
-  if (values.recipientUserIds.length > 0) return "specific";
-  if (values.roleIds.length > 0 || values.intoleranceIds.length > 0) return "roles";
-  return "everyone";
-}
-
-export const EMPTY_ANNOUNCEMENT_FORM: AnnouncementInput = {
-  title: "",
-  body: "",
-  translations: {
-    es: { title: "", body: "" },
-    gl: { title: "", body: "" },
-    en: { title: "", body: "" },
-  },
-  notifyUsers: false,
-  screenPlacement: "none",
-  publishAt: null,
-  expiresAt: null,
-  roleIds: [],
-  intoleranceIds: [],
-  channels: ["in_app", "email", "push"],
-  recipientUserIds: [],
-};
-
-export function announcementToForm(a: Announcement): AnnouncementInput {
-  return {
-    title: a.title,
-    body: a.body,
-    translations: {
-      es: a.translations?.es ?? { title: a.title, body: a.body },
-      gl: a.translations?.gl ?? { title: "", body: "" },
-      en: a.translations?.en ?? { title: "", body: "" },
-    },
-    notifyUsers: a.notify_users,
-    screenPlacement: a.screen_placement,
-    publishAt: a.publish_at,
-    expiresAt: a.expires_at,
-    roleIds: a.role_ids ?? [],
-    intoleranceIds: a.intolerance_ids ?? [],
-    channels: a.channels ?? ["in_app", "email", "push"],
-    recipientUserIds: (a.recipients ?? []).map((r) => r.id),
-  };
-}
+export { announcementToForm } from "@hackos/shared/announcement-form";
 
 /**
  * Form modal for creating or editing announcements.

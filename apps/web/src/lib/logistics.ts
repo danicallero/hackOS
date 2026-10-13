@@ -352,8 +352,9 @@ export interface ScheduleInput {
   titleLanguage?: Language;
 }
 
-export type ScheduleTranslation = { title?: string; description?: string | null };
-export type ScheduleTranslations = Partial<Record<Language, ScheduleTranslation>>;
+export type { ScheduleTranslation, ScheduleTranslations } from "@hackos/shared/schedule-form";
+
+import type { ScheduleTranslations } from "@hackos/shared/schedule-form";
 
 /**
  * Resolves what a viewer sees for a schedule item's title/description (H50
@@ -361,31 +362,7 @@ export type ScheduleTranslations = Partial<Record<Language, ScheduleTranslation>
  * item's primary (authored) language — never blank, since primaryLanguage's
  * canonical `title`/`description` is always filled.
  */
-export function resolveScheduleText(
-  item: PublicScheduleItem,
-  language: Language,
-): { title: string; description: string | null } {
-  const firstText = (...values: (string | null | undefined)[]) =>
-    values.find((value) => typeof value === "string" && value.trim().length > 0) ?? null;
-  const fallbackLanguage =
-    language === item.primaryLanguage || language === "en" ? undefined : "en";
-  return {
-    // Resolve title and description independently. A translated title must
-    // not hide an available description (or vice versa) when translations
-    // were entered one field at a time (H50).
-    title:
-      firstText(
-        language === item.primaryLanguage ? undefined : item.titleI18n?.[language],
-        fallbackLanguage ? item.titleI18n?.[fallbackLanguage] : undefined,
-        item.title,
-      ) ?? item.title,
-    description: firstText(
-      language === item.primaryLanguage ? undefined : item.descriptionI18n?.[language],
-      fallbackLanguage ? item.descriptionI18n?.[fallbackLanguage] : undefined,
-      item.description,
-    ),
-  };
-}
+export { resolveScheduleText } from "@hackos/shared/localized-text";
 
 export function idempotencyHeaders(prefix: string): Record<string, string> {
   return { "idempotency-key": `${prefix}-${crypto.randomUUID()}` };
