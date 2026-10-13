@@ -12,6 +12,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { PAIRED_HEADER_CLASS, SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { PresentationStatus } from "@/components/projects/presentation-status";
 import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
@@ -20,6 +21,7 @@ import { WorkGroupEditor } from "@/components/projects/work-group-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
@@ -51,8 +53,8 @@ export default function MyProjectDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [changeError, setChangeError] = useState<string | null>(null);
   const [removingChallenge, setRemovingChallenge] = useState<number | null>(null);
+  const { succeeded, failed, reset, stale, retryNonce } = useBackgroundRefresh();
   const load = useCallback(async () => {
-    setLoadError(null);
     try {
       const [result, catalogue, planned] = await Promise.all([
         myProjects(),
@@ -62,13 +64,16 @@ export default function MyProjectDetailPage() {
       setProject(result.projects.map(toProjectRepo).find((item) => item.id === Number(id)) ?? null);
       setChallenges(catalogue.items);
       setGroup(planned.groups.find((item) => item.linked_repo_id === Number(id)) ?? null);
+      succeeded();
+      setLoadError(null);
     } catch (error) {
-      toast.error(apiErrorText(error, t, t("couldNotLoadProject")), t("projectLabel"));
+      // A failed background refresh keeps the loaded project (#1012).
+      if (!failed(error)) return;
       setLoadError(apiErrorText(error, t, t("couldNotLoadProject")));
     } finally {
       setLoading(false);
     }
-  }, [id, t]);
+  }, [id, t, succeeded, failed]);
   const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
   const queueRefresh = useAutoRefresh("/api/queue/me/stream", [
     EVENTS.USER_QUEUE_CHANGED,
@@ -77,7 +82,9 @@ export default function MyProjectDetailPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: refresh nonces trigger authoritative refetches (H38).
   useEffect(() => {
     void load();
-  }, [load, liveRefresh, queueRefresh]);
+  }, [load, liveRefresh, queueRefresh, retryNonce]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a different project is a different resource, so its first load may show an error.
+  useEffect(() => reset(), [id, reset]);
   if (loading)
     return (
       <div className="flex min-h-80 items-center justify-center">
@@ -88,6 +95,7 @@ export default function MyProjectDetailPage() {
   if (!project) return <EmptyState icon={FolderSimpleIcon} title={t("projectNotFoundTitle")} />;
   return (
     <PageLayout>
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         className="flex-row items-center justify-between gap-2 md:items-center [&>[data-slot=action-group]]:shrink-0 [&>[data-slot=action-group]]:flex-nowrap"
         title={project.name}

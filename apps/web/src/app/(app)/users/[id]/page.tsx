@@ -5,12 +5,15 @@ import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageLayout } from "@/components/common/page-layout";
 import { Spinner } from "@/components/common/spinner";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
@@ -51,6 +54,9 @@ export default function UserProfilePage() {
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
+  const [notFound, setNotFound] = useState(false);
+
+  const { succeeded, failed, reset, stale, retryNonce } = useBackgroundRefresh();
 
   const load = useCallback(async () => {
     setStatus((current) => (current === "ready" ? "ready" : "loading"));
@@ -58,11 +64,15 @@ export default function UserProfilePage() {
       const data = await api.get<UserDetail>(`/api/users/${userId}`);
       setUser(data);
       setStatus("ready");
+      succeeded();
     } catch (err) {
+      // A failed background refresh keeps the loaded profile (#1012).
+      if (!failed(err)) return;
       setErrorMsg(apiErrorText(err, t, t("couldNotLoadUserProfile")));
+      setNotFound(isNotFoundError(err));
       setStatus("error");
     }
-  }, [userId, t]);
+  }, [userId, t, succeeded, failed]);
 
   // Soft, in-place refresh instead of a hard reload when this user's profile
   // changes elsewhere.
@@ -72,8 +82,14 @@ export default function UserProfilePage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (Number.isFinite(userId)) void load();
-    else setStatus("error");
-  }, [userId, load, liveRefresh]);
+    else {
+      setNotFound(true);
+      setStatus("error");
+    }
+  }, [userId, load, liveRefresh, retryNonce]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a different user is a different resource, so its first load may show an error.
+  useEffect(() => reset(), [userId, reset]);
 
   useEffect(() => {
     api
@@ -91,6 +107,14 @@ export default function UserProfilePage() {
   }
 
   if (status === "error" || !user) {
+    if (!notFound) {
+      return (
+        <ContextualError
+          message={errorMsg || t("couldNotLoadUserProfile")}
+          onRetry={() => void load()}
+        />
+      );
+    }
     return (
       <div className="space-y-6">
         <EmptyState
@@ -104,6 +128,7 @@ export default function UserProfilePage() {
 
   return (
     <PageLayout>
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <ProfileHeader user={user} onPhotoChanged={load} />
 
       <Tabs value={tab} onValueChange={setTab}>

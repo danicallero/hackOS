@@ -21,6 +21,7 @@ import { ActionGroup } from "@/components/common/action-group";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { ListToolbar } from "@/components/common/list-toolbar";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
@@ -105,7 +107,7 @@ export function ResponsesTab({
   const [allRows, setAllRows] = useState<ResponseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const hasLoadedRef = useRef(false);
+  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -139,25 +141,30 @@ export function ResponsesTab({
       // In particular, accepting a review moves it out of this workspace; the
       // reviewer should still be able to navigate the familiar set and use undo.
       if (!force && selectedId !== null) return;
-      if (!hasLoadedRef.current) setLoading(true);
-      setLoadError(null);
+      if (!hasLoaded()) setLoading(true);
       try {
         const { responses } = await api.get<{ responses: ResponseRow[] }>(
           `/api/applications/${id}/responses`,
         );
         setAllRows(responses);
         setDecisionStatusOverrides({});
-        setSelectedIds(new Set());
-        hasLoadedRef.current = true;
+        // Keep the reviewer's selection across live refreshes; drop removed rows (#1012).
+        const remaining = new Set(responses.map((row) => String(row.id)));
+        setSelectedIds((current) => {
+          const next = new Set([...current].filter((rowId) => remaining.has(rowId)));
+          return next.size === current.size ? current : next;
+        });
+        succeeded();
+        setLoadError(null);
       } catch (err) {
-        const message = apiErrorText(err, t, t("couldNotLoadResponses"));
-        setLoadError(message);
-        toast.error(message, t("workspaceApplications"));
+        // A failed background refresh keeps the table and selection (#1012).
+        if (!failed(err)) return;
+        setLoadError(apiErrorText(err, t, t("couldNotLoadResponses")));
       } finally {
         setLoading(false);
       }
     },
-    [id, selectedId, t],
+    [id, selectedId, t, succeeded, failed, hasLoaded],
   );
 
   // Soft, in-place refresh instead of a hard reload when a response changes
@@ -171,7 +178,7 @@ export function ResponsesTab({
   useEffect(() => {
     const handle = setTimeout(() => void load(true), 250);
     return () => clearTimeout(handle);
-  }, [load, liveRefresh]);
+  }, [load, liveRefresh, retryNonce]);
 
   // Deep-link: `?response=<id>` (used by the profile Application tab) opens that
   // specific response's review modal directly — the same view as clicking a row
@@ -348,6 +355,7 @@ export function ResponsesTab({
           result?.processed ?? result?.sent ?? Math.max(0, selectedIds.size - skipped.length),
         skipped,
       });
+      setSelectedIds(new Set());
       await load();
       if (skipped.length === 0) toast.success(label, { compactTitle: t("toastDecisions") });
     } catch (err) {
@@ -459,6 +467,7 @@ export function ResponsesTab({
           )
         }
       />
+      {stale && <StaleDataNotice onRetry={() => void load(true)} />}
       <span role="status" aria-live="polite" className="text-muted-foreground text-xs tabular-nums">
         {t("tableResultCount", { count: rows.length })}
       </span>
@@ -855,13 +864,8 @@ export function ResponsesTab({
         columns={columns}
         data={rows}
         getRowId={(r) => String(r.id)}
-        loading={loading && !hasLoadedRef.current}
-        error={
-          !hasLoadedRef.current && loadError ? { message: loadError, onRetry: load } : undefined
-        }
-        mutationError={
-          hasLoadedRef.current && loadError ? { message: loadError, onRetry: load } : undefined
-        }
+        loading={loading && !hasLoaded()}
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         onRowClick={(r) => setSelectedId(r.id)}
         getRowLabel={(r) => r.name ?? r.email}
         selectable={canDecide}

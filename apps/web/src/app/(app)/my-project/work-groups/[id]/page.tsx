@@ -13,12 +13,14 @@ import { PageLayout } from "@/components/common/page-layout";
 import { PAIRED_HEADER_CLASS, SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
 import { ProjectNavigation } from "@/components/projects/project-navigation";
 import { ProjectLifecycle } from "@/components/projects/project-submission";
 import { WorkGroupField as Field, WorkGroupEditor } from "@/components/projects/work-group-editor";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
@@ -48,8 +50,8 @@ export default function WorkGroupDetailPage() {
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const { succeeded, failed, reset, stale, retryNonce } = useBackgroundRefresh();
   const load = useCallback(async () => {
-    setLoadError(null);
     try {
       const [next, catalogue] = await Promise.all([
         getMyWorkGroup(id),
@@ -57,6 +59,8 @@ export default function WorkGroupDetailPage() {
       ]);
       setGroup(next);
       setChallenges(catalogue.items);
+      succeeded();
+      setLoadError(null);
       if (next.linked_repo_id != null) {
         const mine = await myProjects();
         if (mine.projects.some((project) => project.id === next.linked_repo_id)) {
@@ -64,13 +68,17 @@ export default function WorkGroupDetailPage() {
         }
       }
     } catch (error) {
-      toast.error(apiErrorText(error, t, t("couldNotLoadProject")), t("projectLabel"));
-      setLoadError(apiErrorText(error, t, t("couldNotLoadProject")));
+      // A failed background refresh keeps the loaded group (#1012).
+      if (!failed(error)) return;
       setGroup(null);
+      // "Not found" is reserved for a 404.
+      setLoadError(
+        isNotFoundError(error) ? null : apiErrorText(error, t, t("couldNotLoadProject")),
+      );
     } finally {
       setLoading(false);
     }
-  }, [id, router, t]);
+  }, [id, router, t, succeeded, failed]);
   const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
   const challengeRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [
     EVENTS.DOMAIN_CHANGED,
@@ -78,7 +86,9 @@ export default function WorkGroupDetailPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: project mutations may establish the import link (#854).
   useEffect(() => {
     void load();
-  }, [load, liveRefresh, challengeRefresh]);
+  }, [load, liveRefresh, challengeRefresh, retryNonce]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a different group is a different resource, so its first load may show an error.
+  useEffect(() => reset(), [id, reset]);
   if (loading)
     return (
       <div className="flex min-h-80 items-center justify-center">
@@ -117,6 +127,7 @@ export default function WorkGroupDetailPage() {
   );
   return (
     <PageLayout>
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         className={
           active

@@ -12,16 +12,19 @@ import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimpl
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { TabBar } from "@/components/common/tab-bar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -56,6 +59,8 @@ export default function EnterpriseDetailPage() {
   const [enterprise, setEnterprise] = useState<Enterprise | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
+  const [notFound, setNotFound] = useState(false);
+  const { succeeded, failed, reset, stale, retryNonce } = useBackgroundRefresh();
 
   const load = useCallback(async () => {
     // A background live-refresh shouldn't flash the whole page away — only
@@ -65,11 +70,15 @@ export default function EnterpriseDetailPage() {
       const data = await api.get<Enterprise>(`/api/enterprises/${id}`);
       setEnterprise(data);
       setStatus("ready");
+      succeeded();
     } catch (err) {
-      setErrorMsg(apiErrorText(err, t, "Could not load this enterprise."));
+      // A failed background refresh keeps the loaded enterprise (#1012).
+      if (!failed(err)) return;
+      setErrorMsg(apiErrorText(err, t, t("couldNotLoadEnterprise")));
+      setNotFound(isNotFoundError(err));
       setStatus("error");
     }
-  }, [id, t]);
+  }, [id, t, succeeded, failed]);
 
   // Soft, in-place refresh instead of a hard reload when another admin edits
   // this enterprise elsewhere.
@@ -80,8 +89,14 @@ export default function EnterpriseDetailPage() {
     if (Number.isFinite(id)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       void load();
-    } else setStatus("error");
-  }, [id, load, liveRefresh]);
+    } else {
+      setNotFound(true);
+      setStatus("error");
+    }
+  }, [id, load, liveRefresh, retryNonce]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a different enterprise is a different resource, so its first load may show an error.
+  useEffect(() => reset(), [id, reset]);
 
   if (status === "loading") {
     return (
@@ -92,6 +107,14 @@ export default function EnterpriseDetailPage() {
   }
 
   if (status === "error" || !enterprise) {
+    if (!notFound) {
+      return (
+        <ContextualError
+          message={errorMsg || t("couldNotLoadEnterprise")}
+          onRetry={() => void load()}
+        />
+      );
+    }
     return (
       <div className="space-y-6">
         <EmptyState
@@ -105,6 +128,7 @@ export default function EnterpriseDetailPage() {
 
   return (
     <PageLayout>
+      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         leading={
           <Avatar size="lg">
