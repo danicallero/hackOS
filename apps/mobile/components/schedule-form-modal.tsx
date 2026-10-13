@@ -88,54 +88,8 @@ function emptyForm(): ScheduleInput {
  * Saving re-anchors primary_language to the editor's language server-side
  * (see the API's updateScheduleItem/reanchorPrimaryLanguage).
  */
-export function scheduleItemToForm(
-  item: AdminScheduleItem,
-  accountLanguage: Language,
-): ScheduleInput {
-  const resolved =
-    item.primaryLanguage === accountLanguage
-      ? { title: item.title, description: item.description }
-      : {
-          title: item.titleI18n[accountLanguage] ?? "",
-          description: item.descriptionI18n[accountLanguage] ?? null,
-        };
-  return {
-    title: resolved.title,
-    description: resolved.description,
-    location: item.location,
-    type: item.type,
-    requiresScan: item.requiresScan,
-    startsAt: item.startsAt,
-    endsAt: item.endsAt,
-    visibility: item.visibility,
-    publishAt: item.publishAt,
-    audiences: item.audiences ?? [],
-    liveActivityAudience: item.liveActivityAudience ?? false,
-    contactNote: item.contactNote,
-    notes: item.notes,
-  };
-}
-
 /** The non-viewer locales' hand-edited/machine-translated title+description, including the item's original primary language if it isn't the viewer's own (H50 extension). */
-export function scheduleItemToTranslations(
-  item: AdminScheduleItem,
-  accountLanguage: Language,
-): ScheduleTranslations {
-  const translations: ScheduleTranslations = {};
-  for (const language of LANGUAGES) {
-    if (language === accountLanguage) continue;
-    if (language === item.primaryLanguage) {
-      translations[language] = { title: item.title, description: item.description };
-      continue;
-    }
-    const title = item.titleI18n[language];
-    const description = item.descriptionI18n[language];
-    if (title !== undefined || description !== undefined) {
-      translations[language] = { title, description };
-    }
-  }
-  return translations;
-}
+export { scheduleItemToForm, scheduleItemToTranslations } from "@hackos/shared/schedule-form";
 
 /**
  * Admin create/edit form (H59 3c) — same field set and validation as the

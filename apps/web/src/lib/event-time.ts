@@ -6,28 +6,13 @@
 // helpers read it so non-React code (CSV export, form defaults) agrees with
 // what the roster shows. Until it is known the browser zone stands in.
 
-import { deviceTimeZone, isValidTimeZone, zoneAbbreviation } from "@hackos/shared/event-time";
+import { deviceTimeZone, zoneAbbreviation } from "@hackos/shared/event-time";
+import { createEventTimeZoneStore } from "@hackos/shared/event-time-store";
 import { useSyncExternalStore } from "react";
 
-let eventZone: string | null = null;
-const listeners = new Set<() => void>();
+const { setEventTimeZone, getEventTimeZone, subscribe } = createEventTimeZoneStore();
 
-export function setEventTimeZone(zone: string | null | undefined): void {
-  const next = isValidTimeZone(zone) ? zone : null;
-  if (next === eventZone) return;
-  eventZone = next;
-  for (const listener of listeners) listener();
-}
-
-/** The event's IANA zone, or the browser's while it is not yet known. */
-export function getEventTimeZone(): string {
-  return eventZone ?? deviceTimeZone();
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export { getEventTimeZone, setEventTimeZone };
 
 /** Re-renders the caller when the event zone changes. */
 export function useEventTimeZone(): string {
