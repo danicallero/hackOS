@@ -62,10 +62,6 @@ export function routerTabBarInsets(safeAreaBottom: number, width = 0): RouterTab
   };
 }
 
-export function routerTabBarBottomInset(safeAreaBottom: number, width = 0): number {
-  return routerTabBarInsets(safeAreaBottom, width).contentBottomInset;
-}
-
 const RouterTabBarInsetsContext = createContext<RouterTabBarInsets | null>(null);
 
 /** Provides the custom tab bar's geometry to every route rendered in its TabSlot. */

@@ -568,11 +568,6 @@ export async function roomAssignments(roomId: number) {
   };
 }
 
-export async function allRoomViews() {
-  const rooms = (await pool.query(`SELECT id FROM rooms ORDER BY id ASC`)).rows;
-  return Promise.all(rooms.map((r: { id: number }) => roomView(r.id)));
-}
-
 /**
  * Public TV snapshot (H41). The operational room projection intentionally
  * includes team membership, project links and cross-room diagnostics; venue

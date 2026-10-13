@@ -206,9 +206,3 @@ export async function nextBottomPosition(client: Queryable, challengeId: number)
   const order = await lockedGroupOrder(client, challengeId);
   return order.length + 1;
 }
-
-/** How many teams are active in the challenge's queue_group. */
-export async function groupQueueLength(client: Queryable, challengeId: number): Promise<number> {
-  const order = await lockedGroupOrder(client, challengeId);
-  return order.length;
-}

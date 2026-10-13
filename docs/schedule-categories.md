@@ -15,10 +15,9 @@ declare one on the side.
 1. **Add one entry** to `KINDS` in `packages/shared/src/activity-kinds.ts`:
 
    ```ts
-   hike: { icon: "footprints", symbol: "figure.walk", scan: "activity" },
+   hike: { symbol: "figure.walk", scan: "activity" },
    ```
 
-   - `icon` — a stable web icon key mapped to a Phosphor component.
    - `symbol` — an SF Symbol name for the mobile app.
    - `scan` — `"meal"` gives the category meal semantics (always scannable,
      everyone entitled, repeats counted); anything else is `"activity"`.
@@ -31,11 +30,9 @@ declare one on the side.
    | `typeHike` | `packages/shared/locales/{es,gl,en}/common.json` | singular, e.g. "Hike" |
    | `kindHike` | `packages/shared/locales/{es,gl,en}/web.json` | plural, for reminder preferences, e.g. "Hikes" |
 
-3. **Map the new icon name** in `KIND_ICONS`
-   (`apps/web/src/app/(app)/schedule/schedule-model.ts`) and **add the Android
-   alias** for the new SF Symbol in `ANDROID_SYMBOL_NAMES`
-   (`apps/mobile/components/symbol.tsx`). Reusing an icon/symbol another
-   category already declares needs neither step.
+3. **Add the Android alias** for the new SF Symbol in `ANDROID_SYMBOL_NAMES`
+   (`apps/mobile/components/symbol.tsx`). Reusing a symbol another category
+   already declares needs no additional alias.
 
 That's the whole change: the web schedule filter and form, the inbox reminder
 kinds, the mobile schedule/filter/notification screens, the API's validation of
@@ -46,7 +43,6 @@ kinds, the mobile schedule/filter/notification screens, the API's validation of
 | Guardrail | Catches |
 | --- | --- |
 | `activityKindLabelKey` / `activityKindPluralKey` return template-literal types (`` `type${Capitalize<ActivityKind>}` ``) checked against each app's `MessageKey` | a category shipped before its `common`/`web` labels exist — web **and** mobile fail to typecheck |
-| `KIND_ICONS: Record<ActivityKindIconName, PhosphorIcon>` | a new web icon key with no component mapped — web fails to typecheck |
 | `ANDROID_SYMBOL_NAMES … satisfies Record<string, string> & Record<ActivityKindSymbolName, string>` | a new SF Symbol with no Android alias (it would render blank on Android) — mobile fails to typecheck |
 | `pnpm check:copy` cross-checks every registry id against `common/type*` and `web/kind*` | a missing **locale** (es/gl/en) for a category, without needing a typecheck |
 

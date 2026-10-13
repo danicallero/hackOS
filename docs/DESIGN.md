@@ -837,7 +837,7 @@ anything else.
 | Zero-state | `EmptyState` with one direct CTA | Prose explaining where to navigate |
 | Long-form save feedback | `FormActions` + `SaveStatus` (`lib/save-state.ts`), sticky within the owning form | Silent autosave, per-section save buttons |
 | Application-template fields (any kind) | `TemplateFieldControl` — the single renderer both applicant form and staff review use | A second field renderer |
-| Gate UI by permission | `<CapabilityGate>` / `useCan(cap)` | Checking `me.role` |
+| Gate UI by permission | `useCan(cap)` | Checking `me.role` |
 
 The primitives layer (`components/ui/*`, shadcn) keeps vendored behavior and
 structure. Its token-backed visual defaults are maintained as part of the web

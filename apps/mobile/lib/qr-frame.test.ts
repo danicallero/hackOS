@@ -1,11 +1,11 @@
-import { isBarcodeScannableInFrame } from "./qr-frame";
+import { getBarcodeFrameObservation } from "./qr-frame";
 
 const viewport = { height: 800, width: 400 };
 
 describe("QR scanner frame", () => {
   it("accepts a QR fully contained by the cutout", () => {
     expect(
-      isBarcodeScannableInFrame(
+      getBarcodeFrameObservation(
         {
           cornerPoints: [
             { x: 120, y: 300 },
@@ -18,12 +18,12 @@ describe("QR scanner frame", () => {
         viewport,
         264,
       ),
-    ).toBe(true);
+    ).not.toBeNull();
   });
 
   it("rejects a QR when any corner is outside the cutout", () => {
     expect(
-      isBarcodeScannableInFrame(
+      getBarcodeFrameObservation(
         {
           cornerPoints: [
             { x: 20, y: 300 },
@@ -36,12 +36,12 @@ describe("QR scanner frame", () => {
         viewport,
         264,
       ),
-    ).toBe(false);
+    ).toBeNull();
   });
 
   it("falls back to non-empty bounds when corner points are unavailable", () => {
     expect(
-      isBarcodeScannableInFrame(
+      getBarcodeFrameObservation(
         {
           cornerPoints: [],
           bounds: { origin: { x: 100, y: 300 }, size: { height: 200, width: 200 } },
@@ -49,12 +49,12 @@ describe("QR scanner frame", () => {
         viewport,
         264,
       ),
-    ).toBe(true);
+    ).not.toBeNull();
   });
 
   it("rejects a tiny QR even when it is centered in the cutout", () => {
     expect(
-      isBarcodeScannableInFrame(
+      getBarcodeFrameObservation(
         {
           cornerPoints: [
             { x: 165, y: 365 },
@@ -67,12 +67,12 @@ describe("QR scanner frame", () => {
         viewport,
         264,
       ),
-    ).toBe(false);
+    ).toBeNull();
   });
 
   it("rejects a large QR that is inside the cutout but not deliberately centered", () => {
     expect(
-      isBarcodeScannableInFrame(
+      getBarcodeFrameObservation(
         {
           cornerPoints: [
             { x: 70, y: 340 },
@@ -85,12 +85,12 @@ describe("QR scanner frame", () => {
         viewport,
         264,
       ),
-    ).toBe(false);
+    ).toBeNull();
   });
 
   it("measures iOS corner ordering correctly when enforcing minimum size", () => {
     expect(
-      isBarcodeScannableInFrame(
+      getBarcodeFrameObservation(
         {
           cornerPoints: [
             { x: 140, y: 460 },
@@ -103,12 +103,12 @@ describe("QR scanner frame", () => {
         viewport,
         264,
       ),
-    ).toBe(true);
+    ).not.toBeNull();
   });
 
   it("rejects tiny bounds when corner points are unavailable", () => {
     expect(
-      isBarcodeScannableInFrame(
+      getBarcodeFrameObservation(
         {
           cornerPoints: [],
           bounds: { origin: { x: 175, y: 375 }, size: { height: 50, width: 50 } },
@@ -116,12 +116,12 @@ describe("QR scanner frame", () => {
         viewport,
         264,
       ),
-    ).toBe(false);
+    ).toBeNull();
   });
 
   it("accepts a centered QR when Android reports horizontally mirrored points", () => {
     expect(
-      isBarcodeScannableInFrame(
+      getBarcodeFrameObservation(
         {
           cornerPoints: [
             { x: 280, y: 300 },
@@ -134,12 +134,12 @@ describe("QR scanner frame", () => {
         viewport,
         264,
       ),
-    ).toBe(true);
+    ).not.toBeNull();
   });
 
   it("still rejects an outside QR when Android reports both axes flipped", () => {
     expect(
-      isBarcodeScannableInFrame(
+      getBarcodeFrameObservation(
         {
           cornerPoints: [
             { x: 380, y: 500 },
@@ -152,12 +152,12 @@ describe("QR scanner frame", () => {
         viewport,
         264,
       ),
-    ).toBe(false);
+    ).toBeNull();
   });
 
   it("accepts the same centered QR after a quarter-turn orientation change", () => {
     expect(
-      isBarcodeScannableInFrame(
+      getBarcodeFrameObservation(
         {
           cornerPoints: [
             { x: 500, y: 120 },
@@ -170,12 +170,12 @@ describe("QR scanner frame", () => {
         { height: 400, width: 800 },
         264,
       ),
-    ).toBe(true);
+    ).not.toBeNull();
   });
 
   it("does not scan before the measured camera viewport is available", () => {
     expect(
-      isBarcodeScannableInFrame(
+      getBarcodeFrameObservation(
         {
           cornerPoints: [
             { x: 120, y: 300 },
@@ -188,6 +188,6 @@ describe("QR scanner frame", () => {
         { height: 0, width: 0 },
         264,
       ),
-    ).toBe(false);
+    ).toBeNull();
   });
 });

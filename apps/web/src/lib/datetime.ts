@@ -49,11 +49,6 @@ export function fromDatetimeLocal(
 }
 
 const dateTimeLocalPattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/;
-const displayDateTimePattern = /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})$/;
-
-function padDatePart(value: number): string {
-  return String(value).padStart(2, "0");
-}
 
 /**
  * Event IANA zone id plus its UTC offset (e.g. "Europe/Madrid (UTC+2)"), so
@@ -92,42 +87,4 @@ export function formatScheduledDateTime(value: string, locale?: string): string 
       minute: "2-digit",
     }) || value
   );
-}
-
-export function parseScheduledDateTime(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-
-  const localMatch = dateTimeLocalPattern.exec(trimmed);
-  if (localMatch) {
-    return `${localMatch[1]}-${localMatch[2]}-${localMatch[3]}T${localMatch[4]}:${localMatch[5]}`;
-  }
-
-  const match = displayDateTimePattern.exec(trimmed);
-  if (!match) return null;
-
-  const [, dayRaw, monthRaw, yearRaw, hourRaw, minuteRaw] = match;
-  const day = Number(dayRaw);
-  const month = Number(monthRaw);
-  const year = Number(yearRaw);
-  const hour = Number(hourRaw);
-  const minute = Number(minuteRaw);
-
-  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) {
-    return null;
-  }
-
-  // Pure calendar check: UTC fields, so a wall time inside a DST gap is not rejected.
-  const parsed = new Date(Date.UTC(year, month - 1, day, hour, minute));
-  if (
-    parsed.getUTCFullYear() !== year ||
-    parsed.getUTCMonth() !== month - 1 ||
-    parsed.getUTCDate() !== day ||
-    parsed.getUTCHours() !== hour ||
-    parsed.getUTCMinutes() !== minute
-  ) {
-    return null;
-  }
-
-  return `${year}-${padDatePart(month)}-${padDatePart(day)}T${padDatePart(hour)}:${padDatePart(minute)}`;
 }

@@ -3,7 +3,6 @@ import {
   canonicalStatisticsPanelKey,
   isCompatibleStatisticsPanel,
   panelDefinition,
-  panelSupportsScope,
 } from "../../src/modules/statistics/catalog.js";
 import {
   parseStatisticsScopeKey,
@@ -23,8 +22,6 @@ describe("generic statistics catalog", () => {
     expect(isCompatibleStatisticsPanel("overview", ["role"])).toBe(false);
     expect(isCompatibleStatisticsPanel("shirt-sizes", ["application", "role"])).toBe(true);
     expect(isCompatibleStatisticsPanel("field:gender", ["application", "role"])).toBe(false);
-    expect(panelSupportsScope("field:gender", "application")).toBe(true);
-    expect(panelSupportsScope("field:gender", "role")).toBe(false);
   });
 
   it("round-trips opaque scope resource keys", () => {

@@ -98,40 +98,6 @@ export function statisticsPanelKeys(
   ]);
 }
 
-/** Resolve a caller's panel ACL with H8's own role-position semantics. */
-export async function allowedStatisticsPanels(
-  applicationId: number,
-  userId: number,
-  generalAccess = false,
-): Promise<Set<string>> {
-  const application = await requireApplication(pool, applicationId);
-  const { rows } = await pool.query(
-    `SELECT a.panel_key, a.state, r.position
-       FROM statistics_scope_panel_role_access a
-       JOIN user_roles ur ON ur.role_id = a.role_id AND ur.user_id = $2
-       JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
-      WHERE a.scope_key = $1 AND a.state <> 'inherit'
-      ORDER BY a.panel_key, r.position DESC`,
-    [`application:${applicationId}`, userId],
-  );
-  const decisions = resolveStatisticsPanelDecisions(
-    (rows as Array<{ panel_key: string; state: "allow" | "deny"; position: number }>).map(
-      (row) => ({
-        panelKey: row.panel_key,
-        rolePosition: Number(row.position),
-        state: row.state,
-      }),
-    ),
-  );
-  const availablePanels = statisticsPanelKeys(application.template);
-  return new Set(
-    [...availablePanels].filter((panelKey) => {
-      const explicit = decisions.get(canonicalStatisticsPanelKey(panelKey));
-      return explicit ? explicit === "allow" : generalAccess;
-    }),
-  );
-}
-
 export async function applicationStats(
   applicationId: number,
   field?: string,

@@ -1033,53 +1033,6 @@ export async function cancelEntry(
   }).then(broadcastEntry);
 }
 
-/**
- * H21: remove a repo from a challenge queue. Waiting/called teams are
- * cancelled; teams already in the room are disqualified so the live judging
- * surface stops showing them. Remaining active entries are compacted.
- */
-export async function removeRepoFromChallenge(
-  entryId: number,
-  actorId: number,
-  reason?: string,
-): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
-    const entry = await lockEntry(client, entryId);
-    await assertEntryFixtureScope(client, actorId, entryId);
-    const removable = ["waiting", "called", "in_room", "presenting"];
-    assertFrom(entry, removable, "remove from challenge");
-    const nextStatus =
-      entry.status === "waiting" || entry.status === "called" ? "cancelled" : "disqualified";
-    const res = await client.query(
-      `UPDATE queue_entries
-          SET status = $1, assigned_room_id = NULL, position = NULL, called_at = NULL,
-              precalled_at = NULL, presentation_started_at = NULL, presentation_paused_at = NULL, presentation_paused_seconds = 0, presentation_total_seconds = NULL, room_entered_at = NULL, completed_at = NULL
-        WHERE id = $2
-        RETURNING *`,
-      [nextStatus, entryId],
-    );
-    await writeQueueHistory(client, {
-      entryId,
-      actorId,
-      previousStatus: entry.status,
-      newStatus: nextStatus,
-      action: "remove_from_challenge",
-      reason,
-    });
-    await audit(client, {
-      actorId,
-      entityType: "queue_entry",
-      entityId: entryId,
-      action: "remove_from_challenge",
-      before: { status: entry.status, challengeId: entry.challenge_id, repoId: entry.repo_id },
-      after: { status: nextStatus },
-      reason,
-    });
-    await compactQueueGroupPositions(client, entry.challenge_id);
-    return res.rows[0];
-  }).then(broadcastEntry);
-}
-
 // ── manual call (any team, any position, H37 search-and-bring-in) ──────────
 
 export async function manualCall(

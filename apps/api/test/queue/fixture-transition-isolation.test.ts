@@ -2,6 +2,7 @@ import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { beforeEach, describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
+import { removeRepoChallenge } from "../../src/modules/projects/service.js";
 import { entryHistory } from "../../src/modules/queue/reads.js";
 import {
   bringIn,
@@ -19,7 +20,6 @@ import {
   pauseRoom,
   reEnter,
   remindWaitingRoom,
-  removeRepoFromChallenge,
   requeue,
   resumeRoom,
   sendBackToWaiting,
@@ -106,7 +106,7 @@ describe("queue fixture transition isolation", () => {
       () => moveToTop(fixtureEntryId, realOperator, "scope"),
       () => disqualify(fixtureEntryId, realOperator, "scope"),
       () => cancelEntry(fixtureEntryId, realOperator, "scope"),
-      () => removeRepoFromChallenge(fixtureEntryId, realOperator, "scope"),
+      () => removeRepoChallenge(realOperator, fixtureRepoId, fixtureChallengeId),
       () => manualCall(fixtureEntryId, realOperator, "called", fixtureRoomId, "scope"),
     ];
     for (const transition of fixtureEntryTransitions) {
@@ -128,7 +128,7 @@ describe("queue fixture transition isolation", () => {
       () => moveToTop(realEntryId, fixtureOperator, "scope"),
       () => disqualify(realEntryId, fixtureOperator, "scope"),
       () => cancelEntry(realEntryId, fixtureOperator, "scope"),
-      () => removeRepoFromChallenge(realEntryId, fixtureOperator, "scope"),
+      () => removeRepoChallenge(fixtureOperator, realRepoId, realChallengeId),
       () => manualCall(realEntryId, fixtureOperator, "called", realRoomId, "scope"),
     ];
     for (const transition of realEntryTransitions) {

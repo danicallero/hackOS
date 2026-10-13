@@ -36,10 +36,6 @@ export interface DiaryEntry {
   sponsor: DiarySponsor | null;
 }
 
-export function diaryCacheKey(userId: number): string {
-  return `user:${userId}:diary`;
-}
-
 /**
  * Milliseconds of an API timestamp. `apiFetch` goes through Better Auth's
  * client, whose JSON parser revives ISO strings into `Date` objects, so a
@@ -62,10 +58,6 @@ export function sortDiaryEntries(entries: DiaryEntry[]): DiaryEntry[] {
 /** Replace or add one entry returned by a mutation, keeping the API order. */
 export function upsertDiaryEntry(entries: DiaryEntry[], entry: DiaryEntry): DiaryEntry[] {
   return sortDiaryEntries([...entries.filter((current) => current.id !== entry.id), entry]);
-}
-
-export function isDiaryEntryAvailable(entry: DiaryEntry): boolean {
-  return entry.kind === "person" ? entry.person !== null : entry.sponsor !== null;
 }
 
 /** Up to two initials for a person without a shared photo. */

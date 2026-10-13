@@ -212,12 +212,6 @@ export async function listManageableQueueGroups(
   return rows.map(toSummary);
 }
 
-export async function getQueueGroup(queueGroupId: number): Promise<QueueGroupSummary> {
-  const { rows } = await pool.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]);
-  if (!rows[0]) throw new NotFoundError("Queue group not found", { queueGroupId });
-  return toSummary(rows[0]);
-}
-
 /**
  * Lock every queue group of one enterprise, lowest id first, for the whole
  * transaction. Merge and split both move `queue_group_challenges` rows

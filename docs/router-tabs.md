@@ -141,7 +141,7 @@ The reusable module has no default export. Its package-facing exports are:
 | `RouterTabsProps`, `RouterTabsTheme` | types | Shell configuration and semantic colours. |
 | `RouterTabsSurfaceProps`, `RouterTabsSurfaceComponent`, `RouterTabsSurfaceMode` | types | Material injection contract for a design system or custom renderer. |
 | `MAX_DIRECT_TABS`, `MAX_TABS_WITHOUT_OVERFLOW` | constants | Default direct-cell budgets: 4 with overflow, 5 without. |
-| `ROUTER_TAB_BAR_HEIGHT`, `ROUTER_TAB_OVERFLOW_WIDTH` | constants | Compact surface/circle size: 64 pt. Tablet geometry is resolved by the inset helpers. |
+| `ROUTER_TAB_BAR_HEIGHT` | constant | Compact surface/circle size: 64 pt. Tablet geometry is resolved by the inset helpers. |
 | `useRouterTabBarInsets`, `useRouterTabBarBottomInset`, `useRouterTabBarScrollBottomInset` | hooks | Safe-area and scroll-clearance contract for route content. |
 
 The source currently lives in `apps/mobile/components/router-tabs.tsx` and

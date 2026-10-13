@@ -104,13 +104,6 @@ export function panelDefinition(key: string): StatisticsPanelDefinition | undefi
   return STATISTICS_PANEL_CATALOG.find((panel) => panel.key === canonicalStatisticsPanelKey(key));
 }
 
-export function panelSupportsScope(key: string, scopeKind: StatisticsScopeKind): boolean {
-  return (
-    panelDefinition(key)?.supportedScopeKinds.includes(scopeKind) ??
-    (key.startsWith("field:") && scopeKind === "application")
-  );
-}
-
 export function isCompatibleStatisticsPanel(
   key: string,
   scopeKinds: StatisticsScopeKind[],

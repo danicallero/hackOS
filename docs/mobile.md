@@ -980,9 +980,8 @@ and the native view exists; every other case keeps the paths above unchanged
   stops rising: its bottom edge moves up with the content, keeping its gap to
   the text below, or along an ease-in path to the lens centre when that is
   higher, so it is in the lens by progress 1. It stays a circle and shrinks
-  uniformly towards its top to the lens diameter minus 1 dp per side by 0.55
-  (`PROFILE_GOOEY_SHRINK_END`; `profileGooeyEndDiameter` /
-  `profileGooeyEndScale`), gliding to the lens column; until then it also
+  uniformly towards its top to 1 dp inside the lens by 0.55
+  (`PROFILE_GOOEY_SHRINK_END`), gliding to the lens column; until then it also
   keeps at least the staging gap (0.9 lens diameters) below the lens, so a
   photo never touches it. It blurs (up to 6 dp) and darkens (`darkness`) from
   55% of the shrink (`PROFILE_GOOEY_FADE_START`), is 85% black once fully

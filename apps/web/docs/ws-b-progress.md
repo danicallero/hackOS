@@ -23,7 +23,7 @@ Owner: Codex · Status: ✅ implementation complete
     for room challenges and judges, plus authoritative assignment lists from
     the backend read surface (H46).
 - `apps/web/src/lib/queue.ts`
-  - Corrected `callNext` signature to backend `{ force? }`.
+  - Corrected the call-next wrapper payload to match the backend `{ force? }`.
   - Added idempotency headers to pause/resume wrappers.
   - Typed review/session/search wrappers and fixed session join body.
   - Added room/admin and queue-settings wrappers used by `/queue/rooms`.

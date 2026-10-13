@@ -21,14 +21,6 @@ export interface QrFrameObservation {
 // must occupy about 39% of the frame in each direction before it can scan.
 const MIN_BARCODE_TO_FRAME_AREA_RATIO = 0.15;
 
-export function isBarcodeScannableInFrame(
-  barcode: BarcodeGeometry,
-  viewport: { height: number; width: number },
-  frameSize: number,
-): boolean {
-  return getBarcodeFrameObservation(barcode, viewport, frameSize) !== null;
-}
-
 export function getBarcodeFrameObservation(
   barcode: BarcodeGeometry,
   viewport: { height: number; width: number },
