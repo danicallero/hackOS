@@ -31,7 +31,7 @@ describe("application validation errors", () => {
 
   it("localizes API field errors and formats their labels for a toast", () => {
     const error = new ApiError(400, "validation_error", "Response fails template validation", {
-      fields: { name: "required", age: "must be a number", consent: "must be a boolean" },
+      fieldReasons: { name: "required", age: "must_be_number", consent: "must_be_boolean" },
     });
     const errors = fieldErrorsFromApi(error, translate, template, "en");
 
@@ -53,7 +53,7 @@ describe("application validation errors", () => {
       validation: { text_condition: "url" },
     };
     const error = new ApiError(400, "validation_error", "Invalid response", {
-      fields: { portfolio: "invalid format" },
+      fieldReasons: { portfolio: "invalid_format" },
     });
 
     expect(fieldErrorsFromApi(error, translate, [urlField], "en")).toEqual({
