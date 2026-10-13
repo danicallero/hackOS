@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { errorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import type { Room } from "@/lib/queue";
 import type { EnterpriseSummary } from "@/lib/types";
@@ -181,7 +182,7 @@ function RoomEnterpriseCell({
           try {
             await onAssign(room, enterpriseId);
           } catch (err) {
-            setError(err instanceof Error ? err.message : t("couldNotAssignEnterprise"));
+            setError(errorText(err, t, t("couldNotAssignEnterprise")));
           } finally {
             setPending(false);
           }

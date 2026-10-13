@@ -1,6 +1,6 @@
 "use client";
 
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useParams } from "next/navigation";
@@ -15,11 +15,11 @@ import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
-import type { Intolerance, UserDetail } from "@/lib/types";
+import type { UserDetail } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
-
 import { ApplicationTab } from "./application-tab";
 import { LogsTab } from "./logs-tab";
 import { OverviewTab } from "./overview-tab";
@@ -69,7 +69,7 @@ export default function UserProfilePage() {
     } catch (err) {
       // A failed background refresh keeps the loaded profile (#1012).
       if (!failed(err)) return;
-      setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadUserProfile"));
+      setErrorMsg(apiErrorText(err, t, t("couldNotLoadUserProfile")));
       setNotFound(isNotFoundError(err));
       setStatus("error");
     }
@@ -77,7 +77,7 @@ export default function UserProfilePage() {
 
   // Soft, in-place refresh instead of a hard reload when this user's profile
   // changes elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=identity", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.IDENTITY), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

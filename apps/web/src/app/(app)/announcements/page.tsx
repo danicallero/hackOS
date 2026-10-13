@@ -5,7 +5,7 @@
 // consumes the CRUD API in apps/api/src/modules/notifications/routes/announcements.ts.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
@@ -25,7 +25,7 @@ import type { UserOption } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import type { Announcement, AnnouncementInput } from "@/lib/notifications";
@@ -103,7 +103,7 @@ export default function AnnouncementsPage() {
     } catch (err) {
       // A failed background refresh keeps the list (#1012).
       if (!failed(err)) return;
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadAnnouncements")));
     } finally {
       setLoading(false);
     }
@@ -111,7 +111,7 @@ export default function AnnouncementsPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // publishes/edits/deletes an announcement elsewhere (H50).
-  const liveRefresh = useAutoRefresh("/api/content/stream", [EVENTS.CONTENT_ANNOUNCEMENT]);
+  const liveRefresh = useAutoRefresh(REALTIME_SCOPES.PUBLIC_CONTENT, [EVENTS.CONTENT_ANNOUNCEMENT]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
@@ -125,10 +125,7 @@ export default function AnnouncementsPage() {
       const full = await notificationsApi.getAnnouncement(item.id);
       setEditingItem(full);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"),
-        t("announcements"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLoadAnnouncements")), t("announcements"));
     }
   }
 
@@ -141,7 +138,7 @@ export default function AnnouncementsPage() {
       setDeleting(null);
       await load();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotDeleteAnnouncement");
+      const message = apiErrorText(err, t, t("couldNotDeleteAnnouncement"));
       setDeleteError(message);
       toast.error(message, t("deleteAnnouncementAria"));
     } finally {

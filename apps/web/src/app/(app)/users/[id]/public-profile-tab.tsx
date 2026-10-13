@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -24,7 +24,8 @@ import {
 } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
 import { useLiveQuery } from "@/hooks/use-event-source";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import type { UserDetail } from "@/lib/types";
@@ -51,7 +52,7 @@ export function PublicProfileTab({
       const startedAt = generation.current;
       return { generation: startedAt, profile: await api.get<PublicProfile>(path) };
     },
-    "/api/events/stream?topic=identity",
+    domainScope(SSE_TOPICS.IDENTITY),
     [EVENTS.DOMAIN_CHANGED],
     {
       queryKey: [user.id, user.image],
@@ -115,7 +116,7 @@ export function PublicProfileTab({
       else if (action === "cv")
         setEdits((current) => (current ? { ...current, shareCv: false } : null));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("couldNotSavePublicProfile"));
+      setError(apiErrorText(err, t, t("couldNotSavePublicProfile")));
       throw err;
     } finally {
       setPending(false);
@@ -125,7 +126,7 @@ export function PublicProfileTab({
   if (!profile || !settings) {
     return loadError ? (
       <ContextualError
-        message={loadError instanceof ApiError ? loadError.message : t("couldNotLoadPublicProfile")}
+        message={apiErrorText(loadError, t, t("couldNotLoadPublicProfile"))}
         onRetry={() => refetch("retry")}
       />
     ) : (

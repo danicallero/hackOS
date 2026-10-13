@@ -6,7 +6,7 @@
 // is no admin GET — we list via the public search endpoint — and mutate via the
 // guarded POST/DELETE /api/universities (capability INTOLERANCES_MANAGE).
 
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { GraduationCapIcon } from "@phosphor-icons/react/dist/csr/GraduationCap";
@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { LibraryToolbar } from "./library-toolbar";
@@ -84,7 +85,7 @@ export function UniversitiesManager() {
     } catch (err) {
       // A failed background refresh keeps the list (#1012).
       if (!failed(err)) return;
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadDirectory"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadDirectory")));
     } finally {
       setLoading(false);
     }
@@ -92,7 +93,7 @@ export function UniversitiesManager() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // edits the universities library elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=logistics", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.LOGISTICS), [EVENTS.DOMAIN_CHANGED]);
 
   // Debounce so the server search doesn't fire on every keystroke.
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
@@ -121,10 +122,7 @@ export function UniversitiesManager() {
       setEditing(undefined);
       await load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveUniversity"),
-        t("toastSaveUniversity"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveUniversity")), t("toastSaveUniversity"));
     }
   }
 
@@ -141,9 +139,7 @@ export function UniversitiesManager() {
         err instanceof ApiError &&
           (err.details as { reason?: string } | undefined)?.reason === "university_in_use"
           ? t("universityInUse")
-          : err instanceof ApiError
-            ? err.message
-            : t("couldNotDeleteUniversity"),
+          : apiErrorText(err, t, t("couldNotDeleteUniversity")),
         t("deleteUniversityTitle"),
       );
     } finally {
@@ -171,9 +167,7 @@ export function UniversitiesManager() {
       setNormalizationTargetId("");
       await load();
     } catch (err) {
-      setNormalizationError(
-        err instanceof ApiError ? err.message : t("couldNotNormalizeUniversities"),
-      );
+      setNormalizationError(apiErrorText(err, t, t("couldNotNormalizeUniversities")));
     } finally {
       setNormalizing(false);
     }

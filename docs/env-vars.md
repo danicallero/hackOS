@@ -84,6 +84,7 @@ siguiente especifica cada variable individualmente.
 | `SMTP_SECURE` | configuración | no | `false` (por defecto) para STARTTLS en 587; `true` para SMTPS, que inicia TLS al conectar (normalmente en 465). |
 | `SMTP_REQUIRE_TLS` | configuración | no | `true` en producción por defecto: rechaza un relay STARTTLS que no pueda cifrar la conexión. No aplica cuando `SMTP_SECURE=true`. |
 | `MOBILE_APP_SCHEME` | configuración | no | Esquema de la app móvil, por defecto `hackos`. |
+| `MOBILE_MIN_BUILD` | configuración | no | Build nativa mínima soportada de la app móvil (cabecera `X-HackOS-Build`); por debajo, la API responde `426 upgrade_required`. `0` (por defecto) lo desactiva. Ver [mobile-release](./mobile-release.md#minimum-supported-build). |
 
 El script [`deploy/scripts/check-env.sh`](../deploy/scripts/check-env.sh)
 valida estos valores, evita tags mutables y comprueba los bloques de correo y

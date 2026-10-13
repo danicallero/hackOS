@@ -1,12 +1,12 @@
 "use client";
 
-import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
+import type { SseEnvelope } from "@hackos/shared/events";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { API_URL } from "@/lib/env";
 import {
   observeRefetch,
   type RealtimeRefetchTrigger,
-  telemetryScopeForStream,
+  telemetryScopeForRealtimeScope,
 } from "@/lib/realtime-telemetry";
 import { invalidateServerState, readServerState, type ServerStateKey } from "@/lib/server-state";
 import {
@@ -57,11 +57,11 @@ interface UseEventSourceOptions {
 }
 
 /**
- * Open an SSE connection to `${API_URL}${path}` and dispatch envelopes by name.
+ * Subscribe to a `REALTIME_SCOPES` scope (#892) and dispatch envelopes by name.
  * Returns the live connection state for optional "reconnecting…" UI.
  */
 export function useEventSource(
-  path: string,
+  scope: string,
   { events, onEvent, enabled = true, identityKey = null, onResync }: UseEventSourceOptions = {},
 ): { connected: boolean } {
   const [connected, setConnected] = useState(false);
@@ -89,10 +89,10 @@ export function useEventSource(
     // SSR and lightweight component-test environments do not provide the
     // browser window. There is no stream to subscribe to in
     // either case; the next mounted browser session performs the normal sync.
-    if (!enabled || !path || typeof window === "undefined") return;
+    if (!enabled || !scope || typeof window === "undefined") return;
 
     const names = eventsKey ? eventsKey.split(",") : null;
-    const unsubscribe = subscribeToSse(`${API_URL}${path}`, {
+    const unsubscribe = subscribeToSse(scope, API_URL, {
       events: names ?? undefined,
       onConnectionChange: setConnected,
       onEvent: (envelope) => onEventRef.current?.(envelope),
@@ -103,7 +103,7 @@ export function useEventSource(
     if (hasPreviousIdentityKey.current && previousIdentityKey.current !== identityKey) {
       onResyncRef.current?.({
         reason: "identity-change" satisfies SseResyncReason,
-        topic: path,
+        topic: scope,
         lastEventId: null,
       });
     }
@@ -114,26 +114,26 @@ export function useEventSource(
       unsubscribe();
       setConnected(false);
     };
-  }, [path, enabled, eventsKey, identityKey, sessionIdentity]);
+  }, [scope, enabled, eventsKey, identityKey, sessionIdentity]);
 
   return { connected };
 }
 
 /**
  * The common pattern (plan §4): fetch a read model on mount, then debounce-
- * refetch whenever a relevant event arrives on `streamPath`. Returns the data,
+ * refetch whenever a relevant event arrives on `scope`. Returns the data,
  * a manual `refetch`, loading/error, and live connection state.
  *
  *   const { data } = useLiveQuery(
  *     () => getRoomView(roomId),
- *     "/api/queue/stream",
+ *     REALTIME_SCOPES.QUEUE,
  *     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
  *     { resourceKey: ["queue", "room-view", roomId] },
  *   );
  */
 export function useLiveQuery<T>(
   fetcher: (signal?: AbortSignal) => Promise<T>,
-  streamPath: string,
+  scope: string,
   eventNames: readonly string[],
   {
     enabled = true,
@@ -173,7 +173,7 @@ export function useLiveQuery<T>(
     fetcherRef.current = fetcher;
   }, [fetcher]);
 
-  const telemetryScope = useMemo(() => telemetryScopeForStream(streamPath), [streamPath]);
+  const telemetryScope = useMemo(() => telemetryScopeForRealtimeScope(scope), [scope]);
   const requestRef = useRef<{
     cancelled: boolean;
     queuedTrigger: RealtimeRefetchTrigger | null;
@@ -285,7 +285,7 @@ export function useLiveQuery<T>(
     onResyncRef.current = onResync;
   }, [onResync]);
 
-  const { connected } = useEventSource(streamPath, {
+  const { connected } = useEventSource(scope, {
     events: eventNames,
     onEvent,
     enabled,

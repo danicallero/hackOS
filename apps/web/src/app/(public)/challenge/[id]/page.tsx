@@ -17,7 +17,8 @@ import {
   type PublicChallenge,
 } from "@/components/public/public-types";
 import { Button } from "@/components/ui/button";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
 
@@ -50,7 +51,7 @@ export default function PublicChallengePage() {
       const { items } = await api.get<{ items: PublicChallenge[] }>("/api/public/challenges");
       setChallenge(items.find((c) => String(c.id) === id) ?? null);
     } catch (error) {
-      setChallengeError(error instanceof ApiError ? error.message : t("couldNotLoadChallenge"));
+      setChallengeError(apiErrorText(error, t, t("couldNotLoadChallenge")));
     }
   }, [id, t]);
 
@@ -63,9 +64,7 @@ export default function PublicChallengePage() {
       );
       setHasOpenApplications(applications.length > 0);
     } catch (error) {
-      setApplicationsError(
-        error instanceof ApiError ? error.message : t("couldNotLoadApplicationForms"),
-      );
+      setApplicationsError(apiErrorText(error, t, t("couldNotLoadApplicationForms")));
     } finally {
       setApplicationsLoading(false);
     }

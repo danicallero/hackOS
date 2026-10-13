@@ -9,7 +9,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { textForDisplay } from "../shared";
 
@@ -98,7 +99,7 @@ export function VersionHistory({ challengeId }: { challengeId: number }) {
         setVersions(r.versions);
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : t("couldNotLoadVersions"));
+        setError(apiErrorText(err, t, t("couldNotLoadVersions")));
       });
   }, [challengeId, t]);
 

@@ -37,11 +37,12 @@ import { Section } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
 import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { languageName, type MessageKey, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import type { Intolerance, Language, Me } from "@/lib/types";
+import type { Language, Me } from "@/lib/types";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import { capabilitiesByDomain, prettifyCapability } from "../../permissions/helpers";
 import { DangerZoneCard } from "./danger-zone";
@@ -189,11 +190,8 @@ function ProfileForm({ me }: { me: Me }) {
       await refresh();
       toast.success(t("profileUpdated"), { compactTitle: t("toastSaveProfile") });
     } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : t("couldNotSaveProfile"));
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveProfile"),
-        t("toastSaveProfile"),
-      );
+      setSaveError(apiErrorText(err, t, t("couldNotSaveProfile")));
+      toast.error(apiErrorText(err, t, t("couldNotSaveProfile")), t("toastSaveProfile"));
     }
   }
 

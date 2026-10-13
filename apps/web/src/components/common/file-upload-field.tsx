@@ -13,7 +13,8 @@ import { useId, useRef, useState } from "react";
 import { FileLink } from "@/components/common/file-link";
 import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
-import { ApiError, apiUpload } from "@/lib/api";
+import { apiUpload } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
@@ -94,7 +95,7 @@ export function FileUploadField({
           loading: { title: t("uploading"), description: file.name },
           success: { title: t("fileUploaded"), description: file.name },
           error: (error) => ({
-            title: error instanceof ApiError ? error.message : t("uploadFailed"),
+            title: apiErrorText(error, t, t("uploadFailed")),
           }),
         },
       );
@@ -103,7 +104,7 @@ export function FileUploadField({
       onBlur?.();
       setUploadError(null);
     } catch (error) {
-      const message = error instanceof ApiError ? error.message : t("uploadFailed");
+      const message = apiErrorText(error, t, t("uploadFailed"));
       setUploadError(message);
     } finally {
       setUploading(false);

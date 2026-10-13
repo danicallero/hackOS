@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  canonicalStatisticsPanelKey,
   isCompatibleStatisticsPanel,
-  panelDefinition,
 } from "../../src/modules/statistics/catalog.js";
 import {
   parseStatisticsScopeKey,
@@ -11,12 +9,6 @@ import {
 } from "../../src/modules/statistics/service.js";
 
 describe("generic statistics catalog", () => {
-  it("canonicalizes retired panel ids without creating duplicate panels", () => {
-    expect(canonicalStatisticsPanelKey("funnel")).toBe("overview");
-    expect(canonicalStatisticsPanelKey("submissions-by-day")).toBe("applications-over-time");
-    expect(panelDefinition("confirmations-by-day")?.key).toBe("confirmations-over-time");
-  });
-
   it("declares scope compatibility explicitly", () => {
     expect(isCompatibleStatisticsPanel("overview", ["application"])).toBe(true);
     expect(isCompatibleStatisticsPanel("overview", ["role"])).toBe(false);

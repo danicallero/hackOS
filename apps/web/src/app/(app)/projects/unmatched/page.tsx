@@ -3,7 +3,7 @@
 // Resolve unmatched Devpost participants and map prizes to challenges (H17).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
@@ -34,7 +34,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   type DevpostPrize,
@@ -105,10 +106,7 @@ export default function UnmatchedProjectsPage() {
       setPrizes(devpostPrizes.prizes);
       setChallenges(publicChallenges.items);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadUnmatched"),
-        t("resolveImports"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLoadUnmatched")), t("resolveImports"));
     } finally {
       setLoading(false);
     }
@@ -116,7 +114,7 @@ export default function UnmatchedProjectsPage() {
 
   // Soft, in-place refresh instead of a hard reload when a project/repo
   // changes elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
@@ -132,10 +130,7 @@ export default function UnmatchedProjectsPage() {
         toast.success(success, { compactTitle: t("resolveImports") });
         await load();
       } catch (err) {
-        toast.error(
-          err instanceof ApiError ? err.message : t("actionFailedGeneric"),
-          t("resolveImports"),
-        );
+        toast.error(apiErrorText(err, t, t("actionFailedGeneric")), t("resolveImports"));
       } finally {
         setBusy(null);
       }

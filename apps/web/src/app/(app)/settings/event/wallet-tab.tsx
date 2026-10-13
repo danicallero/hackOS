@@ -30,7 +30,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig, PassBackField } from "@/lib/types";
@@ -412,16 +413,11 @@ export function WalletTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =
     } catch (err) {
       setSaveState("error");
       setSaveError(
-        err instanceof ApiError
-          ? err.message
-          : err instanceof SyntaxError
-            ? t("walletInvalidOptions")
-            : t("couldNotSaveEventSettings"),
+        err instanceof SyntaxError
+          ? t("walletInvalidOptions")
+          : apiErrorText(err, t, t("couldNotSaveEventSettings")),
       );
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveEventSettings"),
-        t("toastWalletSettings"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveEventSettings")), t("toastWalletSettings"));
     } finally {
       setSubmitting(false);
     }

@@ -3,7 +3,7 @@
 // A participant sees a team preparing (or presenting) to challenges. Projects,
 // planned work groups and their queue status are one model, not destinations to
 // reconcile mentally (H19, H20, H38, #852).
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import Link from "next/link";
@@ -23,7 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   acceptProjectInvite,
@@ -91,14 +92,14 @@ export default function MyProjectPage() {
       // A failed background refresh keeps the loaded projects; only a failed
       // first load replaces them with an error, never the empty state (#1012).
       if (!failed(error)) return;
-      setLoadError(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      setLoadError(apiErrorText(error, t, t("couldNotLoadProject")));
     } finally {
       setLoading(false);
     }
   }, [router, t, succeeded, failed]);
 
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
-  const queueRefresh = useAutoRefresh("/api/queue/me/stream", [
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
+  const queueRefresh = useAutoRefresh(REALTIME_SCOPES.PERSONAL, [
     EVENTS.USER_QUEUE_CHANGED,
     EVENTS.USER_QUEUE_CALLED,
   ]);
@@ -186,10 +187,7 @@ function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
       setOpen(false);
       await onCreated();
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotCreateWorkGroup"),
-        t("toastCreateProject"),
-      );
+      toast.error(apiErrorText(error, t, t("couldNotCreateWorkGroup")), t("toastCreateProject"));
     } finally {
       setSaving(false);
     }
@@ -343,10 +341,7 @@ function PendingInvitesCard({
       else await declineProjectInvite(repoId);
       await onChanged();
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
-        t("toastReplyInvite"),
-      );
+      toast.error(apiErrorText(error, t, t("couldNotLoadProject")), t("toastReplyInvite"));
     } finally {
       setBusy(null);
     }

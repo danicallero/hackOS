@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
@@ -106,7 +107,7 @@ export function EditableStatusCell({
       if (result !== false) setOpen(false);
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        apiErrorText(err, t, t("couldNotSaveScheduleItem")),
         t("toastActivityVisibility"),
       );
     } finally {
@@ -198,10 +199,7 @@ export function EditableTextCell({
       if (saved) setEditing(false);
       return saved;
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastActivityText"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastActivityText"));
       return false;
     } finally {
       setSaving(false);
@@ -305,10 +303,7 @@ export function EditableTimeCell({
       if (saved) setEditing(false);
       return saved;
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastActivityTime"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastActivityTime"));
       return false;
     } finally {
       setSaving(false);
@@ -393,10 +388,7 @@ export function EditableSelectCell({
       const result = await onSave(next === EMPTY_SCHEDULE_TYPE ? null : next);
       if (result !== false) setOpen(false);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastActivitySelect"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastActivitySelect"));
     } finally {
       setSaving(false);
     }
@@ -482,10 +474,7 @@ export function EditableAudienceCell({
       const result = await onSave(draft);
       if (result !== false) setOpen(false);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastActivityAudience"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastActivityAudience"));
     } finally {
       setSaving(false);
     }
@@ -565,7 +554,7 @@ export function EditableScannableCell({
       await onSave(next);
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        apiErrorText(err, t, t("couldNotSaveScheduleItem")),
         errorTitle ?? t("toastActivityScanning"),
       );
     } finally {
@@ -628,10 +617,7 @@ export function EditablePublishDateCell({
       if (saved) setEditing(false);
       return saved;
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
-        t("toastPublishSchedule"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveScheduleItem")), t("toastPublishSchedule"));
       return false;
     } finally {
       setSaving(false);

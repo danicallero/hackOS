@@ -36,7 +36,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { isLanguage, LANGS, languageName, pickText, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -214,10 +215,7 @@ export function StaffEditForm({
       await onUpdated();
       toast.success(t("profileUpdated"), { compactTitle: t("toastSaveProfile") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveProfile"),
-        t("toastSaveProfile"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveProfile")), t("toastSaveProfile"));
     }
   }
 
@@ -231,10 +229,7 @@ export function StaffEditForm({
       setPrimaryEmail("");
       await onUpdated();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotChangePrimaryEmail"),
-        t("toastChangeEmail"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotChangePrimaryEmail")), t("toastChangeEmail"));
     } finally {
       setPrimarySending(false);
     }
@@ -250,10 +245,7 @@ export function StaffEditForm({
       setSecEmail("");
       await onUpdated();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSetSecondaryEmail"),
-        t("toastAddEmail"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSetSecondaryEmail")), t("toastAddEmail"));
     } finally {
       setSecSending(false);
     }
@@ -266,10 +258,7 @@ export function StaffEditForm({
       toast.success(t("secondaryEmailRemoved"), { compactTitle: t("toastRemoveEmail") });
       await onUpdated();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotRemoveSecondaryEmail"),
-        t("toastRemoveEmail"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotRemoveSecondaryEmail")), t("toastRemoveEmail"));
     } finally {
       setSecSending(false);
     }

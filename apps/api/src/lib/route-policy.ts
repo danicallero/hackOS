@@ -221,16 +221,8 @@ function validatePolicy(policy: RouteAccessPolicy, route: RouteOptions): void {
   throw new Error(`Route ${String(route.method)} ${route.url} has unknown policy kind`);
 }
 
-/**
- * Adds the route-policy ledger and enforcement hook.  `enforce` is opt-in
- * during the AC-1/AC-2 transition so the foundation can land before each
- * domain has classified its owned routes; production startup must enable it
- * once the complete ledger is registered.  Tests can always opt in directly.
- */
-export function registerRoutePolicyInfrastructure(
-  app: FastifyInstance,
-  { enforce = false }: { enforce?: boolean } = {},
-): void {
+/** Adds the route-policy ledger and mandatory enforcement hook. */
+export function registerRoutePolicyInfrastructure(app: FastifyInstance): void {
   const ledger: RoutePolicyLedgerRow[] = [];
   const exemptions: RoutePolicyExemption[] = [];
   app.decorate("routePolicyLedger", ledger);
@@ -258,12 +250,9 @@ export function registerRoutePolicyInfrastructure(
 
     const policy = route.config?.routeAccessPolicy;
     if (!policy) {
-      if (enforce) {
-        throw new Error(
-          `Application route ${String(route.method)} ${route.url} is missing mandatory RouteAccessPolicy metadata`,
-        );
-      }
-      return;
+      throw new Error(
+        `Application route ${String(route.method)} ${route.url} is missing mandatory RouteAccessPolicy metadata`,
+      );
     }
     validatePolicy(policy, route);
     const methods = Array.isArray(route.method) ? route.method : [route.method];

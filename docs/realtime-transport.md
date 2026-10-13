@@ -179,4 +179,7 @@ runs, not a proportional memory/CPU saving claim.
 Keep all legacy endpoints for installed mobile compatibility. Deploy API support
 before new clients, monitor physical/logical gauges, access-check load, refetch
 errors and reconnect rates, and retire legacy endpoints only after supported
-installed versions permit it.
+installed versions permit it. The minimum supported build is
+`MOBILE_MIN_BUILD` (see [mobile-release](./mobile-release.md#minimum-supported-build));
+the web client no longer uses these endpoints and subscribes with
+`REALTIME_SCOPES` values only (`useEventSource`/`useAutoRefresh` take a scope).

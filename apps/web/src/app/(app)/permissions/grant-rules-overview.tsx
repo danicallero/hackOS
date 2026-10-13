@@ -8,7 +8,8 @@ import { Modal } from "@/components/common/modal";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Input } from "@/components/ui/input";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { RoleGrantRule } from "@/lib/types";
@@ -53,10 +54,7 @@ export function GrantRulesOverviewModal({
     try {
       setRules(await api.get<RoleGrantRule[]>("/api/role-grant-rules"));
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotLoadGrantRules"),
-        t("toastGrantRules"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotLoadGrantRules")), t("toastGrantRules"));
     } finally {
       setLoading(false);
     }

@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
@@ -85,7 +86,7 @@ export function ShirtSizesManager() {
         setStatus("ready");
       })
       .catch((err) => {
-        setError(err instanceof ApiError ? err.message : t("couldNotLoadEventSettings"));
+        setError(apiErrorText(err, t, t("couldNotLoadEventSettings")));
         setStatus("error");
       });
   }, [reset, t]);
@@ -118,9 +119,7 @@ export function ShirtSizesManager() {
           ? t("shirtSizesInUseError", {
               sizes: inUse.map((s) => `${s.value} (${s.count})`).join(", "),
             })
-          : err instanceof ApiError
-            ? err.message
-            : t("couldNotSaveEventSettings"),
+          : apiErrorText(err, t, t("couldNotSaveEventSettings")),
         t("toastShirtSizes"),
       );
     }

@@ -4,7 +4,7 @@
 // conflict reconciliation, judge presence and offline handling. The rules it
 // shares with the reviews-overview detail live in lib/attempt-review.ts.
 
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, reviewScope } from "@hackos/shared/events";
 import type { Question } from "@hackos/shared/questions";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
@@ -212,7 +212,7 @@ export function ReviewForm({
         : Promise.resolve(null),
     ])
       .catch((err) => {
-        if (!cancelled) setSaveError(errorMessage(err, t("couldNotLoadReview")));
+        if (!cancelled) setSaveError(errorMessage(err, t, t("couldNotLoadReview")));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -290,7 +290,7 @@ export function ReviewForm({
     return () => window.clearInterval(timer);
   }, [acquireField, entryId, focusedField, ownedFields]);
 
-  useEventSource(entry ? `/api/queue/entries/${entryId}/stream` : "", {
+  useEventSource(entry && entryId ? reviewScope(entryId) : "", {
     events: [EVENTS.QUEUE_REVIEW_CHANGED],
     enabled: entry != null,
     onEvent: () => void loadRemote(true),
@@ -348,7 +348,7 @@ export function ReviewForm({
       } catch (err) {
         if (currentEntryRef.current !== entryId) return;
         const fallback = t("couldNotSaveReview");
-        const message = errorMessage(err, fallback);
+        const message = errorMessage(err, t, fallback);
         setSaveError(message);
       } finally {
         savingRef.current = false;

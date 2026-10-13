@@ -1,5 +1,5 @@
 "use client";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useParams } from "next/navigation";
@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   addMyProjectChallenge,
@@ -68,13 +69,13 @@ export default function MyProjectDetailPage() {
     } catch (error) {
       // A failed background refresh keeps the loaded project (#1012).
       if (!failed(error)) return;
-      setLoadError(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      setLoadError(apiErrorText(error, t, t("couldNotLoadProject")));
     } finally {
       setLoading(false);
     }
   }, [id, t, succeeded, failed]);
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
-  const queueRefresh = useAutoRefresh("/api/queue/me/stream", [
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
+  const queueRefresh = useAutoRefresh(REALTIME_SCOPES.PERSONAL, [
     EVENTS.USER_QUEUE_CHANGED,
     EVENTS.USER_QUEUE_CALLED,
   ]);
@@ -216,11 +217,7 @@ export default function MyProjectDetailPage() {
                           await removeMyProjectChallenge(project.id, challenge.id);
                           await load();
                         } catch (error) {
-                          setChangeError(
-                            error instanceof ApiError
-                              ? error.message
-                              : t("couldNotRemoveChallenge"),
-                          );
+                          setChangeError(apiErrorText(error, t, t("couldNotRemoveChallenge")));
                         } finally {
                           setRemovingChallenge(null);
                         }
@@ -280,10 +277,7 @@ function AddChallenge({
       setOpen(false);
       await onAdded();
     } catch (error) {
-      toast.error(
-        error instanceof ApiError ? error.message : t("couldNotSaveProject"),
-        t("addChallengeLabel"),
-      );
+      toast.error(apiErrorText(error, t, t("couldNotSaveProject")), t("addChallengeLabel"));
     } finally {
       setSaving(false);
     }
@@ -347,10 +341,7 @@ function InviteMember({
           description: t("inviteAcceptedParticipantRequired"),
         });
       } else {
-        toast.error(
-          error instanceof ApiError ? error.message : t("couldNotSendInvite"),
-          t("toastSendInvite"),
-        );
+        toast.error(apiErrorText(error, t, t("couldNotSendInvite")), t("toastSendInvite"));
       }
     } finally {
       setSaving(false);

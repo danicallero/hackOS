@@ -4,7 +4,7 @@
 // size, mapped challenges / prizes and a matched-vs-unmatched indicator.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
-import { ApiError } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { listRepos } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
@@ -152,7 +152,7 @@ export default function ProjectsPage() {
       // A failed background refresh keeps the list (#1012).
       if (!failed(err)) return;
       setRepos([]);
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadProjects"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadProjects")));
     } finally {
       setLoading(false);
     }
@@ -160,11 +160,11 @@ export default function ProjectsPage() {
 
   // Soft, in-place refresh instead of a hard reload when a project changes
   // elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
-  const challengeRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
+  const challengeRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [
     EVENTS.DOMAIN_CHANGED,
   ]);
-  const queueRefresh = useAutoRefresh("/api/tv/stream", [EVENTS.DATA_CHANGED]);
+  const queueRefresh = useAutoRefresh(REALTIME_SCOPES.PUBLIC_TV, [EVENTS.DATA_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

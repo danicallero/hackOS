@@ -8,7 +8,7 @@
 //   GET /api/me/applications      → { responses } (my responses, masked status)
 //   GET /api/public/applications  → { applications } (open forms w/ template)
 
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { FilePlusIcon } from "@phosphor-icons/react/dist/csr/FilePlus";
 import { TrayIcon } from "@phosphor-icons/react/dist/csr/Tray";
@@ -22,7 +22,8 @@ import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   fmtDateTime,
@@ -55,17 +56,13 @@ export default function MyApplicationsPage() {
       setResponses(mine.value.responses);
       setResponsesError(null);
     } else {
-      setResponsesError(
-        mine.reason instanceof ApiError ? mine.reason.message : t("couldNotLoadYourApplications"),
-      );
+      setResponsesError(apiErrorText(mine.reason, t, t("couldNotLoadYourApplications")));
     }
     if (open.status === "fulfilled") {
       setForms(open.value.applications);
       setFormsError(null);
     } else {
-      setFormsError(
-        open.reason instanceof ApiError ? open.reason.message : t("couldNotLoadYourApplications"),
-      );
+      setFormsError(apiErrorText(open.reason, t, t("couldNotLoadYourApplications")));
     }
     hasLoadedRef.current =
       hasLoadedRef.current || mine.status === "fulfilled" || open.status === "fulfilled";
@@ -74,9 +71,7 @@ export default function MyApplicationsPage() {
 
   // Soft, in-place refresh instead of a hard reload when staff decides on
   // one of your applications elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=applications", [
-    EVENTS.DOMAIN_CHANGED,
-  ]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

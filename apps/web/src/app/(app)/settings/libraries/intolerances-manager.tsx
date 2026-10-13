@@ -6,7 +6,7 @@
 // admin GET — we list via the public endpoint — and mutate via the guarded
 // POST/PATCH/DELETE /api/food-intolerances (capability INTOLERANCES_MANAGE).
 
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { ForkKnifeIcon } from "@phosphor-icons/react/dist/csr/ForkKnife";
@@ -37,7 +37,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { pickText, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { Intolerance } from "@/lib/types";
@@ -110,7 +111,7 @@ export function IntolerancesManager() {
     } catch (err) {
       // A failed background refresh keeps the list (#1012).
       if (!failed(err)) return;
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadDictionary"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadDictionary")));
     } finally {
       setLoading(false);
     }
@@ -118,7 +119,7 @@ export function IntolerancesManager() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // edits the intolerances library elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=logistics", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.LOGISTICS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
@@ -164,10 +165,7 @@ export function IntolerancesManager() {
       setEditing(undefined);
       await load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveEntry"),
-        t("toastSaveDietaryNeed"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveEntry")), t("toastSaveDietaryNeed"));
     }
   }
 
@@ -180,10 +178,7 @@ export function IntolerancesManager() {
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotDeleteEntry"),
-        t("toastDeleteDietaryNeed"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotDeleteEntry")), t("toastDeleteDietaryNeed"));
     } finally {
       setDeleting(false);
     }

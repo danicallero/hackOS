@@ -25,8 +25,9 @@ backend, one workstream at a time.
 
 Realtime readers share one authenticated fetch/SSE transport per tab through
 `lib/sse-broker.ts`, with canonical identity owned by `SessionProvider` and
-100 ms scope-union coalescing. Existing reader paths map to authorized logical
-scopes; recovery and sequence gaps stay scope-specific. Public TV uses one
+100 ms scope-union coalescing. `useEventSource`, `useAutoRefresh` and `useLiveQuery` take a
+`REALTIME_SCOPES` value (`domainScope(topic)` / `reviewScope(id)` for the
+parameterized ones), never a stream URL; recovery and sequence gaps stay scope-specific. Public TV uses one
 payload-free stream. See [realtime transport](../../docs/realtime-transport.md)
 for the contract, bounds, revocation and migration behavior.
 
@@ -110,6 +111,11 @@ applies to loading, custom-icon, and promise feedback. Descriptions wrap long
 words and links so the full explanation stays inside the surface. Their surface
 is intentionally inverted (light toast on dark UI, dark toast on light UI), with
 state colors tuned for that surface.
+
+Never render `ApiError.message` (English server copy): use
+`apiErrorText(err, t, t("couldNotX"))` from `@/lib/api-error-text`, which
+resolves the error reason to localized copy first (`pnpm check:api-error-messages`
+enforces it). See `docs/api-reference.md` § Errors.
 
 Define a concise localized heading for every toast (usually two or three words).
 Errors use `toast.error(message, t("addChallengeLabel"))`, or `{ title: … }`

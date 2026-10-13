@@ -21,7 +21,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
@@ -113,7 +114,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
       setLinks(nextLinks);
       setEnterpriseLinks(nextEnterpriseLinks);
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : t("couldNotLoadInvitations"));
+      setError(apiErrorText(cause, t, t("couldNotLoadInvitations")));
     } finally {
       setLoading(false);
     }
@@ -297,10 +298,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
       setSelected(null);
       await load();
     } catch (cause) {
-      toast.error(
-        cause instanceof ApiError ? cause.message : t("couldNotWithdrawLink"),
-        t("toastWithdrawInvite"),
-      );
+      toast.error(apiErrorText(cause, t, t("couldNotWithdrawLink")), t("toastWithdrawInvite"));
     } finally {
       setExpiring(false);
     }
@@ -313,10 +311,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
       await api.post(`/api/invites/${selected.id}/resend`);
       toast.success(t("inviteResent"), { compactTitle: t("toastSendInvite") });
     } catch (cause) {
-      toast.error(
-        cause instanceof ApiError ? cause.message : t("couldNotInviteAction"),
-        t("toastSendInvite"),
-      );
+      toast.error(apiErrorText(cause, t, t("couldNotInviteAction")), t("toastSendInvite"));
     } finally {
       setResending(false);
     }

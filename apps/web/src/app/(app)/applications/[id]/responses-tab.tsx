@@ -3,7 +3,7 @@
 // Submitted responses (H13/H14): filtering, review, scoring and decisions.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { ChecksIcon } from "@phosphor-icons/react/dist/csr/Checks";
@@ -37,7 +37,8 @@ import {
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText, errorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
@@ -158,7 +159,7 @@ export function ResponsesTab({
       } catch (err) {
         // A failed background refresh keeps the table and selection (#1012).
         if (!failed(err)) return;
-        setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadResponses"));
+        setLoadError(apiErrorText(err, t, t("couldNotLoadResponses")));
       } finally {
         setLoading(false);
       }
@@ -168,9 +169,7 @@ export function ResponsesTab({
 
   // Soft, in-place refresh instead of a hard reload when a response changes
   // (submitted, reviewed, decided) elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=applications", [
-    EVENTS.DOMAIN_CHANGED,
-  ]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED]);
 
   // Coalesce live refreshes; categorical filters and search share the loaded snapshot.
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
@@ -329,7 +328,7 @@ export function ResponsesTab({
         toast.success(t("exportFilesDownloaded"), { compactTitle: t("exportFiles") });
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("exportFailed"), t("exportFiles"));
+      toast.error(errorText(err, t, t("exportFailed")), t("exportFiles"));
     } finally {
       setExportingKey(null);
     }
@@ -358,10 +357,7 @@ export function ResponsesTab({
       await load();
       if (skipped.length === 0) toast.success(label, { compactTitle: t("toastDecisions") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("batchActionFailed"),
-        t("toastDecisions"),
-      );
+      toast.error(apiErrorText(err, t, t("batchActionFailed")), t("toastDecisions"));
     } finally {
       setBatchBusy(false);
     }

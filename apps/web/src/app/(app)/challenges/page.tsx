@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
@@ -17,7 +17,8 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
@@ -126,7 +127,7 @@ export default function ChallengesPage() {
       // A failed background refresh keeps the list and selection (#1012).
       if (!failed(err)) return;
       setChallenges([]);
-      setLoadError(err instanceof ApiError ? err.message : t("couldNotLoadChallenges"));
+      setLoadError(apiErrorText(err, t, t("couldNotLoadChallenges")));
     } finally {
       setLoading(false);
     }
@@ -153,7 +154,7 @@ export default function ChallengesPage() {
         await load();
       } catch (err) {
         toast.error(
-          err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"),
+          apiErrorText(err, t, t("couldNotUpdateVisibility")),
           t("toastChallengeVisibility"),
         );
       } finally {
@@ -165,7 +166,7 @@ export default function ChallengesPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits a challenge elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

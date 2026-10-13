@@ -1,5 +1,5 @@
 "use client";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { UserPlusIcon } from "@phosphor-icons/react/dist/csr/UserPlus";
 import { useParams, useRouter } from "next/navigation";
@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import {
   addWorkGroupChallenge,
@@ -72,18 +73,14 @@ export default function WorkGroupDetailPage() {
       setGroup(null);
       // "Not found" is reserved for a 404.
       setLoadError(
-        isNotFoundError(error)
-          ? null
-          : error instanceof ApiError
-            ? error.message
-            : t("couldNotLoadProject"),
+        isNotFoundError(error) ? null : apiErrorText(error, t, t("couldNotLoadProject")),
       );
     } finally {
       setLoading(false);
     }
   }, [id, router, t, succeeded, failed]);
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
-  const challengeRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
+  const challengeRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [
     EVENTS.DOMAIN_CHANGED,
   ]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: project mutations may establish the import link (#854).
@@ -111,7 +108,7 @@ export default function WorkGroupDetailPage() {
       if (action === "decline") router.replace("/my-project");
       else await load();
     } catch (error) {
-      setLoadError(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
+      setLoadError(apiErrorText(error, t, t("couldNotSaveProject")));
     } finally {
       setResponding(false);
     }
@@ -223,10 +220,7 @@ function Members({
           description: t("inviteAcceptedParticipantRequired"),
         });
       } else {
-        toast.error(
-          error instanceof ApiError ? error.message : t("couldNotSendInvite"),
-          t("toastSendInvite"),
-        );
+        toast.error(apiErrorText(error, t, t("couldNotSendInvite")), t("toastSendInvite"));
       }
     } finally {
       setBusy(false);
@@ -294,9 +288,7 @@ function Members({
                       await removeWorkGroupMember(group.id, member.userId);
                       await onChanged();
                     } catch (error) {
-                      setMemberError(
-                        error instanceof ApiError ? error.message : t("couldNotSaveProject"),
-                      );
+                      setMemberError(apiErrorText(error, t, t("couldNotSaveProject")));
                     } finally {
                       setBusy(false);
                     }
@@ -340,7 +332,7 @@ function Challenges({
       if (!remove) setAddOpen(false);
       await onChanged();
     } catch (error) {
-      setError(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
+      setError(apiErrorText(error, t, t("couldNotSaveProject")));
     } finally {
       setBusy(false);
     }
@@ -469,7 +461,7 @@ function DeleteGroup({ group, onDeleted }: { group: PlannedWorkGroup; onDeleted:
             setOpen(false);
             onDeleted();
           } catch (error) {
-            setError(error instanceof ApiError ? error.message : t("couldNotDeleteProject"));
+            setError(apiErrorText(error, t, t("couldNotDeleteProject")));
           } finally {
             setPending(false);
           }

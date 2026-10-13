@@ -1,7 +1,7 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
@@ -31,7 +31,8 @@ import {
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePersistedState } from "@/hooks/use-persisted-state";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { shortDateFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
@@ -424,7 +425,7 @@ export default function UsersPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits a user elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream?topic=identity", [EVENTS.DOMAIN_CHANGED]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.IDENTITY), [EVENTS.DOMAIN_CHANGED]);
 
   // Live occupancy for the optional Presence column — only fetched for staff
   // who could otherwise see it via the presence/stats panels anyway.
@@ -470,9 +471,8 @@ export default function UsersPage() {
           if (cancelled) return;
           setUsers([]);
           setTotal(0);
-          const message = err instanceof ApiError ? err.message : t("couldNotLoadUsers");
-          setLoadError(message);
-          toast.error(message, t("columnPeople"));
+          setLoadError(apiErrorText(err, t, t("couldNotLoadUsers")));
+          toast.error(apiErrorText(err, t, t("couldNotLoadUsers")), t("columnPeople"));
         })
         .finally(() => {
           if (!cancelled) setLoading(false);

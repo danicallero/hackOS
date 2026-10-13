@@ -15,8 +15,9 @@ export function hoursSince(iso: string, t: Translate): string {
 
 export function queryLoadError(
   error: unknown,
+  t: Translate,
   fallback: string,
   onRetry: () => void,
 ): { message: string; onRetry: () => void } | undefined {
-  return error ? { message: errorMessage(error, fallback), onRetry } : undefined;
+  return error ? { message: errorMessage(error, t, fallback), onRetry } : undefined;
 }

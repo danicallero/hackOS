@@ -121,9 +121,7 @@ describe("PersonDetail (#934, #935)", () => {
     expect(document.querySelector("[role=dialog]")?.textContent).toContain("cvViewerTitle");
     vi.unstubAllGlobals();
     expect(container.querySelector("a[href='/people']")?.textContent).toBe("backToPeople");
-    expect(env.autoRefresh).toHaveBeenCalledWith("/api/events/stream?topic=directory", [
-      "domain.changed",
-    ]);
+    expect(env.autoRefresh).toHaveBeenCalledWith("domain:directory", ["domain.changed"]);
   });
 
   it("lists every project and work group the person is in", async () => {
@@ -163,7 +161,7 @@ describe("PersonDetail (#934, #935)", () => {
   it("keeps a failed load in place with a retry", async () => {
     person = new ApiError(500, "internal", "Server down");
     await render();
-    expect(container.querySelector("[role=alert]")?.textContent).toContain("Server down");
+    expect(container.querySelector("[role=alert]")?.textContent).toContain("apiErrorServer");
     person = entry({ displayName: "Back again" });
     const retry = [...container.querySelectorAll("button")].find((b) => b.textContent === "retry");
     await act(async () => retry?.click());

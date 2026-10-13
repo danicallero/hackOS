@@ -1,6 +1,6 @@
 "use client";
 
-import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { apiAssetUrl, type DirectoryEntry } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
@@ -48,9 +49,7 @@ function PersonReader({ userId }: { userId: number }) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [retryNonce, setRetryNonce] = useState(0);
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
-  const liveRefresh = useAutoRefresh(`/api/events/stream?topic=${SSE_TOPICS.DIRECTORY}`, [
-    EVENTS.DOMAIN_CHANGED,
-  ]);
+  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.DIRECTORY), [EVENTS.DOMAIN_CHANGED]);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +85,7 @@ function PersonReader({ userId }: { userId: number }) {
         else {
           setState({
             status: "error",
-            message: err instanceof ApiError ? err.message : t("couldNotLoadPerson"),
+            message: apiErrorText(err, t, t("couldNotLoadPerson")),
           });
         }
       });

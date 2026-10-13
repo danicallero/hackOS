@@ -20,7 +20,8 @@ import {
   useStandTagLink,
 } from "@/components/stand-tag-link";
 import { SymbolView } from "@/components/symbol";
-import { ApiError, apiFetch } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -108,10 +109,7 @@ export function StandDetailScreen() {
     } catch (err) {
       setStand((current) => (current ? { ...current, scannable: previous } : current));
       void haptic("error");
-      Alert.alert(
-        t("standsTitle"),
-        err instanceof ApiError ? err.message : t("standsScannableFailed"),
-      );
+      Alert.alert(t("standsTitle"), apiErrorText(err, t, t("standsScannableFailed")));
     } finally {
       setScanBusy(false);
     }
@@ -137,10 +135,7 @@ export function StandDetailScreen() {
       );
     } catch (err) {
       void haptic("error");
-      Alert.alert(
-        t("standsRemoveTag"),
-        err instanceof ApiError ? err.message : t("standsRemoveTagFailed"),
-      );
+      Alert.alert(t("standsRemoveTag"), apiErrorText(err, t, t("standsRemoveTagFailed")));
     } finally {
       setRemoving((current) => {
         const next = new Set(current);

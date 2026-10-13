@@ -23,7 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { readServerState } from "@/lib/server-state";
 import { toast } from "@/lib/toast";
@@ -204,9 +205,7 @@ export function GrantRulesPanel({
       await load();
     } catch (err) {
       toast.error(
-        err instanceof ApiError
-          ? err.message
-          : t(editing ? "couldNotSaveGrantRule" : "couldNotCreateGrantRule"),
+        apiErrorText(err, t, t(editing ? "couldNotSaveGrantRule" : "couldNotCreateGrantRule")),
         t("toastSaveGrantRule"),
       );
     }
@@ -219,10 +218,7 @@ export function GrantRulesPanel({
       await api.patch<RoleGrantRule>(`/api/role-grant-rules/${rule.id}`, { enabled });
     } catch (err) {
       setRules(before);
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveGrantRule"),
-        t("toastSaveGrantRule"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveGrantRule")), t("toastSaveGrantRule"));
     }
   }
 
@@ -235,10 +231,7 @@ export function GrantRulesPanel({
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotDeleteGrantRule"),
-        t("deleteGrantRule"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotDeleteGrantRule")), t("deleteGrantRule"));
     } finally {
       setDeleting(false);
     }

@@ -11,8 +11,9 @@ import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
 import { apiErrorReason } from "@/lib/api-error-reason";
+import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { pickText, useLocale } from "@/lib/i18n";
 import type { MealPlan, MealPlanMeal } from "@/lib/meal-plan";
@@ -88,10 +89,7 @@ export function MealPlanSection({ userId }: { userId: number }) {
       apply(next);
       toast.success(t("mealPlanSaved"), { compactTitle: t("toastSaveUserMealPlan") });
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : t("couldNotSaveUserMealPlan"),
-        t("toastSaveUserMealPlan"),
-      );
+      toast.error(apiErrorText(err, t, t("couldNotSaveUserMealPlan")), t("toastSaveUserMealPlan"));
     } finally {
       setSaving(false);
     }
