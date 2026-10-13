@@ -29,7 +29,9 @@
     "./presence-timeline": "./src/presence-timeline.ts",
     "./display-labels": "./src/display-labels.ts",
     "./account-removal": "./src/account-removal.ts",
-    "./event-time-store": "./src/event-time-store.ts"
+    "./event-time-store": "./src/event-time-store.ts",
+    "./forms": "./src/forms.ts",
+    "./projects": "./src/projects.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
