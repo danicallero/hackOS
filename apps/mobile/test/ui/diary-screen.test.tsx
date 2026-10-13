@@ -364,6 +364,7 @@ describe("People", () => {
     await scanWithNfc();
     await screen.findByTestId("connection-celebration");
     expect(screen.getByTestId("connection-celebration-burst")).toBeTruthy();
+    expect(screen.getByTestId("connection-celebration-skia")).toBeTruthy();
     expect(announce).toHaveBeenCalledWith("diaryConnected:Bea R.");
     expect(haptic).toHaveBeenCalledWith("success");
     await fireEvent.press(screen.getByTestId("connection-celebration"));
@@ -386,6 +387,7 @@ describe("People", () => {
     await scanWithNfc();
     await screen.findByTestId("connection-celebration");
     expect(screen.queryByTestId("connection-celebration-burst")).toBeNull();
+    expect(screen.queryByTestId("connection-celebration-skia")).toBeNull();
     expect(haptic).toHaveBeenCalledWith("success");
     expect(haptic).not.toHaveBeenCalledWith("medium");
   });

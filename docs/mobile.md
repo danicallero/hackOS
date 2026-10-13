@@ -1074,17 +1074,28 @@ badge (`diary.md`).
 **Meeting someone.** A scan that adds a person who was not yet in the loaded
 diary (never a re-scan, never a stand) plays `components/connection-celebration.tsx`:
 a transparent full-screen `Modal` where the viewer's photo (from `useMeContext`)
-and the scanned person's (`UserAvatar`, initials until the authenticated photo
-loads) fly in from opposite sides, merge with an elastic spring, then a ring,
+and the scanned person's fly in from opposite sides and fuse like metaballs
+(`components/connection-celebration-skia.tsx`, `@shopify/react-native-skia`): the
+two accent blobs behind the photos go through a Skia blur plus an alpha-threshold
+`ColorMatrix` layer, so a neck of goo stretches between them and settles into a
+shared accent rim as the photos overlap with a spring overshoot. Then a ring,
 ten particles in the accent color and a link glyph burst from the join (about
-1.6 s), fading out onto the pinned card. Frames are shared-value transforms on
-the UI thread (reanimated; no Skia in the app, so the "gooey" feel is spring
-overshoot plus a squash on the merge, not a metaball filter). Haptics through
+1.6 s), fading out onto the pinned card. The photo routes are authenticated, so
+the bytes come from `loadApiImage` (session cookie) and are decoded with
+`Skia.Image.MakeImageFromEncoded`; until they arrive, or without a photo, the
+circle shows initials. Frames are driven by Reanimated shared values that Skia
+reads directly, so they stay on the UI thread. Skia paints with color strings,
+so the scene carries the light/dark systemBlue and ground hex values instead of
+the dynamic `colors` tokens. Where Skia cannot load (web) or throws while
+rendering (an error boundary), the earlier Reanimated version plays instead: the
+same beats as spring transforms with a squash, no goo. Skia is a native module
+(no config plugin; the `ios/`/`android/` projects are generated), so adding it
+needed a new native build, not an OTA update. Haptics through
 `lib/haptics.ts`: light and medium as the photos approach, success at the
 merge (the lib has no user setting; it is best-effort and silent where there is
 no engine). A tap anywhere skips it; it never outlasts its timer. Under
 reduced motion it is a 1.1 s crossfade of the two photos and the glyph, with no
-travel, ring or particles and only the success haptic. It announces
+Skia canvas, travel, ring or particles and only the success haptic. It announces
 `diaryConnected` ("You are now connected with {name}") to screen readers and
 labels the overlay with it. The API reports `created` only as the status code
 (201 vs 200), which `apiFetch` does not expose, so "new" is decided against the
@@ -2123,7 +2134,8 @@ rendered through `renderMobile`, including the shared H4 sign-in contract.
 `GestureHandlerRootView` and a `SafeAreaProvider` with fixed test insets, so
 components using `useSafeAreaInsets()` or gesture-handler's
 `GestureDetector`/`Swipeable` don't need a per-test workaround. `jest.setup.js`
-mocks `react-native-reanimated`, `react-native-worklets`, and
+mocks `react-native-reanimated`, `react-native-worklets`, `@shopify/react-native-skia`
+(a plain-view `Canvas`, drawing primitives render nothing) and
 `react-native-gesture-handler` at the root — real gesture recognition and
 worklet scheduling aren't meaningful under jest, so `Gesture`/`GestureDetector`
 are no-op pass-throughs and `Swipeable` renders its `renderLeftActions`/

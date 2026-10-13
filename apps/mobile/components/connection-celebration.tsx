@@ -1,5 +1,13 @@
-import { type ReactNode, useEffect, useRef } from "react";
-import { AccessibilityInfo, Modal, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Component, type ReactNode, useEffect, useRef } from "react";
+import {
+  AccessibilityInfo,
+  Modal,
+  Platform,
+  Pressable,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Animated, {
   Easing,
   type SharedValue,
@@ -31,6 +39,20 @@ export interface ConnectionCelebrationSelf {
   image: string | null;
 }
 
+/**
+ * The Skia gooey merge, or null where Skia cannot load (web, a build without
+ * the native module): the Reanimated version below then plays instead.
+ */
+const MergeCanvas: typeof import("./connection-celebration-skia").ConnectionMergeCanvas | null =
+  (() => {
+    if (Platform.OS === "web") return null;
+    try {
+      return require("./connection-celebration-skia").ConnectionMergeCanvas;
+    } catch {
+      return null;
+    }
+  })();
+
 const AVATAR = 92;
 const OVERLAP = AVATAR * 0.3;
 const PARTICLES = 10;
@@ -40,10 +62,13 @@ const REDUCED_MS = 1100;
 
 /**
  * #935: the moment two people connect. A full-screen overlay where both photos
- * fly in, merge with an elastic spring, and burst into a ring, particles and a
- * link glyph (about 1.6 s). Everything is a shared-value transform, so the
- * frames run on the UI thread. Under reduced motion it is a short crossfade
- * with no travel, ring or particles. Tapping anywhere skips it.
+ * fly in, fuse like metaballs with an elastic spring (Skia blur + alpha
+ * threshold), and burst into a ring, particles and a link glyph (about 1.6 s).
+ * Everything is a shared-value driven, so the frames run on the UI thread. If
+ * Skia is unavailable or throws, the same beats play as Reanimated transforms
+ * with a squash instead of the goo. Under reduced motion it is a short
+ * crossfade with no travel, ring or particles and no canvas. Tapping anywhere
+ * skips it.
  */
 export function ConnectionCelebration({
   target,
@@ -177,38 +202,38 @@ function Celebration({
             width: "100%",
           }}
         >
-          {reduceMotion ? null : (
-            <>
-              <Animated.View
-                testID="connection-celebration-burst"
-                style={[
-                  {
-                    borderColor: colors.accent,
-                    borderRadius: AVATAR,
-                    borderWidth: 3,
-                    height: AVATAR,
-                    position: "absolute",
-                    width: AVATAR,
-                  },
-                  ring,
-                ]}
+          {!reduceMotion && MergeCanvas ? (
+            <MergeBoundary
+              fallback={
+                <SpringStage
+                  reduceMotion={false}
+                  self={self}
+                  target={target}
+                  stage={{ left, right, ring, burst }}
+                />
+              }
+            >
+              <MergeCanvas
+                width={width}
+                height={AVATAR * 3.4}
+                avatar={AVATAR}
+                travel={travel}
+                apart={apart}
+                approach={approach}
+                pop={pop}
+                burst={burst}
+                self={{ name: self.name, image: self.image }}
+                other={{ name: target.name, image: target.photoUrl }}
               />
-              {Array.from({ length: PARTICLES }, (_, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: a fixed ring of identical particles.
-                <Particle key={index} index={index} burst={burst} />
-              ))}
-            </>
+            </MergeBoundary>
+          ) : (
+            <SpringStage
+              reduceMotion={reduceMotion}
+              self={self}
+              target={target}
+              stage={{ left, right, ring, burst }}
+            />
           )}
-          <Animated.View style={[{ position: "absolute" }, left]}>
-            <Ringed>
-              <UserAvatar name={self.name} image={self.image} size={AVATAR} />
-            </Ringed>
-          </Animated.View>
-          <Animated.View style={[{ position: "absolute" }, right]}>
-            <Ringed>
-              <UserAvatar name={target.name} image={target.photoUrl} size={AVATAR} />
-            </Ringed>
-          </Animated.View>
           <Animated.View
             style={[
               {
@@ -280,5 +305,76 @@ function Particle({ index, burst }: { index: number; burst: SharedValue<number> 
         style,
       ]}
     />
+  );
+}
+
+/** Falls back to the Reanimated stage if the canvas throws while rendering. */
+class MergeBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+type AnimatedStyle = ReturnType<typeof useAnimatedStyle>;
+
+/** The photos, ring and particles as Reanimated transforms (no Skia). */
+function SpringStage({
+  reduceMotion,
+  self,
+  target,
+  stage,
+}: {
+  reduceMotion: boolean;
+  self: ConnectionCelebrationSelf;
+  target: ConnectionCelebrationTarget;
+  stage: {
+    left: AnimatedStyle;
+    right: AnimatedStyle;
+    ring: AnimatedStyle;
+    burst: SharedValue<number>;
+  };
+}) {
+  return (
+    <>
+      {reduceMotion ? null : (
+        <>
+          <Animated.View
+            testID="connection-celebration-burst"
+            style={[
+              {
+                borderColor: colors.accent,
+                borderRadius: AVATAR,
+                borderWidth: 3,
+                height: AVATAR,
+                position: "absolute",
+                width: AVATAR,
+              },
+              stage.ring,
+            ]}
+          />
+          {Array.from({ length: PARTICLES }, (_, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed ring of identical particles.
+            <Particle key={index} index={index} burst={stage.burst} />
+          ))}
+        </>
+      )}
+      <Animated.View style={[{ position: "absolute" }, stage.left]}>
+        <Ringed>
+          <UserAvatar name={self.name} image={self.image} size={AVATAR} />
+        </Ringed>
+      </Animated.View>
+      <Animated.View style={[{ position: "absolute" }, stage.right]}>
+        <Ringed>
+          <UserAvatar name={target.name} image={target.photoUrl} size={AVATAR} />
+        </Ringed>
+      </Animated.View>
+    </>
   );
 }
