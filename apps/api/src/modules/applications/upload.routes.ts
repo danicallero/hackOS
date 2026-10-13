@@ -16,7 +16,7 @@ import {
   NotFoundError,
   UnauthorizedError,
 } from "../../lib/errors.js";
-import { requireIdempotencyKey } from "../../lib/idempotency.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { getObject, putObject } from "../../lib/storage.js";
 import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
@@ -80,7 +80,7 @@ export function registerUploadRoutes(app: FastifyInstance): void {
   r.post(
     "/api/applications/:applicationId/upload/:fieldKey",
     {
-      preHandler: [requireAuth, requireIdempotencyKey],
+      preHandler: [requireAuth, idempotencyGuard],
       config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         summary: "Upload a file for an application field",

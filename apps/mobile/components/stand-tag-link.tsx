@@ -4,7 +4,6 @@ import { SymbolView } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { type MessageKey, useLocale } from "@/lib/i18n";
-import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { startNfcRead } from "@/lib/nfc-reader";
 import { type StandSummary, type StandTag, standLinkErrorKey } from "@/lib/stands";
 import { colors } from "@/theme/colors";
@@ -64,7 +63,6 @@ export function useStandTagLink(onLinked: (stand: LinkTarget, tag: StandTag) => 
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "Idempotency-Key": createIdempotencyKey(),
         },
         body: JSON.stringify({ kind: "nfc", uid }),
       });

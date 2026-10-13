@@ -174,7 +174,6 @@ describe("StandDetailScreen (#935)", () => {
         method: "PUT",
         body: JSON.stringify({ scannable: false }),
       });
-      expect((call?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
     });
   });
 
@@ -202,7 +201,6 @@ describe("StandDetailScreen (#935)", () => {
     await waitFor(() => expect(screen.queryByLabelText("Lanyard Ana, 04AABBCCDDEEFF")).toBeNull());
     const call = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE");
     expect(call?.[0]).toBe("/api/enterprises/1/stand-tags/4");
-    expect((call?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
     expect(screen.queryByText("standsNfcTags")).toBeNull();
   });
 

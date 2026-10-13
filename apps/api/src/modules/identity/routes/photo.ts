@@ -17,7 +17,7 @@ import {
   NotFoundError,
   UnauthorizedError,
 } from "../../../lib/errors.js";
-import { idempotencyGuard, requireIdempotencyKey } from "../../../lib/idempotency.js";
+import { idempotencyGuard } from "../../../lib/idempotency.js";
 import {
   deleteReplacedObject,
   PHOTO_MAX_BYTES,
@@ -183,7 +183,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
     "/api/me/photo",
     {
       config: routeAccess({ kind: "authenticated" }),
-      preHandler: [requireAuth, requireIdempotencyKey],
+      preHandler: [requireAuth, idempotencyGuard],
       schema: {
         summary: "Upload my photo",
         description:
@@ -213,7 +213,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
     "/api/users/:id/photo",
     {
       config: usersWriter,
-      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), requireIdempotencyKey],
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
       schema: {
         params: photoParams,
         summary: "Upload a person's photo",

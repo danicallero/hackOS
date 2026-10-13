@@ -19,7 +19,6 @@ import { SymbolView } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
 import {
   findQueueEntries,
@@ -256,7 +255,6 @@ export function QueueOperationsScreen() {
       try {
         await apiFetch(`/api/queue/entries/${entryId}/notify-enter`, {
           method: "POST",
-          headers: { "Idempotency-Key": createIdempotencyKey() },
         });
         setNotifiedEntryId(entryId);
         void haptic("success");

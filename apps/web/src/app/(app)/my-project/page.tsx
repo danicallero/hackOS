@@ -180,7 +180,7 @@ function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
   async function create() {
     setSaving(true);
     try {
-      await createWorkGroup(name.trim(), challengeIds.map(Number), crypto.randomUUID());
+      await createWorkGroup(name.trim(), challengeIds.map(Number));
       setName("");
       setChallengeIds([]);
       setOpen(false);
@@ -339,8 +339,8 @@ function PendingInvitesCard({
   async function respond(repoId: number, action: "accept" | "decline") {
     setBusy(repoId);
     try {
-      if (action === "accept") await acceptProjectInvite(repoId, crypto.randomUUID());
-      else await declineProjectInvite(repoId, crypto.randomUUID());
+      if (action === "accept") await acceptProjectInvite(repoId);
+      else await declineProjectInvite(repoId);
       await onChanged();
     } catch (error) {
       toast.error(

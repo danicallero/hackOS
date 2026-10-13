@@ -1,5 +1,6 @@
 import { authClient } from "./auth-client";
 import { API_URL } from "./env";
+import { intentKey, settleIntentKey } from "./idempotency-key";
 
 export class ApiError extends Error {
   constructor(
@@ -72,12 +73,11 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
   const url = `${API_URL.replace(/\/+$/, "")}${path}`;
   const method = requestInit.method?.toUpperCase() ?? "GET";
   const mutationHeaders = new Headers(requestInit.headers);
-  if (!["GET", "HEAD", "OPTIONS"].includes(method) && !mutationHeaders.has("Idempotency-Key")) {
-    mutationHeaders.set(
-      "Idempotency-Key",
-      globalThis.crypto?.randomUUID?.() ?? `mobile-${Date.now()}-${Math.random()}`,
-    );
-  }
+  const intent =
+    !["GET", "HEAD", "OPTIONS"].includes(method) && !mutationHeaders.has("Idempotency-Key")
+      ? `${method} ${path} ${typeof requestInit.body === "string" ? requestInit.body : ""}`
+      : null;
+  if (intent) mutationHeaders.set("Idempotency-Key", intentKey(intent));
   const { data, error } = await authClient.$fetch<T>(url, {
     method: requestInit.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | undefined,
     body: requestInit.body,
@@ -113,6 +113,8 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
           }
         : undefined,
   });
+  // A transport failure has no status and keeps the key for the user's retry.
+  if (intent) settleIntentKey(intent, error ? (error.status ?? null) : 200);
   if (error) {
     const envelope = error as {
       error?: { code?: string; message?: string; details?: unknown };

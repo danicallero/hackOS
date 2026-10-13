@@ -12,7 +12,7 @@ import {
 } from "../../lib/capabilities.js";
 import { sendCsv } from "../../lib/csv.js";
 import { ForbiddenError } from "../../lib/errors.js";
-import { requireIdempotencyKey } from "../../lib/idempotency.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { requireApplication } from "../applications/service.js";
 import { statisticsPanelKeys } from "../applications/stats.js";
@@ -233,7 +233,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
   r.put(
     "/api/statistics/access",
     {
-      preHandler: [requireAuth, requireIdempotencyKey],
+      preHandler: [requireAuth, idempotencyGuard],
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         summary: "Set a generic statistics scope panel override",
@@ -307,7 +307,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/statistics/access/:roleId",
     {
-      preHandler: [requireAuth, requireIdempotencyKey],
+      preHandler: [requireAuth, idempotencyGuard],
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         summary: "Remove a role's generic statistics overrides",

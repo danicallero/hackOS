@@ -41,7 +41,6 @@ import {
 import { filterDiaryEntries } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
@@ -64,7 +63,6 @@ type NoteTarget = { kind: "person"; entry: DiaryEntry } | { kind: "company"; ent
 
 const JSON_HEADERS = () => ({
   "content-type": "application/json",
-  "Idempotency-Key": createIdempotencyKey(),
 });
 
 /**
@@ -360,7 +358,6 @@ export function DiaryScreen() {
         void mutate(`entry:${entry.id}`, async () => {
           await apiFetch(`/api/me/diary/${entry.id}`, {
             method: "DELETE",
-            headers: { "Idempotency-Key": createIdempotencyKey() },
           });
           requestId.current += 1;
           setEntries((current) => (current ?? []).filter((item) => item.id !== entry.id));
@@ -388,7 +385,6 @@ export function DiaryScreen() {
         void mutate(`company:${item.enterpriseId}`, async () => {
           await apiFetch(`/api/me/diary/${entry.id}`, {
             method: "DELETE",
-            headers: { "Idempotency-Key": createIdempotencyKey() },
           });
           setOpenCompanyId(null);
           applyCompany(item.enterpriseId, null);
