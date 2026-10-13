@@ -18,7 +18,7 @@ describe("RouteAccessPolicy infrastructure", () => {
   it("fails registration of an application route without mandatory metadata", () => {
     const app = Fastify();
     apps.push(app);
-    registerRoutePolicyInfrastructure(app, { enforce: true });
+    registerRoutePolicyInfrastructure(app);
 
     expect(() => app.get("/api/private", async () => ({ ok: true }))).toThrow(
       "missing mandatory RouteAccessPolicy metadata",
@@ -28,7 +28,7 @@ describe("RouteAccessPolicy infrastructure", () => {
   it("records declared policies and permits only the narrow Better Auth exemption", () => {
     const app = Fastify();
     apps.push(app);
-    registerRoutePolicyInfrastructure(app, { enforce: true });
+    registerRoutePolicyInfrastructure(app);
     app.get(
       "/api/public/example",
       { config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-content" } } },
@@ -61,7 +61,7 @@ describe("RouteAccessPolicy infrastructure", () => {
   it("permits contextual collection policies without inventing a resource locator", () => {
     const app = Fastify();
     apps.push(app);
-    registerRoutePolicyInfrastructure(app, { enforce: true });
+    registerRoutePolicyInfrastructure(app);
     const policy: RouteAccessPolicy = { kind: "contextual", policy: "challenge:list" };
 
     app.get("/api/challenges", { config: { routeAccessPolicy: policy } }, async () => ({
@@ -78,7 +78,7 @@ describe("RouteAccessPolicy infrastructure", () => {
   it("retains and validates resource locators for resource-bound contextual policies", () => {
     const app = Fastify();
     apps.push(app);
-    registerRoutePolicyInfrastructure(app, { enforce: true });
+    registerRoutePolicyInfrastructure(app);
     const policy: RouteAccessPolicy = {
       kind: "contextual",
       policy: "project:read",
@@ -99,7 +99,7 @@ describe("RouteAccessPolicy infrastructure", () => {
   it("rejects malformed contextual policy metadata when registering a route", () => {
     const app = Fastify();
     apps.push(app);
-    registerRoutePolicyInfrastructure(app, { enforce: true });
+    registerRoutePolicyInfrastructure(app);
 
     expect(() =>
       app.get(
@@ -150,7 +150,7 @@ describe("RouteAccessPolicy infrastructure", () => {
   it("rejects malformed public, token, and capability metadata at registration", () => {
     const app = Fastify();
     apps.push(app);
-    registerRoutePolicyInfrastructure(app, { enforce: true });
+    registerRoutePolicyInfrastructure(app);
     const route = (url: string, policy: unknown) =>
       app.get(url, { config: { routeAccessPolicy: policy as RouteAccessPolicy } }, async () => ({
         ok: true,
@@ -216,7 +216,7 @@ describe("RouteAccessPolicy infrastructure", () => {
   it("rejects caller verification on public/token routes and target verification elsewhere", () => {
     const app = Fastify();
     apps.push(app);
-    registerRoutePolicyInfrastructure(app, { enforce: true });
+    registerRoutePolicyInfrastructure(app);
 
     expect(() =>
       app.post(

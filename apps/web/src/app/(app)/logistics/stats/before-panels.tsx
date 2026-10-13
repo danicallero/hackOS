@@ -717,7 +717,7 @@ function OverviewPanel({
   const reducedDragMotion = useReducedDragMotion();
   const [activeKpi, setActiveKpi] = useState<string | null>(null);
   const { t } = useLocale();
-  const confirmed = stats?.overview?.confirmed ?? stats?.funnel?.confirmed;
+  const confirmed = stats?.overview?.confirmed;
   const submitted =
     stats?.overview?.submitted ??
     Object.entries(stats?.counts_by_status ?? {}).reduce(
@@ -725,13 +725,8 @@ function OverviewPanel({
       0,
     );
   const overview = stats?.overview;
-  const fallbackSent = stats?.funnel?.sent ?? 0;
   const rate =
-    overview?.confirmation_rate != null
-      ? Math.round(overview.confirmation_rate * 100)
-      : confirmed === undefined || fallbackSent === 0
-        ? null
-        : Math.round((confirmed / fallbackSent) * 100);
+    overview?.confirmation_rate != null ? Math.round(overview.confirmation_rate * 100) : null;
   const kpiSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
