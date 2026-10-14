@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 
+let mockParams: Record<string, string> = { id: "5" };
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockSetOptions = jest.fn();
@@ -11,7 +12,7 @@ jest.mock("expo-router", () => ({
     const { useEffect } = jest.requireActual("react");
     useEffect(callback, [callback]);
   },
-  useLocalSearchParams: () => ({ id: "5" }),
+  useLocalSearchParams: () => mockParams,
   useNavigation: () => ({ addListener: jest.fn(() => () => {}), setOptions: mockSetOptions }),
 }));
 jest.mock("@/lib/api", () => ({
@@ -66,6 +67,7 @@ const project: NativeProject = {
   presentations: [],
 };
 beforeEach(() => {
+  mockParams = { id: "5" };
   mockApi.mockReset();
   mockPush.mockReset();
   mockBack.mockReset();
@@ -464,4 +466,19 @@ it("hides gallery retry when the audience is denied (H18)", async () => {
   expect(await screen.findByText("apiErrorForbidden")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
   expect(screen.queryByText("projectNoGallery")).toBeNull();
+});
+
+it("opens the gallery filtered to the linked challenge and sends every chosen challenge (H18)", async () => {
+  mockParams = { challengeId: "9" };
+  settle({
+    "/api/public/projects?page=1&pageSize=20&search=&challengeId=9": {
+      items: [{ ...project, name: "Filtered" }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    },
+  });
+  await renderMobile(<ProjectGalleryScreen />);
+  expect(await screen.findByText("Filtered")).toBeTruthy();
+  expect(screen.queryByText("projectAllChallenges")).toBeNull();
 });

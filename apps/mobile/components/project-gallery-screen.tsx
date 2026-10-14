@@ -1,10 +1,10 @@
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, TextInput, View } from "react-native";
+import { Platform, ScrollView, TextInput, View } from "react-native";
 import { FilterMenu, type FilterMenuProps } from "@/components/filter-menu";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
-import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
+import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
 import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ApiError, apiFetch } from "@/lib/api";
@@ -19,8 +19,8 @@ export function ProjectGalleryScreen() {
   const navigation = useNavigation();
   const [search, setSearch] = useState("");
   const params = useLocalSearchParams<{ challengeId?: string }>();
-  const [challengeId, setChallengeId] = useState<number | null>(
-    params.challengeId ? Number(params.challengeId) : null,
+  const [challengeIds, setChallengeIds] = useState<number[]>(
+    params.challengeId ? [Number(params.challengeId)] : [],
   );
   const [challenges, setChallenges] = useState<{ id: number; title: string }[]>([]);
   const [projects, setProjects] = useState<NativeProject[]>([]);
@@ -34,17 +34,24 @@ export function ProjectGalleryScreen() {
     ...challenges.map((item) => ({
       id: String(item.id),
       label: item.title,
-      selected: item.id === challengeId,
+      selected: challengeIds.includes(item.id),
     })),
-    ...(challengeId !== null
+    ...(challengeIds.length > 0
       ? [{ id: "all", label: t("projectAllChallenges"), selected: false }]
       : []),
   ];
-  const selectChallenge = (id: string) => setChallengeId(id === "all" ? null : Number(id));
+  const selectChallenge = (id: string) =>
+    setChallengeIds((current) =>
+      id === "all"
+        ? []
+        : current.includes(Number(id))
+          ? current.filter((value) => value !== Number(id))
+          : [...current, Number(id)],
+    );
   const filter = (
     <FilterMenu
       accessibilityLabel={t("projectChallenges")}
-      active={challengeId !== null}
+      active={challengeIds.length > 0}
       items={filterItems}
       onSelect={selectChallenge}
     />
@@ -87,7 +94,7 @@ export function ProjectGalleryScreen() {
           pageSize: "20",
           search: search.trim(),
         });
-        if (challengeId !== null) query.set("challengeId", String(challengeId));
+        for (const id of challengeIds) query.append("challengeId", String(id));
         const result = await apiFetch<GalleryPage>(`/api/public/projects?${query}`);
         if (request !== generation.current) return;
         setProjects((current) => (nextPage === 1 ? result.items : [...current, ...result.items]));
@@ -102,7 +109,7 @@ export function ProjectGalleryScreen() {
         if (request === generation.current) setLoading(false);
       }
     },
-    [search, challengeId],
+    [search, challengeIds],
   );
   useEffect(() => {
     void apiFetch<{ id: number; title: string }[]>("/api/public/challenges")
@@ -153,22 +160,6 @@ export function ProjectGalleryScreen() {
               borderRadius: 8,
             }}
           />
-        ) : null}
-        {challengeId !== null ? (
-          <Section>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("projectAllChallenges")}
-              onPress={() => setChallengeId(null)}
-            >
-              <InfoRow
-                icon="line.3.horizontal.decrease.circle.fill"
-                label={t("projectChallenges")}
-                value={challenges.find((item) => item.id === challengeId)?.title ?? ""}
-                accessoryIcon="xmark.circle.fill"
-              />
-            </Pressable>
-          </Section>
         ) : null}
         {error ? (
           <RequestFeedback

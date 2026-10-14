@@ -433,8 +433,7 @@ are rendered. The gallery photo follows the networking-profile photo toggle,
 which is the only photo control; My Projects has none. Members appear by name
 per H18. Challenge rows (project page, editor, profiles) open the gallery filtered to that
 challenge (`/projects/gallery?challengeId=`), and each project on a profile opens
-its page; the server decides who may read it. The challenge filter is the native filter menu (one choice, a row
-shows the active filter) so it scales past a dozen challenges.
+its page; the server decides who may read it. The challenge filter is the native filter menu (multi-select, kept open while choosing; the glass toolbar button is the only filter control) so it scales past a dozen challenges.
 
 Several projects list as one grouped row section (name, draft/submitted,
 chevron); the editor lists the chosen challenges (mandatory ones with a lock) and an
