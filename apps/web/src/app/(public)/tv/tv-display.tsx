@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { announcementContent } from "./announcement-content";
 import { EmbeddedAnnouncement, LiveScreen, ScheduleBlock } from "./live-screen";
 import { MarqueeText } from "./marquee-text";
+import { PublishedWinners } from "./published-winners";
 import { SponsorMark } from "./sponsor-mark";
 import { TvBody, TvEmpty, TvHeader, TvScreen } from "./tv-screen";
 import { WifiQr } from "./wifi-qr";
@@ -1023,14 +1024,16 @@ function TvView({ data, error }: { data: TvData | null; error: string | null }) 
 
   if (mode === "live")
     return (
-      <LiveScreen
-        config={liveConfigFrom(payload)}
-        event={data.event}
-        schedule={data.schedule}
-        sponsors={data.sponsors}
-        venue={data.venue}
-        announcement={embeddedAnnouncement}
-      />
+      <PublishedWinners event={data.event}>
+        <LiveScreen
+          config={liveConfigFrom(payload)}
+          event={data.event}
+          schedule={data.schedule}
+          sponsors={data.sponsors}
+          venue={data.venue}
+          announcement={embeddedAnnouncement}
+        />
+      </PublishedWinners>
     );
   if (mode === "schedule")
     return (

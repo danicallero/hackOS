@@ -153,7 +153,7 @@ function VerifySecondaryInner() {
               </div>
               <CardTitle>{t("secondaryEmailVerified")}</CardTitle>
               <CardDescription>
-                {state.already ? t("alreadyVerifiedAddress") : t("willUseToMatchDevpost")}
+                {state.already ? t("alreadyVerifiedAddress") : t("alreadyVerifiedAddress")}
               </CardDescription>
             </CardHeader>
             <CardContent className="text-center">

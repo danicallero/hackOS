@@ -5,7 +5,6 @@ import { useLocale } from "@/lib/i18n";
 import { ProjectDescription } from "./project-description";
 
 type ProjectLinks = {
-  devpostUrl?: string | null;
   demoUrl?: string | null;
   githubUrl?: string | null;
 };
@@ -20,7 +19,6 @@ export function ProjectDescriptionLinks({
 }) {
   const { t } = useLocale();
   const externalLinks = [
-    { label: t("devpostUrlLabel"), href: links.devpostUrl },
     { label: t("demoUrlLabel"), href: links.demoUrl },
     { label: t("githubUrlLabel"), href: links.githubUrl },
   ].filter((link): link is { label: string; href: string } => Boolean(link.href));

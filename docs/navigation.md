@@ -37,17 +37,15 @@ is no role switcher.
 effective capability set precisely so navigation can check association and
 permission facts independently — the single `role` field collapses a sponsor
 rep who also judges to `"judge"`, which would hide their sponsor workspace if
-nav gated on `role` instead. The mobile personal Queue tab uses the stable
-`queue:status` capability for the pre-enrollment empty state, or
-`hasQueueItems` when the account already has an active personal queue entry;
-neither path depends on a role name.
+nav gated on `role` instead. The mobile My Projects tab needs only event access (`canSeeMyQueue` in
+`apps/mobile/lib/tabs.ts`), no capability or role name.
 
 ## Web: personal area + workspaces
 
 ### Stable personal area (`PERSONAL_NAV`)
 
 Visible to any authenticated account, no capability required: Schedule, My
-applications, My projects, Wallet, Inbox, My profile — except for a
+applications, My projects, Project gallery, Wallet, Inbox, My profile — except for a
 **pure applicant**: an account with no role-derived event access (`GET
 /api/me`'s `hasEventAccess`, `apps/api/src/modules/identity/role.ts#hasEventAccess`),
 no operational capability, and no room-judge/sponsor-rep association
@@ -71,10 +69,13 @@ landing destination after sign-in and email verification
 and every other destination a dashboard would have surfaced (applications,
 project, wallet) already has its own stable nav entry above.
 
-My projects stays visible to every admitted participant because work groups
-can be planned before an operational project exists. Live queue status appears
+My projects stays visible to every admitted participant. Projects have one
+draft-to-submitted lifecycle and one team roster (H19/H20). Live queue status appears
 inside the relevant project record, rather than as a separate destination.
-`/my-queue` remains a compatibility redirect for saved links.
+`/my-queue` remains a compatibility redirect for saved links. Participant project
+details use `/my-project/:id` for drafts, submitted content, the team and queues.
+The server-rendered `/gallery` and `/gallery/:id` use the API’s event phase and
+audience policy; navigation does not grant gallery access.
 
 ### Work workspaces (`WORKSPACES`)
 
@@ -85,7 +86,7 @@ workspace never over-grants access.
 | Workspace | Items | Visible when |
 | --- | --- | --- |
 | Applications | Applications | `applications:review`, `applications:decide`, or `applications:manage` |
-| Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
+| Projects | Projects, Project form | Projects: `projects:read`, `judge:panel`, or an assigned-judge/sponsor-rep association; Project form: `projects:edit` |
 | Live judging | Queue operations (tabs: All rooms overview · Judging queues · Room configuration), Judging, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); The Room configuration tab is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from room administration |
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | `schedule:read` (view-only schedule), `schedule:manage`, `tv:control`, or `announcements:manage` |
@@ -171,10 +172,10 @@ hidden destinations stay routable:
   [`diary.md`](./diary.md); People and Companies segments only, with no
   directory to browse, opened directly with `?view=companies`; the direct tab is
   `app/(tabs)/diary/`, its own Stack for the native header and search) and
-  **Account** are direct, with My queue added when eligible (five fit
-  directly). **My queue** is visible to participants even before their first
-  queue entry so they can see the empty state and tutorial; mentors, sponsors,
-  and other accounts only see it once they have an actual queue entry. Wallet
+  **Account** are direct, with **My Projects** (tab key `queue`, H19/H20) always
+  added: every account in the event-access shell can open it before any queue
+  entry, and the live queue status appears inside each project record, so five fit
+  directly. Wallet
   is not a tab: every account opens it from the wallet button in Account's
   top-left corner, as an overlay whose close button is that same button (H28);
   `others/wallet` stays routable for deep links. Alerts are not a tab either: the Schedule header bell (with an unread
@@ -187,7 +188,7 @@ hidden destinations stay routable:
   **Scanner** (NFC waves icon, with explicit camera fallback), Activities (`activity:scan` holders only) —
   scanning must never sit behind an ellipsis. The separate
   **"Others" overflow selector** (only when more than five destinations)
-  holds eligible personal Queue, Diary, Account, and any queue operations destination as pseudo-tabs. Account's
+  holds My Projects, Diary, Account, and any queue operations destination as pseudo-tabs. Account's
   Statistics destination is the staff operations hub for the person finder,
   scan history, and sync reconciliation. Holders of `sponsors:manage` (with or
   without a scanner capability) also get Account → Staff → Company tags, to
@@ -195,7 +196,7 @@ hidden destinations stay routable:
   tab. Company-tag links `/s/<code>` (`app/s/[code].tsx`) open outside the
   session guard and resume after sign-in.
 - **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
-  scanner capability): Queue operations is a direct tab alongside Schedule; an eligible personal Queue, Diary and Account move to Others when the set
+  scanner capability): Queue operations is a direct tab alongside Schedule; My Projects, Diary and Account move to Others when the set
   exceeds five. If
   the person also has a scanner capability, Queue operations joins Others so
   Scanner stays directly reachable.
