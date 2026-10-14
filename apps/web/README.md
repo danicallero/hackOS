@@ -598,13 +598,32 @@ siblings shift (issue #849). Use `useReducedDragMotion` to disable overlay drop
 animations, and `motion-reduce:transition-none!` on sortable wrappers. Keyboard
 sensors retain pickup, arrow movement, drop, and Escape cancellation.
 
-Project submission controls reuse `SectionCard`, `SidePanelEditor` and `AlertModal`; the latter accepts `confirmDisabled` for required decision reasons without displaying a pending spinner. See the [project lifecycle audit](../../docs/project-lifecycle-audit.md) for submission, reconciliation and track timing behavior.
+## Native projects (H16–H21, H60)
 
-The project reconciliation workspace follows Users/Responses: `ListToolbar` + `FilterMenu` + `DataTable`, with mobile drill-down rows and one review overlay per project. Submission actions use `SectionCard.action`; do not place a SidePanelEditor trigger wrapper inside reading content, where its automatic right alignment creates a detached action.
+Projects have one draft-to-submitted lifecycle and one team roster. Participant
+routes are `/my-project` and `/my-project/:id`; the common single-project case
+opens its editor directly, with the list available through the back link.
+Draft responses autosave with optimistic server revisions. In-flight responses
+never overwrite newer edits; conflicts retain local answers and stop autosave.
+Required fields block submission, not draft persistence. Submitted projects
+remain editable until the server closes editing; resubmission snapshots answers.
 
-Controlled list review dialogs can pass `Modal.onCloseAutoFocus` to restore their opening row or search field. Keep persistent review utilities in `Modal.footer`, outside the scrolling body.
+`/projects/form` reuses the applications `QuestionsCard`, `TemplateField` and
+section model. `saveDefinition` supplies the project persistence endpoint and
+skips application-specific reserved-key nudges. `TemplateFieldControl` and
+`FileUploadField` accept the project-scoped upload path. Staff and participants
+share `ProjectEditor`, with server authorization retained for every mutation.
 
-Participant project detail pages use the content canvas with a direct back arrow and compact edit controls inline with the title. Desktop places project details and team in the main column and challenges/judging in the adjacent column; narrow screens stack the sections. Participant and staff details reuse ProjectDescriptionLinks for Devpost, demo and repository links. Project details, team, challenges/judging preference and a final submission section use separate SectionCard surfaces in that order; the submission section leads with Devpost (code and link status) and offers "Submit without Devpost" as a secondary action below an "or" divider; team/challenge members stay plain rows inside their section. Both planning and reconciled projects use the same Add challenge editor instead of separate inline selection controls. Ordinary event rule settings record audit metadata automatically without asking for a justification; explicit project exceptions retain their reason.
+Project phase controls belong to the Event category's common form, save footer
+and dirty guard. Dates use the event time zone. Gallery routes `/gallery` and
+`/gallery/:id` render on the server with metadata, forward the audience session
+and use no-store reads; authenticated content and unrevealed results must never
+enter a shared rendering cache. Published winners are read independently of the
+private challenge editor: the gallery, public challenge details and the live TV
+mode consume the published projection only. Live TV switches to a paged winner
+wall once results are visible, retaining fullscreen announcement priority. Member photos use separate public-gallery
+consent, independent of scan-profile sharing. Only API-authorized image URLs
+reach gallery content or social metadata.
 
 ## Invitation onboarding (H7/H9/H10)
 

@@ -1,384 +1,155 @@
 "use client";
 
-// A participant sees a team preparing (or presenting) to challenges. Projects,
-// planned work groups and their queue status are one model, not destinations to
-// reconcile mentally (H19, H20, H38, #852).
-import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
-import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
-import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type ComponentProps, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
-import { EmptyState } from "@/components/common/empty-state";
-import { MultiSelect, type MultiSelectOption } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
-import { StaleDataNotice } from "@/components/common/stale-data-notice";
-import { PresentationStatus } from "@/components/projects/presentation-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
-import {
-  acceptProjectInvite,
-  createWorkGroup,
-  declineProjectInvite,
-  myPendingInvites,
-  myProjects,
-  myWorkGroups,
-  type PendingInvite,
-  type PlannedWorkGroup,
-} from "@/lib/projects";
-import { getMyQueue, type MyQueueEntry } from "@/lib/queue";
-import { toast } from "@/lib/toast";
-import {
-  type ChallengeOption,
-  challengeTitleText,
-  type ProjectRepo,
-  toProjectRepo,
-} from "../projects/shared";
+import { type NativeProject, nativeProjects } from "@/lib/native-projects";
 
-export default function MyProjectPage() {
+type Invite = { id: number; projectId: number; name: string; invitedBy: string | null };
+export default function MyProjectsPage() {
   const { t } = useLocale();
   const router = useRouter();
-  const [projects, setProjects] = useState<ProjectRepo[]>([]);
-  const [groups, setGroups] = useState<PlannedWorkGroup[]>([]);
-  const [queue, setQueue] = useState<MyQueueEntry[]>([]);
-  const [invites, setInvites] = useState<PendingInvite[]>([]);
+  const [projects, setProjects] = useState<NativeProject[] | null>(null);
+  const [invites, setInvites] = useState<Invite[]>([]);
   const [canCreate, setCanCreate] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [redirecting, setRedirecting] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const { succeeded, failed, stale, retryNonce } = useBackgroundRefresh();
-
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
     try {
-      const [projectsRes, groupsRes, invitesRes, queueRes] = await Promise.all([
-        myProjects(),
-        myWorkGroups(),
-        myPendingInvites(),
-        getMyQueue(),
+      const [result, pending] = await Promise.all([
+        nativeProjects.mine(),
+        api.get<{ invites: Invite[] }>("/api/me/projects/invites"),
       ]);
-      setProjects(projectsRes.projects.map(toProjectRepo));
-      setGroups(groupsRes.groups);
-      setInvites(invitesRes.invites);
-      setCanCreate(groupsRes.canCreate);
-      setQueue(queueRes);
-      succeeded();
-      setLoadError(null);
-      const unlinkedGroups = groupsRes.groups.filter(
-        (group) => !projectsRes.projects.some((project) => project.id === group.linked_repo_id),
-      );
+      setProjects(result.projects);
+      setInvites(pending.invites);
+      setCanCreate(result.canCreate);
+      setError(null);
       if (
-        new URLSearchParams(window.location.search).get("view") !== "all" &&
-        invitesRes.invites.length === 0 &&
-        projectsRes.projects.length + unlinkedGroups.length === 1
-      ) {
-        setRedirecting(true);
-        router.replace(
-          projectsRes.projects.length === 1
-            ? `/my-project/projects/${projectsRes.projects[0].id}`
-            : `/my-project/work-groups/${unlinkedGroups[0].id}`,
-        );
-      }
-    } catch (error) {
-      // A failed background refresh keeps the loaded projects; only a failed
-      // first load replaces them with an error, never the empty state (#1012).
-      if (!failed(error)) return;
-      setLoadError(apiErrorText(error, t, t("couldNotLoadProject")));
-    } finally {
-      setLoading(false);
+        result.projects.length === 1 &&
+        pending.invites.length === 0 &&
+        new URLSearchParams(window.location.search).get("view") !== "all"
+      )
+        router.replace(`/my-project/${result.projects[0].id}`);
+    } catch (cause) {
+      setError(apiErrorText(cause, t, t("couldNotLoadProject")));
     }
-  }, [router, t, succeeded, failed]);
-
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
-  const queueRefresh = useAutoRefresh(REALTIME_SCOPES.PERSONAL, [
-    EVENTS.USER_QUEUE_CHANGED,
-    EVENTS.USER_QUEUE_CALLED,
-  ]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce.
+  }, [router, t]);
   useEffect(() => {
     void load();
-  }, [load, liveRefresh, queueRefresh, retryNonce]);
-
-  const queueByProject = useMemo(() => {
-    const result = new Map<number, MyQueueEntry[]>();
-    for (const entry of queue)
-      result.set(entry.repoId, [...(result.get(entry.repoId) ?? []), entry]);
-    return result;
-  }, [queue]);
-
-  if (loading || redirecting)
-    return (
-      <div className="flex min-h-80 items-center justify-center">
-        <Spinner />
-      </div>
-    );
-
+  }, [load]);
+  async function create(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const project = await nativeProjects.create(name.trim());
+      router.push(`/my-project/${project.id}`);
+    } catch (cause) {
+      setError(apiErrorText(cause, t, t("couldNotSaveProject")));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function respond(id: number, action: "accept" | "decline") {
+    setBusy(true);
+    setError(null);
+    try {
+      await nativeProjects.respond(id, action);
+      await load();
+    } catch (cause) {
+      setError(apiErrorText(cause, t, t("couldNotLoadProject")));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <PageLayout>
-      {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         title={t("myProjects")}
-        primaryAction={canCreate ? <CreateWorkGroup onCreated={load} /> : undefined}
+        primaryAction={
+          canCreate && <Button onClick={() => setOpen(true)}>{t("createMyProjectCta")}</Button>
+        }
       />
-      {loadError && <ContextualError message={loadError} onRetry={() => void load()} />}
-      {invites.length > 0 && <PendingInvitesCard invites={invites} onChanged={load} />}
-      {loadError ? null : projects.length === 0 && groups.length === 0 ? (
-        <EmptyState
-          icon={FolderSimpleIcon}
-          title={t("myProjectsEmptyTitle")}
-          description={canCreate ? t("myProjectCanCreateDesc") : t("myProjectEmptyDesc")}
-        />
-      ) : (
-        <div className="space-y-8">
-          {projects.map((project) => (
-            <ProjectCard
-              entries={queueByProject.get(project.id) ?? []}
-              key={project.id}
-              project={project}
-            />
-          ))}
-          {groups
-            // Once an exact Devpost match turns a planned group into one of the
-            // caller's projects, show its operational card once rather than
-            // making participants choose between two representations.
-            .filter(
-              (group) =>
-                group.linked_repo_id == null ||
-                !projects.some((project) => project.id === group.linked_repo_id),
-            )
-            .map((group) => (
-              <WorkGroupCard group={group} key={group.id} />
+      {error && <ContextualError message={error} onRetry={load} />}
+      {!projects && !error && <Spinner />}
+      {invites.length > 0 && (
+        <SectionCard title={t("pendingInvitesTitle")}>
+          <ul className="divide-y divide-border/60">
+            {invites.map((invite) => (
+              <li
+                className="flex flex-wrap items-center justify-between gap-3 py-3"
+                key={invite.id}
+              >
+                <span>{invite.name}</span>
+                <div className="flex gap-2">
+                  <Button disabled={busy} onClick={() => void respond(invite.projectId, "accept")}>
+                    {t("acceptInvite")}
+                  </Button>
+                  <Button
+                    disabled={busy}
+                    variant="outline"
+                    onClick={() => void respond(invite.projectId, "decline")}
+                  >
+                    {t("declineInvite")}
+                  </Button>
+                </div>
+              </li>
             ))}
-        </div>
+          </ul>
+        </SectionCard>
       )}
+      {projects?.length === 0 && (
+        <p className="text-muted-foreground">{t("myProjectsEmptyTitle")}</p>
+      )}
+      <div className="space-y-6">
+        {projects?.map((project) => (
+          <SectionCard
+            key={project.id}
+            title={<Link href={`/my-project/${project.id}`}>{project.name}</Link>}
+            state={t(
+              project.submissionStatus === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft",
+            )}
+          >
+            <p className="text-sm">{project.description}</p>
+          </SectionCard>
+        ))}
+      </div>
+      <SidePanelEditor
+        open={open}
+        onOpenChange={(value) => !busy && setOpen(value)}
+        title={t("createMyProjectCta")}
+        footer={
+          <Button type="submit" form="create-project" loading={busy}>
+            {t("createMyProjectCta")}
+          </Button>
+        }
+      >
+        <form id="create-project" onSubmit={create} className="space-y-2">
+          <Label htmlFor="project-name">{t("projectNameLabel")}</Label>
+          <Input
+            id="project-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            required
+            disabled={busy}
+          />
+        </form>
+        {error && <ContextualError message={error} />}
+      </SidePanelEditor>
     </PageLayout>
-  );
-}
-
-function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
-  const { t } = useLocale();
-  const [name, setName] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [challengeIds, setChallengeIds] = useState<string[]>([]);
-  const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
-  useEffect(() => {
-    if (!open) return;
-    api
-      .get<{ items: ChallengeOption[] }>("/api/public/challenges")
-      .then((result) => setChallenges(result.items))
-      .catch(() => setChallenges([]));
-  }, [open]);
-  async function create() {
-    setSaving(true);
-    try {
-      await createWorkGroup(name.trim(), challengeIds.map(Number));
-      setName("");
-      setChallengeIds([]);
-      setOpen(false);
-      await onCreated();
-    } catch (error) {
-      toast.error(apiErrorText(error, t, t("couldNotCreateWorkGroup")), t("toastCreateProject"));
-    } finally {
-      setSaving(false);
-    }
-  }
-  return (
-    <SidePanelEditor
-      open={open}
-      onOpenChange={setOpen}
-      trigger={<Button>{t("createMyProjectCta")}</Button>}
-      title={t("createMyProjectCta")}
-      footer={
-        <Button disabled={saving || !name.trim()} onClick={create} loading={saving}>
-          {t("createMyProjectCta")}
-        </Button>
-      }
-    >
-      <div className="space-y-2">
-        <label className="text-sm font-medium" htmlFor="work-group-name">
-          {t("projectNameLabel")}
-        </label>
-        <Input
-          id="work-group-name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-      </div>
-      <div className="mt-4 space-y-2">
-        <label className="text-sm font-medium" htmlFor="work-group-challenges">
-          {t("challenges")}
-        </label>
-        <MultiSelect
-          inDialog
-          id="work-group-challenges"
-          options={challenges.map(
-            (challenge): MultiSelectOption => ({
-              value: String(challenge.id),
-              label: challengeTitleText(challenge.title),
-            }),
-          )}
-          value={challengeIds}
-          onChange={setChallengeIds}
-          placeholder={t("selectChallengePlaceholder")}
-        />
-      </div>
-    </SidePanelEditor>
-  );
-}
-
-function ProjectCard({ project, entries }: { project: ProjectRepo; entries: MyQueueEntry[] }) {
-  const { t } = useLocale();
-  const queuedChallengeIds = new Set(entries.map((entry) => entry.challengeId));
-  return (
-    <SectionCard
-      title={project.name}
-      action={
-        <Button asChild size="sm" variant="outline">
-          <Link href={`/my-project/projects/${project.id}`}>{t("openProject")}</Link>
-        </Button>
-      }
-    >
-      <div className="divide-y divide-border/60">
-        {entries.map((entry) => (
-          <QueueChallengeRow entry={entry} key={entry.entryId} />
-        ))}
-        {project.challenges
-          .filter((challenge) => !queuedChallengeIds.has(challenge.id))
-          .map((challenge) => (
-            <ChallengeRow
-              key={challenge.id}
-              title={challengeTitleText(challenge.title)}
-              presentation={challenge}
-            />
-          ))}
-        {project.challenges.length === 0 && entries.length === 0 && (
-          <p className="text-sm text-muted-foreground">{t("noChallenges")}</p>
-        )}
-      </div>
-    </SectionCard>
-  );
-}
-
-function WorkGroupCard({ group }: { group: PlannedWorkGroup }) {
-  const { t } = useLocale();
-  const members = group.members.filter((member) => member.status === "active").length;
-  return (
-    <SectionCard
-      title={group.name}
-      action={
-        <Button asChild size="sm" variant="outline">
-          <Link href={`/my-project/work-groups/${group.id}`}>{t("openProject")}</Link>
-        </Button>
-      }
-    >
-      <p className="text-sm text-muted-foreground">{t("workGroupMembers", { count: members })}</p>
-      <div className="mt-3 divide-y divide-border/60">
-        {group.challenges.map((challenge) => (
-          <ChallengeRow key={challenge.id} title={challengeTitleText(challenge.title)} />
-        ))}
-        {group.challenges.length === 0 && (
-          <p className="text-sm text-muted-foreground">{t("noChallenges")}</p>
-        )}
-      </div>
-    </SectionCard>
-  );
-}
-
-function ChallengeRow({
-  title,
-  presentation,
-}: {
-  title: string;
-  presentation?: ComponentProps<typeof PresentationStatus>;
-}) {
-  const { t } = useLocale();
-  return (
-    <div className="grid min-w-0 gap-2 py-3">
-      <span className="min-w-0 font-medium wrap-break-word">{title}</span>
-      {presentation?.status ? (
-        <PresentationStatus {...presentation} />
-      ) : (
-        <span className="text-sm text-muted-foreground">{t("plannedChallenge")}</span>
-      )}
-    </div>
-  );
-}
-
-function QueueChallengeRow({ entry }: { entry: MyQueueEntry }) {
-  return (
-    <div className="grid min-w-0 gap-2 py-3">
-      <span className="min-w-0 font-medium wrap-break-word">
-        {challengeTitleText(entry.challengeTitle)}
-      </span>
-      <PresentationStatus {...entry} assignedRoomName={entry.room?.name} />
-    </div>
-  );
-}
-
-function PendingInvitesCard({
-  invites,
-  onChanged,
-}: {
-  invites: PendingInvite[];
-  onChanged: () => Promise<void>;
-}) {
-  const { t } = useLocale();
-  const [busy, setBusy] = useState<number | null>(null);
-  async function respond(repoId: number, action: "accept" | "decline") {
-    setBusy(repoId);
-    try {
-      if (action === "accept") await acceptProjectInvite(repoId);
-      else await declineProjectInvite(repoId);
-      await onChanged();
-    } catch (error) {
-      toast.error(apiErrorText(error, t, t("couldNotLoadProject")), t("toastReplyInvite"));
-    } finally {
-      setBusy(null);
-    }
-  }
-  return (
-    <SectionCard variant="plain" title={t("pendingInvitesTitle")} icon={EnvelopeSimpleIcon}>
-      <ul className="space-y-3">
-        {invites.map((invite) => (
-          <li className="grid min-w-0 gap-2 py-3" key={invite.repoId}>
-            <p className="min-w-0 truncate text-sm">
-              {t("invitedToProjectLabel", {
-                inviterName: invite.invitedByName ?? "",
-                projectName: invite.repoName,
-              })}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                disabled={busy === invite.repoId}
-                onClick={() => respond(invite.repoId, "accept")}
-                size="sm"
-                loading={busy === invite.repoId}
-              >
-                {t("acceptInvite")}
-              </Button>
-              <Button
-                disabled={busy === invite.repoId}
-                onClick={() => respond(invite.repoId, "decline")}
-                size="sm"
-                variant="outline"
-                loading={busy === invite.repoId}
-              >
-                {t("declineInvite")}
-              </Button>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </SectionCard>
   );
 }
