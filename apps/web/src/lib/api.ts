@@ -56,7 +56,7 @@ export async function apiFetch<T = unknown>(
       : null;
   // A transport failure throws before settling, which keeps the key for the retry.
   const res = await fetch(buildUrl(path, query), {
-    credentials: isPublicRead ? "omit" : (requestedCredentials ?? "include"),
+    credentials: requestedCredentials ?? (isPublicRead ? "omit" : "include"),
     headers: {
       ...(body !== undefined ? { "content-type": "application/json" } : {}),
       ...(intent ? { "Idempotency-Key": intentKey(intent) } : {}),

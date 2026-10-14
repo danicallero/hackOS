@@ -17,6 +17,7 @@ import {
   type PublicChallenge,
 } from "@/components/public/public-types";
 import { Button } from "@/components/ui/button";
+import { usePublishedWinners } from "@/hooks/use-published-winners";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
@@ -37,6 +38,7 @@ function asPrizes(value: unknown): Prize[] {
 export default function PublicChallengePage() {
   const { language, t } = useLocale();
   const { id } = useParams<{ id: string }>();
+  const winners = usePublishedWinners(`/api/public/challenges/${encodeURIComponent(id)}/winners`);
   const [challenge, setChallenge] = useState<PublicChallenge | null | undefined>(undefined);
   const [challengeError, setChallengeError] = useState<string | null>(null);
   const [hasOpenApplications, setHasOpenApplications] = useState<boolean | null>(null);
@@ -90,6 +92,20 @@ export default function PublicChallengePage() {
         <Brand />
         <ThemeToggle />
       </header>
+      {winners.length > 0 && (
+        <section className="mb-6">
+          <h2 className="mb-3 font-semibold">{t("winnersTabLabel")}</h2>
+          <ol className="space-y-2">
+            {winners.map((winner) => (
+              <li key={winner.rank}>
+                <Link href={`/gallery/${winner.repoId}`} className="underline">
+                  {winner.rank} · {winner.repoName}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       <Button variant="ghost" size="sm" asChild className="mb-6">
         <Link href="/">
