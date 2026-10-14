@@ -2,7 +2,8 @@ import { Stack, useRouter } from "expo-router";
 import { useRef } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 
-import { InfoRow, Section, Separator } from "@/components/native-ui";
+import { Section, Separator } from "@/components/native-ui";
+import { SymbolView } from "@/components/symbol";
 import { findLicense, LICENSES } from "@/lib/licenses";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -45,7 +46,31 @@ export function LicensesScreen() {
               }
               style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
             >
-              <InfoRow accessoryIcon="chevron.right" label={entry.name} value={entry.license} />
+              {/* Stacked: package names and license expressions are both long. */}
+              <View
+                style={{
+                  alignItems: "center",
+                  flexDirection: "row",
+                  gap: 12,
+                  minHeight: 50,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                }}
+              >
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={{ color: colors.label, fontSize: 16 }}>{entry.name}</Text>
+                  <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                    {entry.license}
+                  </Text>
+                </View>
+                <SymbolView
+                  accessible={false}
+                  name="chevron.right"
+                  size={12}
+                  tintColor={colors.tertiaryLabel}
+                  weight="semibold"
+                />
+              </View>
             </Pressable>
           </View>
         ))}
