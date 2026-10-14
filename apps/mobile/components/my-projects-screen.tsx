@@ -3,8 +3,8 @@ import Stack from "expo-router/stack";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
-import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
-import { NavRow } from "@/components/project-ui";
+import { EmptyState, Section, Separator } from "@/components/native-ui";
+import { GlassButton, NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
@@ -190,9 +190,9 @@ export function MyProjectsScreen() {
             action={
               canCreate ? (
                 <View style={{ alignSelf: "stretch", marginTop: 12 }}>
-                  <ActionButton
+                  <GlassButton
                     label={t("createProject")}
-                    variant="filled"
+                    prominent
                     onPress={() => router.push("/queue/new")}
                   />
                 </View>
