@@ -25,7 +25,7 @@
   "passwordUpdatedTitle": "Password updated",
   "passwordUpdated": "Your password is ready. Sign in with the new one.",
   "tabSchedule": "Schedule",
-  "tabQueue": "My queue",
+  "tabQueue": "My Projects",
   "tabWallet": "Wallet",
   "tabNotifications": "Alerts",
   "alertsUpcoming": "Coming up",
@@ -951,5 +951,17 @@
   "projectConsentPolicy": "The gallery may be public and indexable.",
   "projectQueue": "My queue",
   "projectLocked": "Editing is closed",
-  "projectTooLarge": "This file exceeds the field's size limit."
+  "projectTooLarge": "This file exceeds the field's size limit.",
+  "projectStatus": "Status",
+  "projectDeadline": "Deadline",
+  "projectResubmit": "Resubmit",
+  "projectInvitations": "Invitations",
+  "projectInvitedBy": "Invited by {name}",
+  "projectNewTitle": "New project",
+  "projectNoInvites": "No pending invitations",
+  "projectCreate": "Create",
+  "projectAcceptShort": "Accept",
+  "projectDeclineShort": "Decline",
+  "projectAddChallenge": "Add challenge",
+  "projectSearchChallenges": "Search challenges"
 }

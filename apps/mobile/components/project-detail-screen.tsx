@@ -3,11 +3,15 @@ import * as DocumentPicker from "expo-document-picker";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DynamicForm } from "@/components/dynamic-form";
-import { ActionButton, InfoRow, Section, Separator, StatusPill } from "@/components/native-ui";
+import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
+import { FieldRow, GlassButton, NavRow, RowButton } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { SymbolView } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
+import { formatEventTime } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import { type NativeProject, projectMutation } from "@/lib/projects";
 import { useProjectDraft } from "@/lib/use-project-draft";
@@ -64,17 +68,27 @@ export function ProjectDetailScreen() {
 /** H18/H60: display only server-approved photos and published winner fields. */
 export function ProjectReadView({ project }: { project: NativeProject }) {
   const { t } = useLocale();
+  const router = useRouter();
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ gap: 16, padding: 16 }}
+      contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 32 }}
+      style={{ backgroundColor: colors.background }}
     >
-      <Text
-        accessibilityRole="header"
-        style={{ color: colors.label, fontSize: 24, fontWeight: "700" }}
-      >
-        {project.name}
-      </Text>
+      {project.winners?.length ? (
+        <Section>
+          {project.winners.map((winner, index) => (
+            <View key={`${winner.challengeId}:${winner.rank}`}>
+              {index > 0 ? <Separator /> : null}
+              <InfoRow
+                icon="trophy.fill"
+                label={t("projectWinner")}
+                value={winner.challengeTitle ?? String(winner.rank)}
+              />
+            </View>
+          ))}
+        </Section>
+      ) : null}
       <DynamicForm
         template={project.template}
         sections={project.sections}
@@ -85,19 +99,24 @@ export function ProjectReadView({ project }: { project: NativeProject }) {
       <Section title={t("projectTeam")}>
         <ProjectMembers project={project} />
       </Section>
-      <Section title={t("projectChallenges")}>
-        {project.challenges.map((challenge) => (
-          <Text key={challenge.id} style={{ padding: 16, color: colors.label }}>
-            {challenge.title}
-          </Text>
-        ))}
-      </Section>
-      {project.winners?.map((winner) => (
-        <StatusPill
-          key={`${winner.challengeId}:${winner.rank}`}
-          tone="success"
-        >{`${t("projectWinner")} · ${winner.challengeTitle ?? winner.rank}`}</StatusPill>
-      ))}
+      {project.challenges.length ? (
+        <Section title={t("projectChallenges")}>
+          {project.challenges.map((challenge, index) => (
+            <View key={challenge.id}>
+              {index > 0 ? <Separator /> : null}
+              <NavRow
+                title={challenge.title}
+                onPress={() =>
+                  router.push({
+                    pathname: "/projects/gallery",
+                    params: { challengeId: String(challenge.id) },
+                  })
+                }
+              />
+            </View>
+          ))}
+        </Section>
+      ) : null}
     </ScrollView>
   );
 }
@@ -106,26 +125,27 @@ function ProjectMembers({ project }: { project: NativeProject }) {
   const { t } = useLocale();
   return (
     <>
-      {project.members.map((member) => (
-        <View
-          key={member.userId}
-          style={{ flexDirection: "row", gap: 12, alignItems: "center", padding: 16 }}
-        >
-          {member.photoUrl ? (
-            <PersonAvatar size={44} name={member.name} uri={member.photoUrl} />
-          ) : null}
-          <Text style={{ color: colors.label, fontSize: 17, flex: 1 }}>{member.name}</Text>
-          {member.status ? (
-            <StatusPill>
-              {t(
-                member.status === "active"
-                  ? "projectActive"
-                  : member.status === "invited"
-                    ? "projectInvited"
-                    : "projectDeclined",
-              )}
-            </StatusPill>
-          ) : null}
+      {project.members.map((member, index) => (
+        <View key={member.userId}>
+          {index > 0 ? <Separator inset={72} /> : null}
+          <View
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              gap: 12,
+              minHeight: 60,
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+            }}
+          >
+            <PersonAvatar size={40} name={member.name ?? "?"} uri={member.photoUrl ?? null} />
+            <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>{member.name}</Text>
+            {member.status && member.status !== "active" ? (
+              <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>
+                {t(member.status === "invited" ? "projectInvited" : "projectDeclined")}
+              </Text>
+            ) : null}
+          </View>
         </View>
       ))}
     </>
@@ -135,14 +155,13 @@ function ProjectMembers({ project }: { project: NativeProject }) {
 export function ProjectEditor({
   project,
   reload,
-  embedded = false,
 }: {
   project: NativeProject;
   reload: () => Promise<void>;
-  embedded?: boolean;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const draft = useProjectDraft(project);
   const navigation = useNavigation();
   const [busy, setBusy] = useState(false);
@@ -166,14 +185,18 @@ export function ProjectEditor({
       }),
     [navigation, draft, name, project],
   );
-  const [challenges, setChallenges] = useState<{ id: number; title: string }[]>([]);
+  const [chosen, setChosen] = useState(project.challenges);
   const canEdit = project.canEdit === true;
   const blocked = busy || !canEdit || draft.state === "conflict";
-  useEffect(() => {
-    void apiFetch<{ id: number; title: string }[]>("/api/public/challenges")
-      .then(setChallenges)
-      .catch((cause) => setError(cause as Error));
-  }, []);
+  const submitted = project.submissionStatus === "submitted";
+  // The picker is a separate screen: refresh the chosen challenges when returning to it.
+  useFocusEffect(
+    useCallback(() => {
+      void apiFetch<NativeProject>(`/api/me/projects/${project.id}`)
+        .then((fresh) => setChosen((current) => fresh.challenges ?? current))
+        .catch(() => {});
+    }, [project.id]),
+  );
   async function run(action: () => Promise<unknown>, refresh = true) {
     setBusy(true);
     setError(null);
@@ -221,37 +244,53 @@ export function ProjectEditor({
       draft.change(field.key, result.objectKey);
     }, false);
   }
-  const content = (
-    <View style={{ gap: 16 }}>
-      {embedded ? (
-        <Text
-          accessibilityRole="header"
-          style={{ color: colors.label, fontSize: 24, fontWeight: "700" }}
-        >
-          {project.name}
-        </Text>
-      ) : null}
-      <StatusPill>
-        {t(project.submissionStatus === "submitted" ? "projectSubmitted" : "projectDraft")}
-      </StatusPill>
-      {!canEdit ? <Text style={{ color: colors.secondaryLabel }}>{t("projectLocked")}</Text> : null}
-      <Section title={t("projectName")}>
-        <TextInput
-          accessibilityLabel={t("projectName")}
-          value={name}
-          onChangeText={setName}
-          editable={!blocked}
-          style={{ padding: 16, color: colors.label, fontSize: 17, minHeight: 44 }}
-        />
-        {name !== project.name ? (
-          <ActionButton
-            label={t("save")}
-            disabled={blocked || !name.trim() || name === project.name}
-            onPress={() => void run(() => Promise.resolve())}
+  const deadline = project.submissionsCloseAt
+    ? formatEventTime(project.submissionsCloseAt, language, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : null;
+  const saveCaption = t(
+    draft.state === "saved"
+      ? "projectSaved"
+      : draft.state === "saving"
+        ? "projectSaving"
+        : "projectUnsaved",
+  );
+  return (
+    <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      <ScrollView
+        automaticallyAdjustKeyboardInsets
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 96 + insets.bottom }}
+      >
+        <Section footer={!canEdit ? t("projectLocked") : saveCaption}>
+          <InfoRow
+            icon={submitted ? "checkmark.circle.fill" : "pencil.circle"}
+            label={t("projectStatus")}
+            value={t(submitted ? "projectSubmitted" : "projectDraft")}
           />
-        ) : null}
-      </Section>
-      <Section title={t("projectFields")}>
+          {deadline ? (
+            <>
+              <Separator />
+              <InfoRow icon="clock" label={t("projectDeadline")} value={deadline} />
+            </>
+          ) : null}
+        </Section>
+        <Section>
+          <FieldRow label={t("projectName")}>
+            <TextInput
+              accessibilityLabel={t("projectName")}
+              value={name}
+              onChangeText={setName}
+              editable={!blocked}
+              returnKeyType="done"
+              style={{ color: colors.label, fontSize: 17, minHeight: 28, padding: 0 }}
+            />
+          </FieldRow>
+        </Section>
         <DynamicForm
           template={project.template}
           sections={project.sections}
@@ -261,157 +300,166 @@ export function ProjectEditor({
           onChange={draft.change}
           onUpload={(field) => void upload(field)}
         />
-      </Section>
-      <Text accessibilityLiveRegion="polite" style={{ color: colors.secondaryLabel }}>
-        {t(
-          draft.state === "saved"
-            ? "projectSaved"
-            : draft.state === "saving"
-              ? "projectSaving"
-              : "projectUnsaved",
-        )}
-      </Text>
-      {draft.state === "conflict" ? (
-        <>
-          <Text accessibilityRole="alert" style={{ color: colors.destructive }}>
-            {t("projectConflict")}
-          </Text>
-          <ActionButton label={t("projectReload")} onPress={() => void reload()} />
-        </>
-      ) : draft.error ? (
-        <RequestFeedback error={draft.error} onRetry={() => void draft.flush().catch(() => {})} />
-      ) : null}
-      {error ? (
-        <RequestFeedback
-          error={error}
-          message={error.message === t("projectTooLarge") ? error.message : undefined}
-        />
-      ) : null}
-      <ActionButton
-        label={t("projectSubmit")}
-        variant="filled"
-        disabled={blocked || !name.trim() || project.canSubmit === false}
-        busy={busy}
-        onPress={() =>
-          void run(() => projectMutation(`/api/me/projects/${project.id}/submit`, "POST"))
-        }
-      />
-      <Section title={t("projectTeam")}>
-        <ProjectMembers project={project} />
-        <View style={{ padding: 16, gap: 12 }}>
-          <TextInput
-            accessibilityLabel={t("projectEmail")}
-            value={email}
-            onChangeText={setEmail}
-            editable={!blocked}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            placeholder="name@example.com"
-            placeholderTextColor={colors.tertiaryLabel}
-            style={{ color: colors.label, fontSize: 17, minHeight: 44 }}
-          />
-          <ActionButton
-            label={t("projectInvite")}
-            disabled={blocked || !email.trim() || project.canInvite === false}
+        <Section title={t("projectChallenges")}>
+          {chosen.map((challenge) => (
+            <View key={challenge.id}>
+              <NavRow
+                title={challenge.title}
+                value={challenge.mandatory ? t("projectRequired") : undefined}
+                onPress={() =>
+                  router.push({
+                    pathname: "/projects/gallery",
+                    params: { challengeId: String(challenge.id) },
+                  })
+                }
+              />
+              <Separator />
+            </View>
+          ))}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("projectAddChallenge")}
+            disabled={!canEdit}
             onPress={() =>
-              void run(() =>
-                projectMutation(`/api/me/projects/${project.id}/invites`, "POST", {
-                  email: email.trim(),
-                }),
-              )
+              router.push({ pathname: "/projects/challenges", params: { id: String(project.id) } })
+            }
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              gap: 12,
+              minHeight: 50,
+              opacity: canEdit ? 1 : 0.5,
+              paddingHorizontal: 16,
+            }}
+          >
+            <SymbolView
+              name="plus.circle.fill"
+              tintColor={colors.accent}
+              size={22}
+              accessible={false}
+            />
+            <Text style={{ color: colors.accent, flex: 1, fontSize: 17 }}>
+              {t("projectAddChallenge")}
+            </Text>
+          </Pressable>
+        </Section>
+        <Section title={t("projectTeam")}>
+          <ProjectMembers project={project} />
+          <Separator />
+          <View
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              gap: 8,
+              minHeight: 56,
+              paddingHorizontal: 16,
+            }}
+          >
+            <TextInput
+              accessibilityLabel={t("projectEmail")}
+              value={email}
+              onChangeText={setEmail}
+              editable={!blocked && project.canInvite !== false}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder={t("projectEmail")}
+              placeholderTextColor={colors.tertiaryLabel}
+              style={{ color: colors.label, flex: 1, fontSize: 17, minHeight: 44, padding: 0 }}
+            />
+            <RowButton
+              label={t("projectInvite")}
+              disabled={blocked || !email.trim() || project.canInvite === false}
+              onPress={() =>
+                void run(async () => {
+                  await projectMutation(`/api/me/projects/${project.id}/invites`, "POST", {
+                    email: email.trim(),
+                  });
+                  setEmail("");
+                })
+              }
+            />
+          </View>
+        </Section>
+        {project.presentations.length ? (
+          <Section title={t("projectQueue")}>
+            {project.presentations.map((entry, index) => (
+              <View key={entry.id}>
+                {index > 0 ? <Separator /> : null}
+                <InfoRow
+                  label={entry.title}
+                  value={t(
+                    entry.status === "waiting"
+                      ? "queueStatusWaiting"
+                      : entry.status === "called"
+                        ? "queueStatusCalled"
+                        : entry.status === "in_room"
+                          ? "queueStatusInRoom"
+                          : entry.status === "presenting"
+                            ? "queueStatusPresenting"
+                            : entry.status === "completed"
+                              ? "queueStatusCompleted"
+                              : "queueStatusDisqualified",
+                  )}
+                />
+              </View>
+            ))}
+          </Section>
+        ) : null}
+        {draft.state === "conflict" ? (
+          <Section footer={t("projectConflict")}>
+            <ActionButton label={t("projectReload")} onPress={() => void reload()} />
+          </Section>
+        ) : draft.error ? (
+          <RequestFeedback error={draft.error} onRetry={() => void draft.flush().catch(() => {})} />
+        ) : null}
+        {error ? (
+          <RequestFeedback
+            error={error}
+            message={error.message === t("projectTooLarge") ? error.message : undefined}
+          />
+        ) : null}
+        <Section>
+          <ActionButton
+            label={t("projectLeave")}
+            destructive
+            disabled={busy}
+            onPress={() =>
+              Alert.alert(t("projectLeave"), t("projectLeaveConfirm"), [
+                { text: t("cancel"), style: "cancel" },
+                {
+                  text: t("projectLeave"),
+                  style: "destructive",
+                  onPress: () =>
+                    void run(async () => {
+                      await projectMutation(`/api/me/projects/${project.id}/leave`, "POST");
+                      router.back();
+                    }, false),
+                },
+              ])
             }
           />
-        </View>
-      </Section>
-      <Section title={t("projectChallenges")}>
-        {challenges.map((challenge, index) => {
-          const selected = project.challenges.find((item) => item.id === challenge.id);
-          const locked = blocked || selected?.mandatory === true;
-          return (
-            <View key={challenge.id}>
-              {index > 0 ? <Separator /> : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={challenge.title}
-                accessibilityState={{ selected: !!selected, disabled: locked }}
-                disabled={locked}
-                style={{ opacity: locked && !selected ? 0.5 : 1 }}
-                onPress={() =>
-                  void run(() =>
-                    projectMutation(
-                      `/api/me/projects/${project.id}/challenges/${challenge.id}`,
-                      selected ? "DELETE" : "PUT",
-                    ),
-                  )
-                }
-              >
-                <InfoRow
-                  label={challenge.title}
-                  value=""
-                  accessoryIcon={selected ? "checkmark" : undefined}
-                  accessoryColor={colors.accent}
-                />
-              </Pressable>
-            </View>
-          );
-        })}
-      </Section>
-      <Section title={t("projectQueue")}>
-        {project.presentations.map((entry) => (
-          <View key={entry.id} style={{ padding: 16, gap: 8 }}>
-            <Text style={{ color: colors.label }}>{entry.title}</Text>
-            <StatusPill>
-              {t(
-                entry.status === "waiting"
-                  ? "queueStatusWaiting"
-                  : entry.status === "called"
-                    ? "queueStatusCalled"
-                    : entry.status === "in_room"
-                      ? "queueStatusInRoom"
-                      : entry.status === "presenting"
-                        ? "queueStatusPresenting"
-                        : entry.status === "completed"
-                          ? "queueStatusCompleted"
-                          : "queueStatusDisqualified",
-              )}
-            </StatusPill>
-            {entry.position != null ? (
-              <Text style={{ color: colors.label }}>{entry.position}</Text>
-            ) : null}
-          </View>
-        ))}
-        <ActionButton label={t("projectQueue")} onPress={() => router.push("/projects/queue")} />
-      </Section>
-      <ActionButton
-        label={t("projectLeave")}
-        destructive
-        disabled={busy}
-        onPress={() =>
-          Alert.alert(t("projectLeave"), t("projectLeaveConfirm"), [
-            { text: t("cancel"), style: "cancel" },
-            {
-              text: t("projectLeave"),
-              style: "destructive",
-              onPress: () =>
-                void run(async () => {
-                  await projectMutation(`/api/me/projects/${project.id}/leave`, "POST");
-                  router.back();
-                }, false),
-            },
-          ])
-        }
-      />
+        </Section>
+      </ScrollView>
+      <View
+        pointerEvents="box-none"
+        style={{
+          bottom: Math.max(insets.bottom, 12),
+          left: 16,
+          position: "absolute",
+          right: 16,
+        }}
+      >
+        <GlassButton
+          label={t(submitted ? "projectResubmit" : "projectSubmit")}
+          prominent
+          disabled={blocked || !name.trim() || project.canSubmit === false}
+          busy={busy}
+          onPress={() =>
+            void run(() => projectMutation(`/api/me/projects/${project.id}/submit`, "POST"))
+          }
+        />
+      </View>
     </View>
-  );
-  return embedded ? (
-    content
-  ) : (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-    >
-      {content}
-    </ScrollView>
   );
 }

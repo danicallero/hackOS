@@ -3,6 +3,7 @@ import Stack from "expo-router/stack";
 import { HeaderBackButton } from "@/components/header-back-button";
 import { useLocale } from "@/lib/i18n";
 import { nativeStackScreenOptions } from "@/lib/navigation";
+import { colors } from "@/theme/colors";
 export default function ProjectsLayout() {
   const router = useRouter();
   const { t } = useLocale();
@@ -10,6 +11,8 @@ export default function ProjectsLayout() {
     <Stack
       screenOptions={{
         ...nativeStackScreenOptions,
+        contentStyle: { backgroundColor: colors.background },
+        headerShadowVisible: false,
         headerLeft: () => (
           <HeaderBackButton
             onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/queue"))}
@@ -18,6 +21,7 @@ export default function ProjectsLayout() {
       }}
     >
       <Stack.Screen name="[id]" options={{ title: t("projectFields") }} />
+      <Stack.Screen name="challenges" options={{ title: t("projectChallenges") }} />
       <Stack.Screen name="gallery" options={{ title: t("gallery") }} />
       <Stack.Screen name="queue" options={{ title: t("projectQueue") }} />
     </Stack>

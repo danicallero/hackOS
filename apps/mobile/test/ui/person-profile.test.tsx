@@ -8,9 +8,10 @@ import { renderMobile } from "./render";
 
 let mockId = "101";
 const mockBack = jest.fn();
+const mockRouterPush = jest.fn();
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: mockId }),
-  useRouter: () => ({ back: mockBack, canGoBack: () => true }),
+  useRouter: () => ({ back: mockBack, canGoBack: () => true, push: mockRouterPush }),
 }));
 jest.mock("expo-router/stack", () => ({ __esModule: true, default: { Screen: () => null } }));
 const mockDownload: jest.Mock = jest.fn();
@@ -164,8 +165,29 @@ it("lists every project the person is in (#935)", async () => {
     ],
   };
   await renderMobile(<PersonProfileScreen />);
-  expect(await screen.findByText("Rover\nLander\nSide quest")).toBeTruthy();
+  expect(await screen.findByText("Rover")).toBeTruthy();
+  expect(screen.getByText("Lander")).toBeTruthy();
+  expect(screen.getByText("Side quest")).toBeTruthy();
   expect(screen.getByText("directoryProjects")).toBeTruthy();
+});
+
+it("opens a listed project and a challenge gallery from the profile (H18)", async () => {
+  personResult = {
+    ...profile,
+    projects: [{ kind: "project", id: 3, name: "Lander" }],
+    challenges: [{ id: 9, name: "Space" }],
+  };
+  await renderMobile(<PersonProfileScreen />);
+  await fireEvent.press(await screen.findByRole("link", { name: /Lander/ }));
+  expect(mockRouterPush).toHaveBeenCalledWith({
+    pathname: "/projects/[id]",
+    params: { id: "3", gallery: "1" },
+  });
+  await fireEvent.press(screen.getByRole("link", { name: /Space/ }));
+  expect(mockRouterPush).toHaveBeenCalledWith({
+    pathname: "/projects/gallery",
+    params: { challengeId: "9" },
+  });
 });
 
 it("opens the CV in the in-app viewer after downloading it with the session", async () => {

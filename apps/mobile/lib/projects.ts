@@ -26,6 +26,8 @@ export interface NativeProject {
   canEdit?: boolean;
   canSubmit?: boolean;
   canInvite?: boolean;
+  /** ISO time the phase window closes; shown only when the server provides it. */
+  submissionsCloseAt?: string | null;
   files?: {
     objectKey: string;
     url: string;
@@ -34,6 +36,49 @@ export interface NativeProject {
     mimeType: string;
   }[];
 }
+export interface ProjectInvite {
+  id: number;
+  projectId: number;
+  name: string;
+  invitedBy?: string | null;
+}
+
+/** One row of GET /api/queue/me (H38) as My Projects needs it. */
+export interface ProjectQueueEntry {
+  entryId: number;
+  repoId: number;
+  challengeTitle: string;
+  status: string;
+  position: number | null;
+  etaMinutes: number | null;
+}
+
+/** The queue lines shown under one project row; waiting entries first, by position. */
+export function queueBriefFor(entries: ProjectQueueEntry[], projectId: number) {
+  const rank = (entry: ProjectQueueEntry) =>
+    entry.status === "completed" ? 2 : entry.status === "waiting" ? 1 : 0;
+  return entries
+    .filter((entry) => entry.repoId === projectId)
+    .sort((a, b) => rank(a) - rank(b) || (a.position ?? 1e9) - (b.position ?? 1e9));
+}
+
+export function formatEtaMinutes(
+  minutes: number | null,
+  t: (
+    key: "queueAnyMoment" | "queueEtaMinutes" | "queueEtaHours" | "queueEtaHoursMinutes",
+    vars?: Record<string, string>,
+  ) => string,
+) {
+  if (minutes == null) return null;
+  if (minutes <= 0) return t("queueAnyMoment");
+  if (minutes < 60) return t("queueEtaMinutes", { minutes: String(minutes) });
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder
+    ? t("queueEtaHoursMinutes", { hours: String(hours), minutes: String(remainder) })
+    : t("queueEtaHours", { hours: String(hours) });
+}
+
 export interface GalleryPage {
   items: NativeProject[];
   total: number;

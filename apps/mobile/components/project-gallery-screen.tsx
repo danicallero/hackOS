@@ -1,9 +1,12 @@
-import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import Stack from "expo-router/stack";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, TextInput, View } from "react-native";
-import { ActionButton, EmptyState, InfoRow, Section, StatusPill } from "@/components/native-ui";
+import { FilterMenu, type FilterMenuProps } from "@/components/filter-menu";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
+import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { SegmentedControl } from "@/components/segmented-control";
 import { ApiError, apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { GalleryPage, NativeProject } from "@/lib/projects";
@@ -15,7 +18,10 @@ export function ProjectGalleryScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const [search, setSearch] = useState("");
-  const [challengeId, setChallengeId] = useState<number | null>(null);
+  const params = useLocalSearchParams<{ challengeId?: string }>();
+  const [challengeId, setChallengeId] = useState<number | null>(
+    params.challengeId ? Number(params.challengeId) : null,
+  );
   const [challenges, setChallenges] = useState<{ id: number; title: string }[]>([]);
   const [projects, setProjects] = useState<NativeProject[]>([]);
   const [page, setPage] = useState(1);
@@ -23,20 +29,49 @@ export function ProjectGalleryScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const generation = useRef(0);
+  const glassAvailable = isRealLiquidGlassAvailable();
+  const filterItems: FilterMenuProps["items"] = [
+    ...challenges.map((item) => ({
+      id: String(item.id),
+      label: item.title,
+      selected: item.id === challengeId,
+    })),
+    ...(challengeId !== null
+      ? [{ id: "all", label: t("projectAllChallenges"), selected: false }]
+      : []),
+  ];
+  const selectChallenge = (id: string) => setChallengeId(id === "all" ? null : Number(id));
+  const filter = (
+    <FilterMenu
+      accessibilityLabel={t("projectChallenges")}
+      active={challengeId !== null}
+      items={filterItems}
+      onSelect={selectChallenge}
+    />
+  );
   useLayoutEffect(() => {
-    if (Platform.OS !== "ios") return;
     navigation.setOptions({
-      headerSearchBarOptions: {
-        placeholder: t("projectSearch"),
-        autoCapitalize: "none",
-        hideWhenScrolling: true,
-        allowToolbarIntegration: false,
-        placement: "integratedButton",
-        onChangeText: (event: { nativeEvent: { text: string } }) =>
-          setSearch(event.nativeEvent.text),
-      },
+      title: t("gallery"),
+      headerShown: true,
+      headerLargeTitle: true,
+      headerLargeTitleShadowVisible: false,
+      headerShadowVisible: false,
+      headerRight: glassAvailable || challenges.length === 0 ? undefined : () => filter,
+      ...(Platform.OS === "ios"
+        ? {
+            headerSearchBarOptions: {
+              placeholder: t("projectSearch"),
+              autoCapitalize: "none",
+              hideWhenScrolling: false,
+              allowToolbarIntegration: false,
+              placement: "integratedButton",
+              onChangeText: (event: { nativeEvent: { text: string } }) =>
+                setSearch(event.nativeEvent.text),
+            },
+          }
+        : {}),
     });
-  }, [navigation, t]);
+  });
   const load = useCallback(
     async (nextPage = 1) => {
       const request = ++generation.current;
@@ -91,87 +126,96 @@ export function ProjectGalleryScreen() {
     }, [load]),
   );
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}
-    >
-      {Platform.OS !== "ios" ? (
-        <TextInput
-          accessibilityLabel={t("projectSearch")}
-          value={search}
-          onChangeText={setSearch}
-          placeholder={t("projectSearch")}
-          placeholderTextColor={colors.tertiaryLabel}
-          style={{
-            color: colors.label,
-            padding: 12,
-            minHeight: 44,
-            fontSize: 17,
-            backgroundColor: colors.surface,
-            borderRadius: 8,
-          }}
-        />
+    <>
+      {glassAvailable && challenges.length > 0 ? (
+        <Stack.Toolbar placement="right">
+          <Stack.Toolbar.View hidesSharedBackground>{filter}</Stack.Toolbar.View>
+        </Stack.Toolbar>
       ) : null}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={{ width: Math.max(320, (challenges.length + 1) * 180) }}>
-          <SegmentedControl
-            label={t("projectChallenges")}
-            values={[t("projectAllChallenges"), ...challenges.map((item) => item.title)]}
-            selectedIndex={
-              challengeId === null ? 0 : challenges.findIndex((item) => item.id === challengeId) + 1
-            }
-            onChange={(index) => setChallengeId(index === 0 ? null : challenges[index - 1].id)}
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}
+      >
+        {Platform.OS !== "ios" ? (
+          <TextInput
+            accessibilityLabel={t("projectSearch")}
+            value={search}
+            onChangeText={setSearch}
+            placeholder={t("projectSearch")}
+            placeholderTextColor={colors.tertiaryLabel}
+            style={{
+              color: colors.label,
+              padding: 12,
+              minHeight: 44,
+              fontSize: 17,
+              backgroundColor: colors.surface,
+              borderRadius: 8,
+            }}
           />
-        </View>
-      </ScrollView>
-      {error ? (
-        <RequestFeedback
-          error={error}
-          onRetry={
-            error instanceof ApiError && error.status === 403 ? undefined : () => void load()
-          }
-        />
-      ) : null}
-      {!loading && !error && projects.length === 0 ? (
-        <EmptyState icon="hammer" title={t("projectNoGallery")} />
-      ) : null}
-      {projects.map((project) => (
-        <Section key={project.id}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={project.name}
-            onPress={() =>
-              router.push({
-                pathname: "/projects/[id]",
-                params: { id: String(project.id), gallery: "1" },
-              })
-            }
-          >
-            <InfoRow
-              label={project.name}
-              value={project.challenges.map((challenge) => challenge.title).join(" · ")}
-              accessoryIcon="chevron.right"
-            />
-          </Pressable>
-          {project.winners?.map((winner) => (
-            <View
-              key={`${winner.challengeId}:${winner.rank}`}
-              style={{ paddingHorizontal: 16, paddingBottom: 12 }}
+        ) : null}
+        {challengeId !== null ? (
+          <Section>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("projectAllChallenges")}
+              onPress={() => setChallengeId(null)}
             >
-              <StatusPill tone="success">{`${t("projectWinner")} · ${winner.challengeTitle ?? winner.rank}`}</StatusPill>
-            </View>
-          ))}
-        </Section>
-      ))}
-      {loading ? <RequestFeedback loading /> : null}
-      {projects.length < total ? (
-        <ActionButton
-          label={t("projectMore")}
-          disabled={loading}
-          onPress={() => void load(page + 1)}
-        />
-      ) : null}
-    </ScrollView>
+              <InfoRow
+                icon="line.3.horizontal.decrease.circle.fill"
+                label={t("projectChallenges")}
+                value={challenges.find((item) => item.id === challengeId)?.title ?? ""}
+                accessoryIcon="xmark.circle.fill"
+              />
+            </Pressable>
+          </Section>
+        ) : null}
+        {error ? (
+          <RequestFeedback
+            error={error}
+            onRetry={
+              error instanceof ApiError && error.status === 403 ? undefined : () => void load()
+            }
+          />
+        ) : null}
+        {!loading && !error && projects.length === 0 ? (
+          <EmptyState icon="hammer" title={t("projectNoGallery")} />
+        ) : null}
+        {projects.length > 0 ? (
+          <Section>
+            {projects.map((project, index) => (
+              <View key={project.id}>
+                {index > 0 ? <Separator /> : null}
+                <NavRow
+                  title={project.name}
+                  lines={[
+                    ...(project.winners ?? []).map(
+                      (winner) => `${t("projectWinner")} · ${winner.challengeTitle ?? winner.rank}`,
+                    ),
+                    ...(project.challenges.length
+                      ? [project.challenges.map((challenge) => challenge.title).join(" · ")]
+                      : []),
+                  ]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/projects/[id]",
+                      params: { id: String(project.id), gallery: "1" },
+                    })
+                  }
+                />
+              </View>
+            ))}
+          </Section>
+        ) : null}
+        {loading ? <RequestFeedback loading /> : null}
+        {projects.length < total ? (
+          <ActionButton
+            label={t("projectMore")}
+            disabled={loading}
+            onPress={() => void load(page + 1)}
+          />
+        ) : null}
+      </ScrollView>
+    </>
   );
 }

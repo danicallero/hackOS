@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { type LayoutChangeEvent, Linking, Text, TextInput, View } from "react-native";
 import { Section, Separator } from "@/components/native-ui";
@@ -65,6 +66,7 @@ export function ProfileCard({
   edit?: ProfileCardEdit;
 }) {
   const { t } = useLocale();
+  const router = useRouter();
   const headline = edit ? edit.headline : data.headline;
   const bio = edit ? edit.bio : data.bio;
   const locationNote = edit ? edit.locationNote : data.locationNote;
@@ -105,18 +107,38 @@ export function ProfileCard({
   // carries the owner's eye.
   let eyeUsed = false;
   for (const { kind, one, many } of PROJECT_KINDS) {
-    const names = data.projects.filter((project) => project.kind === kind).map((p) => p.name);
-    if (names.length === 0) continue;
-    rows.push(
-      <DetailRow
-        key={kind}
-        dimmed={projectsDimmed}
-        icon="hammer"
-        label={t(names.length === 1 ? one : many)}
-        value={names.join("\n")}
-        trailing={eyeUsed ? undefined : projectEye}
-      />,
-    );
+    const projects = data.projects.filter((project) => project.kind === kind);
+    if (projects.length === 0) continue;
+    if (edit) {
+      rows.push(
+        <DetailRow
+          key={kind}
+          dimmed={projectsDimmed}
+          icon="hammer"
+          label={t(projects.length === 1 ? one : many)}
+          value={projects.map((project) => project.name).join("\n")}
+          trailing={eyeUsed ? undefined : projectEye}
+        />,
+      );
+    } else {
+      // H18: each project opens its page; the server decides who may read it.
+      for (const [index, project] of projects.entries()) {
+        rows.push(
+          <DetailRow
+            key={`${kind}:${project.id}`}
+            icon="hammer"
+            label={index === 0 ? t(projects.length === 1 ? one : many) : undefined}
+            value={project.name}
+            onPress={() =>
+              router.push({
+                pathname: "/projects/[id]",
+                params: { id: String(project.id), gallery: "1" },
+              })
+            }
+          />,
+        );
+      }
+    }
     eyeUsed = true;
   }
   if (edit && !eyeUsed) {
@@ -131,15 +153,35 @@ export function ProfileCard({
     );
   }
   if (data.challenges.length > 0) {
-    rows.push(
-      <DetailRow
-        key="challenges"
-        dimmed={projectsDimmed}
-        icon="trophy"
-        label={t("directoryChallenges")}
-        value={data.challenges.map((challenge) => challenge.name).join("\n")}
-      />,
-    );
+    if (edit) {
+      rows.push(
+        <DetailRow
+          key="challenges"
+          dimmed={projectsDimmed}
+          icon="trophy"
+          label={t("directoryChallenges")}
+          value={data.challenges.map((challenge) => challenge.name).join("\n")}
+        />,
+      );
+    } else {
+      // Each challenge opens the gallery filtered to that challenge.
+      for (const [index, challenge] of data.challenges.entries()) {
+        rows.push(
+          <DetailRow
+            key={`challenge:${challenge.id}`}
+            icon="trophy"
+            label={index === 0 ? t("directoryChallenges") : undefined}
+            value={challenge.name}
+            onPress={() =>
+              router.push({
+                pathname: "/projects/gallery",
+                params: { challengeId: String(challenge.id) },
+              })
+            }
+          />,
+        );
+      }
+    }
   }
 
   return (

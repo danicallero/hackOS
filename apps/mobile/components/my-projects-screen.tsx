@@ -1,38 +1,57 @@
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
-import { ProjectEditor } from "@/components/project-detail-screen";
-import { ProjectGalleryConsent } from "@/components/project-gallery-consent";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import Stack from "expo-router/stack";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
+import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
-import { type NativeProject, projectMutation } from "@/lib/projects";
+import { type MessageKey, useLocale } from "@/lib/i18n";
+import { subscribeToCategory } from "@/lib/notification-events";
+import {
+  formatEtaMinutes,
+  type NativeProject,
+  type ProjectInvite,
+  type ProjectQueueEntry,
+  queueBriefFor,
+} from "@/lib/projects";
+import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
-/** H19/H20: one personal destination for drafts, invitations and live queue. */
+const STATUS_KEY: Record<string, MessageKey> = {
+  waiting: "queueStatusWaiting",
+  called: "queueStatusCalled",
+  in_room: "queueStatusInRoom",
+  presenting: "queueStatusPresenting",
+  completed: "queueStatusCompleted",
+  disqualified: "queueStatusDisqualified",
+};
+
+/** H19-H21: every project the user belongs to, with its live queue brief. */
 export function MyProjectsScreen() {
   const { t } = useLocale();
   const router = useRouter();
+  const navigation = useNavigation();
   const scrollRef = useRef<ScrollView>(null);
   const trueTop = useTrueTopScroll(scrollRef);
+  const bottomInset = useRouterTabBarScrollBottomInset();
   const [projects, setProjects] = useState<NativeProject[] | null>(null);
-  const [invites, setInvites] = useState<{ id: number; projectId: number; name: string }[]>([]);
-  const [showCreate, setShowCreate] = useState(false);
+  const [invites, setInvites] = useState<ProjectInvite[]>([]);
+  const [queue, setQueue] = useState<ProjectQueueEntry[]>([]);
   const [canCreate, setCanCreate] = useState(false);
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const load = useCallback(async () => {
-    const [mine, invitations] = await Promise.allSettled([
+    const [mine, invitations, entries] = await Promise.allSettled([
       apiFetch<{ projects: NativeProject[]; canCreate: boolean }>("/api/me/projects"),
-      apiFetch<{ invites: { id: number; projectId: number; name: string }[] }>(
-        "/api/me/projects/invites",
-      ),
+      apiFetch<{ invites: ProjectInvite[] }>("/api/me/projects/invites"),
+      apiFetch<ProjectQueueEntry[]>("/api/queue/me"),
     ]);
-    // A failed invitation read must not hide the participant's own projects.
+    // A failed secondary read must not hide the participant's own projects.
     setInvites(invitations.status === "fulfilled" ? invitations.value.invites : []);
+    setQueue(entries.status === "fulfilled" && Array.isArray(entries.value) ? entries.value : []);
     if (mine.status === "fulfilled") {
       setProjects(mine.value.projects);
       setCanCreate(mine.value.canCreate);
@@ -46,142 +65,191 @@ export function MyProjectsScreen() {
   useFocusEffect(
     useCallback(() => {
       void load();
+      return subscribeToCategory("queue", () => void load());
     }, [load]),
   );
-  async function mutate(action: () => Promise<unknown>) {
-    setBusy(true);
-    setError(null);
-    try {
-      await action();
-      await load();
-    } catch (cause) {
-      await load();
-      setError(cause as Error);
-    } finally {
-      setBusy(false);
-    }
+  const glassAvailable = isRealLiquidGlassAvailable();
+  const openInvites = useCallback(() => router.push("/queue/invites"), [router]);
+  const openGallery = useCallback(() => router.push("/projects/gallery"), [router]);
+  const openQueue = useCallback(() => router.push("/projects/queue"), [router]);
+  const openNew = useCallback(() => router.push("/queue/new"), [router]);
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: t("projects"),
+      headerShown: true,
+      headerLargeTitle: true,
+      headerLargeTitleShadowVisible: false,
+      headerShadowVisible: false,
+      // iOS 26 gets native glass toolbar circles below; elsewhere the same
+      // actions are 44 pt circles in the header.
+      headerRight: glassAvailable
+        ? undefined
+        : () => (
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <CircleButton icon="list.number" label={t("projectQueue")} onPress={openQueue} />
+              {canCreate ? (
+                <CircleButton icon="plus" label={t("createProject")} onPress={openNew} />
+              ) : null}
+            </View>
+          ),
+    });
+  }, [navigation, t, glassAvailable, canCreate, openNew, openQueue]);
+
+  function briefLines(project: NativeProject) {
+    return queueBriefFor(queue, project.id)
+      .slice(0, 3)
+      .map((entry) => {
+        const status =
+          entry.status === "waiting" && entry.position != null
+            ? t("queuePosition", { n: String(entry.position) })
+            : t(STATUS_KEY[entry.status] ?? "queueStatusWaiting");
+        const eta = entry.status === "waiting" ? formatEtaMinutes(entry.etaMinutes, t) : null;
+        return [entry.challengeTitle, status, eta].filter(Boolean).join(" · ");
+      });
   }
   return (
-    <ScrollView
-      ref={scrollRef}
-      {...trueTop.scrollProps}
-      contentInsetAdjustmentBehavior="automatic"
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ gap: 16, padding: 16, paddingBottom: 120 }}
-    >
-      <Text
-        accessibilityRole="header"
-        style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
+    <>
+      {glassAvailable ? (
+        <Stack.Toolbar placement="right">
+          <Stack.Toolbar.Button
+            separateBackground
+            icon="list.number"
+            accessibilityLabel={t("projectQueue")}
+            onPress={openQueue}
+          />
+          {canCreate ? (
+            <Stack.Toolbar.Button
+              separateBackground
+              icon="plus"
+              accessibilityLabel={t("createProject")}
+              onPress={openNew}
+            />
+          ) : null}
+        </Stack.Toolbar>
+      ) : null}
+      <ScrollView
+        ref={scrollRef}
+        {...trueTop.scrollProps}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: bottomInset + 24 }}
       >
-        {t("projects")}
-      </Text>
-      {error ? (
-        <RequestFeedback
-          error={error}
-          onRetry={
-            error instanceof ApiError && error.status === 403 ? undefined : () => void load()
-          }
-        />
-      ) : null}
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        <ActionButton label={t("gallery")} onPress={() => router.push("/projects/gallery")} />
-        <ActionButton label={t("projectQueue")} onPress={() => router.push("/projects/queue")} />
-      </View>
-      {projects === null && !error ? <RequestFeedback loading /> : null}
-      {projects?.length === 0 && !error ? (
-        <EmptyState icon="hammer" title={t("projectNoProjects")} />
-      ) : null}
-      {projects?.length === 1 ? (
-        <ProjectEditor
-          key={`${projects[0].id}:${projects[0].revision}`}
-          project={projects[0]}
-          reload={load}
-          embedded
-        />
-      ) : (
-        projects &&
-        projects.length > 1 && (
+        {error ? (
+          <RequestFeedback
+            error={error}
+            onRetry={
+              error instanceof ApiError && error.status === 403 ? undefined : () => void load()
+            }
+          />
+        ) : null}
+        {invites.length > 0 ? (
+          <GlassView
+            colorScheme="auto"
+            glassEffectStyle="regular"
+            isInteractive
+            style={{ borderCurve: "continuous", borderRadius: 14 }}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${t("projectInvitations")}, ${invites.length}`}
+              onPress={openInvites}
+              style={{
+                alignItems: "center",
+                flexDirection: "row",
+                gap: 10,
+                minHeight: 52,
+                paddingHorizontal: 20,
+              }}
+            >
+              <SymbolView
+                name="person.2.fill"
+                tintColor={colors.accent}
+                size={20}
+                accessible={false}
+              />
+              <Text style={{ color: colors.label, flex: 1, fontSize: 17, fontWeight: "600" }}>
+                {t("projectInvitations")}
+              </Text>
+              <Text style={{ color: colors.secondaryLabel, fontSize: 17 }}>{invites.length}</Text>
+              <SymbolView
+                name="chevron.right"
+                tintColor={colors.tertiaryLabel}
+                size={12}
+                weight="semibold"
+                accessible={false}
+              />
+            </Pressable>
+          </GlassView>
+        ) : null}
+        {projects === null && !error ? <RequestFeedback loading /> : null}
+        {projects?.length === 0 && !error ? (
+          <EmptyState
+            icon="hammer"
+            title={t("projectNoProjects")}
+            description={!canCreate ? t("projectLocked") : undefined}
+            action={
+              canCreate ? (
+                <View style={{ alignSelf: "stretch", marginTop: 12 }}>
+                  <ActionButton
+                    label={t("createProject")}
+                    variant="filled"
+                    onPress={() => router.push("/queue/new")}
+                  />
+                </View>
+              ) : undefined
+            }
+          />
+        ) : null}
+        {projects && projects.length > 0 ? (
           <Section>
             {projects.map((project, index) => (
               <View key={project.id}>
                 {index > 0 ? <Separator /> : null}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={project.name}
+                <NavRow
+                  title={project.name}
+                  lines={briefLines(project)}
+                  value={t(
+                    project.submissionStatus === "submitted" ? "projectSubmitted" : "projectDraft",
+                  )}
                   onPress={() => router.push(`/projects/${project.id}`)}
-                >
-                  <InfoRow
-                    label={project.name}
-                    value={t(
-                      project.submissionStatus === "submitted"
-                        ? "projectSubmitted"
-                        : "projectDraft",
-                    )}
-                    accessoryIcon="chevron.right"
-                  />
-                </Pressable>
+                />
               </View>
             ))}
           </Section>
-        )
-      )}
-      {invites.map((project) => (
-        <Section key={project.projectId} title={project.name}>
-          <View style={{ gap: 8, padding: 16 }}>
-            <ActionButton
-              label={t("projectAccept")}
-              busy={busy}
-              onPress={() =>
-                void mutate(() =>
-                  projectMutation(`/api/me/projects/${project.projectId}/invites/accept`, "POST"),
-                )
-              }
-            />
-            <ActionButton
-              label={t("projectDecline")}
-              disabled={busy}
-              onPress={() =>
-                void mutate(() =>
-                  projectMutation(`/api/me/projects/${project.projectId}/invites/decline`, "POST"),
-                )
-              }
-            />
-          </View>
+        ) : null}
+        <Section>
+          <NavRow icon="photo.on.rectangle" title={t("gallery")} onPress={openGallery} />
         </Section>
-      ))}
-      {canCreate && projects && projects.length > 0 && !showCreate ? (
-        <ActionButton label={t("createProject")} onPress={() => setShowCreate(true)} />
-      ) : null}
-      {canCreate && (projects?.length === 0 || showCreate) ? (
-        <Section title={t("createProject")}>
-          <View style={{ padding: 16, gap: 12 }}>
-            <TextInput
-              accessibilityLabel={t("projectName")}
-              placeholder={t("projectName")}
-              placeholderTextColor={colors.tertiaryLabel}
-              value={name}
-              editable={!busy}
-              onChangeText={setName}
-              style={{ color: colors.label, fontSize: 17, minHeight: 44 }}
-            />
-            <ActionButton
-              label={t("createProject")}
-              disabled={!name.trim()}
-              busy={busy}
-              onPress={() =>
-                void mutate(async () => {
-                  const created = await projectMutation<NativeProject>("/api/me/projects", "POST", {
-                    name: name.trim(),
-                  });
-                  setName("");
-                  router.push(`/projects/${created.id}`);
-                })
-              }
-            />
-          </View>
-        </Section>
-      ) : null}
-      <ProjectGalleryConsent />
-    </ScrollView>
+      </ScrollView>
+    </>
+  );
+}
+
+function CircleButton({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: SymbolViewProps["name"];
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        backgroundColor: colors.surface,
+        borderRadius: 22,
+        height: 44,
+        justifyContent: "center",
+        opacity: pressed ? 0.6 : 1,
+        width: 44,
+      })}
+    >
+      <SymbolView name={icon} tintColor={colors.accent} size={19} weight="semibold" />
+    </Pressable>
   );
 }

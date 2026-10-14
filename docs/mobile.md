@@ -398,13 +398,22 @@ Mobile filter triggers draw one background: standalone `FilterMenu` owns its cir
 
 ### My Projects (H16–H20, H38, H60; #1011)
 
-The existing personal `queue` tab and overflow route now open **My Projects**.
-The live queue view is retained at `/projects/queue`, with its tutorial,
-pre-call notifications, SSE updates and polling. My Projects shows native
-projects and pending invitations; creation is shown only when the server's
-`canCreate` permits it. `/projects/:id` owns the project's organizer-defined
-answers, team, challenges, submission and queue context. No planning-record
-conversion or external submission path remains in the native client.
+The existing personal `queue` tab and overflow route now open **My Projects**,
+a native stack (`app/(tabs)/queue/`): the list with a native large title, **New
+project** (`/queue/new`, a modal sheet with Cancel / Create in the header, the
+name field focused, Create disabled until valid or when the server's
+`canCreate` is false) and the **Invitations** inbox (`/queue/invites`: inviter
+and project per row, Decline / Accept glass buttons, the row leaves at once and
+returns with the server's reason on failure). The list shows every project as a
+grouped row with its draft/submitted state and a queue brief per challenge
+(position, wait, called, presenting) from `/api/queue/me`; an Invitations glass
+button appears above it only while invitations are pending. The live queue
+view is retained at `/projects/queue`, with its tutorial, pre-call
+notifications, SSE updates and polling. `/projects/:id` is the submission
+screen: status and deadline (when the server provides `submissionsCloseAt`),
+grouped form sections, challenge rows, team and invite, queue context, and a
+floating Submit / Resubmit glass button. No planning-record conversion or
+external submission path remains in the native client.
 
 The reusable `DynamicForm` consumes `TemplateField` and `FormSection` from
 `@hackos/shared/forms`, the application/project schema. File and image fields
@@ -420,13 +429,20 @@ server's phase/audience projection, never a persisted mobile gallery cache.
 Search and challenge filters are paginated; outdated responses cannot replace
 a newer filter result. Foreground gallery polling rechecks publication every
 15 seconds. Only returned member photos and published winner fields
-are rendered. Public gallery photo consent is separately editable in My Projects,
-with explicit notice that the gallery may be public and indexable. Members
-appear by name per H18; only their public photo is optional.
+are rendered. The gallery photo follows the networking-profile photo toggle,
+which is the only photo control; My Projects has none. Members appear by name
+per H18. Challenge rows (project page, editor, profiles) open the gallery filtered to that
+challenge (`/projects/gallery?challengeId=`), and each project on a profile opens
+its page; the server decides who may read it. The challenge filter is the native filter menu (one choice, a row
+shows the active filter) so it scales past a dozen challenges.
 
 Several projects list as one grouped row section (name, draft/submitted,
-chevron); challenge choices are checkmark rows, locked when the server closes
-editing or marks them mandatory. A 403 from the project or gallery reads shows
+chevron); the editor lists the chosen challenges (mandatory ones with a lock) and an
+Add challenge row that opens a picker (`/projects/challenges?id=`): mandatory
+challenges pinned and locked under "Required", every other challenge below with
+checkmarks and native search, so any number of challenges stays usable; changes
+apply at once and revert with the server's reason, and everything is read-only
+when the server closes editing. A 403 from the project or gallery reads shows
 the permission message without a retry action (retrying cannot change the
 audience), 404/403 on gallery detail likewise. A failed invitation read does not
 hide the participant's projects, and a failed accept/decline refreshes the

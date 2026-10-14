@@ -1,11 +1,13 @@
 import type { FormSection, TemplateField } from "@hackos/shared/forms";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { Fragment, useState } from "react";
-import { Image, Linking, Text, TextInput, View } from "react-native";
-import { ActionButton, Section, ToggleRow } from "@/components/native-ui";
+import { Fragment, type ReactNode, useState } from "react";
+import { Image, Linking, Pressable, Text, TextInput, View } from "react-native";
+import { Section, Separator, ToggleRow } from "@/components/native-ui";
 import { useApiImage } from "@/components/person-avatar";
+import { FieldRow, RowButton } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { SymbolView } from "@/components/symbol";
 import { getCurrentSessionCookie } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
@@ -45,143 +47,209 @@ export function DynamicForm({
   }[];
 }) {
   const { t, language } = useLocale();
-  const field = (item: TemplateField) => {
+  const requiredLabel = (item: TemplateField) =>
+    item.required && !readOnly ? t("projectRequired") : undefined;
+  const hint = (item: TemplateField) =>
+    item.help_text && !readOnly ? localizedFormText(item.help_text, language) : undefined;
+  const isChoice = (item: TemplateField) => item.kind === "select" || item.kind === "multiselect";
+  const row = (item: TemplateField) => {
     const label = localizedFormText(item.label, language);
     const value = responses[item.key];
-    const options = item.options ?? [];
     const file = files.find((entry) => entry.objectKey === value);
-    const fileUrl = file ? (file.url.startsWith("/") ? `${API_URL}${file.url}` : file.url) : null;
-    return (
-      <View key={item.key} style={{ gap: 8, padding: 16 }}>
-        <Text
-          accessibilityRole="header"
-          style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}
-        >
-          {label}
-          {item.required && !readOnly ? ` · ${t("projectRequired")}` : ""}
-        </Text>
-        {readOnly ? (
-          <Text selectable style={{ color: colors.label, fontSize: 17 }}>
-            {file?.fileName ?? displayAnswer(item, value, language)}
-          </Text>
-        ) : item.kind === "checkbox" ? (
-          <ToggleRow
-            label={label}
-            value={value === true}
-            disabled={disabled}
-            onChange={(checked) => onChange?.(item.key, checked)}
-          />
-        ) : item.kind === "select" || item.kind === "multiselect" ? (
-          options.map((option) => {
-            const selected =
-              item.kind === "multiselect"
-                ? Array.isArray(value) && value.includes(option.value)
-                : value === option.value;
-            return (
-              <ToggleRow
-                key={option.value}
-                label={localizedFormText(option.label, language)}
-                value={selected}
-                disabled={disabled}
-                onChange={(checked) => {
-                  onChange?.(
-                    item.key,
-                    item.kind === "select"
-                      ? checked
-                        ? option.value
-                        : null
-                      : checked
-                        ? [...(Array.isArray(value) ? value : []), option.value]
-                        : (Array.isArray(value) ? value : []).filter((v) => v !== option.value),
-                  );
-                }}
-              />
-            );
-          })
-        ) : item.kind === "file" ? (
-          <>
-            {value ? (
-              <Text selectable style={{ color: colors.label }}>
-                {file?.fileName ?? displayAnswer(item, value, language)}
-              </Text>
-            ) : null}
-            <ActionButton
+    if (item.kind === "checkbox" && !readOnly) {
+      return (
+        <ToggleRow
+          key={item.key}
+          label={label}
+          value={value === true}
+          disabled={disabled}
+          onChange={(checked) => onChange?.(item.key, checked)}
+        />
+      );
+    }
+    if (readOnly) {
+      const isLink =
+        item.validation?.text_condition === "url" &&
+        typeof value === "string" &&
+        /^https?:\/\//i.test(value);
+      return (
+        <FieldRow key={item.key} label={label}>
+          {isLink ? (
+            <Text
+              accessibilityRole="link"
+              onPress={() => void Linking.openURL(value as string)}
+              style={{ color: colors.accent, fontSize: 17 }}
+            >
+              {value as string}
+            </Text>
+          ) : (
+            <Text selectable style={{ color: colors.label, fontSize: 17 }}>
+              {file?.fileName ?? displayAnswer(item, value, language)}
+            </Text>
+          )}
+          {file ? <ProjectFilePreview file={file} label={label} /> : null}
+        </FieldRow>
+      );
+    }
+    if (item.kind === "file") {
+      return (
+        <FieldRow key={item.key} label={label} required={requiredLabel(item)} hint={hint(item)}>
+          {value ? (
+            <Text selectable style={{ color: colors.label, fontSize: 17 }}>
+              {file?.fileName ?? displayAnswer(item, value, language)}
+            </Text>
+          ) : null}
+          {file ? <ProjectFilePreview file={file} label={label} /> : null}
+          <View style={{ flexDirection: "row", gap: 16 }}>
+            <RowButton
               label={t("projectUpload")}
               disabled={disabled}
               onPress={() => onUpload?.(item)}
             />
             {value ? (
-              <ActionButton
+              <RowButton
                 label={t("projectRemoveFile")}
-                disabled={disabled}
                 destructive
+                disabled={disabled}
                 onPress={() => onChange?.(item.key, null)}
               />
             ) : null}
-          </>
-        ) : (
-          <TextInput
-            accessibilityLabel={label}
-            editable={!disabled}
-            value={value == null ? "" : String(value)}
-            multiline={item.kind === "textarea"}
-            keyboardType={
-              item.kind === "number" || item.kind === "birth_year"
-                ? "numeric"
-                : item.validation?.text_condition === "url"
-                  ? "url"
-                  : "default"
-            }
-            autoCapitalize={item.validation?.text_condition ? "none" : "sentences"}
-            maxLength={item.validation?.max_length}
-            placeholder={
-              item.placeholder ? localizedFormText(item.placeholder, language) : undefined
-            }
-            placeholderTextColor={colors.tertiaryLabel}
-            onChangeText={(next) =>
-              onChange?.(
-                item.key,
-                item.kind === "number" || item.kind === "birth_year"
-                  ? next === ""
-                    ? null
-                    : Number(next)
-                  : next,
-              )
-            }
-            style={{
-              color: colors.label,
-              backgroundColor: colors.background,
-              borderRadius: 8,
-              padding: 12,
-              fontSize: 17,
-              minHeight: item.kind === "textarea" ? 112 : 44,
-            }}
-          />
-        )}
-        {file && fileUrl ? <ProjectFilePreview file={file} label={label} /> : null}
-        {readOnly &&
-        item.validation?.text_condition === "url" &&
-        typeof value === "string" &&
-        /^https?:\/\//i.test(value) ? (
-          <ActionButton label={value} onPress={() => void Linking.openURL(value)} />
-        ) : null}
-        {item.help_text && !readOnly ? (
-          <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-            {localizedFormText(item.help_text, language)}
-          </Text>
-        ) : null}
-      </View>
+          </View>
+        </FieldRow>
+      );
+    }
+    const numeric = item.kind === "number" || item.kind === "birth_year";
+    return (
+      <FieldRow key={item.key} label={label} required={requiredLabel(item)} hint={hint(item)}>
+        <TextInput
+          accessibilityLabel={label}
+          editable={!disabled}
+          value={value == null ? "" : String(value)}
+          multiline={item.kind === "textarea"}
+          scrollEnabled={false}
+          keyboardType={
+            numeric ? "numeric" : item.validation?.text_condition === "url" ? "url" : "default"
+          }
+          autoCapitalize={item.validation?.text_condition ? "none" : "sentences"}
+          maxLength={item.validation?.max_length}
+          placeholder={item.placeholder ? localizedFormText(item.placeholder, language) : undefined}
+          placeholderTextColor={colors.tertiaryLabel}
+          onChangeText={(next) =>
+            onChange?.(item.key, numeric ? (next === "" ? null : Number(next)) : next)
+          }
+          style={{
+            color: colors.label,
+            fontSize: 17,
+            minHeight: item.kind === "textarea" ? 88 : 28,
+            padding: 0,
+            textAlignVertical: "top",
+          }}
+        />
+      </FieldRow>
     );
+  };
+  const choice = (item: TemplateField) => {
+    const value = responses[item.key];
+    const label = localizedFormText(item.label, language);
+    return (
+      <Section key={item.key} title={label}>
+        {(item.options ?? []).map((option, index) => {
+          const selected =
+            item.kind === "multiselect"
+              ? Array.isArray(value) && value.includes(option.value)
+              : value === option.value;
+          return (
+            <View key={option.value}>
+              {index > 0 ? <Separator /> : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={localizedFormText(option.label, language)}
+                accessibilityState={{ selected, disabled }}
+                disabled={disabled}
+                onPress={() => {
+                  const list = Array.isArray(value) ? value : [];
+                  onChange?.(
+                    item.key,
+                    item.kind === "select"
+                      ? selected
+                        ? null
+                        : option.value
+                      : selected
+                        ? list.filter((v) => v !== option.value)
+                        : [...list, option.value],
+                  );
+                }}
+                style={{
+                  alignItems: "center",
+                  flexDirection: "row",
+                  gap: 12,
+                  minHeight: 50,
+                  opacity: disabled ? 0.5 : 1,
+                  paddingHorizontal: 16,
+                }}
+              >
+                <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>
+                  {localizedFormText(option.label, language)}
+                </Text>
+                {selected ? (
+                  <SymbolView
+                    name="checkmark"
+                    tintColor={colors.accent}
+                    size={17}
+                    weight="semibold"
+                    accessible={false}
+                  />
+                ) : null}
+              </Pressable>
+            </View>
+          );
+        })}
+      </Section>
+    );
+  };
+  /** Consecutive plain fields share one inset group; a choice field is its own group. */
+  const group = (items: TemplateField[], title?: string) => {
+    const blocks: ReactNode[] = [];
+    let run: TemplateField[] = [];
+    const flush = () => {
+      if (!run.length) return;
+      const current = run;
+      blocks.push(
+        <Section
+          key={`${title ?? "form"}:${current[0].key}`}
+          title={blocks.length ? undefined : title}
+        >
+          {current.map((item, index) => (
+            <View key={item.key}>
+              {index > 0 ? <Separator /> : null}
+              {row(item)}
+            </View>
+          ))}
+        </Section>,
+      );
+      run = [];
+    };
+    for (const item of items) {
+      if (isChoice(item) && !readOnly) {
+        flush();
+        blocks.push(choice(item));
+      } else {
+        run.push(item);
+      }
+    }
+    flush();
+    return blocks;
   };
   return (
     <>
-      {template.filter((item) => !item.section_key && !item.after_section_key).map(field)}
+      {group(template.filter((item) => !item.section_key && !item.after_section_key))}
       {sections.map((section) => (
         <Fragment key={section.key}>
-          <Section title={localizedFormText(section.title, language)}>
-            {template.filter((item) => item.section_key === section.key).map(field)}
-          </Section>
-          {template.filter((item) => item.after_section_key === section.key).map(field)}
+          {group(
+            template.filter((item) => item.section_key === section.key),
+            localizedFormText(section.title, language),
+          )}
+          {group(template.filter((item) => item.after_section_key === section.key))}
         </Fragment>
       ))}
     </>
@@ -240,10 +308,15 @@ function ProjectFilePreview({
           accessibilityLabel={label}
           source={{ uri: image }}
           resizeMode="contain"
-          style={{ height: 200, width: "100%", borderRadius: 8 }}
+          style={{
+            height: 160,
+            width: "100%",
+            borderRadius: 14,
+            backgroundColor: colors.elevatedSurface,
+          }}
         />
       ) : null}
-      <ActionButton label={file.fileName} busy={busy} onPress={() => void open()} />
+      <RowButton label={file.fileName} disabled={busy} onPress={() => void open()} />
       {error ? <RequestFeedback error={error} /> : null}
     </>
   );
