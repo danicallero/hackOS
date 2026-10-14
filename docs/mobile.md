@@ -530,8 +530,9 @@ they are not device screenshots or proof of native toolbar behavior.
   `app/(tabs)/others/legal.tsx`, which keeps the privacy policy and terms links
   together with Open-source licenses (`app/(tabs)/others/licenses/`,
   `components/licenses-screen.tsx`): every npm package in the shipped
-  JavaScript bundle with its license, and a detail page with the notice text it
-  ships. The list is `assets/licenses.json`, generated from the iOS and Android
+  JavaScript bundle with its notice truncated to four lines and a link to its
+  source repository (from the manifest's `repository`, else `homepage`), under
+  a compact transparent header; a package opens its full notice. The list is `assets/licenses.json`, generated from the iOS and Android
   export source maps by `pnpm --filter @hackos/mobile generate:licenses`
   (`scripts/generate-licenses.mjs`); rerun it and commit the result whenever a
   dependency is added, removed or upgraded. Third-party native libraries

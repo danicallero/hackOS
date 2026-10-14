@@ -52,6 +52,37 @@ function licenseOf(manifest) {
   return "UNKNOWN";
 }
 
+/** A browsable https URL for the package's source, from `repository` (or `homepage`). */
+export function sourceUrl(manifest) {
+  const repository =
+    typeof manifest.repository === "string" ? { url: manifest.repository } : manifest.repository;
+  let url = repository?.url?.trim();
+  if (url) {
+    const shorthand = url.match(/^(github:|gitlab:|bitbucket:)?([\w.-]+\/[\w.-]+)$/);
+    if (shorthand) {
+      const host = { "gitlab:": "gitlab.com", "bitbucket:": "bitbucket.org" }[shorthand[1]];
+      url = `https://${host ?? "github.com"}/${shorthand[2]}`;
+    }
+    url = url
+      .replace(/^git\+/, "")
+      .replace(/^git:\/\//, "https://")
+      .replace(/^ssh:\/\/git@/, "https://")
+      .replace(/^git@([^:]+):/, "https://$1/")
+      .replace(/\.git$/, "")
+      .replace(/#.*$/, "");
+    if (url.startsWith("https://")) {
+      // Monorepo packages point at their own folder.
+      const directory = repository.directory?.replace(/^\/+|\/+$/g, "");
+      return directory && /^https:\/\/(github|gitlab)\.com\//.test(url)
+        ? `${url}/tree/HEAD/${directory}`
+        : url;
+    }
+  }
+  return typeof manifest.homepage === "string" && manifest.homepage.startsWith("https://")
+    ? manifest.homepage.replace(/#.*$/, "")
+    : null;
+}
+
 function noticeText(dir) {
   const file = readdirSync(dir)
     .filter((name) => NOTICE_FILE.test(name))
@@ -59,28 +90,36 @@ function noticeText(dir) {
   return file ? readFileSync(join(dir, file), "utf8").trim() : null;
 }
 
-const dirs = new Set([...bundledPackageDirs("ios"), ...bundledPackageDirs("android")]);
-const packages = new Map();
-for (const dir of dirs) {
-  const manifestPath = join(dir, "package.json");
-  if (!existsSync(manifestPath)) continue;
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  // Workspace packages are hackOS's own code.
-  if (manifest.name.startsWith("@hackos/")) continue;
-  const key = `${manifest.name}@${manifest.version}`;
-  if (packages.has(key)) continue;
-  packages.set(key, {
-    name: manifest.name,
-    version: manifest.version,
-    license: licenseOf(manifest),
-    text: noticeText(dir),
-  });
+function main() {
+  const dirs = new Set([...bundledPackageDirs("ios"), ...bundledPackageDirs("android")]);
+  const packages = new Map();
+  for (const dir of dirs) {
+    const manifestPath = join(dir, "package.json");
+    if (!existsSync(manifestPath)) continue;
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    // Workspace packages are hackOS's own code.
+    if (manifest.name.startsWith("@hackos/")) continue;
+    const key = `${manifest.name}@${manifest.version}`;
+    if (packages.has(key)) continue;
+    packages.set(key, {
+      name: manifest.name,
+      version: manifest.version,
+      license: licenseOf(manifest),
+      source: sourceUrl(manifest),
+      text: noticeText(dir),
+    });
+  }
+
+  const sorted = [...packages.values()].sort(
+    (a, b) => a.name.localeCompare(b.name, "en") || a.version.localeCompare(b.version, "en"),
+  );
+  writeFileSync(output, `${JSON.stringify(sorted, null, 2)}\n`);
+  const missing = sorted.filter((entry) => !entry.text).map((entry) => entry.name);
+  const sourceless = sorted.filter((entry) => !entry.source).map((entry) => entry.name);
+  console.log(`Wrote ${sorted.length} packages to ${output}`);
+  if (missing.length > 0) console.log(`No notice file (license id only): ${missing.join(", ")}`);
+  if (sourceless.length > 0) console.log(`No source URL: ${sourceless.join(", ")}`);
 }
 
-const sorted = [...packages.values()].sort(
-  (a, b) => a.name.localeCompare(b.name, "en") || a.version.localeCompare(b.version, "en"),
-);
-writeFileSync(output, `${JSON.stringify(sorted, null, 2)}\n`);
-const missing = sorted.filter((entry) => !entry.text).map((entry) => entry.name);
-console.log(`Wrote ${sorted.length} packages to ${output}`);
-if (missing.length > 0) console.log(`No notice file (license id only): ${missing.join(", ")}`);
+// Run as a script; importing it (to try `sourceUrl`) does nothing.
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

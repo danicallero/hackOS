@@ -1,10 +1,10 @@
 import { Stack, useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useRef } from "react";
-import { Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
-import { Section, Separator } from "@/components/native-ui";
-import { SymbolView } from "@/components/symbol";
-import { findLicense, LICENSES } from "@/lib/licenses";
+import { Separator } from "@/components/native-ui";
+import { findLicense, LICENSES, type LicenseEntry } from "@/lib/licenses";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
@@ -17,64 +17,74 @@ function useLegalScroll() {
     ref: scrollRef,
     ...trueTop.scrollProps,
     contentInsetAdjustmentBehavior: "automatic" as const,
-    contentContainerStyle: {
-      gap: 20,
-      padding: 16,
-      paddingBottom: Math.max(32, tabBarBottomInset + 16),
-    },
+    contentContainerStyle: { paddingBottom: Math.max(32, tabBarBottomInset + 16) },
   };
 }
 
-/** Account → Legal → the packages shipped in the app, with their license (`assets/licenses.json`). */
+function SourceLink({ url }: { url: string }) {
+  return (
+    <Pressable
+      accessibilityRole="link"
+      hitSlop={8}
+      onPress={() => void WebBrowser.openBrowserAsync(url)}
+      style={({ pressed }) => ({ alignSelf: "flex-start", opacity: pressed ? 0.6 : 1 })}
+    >
+      <Text numberOfLines={1} style={{ color: colors.tertiaryLabel, fontSize: 13 }}>
+        {url.replace(/^https:\/\//, "")}
+      </Text>
+    </Pressable>
+  );
+}
+
+function NoticeText({ entry, preview }: { entry: LicenseEntry; preview: boolean }) {
+  // Without a notice file the license id stands in.
+  return (
+    <Text
+      selectable={!preview}
+      numberOfLines={preview ? 4 : undefined}
+      style={{ color: colors.secondaryLabel, fontSize: 16, lineHeight: 22 }}
+    >
+      {entry.text ?? entry.license}
+    </Text>
+  );
+}
+
+/**
+ * Account → Legal → every package shipped in the app (`assets/licenses.json`):
+ * its notice, truncated, and its source. A package opens its full notice.
+ */
 export function LicensesScreen() {
   const router = useRouter();
   const scroll = useLegalScroll();
   return (
     <ScrollView {...scroll}>
-      <Section>
-        {LICENSES.map((entry, index) => (
-          <View key={`${entry.name}@${entry.version}`}>
-            {index > 0 ? <Separator /> : null}
-            <Pressable
-              accessibilityLabel={`${entry.name}, ${entry.license}`}
-              accessibilityRole="button"
-              onPress={() =>
-                router.push({
-                  pathname: "/(tabs)/others/licenses/[name]",
-                  params: { name: entry.name },
-                })
-              }
-              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-            >
-              {/* Stacked: package names and license expressions are both long. */}
-              <View
-                style={{
-                  alignItems: "center",
-                  flexDirection: "row",
-                  gap: 12,
-                  minHeight: 50,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                }}
-              >
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={{ color: colors.label, fontSize: 16 }}>{entry.name}</Text>
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                    {entry.license}
-                  </Text>
-                </View>
-                <SymbolView
-                  accessible={false}
-                  name="chevron.right"
-                  size={12}
-                  tintColor={colors.tertiaryLabel}
-                  weight="semibold"
-                />
-              </View>
-            </Pressable>
-          </View>
-        ))}
-      </Section>
+      {LICENSES.map((entry, index) => (
+        <View key={`${entry.name}@${entry.version}`}>
+          {index > 0 ? <Separator /> : null}
+          <Pressable
+            accessibilityLabel={`${entry.name}, ${entry.license}`}
+            accessibilityRole="button"
+            onPress={() =>
+              router.push({
+                pathname: "/(tabs)/others/licenses/[name]",
+                params: { name: entry.name },
+              })
+            }
+            style={({ pressed }) => ({
+              gap: 10,
+              opacity: pressed ? 0.6 : 1,
+              paddingHorizontal: 16,
+              paddingVertical: 18,
+            })}
+          >
+            <Text style={{ color: colors.label, fontSize: 19, fontWeight: "500" }}>
+              {entry.name}
+            </Text>
+            <NoticeText entry={entry} preview />
+            {entry.source ? <SourceLink url={entry.source} /> : null}
+          </Pressable>
+        </View>
+      ))}
     </ScrollView>
   );
 }
@@ -87,26 +97,15 @@ export function LicenseScreen({ name }: { name: string }) {
     <ScrollView {...scroll}>
       <Stack.Screen options={{ title: name }} />
       {entry ? (
-        <Section>
-          <View style={{ gap: 12, padding: 16 }}>
-            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
+        <View style={{ gap: 12, paddingHorizontal: 16, paddingVertical: 18 }}>
+          <View style={{ gap: 4 }}>
+            <Text selectable style={{ color: colors.tertiaryLabel, fontSize: 13 }}>
               {entry.version} · {entry.license}
             </Text>
-            {entry.text ? (
-              <Text
-                selectable
-                style={{
-                  color: colors.label,
-                  fontFamily: Platform.select({ ios: "Menlo", default: "monospace" }),
-                  fontSize: 12,
-                  lineHeight: 17,
-                }}
-              >
-                {entry.text}
-              </Text>
-            ) : null}
+            {entry.source ? <SourceLink url={entry.source} /> : null}
           </View>
-        </Section>
+          {entry.text ? <NoticeText entry={entry} preview={false} /> : null}
+        </View>
       ) : null}
     </ScrollView>
   );

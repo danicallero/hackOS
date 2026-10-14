@@ -1,4 +1,5 @@
 import { Stack } from "expo-router/stack";
+import { Platform } from "react-native";
 import { useLocale } from "@/lib/i18n";
 import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
 import { isPadIdiom } from "@/lib/tabs";
@@ -11,6 +12,13 @@ import { isPadIdiom } from "@/lib/tabs";
  * discard the previous Statistics/history screen from the detail navigator's
  * own history and leave it without a native back action.
  */
+const compactHeaderOptions = {
+  headerShown: true,
+  headerLargeTitle: false,
+  headerShadowVisible: false,
+  headerTransparent: Platform.OS === "ios",
+} as const;
+
 export default function OthersLayout() {
   const { t } = useLocale();
   const headerShown = isPadIdiom();
@@ -73,11 +81,12 @@ export default function OthersLayout() {
         name="legal"
         options={{ headerShown: true, headerLargeTitle: true, title: t("accountLegalTitle") }}
       />
+      {/* Compact title over the scrolling notices; iOS blurs the scroll edge. */}
       <Stack.Screen
         name="licenses/index"
-        options={{ headerShown: true, headerLargeTitle: true, title: t("legalLicenses") }}
+        options={{ ...compactHeaderOptions, title: t("legalLicenses") }}
       />
-      <Stack.Screen name="licenses/[name]" options={{ headerShown: true }} />
+      <Stack.Screen name="licenses/[name]" options={compactHeaderOptions} />
       <Stack.Screen name="person/[id]" options={transparentDetailHeaderOptions} />
       <Stack.Screen name="person/presence/[id]" options={transparentDetailHeaderOptions} />
       <Stack.Screen

@@ -6,6 +6,8 @@ export interface LicenseEntry {
   version: string;
   /** SPDX expression from the package manifest. */
   license: string;
+  /** Browsable source repository, or null when the manifest names none. */
+  source: string | null;
   /** The package's LICENSE/NOTICE file, or null when it ships none. */
   text: string | null;
 }

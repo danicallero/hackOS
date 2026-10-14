@@ -5,6 +5,8 @@ import { renderMobile } from "./render";
   true;
 
 const mockPush = jest.fn();
+const mockOpenBrowser = jest.fn();
+jest.mock("expo-web-browser", () => ({ openBrowserAsync: (url: string) => mockOpenBrowser(url) }));
 jest.mock("expo-router", () => ({
   ...jest.requireActual("expo-router"),
   Stack: { Screen: () => null },
@@ -14,8 +16,14 @@ jest.mock("expo-router", () => ({
 jest.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
 jest.mock("@/lib/router-tabs-inset", () => ({ useRouterTabBarScrollBottomInset: () => 0 }));
 jest.mock("@/assets/licenses.json", () => [
-  { name: "@scope/kit", version: "1.2.0", license: "MIT", text: "Copyright (c) 2026 Kit" },
-  { name: "bare", version: "0.1.0", license: "ISC", text: null },
+  {
+    name: "@scope/kit",
+    version: "1.2.0",
+    license: "MIT",
+    source: "https://github.com/scope/kit",
+    text: "Copyright (c) 2026 Kit",
+  },
+  { name: "bare", version: "0.1.0", license: "ISC", source: null, text: null },
 ]);
 
 const { LicenseScreen, LicensesScreen } =
@@ -29,15 +37,19 @@ describe("open-source licenses", () => {
 
   it("links from Legal", async () => {
     await renderMobile(<LegalScreen />);
-    fireEvent.press(screen.getByLabelText("legalLicenses"));
+    await fireEvent.press(screen.getByLabelText("legalLicenses"));
     expect(mockPush).toHaveBeenCalledWith("/(tabs)/others/licenses");
   });
 
-  it("lists every bundled package with its license and opens its notice", async () => {
+  it("lists every bundled package with its notice and source, and opens it", async () => {
     await renderMobile(<LicensesScreen />);
     expect(screen.getByText("@scope/kit")).toBeTruthy();
+    expect(screen.getByText("Copyright (c) 2026 Kit").props.numberOfLines).toBe(4);
+    // Without a notice file the license id stands in.
     expect(screen.getByText("ISC")).toBeTruthy();
-    fireEvent.press(screen.getByLabelText("@scope/kit, MIT"));
+    await fireEvent.press(screen.getByText("github.com/scope/kit"));
+    expect(mockOpenBrowser).toHaveBeenCalledWith("https://github.com/scope/kit");
+    await fireEvent.press(screen.getByLabelText("@scope/kit, MIT"));
     expect(mockPush).toHaveBeenCalledWith({
       pathname: "/(tabs)/others/licenses/[name]",
       params: { name: "@scope/kit" },
@@ -47,9 +59,11 @@ describe("open-source licenses", () => {
   it("shows the notice, or only the license id when the package ships none", async () => {
     await renderMobile(<LicenseScreen name="@scope/kit" />);
     expect(screen.getByText("1.2.0 · MIT")).toBeTruthy();
-    expect(screen.getByText("Copyright (c) 2026 Kit")).toBeTruthy();
+    expect(screen.getByText("Copyright (c) 2026 Kit").props.numberOfLines).toBeUndefined();
+    expect(screen.getByText("github.com/scope/kit")).toBeTruthy();
 
     await renderMobile(<LicenseScreen name="bare" />);
     expect(screen.getByText("0.1.0 · ISC")).toBeTruthy();
+    expect(screen.queryByText(/github\.com/)).toBeNull();
   });
 });
