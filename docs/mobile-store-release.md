@@ -99,7 +99,10 @@ English, Spanish, and Galician. Use seeded fictional people/QRs only.
 This app handles account/session data, email/name/profile information,
 ticket/badge identifiers, push tokens, notification preferences, queue state,
 and—on authorized staff devices—a local SQLite copy containing attendee names,
-dietary restrictions/notes, badges, and pending operational scans. Camera
+dietary restrictions/notes, badges, and pending operational scans. When a
+build embeds `EXPO_PUBLIC_SENTRY_DSN`, it also sends crash and error reports
+(stack traces, device model, OS and app version; no user identity) to the
+Sentry project — declare them as diagnostics. Camera
 frames are used to decode QR values; the implementation does not need
 microphone recording.
 

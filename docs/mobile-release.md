@@ -54,3 +54,23 @@ at build time, otherwise the event website.
 The examples across all three match the versions currently in the
 repository: Expo SDK 57, React Native 0.86, and pnpm 10. Check Expo, Apple,
 and Google requirements again when upgrading the SDK.
+
+## Crash reports
+
+Crash and error reports (`lib/crash-reporting.ts`, see
+[mobile.md](./mobile.md#other-infrastructure)) need a Sentry-compatible
+project. Set these as EAS environment variables for `preview` and
+`production`:
+
+| Variable | Visibility | Purpose |
+|---|---|---|
+| `EXPO_PUBLIC_SENTRY_DSN` | plain text | Project DSN embedded in the bundle. Unset = reporting off. |
+| `SENTRY_AUTH_TOKEN` | secret | Uploads source maps and native debug symbols. |
+| `SENTRY_ORG`, `SENTRY_PROJECT` | plain text | Upload target. |
+| `SENTRY_URL` | plain text | Only for a self-hosted server; default `https://sentry.io/`. |
+
+Without the three upload variables the build still reports, but stack traces
+stay minified. Adding the SDK changes the native binary: rebuild the dev
+client and store builds. Declare crash data in Apple App Privacy and Google
+Data Safety (see [store release](./mobile-store-release.md#2-privacy-permissions-and-store-declarations)),
+and name the processor in the privacy policy before enabling it in production.

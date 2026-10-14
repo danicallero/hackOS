@@ -2202,6 +2202,22 @@ an id's first post).
   (`lib/upgrade-required.ts`), the root layout replaces the app with
   `UpgradeRequiredScreen`, which opens the store (#999). See
   [mobile-release](./mobile-release.md#minimum-supported-build).
+- `lib/crash-reporting.ts` sends crash and error reports with the Sentry SDK
+  (`@sentry/react-native`; any Sentry-compatible server). It is off unless the
+  build embeds `EXPO_PUBLIC_SENTRY_DSN`, and always off in development. The
+  root layout initialises it, wraps the app (`Sentry.wrap`: native crashes and
+  unhandled JS errors) and reports errors caught by expo-router's
+  `ErrorBoundary`, which would otherwise swallow them. Reports are errors only
+  (no tracing, profiling or replay) and carry no personal data: no user, IP,
+  request headers (the session cookie), bodies, query strings or console
+  breadcrumbs. Each event is tagged `api: production|development` because the
+  developer switch can point a store build at staging. `metro.config.js` uses
+  `getSentryExpoConfig` so bundles carry debug IDs; source maps and native
+  debug symbols upload only when the build has `SENTRY_AUTH_TOKEN`,
+  `SENTRY_ORG` and `SENTRY_PROJECT` (optionally `SENTRY_URL` for a
+  self-hosted server) — without them `app.config.ts` leaves the Sentry plugin
+  out, because its native build phases fail without credentials. See
+  [mobile-release](./mobile-release.md#crash-reports).
 - `lib/app-version.ts` shows the installed binary's version and a seven-character
   commit in Sign in and Account. `app.config.ts` captures EAS/CI commit metadata,
   falling back to the checkout's HEAD when building locally; builds without Git

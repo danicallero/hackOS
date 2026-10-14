@@ -1,6 +1,14 @@
 import { EVENTS } from "@hackos/shared/events";
+import * as Sentry from "@sentry/react-native";
 import { useFonts } from "expo-font";
-import { type Href, usePathname, useRootNavigationState, useRouter } from "expo-router";
+import {
+  type ErrorBoundaryProps,
+  type Href,
+  ErrorBoundary as RouterErrorBoundary,
+  usePathname,
+  useRootNavigationState,
+  useRouter,
+} from "expo-router";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
 import { Stack } from "expo-router/stack";
 import * as SplashScreen from "expo-splash-screen";
@@ -17,6 +25,7 @@ import { useColorScheme } from "@/components/useColorScheme";
 import { ApiModeProvider, useApiMode } from "@/lib/api-mode";
 import { signOut } from "@/lib/auth-client";
 import { collectCompanyTagHref, takePendingCompanyTag } from "@/lib/company-tag-link";
+import { captureError, initCrashReporting } from "@/lib/crash-reporting";
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
 import { useLiveActivities } from "@/lib/live-activities/use-live-activities";
 import { MeProvider, useMeContext } from "@/lib/me-context";
@@ -36,15 +45,18 @@ import { useUpgradeRequired } from "@/lib/upgrade-required";
 import { warmWalletCache } from "@/lib/wallet-cache";
 import { colors } from "@/theme/colors";
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from "expo-router";
+initCrashReporting();
+
+/** expo-router's error screen; the error is reported first, since the boundary swallows it. */
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  useEffect(() => captureError(props.error), [props.error]);
+  return <RouterErrorBoundary {...props} />;
+}
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
@@ -516,3 +528,6 @@ function useDelayedVisibility(active: boolean, delayMs: number) {
 
   return visible;
 }
+
+// Native crashes and unhandled JS errors are captured from here on (no-op without a DSN).
+export default Sentry.wrap(RootLayout);

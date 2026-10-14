@@ -28,6 +28,21 @@ const isDevelopmentBuild = process.env.APP_VARIANT === "development";
  * (`e2e/mobile`, see docs/ui-testing.md) — a launcher screen no test can tap
  * past would otherwise fail every Detox spec.
  */
+/**
+ * Source map and debug-symbol upload for crash reports. The Sentry plugin adds
+ * native build phases that fail without credentials, so it is only applied
+ * when the build has them (EAS secrets); the SDK itself is autolinked and
+ * reports without it.
+ */
+const sentryUpload =
+  process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
+    ? {
+        organization: process.env.SENTRY_ORG,
+        project: process.env.SENTRY_PROJECT,
+        url: process.env.SENTRY_URL ?? "https://sentry.io/",
+      }
+    : null;
+
 const devClientDefaultLauncherUrl = process.env.DEV_CLIENT_DEFAULT_LAUNCHER_URL;
 
 export default function appConfig({ config }: ConfigContext): ExpoConfig {
@@ -69,6 +84,7 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
       "./plugins/withWidgetBundleVersion.js",
       // #935: company-tag links https://<event host>/s/<code> open the app.
       ["./plugins/withAndroidCompanyTagLinks.js", { host: eventWebsiteHost }],
+      ...(sentryUpload ? [["@sentry/react-native/expo", sentryUpload] as [string, unknown]] : []),
     ],
     extra: { ...config.extra, buildCommit: buildCommit() },
     name: isDevelopmentBuild ? `${config.name} (Debug)` : config.name,
