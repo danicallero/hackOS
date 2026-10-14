@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import { FieldRow, GlassButton, RowButton } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
@@ -74,14 +75,8 @@ export function InviteTeammateRow({
     );
   }
   return (
-    <View style={{ gap: 8, paddingHorizontal: 16, paddingVertical: 8 }}>
-      <View style={{ alignItems: "center", flexDirection: "row", gap: 12 }}>
-        <SymbolView
-          name="envelope"
-          tintColor={colors.secondaryLabel}
-          size={20}
-          accessible={false}
-        />
+    <View>
+      <FieldRow label={t("projectEmail")}>
         <TextInput
           accessibilityLabel={t("projectEmail")}
           autoCapitalize="none"
@@ -95,57 +90,37 @@ export function InviteTeammateRow({
             setError(null);
           }}
           onSubmitEditing={() => void send()}
-          placeholder={t("projectEmail")}
+          placeholder="name@example.com"
           placeholderTextColor={colors.tertiaryLabel}
           returnKeyType="send"
-          style={{ color: colors.label, flex: 1, fontSize: 17, minHeight: 44, padding: 0 }}
+          style={{ color: colors.label, fontSize: 17, minHeight: 28, padding: 0 }}
           textContentType="emailAddress"
           value={email}
         />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("projectSend")}
-          accessibilityState={{ disabled: !valid || busy, busy }}
-          disabled={!valid || busy}
-          onPress={() => void send()}
-          style={{
-            alignItems: "center",
-            backgroundColor: colors.accent,
-            borderRadius: 22,
-            height: 44,
-            justifyContent: "center",
-            opacity: !valid || busy ? 0.35 : 1,
-            width: 44,
-          }}
-        >
-          <SymbolView
-            name="arrow.up"
-            tintColor={colors.primaryActionText}
-            size={18}
-            weight="bold"
-            accessible={false}
-          />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("cancel")}
+      </FieldRow>
+      {error ? (
+        <View style={{ paddingHorizontal: 16 }}>
+          <RequestFeedback error={error} />
+        </View>
+      ) : null}
+      <View style={{ alignItems: "center", flexDirection: "row", gap: 12, padding: 16 }}>
+        <RowButton
+          label={t("cancel")}
           onPress={() => {
             setOpen(false);
             setEmail("");
             setError(null);
           }}
-          style={{ alignItems: "center", height: 44, justifyContent: "center", width: 32 }}
-        >
-          <SymbolView
-            name="xmark"
-            tintColor={colors.tertiaryLabel}
-            size={15}
-            weight="semibold"
-            accessible={false}
-          />
-        </Pressable>
+        />
+        <GlassButton
+          style={{ flex: 1 }}
+          prominent
+          label={t("projectSend")}
+          disabled={!valid}
+          busy={busy}
+          onPress={() => void send()}
+        />
       </View>
-      {error ? <RequestFeedback error={error} /> : null}
     </View>
   );
 }
