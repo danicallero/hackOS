@@ -17,9 +17,12 @@ retry contract.
 `applications-expirer` tick deletes, in batches of 1000 and using
 `idempotency_keys_created_at_idx`:
 
-- completed rows older than **7 days** — longer than any legitimate replay,
-  including a mobile scanner that reuses its scan id as key after an offline
-  shift;
+- completed rows older than **7 days** (`IDEMPOTENCY_RETENTION_DAYS` in
+  `@hackos/shared/idempotency`) — longer than any legitimate replay. The
+  mobile scanner reuses its scan id as key after an offline shift and stops
+  replaying a queued scan after `SCANNER_REPLAY_MAX_AGE_DAYS` (6 days; the
+  extra day absorbs device-clock drift); an older scan is failed locally
+  instead of re-executing (`docs/mobile.md` § Backend changes);
 - rows with no response (abandoned in-flight attempts and the H54
   pending-removal marker) older than **1 day**, well past the 30 s reclaim
   threshold.

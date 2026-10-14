@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
+import { IDEMPOTENCY_RETENTION_DAYS } from "@hackos/shared/idempotency";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { pool } from "../db/pool.js";
 import { ConflictError } from "./errors.js";
@@ -33,13 +34,12 @@ import { ConflictError } from "./errors.js";
 const STALE_IN_FLIGHT_MS = 30_000;
 
 /**
- * Retention (#994, H54 data minimisation). Completed rows are kept 7 days —
- * longer than the longest legitimate replay (a mobile scanner reconnecting
- * after an offline shift reuses the scan id as its key) — then purged.
+ * Retention (#994, H54 data minimisation). Completed rows are kept
+ * IDEMPOTENCY_RETENTION_DAYS (shared with the mobile scanner, which stops
+ * replaying queued scans after SCANNER_REPLAY_MAX_AGE_DAYS) — then purged.
  * NULL-response rows (never completed, or the H54 pending-removal marker) are
  * kept 1 day, far past STALE_IN_FLIGHT_MS, so a reclaim is always possible.
  */
-export const IDEMPOTENCY_RETENTION_DAYS = 7;
 export const IDEMPOTENCY_IN_FLIGHT_RETENTION_DAYS = 1;
 const PURGE_BATCH = 1000;
 

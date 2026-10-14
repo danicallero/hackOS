@@ -31,6 +31,7 @@
     "./account-removal": "./src/account-removal.ts",
     "./event-time-store": "./src/event-time-store.ts",
     "./forms": "./src/forms.ts",
+    "./idempotency": "./src/idempotency.ts",
     "./projects": "./src/projects.ts"
   },
   "scripts": {
