@@ -199,8 +199,16 @@ export function QuestionsCard({
   form,
   onSaved,
   onDirtyChange,
+  saveDefinition,
 }: {
-  form: ApplicationForm;
+  form: Pick<ApplicationForm, "id" | "name" | "template" | "sections"> &
+    Partial<Pick<ApplicationForm, "ask_shirt_size" | "ask_food_intolerances">>;
+  /** H16: projects persist the same form schema through their own endpoint. */
+  saveDefinition?: (definition: {
+    template: TemplateField[];
+    sections: FormSection[];
+    field_renames: { from: string; to: string }[];
+  }) => Promise<unknown>;
   onSaved: () => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
@@ -252,12 +260,12 @@ export function QuestionsCard({
   // would silently hide the very fields those toggles turn on. Those synthetic
   // fields are tagged with the reserved Logistics section, so they group under
   // their own header instead of dangling as ungrouped fields.
-  const hasLogisticsFields = form.ask_shirt_size || form.ask_food_intolerances;
+  const hasLogisticsFields = Boolean(form.ask_shirt_size || form.ask_food_intolerances);
   const previewFields = [
     ...fields,
     ...logisticsPreviewFields(
-      form.ask_shirt_size,
-      form.ask_food_intolerances,
+      form.ask_shirt_size ?? false,
+      form.ask_food_intolerances ?? false,
       intolerances,
       shirtSizes,
     ),
@@ -522,7 +530,7 @@ export function QuestionsCard({
     // with the applicant's profile, so this is skippable.
     const presentKeys = new Set(fields.map((f) => f.key.trim().toLowerCase()));
     const missing = RESERVED_FIELD_KEYS.map((r) => r.key).filter((k) => !presentKeys.has(k));
-    if (missing.length > 0) {
+    if (!saveDefinition && missing.length > 0) {
       setMissingReservedKeys(missing);
       return;
     }
@@ -537,7 +545,7 @@ export function QuestionsCard({
       // PATCH /api/applications/:id { template, sections } (APPLICATIONS_MANAGE).
       // The server re-validates with templateSchema/sectionsSchema (unique
       // keys, option kinds, every field.section_key resolves to a section).
-      await api.patch<ApplicationForm>(`/api/applications/${form.id}`, {
+      const definition = {
         template: fields.map(serializeApplicationField),
         field_renames: fields.flatMap((field) => {
           const previous = originalFieldsRef.current.get(field._id);
@@ -550,7 +558,9 @@ export function QuestionsCard({
           title: s.title,
           ...(hasI18nText(s.description) ? { description: s.description } : {}),
         })),
-      });
+      };
+      if (saveDefinition) await saveDefinition(definition);
+      else await api.patch<ApplicationForm>(`/api/applications/${form.id}`, definition);
       await onSaved();
       setSaveState("saved");
       toast.success(t("questionsSaved"), { compactTitle: t("saveQuestions") });
@@ -579,6 +589,7 @@ export function QuestionsCard({
                 primaryLocale={language}
                 existingKeys={fields.filter((f) => f._id !== field._id).map((f) => f.key)}
                 dragHandle={<DragHandle {...drag} label={t("dragToReorder")} />}
+                projectMode={Boolean(saveDefinition)}
                 active={activeFieldId === field._id}
                 onActivate={() => setActiveFieldId(field._id)}
                 onDeactivate={() => setActiveFieldId(null)}
@@ -638,25 +649,27 @@ export function QuestionsCard({
         </>
       }
     >
-      <Collapsible>
-        <CollapsibleTrigger asChild>
-          <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
-            <CaretDownIcon aria-hidden="true" className="size-4" />
-            {t("reservedKeysToggle")}
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="text-muted-foreground space-y-2 pt-2 pb-2 text-sm text-pretty">
-          <p>{t("reservedKeysDesc")}</p>
-          <ul className="list-disc space-y-1 pl-5">
-            {RESERVED_FIELD_KEYS.map((r) => (
-              <li key={r.key}>
-                <code className="bg-muted rounded px-1 py-0.5 text-xs">{r.key}</code>{" "}
-                {t(RESERVED_KEY_DESC[r.key])}
-              </li>
-            ))}
-          </ul>
-        </CollapsibleContent>
-      </Collapsible>
+      {!saveDefinition && (
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
+              <CaretDownIcon aria-hidden="true" className="size-4" />
+              {t("reservedKeysToggle")}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="text-muted-foreground space-y-2 pt-2 pb-2 text-sm text-pretty">
+            <p>{t("reservedKeysDesc")}</p>
+            <ul className="list-disc space-y-1 pl-5">
+              {RESERVED_FIELD_KEYS.map((r) => (
+                <li key={r.key}>
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">{r.key}</code>{" "}
+                  {t(RESERVED_KEY_DESC[r.key])}
+                </li>
+              ))}
+            </ul>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
       <AlertModal
         open={missingReservedKeys !== null}
         onOpenChange={(open) => !open && setMissingReservedKeys(null)}
@@ -947,6 +960,7 @@ export function FieldEditor({
   primaryLocale,
   existingKeys,
   dragHandle,
+  projectMode = false,
   active,
   onActivate,
   onDeactivate,
@@ -963,6 +977,8 @@ export function FieldEditor({
   primaryLocale: Language;
   existingKeys: string[];
   dragHandle?: React.ReactNode;
+  /** H16: project forms reuse this engine without application-only controls (retention, statistics, CV, sponsor sharing). */
+  projectMode?: boolean;
   active: boolean;
   onActivate: () => void;
   onDeactivate: () => void;
@@ -1292,173 +1308,181 @@ export function FieldEditor({
               onChange={setValidation}
             />
           )}
-          <div className="space-y-1.5">
-            <Label htmlFor={`retention-mode-${uid}`}>{t("anonymousAuditRetentionLabel")}</Label>
-            <Select
-              value={field.retention_mode ?? "none"}
-              onValueChange={(value) =>
-                onChange({
-                  retention_mode: value as "none" | "anonymous_audit",
-                  ...(value === "none" ? { anonymous_audit_dimension: undefined } : {}),
-                })
-              }
-            >
-              <SelectTrigger id={`retention-mode-${uid}`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">{t("anonymousAuditRetentionOff")}</SelectItem>
-                <SelectItem value="anonymous_audit">{t("anonymousAuditRetentionOn")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-muted-foreground text-xs">{t("anonymousAuditRetentionHint")}</p>
-          </div>
-          {field.retention_mode === "anonymous_audit" && (
+          {!projectMode && (
             <>
-              <p role="alert" className="text-destructive text-pretty text-sm">
-                {t("anonymousAuditRetentionWarning")}
-              </p>
               <div className="space-y-1.5">
-                <Label htmlFor={`audit-dimension-${uid}`}>
-                  {t("anonymousAuditDimensionLabel")}
-                </Label>
-                <Input
-                  id={`audit-dimension-${uid}`}
-                  value={field.anonymous_audit_dimension ?? ""}
-                  onChange={(e) => onChange({ anonymous_audit_dimension: e.target.value || null })}
-                  placeholder={t("anonymousAuditDimensionPlaceholder")}
-                  aria-describedby={`audit-dimension-hint-${uid}`}
-                />
-                <p id={`audit-dimension-hint-${uid}`} className="text-muted-foreground text-xs">
-                  {t("anonymousAuditDimensionHint")}
-                </p>
-              </div>
-            </>
-          )}
-          <div className="flex items-center justify-between gap-3 border-t pt-4">
-            <Label htmlFor={`statistics-enabled-${uid}`} className="text-sm">
-              {t("includeInStatistics")}
-            </Label>
-            <Switch
-              id={`statistics-enabled-${uid}`}
-              checked={statisticsEnabled}
-              onCheckedChange={(enabled) =>
-                onChange({
-                  statistics: {
-                    ...(field.statistics ?? {}),
-                    enabled,
-                  },
-                })
-              }
-            />
-          </div>
-          {statisticsEnabled && (
-            <div className="grid gap-3 border-t pt-4 @md:grid-cols-3">
-              <div className="space-y-1.5">
-                <Label htmlFor={`statistics-visualization-${uid}`}>
-                  {t("statisticsVisualizationLabel")}
-                </Label>
+                <Label htmlFor={`retention-mode-${uid}`}>{t("anonymousAuditRetentionLabel")}</Label>
                 <Select
-                  value={field.statistics?.visualization ?? "bar"}
-                  onValueChange={(visualization) =>
+                  value={field.retention_mode ?? "none"}
+                  onValueChange={(value) =>
                     onChange({
-                      statistics: {
-                        ...(field.statistics ?? { enabled: true }),
-                        enabled: true,
-                        visualization: visualization as "bar" | "pie" | "line",
-                      },
+                      retention_mode: value as "none" | "anonymous_audit",
+                      ...(value === "none" ? { anonymous_audit_dimension: undefined } : {}),
                     })
                   }
                 >
-                  <SelectTrigger id={`statistics-visualization-${uid}`}>
+                  <SelectTrigger id={`retention-mode-${uid}`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="bar">{t("chartTypeBar")}</SelectItem>
-                    <SelectItem value="pie">{t("chartTypePie")}</SelectItem>
-                    <SelectItem value="line">{t("chartTypeLine")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor={`statistics-transformation-${uid}`}>
-                  {t("statisticsTransformationLabel")}
-                </Label>
-                <Select
-                  value={field.statistics?.transformation ?? "none"}
-                  onValueChange={(transformation) =>
-                    onChange({
-                      statistics: {
-                        ...(field.statistics ?? { enabled: true }),
-                        enabled: true,
-                        transformation: transformation as "none" | "age" | "study_level",
-                      },
-                    })
-                  }
-                >
-                  <SelectTrigger id={`statistics-transformation-${uid}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">{t("statisticsTransformationNone")}</SelectItem>
-                    <SelectItem value="age">{t("statisticsTransformationAge")}</SelectItem>
-                    <SelectItem value="study_level">
-                      {t("statisticsTransformationStudyLevel")}
+                    <SelectItem value="none">{t("anonymousAuditRetentionOff")}</SelectItem>
+                    <SelectItem value="anonymous_audit">
+                      {t("anonymousAuditRetentionOn")}
                     </SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-muted-foreground text-xs">{t("anonymousAuditRetentionHint")}</p>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor={`statistics-aggregation-${uid}`}>
-                  {t("statisticsAggregationLabel")}
+              {field.retention_mode === "anonymous_audit" && (
+                <>
+                  <p role="alert" className="text-destructive text-pretty text-sm">
+                    {t("anonymousAuditRetentionWarning")}
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`audit-dimension-${uid}`}>
+                      {t("anonymousAuditDimensionLabel")}
+                    </Label>
+                    <Input
+                      id={`audit-dimension-${uid}`}
+                      value={field.anonymous_audit_dimension ?? ""}
+                      onChange={(e) =>
+                        onChange({ anonymous_audit_dimension: e.target.value || null })
+                      }
+                      placeholder={t("anonymousAuditDimensionPlaceholder")}
+                      aria-describedby={`audit-dimension-hint-${uid}`}
+                    />
+                    <p id={`audit-dimension-hint-${uid}`} className="text-muted-foreground text-xs">
+                      {t("anonymousAuditDimensionHint")}
+                    </p>
+                  </div>
+                </>
+              )}
+              <div className="flex items-center justify-between gap-3 border-t pt-4">
+                <Label htmlFor={`statistics-enabled-${uid}`} className="text-sm">
+                  {t("includeInStatistics")}
                 </Label>
-                <Select
-                  value={field.statistics?.aggregation ?? "count"}
-                  onValueChange={(aggregation) =>
+                <Switch
+                  id={`statistics-enabled-${uid}`}
+                  checked={statisticsEnabled}
+                  onCheckedChange={(enabled) =>
                     onChange({
                       statistics: {
-                        ...(field.statistics ?? { enabled: true }),
-                        enabled: true,
-                        aggregation: aggregation as "count" | "sum" | "average",
+                        ...(field.statistics ?? {}),
+                        enabled,
                       },
                     })
                   }
-                >
-                  <SelectTrigger id={`statistics-aggregation-${uid}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="count">{t("statisticsAggregationCount")}</SelectItem>
-                    <SelectItem value="sum">{t("statisticsAggregationSum")}</SelectItem>
-                    <SelectItem value="average">{t("statisticsAggregationAverage")}</SelectItem>
-                  </SelectContent>
-                </Select>
+                />
               </div>
-              {field.statistics?.transformation === "study_level" && (
-                <div className="space-y-1.5 @md:col-span-3">
-                  <Label htmlFor={`statistics-program-years-${uid}`}>
-                    {t("statisticsProgramYearsLabel")}
-                  </Label>
-                  <Input
-                    id={`statistics-program-years-${uid}`}
-                    type="number"
-                    min={1}
-                    max={12}
-                    value={field.statistics.program_years ?? 4}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      onChange({
-                        statistics: {
-                          ...(field.statistics ?? { enabled: true }),
-                          enabled: true,
-                          program_years: value === "" ? undefined : Number(value),
-                        },
-                      });
-                    }}
-                  />
+              {statisticsEnabled && (
+                <div className="grid gap-3 border-t pt-4 @md:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`statistics-visualization-${uid}`}>
+                      {t("statisticsVisualizationLabel")}
+                    </Label>
+                    <Select
+                      value={field.statistics?.visualization ?? "bar"}
+                      onValueChange={(visualization) =>
+                        onChange({
+                          statistics: {
+                            ...(field.statistics ?? { enabled: true }),
+                            enabled: true,
+                            visualization: visualization as "bar" | "pie" | "line",
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger id={`statistics-visualization-${uid}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bar">{t("chartTypeBar")}</SelectItem>
+                        <SelectItem value="pie">{t("chartTypePie")}</SelectItem>
+                        <SelectItem value="line">{t("chartTypeLine")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`statistics-transformation-${uid}`}>
+                      {t("statisticsTransformationLabel")}
+                    </Label>
+                    <Select
+                      value={field.statistics?.transformation ?? "none"}
+                      onValueChange={(transformation) =>
+                        onChange({
+                          statistics: {
+                            ...(field.statistics ?? { enabled: true }),
+                            enabled: true,
+                            transformation: transformation as "none" | "age" | "study_level",
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger id={`statistics-transformation-${uid}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{t("statisticsTransformationNone")}</SelectItem>
+                        <SelectItem value="age">{t("statisticsTransformationAge")}</SelectItem>
+                        <SelectItem value="study_level">
+                          {t("statisticsTransformationStudyLevel")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`statistics-aggregation-${uid}`}>
+                      {t("statisticsAggregationLabel")}
+                    </Label>
+                    <Select
+                      value={field.statistics?.aggregation ?? "count"}
+                      onValueChange={(aggregation) =>
+                        onChange({
+                          statistics: {
+                            ...(field.statistics ?? { enabled: true }),
+                            enabled: true,
+                            aggregation: aggregation as "count" | "sum" | "average",
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger id={`statistics-aggregation-${uid}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="count">{t("statisticsAggregationCount")}</SelectItem>
+                        <SelectItem value="sum">{t("statisticsAggregationSum")}</SelectItem>
+                        <SelectItem value="average">{t("statisticsAggregationAverage")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {field.statistics?.transformation === "study_level" && (
+                    <div className="space-y-1.5 @md:col-span-3">
+                      <Label htmlFor={`statistics-program-years-${uid}`}>
+                        {t("statisticsProgramYearsLabel")}
+                      </Label>
+                      <Input
+                        id={`statistics-program-years-${uid}`}
+                        type="number"
+                        min={1}
+                        max={12}
+                        value={field.statistics.program_years ?? 4}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          onChange({
+                            statistics: {
+                              ...(field.statistics ?? { enabled: true }),
+                              enabled: true,
+                              program_years: value === "" ? undefined : Number(value),
+                            },
+                          });
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
 
@@ -1466,7 +1490,7 @@ export function FieldEditor({
           <div className="border-t pt-4">
             <p className="text-sm font-medium">{t("fileRestrictions")}</p>
             <div className="mt-3">
-              <FileRestrictionsEditor field={field} onChange={onChange} />
+              <FileRestrictionsEditor field={field} onChange={onChange} projectMode={projectMode} />
             </div>
           </div>
         )}
@@ -2018,11 +2042,13 @@ export function OptionsEditor({
 
 /** Upload restrictions for a "file" field: allowed extensions + size cap (H12). */
 export function FileRestrictionsEditor({
+  projectMode = false,
   field,
   onChange,
 }: {
   field: TemplateField;
   onChange: (patch: Partial<TemplateField>) => void;
+  projectMode?: boolean;
 }) {
   const { t } = useLocale();
   const restrictTypes = field.allowed_file_types !== undefined;
@@ -2075,28 +2101,32 @@ export function FileRestrictionsEditor({
         />
         <p className="text-muted-foreground text-xs">{t("blankMax10MbDesc")}</p>
       </div>
-      <div className="flex items-center gap-2">
-        <Switch
-          checked={field.shareable_with_sponsors ?? false}
-          onCheckedChange={(v) => onChange({ shareable_with_sponsors: v })}
-          id="shareable-with-sponsors"
-        />
-        <Label htmlFor="shareable-with-sponsors" className="text-sm">
-          {t("shareableWithSponsorsLabel")}
-        </Label>
-      </div>
-      <p className="text-muted-foreground text-xs">{t("shareableWithSponsorsDesc")}</p>
-      <div className="flex items-center gap-2">
-        <Switch
-          checked={field.profile_cv ?? false}
-          onCheckedChange={(v) => onChange({ profile_cv: v })}
-          id="profile-cv"
-        />
-        <Label htmlFor="profile-cv" className="text-sm">
-          {t("profileCvFieldLabel")}
-        </Label>
-      </div>
-      <p className="text-muted-foreground text-xs">{t("profileCvFieldDesc")}</p>
+      {!projectMode && (
+        <>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={field.shareable_with_sponsors ?? false}
+              onCheckedChange={(v) => onChange({ shareable_with_sponsors: v })}
+              id="shareable-with-sponsors"
+            />
+            <Label htmlFor="shareable-with-sponsors" className="text-sm">
+              {t("shareableWithSponsorsLabel")}
+            </Label>
+          </div>
+          <p className="text-muted-foreground text-xs">{t("shareableWithSponsorsDesc")}</p>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={field.profile_cv ?? false}
+              onCheckedChange={(v) => onChange({ profile_cv: v })}
+              id="profile-cv"
+            />
+            <Label htmlFor="profile-cv" className="text-sm">
+              {t("profileCvFieldLabel")}
+            </Label>
+          </div>
+          <p className="text-muted-foreground text-xs">{t("profileCvFieldDesc")}</p>
+        </>
+      )}
     </div>
   );
 }

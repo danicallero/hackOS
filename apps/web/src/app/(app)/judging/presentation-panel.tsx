@@ -252,7 +252,6 @@ export function ProjectInfo({
   // GitHub first — it's the artifact judges actually need to open.
   const links = [
     { label: "GitHub", href: entry.repo_github_url },
-    { label: "Devpost", href: entry.repo_devpost_url },
     { label: "Demo", href: entry.repo_demo_url },
   ].filter((link): link is { label: string; href: string } => Boolean(link.href));
 

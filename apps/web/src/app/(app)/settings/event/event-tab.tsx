@@ -32,6 +32,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
@@ -51,9 +58,20 @@ const createSchema = (t: Translate) =>
       name: z.string().max(200, t("tooLong")),
       tagline: z.string().max(500, t("tooLong")),
       timezone: z.string().min(1, t("required")).max(100, t("tooLong")),
-      participantsCanCreateProjects: z.boolean(),
-      participantSelfServiceStartsAt: z.string(),
-      participantSelfServiceEndsAt: z.string(),
+      projectDraftsOpenAt: z.string(),
+      projectSubmissionsCloseAt: z.string(),
+      projectDraftVisibility: z.enum(["team_only", "attendees", "public"]),
+      projectGalleryOpensAt: z.string(),
+      projectGalleryAudience: z.enum(["staff", "attendees", "public"]),
+      projectEditsLockAt: z.string(),
+      projectMaxTeamSize: z
+        .string()
+        .refine(
+          (value) =>
+            !value ||
+            (Number.isInteger(Number(value)) && Number(value) > 0 && Number(value) <= 100),
+          t("fieldMustBeNumber"),
+        ),
       eventStartsAt: z.string(),
       eventEndsAt: z.string(),
       hackingStartsAt: z.string(),
@@ -102,9 +120,13 @@ function fromConfig(cfg: EventConfig): Values {
     name: cfg.name ?? "",
     tagline: cfg.tagline ?? "",
     timezone: cfg.timezone || "Europe/Madrid",
-    participantsCanCreateProjects: cfg.participantsCanCreateProjects,
-    participantSelfServiceStartsAt: toLocalInputValue(cfg.participantSelfServiceStartsAt, zone),
-    participantSelfServiceEndsAt: toLocalInputValue(cfg.participantSelfServiceEndsAt, zone),
+    projectDraftsOpenAt: toLocalInputValue(cfg.projectDraftsOpenAt, zone),
+    projectSubmissionsCloseAt: toLocalInputValue(cfg.projectSubmissionsCloseAt, zone),
+    projectDraftVisibility: cfg.projectDraftVisibility ?? "team_only",
+    projectGalleryOpensAt: toLocalInputValue(cfg.projectGalleryOpensAt, zone),
+    projectGalleryAudience: cfg.projectGalleryAudience ?? "staff",
+    projectEditsLockAt: toLocalInputValue(cfg.projectEditsLockAt, zone),
+    projectMaxTeamSize: cfg.projectMaxTeamSize == null ? "" : String(cfg.projectMaxTeamSize),
     eventStartsAt: toLocalInputValue(cfg.eventStartsAt, zone),
     eventEndsAt: toLocalInputValue(cfg.eventEndsAt, zone),
     hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt, zone),
@@ -157,9 +179,13 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
       name: "",
       tagline: "",
       timezone: "Europe/Madrid",
-      participantsCanCreateProjects: false,
-      participantSelfServiceStartsAt: "",
-      participantSelfServiceEndsAt: "",
+      projectDraftsOpenAt: "",
+      projectSubmissionsCloseAt: "",
+      projectDraftVisibility: "team_only",
+      projectGalleryOpensAt: "",
+      projectGalleryAudience: "staff",
+      projectEditsLockAt: "",
+      projectMaxTeamSize: "",
       eventStartsAt: "",
       eventEndsAt: "",
       hackingStartsAt: "",
@@ -193,15 +219,13 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
         name: values.name.trim() || null,
         tagline: values.tagline.trim() || null,
         timezone: values.timezone.trim(),
-        participantsCanCreateProjects: values.participantsCanCreateProjects,
-        participantSelfServiceStartsAt: fromLocalInputValue(
-          values.participantSelfServiceStartsAt,
-          zone,
-        ),
-        participantSelfServiceEndsAt: fromLocalInputValue(
-          values.participantSelfServiceEndsAt,
-          zone,
-        ),
+        projectDraftsOpenAt: fromLocalInputValue(values.projectDraftsOpenAt, zone),
+        projectSubmissionsCloseAt: fromLocalInputValue(values.projectSubmissionsCloseAt, zone),
+        projectDraftVisibility: values.projectDraftVisibility,
+        projectGalleryOpensAt: fromLocalInputValue(values.projectGalleryOpensAt, zone),
+        projectGalleryAudience: values.projectGalleryAudience,
+        projectEditsLockAt: fromLocalInputValue(values.projectEditsLockAt, zone),
+        projectMaxTeamSize: values.projectMaxTeamSize ? Number(values.projectMaxTeamSize) : null,
         eventStartsAt: fromLocalInputValue(values.eventStartsAt, zone),
         eventEndsAt: fromLocalInputValue(values.eventEndsAt, zone),
         hackingStartsAt: fromLocalInputValue(values.hackingStartsAt, zone),
@@ -222,7 +246,7 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
   function revealInvalidTab(errors: Record<string, unknown>) {
     const names = Object.keys(errors);
     if (names.some((n) => ["name", "tagline", "timezone"].includes(n))) setView("general");
-    else if (names.some((n) => n.startsWith("participantSelfService"))) setView("participants");
+    else if (names.some((n) => n.startsWith("project"))) setView("participants");
     else if (names.length > 0) setView("schedule");
   }
 
@@ -435,62 +459,86 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
               hidden={view !== "participants"}
               className="space-y-(--space-within-section)"
             >
-              <FormField
-                control={form.control}
-                name="participantsCanCreateProjects"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="flex items-center justify-between gap-4 py-3">
-                      <FormLabel className="font-normal">
-                        {t("participantsCanCreateProjectsLabel")}
-                      </FormLabel>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div>
-                <h3 className="text-balance text-sm font-semibold">
-                  {t("participantSelfServiceTitle")}
-                </h3>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  {t("participantSelfServiceDesc")}
-                </p>
-              </div>
               <div className="grid items-start gap-4 sm:grid-cols-2">
+                {(
+                  [
+                    ["projectDraftsOpenAt", "projectDraftsOpenAtLabel"],
+                    ["projectSubmissionsCloseAt", "projectSubmissionsCloseAtLabel"],
+                    ["projectEditsLockAt", "projectEditsLockAtLabel"],
+                    ["projectGalleryOpensAt", "projectGalleryOpensAtLabel"],
+                  ] as const
+                ).map(([name, label]) => (
+                  <FormField
+                    key={name}
+                    control={form.control}
+                    name={name}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t(label)}</FormLabel>
+                        <FormControl>
+                          <DateTimeInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            className={EQUAL_SPLIT}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ))}
                 <FormField
                   control={form.control}
-                  name="participantSelfServiceStartsAt"
+                  name="projectDraftVisibility"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("participantSelfServiceStartsLabel")}</FormLabel>
-                      <FormControl>
-                        <DateTimeInput
-                          value={field.value}
-                          onChange={field.onChange}
-                          className={EQUAL_SPLIT}
-                        />
-                      </FormControl>
+                      <FormLabel>{t("projectDraftVisibilityLabel")}</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="team_only">{t("projectAudienceTeam")}</SelectItem>
+                          <SelectItem value="attendees">{t("projectAudienceAttendees")}</SelectItem>
+                          <SelectItem value="public">{t("projectAudiencePublic")}</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
                 <FormField
                   control={form.control}
-                  name="participantSelfServiceEndsAt"
+                  name="projectGalleryAudience"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("participantSelfServiceEndsLabel")}</FormLabel>
+                      <FormLabel>{t("projectGalleryAudienceLabel")}</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="staff">{t("projectAudienceStaff")}</SelectItem>
+                          <SelectItem value="attendees">{t("projectAudienceAttendees")}</SelectItem>
+                          <SelectItem value="public">{t("projectAudiencePublic")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="projectMaxTeamSize"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("projectMaxTeamSize")}</FormLabel>
                       <FormControl>
-                        <DateTimeInput
-                          value={field.value}
-                          onChange={field.onChange}
-                          className={EQUAL_SPLIT}
-                        />
+                        <Input type="number" min={1} max={100} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
