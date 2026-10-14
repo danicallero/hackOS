@@ -27,6 +27,35 @@ export function apiAssetUrl(path: string): string {
 const PHOTO_CACHE_LIMIT = 60;
 const photoCache = new Map<string, Promise<string>>();
 
+/** A short, stable tag for a session, so cache keys never carry the cookie itself. */
+function sessionTag(cookie: string): string {
+  let hash = 5381;
+  for (let index = 0; index < cookie.length; index += 1) {
+    hash = ((hash << 5) + hash + cookie.charCodeAt(index)) | 0;
+  }
+  return (hash >>> 0).toString(36);
+}
+
+/**
+ * An `expo-image` source for an API photo (#934). The route is private, so the
+ * request carries the session cookie (expo-image sends it on Android too,
+ * unlike React Native's `Image`). The cache key includes the session: another
+ * account on this device re-checks access. Callers keep `cachePolicy="memory"`
+ * so a photo is never written to disk and one hidden later is gone after the
+ * next launch; the `?v=` in the route changes with every upload. Sponsor logos
+ * are absolute public URLs and load directly.
+ */
+export function apiImageSource(path: string): {
+  uri: string;
+  headers?: Record<string, string>;
+  cacheKey?: string;
+} {
+  if (!path.startsWith("/")) return { uri: path };
+  const url = apiAssetUrl(path);
+  const cookie = getCurrentSessionCookie();
+  return { uri: url, headers: { Cookie: cookie }, cacheKey: `${sessionTag(cookie)}:${url}` };
+}
+
 function blobToDataUri(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -37,12 +66,9 @@ function blobToDataUri(blob: Blob): Promise<string> {
 }
 
 /**
- * Photos are proxied by the API behind the session (#934): a bare relative
- * `uri` resolves nowhere, and Android's image pipeline drops a `Cookie`
- * header, answering 401. So the photo is fetched with the session and shown
- * from memory. It is never written to disk, so a photo hidden later is gone
- * after the next launch; the `?v=` in the route changes with every upload.
- * Sponsor logos are absolute public URLs and load directly.
+ * The photo's bytes as a data URI, for Skia, which decodes them itself
+ * (`connection-celebration-skia.tsx`). Views use `apiImageSource` instead.
+ * Kept in memory only, like the views' cache.
  */
 export function loadApiImage(path: string): Promise<string> {
   if (!path.startsWith("/")) return Promise.resolve(path);

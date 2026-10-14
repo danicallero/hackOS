@@ -35,7 +35,10 @@ import {
 } from "@/lib/profile-avatar-collapse";
 import { renderMobile } from "./render";
 
-jest.mock("@/components/person-avatar", () => ({ useApiImage: () => null }));
+jest.mock("@/components/person-avatar", () => ({
+  loadingImageStyle: {},
+  useApiImage: () => ({ loaded: false, props: null }),
+}));
 // Expose the scroll worklets as plain callbacks so a drag can be replayed.
 jest.mock("react-native-reanimated", () => ({
   ...require("react-native-reanimated/mock"),

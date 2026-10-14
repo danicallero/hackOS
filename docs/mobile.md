@@ -255,15 +255,15 @@ distributed to other Expo Router apps without importing hackOS code.
   multipart `file` to `POST /api/me/photo` (removal is `DELETE`), each attempt
   under its own `Idempotency-Key`. The avatar shows a spinner meanwhile and
   `/api/me` is refetched afterwards: the API answers a new `?v=` route, which is
-  also the `loadApiImage` cache key, so every avatar reloads. Failures show a
+  also part of the image cache key, so every avatar reloads. Failures show a
   localized alert (denied camera access, rejected image, account being removed
   = 409, generic); the API has no other profile lock. `expo-image-picker`
   (config plugin in `app.json`, iOS usage strings; Android needs no extra
   permission) and `expo-image-manipulator` provide the native pieces.
-  `components/user-avatar.tsx` fetches the private `/api/users/:id/photo` route
-  with the session (`loadApiImage`, shown from memory: Android's image pipeline
-  drops a `Cookie` header on an `Image` source) and keeps the initials until it
-  arrives or if it cannot load. The items inside the native `Others` dropdown
+  `components/user-avatar.tsx` loads the private `/api/users/:id/photo` route
+  with `expo-image` and the session cookie as a request header (`useApiImage`;
+  React Native's own `Image` drops that header on Android, `expo-image` sends
+  it) and keeps the initials until it has drawn or if it cannot load. The items inside the native `Others` dropdown
   keep SF Symbols: UIMenu/Android menu items accept symbol names, not an
   authenticated remote image.
   `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
@@ -1098,8 +1098,15 @@ client and store builds must be rebuilt; Jest mocks it in `jest.setup.js`. The
 app does not show the user's own
 CV anywhere yet, so the viewer has one caller. A hidden profile and a person the reader may not open both answer 404
 and show one "Profile not available" state. Photos are authenticated API
-routes: `lib/directory.ts` fetches them with the session and shows them from
-memory (Android's image pipeline drops a `Cookie` header), never from disk.
+routes: `useApiImage` (`components/person-avatar.tsx`) hands `expo-image` the
+`apiImageSource` from `lib/directory.ts` — the session cookie as a header and a
+cache key tagged with the session — and every caller keeps
+`cachePolicy="memory"`, so a photo is never written to disk and one hidden later
+is gone after the next launch. The fallback (initials or symbol) stays until the
+photo has drawn. Public sponsor logos use `expo-image`'s default disk cache.
+Skia, which decodes bytes itself, still reads photos through `loadApiImage`
+(an in-memory data URI cache). **Native dependency:** `expo-image` needs a
+rebuilt development client and store build.
 
 **Companies** is a sticker album (`components/company-album.tsx`) from
 `GET /api/me/diary/sponsors`: a progress ring with collected / total, then a

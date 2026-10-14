@@ -1,4 +1,5 @@
 import MaskedView from "@react-native-masked-view/masked-view";
+import { Image } from "expo-image";
 import {
   type ReactNode,
   type RefObject,
@@ -10,7 +11,6 @@ import {
   useState,
 } from "react";
 import {
-  Image,
   type LayoutChangeEvent,
   Platform,
   type ScrollView,
@@ -28,7 +28,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, Path, RadialGradient, Rect, Stop } from "react-native-svg";
-import { useApiImage } from "@/components/person-avatar";
+import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { avatarInitials } from "@/components/user-avatar";
 import { diaryInitials } from "@/lib/diary";
 import { haptic } from "@/lib/haptics";
@@ -506,7 +506,14 @@ export function ProfileAvatarCollapse({
   /** Optional live avatar content (video, rings or overlays), inside the same mask. */
   children?: ReactNode;
 }) {
-  const source = useApiImage(image);
+  const photo = useApiImage(image);
+  // The photo layers render once it has loaded (then from the memory cache);
+  // until then a hidden loader fetches it and the initials stay (#934).
+  const source = photo.loaded ? (photo.props?.source ?? null) : null;
+  const loader =
+    photo.props && !photo.loaded ? (
+      <Image {...photo.props} style={[{ height: size, width: size }, loadingImageStyle]} />
+    ) : null;
   const gradientId = `profile-avatar-cover-${useId().replaceAll(":", "-")}`;
   // Only a camera cutout gets the overlay; the plain collapse (`simple`)
   // keeps the anchor in the scroll content (#935).
@@ -664,17 +671,21 @@ export function ProfileAvatarCollapse({
               (source ? (
                 <Image
                   accessible={false}
-                  source={{ uri: source }}
-                  resizeMode="cover"
+                  source={source}
+                  cachePolicy="memory"
+                  contentFit="cover"
                   style={{ height: size, width: size, borderRadius: size / 2 }}
                 />
               ) : (
-                <Text
-                  accessible={false}
-                  style={{ color: initialsColor, fontSize: size * 0.36, fontWeight: "700" }}
-                >
-                  {initials}
-                </Text>
+                <>
+                  <Text
+                    accessible={false}
+                    style={{ color: initialsColor, fontSize: size * 0.36, fontWeight: "700" }}
+                  >
+                    {initials}
+                  </Text>
+                  {loader}
+                </>
               ))}
           </View>
         </AnimatedProfileGooeyView>
@@ -714,24 +725,31 @@ export function ProfileAvatarCollapse({
               <>
                 <Image
                   accessible={false}
-                  source={{ uri: source as string }}
-                  resizeMode="cover"
+                  source={source}
+                  cachePolicy="memory"
+                  contentFit="cover"
                   style={{ height: "100%", width: "100%" }}
                 />
-                <Animated.Image
-                  accessible={false}
-                  blurRadius={6}
-                  source={{ uri: source as string }}
-                  resizeMode="cover"
-                  style={[absoluteFill, softBlurStyle]}
-                />
-                <Animated.Image
-                  accessible={false}
-                  blurRadius={18}
-                  source={{ uri: source as string }}
-                  resizeMode="cover"
-                  style={[absoluteFill, strongBlurStyle]}
-                />
+                <Animated.View style={[absoluteFill, softBlurStyle]}>
+                  <Image
+                    accessible={false}
+                    blurRadius={6}
+                    source={source}
+                    cachePolicy="memory"
+                    contentFit="cover"
+                    style={absoluteFill}
+                  />
+                </Animated.View>
+                <Animated.View style={[absoluteFill, strongBlurStyle]}>
+                  <Image
+                    accessible={false}
+                    blurRadius={18}
+                    source={source}
+                    cachePolicy="memory"
+                    contentFit="cover"
+                    style={absoluteFill}
+                  />
+                </Animated.View>
               </>
             )}
           </Animated.View>
@@ -748,6 +766,7 @@ export function ProfileAvatarCollapse({
             >
               {initials}
             </Animated.Text>
+            {loader}
           </Animated.View>
         )}
         <Animated.View style={[absoluteFill, { backgroundColor: "#000" }, blackStyle]} />

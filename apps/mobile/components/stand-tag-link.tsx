@@ -1,5 +1,6 @@
+import { Image } from "expo-image";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Alert, AppState, Image, Modal, Platform, Pressable, Text, View } from "react-native";
+import { Alert, AppState, Modal, Platform, Pressable, Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { apiErrorCopy } from "@/lib/api-error-reason";
@@ -220,7 +221,7 @@ export function StandLogo({ stand, size }: { stand: StandSummary; size: number }
         <Image
           accessible={false}
           source={{ uri: stand.logoUrl }}
-          resizeMode="contain"
+          contentFit="contain"
           style={{ height: size * 0.68, width: size * 0.68 }}
         />
       ) : (
