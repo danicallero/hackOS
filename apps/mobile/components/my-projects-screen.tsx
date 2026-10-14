@@ -142,45 +142,18 @@ export function MyProjectsScreen() {
             }
           />
         ) : null}
-        {invites.length > 0 ? (
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            isInteractive
-            style={{ borderCurve: "continuous", borderRadius: 14 }}
-          >
-            <Pressable
-              accessibilityRole="button"
+        <View style={{ flexDirection: "row", gap: 12 }}>
+          {invites.length > 0 ? (
+            <GlassPill
+              icon="person.2.fill"
+              label={t("projectInvitations")}
+              value={String(invites.length)}
               accessibilityLabel={`${t("projectInvitations")}, ${invites.length}`}
               onPress={openInvites}
-              style={{
-                alignItems: "center",
-                flexDirection: "row",
-                gap: 10,
-                minHeight: 52,
-                paddingHorizontal: 20,
-              }}
-            >
-              <SymbolView
-                name="person.2.fill"
-                tintColor={colors.accent}
-                size={20}
-                accessible={false}
-              />
-              <Text style={{ color: colors.label, flex: 1, fontSize: 17, fontWeight: "600" }}>
-                {t("projectInvitations")}
-              </Text>
-              <Text style={{ color: colors.secondaryLabel, fontSize: 17 }}>{invites.length}</Text>
-              <SymbolView
-                name="chevron.right"
-                tintColor={colors.tertiaryLabel}
-                size={12}
-                weight="semibold"
-                accessible={false}
-              />
-            </Pressable>
-          </GlassView>
-        ) : null}
+            />
+          ) : null}
+          <GlassPill icon="photo.on.rectangle" label={t("gallery")} onPress={openGallery} />
+        </View>
         {projects === null && !error ? <RequestFeedback loading /> : null}
         {projects?.length === 0 && !error ? (
           <EmptyState
@@ -217,9 +190,6 @@ export function MyProjectsScreen() {
             ))}
           </Section>
         ) : null}
-        <Section>
-          <NavRow icon="photo.on.rectangle" title={t("gallery")} onPress={openGallery} />
-        </Section>
       </ScrollView>
     </>
   );
@@ -251,5 +221,49 @@ function CircleButton({
     >
       <SymbolView name={icon} tintColor={colors.accent} size={19} weight="semibold" />
     </Pressable>
+  );
+}
+
+/** A labelled Liquid Glass button; two share a row evenly, one fills it. */
+function GlassPill({
+  icon,
+  label,
+  value,
+  accessibilityLabel,
+  onPress,
+}: {
+  icon: SymbolViewProps["name"];
+  label: string;
+  value?: string;
+  accessibilityLabel?: string;
+  onPress: () => void;
+}) {
+  return (
+    <GlassView
+      colorScheme="auto"
+      glassEffectStyle="regular"
+      isInteractive
+      style={{ borderCurve: "continuous", borderRadius: 999, flex: 1 }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? label}
+        onPress={onPress}
+        style={{
+          alignItems: "center",
+          flexDirection: "row",
+          gap: 8,
+          justifyContent: "center",
+          minHeight: 52,
+          paddingHorizontal: 16,
+        }}
+      >
+        <SymbolView name={icon} tintColor={colors.accent} size={19} accessible={false} />
+        <Text numberOfLines={1} style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+          {label}
+        </Text>
+        {value ? <Text style={{ color: colors.secondaryLabel, fontSize: 17 }}>{value}</Text> : null}
+      </Pressable>
+    </GlassView>
   );
 }
