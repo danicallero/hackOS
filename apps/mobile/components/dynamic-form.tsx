@@ -1,10 +1,11 @@
 import type { FormSection, TemplateField } from "@hackos/shared/forms";
 import { File, Paths } from "expo-file-system";
+import { Image } from "expo-image";
 import * as Sharing from "expo-sharing";
 import { Fragment, type ReactNode, useState } from "react";
-import { Image, Linking, Pressable, Text, TextInput, View } from "react-native";
+import { Linking, Pressable, Text, TextInput, View } from "react-native";
 import { Section, Separator, ToggleRow } from "@/components/native-ui";
-import { useApiImage } from "@/components/person-avatar";
+import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { FieldRow, RowButton } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
@@ -276,7 +277,7 @@ function ProjectFilePreview({
   file: { url: string; thumbnailUrl?: string | null; fileName: string; mimeType: string };
   label: string;
 }) {
-  const image = useApiImage(
+  const preview = useApiImage(
     file.mimeType.startsWith("image/") ? (file.thumbnailUrl ?? file.url) : null,
   );
   const [busy, setBusy] = useState(false);
@@ -303,17 +304,20 @@ function ProjectFilePreview({
   }
   return (
     <>
-      {image ? (
+      {preview.props ? (
         <Image
+          {...preview.props}
           accessibilityLabel={label}
-          source={{ uri: image }}
-          resizeMode="contain"
-          style={{
-            height: 160,
-            width: "100%",
-            borderRadius: 14,
-            backgroundColor: colors.elevatedSurface,
-          }}
+          contentFit="contain"
+          style={[
+            {
+              height: 160,
+              width: "100%",
+              borderRadius: 14,
+              backgroundColor: colors.elevatedSurface,
+            },
+            !preview.loaded && loadingImageStyle,
+          ]}
         />
       ) : null}
       <RowButton label={file.fileName} disabled={busy} onPress={() => void open()} />

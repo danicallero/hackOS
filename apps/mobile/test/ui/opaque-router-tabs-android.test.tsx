@@ -139,9 +139,7 @@ jest.mock("expo-symbols", () => ({
 }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
 jest.mock("@/lib/api", () => ({ getCurrentSessionCookie: () => "session=abc" }));
-jest.mock("@/lib/directory", () => ({
-  loadApiImage: (path: string) => Promise.resolve(`data:image/jpeg;base64,${path.length}`),
-}));
+jest.mock("@/lib/env", () => ({ API_URL: "https://api.test" }));
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({
     language: "en",
@@ -259,12 +257,16 @@ describe("OpaqueRouterTabs — account photo (#934)", () => {
     const tab = screen.getByTestId("opaque-tab-account");
     expect(tab).toBeTruthy();
     expect(screen.queryByTestId("symbol-account_circle")).toBeNull();
-    // Loaded with the session and shown from memory: Android drops a Cookie
-    // header on an Image source.
+    // Loaded with the session in memory only; expo-image sends the Cookie
+    // header on Android (React Native's Image dropped it).
     const photo = await screen.findByTestId("account-tab-avatar-photo", {
       includeHiddenElements: true,
     });
-    expect(photo.props.source.uri).toMatch(/^data:image\/jpeg;base64,/);
+    expect(photo.props.source[0]).toMatchObject({
+      uri: "https://api.test/api/users/7/photo?v=abc",
+      headers: { Cookie: "session=abc" },
+    });
+    expect(photo.props.cachePolicy).toBe("memory");
   });
 
   it("keeps the Account symbol without a photo", async () => {

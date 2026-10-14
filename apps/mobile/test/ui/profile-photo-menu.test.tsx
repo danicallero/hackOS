@@ -39,7 +39,7 @@ jest.mock("@/lib/api", () => {
 });
 jest.mock("@/lib/me-context", () => ({ useMeContext: () => ({ refetch: mockRefetch }) }));
 jest.mock("@/lib/i18n", () => ({ useLocale: () => ({ language: "en", t: (key: string) => key }) }));
-jest.mock("@/lib/directory", () => ({ loadApiImage: () => new Promise(() => {}) }));
+jest.mock("@/lib/directory", () => ({ apiImageSource: (uri: string) => ({ uri }) }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
 jest.mock("@/theme/colors", () => ({ colors: new Proxy({}, { get: () => "#000000" }) }));
 

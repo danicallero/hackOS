@@ -1,8 +1,8 @@
+import { Image } from "expo-image";
 import { type ReactNode, useEffect, useRef } from "react";
 import {
   Animated,
   Easing,
-  Image,
   Linking,
   Modal,
   Pressable,
@@ -177,7 +177,7 @@ function Medallion({
           <Image
             accessible={false}
             source={{ uri: logo }}
-            resizeMode="contain"
+            contentFit="contain"
             // Uncollected logos render as a flat silhouette of their shape.
             tintColor={collected ? undefined : (colors.tertiaryLabel as string)}
             style={{
