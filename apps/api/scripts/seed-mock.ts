@@ -682,7 +682,6 @@ function fieldValue(
       return dniFor(index);
     if (field.validation?.text_condition === "url" || label.includes("github")) {
       if (label.includes("github")) return `https://github.com/${slug(p.first)}${slug(p.last)}`;
-      if (label.includes("devpost")) return `https://devpost.com/${slug(p.first)}-${slug(p.last)}`;
       if (label.includes("linkedin"))
         return `https://www.linkedin.com/in/${slug(p.first)}-${slug(p.last)}`;
       if (label.includes("site")) return `https://${slug(p.first)}${slug(p.last)}.example`;

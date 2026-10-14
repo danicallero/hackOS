@@ -55,42 +55,8 @@ export async function setChallengeWinner(
     ]);
     if (challenge.rowCount === 0) throw new NotFoundError("Challenge not found", { challengeId });
 
-    // H46: a sponsor may opt out of the queue system entirely, so a repo can
-    // be a legitimate winner candidate either through a queue entry or
-    // through the devpost prize-tag mapping (repo_devpost_prizes / challenge
-    // devpost_tags), same "entered" test loadEligibleRepos uses on the web.
-    //
-    // Eligibility is scoped to the challenge's *queue group*, not the bare
-    // challenge id: challenges merged into one shared queue are judged
-    // together, so a repo evaluated through that queue counts as entered in
-    // every challenge the group feeds (draft §5). Unmerged challenges have
-    // their own group; merged challenges share the same eligibility scope. The
-    // `UNION SELECT $1` keeps that true even for a challenge with no group
-    // row at all. The win is still recorded against the challenge_id the
-    // sponsor is picking for — `challenge_winners` is unchanged.
-    //
-    // NOTE: when a repo qualifies via several challenges in one group, the
-    // draft's §5 picker (asking which challenge_id to attribute the win to)
-    // is deliberately deferred to the PR that ships queue-group merging UI.
-    // No group can hold more than one challenge yet, so there is nothing
-    // ambiguous to resolve; only this eligibility check has to be N-correct.
     const entrant = await client.query(
-      `WITH group_challenges AS (
-         SELECT sibling.challenge_id
-           FROM queue_group_challenges self
-           JOIN queue_group_challenges sibling
-             ON sibling.queue_group_id = self.queue_group_id
-          WHERE self.challenge_id = $1
-         UNION
-         SELECT $1::integer
-       )
-       SELECT 1 FROM queue_entries q
-         JOIN group_challenges g ON g.challenge_id = q.challenge_id
-        WHERE q.repo_id = $2
-       UNION
-       SELECT 1 FROM repo_devpost_prizes p
-         JOIN challenges c ON c.id IN (SELECT challenge_id FROM group_challenges)
-        WHERE p.repo_id = $2 AND p.prize IN (SELECT jsonb_array_elements_text(c.devpost_tags))`,
+      `SELECT 1 FROM project_challenges pc JOIN repos r ON r.id=pc.repo_id WHERE pc.repo_id=$2 AND r.submission_status='submitted' AND pc.challenge_id IN(SELECT sibling.challenge_id FROM queue_group_challenges self JOIN queue_group_challenges sibling ON sibling.queue_group_id=self.queue_group_id WHERE self.challenge_id=$1 UNION SELECT $1::int) UNION SELECT 1 FROM queue_entries qe JOIN repos r ON r.id=qe.repo_id WHERE qe.repo_id=$2 AND r.submission_status='submitted' AND qe.challenge_id IN(SELECT sibling.challenge_id FROM queue_group_challenges self JOIN queue_group_challenges sibling ON sibling.queue_group_id=self.queue_group_id WHERE self.challenge_id=$1 UNION SELECT $1::int)`,
       [challengeId, repoId],
     );
     if (entrant.rowCount === 0) {
@@ -140,6 +106,7 @@ export async function removeChallengeWinner(
   rank: number,
 ): Promise<void> {
   await withTransaction(async (client) => {
+    await client.query(`SELECT id FROM challenges WHERE id=$1 FOR UPDATE`, [challengeId]);
     const existing = await client.query(
       `DELETE FROM challenge_winners WHERE challenge_id = $1 AND rank = $2 RETURNING repo_id`,
       [challengeId, rank],

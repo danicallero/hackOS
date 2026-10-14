@@ -27,8 +27,9 @@ export const CAPABILITIES = {
   APPLICATIONS_EDIT_RESPONSE: "applications:edit-response", // edit any response's form data
   STATISTICS_MANAGE: "statistics:manage", // configure per-panel statistics visibility
 
-  // projects / devpost (H16-H17, H21)
+  // native projects (H16-H17, H21)
   PROJECTS_READ: "projects:read",
+  // Retired (no API route uses it); kept only for staging web/mobile source until #1037/#1038 merge.
   PROJECTS_IMPORT: "projects:import",
   PROJECTS_EDIT: "projects:edit",
 
@@ -110,9 +111,9 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "applications:confirm-override": "Override a participant's confirm/decline as an admin",
   "applications:edit-response": "Edit any applicant's form responses",
   "statistics:manage": "Configure who can view each statistics panel",
-  "projects:read": "Read project and Devpost submissions",
-  "projects:import": "Import projects from Devpost",
-  "projects:edit": "Edit project and Devpost submissions",
+  "projects:read": "Read native projects",
+  "projects:import": "Retired; no longer grants anything",
+  "projects:edit": "Edit native projects",
   "accredit:scan": "Check participants in and assign or rotate badges",
   "presence:scan": "Scan door entry and exit",
   "activity:scan": "Scan meals and registrable activities",

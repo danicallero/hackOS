@@ -47,8 +47,8 @@ through the same shared-member relation as the H30 guard, so a member shared
 with another team counts, and it clears as soon as that entry leaves
 `called`/`in_room`/`presenting`. Reordering (`move-top`, `move-to`, `skip`,
 `requeue`) never calls a team, so project eligibility does not block it; an
-ineligible project is still never called (a Devpost import is ineligible only
-by explicit organizer override, H21): the row says “Not eligible for
+ineligible project is still never called (a submitted project is ineligible only
+by explicit organizer override or a team-size violation, H21): the row says “Not eligible for
 judging”, Manual add is not offered, and a manual call answers “Project is
 not eligible for judging” instead of reporting it busy. Eligibility is a
 separate call-time check (`isRepoIneligibleForJudging`) that call-next, the
@@ -147,12 +147,12 @@ confirmation gates: an impact review, an exact confirmation phrase plus an
 irreversible-action acknowledgement, and a final destructive confirmation.
 
 `POST /api/queue/admin/reset` runs as one transaction with exclusive locks on
-the project/import/queue/judging tables and writes one `queue_reset` audit row
-in that same transaction. It removes native and imported projects, project
-memberships, Devpost import/prize records, project-to-challenge mappings,
+the project/queue/judging tables and writes one `queue_reset` audit row
+in that same transaction. It removes projects, project
+memberships, project-to-challenge selections,
 queue entries and movement history, reviews and review versions, judging
 sessions, winners, judge assignments, queue routing/pools, queue preferences,
-project/queue/Devpost claim notifications, and related idempotency records.
+project/queue notifications, and related idempotency records.
 It then restores paused/default room and queue settings and recreates one
 empty queue group per existing challenge.
 

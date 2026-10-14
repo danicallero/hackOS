@@ -32,8 +32,11 @@ sending `null` clears a nullable field.
 | `event_ends_at` | **Event over** — distinct from `hacking_ends_at` (multi-day events keep going after submissions close). Becomes the Apple pass's `expirationDate` and the Google object's validity end, so Wallet stops surfacing the pass afterwards. `CHECK (ends > starts)`. |
 | `hacking_starts_at`, `hacking_ends_at` | The publicly-"spoken" hacking window; drives the countdown. `CHECK (ends > starts)`. |
 | `show_start_countdown` | Live "hacking starts in" countdown before the start, vs a frozen duration. |
-| `participants_can_create_projects` | H19 policy switch: while `true`, an admitted participant may create another own project (`POST /api/me/projects`); there is no per-participant project-count cap. See `docs/challenges-devpost.md` §1.3. Default `false`. |
-| `participant_self_service_starts_at`, `participant_self_service_ends_at` | H19/H20 participant editing window. Projects inherit the matching hacking start/end when a bound is blank; planned work groups keep their legacy open planning behavior until an organizer sets a custom bound. |
+| `project_drafts_open_at`, `project_submissions_close_at` | H60 project phase bounds. A blank bound inherits `hacking_starts_at`/`hacking_ends_at`; the database clock decides the phase. |
+| `project_edits_lock_at` | Last instant members may edit a submitted project; blank means the submission close. |
+| `project_draft_visibility` | Who besides the team sees drafts: `team_only`, `attendees` or `public`. |
+| `project_gallery_opens_at`, `project_gallery_audience` | When the submitted-project gallery opens (blank = closed) and its audience: `staff`, `attendees` or `public`. |
+| `project_max_team_size` | Optional team-size limit used by invitations and queue eligibility; blank is unlimited. See [projects](./projects.md). |
 | `venue_name`, `venue_latitude`, `venue_longitude` | Venue; coordinates are all-or-nothing (`CHECK`) and drive the pass's lock-screen `locations` relevance. |
 | `wifi_ssid`, `wifi_password` | Venue Wi-Fi shown on the TV screens (H42). Served by `GET /api/tv/config`, **never** by `/api/public/event`; an audit entry records that the password changed, not its value. See [TV screens](./tv-screens.md). |
 | `tv_language` | Nullable; the fixed language every venue TV renders in, overriding the default. Set from `/tv/control`'s Display language section (`PATCH /api/tv/config`, `TV_CONTROL`), served by `GET /api/tv/config`. Never a signed-in caller's own language preference. See [TV screens](./tv-screens.md). |

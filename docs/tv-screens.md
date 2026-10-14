@@ -61,6 +61,14 @@ removes the retired timetable and its stored entries. A stale or malformed
 Valkey payload is discarded on read; it is never translated into a current
 mode. The countdown remains available as a block of the `live` composition.
 
+### Winners
+
+`GET /api/tv/winners` (public) returns `{}` until a challenge's winners are
+published (H46/#1010), then `{winners:[{challengeId,challengeTitle,rank,repoId,repoName}]}`.
+Publication is scheduled or manual (`/api/challenges/:id/winners/publication`,
+`/publish`) and the reveal arrives over `/api/tv/stream` as a payload-free
+invalidation; screens refetch.
+
 ### Announcements on screens
 
 An announcement independently chooses whether it sends user notifications and

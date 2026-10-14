@@ -157,10 +157,9 @@ the account language.
 
 ### Submission deadline (H19, H20)
 
-- **Decision:** submissions close at `event_config.hacking_ends_at`. That is
-  the instant `projects/lifecycle.ts` enforces ("The submission deadline has
-  passed"), Devpost imports lock at and the reconciliation overview calls
-  `deadline`. The participant self-service window only bounds editing.
+- **Decision:** submissions close at `event_config.project_submissions_close_at`,
+  which inherits `hacking_ends_at` when blank (H60). That is the instant the
+  project phase policy enforces; `project_edits_lock_at` only bounds editing.
 - Window: the hacking period, from `hacking_starts_at` until the deadline
   passes. **Decision:** participants expect the countdown whenever they are
   hacking, so it is not limited to the last hours; it replaced a 3-hour lead,
@@ -175,12 +174,10 @@ the account language.
   Event Director), so Organizer, Day Staff or a role holding only `*` get no
   countdown unless organizers tick them in the editor (and, without `*`,
   grant `queue:status`).
-- `submission`: every project or work group the user is an active member of
-  (the three membership sources of `isActiveProjectMember`, H54 boundary
-  included). `submitted` only when all are submitted, `draft` when one is
-  not (an unlinked work group counts as draft), and `null` when the user has
-  none in hackOS, for example a Devpost team that is not imported yet. A
-  `null` status is unknown and is never shown as "not submitted".
+- `submission`: every project the user is an active member of (`submissions`,
+  H54 boundary included). `submitted` only when all are submitted, `draft`
+  when one is not, and `null` when the user has none in hackOS. A `null`
+  status is unknown and is never shown as "not submitted".
 - `phase`: `submitted`; `closing` in the last **closing window** (event
   setting, default 15 minutes = `DEADLINE_CLOSING_MINUTES_DEFAULT`, 1–240) for
   a known draft; otherwise `open`.

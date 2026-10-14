@@ -317,24 +317,24 @@ describe("saved profile reads (#934, #935)", () => {
     const repoA = await activeRepo("Alpha", [me], [first]);
     const repoB = await activeRepo("Beta", [me], [second]);
     const { rows } = await pool.query(
-      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Side quest', $1) RETURNING id`,
+      `INSERT INTO repos (name,created_by,submission_status) VALUES ('Side quest',$1,'draft') RETURNING id`,
       [me],
     );
     await pool.query(
-      `INSERT INTO planned_work_group_members (group_id, user_id, status, responded_at) VALUES ($1, $2, 'active', now())`,
+      `INSERT INTO submissions (repo_id, user_id, status, responded_at) VALUES ($1, $2, 'active', now())`,
       [rows[0].id, me],
     );
-    await pool.query(
-      `INSERT INTO planned_work_group_challenges (group_id, challenge_id) VALUES ($1, $2)`,
-      [rows[0].id, planned],
-    );
+    await pool.query(`INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2)`, [
+      rows[0].id,
+      planned,
+    ]);
     await putProfile(me, VISIBLE);
     await save(me);
     const entry = (await card(me)).json();
     expect(entry.projects).toEqual([
       { kind: "project", id: repoA, name: "Alpha" },
       { kind: "project", id: repoB, name: "Beta" },
-      { kind: "workGroup", id: Number(rows[0].id), name: "Side quest" },
+      { kind: "project", id: Number(rows[0].id), name: "Side quest" },
     ]);
     expect(entry.project).toEqual({ kind: "project", id: repoA, name: "Alpha" });
     expect(entry.challenges).toEqual([
@@ -348,23 +348,21 @@ describe("saved profile reads (#934, #935)", () => {
     const challenge = await publishChallenge("Planned");
     const me = await person("Lúa", "Souto");
     const { rows } = await pool.query(
-      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Planners', $1) RETURNING id`,
+      `INSERT INTO repos (name,created_by,submission_status) VALUES ('Planners',$1,'draft') RETURNING id`,
       [me],
     );
     await pool.query(
-      `INSERT INTO planned_work_group_members (group_id, user_id, status, responded_at) VALUES ($1, $2, 'active', now())`,
+      `INSERT INTO submissions (repo_id, user_id, status, responded_at) VALUES ($1, $2, 'active', now())`,
       [rows[0].id, me],
     );
-    await pool.query(
-      `INSERT INTO planned_work_group_challenges (group_id, challenge_id) VALUES ($1, $2)`,
-      [rows[0].id, challenge],
-    );
+    await pool.query(`INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2)`, [
+      rows[0].id,
+      challenge,
+    ]);
     await putProfile(me, VISIBLE);
     await save(me);
     const entry = (await card(me)).json();
-    expect(entry.projects).toEqual([
-      { kind: "workGroup", id: Number(rows[0].id), name: "Planners" },
-    ]);
+    expect(entry.projects).toEqual([{ kind: "project", id: Number(rows[0].id), name: "Planners" }]);
     expect(entry.challenges).toEqual([{ id: challenge, name: "Planned" }]);
 
     await putProfile(me, { ...VISIBLE, showProject: false });

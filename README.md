@@ -18,7 +18,7 @@ tour and the quickest way to get a development environment running.
 
 Before the event, hackOS handles account verification, configurable application
 forms, review and acceptance, place confirmation, sponsor profiles, challenge
-publishing, schedules and Devpost imports. An account whose primary email is
+publishing, schedules and project submissions. An account whose primary email is
 still unverified can sign in, browse its workspace and save preparation drafts,
 but event transactions—such as submitting an application, confirming a place,
 or changing event operations—require verification. Participants can follow

@@ -904,7 +904,7 @@ describe("self-service account removal (H54)", () => {
     );
   });
 
-  it("preserves a shared project held by a linked Devpost member without a submission", async () => {
+  it("preserves a shared native project held by another active member", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const { createChallenge, createRepoWithTeam, enqueueRepo } = await import(
@@ -914,16 +914,10 @@ describe("self-service account removal (H54)", () => {
       email: "shared-project-departure@example.test",
       emailVerified: false,
     });
-    const surviving = await createUser({ email: "linked-devpost-member@example.test" });
+    const surviving = await createUser({ email: "linked-alternate-member@example.test" });
     await addCredentialPassword(departing);
     const challengeId = await createChallenge();
-    const { repoId } = await createRepoWithTeam([departing], "Shared Devpost project");
-    await pool.query(
-      `INSERT INTO devpost_participants
-         (repo_id, email, user_id, import_batch, merge_status)
-       VALUES ($1, $2, $3, 'test', 'manually_linked')`,
-      [repoId, "linked-devpost-member@example.test", surviving],
-    );
+    const { repoId } = await createRepoWithTeam([departing, surviving], "Shared native project");
     const entryId = await enqueueRepo(challengeId, repoId, 1);
 
     const removal = await a.inject({
@@ -940,14 +934,6 @@ describe("self-service account removal (H54)", () => {
     expect(
       (await pool.query(`SELECT 1 FROM queue_entries WHERE id = $1`, [entryId])).rowCount,
     ).toBe(1);
-    expect(
-      (
-        await pool.query(
-          `SELECT user_id FROM devpost_participants WHERE repo_id = $1 AND user_id = $2`,
-          [repoId, surviving],
-        )
-      ).rows,
-    ).toEqual([{ user_id: surviving }]);
   });
 
   it("uses event dates only for the live warning, never to bypass the lifecycle boundary", async () => {
@@ -2445,21 +2431,7 @@ describe("staff user routes (H7)", () => {
     const repo = await pool.query(
       `INSERT INTO repos (name) VALUES ('Primary reconciliation') RETURNING id`,
     );
-    const repoId = repo.rows[0].id;
-    await pool.query(
-      `INSERT INTO devpost_participants (repo_id, email, import_batch, merge_status)
-       VALUES ($1, 'old@example.test', 'test-import', 'auto_matched'),
-              ($2, 'new@example.test', 'test-import', 'unmatched')`,
-      [oldRepo.rows[0].id, repoId],
-    );
-    await pool.query(`UPDATE devpost_participants SET user_id = $2 WHERE repo_id = $1`, [
-      oldRepo.rows[0].id,
-      target,
-    ]);
-    await pool.query(
-      `INSERT INTO submissions (repo_id, user_id, imported_from) VALUES ($1, $2, 'devpost')`,
-      [oldRepo.rows[0].id, target],
-    );
+    const _repoId = repo.rows[0].id;
 
     // Needs USERS_WRITE.
     expect(
@@ -2504,16 +2476,6 @@ describe("staff user routes (H7)", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].before.email).toBe("old@example.test");
     expect(rows[0].after.email).toBe("new@example.test");
-    const reconciled = await pool.query(
-      `SELECT user_id, merge_status FROM devpost_participants WHERE repo_id = $1`,
-      [repoId],
-    );
-    expect(reconciled.rows).toEqual([{ user_id: target, merge_status: "auto_matched" }]);
-    const oldReconciled = await pool.query(
-      `SELECT user_id, merge_status FROM devpost_participants WHERE repo_id = $1`,
-      [oldRepo.rows[0].id],
-    );
-    expect(oldReconciled.rows).toEqual([{ user_id: null, merge_status: "unmatched" }]);
     const oldSubmission = await pool.query(
       `SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2`,
       [oldRepo.rows[0].id, target],
@@ -2625,22 +2587,13 @@ describe("staff user routes (H7)", () => {
       `INSERT INTO check_in_logs (user_id, badge_id, staff_id) VALUES ($1, 'B-ADMIN-ANON', $2)`,
       [target, admin],
     );
-    // Devpost audit producers historically encoded the participant email in
-    // a composite entity_id rather than in JSON. That indirect copy must not
-    // survive the identity break either (H54).
-    await pool.query(
-      `INSERT INTO audit_log (actor_id, entity_type, entity_id, action, source)
-       VALUES ($1, 'devpost_repo', 'repo:person@example.test', 'participant_import', 'devpost')`,
-      [admin],
-    );
     const { rows: repoRows } = await pool.query(
       `INSERT INTO repos (name) VALUES ('Anonymized member audit fixture') RETURNING id`,
     );
-    await pool.query(
-      `INSERT INTO submissions (repo_id, user_id, imported_from)
-       VALUES ($1, $2, 'manual')`,
-      [repoRows[0].id, target],
-    );
+    await pool.query(`INSERT INTO submissions(repo_id,user_id,status) VALUES($1,$2,'active')`, [
+      repoRows[0].id,
+      target,
+    ]);
     await pool.query(
       `INSERT INTO audit_log (actor_id, entity_type, entity_id, action, source)
        VALUES ($1, 'submission', $2, 'member_added', 'admin')`,
@@ -2753,14 +2706,6 @@ describe("staff user routes (H7)", () => {
     const admin = await createUserWithCapabilities(["*"]);
     const target = await createUser({ email: "historical-old@example.test" });
     const { pool } = await import("../../src/db/pool.js");
-    const { rows: repoRows } = await pool.query(
-      `INSERT INTO repos (name) VALUES ('Historical email fixture') RETURNING id`,
-    );
-    await pool.query(
-      `INSERT INTO devpost_participants (repo_id, email, import_batch, merge_status)
-       VALUES ($1, 'historical-old@example.test', 'test-import', 'unmatched')`,
-      [repoRows[0].id],
-    );
 
     const changed = await a.inject({
       method: "PATCH",
@@ -2781,15 +2726,6 @@ describe("staff user routes (H7)", () => {
       headers: asUser(admin),
     });
     expect(removed.statusCode).toBe(200);
-    expect(
-      (
-        await pool.query(
-          `SELECT 1 FROM devpost_participants
-             WHERE repo_id = $1 AND lower(email) = 'historical-old@example.test'`,
-          [repoRows[0].id],
-        )
-      ).rowCount,
-    ).toBe(0);
     expect(
       (await pool.query(`SELECT 1 FROM user_email_history WHERE user_id = $1`, [target])).rowCount,
     ).toBe(0);
