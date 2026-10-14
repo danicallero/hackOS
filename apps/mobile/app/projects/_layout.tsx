@@ -20,7 +20,14 @@ export default function ProjectsLayout() {
         ),
       }}
     >
-      <Stack.Screen name="[id]" options={{ title: t("projectFields") }} />
+      <Stack.Screen
+        name="[id]"
+        options={{
+          headerLargeTitle: true,
+          headerLargeTitleShadowVisible: false,
+          title: t("projectFields"),
+        }}
+      />
       <Stack.Screen name="challenges" options={{ title: t("projectChallenges") }} />
       <Stack.Screen name="gallery" options={{ title: t("gallery") }} />
       <Stack.Screen name="queue" options={{ title: t("projectQueue") }} />

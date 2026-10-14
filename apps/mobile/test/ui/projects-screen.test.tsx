@@ -308,7 +308,7 @@ const settle = (overrides: Record<string, unknown>) =>
       const value = overrides[path];
       return value instanceof Error ? Promise.reject(value) : Promise.resolve(value);
     }
-    if (path === "/api/public/challenges") return Promise.resolve([]);
+    if (path === "/api/public/challenges") return Promise.resolve({ items: [] });
     return Promise.resolve({});
   });
 
@@ -389,12 +389,15 @@ const manyChallenges = Array.from({ length: 14 }, (_, index) => ({
   id: index + 1,
   title: `Challenge ${String(index + 1).padStart(2, "0")}`,
 }));
+const catalogue = {
+  items: manyChallenges.map((item) => ({ id: item.id, title: { en: item.title } })),
+};
 const pickerApi = (
   selected: { id: number; title: string; mandatory?: boolean }[],
   canEdit = true,
 ) =>
   mockApi.mockImplementation((path: string) => {
-    if (path === "/api/public/challenges") return Promise.resolve(manyChallenges);
+    if (path === "/api/public/challenges") return Promise.resolve(catalogue);
     if (path === "/api/me/projects/5")
       return Promise.resolve({ ...project, canEdit, challenges: selected });
     if (path.startsWith("/api/me/projects/5/challenges/")) return Promise.resolve({});
@@ -424,7 +427,7 @@ it("selects a challenge optimistically and restores it when the server refuses (
   mockApi.mockImplementation((path: string) => {
     if (path === "/api/me/projects/5/challenges/8")
       return Promise.reject(new ApiError("closed", 409));
-    if (path === "/api/public/challenges") return Promise.resolve(manyChallenges);
+    if (path === "/api/public/challenges") return Promise.resolve(catalogue);
     return Promise.resolve({ ...project, canEdit: true, challenges: [] });
   });
   await fireEvent.press(screen.getByRole("button", { name: "Challenge 08" }));
@@ -498,4 +501,107 @@ it("matches several chosen challenges against each project when the API filters 
   expect(mockApi).toHaveBeenCalledWith(
     "/api/public/projects?page=1&pageSize=20&search=&challengeId=9",
   );
+});
+
+const titles = () => screen.getAllByText(/^Challenge \d\d$/).map((node) => node.props.children);
+
+it("persists a chosen challenge through the API and keeps the catalogue order (H20/H21)", async () => {
+  // A stateful server: PUT/DELETE change what the next project read returns.
+  const server = new Set<number>([3]);
+  mockApi.mockImplementation((path: string, init?: { method?: string }) => {
+    if (path === "/api/public/challenges") return Promise.resolve(catalogue);
+    const change = path.match(/^\/api\/me\/projects\/5\/challenges\/(\d+)$/);
+    if (change) {
+      if (init?.method === "PUT") server.add(Number(change[1]));
+      else server.delete(Number(change[1]));
+      return Promise.resolve({});
+    }
+    if (path === "/api/me/projects/5")
+      return Promise.resolve({
+        ...project,
+        canEdit: true,
+        challenges: [...server].map((id) => ({
+          id,
+          title: `Challenge ${String(id).padStart(2, "0")}`,
+          mandatory: id === 3,
+        })),
+      });
+    return Promise.resolve({});
+  });
+  await renderMobile(<ProjectChallengesScreen />);
+  await screen.findByText("projectRequired");
+  const before = titles();
+  expect(before.slice(0, 3)).toEqual(["Challenge 03", "Challenge 01", "Challenge 02"]);
+  await fireEvent.press(screen.getByRole("button", { name: "Challenge 09" }));
+  await fireEvent.press(screen.getByRole("button", { name: "Challenge 05" }));
+  await waitFor(() => expect([...server].sort()).toEqual([3, 5, 9]));
+  // Rows did not move: the same order, only the checkmarks changed.
+  expect(titles()).toEqual(before);
+  expect(
+    screen.getByRole("button", { name: "Challenge 05" }).props.accessibilityState.selected,
+  ).toBe(true);
+  expect(
+    screen.getByRole("button", { name: "Challenge 02" }).props.accessibilityState.selected,
+  ).toBe(false);
+  // Deselecting also keeps the position.
+  await fireEvent.press(screen.getByRole("button", { name: "Challenge 05" }));
+  await waitFor(() => expect([...server].sort()).toEqual([3, 9]));
+  expect(titles()).toEqual(before);
+});
+
+it("reads the real catalogue contract: items with localized titles (H20)", async () => {
+  mockApi.mockImplementation((path: string) => {
+    if (path === "/api/public/challenges")
+      return Promise.resolve({ items: [{ id: 4, title: { en: "Space", es: "Espacio" } }] });
+    return Promise.resolve({ ...project, canEdit: true, challenges: [] });
+  });
+  await renderMobile(<ProjectChallengesScreen />);
+  expect(await screen.findByRole("button", { name: "Space" })).toBeTruthy();
+});
+
+it("invites a teammate inline: the field opens in place, Send waits for a valid email (H19)", async () => {
+  mockApi.mockResolvedValue({});
+  await renderMobile(
+    <ProjectEditor
+      reload={async () => {}}
+      project={{ ...project, canEdit: true, canInvite: true }}
+    />,
+  );
+  await fireEvent.press(screen.getByRole("button", { name: "projectInvite" }));
+  const send = () => screen.getByRole("button", { name: "projectSend" });
+  expect(send().props.accessibilityState.disabled).toBe(true);
+  await fireEvent.changeText(screen.getByLabelText("projectEmail"), "not-an-email");
+  expect(send().props.accessibilityState.disabled).toBe(true);
+  await fireEvent.changeText(screen.getByLabelText("projectEmail"), " leo@example.com ");
+  await fireEvent.press(send());
+  await waitFor(() =>
+    expect(mockApi).toHaveBeenCalledWith(
+      "/api/me/projects/5/invites",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ email: "leo@example.com" }),
+      }),
+    ),
+  );
+  // The editor stays mounted and the field closes.
+  await waitFor(() => expect(screen.queryByLabelText("projectEmail")).toBeNull());
+});
+
+it("shows why an invitation was refused right under the field (H19)", async () => {
+  mockApi.mockImplementation((path: string, init?: { method?: string }) =>
+    init?.method === "POST" && path.endsWith("/invites")
+      ? Promise.reject(new ApiError("full", 409))
+      : Promise.resolve({}),
+  );
+  await renderMobile(
+    <ProjectEditor
+      reload={async () => {}}
+      project={{ ...project, canEdit: true, canInvite: true }}
+    />,
+  );
+  await fireEvent.press(screen.getByRole("button", { name: "projectInvite" }));
+  await fireEvent.changeText(screen.getByLabelText("projectEmail"), "leo@example.com");
+  await fireEvent.press(screen.getByRole("button", { name: "projectSend" }));
+  expect(await screen.findByText("requestError")).toBeTruthy();
+  expect(screen.getByLabelText("projectEmail")).toBeTruthy();
 });

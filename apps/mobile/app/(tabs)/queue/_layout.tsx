@@ -13,8 +13,6 @@ export default function QueueLayout() {
   const header = {
     contentStyle: { backgroundColor: colors.background },
     headerShadowVisible: false,
-    headerStyle: { backgroundColor: colors.background },
-    headerTitleStyle: { color: colors.label, fontSize: 17, fontWeight: "600" as const },
   };
   return (
     <Stack
@@ -28,7 +26,10 @@ export default function QueueLayout() {
         name="new"
         options={{ ...header, presentation: "modal", title: t("projectNewTitle") }}
       />
-      <Stack.Screen name="invites" options={{ ...header, title: t("projectInvitations") }} />
+      <Stack.Screen
+        name="invites"
+        options={{ ...header, headerLargeTitle: true, title: t("projectInvitations") }}
+      />
     </Stack>
   );
 }

@@ -963,5 +963,6 @@
   "projectAcceptShort": "Accept",
   "projectDeclineShort": "Decline",
   "projectAddChallenge": "Add challenge",
-  "projectSearchChallenges": "Search challenges"
+  "projectSearchChallenges": "Search challenges",
+  "projectSend": "Send"
 }

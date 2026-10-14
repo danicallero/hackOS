@@ -9,12 +9,12 @@ import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ApiError, apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import type { GalleryPage, NativeProject } from "@/lib/projects";
+import { fetchChallengeCatalogue, type GalleryPage, type NativeProject } from "@/lib/projects";
 import { colors } from "@/theme/colors";
 
 /** H18: audience and publication policy remain entirely server-owned; no persistent gallery cache. */
 export function ProjectGalleryScreen() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const router = useRouter();
   const navigation = useNavigation();
   const [search, setSearch] = useState("");
@@ -122,10 +122,10 @@ export function ProjectGalleryScreen() {
     [search, challengeIds],
   );
   useEffect(() => {
-    void apiFetch<{ id: number; title: string }[]>("/api/public/challenges")
+    void fetchChallengeCatalogue(language)
       .then(setChallenges)
       .catch(() => {});
-  }, []);
+  }, [language]);
   useFocusEffect(
     useCallback(() => {
       const timer = setTimeout(() => {

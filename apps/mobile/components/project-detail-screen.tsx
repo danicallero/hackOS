@@ -5,9 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DynamicForm } from "@/components/dynamic-form";
+import { InviteTeammateRow } from "@/components/invite-teammate-row";
 import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
-import { FieldRow, GlassButton, NavRow, RowButton } from "@/components/project-ui";
+import { FieldRow, GlassButton, NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
@@ -24,7 +25,13 @@ export function ProjectDetailScreen() {
   const [epoch, setEpoch] = useState(0);
   const navigation = useNavigation();
   useEffect(() => {
-    if (project) navigation.setOptions({ title: project.name });
+    if (project)
+      navigation.setOptions({
+        title: project.name,
+        headerLargeTitle: true,
+        headerLargeTitleShadowVisible: false,
+        headerShadowVisible: false,
+      });
   }, [navigation, project]);
   const load = useCallback(async () => {
     setProject(null);
@@ -166,7 +173,7 @@ export function ProjectEditor({
   const navigation = useNavigation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [email, setEmail] = useState("");
+  const [_email, _setEmail] = useState("");
   const [name, setName] = useState(project.name);
   const [files, setFiles] = useState(project.files ?? []);
   useEffect(
@@ -186,17 +193,20 @@ export function ProjectEditor({
     [navigation, draft, name, project],
   );
   const [chosen, setChosen] = useState(project.challenges);
+  const [members, setMembers] = useState(project.members);
   const canEdit = project.canEdit === true;
   const blocked = busy || !canEdit || draft.state === "conflict";
   const submitted = project.submissionStatus === "submitted";
   // The picker is a separate screen: refresh the chosen challenges when returning to it.
-  useFocusEffect(
-    useCallback(() => {
-      void apiFetch<NativeProject>(`/api/me/projects/${project.id}`)
-        .then((fresh) => setChosen((current) => fresh.challenges ?? current))
-        .catch(() => {});
-    }, [project.id]),
-  );
+  const refreshTeam = useCallback(() => {
+    void apiFetch<NativeProject>(`/api/me/projects/${project.id}`)
+      .then((fresh) => {
+        setChosen((current) => fresh.challenges ?? current);
+        setMembers((current) => fresh.members ?? current);
+      })
+      .catch(() => {});
+  }, [project.id]);
+  useFocusEffect(refreshTeam);
   async function run(action: () => Promise<unknown>, refresh = true) {
     setBusy(true);
     setError(null);
@@ -258,7 +268,7 @@ export function ProjectEditor({
         : "projectUnsaved",
   );
   return (
-    <View style={{ backgroundColor: colors.background, flex: 1 }}>
+    <>
       <ScrollView
         automaticallyAdjustKeyboardInsets
         contentInsetAdjustmentBehavior="automatic"
@@ -344,42 +354,13 @@ export function ProjectEditor({
           </Pressable>
         </Section>
         <Section title={t("projectTeam")}>
-          <ProjectMembers project={project} />
+          <ProjectMembers project={{ ...project, members }} />
           <Separator />
-          <View
-            style={{
-              alignItems: "center",
-              flexDirection: "row",
-              gap: 8,
-              minHeight: 56,
-              paddingHorizontal: 16,
-            }}
-          >
-            <TextInput
-              accessibilityLabel={t("projectEmail")}
-              value={email}
-              onChangeText={setEmail}
-              editable={!blocked && project.canInvite !== false}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder={t("projectEmail")}
-              placeholderTextColor={colors.tertiaryLabel}
-              style={{ color: colors.label, flex: 1, fontSize: 17, minHeight: 44, padding: 0 }}
-            />
-            <RowButton
-              label={t("projectInvite")}
-              disabled={blocked || !email.trim() || project.canInvite === false}
-              onPress={() =>
-                void run(async () => {
-                  await projectMutation(`/api/me/projects/${project.id}/invites`, "POST", {
-                    email: email.trim(),
-                  });
-                  setEmail("");
-                })
-              }
-            />
-          </View>
+          <InviteTeammateRow
+            projectId={project.id}
+            disabled={!canEdit || project.canInvite === false}
+            onInvited={refreshTeam}
+          />
         </Section>
         {project.presentations.length ? (
           <Section title={t("projectQueue")}>
@@ -460,6 +441,6 @@ export function ProjectEditor({
           }
         />
       </View>
-    </View>
+    </>
   );
 }

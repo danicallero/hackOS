@@ -963,5 +963,6 @@
   "projectAcceptShort": "Aceptar",
   "projectDeclineShort": "Rexeitar",
   "projectAddChallenge": "Engadir reto",
-  "projectSearchChallenges": "Buscar retos"
+  "projectSearchChallenges": "Buscar retos",
+  "projectSend": "Enviar"
 }

@@ -7,7 +7,7 @@ import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import { type NativeProject, projectMutation } from "@/lib/projects";
+import { fetchChallengeCatalogue, type NativeProject, projectMutation } from "@/lib/projects";
 import { colors } from "@/theme/colors";
 
 type Chosen = NativeProject["challenges"];
@@ -18,7 +18,7 @@ type Chosen = NativeProject["challenges"];
  */
 export function ProjectChallengesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const navigation = useNavigation();
   const [all, setAll] = useState<{ id: number; title: string }[] | null>(null);
   const [chosen, setChosen] = useState<Chosen>([]);
@@ -28,7 +28,7 @@ export function ProjectChallengesScreen() {
   const load = useCallback(async () => {
     try {
       const [challenges, project] = await Promise.all([
-        apiFetch<{ id: number; title: string }[]>("/api/public/challenges"),
+        fetchChallengeCatalogue(language),
         apiFetch<NativeProject>(`/api/me/projects/${id}`),
       ]);
       setAll(challenges);
@@ -39,7 +39,7 @@ export function ProjectChallengesScreen() {
       setAll((current) => current ?? []);
       setError(cause as Error);
     }
-  }, [id]);
+  }, [id, language]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -76,6 +76,9 @@ export function ProjectChallengesScreen() {
         selected ? "DELETE" : "PUT",
       );
       void haptic("selection");
+      // The server's project is the truth: reflect exactly what it stored.
+      const fresh = await apiFetch<NativeProject>(`/api/me/projects/${id}`);
+      setChosen(fresh.challenges);
     } catch (cause) {
       setChosen(before);
       // The server list is the truth (phase closed, already chosen); keep the reason visible.
@@ -91,14 +94,10 @@ export function ProjectChallengesScreen() {
     () =>
       (all ?? [])
         .filter((item) => !chosen.some((c) => c.id === item.id && c.mandatory))
-        .filter((item) => matches(item.title))
-        .sort(
-          (a, b) =>
-            Number(chosenIds.has(b.id)) - Number(chosenIds.has(a.id)) ||
-            a.title.localeCompare(b.title),
-        ),
+        // Catalogue order, never selection order: a checkmark changes, the row stays.
+        .filter((item) => matches(item.title)),
     // biome-ignore lint/correctness/useExhaustiveDependencies: matches closes over needle
-    [all, chosen, chosenIds, matches],
+    [all, chosen, matches],
   );
   const row = (title: string, selected: boolean, locked: boolean, onPress?: () => void) => (
     <Pressable
