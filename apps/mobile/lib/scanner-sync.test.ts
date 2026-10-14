@@ -1,4 +1,5 @@
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
+import { SCAN_REPLAY_EXPIRED, SCANNER_REPLAY_MAX_AGE_DAYS } from "@hackos/shared/idempotency";
 
 jest.mock("./api", () => ({
   apiFetch: jest.fn(),
@@ -61,6 +62,9 @@ const mockDeleteScan = deleteScan as jest.Mock;
 const mockEnqueueLocalScan = enqueueLocalScan as jest.Mock;
 const mockGetCookie = authClient.getCookie as jest.Mock;
 const OWNER_USER_ID = 42;
+// Fixture scans are queued at 2026-01-01; "now" is one day later.
+const NOW = Date.parse("2026-01-02T00:00:00.000Z");
+const DAY_MS = 24 * 60 * 60 * 1000;
 // The mocked ApiError constructor is (status, code, message, details).
 const apiError = (status: number, message: string, code = "error", reason?: string) =>
   new (
@@ -115,6 +119,11 @@ describe("synchronizeScanner", () => {
     mockDeleteScan.mockReset();
     mockEnqueueLocalScan.mockReset();
     mockGetCookie.mockReset().mockReturnValue("session=staff-a");
+    jest.spyOn(Date, "now").mockReturnValue(NOW);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it("sends an online badge assignment without touching SQLite first", async () => {
@@ -324,6 +333,32 @@ describe("synchronizeScanner", () => {
       "/api/accreditation/remove",
       expect.objectContaining({ body: expect.stringContaining("scan-2") }),
     );
+  });
+
+  it("replays a scan at the replay-age limit and fails one past it without sending (#994)", async () => {
+    const queuedAt = Date.parse("2026-01-01T00:00:00.000Z");
+    const maxAgeMs = SCANNER_REPLAY_MAX_AGE_DAYS * DAY_MS;
+    mockPendingScans.mockResolvedValue([badgeRemoval("scan-1")]);
+    mockApiFetch.mockResolvedValue({
+      generatedAt: "t0",
+      people: [],
+      activities: [],
+      activityStates: [],
+    });
+
+    (Date.now as jest.Mock).mockReturnValue(queuedAt + maxAgeMs);
+    await synchronizeScanner(OWNER_USER_ID);
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/accreditation/remove", expect.anything());
+    expect(mockAcknowledgeScan).toHaveBeenCalledWith("scan-1", expect.anything(), OWNER_USER_ID);
+    expect(mockFailScan).not.toHaveBeenCalled();
+
+    mockApiFetch.mockClear();
+    mockAcknowledgeScan.mockClear();
+    (Date.now as jest.Mock).mockReturnValue(queuedAt + maxAgeMs + 1);
+    await synchronizeScanner(OWNER_USER_ID);
+    expect(mockApiFetch).not.toHaveBeenCalledWith("/api/accreditation/remove", expect.anything());
+    expect(mockAcknowledgeScan).not.toHaveBeenCalled();
+    expect(mockFailScan).toHaveBeenCalledWith("scan-1", SCAN_REPLAY_EXPIRED, OWNER_USER_ID);
   });
 
   it("fails a scan permanently on a business rejection and continues the queue", async () => {

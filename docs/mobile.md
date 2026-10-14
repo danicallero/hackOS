@@ -199,6 +199,12 @@ below.
   storing it) — a transient server failure retries and can actually
   succeed on the next attempt, rather than replaying the same 500
   forever (issue #534).
+- Queued scans stop replaying after `SCANNER_REPLAY_MAX_AGE_DAYS` (6 days,
+  `@hackos/shared/idempotency`), one day inside the server's 7-day
+  `idempotency_keys` retention (#994). An older scan could re-execute once its
+  key is purged, so `replayPendingScans()` fails it locally with
+  `scan_replay_expired` without sending it; it stays in the sync queue for the
+  operator to log manually or discard.
 
 ## Navigation & tabs
 

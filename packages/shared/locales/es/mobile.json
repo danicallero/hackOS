@@ -950,5 +950,6 @@
   "projectDeclineShort": "Rechazar",
   "projectAddChallenge": "Añadir reto",
   "projectSearchChallenges": "Buscar retos",
-  "projectSend": "Enviar"
+  "projectSend": "Enviar",
+  "scanReplayExpired": "No se sincronizó en {days} días. Regístralo manualmente."
 }
