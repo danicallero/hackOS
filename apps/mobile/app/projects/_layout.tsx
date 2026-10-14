@@ -29,7 +29,17 @@ export default function ProjectsLayout() {
         }}
       />
       <Stack.Screen name="challenges" options={{ title: t("projectChallenges") }} />
-      <Stack.Screen name="invite" options={{ presentation: "modal", title: t("projectInvite") }} />
+      <Stack.Screen
+        name="invite"
+        options={{
+          contentStyle: { backgroundColor: colors.surface },
+          headerBlurEffect: "none",
+          headerShadowVisible: false,
+          headerTransparent: true,
+          presentation: "modal",
+          title: t("projectInvite"),
+        }}
+      />
       <Stack.Screen name="gallery" options={{ title: t("gallery") }} />
       <Stack.Screen name="queue" options={{ title: t("projectQueue") }} />
     </Stack>

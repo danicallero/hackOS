@@ -21,14 +21,21 @@ function CircleButton({
   label,
   onPress,
   disabled = false,
+  prominent = false,
+  filled = false,
   size = 44,
 }: {
   icon: "xmark" | "checkmark" | "plus";
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  /** The confirm button turns accent blue once it can act, as in Photos. */
+  prominent?: boolean;
+  /** A quiet filled circle (the add button). */
+  filled?: boolean;
   size?: number;
 }) {
+  const active = prominent && !disabled;
   return (
     <Pressable
       accessibilityRole="button"
@@ -39,15 +46,18 @@ function CircleButton({
       onPress={onPress}
       style={{
         alignItems: "center",
+        backgroundColor: active ? colors.accent : filled ? colors.elevatedSurface : undefined,
+        borderRadius: size / 2,
         height: size,
         justifyContent: "center",
-        opacity: disabled ? 0.4 : 1,
         width: size,
       }}
     >
       <SymbolView
         name={icon}
-        tintColor={colors.label}
+        tintColor={
+          active ? colors.primaryActionText : disabled ? colors.tertiaryLabel : colors.label
+        }
         size={size > 36 ? 19 : 16}
         weight="semibold"
         accessible={false}
@@ -114,6 +124,7 @@ export function InviteTeammatesScreen() {
         <CircleButton
           icon="checkmark"
           label={t("projectSend")}
+          prominent
           disabled={!canConfirm}
           onPress={() => void confirm()}
         />
@@ -122,9 +133,10 @@ export function InviteTeammatesScreen() {
   });
   return (
     <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ paddingBottom: 24 }}
-      style={{ backgroundColor: colors.background }}
+      style={{ backgroundColor: colors.surface }}
     >
       <View
         style={{
@@ -158,6 +170,7 @@ export function InviteTeammatesScreen() {
         <CircleButton
           icon="plus"
           label={t("add")}
+          filled
           disabled={!draftValid || busy}
           onPress={add}
           size={34}
