@@ -64,7 +64,7 @@ jest.mock("@/theme/colors", () => ({
   },
 }));
 
-import QueueScreen, { QueueTutorial } from "@/app/(tabs)/queue";
+import QueueScreen, { QueueTutorial } from "@/components/my-queue-screen";
 import { renderMobile } from "./render";
 
 describe("queue tutorial (H38)", () => {

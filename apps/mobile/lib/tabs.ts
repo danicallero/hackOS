@@ -20,8 +20,9 @@ export function has(capabilities: string[], capability: string): boolean {
   return capabilities.includes(capability) || capabilities.includes(CAPABILITIES.ADMIN_ALL);
 }
 
-export function canSeeMyQueue(capabilities: string[], context: PersonalTabContext): boolean {
-  return has(capabilities, CAPABILITIES.QUEUE_STATUS) || context.hasQueueItems;
+/** H19/H20: the authenticated shell already requires event access. Projects must be reachable before queue enrolment. */
+export function canSeeMyQueue(_capabilities: string[], _context: PersonalTabContext): boolean {
+  return true;
 }
 
 export function isOperator(capabilities: string[]): boolean {
@@ -81,9 +82,8 @@ export function visibleTabs(
 }
 
 /**
- * Tabs shown directly in the custom tab bar. An account with the personal
- * queue capability can see My queue before its first queue entry so the empty
- * state and tutorial remain useful; other accounts need real queue membership.
+ * Tabs shown directly in the custom tab bar. Every account in the event-access shell can open My Projects before its
+ * first draft or queue entry.
  * The bar reserves a separate
  * Others circle only when the complete set is crowded. Operators prioritize
  * their daily tools here; five destinations fit directly, while larger sets

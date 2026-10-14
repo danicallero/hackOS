@@ -20,7 +20,7 @@ import Animated, {
   useReducedMotion,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ActionButton, EmptyState, StatusPill } from "@/components/native-ui";
+import { ActionButton, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
@@ -196,11 +196,31 @@ export default function QueueScreen() {
           ) : error ? (
             <RequestFeedback error={error} onRetry={() => void load()} />
           ) : (
-            <EmptyState
-              icon="person.line.dotted.person.fill"
-              title={t("queueEmptyTitle")}
-              description={t("queueEmpty")}
-            />
+            <View
+              style={{ alignItems: "center", gap: 8, paddingVertical: 48, paddingHorizontal: 24 }}
+            >
+              <Text
+                accessibilityRole="header"
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: 17,
+                  fontWeight: "600",
+                  textAlign: "center",
+                }}
+              >
+                {t("queueEmptyTitle")}
+              </Text>
+              <Text
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: 15,
+                  lineHeight: 21,
+                  textAlign: "center",
+                }}
+              >
+                {t("queueEmpty")}
+              </Text>
+            </View>
           )
         }
         renderItem={renderQueueCard}
@@ -217,8 +237,6 @@ export default function QueueScreen() {
 
 function QueueTutorialTrigger({ onPress }: { onPress: () => void }) {
   const { t } = useLocale();
-  const reducedMotion = useReducedMotion();
-
   return (
     <Pressable
       accessibilityHint={t("queueHowItWorksRevisitHint")}
@@ -231,43 +249,29 @@ function QueueTutorialTrigger({ onPress }: { onPress: () => void }) {
       testID="queue-tutorial-open"
       style={({ pressed }) => ({
         alignItems: "center",
-        backgroundColor: colors.accentSurface,
-        borderCurve: "continuous",
-        borderRadius: 14,
+        backgroundColor: colors.surface,
+        borderRadius: 12,
         flexDirection: "row",
         gap: 12,
-        minHeight: 70,
-        opacity: pressed ? 0.84 : 1,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        transform: reducedMotion ? undefined : [{ scale: pressed ? 0.96 : 1 }],
+        minHeight: 50,
+        opacity: pressed ? 0.6 : 1,
+        paddingHorizontal: 16,
       })}
     >
-      <View
-        style={{
-          alignItems: "center",
-          backgroundColor: colors.surface,
-          borderRadius: 12,
-          height: 42,
-          justifyContent: "center",
-          width: 42,
-        }}
-      >
-        <SymbolView name="questionmark.circle" size={22} tintColor={colors.onAccentSurface} />
-      </View>
-      <View style={{ flex: 1, gap: 3 }}>
-        <Text selectable style={{ color: colors.onAccentSurface, fontSize: 16, fontWeight: "700" }}>
-          {t("queueHowItWorksTitle")}
-        </Text>
-        <Text selectable style={{ color: colors.onAccentSurface, fontSize: 13, lineHeight: 18 }}>
-          {t("queueHowItWorksRevisitBody")}
-        </Text>
-      </View>
+      <SymbolView
+        accessible={false}
+        name="questionmark.circle"
+        size={22}
+        tintColor={colors.accent}
+      />
+      <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>
+        {t("queueHowItWorksTitle")}
+      </Text>
       <SymbolView
         accessible={false}
         name="chevron.right"
-        size={18}
-        tintColor={colors.onAccentSurface}
+        size={14}
+        tintColor={colors.tertiaryLabel}
       />
     </Pressable>
   );

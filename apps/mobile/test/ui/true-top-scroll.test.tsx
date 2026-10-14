@@ -71,7 +71,8 @@ describe("true-top scroll (#935)", () => {
     const root = join(__dirname, "../..");
     const files = [
       ...readdirSync(join(root, "components")).map((name) => join("components", name)),
-      join("app", "(tabs)", "queue.tsx"),
+      "components/my-queue-screen.tsx",
+      "components/my-projects-screen.tsx",
     ].filter((file) => file.endsWith(".tsx"));
     // Account snaps through the profile-avatar hook, which targets the true top.
     const allowed = new Set([
@@ -91,7 +92,8 @@ describe("true-top scroll (#935)", () => {
     }
     expect(offenders).toEqual([]);
     for (const file of [
-      join("app", "(tabs)", "queue.tsx"),
+      "components/my-queue-screen.tsx",
+      "components/my-projects-screen.tsx",
       "components/activities-screen.tsx",
       "components/delete-account-screen.tsx",
       "components/diary-screen.tsx",

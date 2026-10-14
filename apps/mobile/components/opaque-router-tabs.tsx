@@ -73,9 +73,9 @@ const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
   },
   queue: {
     href: "/(tabs)/queue",
-    icon: "clock",
+    icon: "hammer",
     labelKey: "tabQueue",
-    selectedIcon: "clock.fill",
+    selectedIcon: "hammer.fill",
     triggerName: "queue",
   },
   diary: {

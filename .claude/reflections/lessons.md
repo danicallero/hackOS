@@ -212,6 +212,23 @@ justify section surfaces when open sections fail to communicate ownership.
 Keep their contents as rows rather than nested cards. Dense operational tables,
 overlays and truly selectable/bounded objects still justify surfaces; meaningful changing states still justify status badges.
 
+### Native mobile addendum (2026-10-14, My Projects redesign)
+On iOS, "native" means the system's own chrome, not a lookalike. Page titles
+are the native header (large title, scroll edge blur) and the ScrollView stays
+the screen's direct child (wrap siblings in a fragment, never a View) so the
+header collapses and blurs. Forms are inset-grouped rows with a caption above a
+borderless input, never boxes inside a card. Header actions are native toolbar
+buttons (perfect circles) or liquid-glass buttons; an icon-only button is only
+acceptable for a universal glyph (plus, filter), never for a destination such
+as a gallery or inbox; those get a labelled row or glass button. No badge on
+an icon that already carries a count. Pick one corner radius per role
+(containers 14, buttons capsule) instead of mixing. A filter that grows with
+data (challenges, projects) is a menu, not a sliding segmented control; test
+with 12+ items. Do not duplicate a setting that lives in the profile (photo
+visibility). Do not show a destination the screen's own rows already cover.
+Validation: screenshot light and dark, a single, an empty and a 12+ item
+state, and scroll the list to check the header collapse.
+
 ## [R007] Review feedback copy at its call sites
 
 Status: active
@@ -826,3 +843,34 @@ On a device, open and cancel search repeatedly, including edge taps. Confirm one
 
 ### Exceptions
 Use a custom lifecycle only when the product requires behavior the native control cannot provide.
+
+## [R026] Do not drive the user's simulator while they are looking at it
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-10-14
+
+### Trigger
+Taking simulator screenshots for a UI task while the user reviews the same
+simulator.
+
+### Mistake
+A background loop terminated and relaunched the dev client every few seconds.
+The relaunch race crashed the app (`ExpoFabricView` AppContextLost) and the
+user saw crashes and half-rendered screens that were an artefact of the loop.
+
+### Lesson
+Automated relaunches are visible to the user and can crash a dev client.
+
+### Action
+Run screenshot sweeps in the foreground, sequentially, with a settle wait after
+each reload, and never leave one running while the user is iterating. Prefer
+Metro hot reload and deep links over terminate/launch. Make fixture servers
+survive tool shutdown so a stopped task does not leave the app on error states.
+
+### Validation
+No crash report during the sweep; the fixture still answers afterwards.
+
+### Exceptions
+None.
