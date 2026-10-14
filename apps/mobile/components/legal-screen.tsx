@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useRef } from "react";
 import { Linking, ScrollView, useColorScheme } from "react-native";
 
@@ -7,10 +8,11 @@ import { useLocale } from "@/lib/i18n";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 
-/** Privacy and terms links kept out of the account overview. */
+/** Privacy, terms and open-source licenses, kept out of the account overview. */
 export default function LegalScreen() {
   useColorScheme();
   const { t } = useLocale();
+  const router = useRouter();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -38,6 +40,12 @@ export default function LegalScreen() {
           label={t("accountTerms")}
           icon="doc.text"
           onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/terms`)}
+        />
+        <Separator />
+        <ActionButton
+          label={t("legalLicenses")}
+          icon="books.vertical"
+          onPress={() => router.push("/(tabs)/others/licenses")}
         />
       </Section>
     </ScrollView>

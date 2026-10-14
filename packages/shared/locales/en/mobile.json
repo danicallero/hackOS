@@ -164,6 +164,7 @@
   "accountLegalTitle": "Legal",
   "accountPrivacyPolicy": "Privacy policy",
   "accountTerms": "Terms and conditions",
+  "legalLicenses": "Open-source licenses",
   "sessionTitle": "Session",
   "sessionActive": "Signed in on this device as {email}.",
   "signOutConfirmTitle": "Sign out?",

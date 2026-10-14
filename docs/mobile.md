@@ -528,7 +528,15 @@ they are not device screenshots or proof of native toolbar behavior.
   Statistics opens `app/(tabs)/others/statistics.tsx`, with personal scan
   counts and a link to scan history; Legal opens
   `app/(tabs)/others/legal.tsx`, which keeps the privacy policy and terms links
-  together. Sign out is the final action on the main account screen. Its Delete
+  together with Open-source licenses (`app/(tabs)/others/licenses/`,
+  `components/licenses-screen.tsx`): every npm package in the shipped
+  JavaScript bundle with its notice truncated to four lines and a link to its
+  source repository (from the manifest's `repository`, else `homepage`), under
+  a compact transparent header; a package opens its full notice. The list is `assets/licenses.json`, generated from the iOS and Android
+  export source maps by `pnpm --filter @hackos/mobile generate:licenses`
+  (`scripts/generate-licenses.mjs`); rerun it and commit the result whenever a
+  dependency is added, removed or upgraded. Third-party native libraries
+  vendored by those packages (CocoaPods, Gradle) are not listed yet. Sign out is the final action on the main account screen. Its Delete
   account row opens a
   dedicated page that reads `GET /api/me/removal-eligibility`: the page has a
   consequence screen and an inline verification screen, with no progress
