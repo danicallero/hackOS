@@ -1,6 +1,8 @@
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import Stack from "expo-router/stack";
 import { useLayoutEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
@@ -114,104 +116,134 @@ export function InviteTeammatesScreen() {
     }
   }
   const canConfirm = (recipients.length > 0 || draftValid) && !busy;
+  const glass = isRealLiquidGlassAvailable();
   useLayoutEffect(() => {
     navigation.setOptions({
       title: t("projectInvite"),
-      headerLeft: () => (
-        <CircleButton icon="xmark" label={t("cancel")} onPress={() => router.back()} />
-      ),
-      headerRight: () => (
-        <CircleButton
-          icon="checkmark"
-          label={t("projectSend")}
-          prominent
-          disabled={!canConfirm}
-          onPress={() => void confirm()}
-        />
-      ),
+      // iOS 26 draws the native toolbar buttons below as perfect glass circles.
+      ...(glass
+        ? { headerLeft: undefined, headerRight: undefined }
+        : {
+            headerLeft: () => (
+              <CircleButton icon="xmark" label={t("cancel")} onPress={() => router.back()} />
+            ),
+            headerRight: () => (
+              <CircleButton
+                icon="checkmark"
+                label={t("projectSend")}
+                prominent
+                disabled={!canConfirm}
+                onPress={() => void confirm()}
+              />
+            ),
+          }),
     });
   });
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ paddingBottom: 24 }}
-      style={{ backgroundColor: colors.surface }}
-    >
-      <View
-        style={{
-          alignItems: "center",
-          borderBottomColor: colors.separator,
-          borderBottomWidth: 0.5,
-          flexDirection: "row",
-          gap: 8,
-          minHeight: 56,
-          paddingHorizontal: 20,
-        }}
-      >
-        <Text style={{ color: colors.secondaryLabel, fontSize: 17 }}>{`${t("add")}:`}</Text>
-        <TextInput
-          accessibilityLabel={t("projectEmail")}
-          autoCapitalize="none"
-          autoComplete="email"
-          autoCorrect={false}
-          autoFocus
-          editable={!busy}
-          keyboardType="email-address"
-          onChangeText={setDraft}
-          onSubmitEditing={add}
-          placeholder="name@example.com"
-          placeholderTextColor={colors.tertiaryLabel}
-          returnKeyType="next"
-          style={{ color: colors.label, flex: 1, fontSize: 17, minHeight: 44, padding: 0 }}
-          textContentType="emailAddress"
-          value={draft}
-        />
-        <CircleButton
-          icon="plus"
-          label={t("add")}
-          filled
-          disabled={!draftValid || busy}
-          onPress={add}
-          size={34}
-        />
-      </View>
-      {recipients.length > 0 ? (
-        <View style={{ padding: 16 }}>
-          <Section>
-            {recipients.map((recipient, index) => (
-              <View key={recipient.email}>
-                {index > 0 ? <Separator /> : null}
-                <View style={{ gap: 6, paddingHorizontal: 16, paddingVertical: 10 }}>
-                  <View style={{ alignItems: "center", flexDirection: "row", gap: 12 }}>
-                    <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>
-                      {recipient.email}
-                    </Text>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`${t("remove")} ${recipient.email}`}
-                      hitSlop={10}
-                      onPress={() =>
-                        setRecipients((current) =>
-                          current.filter((item) => item.email !== recipient.email),
-                        )
-                      }
-                    >
-                      <SymbolView
-                        name="xmark.circle.fill"
-                        tintColor={colors.tertiaryLabel}
-                        size={20}
-                        accessible={false}
-                      />
-                    </Pressable>
-                  </View>
-                  {recipient.error ? <RequestFeedback error={recipient.error} /> : null}
-                </View>
-              </View>
-            ))}
-          </Section>
-        </View>
+    <>
+      {glass ? (
+        <>
+          <Stack.Toolbar placement="left">
+            <Stack.Toolbar.Button
+              separateBackground
+              icon="xmark"
+              accessibilityLabel={t("cancel")}
+              onPress={() => router.back()}
+            />
+          </Stack.Toolbar>
+          <Stack.Toolbar placement="right">
+            <Stack.Toolbar.Button
+              separateBackground
+              variant="prominent"
+              icon="checkmark"
+              accessibilityLabel={t("projectSend")}
+              disabled={!canConfirm}
+              onPress={() => void confirm()}
+            />
+          </Stack.Toolbar>
+        </>
       ) : null}
-    </ScrollView>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingBottom: 24 }}
+        style={{ backgroundColor: colors.surface }}
+      >
+        <View
+          style={{
+            alignItems: "center",
+            borderBottomColor: colors.separator,
+            borderBottomWidth: 0.5,
+            flexDirection: "row",
+            gap: 8,
+            minHeight: 56,
+            paddingHorizontal: 20,
+          }}
+        >
+          <Text style={{ color: colors.secondaryLabel, fontSize: 17 }}>{`${t("add")}:`}</Text>
+          <TextInput
+            accessibilityLabel={t("projectEmail")}
+            autoCapitalize="none"
+            autoComplete="email"
+            autoCorrect={false}
+            autoFocus
+            editable={!busy}
+            keyboardType="email-address"
+            onChangeText={setDraft}
+            onSubmitEditing={add}
+            placeholder="name@example.com"
+            placeholderTextColor={colors.tertiaryLabel}
+            returnKeyType="next"
+            style={{ color: colors.label, flex: 1, fontSize: 17, minHeight: 44, padding: 0 }}
+            textContentType="emailAddress"
+            value={draft}
+          />
+          <CircleButton
+            icon="plus"
+            label={t("add")}
+            filled
+            disabled={!draftValid || busy}
+            onPress={add}
+            size={34}
+          />
+        </View>
+        {recipients.length > 0 ? (
+          <View style={{ padding: 16 }}>
+            <Section>
+              {recipients.map((recipient, index) => (
+                <View key={recipient.email}>
+                  {index > 0 ? <Separator /> : null}
+                  <View style={{ gap: 6, paddingHorizontal: 16, paddingVertical: 10 }}>
+                    <View style={{ alignItems: "center", flexDirection: "row", gap: 12 }}>
+                      <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>
+                        {recipient.email}
+                      </Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`${t("remove")} ${recipient.email}`}
+                        hitSlop={10}
+                        onPress={() =>
+                          setRecipients((current) =>
+                            current.filter((item) => item.email !== recipient.email),
+                          )
+                        }
+                      >
+                        <SymbolView
+                          name="xmark.circle.fill"
+                          tintColor={colors.tertiaryLabel}
+                          size={20}
+                          accessible={false}
+                        />
+                      </Pressable>
+                    </View>
+                    {recipient.error ? <RequestFeedback error={recipient.error} /> : null}
+                  </View>
+                </View>
+              ))}
+            </Section>
+          </View>
+        ) : null}
+      </ScrollView>
+    </>
   );
 }
