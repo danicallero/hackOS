@@ -10,12 +10,11 @@ import { audit } from "../../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
-import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { enqueueAuthEmail } from "../outbox.js";
 
 /**
- * Secondary email (H6): lets a participant register the address they used on
- * Devpost so the import (H16) can match their projects. Flow:
+ * Secondary email (H6): lets a participant register an additional address so
+ * project invitations (H16) sent to it can be matched to their account. Flow:
  *   POST /api/me/secondary-email          -> issues an email_verification_tokens
  *                                            row (type 'secondary_email') and
  *                                            queues the verification email
@@ -119,7 +118,6 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
           [userId, email],
         );
-        await reconcileDevpostParticipantsForUser(client, userId);
         await audit(client, {
           actorId: userId,
           entityType: "user",
@@ -287,7 +285,6 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           `UPDATE users SET secondary_email = $2, secondary_email_verified_at = now() WHERE id = $1`,
           [userId, row.email],
         );
-        await reconcileDevpostParticipantsForUser(client, userId);
         await audit(client, {
           actorId: userId,
           entityType: "user",
@@ -358,7 +355,6 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           `UPDATE users SET secondary_email = $2, secondary_email_verified_at = NULL WHERE id = $1`,
           [targetId, email],
         );
-        await reconcileDevpostParticipantsForUser(client, targetId);
         await enqueueAuthEmail(client, targetId, "auth.verifySecondaryEmail", {
           recipient: email,
           name: [tgt.name, tgt.surname].filter(Boolean).join(" ") || tgt.email,
@@ -427,7 +423,6 @@ async function removeSecondaryEmail(
       `UPDATE users SET secondary_email = NULL, secondary_email_verified_at = NULL WHERE id = $1`,
       [targetId],
     );
-    await reconcileDevpostParticipantsForUser(client, targetId);
     await audit(client, {
       actorId,
       entityType: "user",

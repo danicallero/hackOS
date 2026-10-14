@@ -128,8 +128,6 @@ export async function purgeReviewFixtureQueue(
 
   if (fixture.repo_id !== null) {
     await client.query(`DELETE FROM challenge_winners WHERE repo_id = $1`, [fixture.repo_id]);
-    await client.query(`DELETE FROM repo_devpost_prizes WHERE repo_id = $1`, [fixture.repo_id]);
-    await client.query(`DELETE FROM devpost_participants WHERE repo_id = $1`, [fixture.repo_id]);
     await client.query(`DELETE FROM submissions WHERE repo_id = $1`, [fixture.repo_id]);
     await client.query(`DELETE FROM repos WHERE id = $1 AND is_test_account = true`, [
       fixture.repo_id,

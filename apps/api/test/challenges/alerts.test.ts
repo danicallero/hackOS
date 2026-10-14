@@ -9,7 +9,7 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import { admitParticipant } from "../projects/fixtures.js";
+import { admitParticipant, setHackingWindow } from "../projects/fixtures.js";
 import { createEnterpriseChallenges, createRepoWithTeam, enqueueRepo } from "../queue/fixtures.js";
 
 describe("challenge alerts (#856)", () => {
@@ -34,40 +34,38 @@ describe("challenge alerts (#856)", () => {
 
   it("limits sponsors to their enterprise, deduplicates entered and planned members, and audits the alert", async () => {
     const { repId, challengeIds } = await createEnterpriseChallenges(1);
+    await pool.query(`UPDATE challenges SET visibility='visible' WHERE id=ANY($1)`, [challengeIds]);
     const challengeId = challengeIds[0]!;
     const participant = await createUser({ email: "alert-recipient@test.local" });
     const plannedOnly = await createUser({ email: "alert-planned@test.local" });
     await pool.query(`UPDATE users SET language = 'es' WHERE id = $1`, [participant]);
     await pool.query(`UPDATE users SET language = 'gl' WHERE id = $1`, [plannedOnly]);
-    await pool.query(
-      `INSERT INTO event_config (id, participants_can_create_projects) VALUES (1, true)
-       ON CONFLICT (id) DO UPDATE SET participants_can_create_projects = true`,
-    );
+    await setHackingWindow(true);
     await admitParticipant(participant);
     await admitParticipant(plannedOnly);
     const { repoId } = await createRepoWithTeam([participant]);
     await enqueueRepo(challengeId, repoId, 1);
     const created = await app.inject({
       method: "POST",
-      url: "/api/me/work-groups",
+      url: "/api/me/projects",
       headers: { ...asUser(participant), "idempotency-key": "alert-group" },
       payload: { name: "Alert planners" },
     });
     const groupId = created.json().id;
     await app.inject({
       method: "POST",
-      url: `/api/me/work-groups/${groupId}/invites`,
+      url: `/api/me/projects/${groupId}/invites`,
       headers: { ...asUser(participant), "idempotency-key": "alert-invite" },
       payload: { email: "alert-planned@test.local" },
     });
     await app.inject({
       method: "POST",
-      url: `/api/me/work-groups/${groupId}/invites/accept`,
+      url: `/api/me/projects/${groupId}/invites/accept`,
       headers: { ...asUser(plannedOnly), "idempotency-key": "alert-accept" },
     });
     await app.inject({
       method: "POST",
-      url: `/api/me/work-groups/${groupId}/challenges`,
+      url: `/api/me/projects/${groupId}/challenges`,
       headers: { ...asUser(participant), "idempotency-key": "alert-intent" },
       payload: { challengeId },
     });

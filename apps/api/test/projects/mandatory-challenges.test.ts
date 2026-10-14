@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { asUser, buildTestApp, createUserWithCapabilities, truncateAll } from "../helpers.js";
-import { createChallenge, participantsCsv, projectsCsv } from "./fixtures.js";
+import { createChallenge } from "./fixtures.js";
 
 let app: App;
 
@@ -74,47 +74,48 @@ describe("mandatory challenge participation (issue #851)", () => {
     expect(remove.statusCode).toBe(409);
   });
 
-  it("enrolls every Devpost import and native project without a selected tag", async () => {
+  it("materializes mandatory intent for native drafts without queue entries until submission", async () => {
     const server = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const manager = await createUserWithCapabilities([
       CAPABILITIES.CHALLENGES_MANAGE,
-      CAPABILITIES.PROJECTS_IMPORT,
       CAPABILITIES.PROJECTS_EDIT,
     ]);
     const challengeId = await createChallenge("Required", []);
-    await server.inject({
+    const { rows } = await pool.query(
+      `INSERT INTO repos(name,submission_status) VALUES('Draft','draft') RETURNING id`,
+    );
+    const enabled = await server.inject({
       method: "PATCH",
       url: `/api/challenges/${challengeId}`,
       headers: asUser(manager),
       payload: { mandatory: true },
     });
-
-    const imported = await server.inject({
-      method: "POST",
-      url: "/api/devpost/imports/confirm",
-      headers: { ...asUser(manager), "idempotency-key": "mandatory-import" },
-      payload: { projectsCsv: projectsCsv(), participantsCsv: participantsCsv() },
-    });
-    expect(imported.statusCode).toBe(200);
-
+    expect(enabled.statusCode, enabled.body).toBe(200);
+    expect(
+      (
+        await pool.query(`SELECT challenge_id FROM project_challenges WHERE repo_id=$1`, [
+          rows[0].id,
+        ])
+      ).rows,
+    ).toEqual([{ challenge_id: challengeId }]);
+    expect(
+      (
+        await pool.query(`SELECT count(*)::int AS n FROM queue_entries WHERE repo_id=$1`, [
+          rows[0].id,
+        ])
+      ).rows[0].n,
+    ).toBe(0);
     const native = await server.inject({
       method: "POST",
       url: "/api/repos",
-      headers: { ...asUser(manager), "idempotency-key": "mandatory-native" },
-      payload: { name: "Native mandatory", description: "", memberUserIds: [], challengeIds: [] },
+      headers: asUser(manager),
+      payload: { name: "Native mandatory", memberUserIds: [], challengeIds: [] },
     });
-    expect(native.statusCode).toBe(200);
-
-    const entrants = await pool.query(
-      `SELECT r.name FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
-        WHERE qe.challenge_id = $1 ORDER BY r.name`,
-      [challengeId],
-    );
-    expect(entrants.rows.map((row: { name: string }) => row.name)).toEqual([
-      "Native mandatory",
-      "Neural Beans",
-      "Rustacean Station",
-    ]);
+    expect(native.statusCode, native.body).toBe(200);
+    expect(
+      (await pool.query(`SELECT repo_id FROM queue_entries WHERE challenge_id=$1`, [challengeId]))
+        .rows,
+    ).toEqual([{ repo_id: native.json().id }]);
   });
 });

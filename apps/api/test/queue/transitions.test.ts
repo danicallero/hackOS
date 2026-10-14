@@ -257,7 +257,7 @@ describe("call_next (H29, H30)", () => {
     expect(third.json().entry.id).toBe(entryB);
   });
 
-  it("H30: treats linked Devpost participants as members even when submissions is missing", async () => {
+  it("H30: serializes native memberships shared by different projects", async () => {
     const { challengeId: ch1, roomId: room1 } = await setup();
     const ch2 = await createChallenge();
     const room2 = await createRoom();
@@ -266,18 +266,16 @@ describe("call_next (H29, H30)", () => {
     const sharedMember = await createUser({ email: "linked-member@test.local" });
     const { pool } = await import("../../src/db/pool.js");
     const activeRepo = (
-      await pool.query(`INSERT INTO repos (name) VALUES ('Devpost active') RETURNING id`)
+      await pool.query(`INSERT INTO repos (name) VALUES ('Native active') RETURNING id`)
     ).rows[0].id;
     const waitingRepo = (
-      await pool.query(`INSERT INTO repos (name) VALUES ('Devpost waiting') RETURNING id`)
+      await pool.query(`INSERT INTO repos (name) VALUES ('Native waiting') RETURNING id`)
     ).rows[0].id;
     for (const repoId of [activeRepo, waitingRepo]) {
-      await pool.query(
-        `INSERT INTO devpost_participants
-           (repo_id, email, user_id, import_batch, merge_status)
-         VALUES ($1, 'linked-member@test.local', $2, 'test-import', 'manually_linked')`,
-        [repoId, sharedMember],
-      );
+      await pool.query(`INSERT INTO submissions(repo_id,user_id,status) VALUES($1,$2,'active')`, [
+        repoId,
+        sharedMember,
+      ]);
     }
 
     const activeEntry = await enqueueRepo(ch1, activeRepo, 1);

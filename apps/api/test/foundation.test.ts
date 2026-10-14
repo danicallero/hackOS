@@ -108,7 +108,7 @@ describe("foundation", () => {
         .map(([method]) => `${method.toUpperCase()} ${path}`),
     );
     expect(untaggedOperations).toEqual([]);
-    expect(operationAt("/api/projects/reconciliation", "get").tags).toEqual(["projects"]);
+    expect(operationAt("/api/projects/estimates", "get").tags).toEqual(["projects"]);
     expect(operationAt("/api/challenges", "get").tags).toEqual(["challenges"]);
     expect(operationAt("/api/realtime/stream", "get").tags).toEqual(["foundation"]);
     expect(operationAt("/api/presence/lookup", "post").tags).toEqual(["logistics"]);

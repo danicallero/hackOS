@@ -278,7 +278,6 @@ export interface ReviewDetail {
     name: string;
     description: string;
     githubUrl: string | null;
-    devpostUrl: string | null;
     demoUrl: string | null;
     members: Array<{ id: number | null; name: string; email: string | null }>;
   };
@@ -305,7 +304,7 @@ export async function getReviewDetail(scope: ReviewScope, entryId: number): Prom
             c.id AS challenge_id, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title,
             ${appliedChallengesSql(2)} AS applied_challenges,
             ${RESOLVED_PANEL_SQL} AS judging_panel_criteria,
-            r.id AS repo_id, r.name AS repo_name, r.description, r.github_url, r.devpost_url, r.demo_url,
+            r.id AS repo_id, r.name AS repo_name, r.description, r.github_url, r.demo_url,
             room.id AS room_id, room.name AS room_name, room.location AS room_location,
             ar.status AS review_status, ar.scores, ar.notes, ar.updated_at
        FROM queue_entries qe
@@ -319,24 +318,14 @@ export async function getReviewDetail(scope: ReviewScope, entryId: number): Prom
   );
   const row = rows[0];
 
-  // Same union as notify.repoMemberIds, plus the Devpost-only rows that never
-  // matched a user — the panel still wants to show who is on the team.
+  // Same union as notify.repoMemberIds, plus invited members who have not yet
+  // accepted — the panel still wants to show who is on the team.
   const { rows: memberRows } = await pool.query(
     `SELECT u.id, trim(concat(u.name, ' ', u.surname)) AS name, u.email
        FROM submissions s JOIN users u ON u.id = s.user_id
       WHERE s.repo_id = $1
         AND s.status = 'active' AND u.account_state = 'active' AND u.anonymized_at IS NULL
         AND u.is_test_account = $2
-       UNION
-       SELECT u.id, trim(concat(u.name, ' ', u.surname)) AS name, u.email
-       FROM devpost_participants dp JOIN users u ON u.id = dp.user_id
-      WHERE dp.repo_id = $1
-        AND u.account_state = 'active' AND u.anonymized_at IS NULL
-        AND u.is_test_account = $2
-       UNION
-       SELECT NULL::int AS id, trim(concat(dp.name, ' ', dp.surname)) AS name, dp.email
-       FROM devpost_participants dp
-      WHERE dp.repo_id = $1 AND dp.user_id IS NULL
       ORDER BY name`,
     [row.repo_id, scope.fixtureMarker],
   );
@@ -376,7 +365,6 @@ export async function getReviewDetail(scope: ReviewScope, entryId: number): Prom
       name: row.repo_name,
       description: row.description ?? "",
       githubUrl: row.github_url,
-      devpostUrl: row.devpost_url,
       demoUrl: row.demo_url,
       members: memberRows.map((m: { id: number | null; name: string; email: string | null }) => ({
         id: m.id,

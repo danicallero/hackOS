@@ -162,7 +162,7 @@ users <---- accounts, sessions, tokens, push, wallet, ticket
   |
   +--> submissions --> repos --> queue_entries --> judging/review history
   |
-  +--> invite redemptions / Devpost denormalized email snapshots
+  +--> invite redemptions / denormalized email snapshots
   |
   +--> audit_log.actor_id and JSON/entity-id snapshots
 
@@ -173,7 +173,7 @@ anonymization:
 ```
 
 Important indirect paths are `application_responses.responses` (including
-file keys and demographic answers), `devpost_participants.email/name`, invite
+file keys and demographic answers), `project_files` originals/thumbnails and gallery consent, invite
 redemption snapshots, `audit_log.before/after/reason/entity_id`, notification
 payloads, DSR `storage_key`, meal inbox `badge_id/result/error`, object-store
 keys, wallet device identifiers, and offline scanner queues.  A foreign key
@@ -197,7 +197,7 @@ scan alone is therefore insufficient.
 | F12 | Medium | confirmed code problem; privacy/security risk | The first H54 implementation retained raw check-in/door rows under the anonymous UUID, exceeding the approved minimum. The current baseline has no anonymous raw-presence foreign keys; finalization retains only calculated guaranteed minutes plus explicitly retained application values. |
 | F13 | Medium | confirmed code problem fixed in this follow-up; operational risk; privacy/security risk | Self-service destructive requests now require a non-empty `Idempotency-Key`; a missing key is rejected instead of entering a path that cannot safely replay a lost response. Supported mobile/web clients already send a high-entropy key, and the no-production-database assumption allows the old no-key compatibility path to be removed. |
 | F14 | Medium | confirmed code problem; operational risk | Offline stale submissions can reach the server after anonymization. Permanent unlinked keyed-digest badge/ticket tombstones and active lookups reject them, and clients remove terminal stale queue items. Devices that never reconnect cannot be remotely wiped; device management/reinstall remains the operational control for the residual local copy. |
-| F15 | Medium | confirmed code improvement; privacy/security risk; requires legal/product confirmation | Shared public repositories, Devpost content and external documents can contain a person's identity independently of hackOS rows. The service removes the subject's personal submission/member link and deletes solo projects, but preserves a shared project for remaining members. The participant Privacy Policy now explains that forms/project records may request links to independent external sites with their own policies and no GPUL affiliation; confirm that this wording matches the event's external-content policy. |
+| F15 | Medium | confirmed code improvement; privacy/security risk; requires legal/product confirmation | Shared public repositories and external documents can contain a person's identity independently of hackOS rows. The service removes the subject's personal submission/member link and deletes solo projects, but preserves a shared project for remaining members. The participant Privacy Policy now explains that forms/project records may request links to independent external sites with their own policies and no GPUL affiliation; confirm that this wording matches the event's external-content policy. |
 | F16 | Medium | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | The consolidated baseline defines `time_logs_kind_check` and versioned response integrity. Invalid presence events and unversioned response policies fail closed; retained calculations rely on the database domain (`in`/`out`) and submitted form-version policy. |
 | F17 | Medium | App Store review risk; confirmed code improvement | The prior mobile flow did not expose a direct, truthful account action. The current Account/Data control is visible in-app, remains available while inside, distinguishes full deletion from irreversible anonymization/pending exit, links the Privacy Policy, and explains the consequences. Reviewer access instructions must provide an accepted test account that can reach it. |
 | F18 | Medium | App Store review risk; requires legal/product confirmation | “Delete” is reserved for full deletion; “anonymize” names the irreversible alternative. Privacy policy and App Store privacy disclosures must match actual operational retention and external-cache limitations. |
@@ -594,12 +594,12 @@ synthetic identity-shaped `users` row.
 | `enterprise_invite_link_redemptions`: user/email/name/IP/user-agent | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity and claim provenance. |
 | `user_invite_link_redemptions`: user/email/name/IP/user-agent | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity and claim provenance. |
 | `enterprise_invite_links` / `user_invite_links`: creator/token | Shared invite config | Provisioning | Null subject creator; expire/revoke shared token as normal | No | Shared link survives; subject authorship does not. |
-| `devpost_participants`: repo/email/name/surname/username/user/linker | Imported project identity | Project reconciliation | Delete subject match by FK/email; capture FK-linked Devpost-only roots before deletion; shared repo may survive | No | External project snapshot is identity-bearing. |
 | `repos`: creator/name/description/URLs | Project/team | Judging/project service | Null creator; delete solo orphan; preserve shared repo for remaining members | No | Shared project is not anonymous demographic audit. |
 | `user_public_profiles`: visibility/headline/location note/bio/links/CV key | Public profile | Public profile (#934) | Delete in the removal transaction; cascades on user delete; H54 trigger rejects pending writes | No | Opt-in public profile is identity-bearing; included in the personal export bundle as `publicProfile`. |
 | `diary_entries`: owner/target/note | Event diary | People diary (#935) | Delete rows owned by or pointing at the subject in the removal transaction; both FKs cascade on user delete; H54 trigger rejects pending writes | No | Private social graph and notes; the owner's own entries are exported as `diary` (saved people by user id only). Other attendees' entries about the subject are their private data and are not exported. |
-| `submissions`: repo/user/inviter/external ID | Team/project relation | Judging | Delete subject membership; null subject inviter | No | No individual submission relationship needed. |
-| `repo_devpost_prizes` / `devpost_prizes`: project/prize | Shared project result | Judging/result | Survive for surviving shared repo; delete with solo orphan | No | No direct identity after member link removal. |
+| `project_files`: repo/uploader/object key/thumbnail key | Native project uploads | Projects (H54) | Original and thumbnail objects uploaded by the subject are inventoried and deleted from storage in the removal flow; rows for the subject's solo projects cascade | No | Uploaded files can carry identity. |
+| `users.gallery_show_name/gallery_show_photo/gallery_consented_at` | Gallery consent | Projects (H60) | Cleared with the user row anonymization; surviving submitted snapshots expose no removed member | No | Consent is identity-linked. |
+| `submissions`: repo/user/inviter | Team/project relation | Judging | Delete subject membership; null subject inviter | No | No individual submission relationship needed. |
 | `challenges`: sponsor author anchor | Shared challenge | Judging | Survive; sponsor user link is severed | No | Organization-owned challenge needs FK anchor. |
 | `challenge_versions`: editor/snapshot | Content history | Challenge operations | Null subject editor; inspect free-text snapshots | No | Subject authorship not audit requirement. |
 | `challenge_winners`: setter/repo | Judging result | Judging | Null subject setter; shared result may survive | No | Result is shared, actor identity is not required. |
@@ -702,7 +702,7 @@ should be silently converted into a legal conclusion.
 | A05 | The existing H24 certainty-window algorithm is the approved definition of guaranteed/verified presence, including activity signals and minute flooring. | Event/audit owner |
 | A06 | The approved permanent presence evidence is aggregate guaranteed minutes; raw check-in/time timestamps, kinds, methods, notes, and actor metadata are not retained after anonymization. | Audit/data-minimization owner |
 | A07 | Rare combinations of demographics can be identifying. Reporting is expected to apply small-cell suppression/aggregation; the reporting layer is outside this implementation and must not publish raw unusual combinations. | Privacy/product owner |
-| A08 | Shared public GitHub/Devpost content and other external sites linked from a form or project are outside the hackOS anonymous audit dataset. The app removes its direct participant link where it controls one but does not rewrite third-party content; those sites have their own policies and are independent of, and not affiliated with, GPUL. | Product/privacy owner |
+| A08 | Shared public GitHub content and other external sites linked from a form or project are outside the hackOS anonymous audit dataset. The app removes its direct participant link where it controls one but does not rewrite third-party content; those sites have their own policies and are independent of, and not affiliated with, GPUL. | Product/privacy owner |
 | A09 | Production S3 versioning, reverse-proxy logs, analytics, error telemetry, PostgreSQL backups/WAL and provider logs have separate retention/purge controls. | Operations/security owner |
 | A10 | The web `hackos*`/`queue-ops-*` namespace is the complete app-owned browser storage namespace; future features must register additional keys with `clearWebAccountData()`. | Web owner |
 | A11 | Native offline scanner data must survive an ordinary staff account switch for operational continuity: shared roster data is wiped on sign-out, while each owner's encrypted pending queue remains recoverable only by that owner; closure wipes the affected owner's queue. The pre-H54 ownerless combined database is not safely migratable and is discarded rather than assigned to the first account. | Mobile/logistics owner |

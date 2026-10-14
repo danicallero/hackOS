@@ -54,7 +54,8 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   auth: "Better Auth session lifecycle (sign up/in/out, verification, password reset).",
   identity: "Users, invites, permissions and the caller's own profile (H1–H10).",
   applications: "Application forms, review, decisions and confirmations (H11–H15).",
-  projects: "Devpost import/sync and project/repo records (H16–H21, H44–H46).",
+  projects:
+    "Native project drafts, submissions, gallery and queue-facing project records (H16–H21, H44–H46).",
   challenges: "Challenge details, visibility and judging configuration (H44–H46, H49).",
   enterprises: "Enterprise records, memberships and sponsor configuration (H9, H43–H46).",
   queue:
@@ -67,7 +68,6 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   diary: "The attendee's saved people and sponsor stands (#935).",
   "live-activities": "Participant and staff Live Activities / Live Updates (#966).",
   statistics: "Configurable event statistics and their access controls (H27).",
-  "work-groups": "Pre-event participant groups, invitations and intended challenges (#852).",
   sponsors: "Sponsor content, including the sponsor FAQ (H43–H45, H58).",
   notifications: "Announcements and the notification outbox (H47–H51).",
   telemetry: "Low-cardinality browser observations for event-day realtime load (H38, #544).",
@@ -91,7 +91,6 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
 
   if (routeMatchesPrefix(url, "/api/me/diary")) return "diary";
   if (routeMatchesPrefix(url, "/api/me/live-activities")) return "live-activities";
-  if (routeMatchesPrefix(url, "/api/me/work-groups")) return "work-groups";
   if (routeMatchesPrefix(url, "/api/me/projects")) return "projects";
   if (
     ["/api/me/notifications", "/api/me/notification-preferences", "/api/me/push-tokens"].some(
@@ -140,11 +139,7 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
     )
   )
     return "applications";
-  if (
-    ["/api/devpost", "/api/projects", "/api/repos"].some((prefix) =>
-      routeMatchesPrefix(url, prefix),
-    )
-  )
+  if (["/api/projects", "/api/repos"].some((prefix) => routeMatchesPrefix(url, prefix)))
     return "projects";
   if (routeMatchesPrefix(url, "/api/challenges")) return "challenges";
   if (
@@ -181,7 +176,6 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
   if (routeMatchesPrefix(url, "/api/exports")) return "exports";
   if (routeMatchesPrefix(url, "/api/directory")) return "directory";
   if (routeMatchesPrefix(url, "/api/statistics")) return "statistics";
-  if (routeMatchesPrefix(url, "/api/work-groups")) return "work-groups";
   if (routeMatchesPrefix(url, "/api/live-activities")) return "live-activities";
   return "api";
 }

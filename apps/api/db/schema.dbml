@@ -329,7 +329,6 @@ Table challenges {
   criteria_i18n jsonb
   description text [not null, default: `''::text`]
   description_i18n jsonb
-  devpost_tags jsonb [not null, default: `'[]'::jsonb`]
   id integer [pk, increment, not null]
   is_test_account boolean [not null, default: `false`, note: 'Synthetic review-fixture queue marker; ordinary event operations exclude marked rows.']
   judging_panel_criteria jsonb
@@ -343,6 +342,8 @@ Table challenges {
   title_i18n jsonb
   updated_at "timestamp with time zone" [not null, default: `now()`]
   visibility text [not null, default: `'hidden'::text`]
+  winners_publish_at "timestamp with time zone"
+  winners_published_at "timestamp with time zone"
 }
 
 Table check_in_logs {
@@ -368,32 +369,6 @@ Table data_subject_requests {
   storage_key text
   subject_user_id integer
   type text [not null]
-  updated_at "timestamp with time zone" [not null, default: `now()`]
-}
-
-Table devpost_participants {
-  claim_email_sent_at "timestamp with time zone"
-  created_at "timestamp with time zone" [not null, default: `now()`]
-  devpost_username text
-  email text [not null]
-  import_batch text [not null]
-  linked_at "timestamp with time zone"
-  linked_by integer
-  merge_status text [not null, default: `'unmatched'::text`]
-  name text
-  repo_id integer [not null]
-  surname text
-  user_id integer
-
-  indexes {
-  (repo_id, email) [pk]
-  }
-}
-
-Table devpost_prizes {
-  created_at "timestamp with time zone" [not null, default: `now()`]
-  last_batch text
-  name text [pk, not null]
   updated_at "timestamp with time zone" [not null, default: `now()`]
 }
 
@@ -487,15 +462,18 @@ Table event_config {
   id integer [pk, not null]
   meal_plan_cutoff_hours integer [not null, default: `24`, note: '#933: meal plans lock this many hours before each meal starts.']
   name text
-  participant_self_service_ends_at "timestamp with time zone"
-  participant_self_service_starts_at "timestamp with time zone"
-  participants_can_create_projects boolean [not null, default: `false`]
   pass_back_fields jsonb [not null, default: `'[]'::jsonb`]
   pass_field_labels jsonb [not null, default: `'{}'::jsonb`]
   pass_field_visibility jsonb [not null, default: `'{}'::jsonb`]
   presence_auto_entry_at "timestamp with time zone"
   presence_certainty_window_minutes integer [not null, default: `720`]
+  project_draft_visibility text [not null, default: `'team_only'::text`]
+  project_drafts_open_at "timestamp with time zone"
+  project_edits_lock_at "timestamp with time zone"
+  project_gallery_audience text [not null, default: `'staff'::text`]
+  project_gallery_opens_at "timestamp with time zone"
   project_max_team_size integer
+  project_submissions_close_at "timestamp with time zone"
   require_sponsor_dietary boolean [not null, default: `false`]
   require_sponsor_shirt_size boolean [not null, default: `false`]
   require_staff_dietary boolean [not null, default: `false`]
@@ -723,56 +701,13 @@ Table notification_preferences {
   }
 }
 
-Table planned_work_group_challenges {
+Table project_challenges {
   challenge_id integer [not null]
   created_at "timestamp with time zone" [not null, default: `now()`]
-  group_id bigint [not null]
-
-  indexes {
-  (group_id, challenge_id) [pk]
-  }
-}
-
-Table planned_work_group_members {
-  created_at "timestamp with time zone" [not null, default: `now()`]
-  group_id bigint [not null]
-  invited_by integer
-  responded_at "timestamp with time zone"
-  status text [not null]
-  user_id integer [not null]
-
-  indexes {
-  (group_id, user_id) [pk]
-  }
-}
-
-Table planned_work_groups {
-  created_at "timestamp with time zone" [not null, default: `now()`]
-  created_by integer [not null]
-  demo_url text
-  description text [not null, default: `''::text`]
-  devpost_canonical_url text
-  devpost_url text
-  github_url text
-  id bigint [pk, increment, not null]
-  linked_repo_id integer [unique, note: 'Exact Devpost URL linkage only (#854); planning metadata never creates queue entries.']
-  name text [not null]
-  presentation_timing_preference text [not null, default: `'no_preference'::text`]
-  reconciliation_code text [not null, default: `new_project_reconciliation_code()`]
-  updated_at "timestamp with time zone" [not null, default: `now()`]
-
-  Note: 'Issue #852 planning only. linked_repo_id and presentation_timing_preference are contracts for #854 and #853; no conversion or queue behavior exists here.'
-}
-
-Table project_claim_decisions {
-  created_at "timestamp with time zone" [not null, default: `now()`]
-  reason text
   repo_id integer [not null]
-  status text [not null]
-  user_id integer [not null]
 
   indexes {
-  (repo_id, user_id) [pk]
+  (repo_id, challenge_id) [pk]
   }
 }
 
@@ -788,49 +723,37 @@ Table project_edit_requests {
   status text [not null, default: `'pending'::text`]
 }
 
-Table project_reconciliation_state {
-  created_at "timestamp with time zone"
-  created_by integer
-  demo_url text
-  description text
-  devpost_canonical_url text
-  devpost_import_url text
-  devpost_url text
-  eligibility_override boolean
+Table project_eligibility {
   eligible boolean
-  external_ids "integer[]"
-  github_url text
-  has_external_roster boolean
-  has_internal_roster boolean
-  id integer
-  imported_project_code text
-  internal_ids "integer[]"
-  is_test_account boolean
-  lock_reason text
-  locked_at "timestamp with time zone"
-  max_team_size integer
-  membership_differs boolean
-  membership_resolution text
-  name text
-  participant_count integer
-  presentation_timing_preference text
-  reconciled_into_repo_id integer
-  reconciliation_code text
-  source text
-  submission_status text
-  submitted_at "timestamp with time zone"
-  submitted_via text
-  team_size_exception boolean
-  team_size_violation boolean
-  unresolved_count integer
-  updated_at "timestamp with time zone"
+  repo_id integer
 
   Note: 'Read-only database view.'
+}
+
+Table project_files {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  field_key text [not null]
+  filename text [not null]
+  mime_type text [not null]
+  object_key text [pk, not null]
+  repo_id integer [not null]
+  size_bytes integer [not null]
+  thumbnail_key text
+  uploaded_by integer
+}
+
+Table project_form_versions {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  created_by integer
+  id integer [pk, increment, not null]
+  sections jsonb [not null, default: `'[]'::jsonb`]
+  template jsonb [not null]
 }
 
 Table project_submission_versions {
   actor_id integer
   created_at "timestamp with time zone" [not null, default: `now()`]
+  form_version_id integer
   id bigint [pk, increment, not null]
   repo_id integer [not null]
   snapshot jsonb [not null]
@@ -908,40 +831,24 @@ Table queue_settings {
   schedule_start_at "timestamp with time zone"
 }
 
-Table repo_devpost_prizes {
-  created_at "timestamp with time zone" [not null, default: `now()`]
-  prize text [not null]
-  repo_id integer [not null]
-
-  indexes {
-  (repo_id, prize) [pk]
-  }
-}
-
 Table repos {
   created_at "timestamp with time zone" [not null, default: `now()`]
   created_by integer
   demo_url text
   description text [not null, default: `''::text`]
-  devpost_canonical_url text
-  devpost_import_url text
-  devpost_url text
+  draft_revision integer [not null, default: `0`]
   eligibility_override boolean
   github_url text
   id integer [pk, increment, not null]
-  imported_project_code text
   is_test_account boolean [not null, default: `false`, note: 'Synthetic review-fixture project marker; ordinary event operations exclude marked rows.']
   lock_reason text
   locked_at "timestamp with time zone"
-  membership_resolution text
   name text [not null]
   presentation_timing_preference text [not null, default: `'no_preference'::text`]
-  reconciled_into_repo_id integer
-  reconciliation_code text [not null, default: `new_project_reconciliation_code()`]
-  source text [not null, default: `'devpost'::text`]
+  responses jsonb [not null, default: `'{}'::jsonb`]
   submission_status text [not null, default: `'submitted'::text`]
   submitted_at "timestamp with time zone"
-  submitted_via text [default: `'devpost'::text`]
+  submitted_via text [default: `'native'::text`]
   team_size_exception boolean [not null, default: `false`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
 
@@ -1155,8 +1062,6 @@ Table statistics_scope_panel_role_access {
 
 Table submissions {
   created_at "timestamp with time zone" [not null, default: `now()`]
-  external_id text
-  imported_from text [not null, default: `'manual'::text`]
   invited_by integer
   repo_id integer [not null]
   responded_at "timestamp with time zone"
@@ -1309,6 +1214,9 @@ Table users {
   email_verified boolean [not null, default: `false`]
   food_intolerance_notes text
   food_intolerances "integer[]" [not null, default: `'{}'::integer[]`]
+  gallery_consented_at "timestamp with time zone"
+  gallery_show_name boolean [not null, default: `true`]
+  gallery_show_photo boolean [not null, default: `false`]
   id integer [pk, increment, not null]
   image text
   is_test_account boolean [not null, default: `false`, note: 'Synthetic reviewer/QA fixture marker; ordinary event surfaces exclude marked rows.']
@@ -1471,9 +1379,6 @@ Ref: check_in_logs.staff_id > users.id
 Ref: check_in_logs.user_id > users.id
 Ref: data_subject_requests.requested_by > users.id
 Ref: data_subject_requests.subject_user_id > users.id
-Ref: devpost_participants.linked_by > users.id
-Ref: devpost_participants.repo_id > repos.id
-Ref: devpost_participants.user_id > users.id
 Ref: diary_entries.enterprise_id > enterprises.id
 Ref: diary_entries.owner_id > users.id
 Ref: diary_entries.target_user_id > users.id
@@ -1508,19 +1413,16 @@ Ref: meal_scan_batches.activity_id > activities.id
 Ref: meal_scan_batches.submitted_by > users.id
 Ref: notification_outbox.user_id > users.id
 Ref: notification_preferences.user_id > users.id
-Ref: planned_work_group_challenges.challenge_id > challenges.id
-Ref: planned_work_group_challenges.group_id > planned_work_groups.id
-Ref: planned_work_group_members.group_id > planned_work_groups.id
-Ref: planned_work_group_members.invited_by > users.id
-Ref: planned_work_group_members.user_id > users.id
-Ref: planned_work_groups.created_by > users.id
-Ref: planned_work_groups.linked_repo_id > repos.id
-Ref: project_claim_decisions.repo_id > repos.id
-Ref: project_claim_decisions.user_id > users.id
+Ref: project_challenges.challenge_id > challenges.id
+Ref: project_challenges.repo_id > repos.id
 Ref: project_edit_requests.decided_by > users.id
 Ref: project_edit_requests.repo_id > repos.id
 Ref: project_edit_requests.requested_by > users.id
+Ref: project_files.repo_id > repos.id
+Ref: project_files.uploaded_by > users.id
+Ref: project_form_versions.created_by > users.id
 Ref: project_submission_versions.actor_id > users.id
+Ref: project_submission_versions.form_version_id > project_form_versions.id
 Ref: project_submission_versions.repo_id > repos.id
 Ref: push_tokens.user_id > users.id
 Ref: queue_entries.assigned_room_id > rooms.id
@@ -1532,9 +1434,7 @@ Ref: queue_groups.created_by > users.id
 Ref: queue_groups.enterprise_id > enterprises.id
 Ref: queue_history.actor_id > users.id
 Ref: queue_history.queue_entry_id > queue_entries.id
-Ref: repo_devpost_prizes.repo_id > repos.id
 Ref: repos.created_by > users.id
-Ref: repos.reconciled_into_repo_id > repos.id
 Ref: review_fixture_accounts.user_id > users.id
 Ref: review_fixture_queues.challenge_id > challenges.id
 Ref: review_fixture_queues.enterprise_id > enterprises.id

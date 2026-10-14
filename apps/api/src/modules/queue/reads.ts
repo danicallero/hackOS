@@ -12,51 +12,10 @@ import {
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
 const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_description,
-  r.github_url AS repo_github_url, r.devpost_url AS repo_devpost_url, r.demo_url AS repo_demo_url,
-  COALESCE(
-    (
-      SELECT jsonb_agg(
-               m ORDER BY (m->>'name') ASC NULLS LAST, (m->>'surname') ASC NULLS LAST, (m->>'email') ASC
-             )
-        FROM (
-          SELECT jsonb_build_object(
-                   'userId', dp.user_id,
-                   'email', dp.email,
-                   'name', COALESCE(u.name, dp.name),
-                   'surname', COALESCE(u.surname, dp.surname),
-                   'source', 'devpost',
-                   'matchType', CASE
-                     WHEN dp.user_id IS NULL THEN 'unmatched'
-                     WHEN lower(dp.email) = lower(u.email) THEN 'primary_email'
-                     WHEN u.secondary_email_verified_at IS NOT NULL
-                       AND lower(dp.email) = lower(u.secondary_email) THEN 'secondary_email'
-                     ELSE 'manual'
-                   END
-                 ) AS m
-            FROM devpost_participants dp
-            LEFT JOIN users u ON u.id = dp.user_id
-           WHERE dp.repo_id = qe.repo_id
-             AND (u.id IS NULL OR (u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false))
-          UNION ALL
-          -- A submission without a Devpost identity is an operator-added row.
-          SELECT jsonb_build_object(
-                   'userId', u.id, 'email', u.email, 'name', u.name, 'surname', u.surname,
-                   'source', 'manual', 'matchType', 'manual'
-                 ) AS m
-            FROM submissions s
-            JOIN users u ON u.id = s.user_id
-           WHERE s.repo_id = qe.repo_id
-             AND s.status = 'active'
-             AND u.account_state = 'active' AND u.anonymized_at IS NULL
-             AND u.is_test_account = false
-             AND NOT EXISTS (
-               SELECT 1 FROM devpost_participants dp
-                WHERE dp.repo_id = s.repo_id AND dp.user_id = s.user_id
-             )
-        ) all_members
-    ),
-    '[]'::jsonb
-  ) AS repo_members`;
+ r.github_url AS repo_github_url,r.demo_url AS repo_demo_url,
+ COALESCE((SELECT jsonb_agg(jsonb_build_object('userId',u.id,'email',u.email,'name',u.name,'surname',u.surname,'source','native','matchType','manual') ORDER BY u.name,u.id)
+ FROM submissions s JOIN users u ON u.id=s.user_id
+ WHERE s.repo_id=qe.repo_id AND s.status='active' AND u.account_state='active' AND u.anonymized_at IS NULL AND u.is_test_account=r.is_test_account),'[]'::jsonb) AS repo_members`;
 
 /**
  * The read-only label a room's queue carries (H29/H41/H46): the queue_group's
@@ -421,7 +380,7 @@ async function crossRoomSkipReasons(
 ): Promise<CrossRoomSkip[]> {
   if (entries.length === 0) return [];
   const { rows: ineligibleRows } = await pool.query<{ id: number }>(
-    `SELECT id FROM project_reconciliation_state WHERE id = ANY($1) AND eligible = false`,
+    `SELECT repo_id AS id FROM project_eligibility WHERE repo_id = ANY($1) AND eligible = false`,
     [entries.map((e) => e.repo_id)],
   );
   const ineligible = new Set(ineligibleRows.map((r) => r.id));
@@ -693,28 +652,6 @@ WITH viewer AS (
       AND su.account_state = 'active' AND su.anonymized_at IS NULL
       AND su.is_test_account = v.is_test_account
       AND sr.is_test_account = v.is_test_account
-   UNION
-   SELECT dp.repo_id
-     FROM devpost_participants dp
-     JOIN users du ON du.id = dp.user_id
-     JOIN repos dr ON dr.id = dp.repo_id
-     CROSS JOIN viewer v
-    WHERE dp.user_id = $1
-      AND du.account_state = 'active' AND du.anonymized_at IS NULL
-      AND du.is_test_account = v.is_test_account
-      AND dr.is_test_account = v.is_test_account
-   UNION
-   SELECT dp.repo_id
-     FROM devpost_participants dp
-     JOIN users u ON u.id = $1
-     JOIN repos er ON er.id = dp.repo_id
-     CROSS JOIN viewer v
-    WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
-      AND u.is_test_account = v.is_test_account
-      AND er.is_test_account = v.is_test_account
-      AND ((u.email_verified AND lower(dp.email) = lower(u.email))
-       OR (u.secondary_email_verified_at IS NOT NULL
-           AND lower(dp.email) = lower(u.secondary_email)))
  ), enterprise_markers AS (
    SELECT s.enterprise_id, u.is_test_account AS marker
      FROM sponsors s
@@ -1087,7 +1024,7 @@ export async function roomPace(
         await db.query(
           `SELECT COUNT(DISTINCT repo_id)::int AS n FROM queue_entries
             WHERE challenge_id = ANY($1) AND status IN ('waiting', 'called')
-              AND repo_id IN (SELECT id FROM project_reconciliation_state WHERE is_test_account = $2 AND eligible)`,
+              AND repo_id IN (SELECT pe.repo_id FROM project_eligibility pe JOIN repos project ON project.id=pe.repo_id WHERE project.is_test_account = $2 AND pe.eligible)`,
           [challengeIds, fixtureMarker],
         )
       ).rows[0].n
@@ -1292,7 +1229,7 @@ export async function repoChallenges(repoId: number) {
        LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
        LEFT JOIN queue_groups qg ON qg.id = qgc.queue_group_id
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
-       LEFT JOIN project_reconciliation_state prs ON prs.id = qe.repo_id
+       LEFT JOIN project_eligibility prs ON prs.repo_id = qe.repo_id
        -- H30/#931: where a member of this team is occupied elsewhere, using
        -- the guard's shared-member relation and fixture filter. Evaluation
        -- (in_room/presenting) blocks moves; a called team only blocks calls.

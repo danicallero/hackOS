@@ -37,7 +37,7 @@ export interface DirectoryEntry {
 }
 
 export interface DirectoryProject {
-  kind: "project" | "workGroup";
+  kind: "project";
   id: number;
   name: string;
 }
@@ -72,31 +72,10 @@ const SHOWN_REPOS_SQL = `
      AND s.status = 'active'
      AND r.is_test_account = false`;
 
-const SHOWN_GROUPS_SQL = `
-  SELECT g.id, g.name
-    FROM planned_work_group_members m
-    JOIN planned_work_groups g ON g.id = m.group_id
-   WHERE p.show_project
-     AND m.user_id = u.id
-     AND m.status = 'active'
-     AND g.linked_repo_id IS NULL`;
-
-/** `c` is a published challenge one of the shown repos or groups takes part in. */
-const CHALLENGE_OF_PROJECTS = `c.visibility = 'visible'
-    AND c.is_test_account = false
-    AND (
-      EXISTS (
-        SELECT 1 FROM queue_entries qe
-         WHERE qe.challenge_id = c.id
-           AND qe.repo_id IN (SELECT id FROM (${SHOWN_REPOS_SQL}) sr)
-           AND qe.status NOT IN ('cancelled', 'disqualified')
-      )
-      OR EXISTS (
-        SELECT 1 FROM planned_work_group_challenges gc
-         WHERE gc.challenge_id = c.id
-           AND gc.group_id IN (SELECT id FROM (${SHOWN_GROUPS_SQL}) sg)
-      )
-    )`;
+const CHALLENGE_OF_PROJECTS = `c.visibility='visible' AND c.is_test_account=false
+ AND EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.challenge_id=c.id
+ AND pc.repo_id IN(SELECT id FROM (${SHOWN_REPOS_SQL}) sr))
+ OR (c.visibility='visible' AND c.is_test_account=false AND EXISTS(SELECT 1 FROM queue_entries qe WHERE qe.challenge_id=c.id AND qe.status NOT IN('cancelled','disqualified') AND qe.repo_id IN(SELECT id FROM (${SHOWN_REPOS_SQL}) sr)))`;
 
 /**
  * Labels or keys that name a CV in the three event languages (#935): "cv",
@@ -186,8 +165,6 @@ function entrySql(profiles: string): string {
            SELECT jsonb_agg(jsonb_build_object('kind', x.kind, 'id', x.id, 'name', x.name) ORDER BY x.ord, x.id)
              FROM (
                SELECT 'project' AS kind, 0 AS ord, id, name FROM (${SHOWN_REPOS_SQL}) sr
-               UNION ALL
-               SELECT 'workGroup', 1, id, name FROM (${SHOWN_GROUPS_SQL}) sg
              ) x
          ), '[]'::jsonb) AS projects,
          COALESCE((
