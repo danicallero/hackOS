@@ -43,6 +43,7 @@ jest.mock("@/lib/env", () => ({ API_URL: "https://api.test" }));
 
 import * as DocumentPicker from "expo-document-picker";
 import { DynamicForm } from "@/components/dynamic-form";
+import { InviteTeammatesScreen } from "@/components/invite-teammates-screen";
 import { MyProjectsScreen } from "@/components/my-projects-screen";
 import { NewProjectScreen } from "@/components/new-project-screen";
 import { ProjectChallengesScreen } from "@/components/project-challenges-screen";
@@ -559,7 +560,7 @@ it("reads the real catalogue contract: items with localized titles (H20)", async
   expect(await screen.findByRole("button", { name: "Space" })).toBeTruthy();
 });
 
-it("invites a teammate inline: the field opens in place, Send waits for a valid email (H19)", async () => {
+it("opens the invite sheet from the Team section (H19)", async () => {
   mockApi.mockResolvedValue({});
   await renderMobile(
     <ProjectEditor
@@ -568,40 +569,48 @@ it("invites a teammate inline: the field opens in place, Send waits for a valid 
     />,
   );
   await fireEvent.press(screen.getByRole("button", { name: "projectInvite" }));
-  const send = () => screen.getByRole("button", { name: "projectSend" });
-  expect(send().props.accessibilityState.disabled).toBe(true);
-  await fireEvent.changeText(screen.getByLabelText("projectEmail"), "not-an-email");
-  expect(send().props.accessibilityState.disabled).toBe(true);
-  await fireEvent.changeText(screen.getByLabelText("projectEmail"), " leo@example.com ");
-  await fireEvent.press(send());
-  await waitFor(() =>
-    expect(mockApi).toHaveBeenCalledWith(
-      "/api/me/projects/5/invites",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ email: "leo@example.com" }),
-      }),
-    ),
-  );
-  // The editor stays mounted and the field closes.
-  await waitFor(() => expect(screen.queryByLabelText("projectEmail")).toBeNull());
+  expect(mockPush).toHaveBeenCalledWith({ pathname: "/projects/invite", params: { id: "5" } });
 });
 
-it("shows why an invitation was refused right under the field (H19)", async () => {
-  mockApi.mockImplementation((path: string, init?: { method?: string }) =>
-    init?.method === "POST" && path.endsWith("/invites")
+it("invites several teammates: each valid email becomes a row, confirm sends them all (H19)", async () => {
+  mockApi.mockResolvedValue({});
+  await renderMobile(<InviteTeammatesScreen />);
+  const confirm = () => mockSetOptions.mock.calls.at(-1)?.[0].headerRight();
+  expect(confirm().props.disabled).toBe(true);
+  expect(screen.getByLabelText("projectEmail").props.autoFocus).toBe(true);
+  await fireEvent.changeText(screen.getByLabelText("projectEmail"), "nope");
+  expect(screen.getByRole("button", { name: "add" }).props.accessibilityState.disabled).toBe(true);
+  await fireEvent.changeText(screen.getByLabelText("projectEmail"), "leo@example.com");
+  await fireEvent.press(screen.getByRole("button", { name: "add" }));
+  expect(screen.getByText("leo@example.com")).toBeTruthy();
+  await fireEvent.changeText(screen.getByLabelText("projectEmail"), "ana@example.com");
+  await act(async () => {
+    confirm().props.onPress();
+  });
+  for (const email of ["leo@example.com", "ana@example.com"])
+    expect(mockApi).toHaveBeenCalledWith(
+      "/api/me/projects/5/invites",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ email }) }),
+    );
+  expect(mockBack).toHaveBeenCalled();
+});
+
+it("keeps only the refused recipient and shows why (H19)", async () => {
+  mockApi.mockImplementation((_path: string, init?: { body?: string }) =>
+    init?.body?.includes("full@example.com")
       ? Promise.reject(new ApiError("full", 409))
       : Promise.resolve({}),
   );
-  await renderMobile(
-    <ProjectEditor
-      reload={async () => {}}
-      project={{ ...project, canEdit: true, canInvite: true }}
-    />,
-  );
-  await fireEvent.press(screen.getByRole("button", { name: "projectInvite" }));
-  await fireEvent.changeText(screen.getByLabelText("projectEmail"), "leo@example.com");
-  await fireEvent.press(screen.getByRole("button", { name: "projectSend" }));
-  expect(await screen.findByText("requestError")).toBeTruthy();
-  expect(screen.getByLabelText("projectEmail")).toBeTruthy();
+  await renderMobile(<InviteTeammatesScreen />);
+  for (const email of ["ok@example.com", "full@example.com"]) {
+    await fireEvent.changeText(screen.getByLabelText("projectEmail"), email);
+    await fireEvent.press(screen.getByRole("button", { name: "add" }));
+  }
+  await act(async () => {
+    mockSetOptions.mock.calls.at(-1)?.[0].headerRight().props.onPress();
+  });
+  expect(await screen.findByText("full@example.com")).toBeTruthy();
+  expect(screen.queryByText("ok@example.com")).toBeNull();
+  expect(screen.getByText("requestError")).toBeTruthy();
+  expect(mockBack).not.toHaveBeenCalled();
 });

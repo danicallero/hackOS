@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DynamicForm } from "@/components/dynamic-form";
-import { InviteTeammateRow } from "@/components/invite-teammate-row";
 import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { FieldRow, GlassButton, NavRow } from "@/components/project-ui";
@@ -356,11 +355,22 @@ export function ProjectEditor({
         <Section title={t("projectTeam")}>
           <ProjectMembers project={{ ...project, members }} />
           <Separator />
-          <InviteTeammateRow
-            projectId={project.id}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("projectInvite")}
             disabled={!canEdit || project.canInvite === false}
-            onInvited={refreshTeam}
-          />
+            onPress={() =>
+              router.push({ pathname: "/projects/invite", params: { id: String(project.id) } })
+            }
+            style={{
+              justifyContent: "center",
+              minHeight: 50,
+              opacity: canEdit && project.canInvite !== false ? 1 : 0.5,
+              paddingHorizontal: 16,
+            }}
+          >
+            <Text style={{ color: colors.accent, fontSize: 17 }}>{t("projectInvite")}</Text>
+          </Pressable>
         </Section>
         {project.presentations.length ? (
           <Section title={t("projectQueue")}>
