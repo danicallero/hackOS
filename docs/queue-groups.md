@@ -245,7 +245,7 @@ backs both the room-assignment picker and the all-queues management view: a
 sponsor representative only their own enterprises', anyone else none.
 
 Queue generation is deliberately incremental. It resolves each member
-challenge's Devpost prize tags, appends only projects without an active entry,
+challenge's submitted projects (via `project_challenges`), appends only projects without an active entry,
 and uses the queue ordering service for every insertion, so regenerating never
 renumbers a team that is already waiting, called, or evaluated. Clearing a
 queue cancels only waiting/called entries and records the clear action; a later

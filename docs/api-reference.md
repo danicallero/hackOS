@@ -211,12 +211,12 @@ result reports the number of updated answers (#846).
 
 ### projects (H16–H17, H21)
 A "project" is a `repos` row; "team" is the set of `submissions (repo_id,
-user_id)` rows — there is no `teams` table. The Devpost CSV import pipeline
-stages rows in `devpost_participants` (`unmatched` / `auto_matched` /
-`manually_linked`) and reconciles them against primary/verified-secondary
-emails without ever silently merging identities. Challenge↔project linkage is
-indirect, through `repo_devpost_prizes.prize` matching a challenge's
-`devpost_tags`. Full detail: [`projects.md`](./projects.md).
+user_id)` rows (`invited`/`active`/`declined`) — there is no `teams` table.
+Challenge intent is stored in `project_challenges`; submitted answers are
+immutable snapshots tied to a `project_form_versions` row. Public gallery,
+consent, uploads and winner publication are under `/api/public/projects`,
+`/api/me/project-gallery-consent` and `/api/challenges/:id/winners/*`. Full
+detail: [`projects.md`](./projects.md).
 
 ### diary (#935)
 The caller's private event diary under `/api/me/diary`: people saved by

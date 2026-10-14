@@ -1272,7 +1272,8 @@ describe("H8 default seeded role set", () => {
   it("seeds the composable default catalogue with real, exact capability grants per role", async () => {
     const pool = await seededRoles();
     const eventDirectorCaps = Object.values(CAPABILITIES).filter(
-      (cap) => cap !== CAPABILITIES.ADMIN_ALL,
+      // projects:import is retired (migration 0705 strips it from seeds).
+      (cap) => cap !== CAPABILITIES.ADMIN_ALL && cap !== CAPABILITIES.PROJECTS_IMPORT,
     );
     const expected: Record<string, string[]> = {
       "Event Director": eventDirectorCaps,

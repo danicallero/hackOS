@@ -13,8 +13,8 @@ import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { enqueueAuthEmail } from "../outbox.js";
 
 /**
- * Secondary email (H6): lets a participant register the address they used on
- * native projects so the import (H16) can match their projects. Flow:
+ * Secondary email (H6): lets a participant register an additional address so
+ * project invitations (H16) sent to it can be matched to their account. Flow:
  *   POST /api/me/secondary-email          -> issues an email_verification_tokens
  *                                            row (type 'secondary_email') and
  *                                            queues the verification email

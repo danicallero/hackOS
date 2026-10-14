@@ -280,7 +280,7 @@ personal data over SSE.
 It fires after a successful profile `PUT` that changed something, CV writes,
 moderation, and writes owned by other domains that change a card
 (`directoryMutationForPath`): `/api/me`, `/api/me/photo` and `/api/users/:id`
-(name, surname, photo, removal), project and work-group membership, and challenge
+(name, surname, photo, removal), project membership, and challenge
 publication, visibility or title. Event-access (role) changes and queue
 status changes are not mapped; open views pick them up when refocused.
 
@@ -327,3 +327,8 @@ the staff actor, source `admin` and changed fields without retaining profile
 text, links or filenames. Repeating unchanged settings writes and broadcasts
 nothing. The existing photo removal route records its own audit entry.
 The legacy hide-and-clear route also enforces the synthetic-account boundary.
+
+Project-gallery consent (`users.gallery_show_name`, `gallery_show_photo`,
+`gallery_consented_at`) is independent of the public profile: directory
+switches never expose a photo in the project gallery, and H54 removal clears the
+consent together with the user's project uploads (see [projects](./projects.md)).

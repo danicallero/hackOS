@@ -1396,8 +1396,7 @@ async function scrubRelationships(
   }
 
   // No project membership is an audit requirement. Capture every repository
-  // linked to the subject before removing either the submission or native projects
-  // participant row; a matched native projects member may have no submission yet.
+  // linked to the subject before removing the submission row.
   const { rows: membershipRows } = await client.query<{ repo_id: number }>(
     `SELECT repo_id FROM submissions WHERE user_id = $1
 

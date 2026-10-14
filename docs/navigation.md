@@ -71,8 +71,8 @@ landing destination after sign-in and email verification
 and every other destination a dashboard would have surfaced (applications,
 project, wallet) already has its own stable nav entry above.
 
-My projects stays visible to every admitted participant because work groups
-can be planned before an operational project exists. Live queue status appears
+My projects stays visible to every admitted participant because drafts can be
+started before submission. Live queue status appears
 inside the relevant project record, rather than as a separate destination.
 `/my-queue` remains a compatibility redirect for saved links.
 
@@ -85,7 +85,7 @@ workspace never over-grants access.
 | Workspace | Items | Visible when |
 | --- | --- | --- |
 | Applications | Applications | `applications:review`, `applications:decide`, or `applications:manage` |
-| Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
+| Projects | Projects | `projects:read`, `judge:panel`, or an assigned-judge/sponsor-rep association |
 | Live judging | Queue operations (tabs: All rooms overview · Judging queues · Room configuration), Judging, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); The Room configuration tab is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from room administration |
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | `schedule:read` (view-only schedule), `schedule:manage`, `tv:control`, or `announcements:manage` |

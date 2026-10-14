@@ -318,8 +318,8 @@ export async function getReviewDetail(scope: ReviewScope, entryId: number): Prom
   );
   const row = rows[0];
 
-  // Same union as notify.repoMemberIds, plus the native projects-only rows that never
-  // matched a user — the panel still wants to show who is on the team.
+  // Same union as notify.repoMemberIds, plus invited members who have not yet
+  // accepted — the panel still wants to show who is on the team.
   const { rows: memberRows } = await pool.query(
     `SELECT u.id, trim(concat(u.name, ' ', u.surname)) AS name, u.email
        FROM submissions s JOIN users u ON u.id = s.user_id

@@ -122,9 +122,9 @@ export interface DeadlineWindow {
 }
 
 /**
- * Submissions close at `event_config.hacking_ends_at` — the same instant
- * `projects/lifecycle.ts` enforces ("The submission deadline has passed")
- * and native projects imports lock at. Decision (H19): the activity runs for the
+ * Submissions close at `event_config.project_submissions_close_at`, which
+ * inherits `hacking_ends_at` when blank (H19, H60) — the same instant the
+ * project phase policy enforces. Decision (H19): the activity runs for the
  * whole hacking period, from `hacking_starts_at` until the deadline passes;
  * only without a start does it fall back to the configured deadline lead
  * (`deadlineLead`, default `LIVE_ACTIVITY_DEADLINE_LEAD_MINUTES`) before the
@@ -135,16 +135,20 @@ export async function readDeadlineWindow(
   leadMinutes?: number,
 ): Promise<DeadlineWindow | null> {
   const lead = leadMinutes ?? (await readLiveActivityTimings(db)).deadlineLead;
-  const { rows } = await db.query<{ hacking_starts_at: Date | null; hacking_ends_at: Date }>(
-    `SELECT hacking_starts_at, hacking_ends_at
+  const { rows } = await db.query<{ starts_at: Date | null; ends_at: Date }>(
+    `SELECT hacking_starts_at AS starts_at,
+            COALESCE(project_submissions_close_at, hacking_ends_at) AS ends_at
        FROM event_config
-      WHERE id = 1 AND hacking_ends_at IS NOT NULL
-        AND now() < hacking_ends_at
-        AND COALESCE(hacking_starts_at, hacking_ends_at - make_interval(mins => $1)) <= now()`,
+      WHERE id = 1 AND COALESCE(project_submissions_close_at, hacking_ends_at) IS NOT NULL
+        AND now() < COALESCE(project_submissions_close_at, hacking_ends_at)
+        AND COALESCE(
+              hacking_starts_at,
+              COALESCE(project_submissions_close_at, hacking_ends_at) - make_interval(mins => $1)
+            ) <= now()`,
     [lead],
   );
   const row = rows[0];
-  return row ? { startsAt: row.hacking_starts_at, endsAt: row.hacking_ends_at } : null;
+  return row ? { startsAt: row.starts_at, endsAt: row.ends_at } : null;
 }
 
 export interface SubmissionFact {
@@ -153,11 +157,10 @@ export interface SubmissionFact {
 }
 
 /**
- * Each user's hackOS project status: every project or work group they are an
- * active member of (the same three membership sources as
- * `isActiveProjectMember`, H54 fixture boundary included), submitted only
- * when all of them are. No project in hackOS → `null` (e.g. a native projects team
- * not imported yet): unknown, never "not submitted".
+ * Each user's hackOS project status: every project they are an active member
+ * of (`submissions`, H54 fixture boundary included), submitted only when all
+ * of them are. No project in hackOS → `null` (e.g. a participant who has not
+ * started a project): unknown, never "not submitted".
  */
 export async function loadSubmissionFacts(
   userIds: number[],

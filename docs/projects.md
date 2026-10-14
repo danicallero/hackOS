@@ -69,5 +69,37 @@ records one transition and compacts positions. H30 membership derives solely fro
 active native memberships, retaining ordered advisory locks across teams sharing
 a member. `project_eligibility` evaluates submitted status, explicit exclusion
 and configured team-size limits even when event settings have no singleton yet.
-Applied migration history is immutable, including retired integration terms;
-0306 removes those database objects and 0307 fixes singleton-independent eligibility.
+Migration `0705_native_projects.sql` is the single migration that introduces the
+native model; earlier applied migrations are immutable and still mention retired
+integration vocabulary.
+
+## Teams, invitations and challenge intent
+
+`POST /api/me/projects` creates a draft (H19; allowed while the draft phase is
+open) and `GET /api/me/projects` returns `{projects,canCreate}`. Members invite
+by email with `POST /api/me/projects/:id/invites`; the invitee answers with
+`POST /api/me/projects/:id/invites/accept|decline` and sees pending invitations
+at `GET /api/me/projects/invites`. Accepting locks the project and enforces
+`projectMaxTeamSize`. `PUT|DELETE /api/me/projects/:id/challenges/:challengeId`
+edit intended challenges; mandatory challenges are added automatically and
+cannot be withdrawn (H17). `GET /api/projects/estimates` gives staff and
+sponsors per-challenge project counts from the same stores and scope.
+Staff create/edit projects with `POST /api/repos` and `PUT /api/repos/:id/draft`
+and enrol or withdraw all projects with
+`POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove` (H21), audited in
+the same transaction.
+
+## Winner publication (H46, #1010)
+
+Challenge winners stay private until revealed. `GET|PUT
+/api/challenges/:id/winners/publication` read or schedule `{publishAt,publishedAt}`
+and `POST /api/challenges/:id/winners/publish` reveals them now (idempotent).
+The scheduled reveal runs in the existing 15 s visibility tick
+(`challenges/visibility-publisher.ts` calling `winner-publication.ts`) using the
+SQL clock. Before reveal, public challenge feed/detail, the native gallery and
+`GET /api/tv/winners` omit winners; after reveal TV returns
+`{winners:[{challengeId,challengeTitle,rank,repoId,repoName}]}` and gallery
+badges omit repo fields. Reveal emits one public `DATA_CHANGED` after commit;
+private winner edits never trigger public invalidation (`lib/sse-routing.ts`).
+A winner may be a project entered in any challenge of the same queue group.
+Regression coverage: `test/challenges/winner-publication.test.ts`.

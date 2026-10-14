@@ -54,7 +54,8 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   auth: "Better Auth session lifecycle (sign up/in/out, verification, password reset).",
   identity: "Users, invites, permissions and the caller's own profile (H1–H10).",
   applications: "Application forms, review, decisions and confirmations (H11–H15).",
-  projects: "native projects import/sync and project/repo records (H16–H21, H44–H46).",
+  projects:
+    "Native project drafts, submissions, gallery and queue-facing project records (H16–H21, H44–H46).",
   challenges: "Challenge details, visibility and judging configuration (H44–H46, H49).",
   enterprises: "Enterprise records, memberships and sponsor configuration (H9, H43–H46).",
   queue:

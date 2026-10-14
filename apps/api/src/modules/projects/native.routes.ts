@@ -120,7 +120,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
       schema: {
         summary: "Read project form",
         description:
-          "Returns the current shared application-form definition and immutable version used by native projects (#1007).",
+          "Returns the current shared application-form definition and immutable version used by projects (#1007).",
       },
     },
     () => nativeForm(),

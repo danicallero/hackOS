@@ -2,7 +2,7 @@
 
 Web and native clients register logical readers with one transport owner per
 browser tab or native instance. There is no cross-tab sharing. Public TV keeps
-its single payload-free `/api/tv/stream`, including content invalidations.
+its single payload-free `/api/tv/stream`, including content invalidations. Winner reveal (H46) emits one public `DATA_CHANGED` after commit; private winner edits emit nothing public.
 Collaborative review remains a logical SSE scope; judging WebSockets and
 bidirectional presence/lease coordination are a separate migration.
 

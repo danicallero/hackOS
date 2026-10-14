@@ -12,9 +12,9 @@ import { roomChallengeIds } from "./groups.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
 /**
- * Team members for a repo. `submissions` is the normal source, while the
- * native projects fallback keeps notifications correct during or after an import even
- * if a legacy participant row has not yet gained its submission.
+ * Team members for a repo. `submissions` is the normal source; the
+ * email fallback keeps notifications correct when a member's invitation was
+ * addressed to a secondary email.
  */
 export async function repoMemberIds(
   client: Queryable,

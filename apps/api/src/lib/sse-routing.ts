@@ -30,7 +30,7 @@ export function mutationDomainForPath(url: string): string | null {
     return SSE_TOPICS.APPLICATIONS;
   }
 
-  // native projects/projects and queue membership edits are project read-model writes
+  // project and queue membership edits are project read-model writes
   // even when the URL is nested under a challenge (H16-H21).
   if (
     matches("/api/projects") ||
