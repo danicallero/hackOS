@@ -8,6 +8,7 @@ import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import type { NativeProject } from "@/lib/native-projects";
 import { galleryContext, projectAssetUrl } from "./data";
+import { GalleryRefresh } from "./gallery-refresh";
 
 interface GalleryChallenge {
   id: number;
@@ -41,6 +42,7 @@ export default async function GalleryPage({
     if (!(error instanceof ApiError)) throw error;
     return (
       <PageLayout className="px-4 py-6 sm:px-6">
+        <GalleryRefresh />
         <PageHeader title={copy.projectGallery} />
         <p role="alert">{apiErrorText(error, t, t("apiErrorServer"))}</p>
       </PageLayout>
@@ -48,6 +50,7 @@ export default async function GalleryPage({
   }
   return (
     <PageLayout className="px-4 py-6 sm:px-6">
+      <GalleryRefresh />
       <PageHeader title={copy.projectGallery} />
       <form className="flex flex-wrap gap-2" action="/gallery">
         <label className="sr-only" htmlFor="gallery-search">

@@ -38,6 +38,11 @@ compares boundaries to `now()`; API host time does not authorize operations.
 retain their team view; public/nonmember content obeys draft visibility and
 gallery audience. Public responses and authorized file streams use no-store
 so a time or consent change cannot retain a privileged cached projection.
+The web gallery refreshes its server projection on public invalidations and
+every 15 seconds for SQL-clock phase boundaries. Consent changes emit only a
+payload-free public invalidation. The configured web origin may make credentialed
+public reads for attendee-only galleries and winners; external catalogue origins
+retain anonymous wildcard CORS.
 
 ## Gallery and files
 
@@ -48,8 +53,10 @@ Batch projections use a fixed number of queries across a page.
 
 Gallery consent is independent of badge-directory consent:
 `GET/PUT /api/me/project-gallery-consent` carries `{showName,showPhoto}`.
-Names default to visible; photos default to hidden. Opt-in explicitly covers
-potential public indexing. Team reads retain private member names and invitation
+Names default to visible; photos default to hidden. Nonmember list and detail
+projections return a null name when its owner disables name sharing, including
+after submission; active teammates retain their private roster names. Opt-in
+explicitly covers potential public indexing. Team reads retain private member names and invitation
 statuses; nonmembers receive only active, consented display information.
 Photo reads recheck current consent and project visibility on each request.
 

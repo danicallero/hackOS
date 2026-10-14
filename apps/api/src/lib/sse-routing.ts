@@ -115,6 +115,7 @@ export function publicContentMutationForPath(url: string): boolean {
   const singleResource = (prefix: string): boolean => new RegExp(`^${prefix}/[^/]+$`).test(path);
 
   return (
+    path === "/api/me/project-gallery-consent" ||
     path === "/api/enterprises" ||
     path === "/api/enterprises/visibility" ||
     singleResource("/api/enterprises") ||

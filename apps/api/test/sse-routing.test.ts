@@ -124,6 +124,8 @@ describe("domain mutation routing", () => {
     expect(publicContentMutationForPath("/api/challenges/3/publish")).toBe(true);
     expect(publicContentMutationForPath("/api/challenges/3/winners/1")).toBe(false);
     expect(publicContentMutationForPath("/api/event")).toBe(false);
+    expect(publicContentMutationForPath("/api/me/project-gallery-consent")).toBe(true);
+    expect(publicContentMutationForPath("/api/me/projects/3/invites")).toBe(false);
   });
 });
 
