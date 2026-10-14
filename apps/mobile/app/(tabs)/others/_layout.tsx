@@ -73,6 +73,11 @@ export default function OthersLayout() {
         name="legal"
         options={{ headerShown: true, headerLargeTitle: true, title: t("accountLegalTitle") }}
       />
+      <Stack.Screen
+        name="licenses/index"
+        options={{ headerShown: true, headerLargeTitle: true, title: t("legalLicenses") }}
+      />
+      <Stack.Screen name="licenses/[name]" options={{ headerShown: true }} />
       <Stack.Screen name="person/[id]" options={transparentDetailHeaderOptions} />
       <Stack.Screen name="person/presence/[id]" options={transparentDetailHeaderOptions} />
       <Stack.Screen

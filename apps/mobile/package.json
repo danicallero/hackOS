@@ -86,7 +86,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
-    "test:ui": "jest --runInBand test/ui"
+    "test:ui": "jest --runInBand test/ui",
+    "generate:licenses": "node scripts/generate-licenses.mjs"
   },
   "jest": {
     "preset": "jest-expo",
