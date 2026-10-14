@@ -26,6 +26,7 @@ export function ProjectGalleryScreen() {
   const [projects, setProjects] = useState<NativeProject[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [loaded, setLoaded] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const generation = useRef(0);
@@ -87,6 +88,7 @@ export function ProjectGalleryScreen() {
       if (nextPage === 1) {
         setProjects([]);
         setTotal(0);
+        setLoaded(0);
       }
       try {
         const query = new URLSearchParams({
@@ -94,10 +96,18 @@ export function ProjectGalleryScreen() {
           pageSize: "20",
           search: search.trim(),
         });
-        for (const id of challengeIds) query.append("challengeId", String(id));
+        // The API filters by one challenge; several are matched here against each project's own list.
+        if (challengeIds.length === 1) query.set("challengeId", String(challengeIds[0]));
         const result = await apiFetch<GalleryPage>(`/api/public/projects?${query}`);
         if (request !== generation.current) return;
-        setProjects((current) => (nextPage === 1 ? result.items : [...current, ...result.items]));
+        const items =
+          challengeIds.length > 1
+            ? result.items.filter((item) =>
+                item.challenges.some((challenge) => challengeIds.includes(challenge.id)),
+              )
+            : result.items;
+        setLoaded((current) => (nextPage === 1 ? 0 : current) + result.items.length);
+        setProjects((current) => (nextPage === 1 ? items : [...current, ...items]));
         setPage(nextPage);
         setTotal(result.total);
       } catch (cause) {
@@ -199,7 +209,7 @@ export function ProjectGalleryScreen() {
           </Section>
         ) : null}
         {loading ? <RequestFeedback loading /> : null}
-        {projects.length < total ? (
+        {loaded < total ? (
           <ActionButton
             label={t("projectMore")}
             disabled={loading}

@@ -482,3 +482,20 @@ it("opens the gallery filtered to the linked challenge and sends every chosen ch
   expect(await screen.findByText("Filtered")).toBeTruthy();
   expect(screen.queryByText("projectAllChallenges")).toBeNull();
 });
+
+it("matches several chosen challenges against each project when the API filters by one (H18)", async () => {
+  mockParams = { challengeId: "9" };
+  settle({
+    "/api/public/projects?page=1&pageSize=20&search=&challengeId=9": {
+      items: [{ ...project, name: "Single" }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    },
+  });
+  await renderMobile(<ProjectGalleryScreen />);
+  expect(await screen.findByText("Single")).toBeTruthy();
+  expect(mockApi).toHaveBeenCalledWith(
+    "/api/public/projects?page=1&pageSize=20&search=&challengeId=9",
+  );
+});
