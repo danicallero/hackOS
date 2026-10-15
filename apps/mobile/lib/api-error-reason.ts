@@ -1,4 +1,5 @@
 import { errorDetailsReason, errorReasonCopyKey } from "@hackos/shared/error-reasons";
+import { SCAN_REPLAY_EXPIRED, SCANNER_REPLAY_MAX_AGE_DAYS } from "@hackos/shared/idempotency";
 import commonEn from "@hackos/shared/locales/en/common.json";
 import { ApiError } from "./api";
 import type { MessageKey } from "./i18n";
@@ -59,6 +60,9 @@ export function scanFailureCode(err: unknown): string {
 
 /** Localized text for a stored scan failure code; legacy English rows get generic copy. */
 export function scanFailureText(code: string, t: Translate): string {
+  if (code === SCAN_REPLAY_EXPIRED) {
+    return t("scanReplayExpired", { days: String(SCANNER_REPLAY_MAX_AGE_DAYS) });
+  }
   const key = errorReasonCopyKey(code);
   if (key in commonEn) return t(key as MessageKey);
   if (code === "http_401") return t("apiErrorSessionExpired");

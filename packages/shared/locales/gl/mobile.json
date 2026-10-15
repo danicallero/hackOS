@@ -946,5 +946,6 @@
   "projectDeclineShort": "Rexeitar",
   "projectAddChallenge": "Engadir reto",
   "projectSearchChallenges": "Buscar retos",
-  "projectSend": "Enviar"
+  "projectSend": "Enviar",
+  "scanReplayExpired": "Non se sincronizou en {days} días. Rexístrao manualmente."
 }
