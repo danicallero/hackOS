@@ -214,8 +214,8 @@ A "project" is a `repos` row; "team" is the set of `submissions (repo_id,
 user_id)` rows (`invited`/`active`/`declined`) — there is no `teams` table.
 Challenge intent is stored in `project_challenges`; submitted answers are
 immutable snapshots tied to a `project_form_versions` row. Public gallery,
-consent, uploads and winner publication are under `/api/public/projects`,
-`/api/me/project-gallery-consent` and `/api/challenges/:id/winners/*`. Full
+uploads and winner publication are under `/api/public/projects` and
+`/api/challenges/:id/winners/*`. Full
 detail: [`projects.md`](./projects.md).
 
 ### diary (#935)

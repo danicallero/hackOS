@@ -59,14 +59,15 @@ returns `{items,total,page,pageSize}`. Detail is `/api/public/projects/:id`.
 The same paths accept optional authenticated sessions for attendee galleries.
 Batch projections use a fixed number of queries across a page.
 
-Gallery consent is independent of badge-directory consent:
-`GET/PUT /api/me/project-gallery-consent` carries `{showName,showPhoto}`.
-Names default to visible; photos default to hidden. Nonmember list and detail
-projections return a null name when its owner disables name sharing, including
-after submission; active teammates retain their private roster names. Opt-in
-explicitly covers potential public indexing. Team reads retain private member names and invitation
-statuses; nonmembers receive only active, consented display information.
-Photo reads recheck current consent and project visibility on each request.
+A member's photo on project data follows their public profile (#934): it is
+shown exactly when the profile is visible (`directory_visible` with consent)
+and shares its photo (`show_photo`); there is no separate gallery photo
+consent. Names default to visible (`users.gallery_show_name`); nonmember list
+and detail projections return a null name when it is off, including after
+submission; active teammates retain their private roster names. Team reads
+retain private member names and invitation statuses; nonmembers receive only
+active display information. Photo reads recheck the public profile and project
+visibility on each request.
 
 Multipart `POST /api/me/projects/:id/uploads?fieldKey=...` sniffs PNG/JPEG/WebP
 or PDF bytes, enforces field type/size limits and writes an idempotent project

@@ -2,7 +2,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import {
   projectDraftSchema,
   projectFormSchema,
-  projectGalleryConsentSchema,
   projectGalleryQuerySchema,
 } from "@hackos/shared/projects";
 import type { FastifyInstance } from "fastify";
@@ -191,52 +190,6 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
       },
     },
     (q) => nativeProject(q.userId, q.params.id),
-  );
-  r.get(
-    "/api/me/project-gallery-consent",
-    {
-      ...auth,
-      preHandler: requireAuth,
-      schema: {
-        summary: "Read gallery consent",
-        description:
-          "Returns explicit gallery name/photo choices independently of directory consent (#1009).",
-      },
-    },
-    async (q) => {
-      const { rows } = await pool.query(
-        `SELECT gallery_show_name AS "showName",gallery_show_photo AS "showPhoto" FROM users WHERE id=$1`,
-        [q.userId],
-      );
-      return rows[0];
-    },
-  );
-  r.put(
-    "/api/me/project-gallery-consent",
-    {
-      ...auth,
-      schema: {
-        body: projectGalleryConsentSchema,
-        summary: "Set gallery consent",
-        description:
-          "Records explicit consent for a potentially public and indexable project gallery; photos default to hidden (#1009,H53).",
-      },
-    },
-    (q) =>
-      withTransaction(async (db) => {
-        await db.query(
-          `UPDATE users SET gallery_show_name=$2,gallery_show_photo=$3,gallery_consented_at=now() WHERE id=$1`,
-          [q.userId, q.body.showName, q.body.showPhoto],
-        );
-        await audit(db, {
-          actorId: q.userId,
-          entityType: "user",
-          entityId: q.userId as number,
-          action: "gallery_consent",
-          after: q.body,
-        });
-        return q.body;
-      }),
   );
   r.get(
     "/api/public/projects",

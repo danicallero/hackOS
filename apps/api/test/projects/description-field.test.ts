@@ -64,6 +64,38 @@ describe("Project description field (H16)", () => {
     expect(project.json().responses.description).toBe("Imported text");
   });
 
+  it("a field chosen later takes over answers given before it was the description", async () => {
+    await form([{ key: "about", kind: "textarea", label }]);
+    const id = await create();
+    await pool.query(`UPDATE repos SET description='Old imported text' WHERE id=$1`, [id]);
+    await app.inject({
+      method: "PUT",
+      url: `/api/me/projects/${id}/draft`,
+      headers: asUser(owner),
+      payload: { responses: { about: "Answer written first" }, revision: 0 },
+    });
+    // Read path: the answer wins even before any resync.
+    await form([{ key: "about", kind: "textarea", project_description: true, label }]);
+    const list = await app.inject({ url: "/api/me/projects", headers: asUser(owner) });
+    expect(list.json().projects[0].description).toBe("Answer written first");
+    // Saving the form copies it into the stored column for every other reader.
+    const { createUserWithCapabilities } = await import("../helpers.js");
+    const { CAPABILITIES } = await import("@hackos/shared/capabilities");
+    const staff = await createUserWithCapabilities([CAPABILITIES.PROJECTS_EDIT]);
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/api/projects/form",
+      headers: { ...asUser(staff), "idempotency-key": "form-1" },
+      payload: {
+        template: [{ key: "about", kind: "textarea", project_description: true, label }],
+        sections: [],
+      },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    const { rows } = await pool.query(`SELECT description FROM repos WHERE id=$1`, [id]);
+    expect(rows[0].description).toBe("Answer written first");
+  });
+
   it("refuses two description fields and a non-text one", async () => {
     const { templateSchema } = await import("@hackos/shared/forms");
     expect(

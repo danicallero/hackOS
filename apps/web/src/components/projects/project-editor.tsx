@@ -31,7 +31,6 @@ import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { type NativeProject, nativeProjects } from "@/lib/native-projects";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
-import { GalleryPhotoConsent } from "./gallery-photo-consent";
 import { ProjectChallenges } from "./project-challenges";
 
 export function ProjectEditor({
@@ -377,7 +376,6 @@ export function ProjectEditor({
                 </div>
               </form>
             )}
-            {!staff && <GalleryPhotoConsent />}
           </SectionCard>
         </div>
         <div className="space-y-6">

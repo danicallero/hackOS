@@ -328,7 +328,8 @@ text, links or filenames. Repeating unchanged settings writes and broadcasts
 nothing. The existing photo removal route records its own audit entry.
 The legacy hide-and-clear route also enforces the synthetic-account boundary.
 
-Project-gallery consent (`users.gallery_show_name`, `gallery_show_photo`,
-`gallery_consented_at`) is independent of the public profile: directory
-switches never expose a photo in the project gallery, and H54 removal clears the
-consent together with the user's project uploads (see [projects](./projects.md)).
+Project data shows a member's photo under the same rule as the public profile:
+a visible profile that shares its photo shows it on projects and in the
+gallery too; hiding either hides it there (see [projects](./projects.md)).
+`users.gallery_show_name` still controls the name in nonmember project reads,
+and H54 removal clears it together with the user's project uploads.
