@@ -92,6 +92,8 @@ export interface TemplateField {
   shareable_with_sponsors?: boolean;
   /** #935: this file is the applicant's public-profile CV; at most one per form. */
   profile_cv?: boolean;
+  /** Project form only (H16): this answer is the project's description. */
+  project_description?: boolean;
   /** Groups this field under a `FormSection.key` (H11 form builder sections). */
   section_key?: string;
   /** Ungrouped question placed after this section (H11). */

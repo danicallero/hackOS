@@ -11,8 +11,16 @@ challenge selections and immutable form version.
 
 Applications and projects share `packages/shared/src/forms.ts`: trilingual
 `TemplateField` definitions, sections and validation. URL questions are text
-fields with `validation.text_condition="url"`. Images are file fields with
-image MIME types. `GET/PUT /api/projects/form` reads or versions the definition;
+fields with `validation.text_condition="url"`. A single image is a file field
+with image MIME types; a photo list is an `images` field (project form only,
+up to `MAX_IMAGES_PER_FIELD` keys). One text field is the project description
+(`project_description: true`, else a text field keyed `description`; see
+`projectDescriptionField`): saving a draft copies its answer into
+`repos.description`, and a project whose answer is empty shows its existing
+description in that field, so lists, the gallery and cards all read one value.
+Imported descriptions with flattened `## Heading` sections are normalized for
+display and summarized as plain clamped text in lists
+(`apps/web/src/lib/project-text.ts`). `GET/PUT /api/projects/form` reads or versions the definition;
 writes require project editing and record a transactional audit.
 
 `PUT /api/me/projects/:id/draft` accepts `{responses,revision}`. The project row

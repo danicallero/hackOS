@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import type { NativeProject } from "@/lib/native-projects";
+import { projectSummary } from "@/lib/project-text";
 import { galleryContext, projectAssetUrl } from "./data";
 import { GalleryRefresh } from "./gallery-refresh";
 
@@ -122,7 +123,11 @@ export default async function GalleryPage({
                 {winner.challengeTitle} · {winner.rank}
               </p>
             ))}
-            {project.description && <p className="text-sm text-pretty">{project.description}</p>}
+            {project.description && (
+              <p className="text-muted-foreground line-clamp-3 text-sm text-pretty">
+                {projectSummary(project.description, project.name)}
+              </p>
+            )}
             <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
               {project.challenges.map((challenge) => (
                 <li key={challenge.id}>

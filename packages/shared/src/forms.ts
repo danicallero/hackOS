@@ -129,6 +129,10 @@ export const templateFieldSchema = z
      *  CV. At most one per form; see directory/service.ts formCvSql. Optional:
      *  a file field named CV/curriculum/resume is picked up automatically. */
     profile_cv: z.boolean().optional(),
+    /** Project form text fields only (H16): this answer is the project's
+     *  description everywhere (lists, gallery, cards). At most one. A text
+     *  field keyed `description` plays this role when no field is marked. */
+    project_description: z.boolean().optional(),
     /** Groups this field under a `FormSection.key` (H11 form builder sections). */
     section_key: z.string().optional(),
     /** H11: ungrouped fields can follow a named section without joining it. */
@@ -161,6 +165,9 @@ export const templateFieldSchema = z
   )
   .refine((f) => !f.profile_cv || f.kind === "file", {
     message: "only a file field can be the profile CV",
+  })
+  .refine((f) => !f.project_description || f.kind === "text" || f.kind === "textarea", {
+    message: "only a text field can be the project description",
   });
 
 export const templateSchema = z
@@ -170,7 +177,24 @@ export const templateSchema = z
   })
   .refine((fields) => fields.filter((f) => f.profile_cv).length <= 1, {
     message: "only one field can be the profile CV",
+  })
+  .refine((fields) => fields.filter((f) => f.project_description).length <= 1, {
+    message: "only one field can be the project description",
   });
+
+/**
+ * H16: the project form field whose answer is the project's description: the
+ * one marked `project_description`, else a text field keyed `description`.
+ */
+export function projectDescriptionField<
+  T extends { key: string; kind: string; project_description?: boolean },
+>(template: readonly T[]): T | undefined {
+  const isText = (field: T) => field.kind === "text" || field.kind === "textarea";
+  return (
+    template.find((field) => field.project_description && isText(field)) ??
+    template.find((field) => field.key === "description" && isText(field))
+  );
+}
 
 export type TemplateField = z.infer<typeof templateFieldSchema>;
 

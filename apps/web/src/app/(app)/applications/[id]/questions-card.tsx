@@ -277,15 +277,20 @@ export function QuestionsCard({
   const blocks = buildBlocks(fields, sections);
   const ungroupedBlock = blocks[0];
 
-  // #935: a form has at most one profile CV field, so choosing one clears the rest.
+  // #935/H16: a form has at most one profile CV field and one project
+  // description field, so choosing one clears the rest.
   const update = (id: string, patch: Partial<TemplateField>) =>
     setFields((prev) =>
       prev.map((f) =>
         f._id === id
           ? { ...f, ...patch }
-          : patch.profile_cv && f.profile_cv
-            ? { ...f, profile_cv: false }
-            : f,
+          : {
+              ...f,
+              ...(patch.profile_cv && f.profile_cv ? { profile_cv: false } : {}),
+              ...(patch.project_description && f.project_description
+                ? { project_description: false }
+                : {}),
+            },
       ),
     );
 
@@ -902,6 +907,9 @@ export function serializeApplicationField(field: TemplateField): TemplateField {
           ...(field.profile_cv ? { profile_cv: true } : {}),
         }
       : {}),
+    ...(field.project_description && (field.kind === "text" || field.kind === "textarea")
+      ? { project_description: true }
+      : {}),
     ...(field.section_key ? { section_key: field.section_key } : {}),
     ...(field.after_section_key ? { after_section_key: field.after_section_key } : {}),
     ...(hasI18nText(field.help_text) ? { help_text: field.help_text } : {}),
@@ -1101,6 +1109,9 @@ export function FieldEditor({
         <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>{fieldKindLabel(field.kind, t)}</span>
           {field.required && <span>{t("required")}</span>}
+          {projectMode && field.project_description && (
+            <span>{t("projectDescriptionFieldLabel")}</span>
+          )}
         </p>
       </Surface>
     );
@@ -1567,6 +1578,14 @@ export function FieldEditor({
                 onCheckedChange={(checked) => onChange({ validation: checked ? {} : undefined })}
               >
                 {t("responseValidation")}
+              </DropdownMenuCheckboxItem>
+            )}
+            {projectMode && (field.kind === "text" || field.kind === "textarea") && (
+              <DropdownMenuCheckboxItem
+                checked={field.project_description ?? false}
+                onCheckedChange={(checked) => onChange({ project_description: checked })}
+              >
+                {t("projectDescriptionFieldLabel")}
               </DropdownMenuCheckboxItem>
             )}
           </DropdownMenuContent>

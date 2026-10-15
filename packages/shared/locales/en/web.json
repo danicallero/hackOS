@@ -3521,5 +3521,6 @@
   "capabilityDescriptionProjectsRead": "Read projects",
   "capabilityDescriptionProjectsEdit": "Edit projects",
   "galleryNotOpen": "The gallery isn't open yet",
-  "galleryOpensOn": "The gallery opens {date}"
+  "galleryOpensOn": "The gallery opens {date}",
+  "projectDescriptionFieldLabel": "Project description"
 }

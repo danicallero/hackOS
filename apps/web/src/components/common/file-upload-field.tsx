@@ -23,6 +23,7 @@ export function FileUploadField({
   applicationId,
   uploadPath,
   downloadUrl,
+  fileName: knownFileName,
   responseId,
   fieldKey,
   value,
@@ -42,6 +43,8 @@ export function FileUploadField({
   /** H16: projects share the upload control with their own scoped route. */
   uploadPath?: string;
   downloadUrl?: string;
+  /** The uploaded file's original name, when the caller knows it (project files, H16). */
+  fileName?: string;
   /** Existing response being corrected by staff; absent for applicant-owned uploads. */
   responseId?: number;
   /** Template field key the upload is attached to, used in the upload route path. */
@@ -64,6 +67,7 @@ export function FileUploadField({
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
+  const [uploadedName, setUploadedName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const { t } = useLocale();
@@ -111,6 +115,7 @@ export function FileUploadField({
       const key = payload.objectKey ?? payload.key;
       if (!key) throw new Error(t("uploadFailed"));
       setUploadedUrl(payload.url ? new URL(payload.url, API_URL).toString() : null);
+      setUploadedName(file.name);
       onChange(key);
       onBlur?.();
       setUploadError(null);
@@ -123,7 +128,9 @@ export function FileUploadField({
     }
   }
 
-  const fileName = value ? decodeURIComponent(value.split("/").pop() ?? value) : null;
+  const fileName = value
+    ? (uploadedName ?? knownFileName ?? decodeURIComponent(value.split("/").pop() ?? value))
+    : null;
   const uploadErrorId = `${id ?? inputId}-upload-error`;
   const describedBy = [ariaDescribedBy, uploadError ? uploadErrorId : null]
     .filter(Boolean)

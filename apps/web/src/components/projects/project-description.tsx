@@ -6,9 +6,10 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
+import { normalizeProjectMarkdown } from "@/lib/project-text";
 import { cn } from "@/lib/utils";
 
-export function ProjectDescription({ text }: { text: string }) {
+export function ProjectDescription({ text, projectName }: { text: string; projectName?: string }) {
   const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
@@ -36,7 +37,7 @@ export function ProjectDescription({ text }: { text: string }) {
           !expanded && "max-h-32 overflow-hidden",
         )}
       >
-        <ReactMarkdown>{text}</ReactMarkdown>
+        <ReactMarkdown>{normalizeProjectMarkdown(text, projectName)}</ReactMarkdown>
       </div>
       {(overflowing || expanded) && (
         <Button

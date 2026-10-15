@@ -340,6 +340,7 @@ export function TemplateFieldControl({
               applicationId={applicationId}
               uploadPath={uploadPath}
               downloadUrl={downloadUrl}
+              fileName={files.find((file) => file.objectKey === value)?.fileName}
               responseId={responseId}
               fieldKey={field.key}
               value={typeof value === "string" ? value : ""}
