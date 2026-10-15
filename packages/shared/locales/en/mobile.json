@@ -83,7 +83,6 @@
   "accountContact": "Contact",
   "accountVerified": "Verified",
   "accountNotVerified": "Not verified",
-  "accountSecondaryEmail": "Secondary email",
   "accountEventDetails": "Event details",
   "accountStaff": "Staff",
   "accountStatistics": "Statistics",
@@ -693,9 +692,6 @@
   "personFallbackName": "Person {id}",
   "personPersonalData": "Personal details",
   "personDni": "ID document",
-  "personSecondaryEmail": "Secondary email",
-  "personSecondaryEmailVerified": "Verified",
-  "personSecondaryEmailUnverified": "Not verified",
   "personShirt": "T-shirt",
   "personCurrentBadge": "Current badge",
   "personUnassigned": "Unassigned",
@@ -949,5 +945,6 @@
   "projectDeclineShort": "Decline",
   "projectAddChallenge": "Add challenge",
   "projectSearchChallenges": "Search challenges",
-  "projectSend": "Send"
+  "projectSend": "Send",
+  "scanReplayExpired": "Not synced within {days} days. Log it manually."
 }

@@ -83,7 +83,6 @@
   "accountContact": "Contacto",
   "accountVerified": "Verificado",
   "accountNotVerified": "Sin verificar",
-  "accountSecondaryEmail": "Correo secundario",
   "accountEventDetails": "Datos del evento",
   "accountStaff": "Personal",
   "accountStatistics": "Estadísticas",
@@ -693,9 +692,6 @@
   "personFallbackName": "Persona {id}",
   "personPersonalData": "Datos personales",
   "personDni": "DNI",
-  "personSecondaryEmail": "Correo secundario",
-  "personSecondaryEmailVerified": "Verificado",
-  "personSecondaryEmailUnverified": "Sin verificar",
   "personShirt": "Camiseta",
   "personCurrentBadge": "Acreditación actual",
   "personUnassigned": "Sin asignar",
@@ -949,5 +945,6 @@
   "projectDeclineShort": "Rechazar",
   "projectAddChallenge": "Añadir reto",
   "projectSearchChallenges": "Buscar retos",
-  "projectSend": "Enviar"
+  "projectSend": "Enviar",
+  "scanReplayExpired": "No se sincronizó en {days} días. Regístralo manualmente."
 }

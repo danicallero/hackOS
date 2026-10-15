@@ -255,10 +255,15 @@ describe("foundation", () => {
     });
     expect(mismatch.statusCode).toBe(409);
 
-    // #994: a replay inside the retention window (6 days) survives the purge
-    // and still returns the stored response; past 8 days it re-executes.
+    // #994: the oldest scan the mobile queue still replays (plus half of the
+    // clock-drift margin) survives the purge and still returns the stored
+    // response; once past retention the key is gone and the request re-executes.
     const { pool } = await import("../src/db/pool.js");
     const { purgeExpiredIdempotencyKeys } = await import("../src/lib/idempotency.js");
+    const { IDEMPOTENCY_RETENTION_DAYS, SCANNER_REPLAY_MAX_AGE_DAYS } = await import(
+      "@hackos/shared/idempotency"
+    );
+    expect(SCANNER_REPLAY_MAX_AGE_DAYS).toBeLessThan(IDEMPOTENCY_RETENTION_DAYS);
     const send = () =>
       app.inject({
         method: "POST",
@@ -266,12 +271,14 @@ describe("foundation", () => {
         headers: { "idempotency-key": key },
         payload: { badge: "B1" },
       });
-    await pool.query(`UPDATE idempotency_keys SET created_at = now() - interval '6 days'`);
+    const age = (interval: string) =>
+      pool.query(`UPDATE idempotency_keys SET created_at = now() - $1::interval`, [interval]);
+    await age(`${SCANNER_REPLAY_MAX_AGE_DAYS} days 12 hours`);
     await purgeExpiredIdempotencyKeys();
     const inWindow = await send();
     expect(inWindow.headers["idempotency-replayed"]).toBe("true");
     expect(inWindow.json()).toEqual({ execution: 1, got: "B1" });
-    await pool.query(`UPDATE idempotency_keys SET created_at = now() - interval '8 days'`);
+    await age(`${IDEMPOTENCY_RETENTION_DAYS} days 1 minute`);
     await purgeExpiredIdempotencyKeys();
     expect((await send()).json()).toEqual({ execution: 2, got: "B1" });
   });

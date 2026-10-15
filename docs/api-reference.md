@@ -69,8 +69,8 @@ other module's exported function instead), and, if it does background work, a
 Better Auth session lifecycle (`/api/auth/*`, pass-through, exempt from the
 route-policy ledger by design), the caller's own profile (`GET/PATCH
 /api/me`), authenticated password change (`POST /api/auth/change-password`),
-staff user management, secondary-email verification (H6),
-invitations including reusable enterprise and account links (H9/H10/H43).
+staff user management, and invitations including reusable enterprise and
+account links (H9/H10/H43).
 Changing a password verifies the current credential in Better Auth, then revokes
 all existing sessions and creates a replacement for the browser making the
 request; the password and its hash are never included in audit data. Email

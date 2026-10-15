@@ -351,33 +351,6 @@ export default function AccountScreen() {
             accessoryColor={me.emailVerified ? colors.success : colors.warning}
             accessoryLabel={me.emailVerified ? t("accountVerified") : t("accountNotVerified")}
           />
-          <Separator inset={48} />
-          <InfoRow
-            label={t("accountSecondaryEmail")}
-            value={me.secondaryEmail || t("accountNotSet")}
-            icon="envelope.badge"
-            accessoryIcon={
-              me.secondaryEmail
-                ? me.secondaryEmailVerified
-                  ? "checkmark.seal.fill"
-                  : "exclamationmark.triangle.fill"
-                : undefined
-            }
-            accessoryColor={
-              me.secondaryEmail
-                ? me.secondaryEmailVerified
-                  ? colors.success
-                  : colors.warning
-                : undefined
-            }
-            accessoryLabel={
-              me.secondaryEmail
-                ? me.secondaryEmailVerified
-                  ? t("accountVerified")
-                  : t("accountNotVerified")
-                : undefined
-            }
-          />
         </Section>
 
         <Section title={t("accountEventDetails")}>
