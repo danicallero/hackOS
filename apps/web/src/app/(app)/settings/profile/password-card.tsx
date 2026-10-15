@@ -7,7 +7,6 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Modal } from "@/components/common/modal";
 import { PasswordInput } from "@/components/common/password-input";
-import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,7 +38,7 @@ function passwordSchema(t: Translate) {
 
 type Values = z.infer<ReturnType<typeof passwordSchema>>;
 
-export function PasswordCard() {
+export function PasswordRow() {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const schema = useMemo(() => passwordSchema(t), [t]);
@@ -73,8 +72,10 @@ export function PasswordCard() {
   }
 
   return (
-    <SectionCard title={t("changePassword")}>
-      <Button variant="outline" onClick={() => setOpen(true)}>
+    <li className="flex items-center gap-3 px-4 py-3">
+      <KeyIcon aria-hidden="true" className="text-muted-foreground size-5 shrink-0" />
+      <p className="min-w-0 flex-1 text-sm font-medium">{t("changePassword")}</p>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         {t("updatePassword")}
       </Button>
       <Modal
@@ -139,6 +140,6 @@ export function PasswordCard() {
           </form>
         </Form>
       </Modal>
-    </SectionCard>
+    </li>
   );
 }

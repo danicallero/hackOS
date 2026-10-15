@@ -5,7 +5,7 @@ import { AddressBookIcon } from "@phosphor-icons/react/dist/csr/AddressBook";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
@@ -108,10 +108,22 @@ export function previewEntry(
  * attendee's write (docs/directory.md). The CV file saves on its own; the
  * switch that shares it is part of the form.
  */
+export type PublicProfileSaveControl = {
+  dirty: boolean;
+  pending: boolean;
+  error: boolean;
+  /** What the owner's card looks like with the unsaved edits; null while the profile is hidden. */
+  preview: DirectoryEntry | null;
+  save: () => Promise<void>;
+};
+
 export function PublicProfileCard({
   onboarding,
+  onSaveControl,
 }: {
   onboarding?: { onFinished: () => void; onLater: () => void };
+  /** Hands the save to the page, which owns one Save for every profile form. */
+  onSaveControl?: (control: PublicProfileSaveControl) => void;
 } = {}) {
   const { me } = useSessionContext();
   const { t } = useLocale();
@@ -148,6 +160,27 @@ export function PublicProfileCard({
   const settings = edits ?? initialSettings;
   const dirty = Boolean(initialSettings && settings && !sameSettings(settings, initialSettings));
   useUnsavedChangesGuard(dirty);
+
+  const submitRef = useRef(onSubmit);
+  submitRef.current = onSubmit;
+  const hasError = saveError !== null;
+  const loaded = profile !== null;
+  const preview = useMemo(() => {
+    if (!me || !profile || !settings?.directoryVisible) return null;
+    return dirty
+      ? previewEntry(me, settings, profile.preview, profile.cv !== null)
+      : profile.preview;
+  }, [me, profile, settings, dirty]);
+  useEffect(() => {
+    if (!loaded) return;
+    onSaveControl?.({
+      preview,
+      dirty,
+      pending,
+      error: hasError,
+      save: () => submitRef.current({ preventDefault() {} } as React.FormEvent),
+    });
+  }, [onSaveControl, loaded, preview, dirty, pending, hasError]);
 
   if (!me) return null;
   if (!profile || !stored || !settings) {
@@ -234,11 +267,11 @@ export function PublicProfileCard({
     <form className="min-w-0" onSubmit={onSubmit}>
       <SectionCard
         footerClassName="justify-start"
-        icon={onboarding ? undefined : AddressBookIcon}
-        title={onboarding ? undefined : t("publicProfileTitle")}
-        variant={onboarding ? "plain" : "surface"}
+        icon={onboarding || onSaveControl ? undefined : AddressBookIcon}
+        title={onboarding || onSaveControl ? undefined : t("publicProfileTitle")}
+        variant={onboarding || onSaveControl ? "plain" : "surface"}
         footer={
-          onboarding ? (
+          onSaveControl ? undefined : onboarding ? (
             <div className="flex w-full flex-wrap justify-end gap-2">
               <Button type="button" variant="ghost" disabled={pending} onClick={onboarding.onLater}>
                 {t("networkingOnboardingLater")}
@@ -297,48 +330,109 @@ export function PublicProfileCard({
                   label={t("publicProfileShowProject")}
                 />
               </div>
-              <div className="grid items-start gap-4 sm:grid-cols-2">
-                <TextField
-                  label={t("publicProfileHeadline")}
-                  max={HEADLINE_MAX}
-                  value={settings.headline}
-                  onChange={(headline) => update({ headline })}
-                />
-                <TextField
-                  label={t("publicProfileLocation")}
-                  max={LOCATION_MAX}
-                  placeholder={t("publicProfileLocationPlaceholder")}
-                  value={settings.locationNote}
-                  onChange={(locationNote) => update({ locationNote })}
-                />
-              </div>
-              <BioField value={settings.bio} onChange={(bio) => update({ bio })} />
-              <LinksEditor links={settings.socials} onChange={(socials) => update({ socials })} />
-              {(!onboarding || profile.cv?.source === "application") && (
-                <CvField
-                  cv={profile.cv}
-                  ownerName={displayName(me, true)}
-                  shareCv={settings.shareCv}
-                  onShareChange={(shareCv) => update({ shareCv })}
-                  onSaved={(next) => {
-                    commit(next);
-                    // A removed CV is no longer shared; drop a pending share too.
-                    if (!next.cv) {
-                      setEdits((current) =>
-                        current?.shareCv ? { ...current, shareCv: false } : current,
-                      );
-                    }
-                  }}
-                />
+              {onboarding ? (
+                <>
+                  <div className="grid items-start gap-4 sm:grid-cols-2">
+                    <TextField
+                      label={t("publicProfileHeadline")}
+                      max={HEADLINE_MAX}
+                      value={settings.headline}
+                      onChange={(headline) => update({ headline })}
+                    />
+                    <TextField
+                      label={t("publicProfileLocation")}
+                      max={LOCATION_MAX}
+                      placeholder={t("publicProfileLocationPlaceholder")}
+                      value={settings.locationNote}
+                      onChange={(locationNote) => update({ locationNote })}
+                    />
+                  </div>
+                  <BioField value={settings.bio} onChange={(bio) => update({ bio })} />
+                  <LinksEditor
+                    links={settings.socials}
+                    onChange={(socials) => update({ socials })}
+                  />
+                  {(!onboarding || profile.cv?.source === "application") && (
+                    <CvField
+                      cv={profile.cv}
+                      ownerName={displayName(me, true)}
+                      shareCv={settings.shareCv}
+                      onShareChange={(shareCv) => update({ shareCv })}
+                      onSaved={(next) => {
+                        commit(next);
+                        // A removed CV is no longer shared; drop a pending share too.
+                        if (!next.cv) {
+                          setEdits((current) =>
+                            current?.shareCv ? { ...current, shareCv: false } : current,
+                          );
+                        }
+                      }}
+                    />
+                  )}
+                  <section className="space-y-2 border-t border-border/60 pt-4">
+                    <h3 className="type-label text-muted-foreground">
+                      {t("publicProfilePreview")}
+                    </h3>
+                    <DirectoryCard
+                      entry={
+                        dirty ? previewEntry(me, settings, profile.preview, hasCv) : profile.preview
+                      }
+                    />
+                  </section>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-6">
+                    <div className="min-w-0 space-y-4">
+                      <div className="space-y-4">
+                        <TextField
+                          label={t("publicProfileHeadline")}
+                          max={HEADLINE_MAX}
+                          value={settings.headline}
+                          onChange={(headline) => update({ headline })}
+                        />
+                        <TextField
+                          label={t("publicProfileLocation")}
+                          max={LOCATION_MAX}
+                          placeholder={t("publicProfileLocationPlaceholder")}
+                          value={settings.locationNote}
+                          onChange={(locationNote) => update({ locationNote })}
+                        />
+                      </div>
+                      <BioField value={settings.bio} onChange={(bio) => update({ bio })} />
+                    </div>
+                  </div>
+                  {!onSaveControl && (
+                    <section className="space-y-2 border-t border-border/60 pt-4">
+                      <h3 className="type-label text-muted-foreground">
+                        {t("publicProfilePreview")}
+                      </h3>
+                      <DirectoryCard entry={preview ?? profile.preview} />
+                    </section>
+                  )}
+                  <LinksEditor
+                    links={settings.socials}
+                    onChange={(socials) => update({ socials })}
+                  />
+                  {(!onboarding || profile.cv?.source === "application") && (
+                    <CvField
+                      cv={profile.cv}
+                      ownerName={displayName(me, true)}
+                      shareCv={settings.shareCv}
+                      onShareChange={(shareCv) => update({ shareCv })}
+                      onSaved={(next) => {
+                        commit(next);
+                        // A removed CV is no longer shared; drop a pending share too.
+                        if (!next.cv) {
+                          setEdits((current) =>
+                            current?.shareCv ? { ...current, shareCv: false } : current,
+                          );
+                        }
+                      }}
+                    />
+                  )}
+                </>
               )}
-              <section className="space-y-2 border-t border-border/60 pt-4">
-                <h3 className="type-label text-muted-foreground">{t("publicProfilePreview")}</h3>
-                <DirectoryCard
-                  entry={
-                    dirty ? previewEntry(me, settings, profile.preview, hasCv) : profile.preview
-                  }
-                />
-              </section>
             </>
           )}
         </fieldset>

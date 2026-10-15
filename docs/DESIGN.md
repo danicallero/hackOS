@@ -508,10 +508,13 @@ shared implementations. Geometry lives in `styles/surfaces.css`.
 Application management and user/enterprise detail use the same 1280 px content
 canvas as Users. A full route page does not mean unlimited
 width: user detail needs its own route, header and tabs, not a stretched canvas
-or a side editor. Libraries use the 896 px reading canvas. Profile, project details and event
-settings use the 1280 px content canvas: desktop columns group personal details
-and account utilities, project content and challenges, or category navigation
-and settings. Keep individual form fields and descriptions readable within
+or a side editor. Libraries use the 896 px reading canvas. Profile and account (`/settings/profile`),
+project details and event settings use the 1280 px content canvas. Profile and account
+is two columns: bordered cards for editing on the left (personal details, public profile,
+account and security, roles, danger zone, one shared Save) and a sticky identity panel on the
+right (photo, name, verified email, visible role and the live public-card preview).
+Project details and event settings group project content and challenges, or category
+navigation and settings. Keep individual form fields and descriptions readable within
 that canvas. These contexts use bounded SectionCard surfaces with plain rows
 inside; avoid nested cards around each person, link or challenge. Neither route name nor settings category chooses width.
 Activities and Accreditation/Presence share this 1280 px canvas, including
