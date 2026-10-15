@@ -419,7 +419,8 @@ external submission path remains in the native client.
 
 The reusable `DynamicForm` consumes `TemplateField` and `FormSection` from
 `@hackos/shared/forms`, the application/project schema. File and image fields
-use the system document picker and project-scoped multipart uploads. Required
+use the system document picker and project-scoped multipart uploads with Expo
+`File` parts (Expo fetch does not serialize legacy React Native URI-only parts). Required
 answers are validated by the server on submission, without blocking drafts.
 `ProjectDraftWriter` serializes autosaves with optimistic revisions; newer
 edits survive an older save completing. A failed save retains answers for retry,

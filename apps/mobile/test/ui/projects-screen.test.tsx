@@ -40,6 +40,19 @@ jest.mock("@/components/glass-view", () => ({
   GlassView: ({ children }: { children?: unknown }) => children ?? null,
 }));
 jest.mock("expo-document-picker", () => ({ getDocumentAsync: jest.fn() }));
+const mockFileBytes = jest.fn(async () => new Uint8Array([1, 2, 3]));
+jest.mock("expo-file-system", () => ({
+  File: class extends Blob {
+    uri: string;
+    name = "a.png";
+    type = "image/png";
+    bytes = mockFileBytes;
+    constructor(uri: string) {
+      super(["png"], { type: "image/png" });
+      this.uri = uri;
+    }
+  },
+}));
 jest.mock("@/lib/i18n", () => ({ useLocale: () => ({ language: "en", t: (key: string) => key }) }));
 jest.mock("@/lib/env", () => ({ API_URL: "https://api.test" }));
 
@@ -338,7 +351,8 @@ it("keeps projects visible when only the invitation read fails (H19)", async () 
   expect(screen.getByText("apiErrorServer")).toBeTruthy();
 });
 
-it("explains an oversized upload rejected by the server (H16)", async () => {
+it("uploads an Expo File part and explains a server size rejection (H16)", async () => {
+  const append = jest.spyOn(FormData.prototype, "append");
   (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
     canceled: false,
     assets: [{ uri: "file:///a.png", name: "a.png", mimeType: "image/png", size: 10 }],
@@ -362,6 +376,12 @@ it("explains an oversized upload rejected by the server (H16)", async () => {
   );
   await fireEvent.press(await screen.findByRole("button", { name: "projectUpload" }));
   expect(await screen.findByText("projectTooLarge")).toBeTruthy();
+  expect(append).toHaveBeenCalledWith(
+    "file",
+    expect.objectContaining({ uri: "file:///a.png", bytes: mockFileBytes }),
+    "a.png",
+  );
+  append.mockRestore();
 });
 
 it("opens the challenge picker from the editor and disables it when closed (H17/H21)", async () => {

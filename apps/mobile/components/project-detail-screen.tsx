@@ -1,5 +1,6 @@
 import type { TemplateField } from "@hackos/shared/forms";
 import * as DocumentPicker from "expo-document-picker";
+import { File } from "expo-file-system";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -233,11 +234,8 @@ export function ProjectEditor({
       if (file.size && field.max_file_size_mb && file.size > field.max_file_size_mb * 1024 * 1024)
         throw new Error(t("projectTooLarge"));
       const body = new FormData();
-      body.append("file", {
-        uri: file.uri,
-        name: file.name,
-        type: file.mimeType ?? "application/octet-stream",
-      } as unknown as Blob);
+      // H16/H20: Expo fetch serializes File bytes; legacy React Native uri parts are unsupported.
+      body.append("file", new File(file.uri), file.name);
       let result: NonNullable<NativeProject["files"]>[number];
       try {
         result = await apiFetch<NonNullable<NativeProject["files"]>[number]>(
