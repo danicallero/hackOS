@@ -225,7 +225,9 @@ For isolated local services, set `TEST_DATABASE_URL`, both `TEST_VALKEY_URL` and
 shared instance. Keep unrelated dev-server variables such as `WEB_URL` unset
 when running tests that assert the default local origins.
 Valkey test database indices must stay within its default 0–15 range. The
-rate-limit TTL regression uses DB 4, separate from identity's DB 11, so other
+project suites use DB 3 so concurrent root-level tests cannot erase their SSE
+counters or capability cache. The rate-limit TTL regression uses DB 4, separate
+from identity's DB 11, so other
 suites' `FLUSHDB` calls cannot remove its counter mid-window (#1035).
 
 Open every pull request as a draft. Feature PRs may target protected `staging`

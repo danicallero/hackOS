@@ -1,3 +1,4 @@
+import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
