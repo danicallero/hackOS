@@ -5,11 +5,16 @@
 // photos only (apps/api/src/modules/projects/files.ts).
 
 import { MAX_IMAGES_PER_FIELD } from "@hackos/shared/forms";
+import { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { ImagesIcon } from "@phosphor-icons/react/dist/csr/Images";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useRef, useState } from "react";
 import { IconButton } from "@/components/common/icon-button";
+import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { apiUpload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
@@ -50,6 +55,13 @@ export function ProjectImagesField({
   const [error, setError] = useState<string | null>(null);
   const known = [...files, ...uploaded];
   const photos = value.flatMap((key) => known.find((file) => file.objectKey === key) ?? []);
+  const canAdd = !disabled && Boolean(uploadPath) && value.length < MAX_IMAGES_PER_FIELD;
+  const [viewing, setViewing] = useState<number | null>(null);
+  const current = viewing === null ? null : photos[viewing];
+  const step = (delta: number) =>
+    setViewing((index) =>
+      index === null ? null : (index + delta + photos.length) % photos.length,
+    );
 
   async function upload(list: FileList) {
     if (!uploadPath) return;
@@ -77,20 +89,39 @@ export function ProjectImagesField({
 
   return (
     <div className="space-y-2">
-      <div className="flex snap-x gap-3 overflow-x-auto pb-1">
-        {photos.map((photo) => (
+      {canAdd && photos.length === 0 && (
+        <Button
+          id={id}
+          type="button"
+          variant="outline"
+          loading={uploading}
+          aria-labelledby={ariaLabelledBy}
+          aria-describedby={ariaDescribedBy}
+          onClick={() => inputRef.current?.click()}
+        >
+          <ImagesIcon aria-hidden="true" />
+          {t("addPhotos")}
+        </Button>
+      )}
+      <div className={photos.length ? "flex snap-x gap-3 overflow-x-auto pb-1" : "hidden"}>
+        {photos.map((photo, index) => (
           <figure
             key={photo.objectKey}
             className="bg-muted relative h-36 w-48 shrink-0 snap-start overflow-hidden rounded-lg"
           >
-            <a href={new URL(photo.url, API_URL).toString()} target="_blank" rel="noreferrer">
+            <button
+              type="button"
+              className="focus-visible:ring-ring size-full cursor-zoom-in focus-visible:ring-2 focus-visible:outline-none"
+              aria-label={photo.fileName}
+              onClick={() => setViewing(index)}
+            >
               {/* biome-ignore lint/performance/noImgElement: authenticated API image, not a Next asset */}
               <img
                 src={new URL(photo.thumbnailUrl ?? photo.url, API_URL).toString()}
-                alt={photo.fileName}
-                className="size-full object-cover"
+                alt=""
+                className="size-full object-cover transition-opacity hover:opacity-90"
               />
-            </a>
+            </button>
             {!disabled && (
               <IconButton
                 type="button"
@@ -105,22 +136,72 @@ export function ProjectImagesField({
             )}
           </figure>
         ))}
-        {!disabled && uploadPath && value.length < MAX_IMAGES_PER_FIELD && (
-          <Button
+        {canAdd && photos.length > 0 && (
+          <button
             id={id}
             type="button"
-            variant="outline"
-            className="h-36 w-36 shrink-0 flex-col"
-            loading={uploading}
+            disabled={uploading}
             aria-labelledby={ariaLabelledBy}
             aria-describedby={ariaDescribedBy}
+            aria-label={t("addPhotos")}
+            title={t("addPhotos")}
             onClick={() => inputRef.current?.click()}
+            className="border-border text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex h-36 w-20 shrink-0 snap-start items-center justify-center rounded-lg border border-dashed transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60"
           >
-            <PlusIcon aria-hidden="true" />
-            {t("addPhotos")}
-          </Button>
+            {uploading ? (
+              <Spinner className="size-5" />
+            ) : (
+              <PlusIcon aria-hidden="true" className="size-5" />
+            )}
+          </button>
         )}
       </div>
+      <Dialog open={viewing !== null} onOpenChange={(open) => !open && setViewing(null)}>
+        <DialogContent
+          className="w-auto max-w-[calc(100vw-2rem)] gap-0 overflow-hidden bg-black p-0 sm:max-w-[min(1200px,calc(100vw-4rem))]"
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft") step(-1);
+            if (event.key === "ArrowRight") step(1);
+          }}
+        >
+          <DialogTitle className="sr-only">{current?.fileName ?? t("addPhotos")}</DialogTitle>
+          {current && (
+            // biome-ignore lint/performance/noImgElement: authenticated API image, not a Next asset
+            <img
+              src={new URL(current.url, API_URL).toString()}
+              alt={current.fileName}
+              className="max-h-[85dvh] w-auto max-w-full object-contain"
+            />
+          )}
+          {photos.length > 1 && (
+            <>
+              <IconButton
+                type="button"
+                variant="secondary"
+                size="icon"
+                label={t("previous")}
+                className="absolute top-1/2 left-3 -translate-y-1/2 rounded-full"
+                onClick={() => step(-1)}
+              >
+                <CaretLeftIcon aria-hidden="true" />
+              </IconButton>
+              <IconButton
+                type="button"
+                variant="secondary"
+                size="icon"
+                label={t("next")}
+                className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full"
+                onClick={() => step(1)}
+              >
+                <CaretRightIcon aria-hidden="true" />
+              </IconButton>
+              <p className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-xs text-white tabular-nums">
+                {(viewing ?? 0) + 1} / {photos.length}
+              </p>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
       <input
         ref={inputRef}
         type="file"

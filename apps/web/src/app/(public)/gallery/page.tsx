@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { getEventTimeZone } from "@/lib/event-time";
 import type { NativeProject } from "@/lib/native-projects";
 import { galleryContext, projectAssetUrl } from "./data";
 import { GalleryRefresh } from "./gallery-refresh";
@@ -22,13 +21,16 @@ function galleryClosedNotice(
   copy: { galleryNotOpen: string; galleryOpensOn: string },
   language: string,
 ) {
-  const details = error.details as { reason?: string; opensAt?: string | null } | undefined;
+  const details = error.details as
+    | { reason?: string; opensAt?: string | null; timeZone?: string }
+    | undefined;
   if (error.status !== 403 || !details?.reason?.startsWith("gallery_")) return null;
   if (details.reason !== "gallery_closed" || !details.opensAt) return copy.galleryNotOpen;
   const date = new Intl.DateTimeFormat(language, {
     dateStyle: "long",
     timeStyle: "short",
-    timeZone: getEventTimeZone(),
+    // Server component: the client-side event-time store is unavailable here.
+    timeZone: details.timeZone || "UTC",
   }).format(new Date(details.opensAt));
   return copy.galleryOpensOn.replace("{date}", date);
 }
