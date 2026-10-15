@@ -489,21 +489,23 @@ function RowHeading({
 function ProfileIdentity({ me, preview }: { me: Me; preview: DirectoryEntry | null }) {
   const { t } = useLocale();
   return (
-    <aside className="order-first lg:order-none rounded-surface border bg-card flex flex-col items-center gap-4 p-6 text-center lg:sticky lg:top-4">
-      <ProfilePhoto size="lg" />
-      <div className="min-w-0 space-y-1">
-        <p className="type-section-title wrap-break-word">
-          {[me.name, me.surname].filter(Boolean).join(" ")}
-        </p>
-        <p className="text-muted-foreground break-all text-sm">{me.email}</p>
+    <aside className="order-first rounded-surface border bg-card space-y-4 p-5 lg:sticky lg:top-4 lg:order-none lg:p-6">
+      <div className="flex items-center gap-4 lg:flex-col lg:text-center">
+        <ProfilePhoto size="lg" />
+        <div className="flex min-w-0 flex-col items-start gap-2 lg:items-center">
+          <p className="type-section-title wrap-break-word">
+            {[me.name, me.surname].filter(Boolean).join(" ")}
+          </p>
+          <p className="text-muted-foreground break-all text-sm">{me.email}</p>
+          {me.emailVerified ? (
+            <StatusBadge tone="success">{t("verified")}</StatusBadge>
+          ) : (
+            <StatusBadge tone="warning">{t("unverified")}</StatusBadge>
+          )}
+        </div>
       </div>
-      {me.emailVerified ? (
-        <StatusBadge tone="success">{t("verified")}</StatusBadge>
-      ) : (
-        <StatusBadge tone="warning">{t("unverified")}</StatusBadge>
-      )}
       {me.visibleRoleName && (
-        <p className="text-muted-foreground border-border/60 w-full border-t pt-4 text-sm">
+        <p className="text-muted-foreground border-border/60 border-t pt-4 text-sm lg:text-center">
           {t("visibleRole")}:{" "}
           <span className="text-foreground font-medium">{me.visibleRoleName}</span>
         </p>
