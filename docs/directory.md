@@ -77,10 +77,11 @@ profile access.
 
 The step explains networking during the event and badge-scan visibility, reuses
 the profile editor (photo, sharing choices, bio, links, CV and preview), and offers
-Create profile, Keep my profile hidden, or Remind me on next login. Creating opens
-the editor with sharing selected; Save profile and continue persists that choice.
-There is no manual Share my profile switch in onboarding: Create profile chooses
-yes, Keep my profile hidden records no, and the reminder writes neither choice.
+the actual form immediately, without an intermediate chooser. Its footer offers
+Create profile, Do not create a public profile, or Remind me on next login.
+Create profile saves the filled form and sharing consent in one action. Declining
+keeps the profile hidden without saving the unsaved public fields; the reminder
+writes neither choice. There is no manual Share my profile switch in onboarding.
 My profile settings retain the sharing switch for later changes.
 Onboarding never offers a CV upload, replacement or removal. If a submitted
 application supplies a CV (for a participant or any other applicant), it appears

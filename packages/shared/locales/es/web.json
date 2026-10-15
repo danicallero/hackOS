@@ -3523,7 +3523,6 @@
   "networkingOnboardingTitle": "Crea tu perfil para conectar",
   "networkingOnboardingDescription": "Usa tu perfil personal para conectar con participantes y representantes de empresas durante el evento. Puedes cambiar lo que compartes después en Mi perfil.",
   "networkingOnboardingLater": "Recordármelo al iniciar sesión",
-  "networkingOnboardingSave": "Guardar perfil y continuar",
-  "networkingOnboardingHidden": "Mantener mi perfil oculto",
+  "networkingOnboardingHidden": "No crear un perfil público",
   "networkingOnboardingCreate": "Crear perfil"
 }

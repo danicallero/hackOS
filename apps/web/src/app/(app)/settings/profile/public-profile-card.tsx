@@ -135,16 +135,18 @@ export function PublicProfileCard({
   const [saved, setSaved] = useState<Snapshot | null>(null);
   // Unsaved edits; null means the form shows the stored settings.
   const [edits, setEdits] = useState<Settings | null>(null);
-  const [pending, setPending] = useState(false);
+  const [savingChoice, setSavingChoice] = useState<"create" | "hidden" | null>(null);
+  const pending = savingChoice !== null;
   const [saveError, setSaveError] = useState<string | null>(null);
   // One key per pending change set, so a retried save replays instead of re-applying.
-  const idempotencyKey = useRef<string | null>(null);
+  const idempotencyKey = useRef<{ key: string; directoryVisible: boolean } | null>(null);
 
   const latest = data && (!saved || data.generation >= saved.generation) ? data : saved;
   const profile = latest?.profile ?? null;
   const stored = profile ? settingsFrom(profile) : null;
-  const settings = edits ?? stored;
-  const dirty = Boolean(stored && settings && !sameSettings(settings, stored));
+  const initialSettings = onboarding && stored ? { ...stored, directoryVisible: true } : stored;
+  const settings = edits ?? initialSettings;
+  const dirty = Boolean(initialSettings && settings && !sameSettings(settings, initialSettings));
   useUnsavedChangesGuard(dirty);
 
   if (!me) return null;
@@ -164,9 +166,9 @@ export function PublicProfileCard({
     idempotencyKey.current = null;
     setSaveError(null);
     setEdits((current) => {
-      const next = { ...(current ?? (stored as Settings)), ...patch };
+      const next = { ...(current ?? (initialSettings as Settings)), ...patch };
       // Back to the stored settings (hidden edits are discarded): follow refreshes again.
-      return sameSettings(next, stored as Settings) ? null : next;
+      return sameSettings(next, initialSettings as Settings) ? null : next;
     });
   }
 
@@ -176,14 +178,24 @@ export function PublicProfileCard({
     setSaved({ generation: generation.current, profile: next });
   }
 
-  async function onSubmit(event: React.FormEvent) {
+  async function onSubmit(event: React.FormEvent, directoryVisible = settings?.directoryVisible) {
     event.preventDefault();
     if (!settings || !stored) return;
     // Turning the opt-in off keeps the stored public fields: nothing hidden is published.
-    const body = settings.directoryVisible ? settings : { ...stored, directoryVisible: false };
-    setPending(true);
+    const body = directoryVisible
+      ? { ...settings, directoryVisible: true }
+      : { ...stored, directoryVisible: false };
+    setSavingChoice(directoryVisible ? "create" : "hidden");
     setSaveError(null);
-    idempotencyKey.current ??= crypto.randomUUID();
+    if (
+      !idempotencyKey.current ||
+      idempotencyKey.current.directoryVisible !== body.directoryVisible
+    ) {
+      idempotencyKey.current = {
+        key: crypto.randomUUID(),
+        directoryVisible: body.directoryVisible,
+      };
+    }
     try {
       const next = await api.put<PublicProfile>(
         "/api/me/public-profile",
@@ -199,7 +211,7 @@ export function PublicProfileCard({
           socials: savedLinks(body.socials),
           shareCv: body.shareCv,
         },
-        { headers: { "Idempotency-Key": idempotencyKey.current } },
+        { headers: { "Idempotency-Key": idempotencyKey.current.key } },
       );
       idempotencyKey.current = null;
       commit(next);
@@ -213,7 +225,7 @@ export function PublicProfileCard({
         t("toastSavePublicProfile"),
       );
     } finally {
-      setPending(false);
+      setSavingChoice(null);
     }
   }
 
@@ -232,25 +244,17 @@ export function PublicProfileCard({
                 {t("networkingOnboardingLater")}
               </Button>
               <Button
-                type="submit"
-                variant={settings.directoryVisible ? "default" : "outline"}
-                loading={pending}
+                type="button"
+                variant="outline"
+                disabled={pending}
+                loading={savingChoice === "hidden"}
+                onClick={(event) => void onSubmit(event, false)}
               >
-                {t(
-                  settings.directoryVisible
-                    ? "networkingOnboardingSave"
-                    : "networkingOnboardingHidden",
-                )}
+                {t("networkingOnboardingHidden")}
               </Button>
-              {!settings.directoryVisible && (
-                <Button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => update({ directoryVisible: true })}
-                >
-                  {t("networkingOnboardingCreate")}
-                </Button>
-              )}
+              <Button type="submit" disabled={pending} loading={savingChoice === "create"}>
+                {t("networkingOnboardingCreate")}
+              </Button>
             </div>
           ) : (
             <FormActions
