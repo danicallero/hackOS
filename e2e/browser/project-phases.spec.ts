@@ -24,6 +24,9 @@ test("project phases share the event category save and event timezone", async ({
   };
   await page.addInitScript(() => localStorage.setItem("hackos-language", "en"));
   await page.route("**/api/**", (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/me")
       return route.fulfill({ json: { ...shellUser, capabilities: [CAPABILITIES.EVENT_MANAGE] } });

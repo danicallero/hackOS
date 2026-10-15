@@ -9,6 +9,9 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await page.setViewportSize({ width: 1440, height: 1000 });
     let savedOrder: string[] = [];
     await page.route("**/api/**", async (route) => {
+      if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+        return route.fallback();
+      }
       const path = new URL(route.request().url()).pathname;
       if (path === "/api/me") {
         await route.fulfill({
@@ -129,6 +132,9 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       created_at: "2026-01-01T00:00:00.000Z",
     };
     await page.route("**/api/**", async (route) => {
+      if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+        return route.fallback();
+      }
       const path = new URL(route.request().url()).pathname;
       if (path === "/api/me")
         await route.fulfill({

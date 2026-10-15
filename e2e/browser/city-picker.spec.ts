@@ -7,6 +7,9 @@ test("can select a city and complete the location while Photon is unavailable", 
   let savedAnswers: unknown = {};
   let responseReads = 0;
   await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     // Exercise lossy-stream recovery while editing: each finite mock stream closes.
     if (path === "/api/realtime/stream") {

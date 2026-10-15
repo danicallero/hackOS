@@ -5,6 +5,9 @@ test("TV reveals published winners without a mode change", async ({ page }, info
   let published = false;
   let reads = 0;
   await page.route("**/api/**", (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/tv/winners") {
       reads += 1;

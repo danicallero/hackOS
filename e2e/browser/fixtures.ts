@@ -70,6 +70,17 @@ type UiFixtures = {
 };
 
 export const test = base.extend<UiFixtures>({
+  page: async ({ page }, use) => {
+    // Existing shell scenarios represent an attendee who already finished onboarding.
+    // Catch-all API mocks delegate this route with route.fallback(); onboarding
+    // scenarios override it explicitly with their own response.
+    await page.route("**/api/me/public-profile", (route) =>
+      route.fulfill({
+        json: { onboardingCompletedAt: "2026-10-01T00:00:00.000Z", consentedAt: null },
+      }),
+    );
+    await use(page);
+  },
   signIn: async ({ page }, use) => {
     await use(new SignInPage(page));
   },

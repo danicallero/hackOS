@@ -68,6 +68,7 @@ export interface PublicProfile {
   shareCv: boolean;
   /** `application`: taken from the person's application form and locked here (#935). */
   cv: { filename: string; uploadedAt: string; source: "upload" | "application" } | null;
+  onboardingCompletedAt?: string | null;
   consentedAt: string | null;
   preview: DirectoryEntry;
 }

@@ -39,6 +39,9 @@ test("application charts stay in Before while During shows live meal coverage", 
     };
   });
   await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     const json =
       path === "/api/me"

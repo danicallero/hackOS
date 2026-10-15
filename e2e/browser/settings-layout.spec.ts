@@ -5,6 +5,9 @@ import { expect, shellUser, test } from "./fixtures";
 // H3/H51: focused password editing and per-category delivery preferences.
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     let body: unknown = { items: [], total: 0 };
     if (path === "/api/me")

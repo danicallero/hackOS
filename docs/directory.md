@@ -64,14 +64,35 @@ in place (headline, location note, bio, and an eye on the surname, photo,
 project and CV that greys what is hidden). Links stay on web. The CV follows
 the same source rules: an application CV is read-only; without one the phone
 can upload (PDF, 5 MB), replace and remove the CV through
-`POST`/`DELETE /api/me/public-profile/cv`, and the eye toggles `shareCv`. After a
-participant confirms their spot (H15), the web "place confirmed" card, the
-public confirmation page (only for the token holder's own session) and the
-mobile wallet banner show `NetworkingProfileInvite` / `NetworkingInvite`: one
-sentence saying other participants and company representatives they network
-with will read this profile, and a button to the editor. It appears only while
-`consentedAt` is `null` (the profile was never created) and is hidden when
-`GET /api/me/public-profile` fails.
+`POST`/`DELETE /api/me/public-profile/cv`, and the eye toggles `shareCv`.
+
+On web, confirming a spot (H15) or creating an invited account (H9/H10)
+leads to a second onboarding step for the personal networking profile. Invited
+accounts sign in after creation; a failed sign-in retains the existing login
+recovery. The authenticated shell shows the step once event access is granted,
+including when confirmation happened through an anonymous email link and the
+person signs in later. A matching session on the public confirmation page sees
+the step before returning to its ticket; the email token alone never authorizes
+profile access.
+
+The step explains networking during the event and badge-scan visibility, reuses
+the profile editor (photo, sharing choices, bio, links, CV and preview), and offers
+Create profile, Keep my profile hidden, or Remind me on next login. Creating opens
+the editor with sharing selected; Save profile and continue persists that choice.
+There is no manual Share my profile switch in onboarding: Create profile chooses
+yes, Keep my profile hidden records no, and the reminder writes neither choice.
+My profile settings retain the sharing switch for later changes.
+Onboarding never offers a CV upload, replacement or removal. If a submitted
+application supplies a CV (for a participant or any other applicant), it appears
+read-only with the optional Share CV switch. Without an application CV, that
+section is omitted.
+Sharing starts off. Saving either visibility choice sends `completeOnboarding`
+and persists `onboarding_completed_at` independently of sharing consent. A hidden
+choice does not set `consented_at`. Deferring leaves the server state untouched
+and suppresses the step in the current browser session, including reloads;
+successful sign-in or sign-out clears that deferral. Existing profiles that were
+previously shared are backfilled as complete. Ordinary applicants without event
+access never see this step. The mobile wallet retains its smaller profile invite.
 
 ## Model
 
@@ -91,6 +112,7 @@ including the account photo, stays in `users` and is projected, never copied.
 | `socials` | `[]` | Up to 6 distinct `{kind, url}`; `kind` is `linkedin`, `github`, `x`, `instagram`, `website` or `other`. `url` must be https (a bare host gets `https://`; credentials and hosts without a dot are rejected) and is stored in the parsed URL's canonical form. |
 | `share_cv` | `false` | Readers may download the CV. Requires an uploaded or application CV (400 otherwise); removing the CV clears it. |
 | `cv_key`, `cv_filename`, `cv_uploaded_at` | `NULL` | The private CV object, its sanitized original name and upload time; all set or all null. |
+| `onboarding_completed_at` | `NULL` | Explicit completion or opt-out of the web profile step (migration `0104`); separate from sharing consent. |
 | `consented_at` | `NULL` | Stamped on every hidden→visible transition; required while visible. |
 
 Text is trimmed, empty text becomes `NULL`, and control characters are
@@ -256,8 +278,11 @@ file name and a Download button instead.
 
 `PUT` locks the `users` row `FOR NO KEY UPDATE` (which also serializes the
 first write, when no profile row exists yet), refuses removal-pending accounts
-with 409 and non-attendees with 403, then upserts. A `PUT` that repeats the
-stored settings (or the hidden defaults, without a row) writes nothing, is not
+with 409 and non-attendees with 403, then upserts. An owner `PUT` with
+`completeOnboarding: true` stamps completion once, under the
+same lock and audit transaction, including when every sharing setting stays hidden.
+A `PUT` that repeats the stored settings (or the hidden defaults, without a row),
+and does not newly complete onboarding, writes nothing, is not
 audited and broadcasts nothing. Every other `PUT` writes one `audit_log` row
 (`public_profile.updated`) in the same transaction, recording the changed field
 names and visibility before/after but never the free text or links. CV uploads

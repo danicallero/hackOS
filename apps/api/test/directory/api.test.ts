@@ -100,6 +100,60 @@ async function activeRepo(name: string, members: number[], challengeIds: number[
 }
 
 describe("public profile owner routes (#934)", () => {
+  it("records an explicit opt-out without sharing or claiming consent, once across concurrent requests", async () => {
+    const me = await person("Private", "Person");
+    const body = { ...VISIBLE, directoryVisible: false, completeOnboarding: true };
+    const results = await Promise.all([putProfile(me, body), putProfile(me, body)]);
+    for (const result of results) {
+      expect(result.statusCode).toBe(200);
+      expect(result.json()).toMatchObject({ directoryVisible: false, consentedAt: null });
+      expect(result.json().onboardingCompletedAt).toEqual(expect.any(String));
+    }
+    expect(results[0].json().onboardingCompletedAt).toBe(results[1].json().onboardingCompletedAt);
+    const { rows } = await pool.query(
+      `SELECT * FROM audit_log WHERE entity_type = 'user_public_profile' AND entity_id = $1`,
+      [me],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].after).toMatchObject({ onboardingCompleted: true, directoryVisible: false });
+    const read = await app.inject({
+      method: "GET",
+      url: "/api/me/public-profile",
+      headers: asUser(me),
+    });
+    expect(read.json().onboardingCompletedAt).toBe(results[0].json().onboardingCompletedAt);
+  });
+
+  it("completes onboarding with an explicitly shared profile", async () => {
+    const me = await person("Public", "Person");
+    const response = await putProfile(me, {
+      ...VISIBLE,
+      headline: "Builder",
+      completeOnboarding: true,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      directoryVisible: true,
+      headline: "Builder",
+      onboardingCompletedAt: expect.any(String),
+      consentedAt: expect.any(String),
+    });
+  });
+
+  it("does not complete onboarding for a non-attendee", async () => {
+    const me = await createUser();
+    const response = await putProfile(me, {
+      ...VISIBLE,
+      directoryVisible: false,
+      completeOnboarding: true,
+    });
+    expect(response.statusCode).toBe(403);
+    const { rows } = await pool.query(`SELECT 1 FROM user_public_profiles WHERE user_id = $1`, [
+      me,
+    ]);
+    expect(rows).toHaveLength(0);
+  });
+
   it("defaults to hidden and previews the card", async () => {
     const me = await person("José", "García");
     const res = await app.inject({

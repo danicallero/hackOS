@@ -4,6 +4,9 @@ import { expect, shellUser, test } from "./fixtures";
 // H12/H36: the application table shares the Users canvas, not a narrow form column.
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     const data =
       path === "/api/me"

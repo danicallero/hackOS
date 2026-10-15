@@ -5,6 +5,9 @@ import { expect, shellUser, test } from "./fixtures";
 // H8/H10: responsive roster actions and selected fields in mobile entries.
 test("users actions fit and mobile tags follow the column selection", async ({ page }) => {
   await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     let body: unknown = { items: [], total: 0 };
     if (path === "/api/me") body = { ...shellUser, capabilities: [CAPABILITIES.ADMIN_ALL] };
