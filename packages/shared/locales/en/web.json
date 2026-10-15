@@ -2551,7 +2551,7 @@
   "resetJudgingDataDescription": "Deletes projects, queue entries and judging results.",
   "resetJudgingDataWarning": "This affects everyone in the event.",
   "resetJudgingDataUseOnlyWhenNeeded": "Use only to restart a judging run. Delivered emails cannot be recalled.",
-  "reviewJudgingDataReset": "Review event-wide reset",
+  "reviewJudgingDataReset": "Review reset",
   "resetJudgingDataFirstConfirmTitle": "Review the event-wide reset?",
   "resetJudgingDataFirstConfirmDescription": "This is the first confirmation. Nothing has been deleted yet.",
   "resetJudgingDataDeletesQueueAndJudging": "Deletes all queue entries, movement history, reviews, judging sessions, winners, judge assignments, and queue notifications.",

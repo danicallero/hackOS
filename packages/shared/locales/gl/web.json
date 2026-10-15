@@ -2551,7 +2551,7 @@
   "resetJudgingDataDescription": "Elimina proxectos, colas e resultados de avaliación.",
   "resetJudgingDataWarning": "Isto afecta a todo o evento.",
   "resetJudgingDataUseOnlyWhenNeeded": "Úsao só para reiniciar a avaliación. Os correos entregados non se poden recuperar.",
-  "reviewJudgingDataReset": "Revisar restablecemento de todo o evento",
+  "reviewJudgingDataReset": "Revisar reinicio",
   "resetJudgingDataFirstConfirmTitle": "¿Revisar o restablecemento de todo o evento?",
   "resetJudgingDataFirstConfirmDescription": "Esta é a primeira confirmación. Aínda non se eliminou nada.",
   "resetJudgingDataDeletesQueueAndJudging": "Elimina todas as entradas de cola, historial de movementos, avaliacións, sesións, gañadores, asignacións de xuíces e notificacións de cola.",
