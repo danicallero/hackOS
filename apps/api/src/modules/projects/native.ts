@@ -1,3 +1,4 @@
+import { projectDescriptionField } from "@hackos/shared/forms";
 import type { ProjectForm } from "@hackos/shared/projects";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -69,9 +70,12 @@ export async function saveNativeDraft(
     if (!before) throw new NotFoundError("Project not found");
     if (before.draft_revision !== revision)
       throw new ConflictError("A newer project draft exists", { revision: before.draft_revision });
+    // H16: the description field's answer is the project's description everywhere.
+    const descriptionField = projectDescriptionField((await nativeForm(db))?.template ?? []);
+    const description = descriptionField ? responses[descriptionField.key] : undefined;
     const { rows } = await db.query(
-      `UPDATE repos SET responses=$2,draft_revision=draft_revision+1 WHERE id=$1 RETURNING responses,draft_revision AS revision`,
-      [id, JSON.stringify(responses)],
+      `UPDATE repos SET responses=$2,draft_revision=draft_revision+1,description=COALESCE($3,description) WHERE id=$1 RETURNING responses,draft_revision AS revision`,
+      [id, JSON.stringify(responses), typeof description === "string" ? description.trim() : null],
     );
     await audit(db, {
       actorId: userId,
@@ -233,10 +237,23 @@ export async function nativeProjects(userId: number | null, ids: number[], staff
       submitted && snapshotTemplate
         ? { version: snapshotFormVersion, template: snapshotTemplate, sections: snapshotSections }
         : currentForm;
-    const responses = content.responses ?? project.responses;
+    const answers = content.responses ?? project.responses;
+    // H16: projects described before the field existed (or imported) show that
+    // text in their description field instead of an empty answer.
+    const descriptionField = projectDescriptionField(form?.template ?? []);
+    const currentDescription = content.description ?? project.description;
+    const responses =
+      descriptionField &&
+      !(
+        typeof answers?.[descriptionField.key] === "string" && answers[descriptionField.key].trim()
+      ) &&
+      currentDescription
+        ? { ...answers, [descriptionField.key]: currentDescription }
+        : answers;
     return {
       ...project,
       ...content,
+      responses,
       formVersion: form?.version ?? null,
       template: form?.template ?? [],
       sections: form?.sections ?? [],

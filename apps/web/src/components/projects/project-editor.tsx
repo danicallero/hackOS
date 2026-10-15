@@ -11,6 +11,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
+import { UserAvatar } from "@/components/common/user-avatar";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -303,8 +304,16 @@ export function ProjectEditor({
               {members
                 .filter((member) => member.status !== "declined")
                 .map((member) => (
-                  <li className="flex items-center justify-between gap-3 py-3" key={member.userId}>
-                    <span>{member.name}</span>
+                  <li className="flex items-center gap-3 py-3" key={member.userId}>
+                    {member.photoUrl && (
+                      <UserAvatar
+                        name={member.name ?? ""}
+                        image={member.photoUrl}
+                        className="size-8"
+                        decorative
+                      />
+                    )}
+                    <span className="mr-auto">{member.name}</span>
                     {staff && project.canEdit && (
                       <Button
                         variant="ghost"
@@ -372,29 +381,28 @@ export function ProjectEditor({
           </SectionCard>
         </div>
         <div className="space-y-6">
-          <ProjectChallenges project={project} staff={staff} />
-          <SectionCard title={t("workGroupTiming")}>
-            <Label className="sr-only" htmlFor="project-timing">
-              {t("workGroupTiming")}
-            </Label>
-            <Select
-              value={timing}
-              onValueChange={(value) =>
-                void saveTiming(value as NativeProject["presentationTimingPreference"])
-              }
-              disabled={busy || !project.canEdit}
-            >
-              <SelectTrigger id="project-timing">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="no_preference">{t("workGroupTimingNone")}</SelectItem>
-                <SelectItem value="early">{t("workGroupTimingEarly")}</SelectItem>
-                <SelectItem value="middle">{t("workGroupTimingMiddle")}</SelectItem>
-                <SelectItem value="late">{t("workGroupTimingLate")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </SectionCard>
+          <ProjectChallenges project={project} staff={staff}>
+            <div className="space-y-2">
+              <Label htmlFor="project-timing">{t("workGroupTiming")}</Label>
+              <Select
+                value={timing}
+                onValueChange={(value) =>
+                  void saveTiming(value as NativeProject["presentationTimingPreference"])
+                }
+                disabled={busy || !project.canEdit}
+              >
+                <SelectTrigger id="project-timing" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="no_preference">{t("workGroupTimingNone")}</SelectItem>
+                  <SelectItem value="early">{t("workGroupTimingEarly")}</SelectItem>
+                  <SelectItem value="middle">{t("workGroupTimingMiddle")}</SelectItem>
+                  <SelectItem value="late">{t("workGroupTimingLate")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </ProjectChallenges>
         </div>
       </div>
     </PageLayout>

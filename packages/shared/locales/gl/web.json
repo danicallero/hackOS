@@ -3521,5 +3521,6 @@
   "capabilityDescriptionProjectsRead": "Ler proxectos",
   "capabilityDescriptionProjectsEdit": "Editar proxectos",
   "galleryNotOpen": "A galería aínda non está aberta",
-  "galleryOpensOn": "A galería abre o {date}"
+  "galleryOpensOn": "A galería abre o {date}",
+  "projectDescriptionFieldLabel": "Descrición do proxecto"
 }
