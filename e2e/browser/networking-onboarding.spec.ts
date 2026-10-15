@@ -152,7 +152,14 @@ test("reminder survives reload and returns after the next login (H4/H7)", async 
     return route.fulfill({ json: { user: { id: "1" }, token: "test" } });
   });
   await page.goto("/inbox");
-  await page.getByRole("button", { name: "Remind me next login", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Remind me on next login", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath("onboarding-reminder-label.png"),
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Remind me on next login", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();

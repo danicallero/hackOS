@@ -77,7 +77,7 @@ profile access.
 
 The step explains networking during the event and badge-scan visibility, reuses
 the profile editor (photo, sharing choices, bio, links, CV and preview), and offers
-Create profile, Keep my profile hidden, or Remind me next login. Creating opens
+Create profile, Keep my profile hidden, or Remind me on next login. Creating opens
 the editor; Save profile and continue persists the chosen sharing settings.
 Onboarding never offers a CV upload, replacement or removal. If a submitted
 application supplies a CV (for a participant or any other applicant), it appears
