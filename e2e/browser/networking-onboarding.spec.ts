@@ -62,14 +62,20 @@ test("profile step saves an explicit hidden choice after confirmation (H7/H15)",
   });
   await page.goto("/applications/confirm?token=profile-test");
   await expect(page.getByRole("heading", { name: "Build your networking profile" })).toBeVisible();
+  await expect(page.getByLabel("Headline", { exact: true })).toBeVisible();
   await expect(page.getByText(/^(?:[12] of 2|[12]\/2)$/)).toHaveCount(0);
   await expect(page.getByRole("switch", { name: "Share my profile", exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("profile-hidden.png"), fullPage: true });
-  await page.getByRole("button", { name: "Keep my profile hidden", exact: true }).click();
+  await page.getByLabel("Headline", { exact: true }).fill("Unsaved private headline");
+  await page.getByRole("button", { name: "Do not create a public profile", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Your place is confirmed", exact: true }),
   ).toBeVisible();
-  expect(saved).toMatchObject({ directoryVisible: false, completeOnboarding: true });
+  expect(saved).toMatchObject({
+    directoryVisible: false,
+    headline: null,
+    completeOnboarding: true,
+  });
 });
 
 test("profile sharing is explicit and lets attendees build their profile (H7)", async ({
@@ -99,7 +105,6 @@ test("profile sharing is explicit and lets attendees build their profile (H7)", 
     route.fulfill({ json: { items: [], total: 0 } }),
   );
   await page.goto("/inbox");
-  await page.getByRole("button", { name: "Create profile", exact: true }).click();
   expect(saved).toBeUndefined();
   await expect(page.getByRole("switch", { name: "Share my profile", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Upload CV", exact: true })).toHaveCount(0);
@@ -115,11 +120,12 @@ test("profile sharing is explicit and lets attendees build their profile (H7)", 
     "color",
     "rgb(250, 250, 250)",
   );
-  await expect(
-    page.getByRole("button", { name: "Save profile and continue", exact: true }),
-  ).toHaveCSS("background-color", "rgb(163, 213, 255)");
+  await expect(page.getByRole("button", { name: "Create profile", exact: true })).toHaveCSS(
+    "background-color",
+    "rgb(163, 213, 255)",
+  );
   await page.screenshot({ path: testInfo.outputPath("profile-editor-dark.png"), fullPage: true });
-  await page.getByRole("button", { name: "Save profile and continue", exact: true }).click();
+  await page.getByRole("button", { name: "Create profile", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Build your networking profile" })).toHaveCount(0);
   expect(saved).toMatchObject({
     directoryVisible: true,
@@ -161,6 +167,7 @@ test("reminder survives reload and returns after the next login (H4/H7)", async 
     path: test.info().outputPath("onboarding-reminder-label.png"),
     fullPage: true,
   });
+  await page.getByLabel("Headline", { exact: true }).fill("Finish this next login");
   await page.getByRole("button", { name: "Remind me on next login", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
   await page.reload();
@@ -248,7 +255,6 @@ test("application CV is inherited read-only during onboarding (H7/H10/H15)", asy
     }),
   );
   await page.goto("/inbox");
-  await page.getByRole("button", { name: "Create profile", exact: true }).click();
   await expect(page.getByRole("button", { name: "application-cv.pdf", exact: true })).toBeVisible();
   await expect(
     page.getByText("From your application. It can't be changed here.", { exact: true }),
@@ -259,9 +265,10 @@ test("application CV is inherited read-only during onboarding (H7/H10/H15)", asy
   }
   await expect(page.locator('input[type="file"][accept="application/pdf"]')).toHaveCount(0);
   await page.mouse.move(0, 0);
-  await expect(
-    page.getByRole("button", { name: "Save profile and continue", exact: true }),
-  ).toHaveCSS("background-color", "rgb(3, 8, 70)");
+  await expect(page.getByRole("button", { name: "Create profile", exact: true })).toHaveCSS(
+    "background-color",
+    "rgb(3, 8, 70)",
+  );
   await page.screenshot({
     path: testInfo.outputPath("application-cv-readonly.png"),
     fullPage: true,

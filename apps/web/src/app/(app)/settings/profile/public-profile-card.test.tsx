@@ -378,16 +378,12 @@ describe("PublicProfileCard", () => {
     expect(submit()?.disabled).toBe(true);
   });
 
-  it("Create profile chooses sharing without a manual toggle or an early write", async () => {
+  it("shows the form immediately and Create profile saves sharing without an early write", async () => {
     vi.mocked(api.get).mockResolvedValue(profile());
     const onFinished = vi.fn();
     await render(<PublicProfileCard onboarding={{ onFinished, onLater: vi.fn() }} />);
     expect(byLabel("publicProfileVisible")).toBeNull();
     expect(container.textContent).toContain("publicProfileAudience");
-    const create = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "networkingOnboardingCreate",
-    );
-    await act(async () => create?.click());
     expect(api.put).not.toHaveBeenCalled();
     expect(byLabel("publicProfileVisible")).toBeNull();
     expect(byLabel("publicProfileHeadline")).not.toBeNull();
@@ -407,12 +403,49 @@ describe("PublicProfileCard", () => {
     await render(<PublicProfileCard onboarding={{ onFinished, onLater: vi.fn() }} />);
     expect(byLabel("publicProfileVisible")).toBeNull();
     vi.mocked(api.put).mockResolvedValue(profile());
-    await save();
+    const hidden = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "networkingOnboardingHidden",
+    );
+    await act(async () => hidden?.click());
     expect(api.put).toHaveBeenCalledWith(
       "/api/me/public-profile",
       expect.objectContaining({ directoryVisible: false, completeOnboarding: true }),
       expect.anything(),
     );
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("can opt out after a failed create without publishing edits or reusing its idempotency key", async () => {
+    vi.mocked(api.get).mockResolvedValue(profile({ headline: "Stored headline" }));
+    const onFinished = vi.fn();
+    await render(<PublicProfileCard onboarding={{ onFinished, onLater: vi.fn() }} />);
+    const user = userEvent.setup();
+    await act(async () =>
+      user.type(byLabel("publicProfileHeadline") as HTMLInputElement, " unsaved"),
+    );
+    vi.mocked(api.put).mockRejectedValueOnce(new Error("Offline"));
+    await save();
+    expect(onFinished).not.toHaveBeenCalled();
+    const createKey = new Headers(vi.mocked(api.put).mock.calls[0][2]?.headers).get(
+      "Idempotency-Key",
+    );
+    vi.mocked(api.put).mockResolvedValue(profile());
+    const hidden = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "networkingOnboardingHidden",
+    );
+    await act(async () => hidden?.click());
+    expect(api.put).toHaveBeenLastCalledWith(
+      "/api/me/public-profile",
+      expect.objectContaining({
+        directoryVisible: false,
+        headline: "Stored headline",
+        completeOnboarding: true,
+      }),
+      expect.anything(),
+    );
+    expect(
+      new Headers(vi.mocked(api.put).mock.calls[1][2]?.headers).get("Idempotency-Key"),
+    ).not.toBe(createKey);
     expect(onFinished).toHaveBeenCalledOnce();
   });
 
