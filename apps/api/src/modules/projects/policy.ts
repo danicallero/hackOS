@@ -2,6 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { Queryable } from "../../db/pool.js";
 import { createAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { ForbiddenError } from "../../lib/errors.js";
+import { getEventTimezone } from "../event/service.js";
 import { hasEventAccess } from "../identity/role.js";
 
 /** SQL owns clock boundaries for every native project projection (#1008). */
@@ -98,6 +99,8 @@ export async function assertGalleryVisible(db: Queryable, userId: number | null)
       {
         reason: access.reason === "closed" ? "gallery_closed" : "gallery_audience",
         opensAt: access.opensAt,
+        // Lets server-rendered clients show the opening time in event time.
+        timeZone: await getEventTimezone(db),
       },
     );
 }

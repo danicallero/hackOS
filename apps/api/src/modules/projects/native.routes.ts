@@ -246,7 +246,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         querystring: projectGalleryQuerySchema,
         summary: "List project gallery",
         description:
-          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009). Project staff (PROJECTS_READ) may browse before it opens. A refusal is 403 with `details.reason` `gallery_closed` (with `details.opensAt`, null while unscheduled) or `gallery_audience` (H18).",
+          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009). Project staff (PROJECTS_READ) may browse before it opens. A refusal is 403 with `details.reason` `gallery_closed` (with `details.opensAt`, null while unscheduled, and the event `details.timeZone`) or `gallery_audience` (H18).",
       },
     },
     async (q, reply) => {
