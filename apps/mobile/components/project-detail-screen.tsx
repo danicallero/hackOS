@@ -423,7 +423,7 @@ export function ProjectEditor({
                   style: "destructive",
                   onPress: () =>
                     void run(async () => {
-                      await projectMutation(`/api/me/projects/${project.id}/leave`, "POST");
+                      await projectMutation(`/api/me/projects/${project.id}/leave`, "DELETE");
                       router.back();
                     }, false),
                 },

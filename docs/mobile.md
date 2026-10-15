@@ -413,7 +413,8 @@ view is retained at `/projects/queue`, with its tutorial, pre-call
 notifications, SSE updates and polling. `/projects/:id` is the submission
 screen: status and deadline (when the server provides `submissionsCloseAt`),
 grouped form sections, challenge rows, team and invite, queue context, and a
-floating Submit / Resubmit glass button. No planning-record conversion or
+floating Submit / Resubmit glass button. Leaving a team uses the authenticated
+`DELETE /api/me/projects/:id/leave` route after confirmation. No planning-record conversion or
 external submission path remains in the native client.
 
 The reusable `DynamicForm` consumes `TemplateField` and `FormSection` from

@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { Alert } from "react-native";
 
 let mockParams: Record<string, string> = { id: "5" };
 const mockPush = jest.fn();
@@ -616,4 +617,23 @@ it("keeps only the refused recipient and shows why (H19)", async () => {
   expect(screen.queryByText("ok@example.com")).toBeNull();
   expect(screen.getByText("requestError")).toBeTruthy();
   expect(mockBack).not.toHaveBeenCalled();
+});
+
+it("leaves a team with the API DELETE contract after confirmation (H19)", async () => {
+  mockApi.mockResolvedValue({});
+  const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+  await renderMobile(<ProjectEditor project={project} reload={async () => {}} />);
+  await fireEvent.press(screen.getByRole("button", { name: "projectLeave" }));
+  const buttons = alert.mock.calls.at(-1)?.[2];
+  await act(async () => {
+    buttons?.[1].onPress?.();
+  });
+  await waitFor(() =>
+    expect(mockApi).toHaveBeenCalledWith(
+      "/api/me/projects/5/leave",
+      expect.objectContaining({ method: "DELETE" }),
+    ),
+  );
+  expect(mockBack).toHaveBeenCalled();
+  alert.mockRestore();
 });
