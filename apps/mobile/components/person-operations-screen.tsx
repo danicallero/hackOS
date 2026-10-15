@@ -49,8 +49,6 @@ import { colors } from "@/theme/colors";
 interface PersonDetails extends ScannerPerson {
   shirtSize?: string | null;
   currentBadge?: string | null;
-  secondaryEmail?: string | null;
-  secondaryEmailVerified?: boolean;
 }
 
 const CONTENT_PADDING = 16;
@@ -940,25 +938,6 @@ export function PersonOperationsScreen() {
           </View>
 
           <Section title={t("personPersonalData")}>
-            {person.secondaryEmail ? (
-              <>
-                <InfoRow
-                  label={t("personSecondaryEmail")}
-                  value={person.secondaryEmail}
-                  icon="envelope.badge"
-                  accessoryIcon={
-                    person.secondaryEmailVerified ? "checkmark.seal.fill" : "exclamationmark.circle"
-                  }
-                  accessoryColor={person.secondaryEmailVerified ? colors.success : colors.warning}
-                  accessoryLabel={
-                    person.secondaryEmailVerified
-                      ? t("personSecondaryEmailVerified")
-                      : t("personSecondaryEmailUnverified")
-                  }
-                />
-                <Separator />
-              </>
-            ) : null}
             <InfoRow
               label={t("personDni")}
               value={person.dni ?? "—"}

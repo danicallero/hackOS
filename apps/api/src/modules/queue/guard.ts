@@ -4,8 +4,8 @@ import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 /**
  * H30 hard invariant: never call a team if any of its members is already
  * `called`, `in_room` or `presenting` in ANOTHER room. Membership includes the
- * authoritative submission row and the primary or verified-secondary email
- * fallback used by the project/queue roster.
+ * authoritative submission row and primary-email fallback used by the
+ * project/queue roster.
  * This includes another entry for the same repo when that project competes in
  * more than one challenge: a team cannot physically wait at two room doors at
  * once.

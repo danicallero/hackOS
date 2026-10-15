@@ -1,70 +1,21 @@
 "use client";
 
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
-import { QuestionIcon } from "@phosphor-icons/react/dist/csr/Question";
-import { useState } from "react";
-import { AlertModal } from "@/components/common/alert-modal";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
-import { SubmitButton } from "@/components/common/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { api } from "@/lib/api";
-import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
-import { toast } from "@/lib/toast";
 
-/**
- * Email addresses (H1 verification state, H6 secondary email). Shows the
- * primary email with a verified/unverified badge, and lets the user register a
- * secondary address with
- * its own verification flow.
- */
+/** Shows the account's primary email and its verification state. */
 export function EmailCard() {
-  const { me, refresh } = useSessionContext();
+  const { me } = useSessionContext();
   const { t } = useLocale();
-  const [secondary, setSecondary] = useState("");
-  const [saving, setSaving] = useState(false);
   if (!me) return null;
 
-  async function sendSecondaryVerification(email: string) {
-    setSaving(true);
-    try {
-      await api.post("/api/me/secondary-email", { email });
-      toast.success(t("verificationEmailSentCheck"), { compactTitle: t("toastVerifyEmail") });
-      setSecondary("");
-      await refresh();
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotSendVerificationEmail")), t("toastVerifyEmail"));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function removeSecondaryEmail() {
-    setSaving(true);
-    try {
-      await api.delete("/api/me/secondary-email");
-      toast.success(t("secondaryEmailRemoved"), { compactTitle: t("toastRemoveEmail") });
-      await refresh();
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotRemoveSecondaryEmail")), t("toastRemoveEmail"));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const hasPendingSecondary = me.secondaryEmail && !me.secondaryEmailVerified;
-
   return (
-    <SectionCard
-      footerClassName="justify-start"
-      icon={EnvelopeSimpleIcon}
-      title={t("emailAddressesTitle")}
-    >
-      {/* Primary */}
+    <SectionCard icon={EnvelopeSimpleIcon} title={t("emailAddressTitle")}>
       <div className="space-y-2">
         <Label htmlFor="primary-email">{t("primaryEmailLabel")}</Label>
         <div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
@@ -76,80 +27,6 @@ export function EmailCard() {
               <StatusBadge tone="warning">{t("unverified")}</StatusBadge>
             )}
           </div>
-        </div>
-      </div>
-
-      {/* Secondary */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-1.5">
-          <Label htmlFor="secondary-email">{t("secondaryEmailLabel")}</Label>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="button-interaction text-muted-foreground hover:text-foreground"
-              >
-                <QuestionIcon aria-hidden="true" className="size-3.5" />
-                <span className="sr-only">{t("whyAddSecondaryEmail")}</span>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs">{t("secondaryEmailTooltip")}</TooltipContent>
-          </Tooltip>
-        </div>
-
-        {me.secondaryEmail && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="min-w-0 wrap-anywhere text-sm">{me.secondaryEmail}</span>
-            {me.secondaryEmailVerified ? (
-              <StatusBadge tone="success">{t("verified")}</StatusBadge>
-            ) : (
-              <StatusBadge tone="warning">{t("pendingVerification")}</StatusBadge>
-            )}
-            {hasPendingSecondary && (
-              <SubmitButton
-                type="button"
-                size="sm"
-                variant="outline"
-                pending={saving}
-                onClick={() => me.secondaryEmail && sendSecondaryVerification(me.secondaryEmail)}
-              >
-                {t("resend")}
-              </SubmitButton>
-            )}
-            <AlertModal
-              title={t("removeSecondaryEmailTitle")}
-              description={t("removeSecondaryEmailDesc")}
-              cancelLabel={t("cancel")}
-              confirmLabel={t("remove")}
-              destructive
-              pending={saving}
-              trigger={
-                <SubmitButton type="button" size="sm" variant="outline" pending={false}>
-                  {t("remove")}
-                </SubmitButton>
-              }
-              onConfirm={removeSecondaryEmail}
-            />
-          </div>
-        )}
-
-        <div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_9rem]">
-          <Input
-            id="secondary-email"
-            type="email"
-            value={secondary}
-            onChange={(e) => setSecondary(e.target.value)}
-            placeholder={me.secondaryEmail ? t("changeSecondaryEmailPlaceholder") : t("email")}
-          />
-          <SubmitButton
-            type="button"
-            className="w-full"
-            pending={saving}
-            disabled={!secondary.includes("@")}
-            onClick={() => sendSecondaryVerification(secondary.trim().toLowerCase())}
-          >
-            {me.secondaryEmail ? t("updateAndVerify") : t("addAndVerify")}
-          </SubmitButton>
         </div>
       </div>
     </SectionCard>

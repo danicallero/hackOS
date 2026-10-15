@@ -107,7 +107,7 @@ describe("toast adapter", () => {
     expect(sileoMock.success).toHaveBeenLastCalledWith(
       expect.objectContaining({ title: "Guardado", duration: 2_400 }),
     );
-    const message = "Your profile was saved and your secondary email still needs verification.";
+    const message = "Your profile changes were saved successfully.";
     toast.success(message, { compactTitle: "Guardar perfil" });
     expect(sileoMock.success).toHaveBeenLastCalledWith(
       expect.objectContaining({

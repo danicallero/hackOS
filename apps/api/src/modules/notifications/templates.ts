@@ -282,10 +282,9 @@ export interface EmailPayload {
   subject?: string;
   body?: string;
   /**
-   * Destination override (H1/H6/H10 flows). When set, email is delivered here
-   * instead of users.email — e.g. a secondary-email verification (H6) or an
-   * invite to an address not yet linked to the user row. Ignored by non-email
-   * channels.
+   * Destination override (H1/H10 flows). When set, email is delivered here
+   * instead of users.email, such as an invite to an address not yet linked to
+   * the user row. Ignored by non-email channels.
    */
   recipient?: string;
   /**

@@ -260,13 +260,9 @@ The full schema, state machine, and removal.ts data flow are documented in
 not restated here. Two bug fixes from this work, unrelated to that doc's
 scope:
 
-- `identity/routes/secondary-email.ts` — **bug fix**: secondary-email
-  verification passed no `recipient`, so the email channel adapter
-  (`channels/email.ts:70`, `payload.recipient ?? user.email`) fell back to the
-  **primary** address. Now the new secondary address is passed as `recipient`.
 - `profile.ts` `PATCH /api/users/:id/email` (`USERS_WRITE`) — safe primary-email
-  change: uniqueness check vs any primary / verified-secondary, single-column
-  update, marks verified (admin-vouched), audited.
+  change: unique across account primary addresses, single-column update, marks
+  verified (admin-vouched), audited.
 
 ---
 

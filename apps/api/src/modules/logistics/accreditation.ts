@@ -70,7 +70,7 @@ export async function lookupByUserId(userId: number, actorId?: number) {
   // handed to a physical person, so the card carries DNI, email and shirt
   // size on top of the shared scanner card.
   const u = await pool.query(
-    `SELECT badge_id, email, dni, shirt_size, secondary_email, secondary_email_verified_at
+    `SELECT badge_id, email, dni, shirt_size
        FROM users
       WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
     [userId],
@@ -88,8 +88,6 @@ export async function lookupByUserId(userId: number, actorId?: number) {
     email: (row.email ?? null) as string | null,
     dni: (row.dni ?? null) as string | null,
     shirtSize: (row.shirt_size ?? null) as string | null,
-    secondaryEmail: (row.secondary_email ?? null) as string | null,
-    secondaryEmailVerified: row.secondary_email_verified_at != null,
     confirmed: confirmed.rows.length > 0,
     hasTicket: eventAccess && (await hasTicket(userId)),
     // Distinct from `confirmed`: any role may grant event access without a
