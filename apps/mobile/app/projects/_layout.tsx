@@ -34,6 +34,8 @@ export default function ProjectsLayout() {
         options={{
           headerBlurEffect: "none",
           headerShadowVisible: false,
+          // The grouped list's page colour, so the sheet's bar and body read as one surface.
+          headerStyle: { backgroundColor: colors.background },
           presentation: "modal",
           title: t("projectChallenges"),
         }}

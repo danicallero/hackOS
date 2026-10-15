@@ -73,7 +73,15 @@ export function ProjectDetailScreen() {
   if (error) {
     // 403/404 are final for this audience; retrying cannot change the answer.
     const final = error instanceof ApiError && (error.status === 403 || error.status === 404);
-    return <RequestFeedback error={error} onRetry={final ? undefined : () => void load()} />;
+    // Inside a ScrollView so the native header's inset keeps it below the bar.
+    return (
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{ padding: 16 }}
+      >
+        <RequestFeedback error={error} onRetry={final ? undefined : () => void load()} />
+      </ScrollView>
+    );
   }
   if (!project) return <RequestFeedback loading />;
   return gallery ? (
