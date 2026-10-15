@@ -28,7 +28,16 @@ export default function ProjectsLayout() {
           title: t("projectFields"),
         }}
       />
-      <Stack.Screen name="challenges" options={{ title: t("projectChallenges") }} />
+      <Stack.Screen name="challenge" options={{ title: "" }} />
+      <Stack.Screen
+        name="challenges"
+        options={{
+          headerBlurEffect: "none",
+          headerShadowVisible: false,
+          presentation: "modal",
+          title: t("projectChallenges"),
+        }}
+      />
       <Stack.Screen
         name="invite"
         options={{

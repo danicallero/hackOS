@@ -945,6 +945,18 @@
   "projectDeclineShort": "Decline",
   "projectAddChallenge": "Add challenge",
   "projectSearchChallenges": "Search challenges",
+  "projectAddPhotos": "Add photos",
+  "projectRemovePhoto": "Remove photo",
+  "projectUploading": "Uploading…",
+  "projectFileError": "Couldn't open this file.",
+  "projectFileMissing": "File not available",
+  "projectShareFile": "Share",
+  "projectContacts": "Contacts",
+  "challengeCriteria": "Evaluation criteria",
+  "challengePrizes": "Prizes",
+  "challengeCompany": "Company",
+  "challengeProjects": "Projects",
+  "challengeNotFound": "Challenge not available",
   "projectSend": "Send",
   "scanReplayExpired": "Not synced within {days} days. Log it manually."
 }

@@ -2059,6 +2059,8 @@
   "fieldKindDate": "Fecha",
   "birthYearPlaceholder": "p. ej., 2001",
   "fieldKindFile": "Subida de archivo",
+  "fieldKindImages": "Fotos",
+  "addPhotos": "Añadir fotos",
   "fieldKindMultiselect": "Opción múltiple",
   "fieldKindNumber": "Número",
   "fieldKindSelect": "Opción única",

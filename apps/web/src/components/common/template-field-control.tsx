@@ -14,6 +14,10 @@ import { FileLink } from "@/components/common/file-link";
 import { FileUploadField } from "@/components/common/file-upload-field";
 import { LinkifiedText } from "@/components/common/linkified-text";
 import { MultiSelect } from "@/components/common/multi-select";
+import {
+  type ProjectImageFile,
+  ProjectImagesField,
+} from "@/components/common/project-images-field";
 import { UniversityPicker } from "@/components/common/university-picker";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -104,6 +108,7 @@ export function TemplateFieldControl({
   onSharedWithSponsorsChange,
   onExternalLinkClick,
   onBlur,
+  files = [],
 }: {
   field: TemplateFieldLike;
   value: FieldValue;
@@ -126,6 +131,8 @@ export function TemplateFieldControl({
    */
   sharedWithSponsors?: boolean;
   onSharedWithSponsorsChange?: (value: boolean) => void;
+  /** H16: uploaded project files, so photo answers can show their previews. */
+  files?: ProjectImageFile[];
   /** Called when a read-only URL answer is opened in a new tab. */
   onExternalLinkClick?: () => void;
   onBlur?: () => void;
@@ -376,6 +383,24 @@ export function TemplateFieldControl({
       );
       break;
     }
+    case "images":
+      control = (
+        <ProjectImagesField
+          id={id}
+          uploadPath={uploadPath}
+          value={Array.isArray(value) ? value : []}
+          files={files}
+          onChange={(keys) => {
+            onChange(keys);
+            onBlur?.();
+          }}
+          disabled={disabled}
+          maxSizeMb={field.max_file_size_mb}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+        />
+      );
+      break;
     case "degree":
       control = (
         <DegreePicker

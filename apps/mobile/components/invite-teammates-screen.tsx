@@ -1,77 +1,38 @@
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
-import { useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { Section, Separator } from "@/components/native-ui";
+import { PersonAvatar } from "@/components/person-avatar";
+import { CircleButton } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
+import { apiFetch } from "@/lib/api";
+import type { DiaryEntry, DiaryPerson } from "@/lib/diary";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import { projectMutation } from "@/lib/projects";
+import { type NativeProject, projectMutation } from "@/lib/projects";
 import { colors } from "@/theme/colors";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** An email typed in, or a diary contact (#935) invited by account. */
 interface Recipient {
-  email: string;
+  email?: string;
+  contact?: DiaryPerson;
   error?: Error;
 }
-
-function CircleButton({
-  icon,
-  label,
-  onPress,
-  disabled = false,
-  prominent = false,
-  filled = false,
-  size = 44,
-}: {
-  icon: "xmark" | "checkmark" | "plus";
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  /** The confirm button turns accent blue once it can act, as in Photos. */
-  prominent?: boolean;
-  /** A quiet filled circle (the add button). */
-  filled?: boolean;
-  size?: number;
-}) {
-  const active = prominent && !disabled;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      hitSlop={6}
-      onPress={onPress}
-      style={{
-        alignItems: "center",
-        backgroundColor: active ? colors.accent : filled ? colors.elevatedSurface : undefined,
-        borderRadius: size / 2,
-        height: size,
-        justifyContent: "center",
-        width: size,
-      }}
-    >
-      <SymbolView
-        name={icon}
-        tintColor={
-          active ? colors.primaryActionText : disabled ? colors.tertiaryLabel : colors.label
-        }
-        size={size > 36 ? 19 : 16}
-        weight="semibold"
-        accessible={false}
-      />
-    </Pressable>
-  );
-}
+const recipientKey = (item: Recipient) =>
+  item.contact ? `user:${item.contact.userId}` : `email:${item.email?.toLowerCase()}`;
+const recipientLabel = (item: Recipient) => item.contact?.displayName ?? item.email ?? "";
 
 /**
  * H19: invite several teammates at once, like Photos' "Invite Participants":
  * round close and confirm in the header, an "Add:" field that turns each email
  * into a row, and the server's reason shown on the row that was refused.
+ * People met at the event (badge scans in the diary) are suggested below the
+ * field, filtered by what is typed, so most invites need no email at all.
  */
 export function InviteTeammatesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -81,30 +42,71 @@ export function InviteTeammatesScreen() {
   const [draft, setDraft] = useState("");
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [busy, setBusy] = useState(false);
+  const [contacts, setContacts] = useState<DiaryPerson[]>([]);
+  useEffect(() => {
+    // Suggestions are optional: a failed read leaves the email field as is.
+    void Promise.all([
+      apiFetch<{ items: DiaryEntry[] }>("/api/me/diary"),
+      apiFetch<NativeProject>(`/api/me/projects/${id}`).catch(() => null),
+    ])
+      .then(([diary, project]) => {
+        const members = new Set(
+          (project?.members ?? [])
+            .filter((member) => member.status !== "declined")
+            .map((member) => member.userId),
+        );
+        setContacts(
+          (diary?.items ?? []).flatMap((entry) =>
+            entry.person && !members.has(entry.person.userId) ? [entry.person] : [],
+          ),
+        );
+      })
+      .catch(() => {});
+  }, [id]);
   const draftValid = EMAIL.test(draft.trim());
+  const needle = draft.trim().toLowerCase();
+  const suggestions = contacts.filter(
+    (person) =>
+      !needle ||
+      person.displayName.toLowerCase().includes(needle) ||
+      person.headline?.toLowerCase().includes(needle),
+  );
+  function include(next: Recipient) {
+    setRecipients((current) =>
+      current.some((item) => recipientKey(item) === recipientKey(next))
+        ? current
+        : [...current, next],
+    );
+  }
   function add() {
     const email = draft.trim();
     if (!EMAIL.test(email)) return;
-    setRecipients((current) =>
-      current.some((item) => item.email.toLowerCase() === email.toLowerCase())
-        ? current
-        : [...current, { email }],
-    );
+    include({ email });
     setDraft("");
   }
+  function toggleContact(person: DiaryPerson) {
+    const key = recipientKey({ contact: person });
+    if (recipients.some((item) => recipientKey(item) === key))
+      setRecipients((current) => current.filter((item) => recipientKey(item) !== key));
+    else include({ contact: person });
+  }
   async function confirm() {
-    const pending = [
-      ...recipients.map((item) => item.email),
-      ...(draftValid ? [draft.trim()] : []),
-    ].filter((email, index, all) => all.indexOf(email) === index);
+    const pending = [...recipients, ...(draftValid ? [{ email: draft.trim() }] : [])].filter(
+      (item, index, all) =>
+        all.findIndex((other) => recipientKey(other) === recipientKey(item)) === index,
+    );
     if (pending.length === 0 || busy) return;
     setBusy(true);
     const failed: Recipient[] = [];
-    for (const email of pending) {
+    for (const item of pending) {
       try {
-        await projectMutation(`/api/me/projects/${id}/invites`, "POST", { email });
+        await projectMutation(
+          `/api/me/projects/${id}/invites`,
+          "POST",
+          item.contact ? { userId: item.contact.userId } : { email: item.email },
+        );
       } catch (cause) {
-        failed.push({ email, error: cause as Error });
+        failed.push({ ...item, error: cause as Error });
       }
     }
     setBusy(false);
@@ -211,20 +213,29 @@ export function InviteTeammatesScreen() {
           <View style={{ padding: 16 }}>
             <Section>
               {recipients.map((recipient, index) => (
-                <View key={recipient.email}>
+                <View key={recipientKey(recipient)}>
                   {index > 0 ? <Separator /> : null}
                   <View style={{ gap: 6, paddingHorizontal: 16, paddingVertical: 10 }}>
                     <View style={{ alignItems: "center", flexDirection: "row", gap: 12 }}>
+                      {recipient.contact ? (
+                        <PersonAvatar
+                          size={28}
+                          name={recipient.contact.displayName}
+                          uri={recipient.contact.photoUrl}
+                        />
+                      ) : null}
                       <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>
-                        {recipient.email}
+                        {recipientLabel(recipient)}
                       </Text>
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel={`${t("remove")} ${recipient.email}`}
+                        accessibilityLabel={`${t("remove")} ${recipientLabel(recipient)}`}
                         hitSlop={10}
                         onPress={() =>
                           setRecipients((current) =>
-                            current.filter((item) => item.email !== recipient.email),
+                            current.filter(
+                              (item) => recipientKey(item) !== recipientKey(recipient),
+                            ),
                           )
                         }
                       >
@@ -240,6 +251,60 @@ export function InviteTeammatesScreen() {
                   </View>
                 </View>
               ))}
+            </Section>
+          </View>
+        ) : null}
+        {suggestions.length > 0 ? (
+          <View style={{ paddingHorizontal: 16, paddingTop: recipients.length ? 0 : 16 }}>
+            <Section title={t("projectContacts")}>
+              {suggestions.map((person, index) => {
+                const selected = recipients.some((item) => item.contact?.userId === person.userId);
+                return (
+                  <View key={person.userId}>
+                    {index > 0 ? <Separator inset={64} /> : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={person.displayName}
+                      accessibilityState={{ selected, disabled: busy }}
+                      disabled={busy}
+                      onPress={() => toggleContact(person)}
+                      style={({ pressed }) => ({
+                        alignItems: "center",
+                        backgroundColor: pressed ? colors.elevatedSurface : "transparent",
+                        flexDirection: "row",
+                        gap: 12,
+                        minHeight: 56,
+                        paddingHorizontal: 16,
+                        paddingVertical: 8,
+                      })}
+                    >
+                      <PersonAvatar size={36} name={person.displayName} uri={person.photoUrl} />
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text style={{ color: colors.label, fontSize: 17 }}>
+                          {person.displayName}
+                        </Text>
+                        {person.headline ? (
+                          <Text
+                            numberOfLines={1}
+                            style={{ color: colors.secondaryLabel, fontSize: 14 }}
+                          >
+                            {person.headline}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {selected ? (
+                        <SymbolView
+                          name="checkmark"
+                          tintColor={colors.accent}
+                          size={17}
+                          weight="semibold"
+                          accessible={false}
+                        />
+                      ) : null}
+                    </Pressable>
+                  </View>
+                );
+              })}
             </Section>
           </View>
         ) : null}

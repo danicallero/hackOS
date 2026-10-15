@@ -1,7 +1,10 @@
-import { useLocalSearchParams, useNavigation } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import Stack from "expo-router/stack";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EmptyState, Section, Separator } from "@/components/native-ui";
+import { CircleButton } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
@@ -13,13 +16,16 @@ import { colors } from "@/theme/colors";
 type Chosen = NativeProject["challenges"];
 
 /**
- * H21: pick the challenges a project competes in. Mandatory challenges are
- * pinned first and locked; the rest scale to any number with native search.
+ * H21: pick the challenges a project competes in, in a sheet like Invite
+ * teammate. Each tap saves at once, so the sheet only needs Done. Mandatory
+ * challenges are pinned first and locked; the rest scale with native search.
  */
 export function ProjectChallengesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t, language } = useLocale();
   const navigation = useNavigation();
+  const router = useRouter();
+  const glass = isRealLiquidGlassAvailable();
   const [all, setAll] = useState<{ id: number; title: string }[] | null>(null);
   const [chosen, setChosen] = useState<Chosen>([]);
   const [editable, setEditable] = useState(false);
@@ -46,9 +52,20 @@ export function ProjectChallengesScreen() {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: t("projectChallenges"),
-      headerLargeTitle: true,
-      headerLargeTitleShadowVisible: false,
+      headerLargeTitle: false,
       headerShadowVisible: false,
+      // iOS 26 draws the native toolbar button below as a glass circle.
+      headerLeft: undefined,
+      headerRight: glass
+        ? undefined
+        : () => (
+            <CircleButton
+              icon="checkmark"
+              label={t("close")}
+              prominent
+              onPress={() => router.back()}
+            />
+          ),
       ...(Platform.OS === "ios"
         ? {
             headerSearchBarOptions: {
@@ -136,59 +153,72 @@ export function ProjectChallengesScreen() {
     </Pressable>
   );
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      keyboardDismissMode="on-drag"
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 32 }}
-    >
-      {Platform.OS !== "ios" ? (
-        <TextInput
-          accessibilityLabel={t("projectSearchChallenges")}
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t("projectSearchChallenges")}
-          placeholderTextColor={colors.tertiaryLabel}
-          style={{
-            backgroundColor: colors.surface,
-            borderRadius: 14,
-            color: colors.label,
-            fontSize: 17,
-            minHeight: 44,
-            paddingHorizontal: 16,
-          }}
-        />
+    <>
+      {glass ? (
+        <Stack.Toolbar placement="right">
+          <Stack.Toolbar.Button
+            separateBackground
+            variant="prominent"
+            icon="checkmark"
+            accessibilityLabel={t("close")}
+            onPress={() => router.back()}
+          />
+        </Stack.Toolbar>
       ) : null}
-      {error ? <RequestFeedback error={error} /> : null}
-      {all === null ? <RequestFeedback loading /> : null}
-      {required.length > 0 ? (
-        <Section title={t("projectRequired")}>
-          {required.map((item, index) => (
-            <View key={item.id}>
-              {index > 0 ? <Separator /> : null}
-              {row(item.title, true, true)}
-            </View>
-          ))}
-        </Section>
-      ) : null}
-      {rest.length > 0 ? (
-        <Section title={required.length > 0 ? t("projectChallenges") : undefined}>
-          {rest.map((item, index) => (
-            <View key={item.id}>
-              {index > 0 ? <Separator /> : null}
-              {row(
-                item.title,
-                chosenIds.has(item.id),
-                false,
-                () => void toggle(item, chosenIds.has(item.id)),
-              )}
-            </View>
-          ))}
-        </Section>
-      ) : null}
-      {all && required.length === 0 && rest.length === 0 && !error ? (
-        <EmptyState icon="magnifyingglass" title={t("projectNoGallery")} />
-      ) : null}
-    </ScrollView>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 32 }}
+      >
+        {Platform.OS !== "ios" ? (
+          <TextInput
+            accessibilityLabel={t("projectSearchChallenges")}
+            value={query}
+            onChangeText={setQuery}
+            placeholder={t("projectSearchChallenges")}
+            placeholderTextColor={colors.tertiaryLabel}
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: 14,
+              color: colors.label,
+              fontSize: 17,
+              minHeight: 44,
+              paddingHorizontal: 16,
+            }}
+          />
+        ) : null}
+        {error ? <RequestFeedback error={error} /> : null}
+        {all === null ? <RequestFeedback loading /> : null}
+        {required.length > 0 ? (
+          <Section title={t("projectRequired")}>
+            {required.map((item, index) => (
+              <View key={item.id}>
+                {index > 0 ? <Separator /> : null}
+                {row(item.title, true, true)}
+              </View>
+            ))}
+          </Section>
+        ) : null}
+        {rest.length > 0 ? (
+          <Section title={required.length > 0 ? t("projectChallenges") : undefined}>
+            {rest.map((item, index) => (
+              <View key={item.id}>
+                {index > 0 ? <Separator /> : null}
+                {row(
+                  item.title,
+                  chosenIds.has(item.id),
+                  false,
+                  () => void toggle(item, chosenIds.has(item.id)),
+                )}
+              </View>
+            ))}
+          </Section>
+        ) : null}
+        {all && required.length === 0 && rest.length === 0 && !error ? (
+          <EmptyState icon="magnifyingglass" title={t("projectNoGallery")} />
+        ) : null}
+      </ScrollView>
+    </>
   );
 }

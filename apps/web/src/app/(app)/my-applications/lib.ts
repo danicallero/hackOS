@@ -28,6 +28,7 @@ export const FIELD_KINDS = [
   "university",
   "degree",
   "city",
+  "images",
 ] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
 

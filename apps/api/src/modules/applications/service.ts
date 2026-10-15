@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { MAX_IMAGES_PER_FIELD } from "@hackos/shared/forms";
 import type pg from "pg";
 import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
@@ -306,6 +307,11 @@ export function validateResponses(
       }
       case "file":
         if (typeof value !== "string") errors[field.key] = "must be a string";
+        break;
+      case "images":
+        if (!Array.isArray(value) || value.some((key) => typeof key !== "string"))
+          errors[field.key] = "must be a list of images";
+        else if (value.length > MAX_IMAGES_PER_FIELD) errors[field.key] = "too many images";
         break;
       case "university":
         // The value is a shared-library university id. The picker sends a

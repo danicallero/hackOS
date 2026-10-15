@@ -1082,7 +1082,7 @@ async function sanitizeAnonymousAuditValue(
 ): Promise<AnonymousAuditValue | null> {
   // Personal files are never copied into the permanent anonymous dataset,
   // even if a future admin accidentally enables retention on a file field.
-  if (field.kind === "file") return null;
+  if (field.kind === "file" || field.kind === "images") return null;
 
   const dimension = field.anonymous_audit_dimension ?? null;
   if (field.kind === "university") {

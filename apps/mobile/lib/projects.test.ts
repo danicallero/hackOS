@@ -1,4 +1,9 @@
-import { ProjectDraftWriter } from "./projects";
+import {
+  ProjectDraftWriter,
+  projectDraftWriter,
+  settleProjectDrafts,
+  trackProjectTask,
+} from "./projects";
 
 jest.mock("./api", () => ({ apiFetch: jest.fn() }));
 
@@ -41,20 +46,50 @@ it("keeps failed answers and revision for an explicit retry (H20)", async () => 
   expect(writer.dirty).toBe(false);
 });
 
-it("does not start another save after its editor is disposed (H20)", async () => {
+it("keeps saving every edit after its editor closes (H20)", async () => {
   let finish!: (value: { revision: number }) => void;
-  const save = jest.fn(
-    () =>
-      new Promise<{ revision: number }>((resolve) => {
-        finish = resolve;
-      }),
-  );
+  const save = jest
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<{ revision: number }>((resolve) => {
+          finish = resolve;
+        }),
+    )
+    .mockResolvedValueOnce({ revision: 2 });
   const writer = new ProjectDraftWriter(0, {}, save);
   writer.change({ title: "one" });
   const flushing = writer.flush();
   writer.change({ title: "two" });
-  writer.dispose();
   finish({ revision: 1 });
   await flushing;
-  expect(save).toHaveBeenCalledTimes(1);
+  expect(save).toHaveBeenLastCalledWith({ title: "two" }, 1);
+  expect(writer.dirty).toBe(false);
+});
+
+it("reuses a project's unsaved writer for the next editor and waits for its uploads (H20)", async () => {
+  const { apiFetch } = jest.requireMock("./api") as { apiFetch: jest.Mock };
+  apiFetch.mockRejectedValueOnce(new Error("offline"));
+  const project = { id: 41, revision: 3, responses: {} };
+  const first = projectDraftWriter(project);
+  first.change({ photos: ["a"] });
+  await expect(first.flush()).rejects.toThrow("offline");
+  const second = projectDraftWriter(project);
+  expect(second).toBe(first);
+  expect(second.current).toEqual({ photos: ["a"] });
+  let uploaded!: () => void;
+  const upload = trackProjectTask(41, new Promise<void>((resolve) => (uploaded = resolve)));
+  apiFetch.mockResolvedValue({ revision: 4 });
+  let settled = false;
+  const settling = settleProjectDrafts(41).then(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  uploaded();
+  await upload;
+  await settling;
+  expect(first.dirty).toBe(false);
+  // Once saved, the next editor starts from the server copy.
+  expect(projectDraftWriter({ ...project, revision: 4 })).not.toBe(first);
 });

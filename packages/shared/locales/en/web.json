@@ -2059,6 +2059,8 @@
   "fieldKindDate": "Date",
   "birthYearPlaceholder": "e.g. 2001",
   "fieldKindFile": "File upload",
+  "fieldKindImages": "Photos",
+  "addPhotos": "Add photos",
   "fieldKindMultiselect": "Multiple choice",
   "fieldKindNumber": "Number",
   "fieldKindSelect": "Single choice",

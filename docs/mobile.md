@@ -417,21 +417,37 @@ grouped row with its draft/submitted state and a queue brief per challenge
 button appears above it only while invitations are pending. The live queue
 view is retained at `/projects/queue`, with its tutorial, pre-call
 notifications, SSE updates and polling. `/projects/:id` is the submission
-screen: status and deadline (when the server provides `submissionsCloseAt`),
-grouped form sections, challenge rows, team and invite, queue context, and a
-floating Submit / Resubmit glass button. Leaving a team uses the authenticated
+screen: the name field (its footer shows the save state and, when the server
+provides `submissionsCloseAt`, the deadline), grouped form sections, challenge
+rows, team with an Invite row, and a floating Submit / Resubmit glass button.
+Queue context lives on My Projects and the queue screen, not in the editor. Leaving a team uses the authenticated
 `DELETE /api/me/projects/:id/leave` route after confirmation. No planning-record conversion or
 external submission path remains in the native client.
 
 The reusable `DynamicForm` consumes `TemplateField` and `FormSection` from
-`@hackos/shared/forms`, the application/project schema. File and image fields
-use the system document picker and project-scoped multipart uploads with Expo
-`File` parts (Expo fetch does not serialize legacy React Native URI-only parts). Required
-answers are validated by the server on submission, without blocking drafts.
+`@hackos/shared/forms`, the application/project schema. File fields use the
+system document picker; a file answer is one attachment row (thumbnail or
+document icon, name, type and size) that opens the in-app viewer
+(`components/file-viewer.tsx`: photos with pinch zoom, PDFs via
+`react-native-pdf`, Share in the header). Photo fields (`images`, project form
+only, up to `MAX_IMAGES_PER_FIELD`) open the system photo picker with
+multi-select; each photo is re-encoded on device as a JPEG of at most 2048 px
+(HEIC never reaches the API) and uploaded one by one with its own
+Idempotency-Key. The answer is a horizontal carousel of 4:3 tiles with a corner
+remove button and an Add photos tile; a tap opens `components/photo-carousel.tsx`
+(full screen, swipe between photos, pinch zoom, "2 / 5"). Uploads use
+project-scoped multipart requests with Expo `File` parts (Expo fetch does not
+serialize legacy React Native URI-only parts). Required answers are validated
+by the server on submission, without blocking drafts.
 `ProjectDraftWriter` serializes autosaves with optimistic revisions; newer
 edits survive an older save completing. A failed save retains answers for retry,
-and a conflict requires explicitly reloading the project. Navigation waits for
-pending draft answers to save instead of dropping them on back.
+and a conflict requires explicitly reloading the project. Writers live per
+project for the app session (`projectDraftWriter` in `lib/projects.ts`), not
+per screen: leaving the editor (back button or swipe) never blocks, saves and
+running uploads finish in the background (`trackProjectTask`), an upload that
+completes after the editor closed still saves its answer, and reopening the
+project or My Projects waits for them (`settleProjectDrafts`); answers that
+could not be saved are resumed by the next editor instead of dropped.
 
 Gallery list/detail (`/projects/gallery`, `/projects/:id?gallery=1`) use the
 server's phase/audience projection, never a persisted mobile gallery cache.
@@ -440,13 +456,19 @@ a newer filter result. Foreground gallery polling rechecks publication every
 15 seconds. Only returned member photos and published winner fields
 are rendered. The gallery photo follows the networking-profile photo toggle,
 which is the only photo control; My Projects has none. Members appear by name
-per H18. Challenge rows (project page, editor, profiles) open the gallery filtered to that
-challenge (`/projects/gallery?challengeId=`), and each project on a profile opens
-its page; the server decides who may read it. The challenge filter is the native filter menu (multi-select, kept open while choosing; the glass toolbar button is the only filter control) so it scales past a dozen challenges.
+per H18. Challenge rows on the project page and editor open the challenge brief
+(`/projects/challenge?challengeId=`, `components/challenge-detail.tsx`): the
+company (logo, name, website), description, public evaluation criteria and
+prizes from `GET /api/public/challenges`, plus a Projects row to the filtered
+gallery only once the gallery answers with projects for it (it is 403 before
+publication). A company's challenges in the diary open the same brief as a
+sheet stacked over the company sheet. Each project on a profile opens its page;
+the server decides who may read it. The challenge filter is the native filter menu (multi-select, kept open while choosing; the glass toolbar button is the only filter control) so it scales past a dozen challenges.
 
 Several projects list as one grouped row section (name, draft/submitted,
 chevron); the editor lists the chosen challenges (mandatory ones with a lock) and an
-Add challenge row that opens a picker (`/projects/challenges?id=`): mandatory
+Add challenge row that opens a picker sheet (`/projects/challenges?id=`,
+presented modally like Invite teammate, with a confirm circle): mandatory
 challenges pinned and locked under "Required", every other challenge below with
 checkmarks and native search, so any number of challenges stays usable; changes
 apply at once and revert with the server's reason, and everything is read-only
@@ -454,7 +476,10 @@ when the server closes editing. A 403 from the project or gallery reads shows
 the permission message without a retry action (retrying cannot change the
 audience), 404/403 on gallery detail likewise. A failed invitation read does not
 hide the participant's projects, and a failed accept/decline refreshes the
-invitation list. Uploads surface server rejections (413 uses the too-large copy).
+invitation list. The Invite teammate sheet suggests the participant's diary
+contacts (people whose badge they scanned, minus current members), filtered
+by what is typed; a contact is invited by account (`{ userId }`, accepted by
+the API only for the inviter's own diary contacts), anyone else by email. Uploads surface server rejections (413 uses the too-large copy).
 
 Native UI fixtures exercise the screen contract and autosave concurrency;
 they are not device screenshots or proof of native toolbar behavior.
@@ -1102,7 +1127,8 @@ the emulator reports the hole to apps but does not paint it black), and with Rem
 neck). On a device without a cutout the plain collapse must be unchanged.
 The CV route needs the session, so it is
 downloaded with the session cookie (`expo-file-system`) into the cache and shown
-in the in-app viewer (`components/cv-viewer.tsx`): a page-sheet modal titled
+in the in-app viewer (`components/cv-viewer.tsx`, a CV-worded wrapper of the
+shared `components/file-viewer.tsx`): a page-sheet modal titled
 with the person's name, a circular close button, and pages that scroll with
 pinch and double-tap zoom, rendered by the native `react-native-pdf` (with its
 peer `react-native-blob-util`). Share stays in the viewer header for anyone who

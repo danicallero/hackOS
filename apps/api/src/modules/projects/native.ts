@@ -8,6 +8,11 @@ import { visibleWinnerRows } from "../challenges/winner-publication.js";
 import { hasEventAccess } from "../identity/role.js";
 import { assertProjectWindow, canViewProject, projectPhase } from "./policy.js";
 
+/** File answers are one key; photo-list answers (H16) are several. */
+function responseFileKeys(value: unknown): string[] {
+  if (typeof value === "string") return value ? [value] : [];
+  return Array.isArray(value) ? value.filter((key) => typeof key === "string") : [];
+}
 export async function nativeMember(db: Queryable, userId: number, id: number) {
   const result = await db.query(
     `SELECT 1 FROM submissions s JOIN users u ON u.id=s.user_id JOIN repos r ON r.id=s.repo_id AND r.is_test_account=u.is_test_account WHERE repo_id=$1 AND user_id=$2 AND status='active' AND u.account_state='active' AND u.anonymized_at IS NULL`,
@@ -142,14 +147,17 @@ export async function submitNativeProject(userId: number, id: number) {
     );
     if (rows[0].maximum && rows[0].count > rows[0].maximum && !project.team_size_exception)
       throw new BadRequestError("Project exceeds maximum team size");
-    for (const field of form.template)
-      if (field.kind === "file" && project.responses[field.key]) {
-        const owned = await db.query(
-          `SELECT 1 FROM project_files WHERE repo_id=$1 AND object_key=$2 AND field_key=$3`,
-          [id, project.responses[field.key], field.key],
-        );
-        if (!owned.rowCount) throw new BadRequestError("File does not belong to this project");
-      }
+    for (const field of form.template) {
+      if (field.kind !== "file" && field.kind !== "images") continue;
+      const keys = responseFileKeys(project.responses[field.key]);
+      if (!keys.length) continue;
+      const owned = await db.query(
+        `SELECT count(DISTINCT object_key)::int AS count FROM project_files WHERE repo_id=$1 AND object_key=ANY($2::text[]) AND field_key=$3`,
+        [id, keys, field.key],
+      );
+      if (owned.rows[0].count !== new Set(keys).size)
+        throw new BadRequestError("File does not belong to this project");
+    }
     await db.query(
       `UPDATE repos SET submission_status='submitted',submitted_at=now(),submitted_via='native',locked_at=now(),lock_reason='native_submission' WHERE id=$1`,
       [id],
@@ -266,7 +274,11 @@ export async function nativeProjects(userId: number | null, ids: number[], staff
         }),
       presentations: challenges.rows.filter((c) => c.repo_id === id && c.status !== null),
       files: files.rows
-        .filter((f) => f.repo_id === id && Object.values(responses).includes(f.object_key))
+        .filter(
+          (f) =>
+            f.repo_id === id &&
+            Object.values(responses).flatMap(responseFileKeys).includes(f.object_key),
+        )
         .map((f) => ({
           objectKey: f.object_key,
           fieldKey: f.field_key,
