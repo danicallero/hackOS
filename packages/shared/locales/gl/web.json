@@ -3519,5 +3519,7 @@
   "devpostEmailPlaceholder": "teu@correo-devpost.com",
   "willUseToMatchDevpost": "Usarémolo para vincular os teus proxectos de Devpost ao importalos.",
   "capabilityDescriptionProjectsRead": "Ler proxectos",
-  "capabilityDescriptionProjectsEdit": "Editar proxectos"
+  "capabilityDescriptionProjectsEdit": "Editar proxectos",
+  "galleryNotOpen": "A galería aínda non está aberta",
+  "galleryOpensOn": "A galería abre o {date}"
 }

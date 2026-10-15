@@ -958,5 +958,7 @@
   "challengeProjects": "Proxectos",
   "challengeNotFound": "Reto non dispoñible",
   "projectSend": "Enviar",
-  "scanReplayExpired": "Non se sincronizou en {days} días. Rexístrao manualmente."
+  "scanReplayExpired": "Non se sincronizou en {days} días. Rexístrao manualmente.",
+  "galleryNotOpen": "A galería aínda non está aberta",
+  "galleryOpensOn": "A galería abre o {date}"
 }

@@ -451,7 +451,11 @@ could not be saved are resumed by the next editor instead of dropped.
 
 Gallery list/detail (`/projects/gallery`, `/projects/:id?gallery=1`) use the
 server's phase/audience projection, never a persisted mobile gallery cache.
-Search and challenge filters are paginated; outdated responses cannot replace
+Before the gallery opens (`project_gallery_opens_at`, unset = closed) the API
+answers 403 with `details.reason` `gallery_closed` (and `opensAt`) or
+`gallery_audience`; the gallery shows "The gallery opens …" / "The gallery
+isn't open yet" instead of a permission error. Project staff (PROJECTS_READ)
+browse it at any time. Search and challenge filters are paginated; outdated responses cannot replace
 a newer filter result. Foreground gallery polling rechecks publication every
 15 seconds. Only returned member photos and published winner fields
 are rendered. The gallery photo follows the networking-profile photo toggle,

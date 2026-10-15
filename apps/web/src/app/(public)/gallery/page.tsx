@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { getEventTimeZone } from "@/lib/event-time";
 import type { NativeProject } from "@/lib/native-projects";
 import { galleryContext, projectAssetUrl } from "./data";
 import { GalleryRefresh } from "./gallery-refresh";
@@ -13,6 +14,23 @@ import { GalleryRefresh } from "./gallery-refresh";
 interface GalleryChallenge {
   id: number;
   title: Record<string, string>;
+}
+
+/** H18: a gallery that is not open yet is a date, not a permission error. */
+function galleryClosedNotice(
+  error: ApiError,
+  copy: { galleryNotOpen: string; galleryOpensOn: string },
+  language: string,
+) {
+  const details = error.details as { reason?: string; opensAt?: string | null } | undefined;
+  if (error.status !== 403 || !details?.reason?.startsWith("gallery_")) return null;
+  if (details.reason !== "gallery_closed" || !details.opensAt) return copy.galleryNotOpen;
+  const date = new Intl.DateTimeFormat(language, {
+    dateStyle: "long",
+    timeStyle: "short",
+    timeZone: getEventTimeZone(),
+  }).format(new Date(details.opensAt));
+  return copy.galleryOpensOn.replace("{date}", date);
 }
 
 export const dynamic = "force-dynamic";
@@ -40,11 +58,16 @@ export default async function GalleryPage({
     ]);
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;
+    const closed = galleryClosedNotice(error, copy, language);
     return (
       <PageLayout className="px-4 py-6 sm:px-6">
         <GalleryRefresh />
         <PageHeader title={copy.projectGallery} />
-        <p role="alert">{apiErrorText(error, t, t("apiErrorServer"))}</p>
+        {closed ? (
+          <p className="text-muted-foreground">{closed}</p>
+        ) : (
+          <p role="alert">{apiErrorText(error, t, t("apiErrorServer"))}</p>
+        )}
       </PageLayout>
     );
   }

@@ -22,9 +22,11 @@ jest.mock("@/lib/api", () => ({
   getCurrentSessionCookie: () => "session=1",
   ApiError: class ApiError extends Error {
     status: number;
-    constructor(message: string, status: number) {
+    details?: unknown;
+    constructor(message: string, status: number, _code?: string, details?: unknown) {
       super(message);
       this.status = status;
+      this.details = details;
     }
   },
 }));
@@ -509,6 +511,18 @@ it("hides gallery retry when the audience is denied (H18)", async () => {
   expect(await screen.findByText("apiErrorForbidden")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
   expect(screen.queryByText("projectNoGallery")).toBeNull();
+});
+
+it("shows when the gallery opens instead of a permission error (H18)", async () => {
+  settle({
+    "/api/public/projects?page=1&pageSize=20&search=": new ApiError("closed", 403, "forbidden", {
+      reason: "gallery_closed",
+      opensAt: "2026-10-18T16:00:00Z",
+    }),
+  });
+  await renderMobile(<ProjectGalleryScreen />);
+  expect(await screen.findByText("galleryOpensOn")).toBeTruthy();
+  expect(screen.queryByText("apiErrorForbidden")).toBeNull();
 });
 
 it("opens the gallery filtered to the linked challenge and sends every chosen challenge (H18)", async () => {
