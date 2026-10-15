@@ -119,19 +119,6 @@ export function ReadOnlyOverview({
     >
       <dl className="space-y-4">
         <Field
-          label={t("secondaryEmailLabel")}
-          value={
-            user.secondaryEmail ? (
-              <span className="inline-flex items-center gap-2">
-                {user.secondaryEmail}
-                <StatusBadge tone={user.secondaryEmailVerified ? "success" : "warning"} dot={false}>
-                  {user.secondaryEmailVerified ? t("verified") : t("pendingShort")}
-                </StatusBadge>
-              </span>
-            ) : null
-          }
-        />
-        <Field
           label={t("language")}
           value={isLanguage(user.language) ? languageName(user.language) : user.language}
         />
@@ -195,8 +182,6 @@ export function StaffEditForm({
     description: i.description ? pickText(i.description, lang) : undefined,
   }));
 
-  const [secEmail, setSecEmail] = useState("");
-  const [secSending, setSecSending] = useState(false);
   const [primaryEmail, setPrimaryEmail] = useState("");
   const [primarySending, setPrimarySending] = useState(false);
 
@@ -232,35 +217,6 @@ export function StaffEditForm({
       toast.error(apiErrorText(err, t, t("couldNotChangePrimaryEmail")), t("toastChangeEmail"));
     } finally {
       setPrimarySending(false);
-    }
-  }
-
-  async function handleSetSecondaryEmail() {
-    setSecSending(true);
-    try {
-      await api.post(`/api/users/${user.id}/secondary-email`, {
-        email: secEmail.trim().toLowerCase(),
-      });
-      toast.success(t("secondaryEmailSetNeedsVerify"), { compactTitle: t("toastAddEmail") });
-      setSecEmail("");
-      await onUpdated();
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotSetSecondaryEmail")), t("toastAddEmail"));
-    } finally {
-      setSecSending(false);
-    }
-  }
-
-  async function handleRemoveSecondaryEmail() {
-    setSecSending(true);
-    try {
-      await api.delete(`/api/users/${user.id}/secondary-email`);
-      toast.success(t("secondaryEmailRemoved"), { compactTitle: t("toastRemoveEmail") });
-      await onUpdated();
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotRemoveSecondaryEmail")), t("toastRemoveEmail"));
-    } finally {
-      setSecSending(false);
     }
   }
 
@@ -451,54 +407,6 @@ export function StaffEditForm({
                 }
                 onConfirm={handleChangePrimaryEmail}
               />
-            </div>
-          </div>
-          <Separator className="my-4" />
-          <div className="space-y-4">
-            <h4 className="text-sm font-medium">{t("secondaryEmailLabel")}</h4>
-            {user.secondaryEmail && (
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">
-                  {t("currentEmailInline", { email: user.secondaryEmail })}
-                </span>
-                <StatusBadge tone={user.secondaryEmailVerified ? "success" : "warning"} dot={false}>
-                  {user.secondaryEmailVerified ? t("verified") : t("pendingShort")}
-                </StatusBadge>
-                <AlertModal
-                  title={t("removeSecondaryEmailTitle")}
-                  description={t("removeSecondaryEmailStaffDesc")}
-                  cancelLabel={t("cancel")}
-                  confirmLabel={t("remove")}
-                  destructive
-                  pending={secSending}
-                  trigger={
-                    <Button type="button" variant="outline" size="sm">
-                      {t("remove")}
-                    </Button>
-                  }
-                  onConfirm={handleRemoveSecondaryEmail}
-                />
-              </div>
-            )}
-            <div className="flex items-end gap-2">
-              <div className="flex-1 space-y-2">
-                <Label htmlFor="admin-sec-email">{t("setSecondaryEmailLabel")}</Label>
-                <Input
-                  id="admin-sec-email"
-                  type="email"
-                  value={secEmail}
-                  onChange={(e) => setSecEmail(e.target.value)}
-                  placeholder={user.secondaryEmail ?? "email@example.com"}
-                />
-              </div>
-              <Button
-                variant="outline"
-                disabled={!secEmail.includes("@") || secSending}
-                onClick={handleSetSecondaryEmail}
-                loading={secSending}
-              >
-                {secSending ? t("sending") : user.secondaryEmail ? t("change") : t("setEmail")}
-              </Button>
             </div>
           </div>
         </SectionCard>

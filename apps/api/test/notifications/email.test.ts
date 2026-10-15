@@ -211,7 +211,7 @@ describe("SMTP via Mailpit (default dev provider)", () => {
 
   it("payload.recipient and payload.language override the user row (H6/H10 flows)", async () => {
     // user row says English + their primary address; payload overrides both,
-    // e.g. verifying a secondary email (H6) in the user's chosen language.
+    // for invitations sent before the recipient has selected a language.
     const userId = await createUser({ email: "primary@test.local" });
     await setUserLanguage(userId, "en");
     await enqueueOutbox(

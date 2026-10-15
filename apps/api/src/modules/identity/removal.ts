@@ -70,7 +70,6 @@ interface UserRemovalRow {
   id: number;
   email: string;
   email_verified: boolean;
-  secondary_email: string | null;
   name: string | null;
   surname: string | null;
   dni: string | null;
@@ -311,7 +310,7 @@ export async function getAccountRemovalEligibility(
 
 async function loadUserForRemoval(client: pg.PoolClient, userId: number): Promise<UserRemovalRow> {
   const { rows } = await client.query<UserRemovalRow>(
-    `SELECT id, email, email_verified, secondary_email, name, surname, dni, is_test_account,
+    `SELECT id, email, email_verified, name, surname, dni, is_test_account,
             badge_id, badge_id_history,
             university_id, account_state, removal_action,
             removal_requires_exit, removal_expires_at, removal_idempotency_key
@@ -976,19 +975,14 @@ function escapeRegExp(value: string): string {
 function safeDemographicText(
   value: unknown,
   maxLength: number,
-  user: Pick<UserRemovalRow, "email" | "secondary_email" | "name" | "surname" | "dni"> & {
+  user: Pick<UserRemovalRow, "email" | "name" | "surname" | "dni"> & {
     historicalEmails?: readonly string[];
   },
 ): string | null {
   const text = textValue(value, maxLength);
   if (!text) return null;
   const folded = text.normalize("NFKC").toLocaleLowerCase();
-  const directTokens = [
-    user.email,
-    user.secondary_email,
-    user.dni,
-    ...(user.historicalEmails ?? []),
-  ]
+  const directTokens = [user.email, user.dni, ...(user.historicalEmails ?? [])]
     .filter((token): token is string => typeof token === "string" && token.trim().length >= 3)
     .map((token) => token.normalize("NFKC").toLocaleLowerCase());
   if (directTokens.some((token) => folded.includes(token))) return null;
@@ -1044,7 +1038,7 @@ function ageFromBirthYear(value: unknown, asOf: Date): number | null {
 async function applicationUniversityValue(
   client: pg.PoolClient,
   value: unknown,
-  identity: Pick<UserRemovalRow, "email" | "secondary_email" | "name" | "surname" | "dni"> & {
+  identity: Pick<UserRemovalRow, "email" | "name" | "surname" | "dni"> & {
     historicalEmails?: readonly string[];
   },
   cachedNames: Map<number, string | null>,
@@ -1080,7 +1074,7 @@ async function sanitizeAnonymousAuditValue(
   client: pg.PoolClient,
   field: TemplateField,
   value: unknown,
-  identity: Pick<UserRemovalRow, "email" | "secondary_email" | "name" | "surname" | "dni"> & {
+  identity: Pick<UserRemovalRow, "email" | "name" | "surname" | "dni"> & {
     historicalEmails?: readonly string[];
   },
   universityNames: Map<number, string | null>,
@@ -1358,7 +1352,7 @@ async function scrubRelationships(
   );
   const emails = [
     ...new Set(
-      [user.email, user.secondary_email, ...historicalEmailRows.map((row) => row.email)].filter(
+      [user.email, ...historicalEmailRows.map((row) => row.email)].filter(
         (value): value is string => Boolean(value),
       ),
     ),
@@ -1826,8 +1820,6 @@ export async function resetReviewFixtureAccount(
             university_id = NULL,
             shirt_size = NULL,
             language = 'en',
-            secondary_email = NULL,
-            secondary_email_verified_at = NULL,
             notes = NULL,
             ui_prefs = '{}'::jsonb,
             account_state = 'active',

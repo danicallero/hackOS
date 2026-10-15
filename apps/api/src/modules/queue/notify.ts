@@ -13,8 +13,8 @@ import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
 /**
  * Team members for a repo. `submissions` is the normal source; the
- * email fallback keeps notifications correct when a member's invitation was
- * addressed to a secondary email.
+ * primary-email fallback resolves accepted invitations while membership rows
+ * are being repaired.
  */
 export async function repoMemberIds(
   client: Queryable,

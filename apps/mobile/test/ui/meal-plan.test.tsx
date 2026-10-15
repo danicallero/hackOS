@@ -18,8 +18,6 @@ const baseMe = {
   dni: null,
   badgeId: null,
   language: "en",
-  secondaryEmail: null,
-  secondaryEmailVerified: false,
   foodIntolerances: [] as number[],
   foodIntoleranceNotes: null as string | null,
   shirtSize: null,
