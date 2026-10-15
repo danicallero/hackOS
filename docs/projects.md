@@ -104,7 +104,8 @@ remains.
 open) and `GET /api/me/projects` returns `{projects,canCreate}`. Members invite
 by email with `POST /api/me/projects/:id/invites`; the invitee answers with
 `POST /api/me/projects/:id/invites/accept|decline` and sees pending invitations
-at `GET /api/me/projects/invites`. Accepting locks the project and enforces
+at `GET /api/me/projects/invites`; `invitedBy` is the active inviter’s display
+name (or null), never an internal user ID. Accepting locks the project and enforces
 `projectMaxTeamSize`. `PUT|DELETE /api/me/projects/:id/challenges/:challengeId`
 edit intended challenges; mandatory challenges are added automatically and
 cannot be withdrawn (H17). `GET /api/projects/estimates` gives staff and

@@ -432,7 +432,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: {
         summary: "My pending project invites (H19/H20).",
         description:
-          "Lists project invites addressed to the caller that haven't been accepted or declined yet, newest first.",
+          "Lists pending project invites addressed to the caller, newest first, with invitedBy as the active inviter's display name or null rather than an internal user ID (H19).",
       },
     },
     async (req) => ({ invites: await myPendingInvites(req.userId as number) }),

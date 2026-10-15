@@ -183,8 +183,22 @@ describe("POST /api/me/projects/:id/invites (H19/H20)", () => {
       headers: asUser(invitee),
     });
     expect(pending.json().invites).toEqual([
-      expect.objectContaining({ projectId: repoId, name: "Team" }),
+      expect.objectContaining({ projectId: repoId, name: "Team", invitedBy: "Test User" }),
     ]);
+    await pool.query(`UPDATE users SET surname='Organizer' WHERE id=$1`, [owner]);
+    const named = await server.inject({
+      method: "GET",
+      url: "/api/me/projects/invites",
+      headers: asUser(invitee),
+    });
+    expect(named.json().invites[0].invitedBy).toBe("Test User Organizer");
+    await pool.query(`UPDATE users SET anonymized_at=now() WHERE id=$1`, [owner]);
+    const removed = await server.inject({
+      method: "GET",
+      url: "/api/me/projects/invites",
+      headers: asUser(invitee),
+    });
+    expect(removed.json().invites[0].invitedBy).toBeNull();
   });
 
   it("403s when the inviter isn't an active member", async () => {
