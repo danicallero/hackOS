@@ -3,11 +3,12 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 let mockParams: Record<string, string> = { id: "5" };
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+const mockReplace = jest.fn();
 const mockSetOptions = jest.fn();
 jest.mock("@/theme/colors", () => ({ colors: new Proxy({}, { get: () => "#171717" }) }));
 jest.mock("expo-router", () => ({
   useScrollToTop: jest.fn(),
-  useRouter: () => ({ push: mockPush, back: mockBack }),
+  useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
   useFocusEffect: (callback: () => undefined | (() => void)) => {
     const { useEffect } = jest.requireActual("react");
     useEffect(callback, [callback]);
@@ -72,6 +73,7 @@ beforeEach(() => {
   mockApi.mockReset();
   mockPush.mockReset();
   mockBack.mockReset();
+  mockReplace.mockReset();
   mockSetOptions.mockReset();
 });
 it("hides creation when server policy denies it and links to the invitation inbox (H19)", async () => {
@@ -175,8 +177,9 @@ it("creates a project from the sheet: Create stays disabled until the name is va
     "/api/me/projects",
     expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Rover" }) }),
   );
-  expect(mockBack).toHaveBeenCalled();
-  expect(mockPush).toHaveBeenCalledWith("/projects/12");
+  expect(mockReplace).toHaveBeenCalledWith("/projects/12");
+  expect(mockBack).not.toHaveBeenCalled();
+  expect(mockPush).not.toHaveBeenCalled();
 });
 
 it("keeps the sheet open and shows the reason when creation fails (H19)", async () => {

@@ -402,7 +402,8 @@ The existing personal `queue` tab and overflow route now open **My Projects**,
 a native stack (`app/(tabs)/queue/`): the list with a native large title, **New
 project** (`/queue/new`, a modal sheet with Cancel / Create in the header, the
 name field focused, Create disabled until valid or when the server's
-`canCreate` is false) and the **Invitations** inbox (`/queue/invites`: inviter
+`canCreate` is false; successful creation atomically replaces the sheet with
+the project editor, avoiding a native dismissal/push race) and the **Invitations** inbox (`/queue/invites`: inviter
 and project per row, Decline / Accept glass buttons, the row leaves at once and
 returns with the server's reason on failure). The list shows every project as a
 grouped row with its draft/submitted state and a queue brief per challenge

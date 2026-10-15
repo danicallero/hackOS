@@ -70,8 +70,8 @@ export function NewProjectScreen() {
         name: name.trim(),
       });
       void haptic("success");
-      router.back();
-      router.push(`/projects/${created.id}`);
+      // H19: replace the sheet atomically; back then push races the native dismissal.
+      router.replace(`/projects/${created.id}`);
     } catch (cause) {
       setError(cause as Error);
       setBusy(false);
