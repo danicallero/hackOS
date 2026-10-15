@@ -10,6 +10,7 @@ import { FolderSimpleIcon } from "@phosphor-icons/react/dist/ssr/FolderSimple";
 import { GavelIcon } from "@phosphor-icons/react/dist/ssr/Gavel";
 import { GearIcon } from "@phosphor-icons/react/dist/ssr/Gear";
 import { HandshakeIcon } from "@phosphor-icons/react/dist/ssr/Handshake";
+import { HouseIcon } from "@phosphor-icons/react/dist/ssr/House";
 import { ListNumbersIcon } from "@phosphor-icons/react/dist/ssr/ListNumbers";
 import { LogIcon } from "@phosphor-icons/react/dist/ssr/Log";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/ssr/Megaphone";
@@ -19,7 +20,6 @@ import { SealCheckIcon } from "@phosphor-icons/react/dist/ssr/SealCheck";
 import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { StorefrontIcon } from "@phosphor-icons/react/dist/ssr/Storefront";
 import { TelevisionSimpleIcon } from "@phosphor-icons/react/dist/ssr/TelevisionSimple";
-import { TrayIcon } from "@phosphor-icons/react/dist/ssr/Tray";
 import { TrophyIcon } from "@phosphor-icons/react/dist/ssr/Trophy";
 import { UserIcon } from "@phosphor-icons/react/dist/ssr/User";
 import { UsersIcon } from "@phosphor-icons/react/dist/ssr/Users";
@@ -29,6 +29,7 @@ export interface NavItem {
   title: import("./i18n").MessageKey;
   href: string;
   icon: PhosphorIcon;
+  activePaths?: readonly string[];
   /** Required capability to see the item (H8/H55). Omit = visible to all. */
   capability?: Capability;
   /** Visible to any of these capabilities. */
@@ -139,22 +140,25 @@ export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): bool
  * first, configuration-ish personal items last.
  */
 export const PERSONAL_NAV: NavItem[] = [
-  { title: "schedule", href: "/timetable", icon: CalendarDotsIcon },
+  {
+    title: "home",
+    href: "/event",
+    icon: HouseIcon,
+    activePaths: ["/timetable", "/inbox", "/challenge"],
+  },
   // Participant-facing: everyone can apply (H12-H15). No capability gate.
   { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
   // H19: admitted participants create and manage their own project drafts.
   {
-    title: "myProject",
+    title: "projects",
     href: "/my-project",
     icon: FolderSimpleIcon,
-    hideForPureApplicant: true,
+    activePaths: ["/gallery"],
   },
-  { title: "projectGallery", href: "/gallery", icon: FolderSimpleIcon },
   // Entrance ticket is exposed only while a role grants current event access
   // (the historical tickets row remains for audit/idempotency).
   { title: "wallet", href: "/wallet", icon: WalletIcon, hideForPureApplicant: true },
-  // Hidden for pure applicants — decision emails go out regardless (H50/H51).
-  { title: "inbox", href: "/inbox", icon: TrayIcon, hideForPureApplicant: true },
+
   // Event diary (#935): people saved by scanning their badge and sponsor
   // stands. Like the API, it needs current event access only.
   { title: "diary", href: "/people", icon: AddressBookIcon, hideForPureApplicant: true },
@@ -192,7 +196,7 @@ export const WORKSPACES: Workspace[] = [
       {
         // H8/H55: judges + sponsor reps get a scoped projects view (backend
         // scopes GET /api/repos by their challenges); full access via projects:*.
-        title: "projects",
+        title: "manageProjects",
         href: "/projects",
         icon: FolderSimpleIcon,
         anyCapability: [CAPABILITIES.PROJECTS_READ, CAPABILITIES.JUDGE_PANEL],

@@ -13,6 +13,8 @@ test("public challenge page shows published winners only after reveal", async ({
       return route.fallback();
     }
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/me")
+      return route.fulfill({ status: 401, json: { error: { code: "unauthenticated" } } });
     if (path === "/api/public/challenges/1/winners")
       return route.fulfill({
         json: revealed

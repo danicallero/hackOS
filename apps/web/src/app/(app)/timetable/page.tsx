@@ -1,19 +1,20 @@
 "use client";
 
-import { PageHeader } from "@/components/common/page-header";
+import { PageLayout } from "@/components/common/page-layout";
+import { HomeSectionHeader } from "@/components/common/section-navigation";
 import { PublicScheduleView } from "@/components/public/public-schedule-view";
-import { useLocale } from "@/lib/i18n";
 
 export default function TimetablePage() {
-  const { t } = useLocale();
-
   return (
-    <div className="space-y-6 sm:space-y-8">
+    <PageLayout>
       <PublicScheduleView
         header={(_event, actions) => (
-          <PageHeader title={t("schedule")} secondaryActions={actions} />
+          <>
+            <HomeSectionHeader />
+            {actions && <div className="flex justify-end gap-2">{actions}</div>}
+          </>
         )}
       />
-    </div>
+    </PageLayout>
   );
 }

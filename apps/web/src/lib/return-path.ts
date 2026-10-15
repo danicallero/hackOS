@@ -7,10 +7,7 @@
  * absolute) could send a user off-site and is rejected in favor of the
  * fallback (#188: return destinations must be same-origin guarded).
  */
-export function safeReturnPath(
-  candidate: string | null | undefined,
-  fallback = "/timetable",
-): string {
+export function safeReturnPath(candidate: string | null | undefined, fallback = "/event"): string {
   if (candidate?.startsWith("/") && !candidate.startsWith("//")) return candidate;
   return fallback;
 }

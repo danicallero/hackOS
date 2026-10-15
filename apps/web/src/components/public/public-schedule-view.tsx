@@ -1,20 +1,24 @@
 "use client";
 
-import type { ActivityKind } from "@hackos/shared/activity-kinds";
+import { type ActivityKind, activityKindLabelKey } from "@hackos/shared/activity-kinds";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
+import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
+import type { FilterDefinition } from "@/components/common/filter-menu";
+import { ListToolbar } from "@/components/common/list-toolbar";
 import { Spinner } from "@/components/common/spinner";
 import type { PublicEvent } from "@/components/public/public-types";
 import {
   deriveViewerScheduleSegments,
   matchesScheduleSegmentFilter,
-  ScheduleAudienceFilterPopover,
+  segmentLabel,
   type ViewerScheduleSegment,
 } from "@/components/public/schedule-audience-filter";
 import {
   deriveScheduleKinds,
   matchesScheduleKindFilter,
-  ScheduleKindFilterPopover,
 } from "@/components/public/schedule-kind-filter";
 import { ScheduleTimeline } from "@/components/public/schedule-timeline";
 import { api } from "@/lib/api";
@@ -32,8 +36,7 @@ import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "@/li
  *
  * `header` is a title slot rather than a plain node because both shells title
  * themselves with the event name, which only this component has loaded.
- * The second slot argument contains the ready-to-use filter actions so each
- * shell can place them in its own header without duplicating schedule state.
+ * Search and categorical filters are owned here so both shells share controls.
  */
 export function PublicScheduleView({
   header,
@@ -55,6 +58,8 @@ export function PublicScheduleView({
   // Companion filter by activity kind (talk/workshop/meal/…) — independent of
   // the audience filter above, so a viewer can combine "just mentor items"
   // with "just workshops" instead of picking one axis.
+  const [search, setSearch] = useState("");
+  const [locations, setLocations] = useState<string[]>([]);
   const [kindFilter, setKindFilter] = useState<Set<ActivityKind>>(new Set());
 
   const loadEvent = useCallback(async () => {
@@ -73,7 +78,7 @@ export function PublicScheduleView({
     setScheduleLoading(true);
     setScheduleError(null);
     try {
-      const { items } = await logisticsApi.publicSchedule();
+      const { items } = await logisticsApi.viewerSchedule();
       // Resolve each item's title/description into the viewer's language here
       // (H50 extension) so ScheduleTimeline and everything downstream can
       // keep reading plain item.title/item.description unchanged.
@@ -99,38 +104,71 @@ export function PublicScheduleView({
       items?.filter(
         (item) =>
           matchesScheduleSegmentFilter(item, segmentFilter) &&
-          matchesScheduleKindFilter(item, kindFilter),
+          matchesScheduleKindFilter(item, kindFilter) &&
+          (!locations.length || locations.includes(item.location ?? "")) &&
+          `${item.title} ${item.description ?? ""} ${item.location ?? ""}`
+            .toLocaleLowerCase(language)
+            .includes(search.trim().toLocaleLowerCase(language)),
       ) ?? null,
-    [items, segmentFilter, kindFilter],
+    [items, segmentFilter, kindFilter, locations, search, language],
   );
-  const filterActions =
-    event &&
-    !eventLoading &&
-    !scheduleLoading &&
-    !eventError &&
-    !scheduleError &&
-    (availableSegments.length > 1 || availableKinds.length > 1) ? (
-      <>
-        {availableSegments.length > 1 && (
-          <ScheduleAudienceFilterPopover
-            segments={availableSegments}
-            selected={segmentFilter}
-            onChange={setSegmentFilter}
-          />
-        )}
-        {availableKinds.length > 1 && (
-          <ScheduleKindFilterPopover
-            kinds={availableKinds}
-            selected={kindFilter}
-            onChange={setKindFilter}
-          />
-        )}
-      </>
-    ) : null;
+  const filters: FilterDefinition[] = [
+    ...(availableKinds.length > 1
+      ? [
+          {
+            id: "kind",
+            label: t("scheduleKindColumn"),
+            icon: CalendarDotsIcon,
+            type: "multiple" as const,
+            value: [...kindFilter],
+            onChange: (values: string[]) => setKindFilter(new Set(values as ActivityKind[])),
+            options: availableKinds.map((kind) => ({
+              value: kind,
+              label: t(activityKindLabelKey(kind)),
+              color: `var(--schedule-${kind})`,
+            })),
+          },
+        ]
+      : []),
+    ...(availableSegments.length > 0
+      ? [
+          {
+            id: "audience",
+            label: t("audienceFilterAction"),
+            icon: UsersIcon,
+            type: "multiple" as const,
+            value: [...segmentFilter],
+            onChange: (values: string[]) =>
+              setSegmentFilter(new Set(values as ViewerScheduleSegment[])),
+            options: availableSegments.map((segment) => ({
+              value: segment,
+              label: segmentLabel(segment, t),
+            })),
+          },
+        ]
+      : []),
+    {
+      id: "location",
+      label: t("locationLabel"),
+      icon: MapPinIcon,
+      type: "multiple" as const,
+      value: locations,
+      onChange: setLocations,
+      options: [
+        ...new Set(
+          (items ?? [])
+            .map((item) => item.location)
+            .filter((location): location is string => Boolean(location)),
+        ),
+      ]
+        .sort()
+        .map((location) => ({ value: location, label: location })),
+    },
+  ].filter((filter) => filter.options.length > 0);
 
   return (
     <>
-      {header?.(event, filterActions)}
+      {header?.(event, null)}
       {eventLoading || scheduleLoading ? (
         <div className="flex justify-center py-20" role="status" aria-busy="true">
           <Spinner className="size-6" />
@@ -154,6 +192,19 @@ export function PublicScheduleView({
              (the "schedule" nav item has no sponsor gate) still sees the
              contact info the API already sent, matching sponsor-faq. */
           <ScheduleTimeline
+            renderToolbar={(controls) => (
+              <ListToolbar
+                search={{
+                  label: t("search"),
+                  placeholder: t("searchSchedulePlaceholder"),
+                  value: search,
+                  onValueChange: setSearch,
+                }}
+                filters={filters}
+                actions={<div className="col-span-full md:col-span-1">{controls}</div>}
+              />
+            )}
+            rangeItems={items ?? undefined}
             items={displayedItems}
             timezone={event.timezone}
             showResponsible

@@ -14,7 +14,7 @@ describe("safeReturnPath (#188 same-origin guard)", () => {
     "//evil.example.com",
     "javascript:alert(1)",
   ])("falls back to the default for %s", (candidate) => {
-    expect(safeReturnPath(candidate)).toBe("/timetable");
+    expect(safeReturnPath(candidate)).toBe("/event");
   });
 
   it("supports a custom fallback", () => {

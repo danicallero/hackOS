@@ -112,7 +112,7 @@ function SignUpInner() {
 
   // Already signed in: no reason to show the sign-up form again.
   useEffect(() => {
-    if (status === "authenticated") router.replace(next || "/timetable");
+    if (status === "authenticated") router.replace(next || "/event");
   }, [status, router, next]);
 
   if (status === "loading" || status === "authenticated") {

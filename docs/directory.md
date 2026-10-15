@@ -359,3 +359,10 @@ a visible profile that shares its photo shows it on projects and in the
 gallery too; hiding either hides it there (see [projects](./projects.md)).
 `users.gallery_show_name` still controls the name in nonmember project reads,
 and H54 removal clears it together with the user's project uploads.
+
+My profile uses three persistent panels: Profile, Public profile, and Account and
+security. Tab switches preserve edits. On desktop, the public-profile fields and
+live preview share two columns; narrow screens stack them. Personal dietary fields
+are grouped separately, and choosing No restrictions hides the optional fields while
+preserving their previous values for restoration when unticked. Email, password,
+role details and account-removal actions live in the security panel.

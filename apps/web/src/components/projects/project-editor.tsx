@@ -10,6 +10,8 @@ import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
+import { ProjectsSectionHeader } from "@/components/common/section-navigation";
+import { StatusBadge } from "@/components/common/status-badge";
 import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
@@ -184,15 +186,26 @@ export function ProjectEditor({
         pending={busy}
         onConfirm={() => void changeMember(removeUser!)}
       />
-      <PageHeader
-        title={name || project.name}
-        context={
-          <Link href={staff ? "/projects" : "/my-project?view=all"}>
-            {t(staff ? "projects" : "myProjects")}
-          </Link>
-        }
-        state={t(status === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft")}
-      />
+      {staff ? (
+        <PageHeader
+          title={name || project.name}
+          context={
+            <Link href={staff ? "/projects" : "/my-project?view=all"}>
+              {t(staff ? "projects" : "myProjects")}
+            </Link>
+          }
+          state={t(status === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft")}
+        />
+      ) : (
+        <ProjectsSectionHeader
+          recordName={name || project.name}
+          recordState={
+            <StatusBadge tone={status === "submitted" ? "success" : "neutral"} dot={false}>
+              {t(status === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft")}
+            </StatusBadge>
+          }
+        />
+      )}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-6">
           <SectionCard
