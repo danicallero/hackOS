@@ -142,13 +142,7 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
       `UPDATE event_config SET project_gallery_opens_at=now()-interval '1 second',project_gallery_audience='public'`,
     );
     for (const showName of [false, true, false]) {
-      const consent = await app.inject({
-        method: "PUT",
-        url: "/api/me/project-gallery-consent",
-        headers: asUser(owner),
-        payload: { showName, showPhoto: false },
-      });
-      expect(consent.statusCode, consent.body).toBe(200);
+      await pool.query(`UPDATE users SET gallery_show_name=$2 WHERE id=$1`, [owner, showName]);
       for (const viewer of [undefined, attendee, outsider]) {
         const detailResponse = await get(`/api/public/projects/${id}`, viewer);
         const listResponse = await get("/api/public/projects", viewer);
@@ -165,29 +159,30 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
       expect(own.members[0].name).toBe("Test User");
     }
   });
-  it("never projects photos without gallery consent, independent of directory switches", async () => {
+  it("shows a member photo exactly when the public profile shares it (H18, #934)", async () => {
     await pool.query(`UPDATE event_config SET project_draft_visibility='public'`);
     await pool.query(
       `UPDATE users SET photo_key='profiles/'||id||'/photo/'||repeat('a',32)||'.jpg',photo_updated_at=now() WHERE id=$1`,
       [owner],
     );
-    expect((await get(`/api/public/projects/${id}`)).json().members[0].photoUrl).toBeNull();
-    await app.inject({
-      method: "PUT",
-      url: "/api/me/project-gallery-consent",
-      headers: asUser(owner),
-      payload: { showName: true, showPhoto: true },
-    });
-    expect((await get(`/api/public/projects/${id}`)).json().members[0].photoUrl).toContain(
-      `/members/${owner}/photo`,
+    const photoUrl = async () =>
+      (await get(`/api/public/projects/${id}`)).json().members[0].photoUrl;
+    expect(await photoUrl()).toBeNull();
+    // A visible profile that hides its photo still hides it on projects.
+    await pool.query(
+      `INSERT INTO user_public_profiles(user_id,directory_visible,show_photo,consented_at) VALUES($1,true,false,now())`,
+      [owner],
     );
-    await app.inject({
-      method: "PUT",
-      url: "/api/me/project-gallery-consent",
-      headers: asUser(owner),
-      payload: { showName: true, showPhoto: false },
-    });
+    expect(await photoUrl()).toBeNull();
+    await pool.query(`UPDATE user_public_profiles SET show_photo=true WHERE user_id=$1`, [owner]);
+    expect(await photoUrl()).toContain(`/members/${owner}/photo`);
+    // Hiding the whole profile hides the photo too, including the photo route.
+    await pool.query(`UPDATE user_public_profiles SET directory_visible=false WHERE user_id=$1`, [
+      owner,
+    ]);
+    expect(await photoUrl()).toBeNull();
     expect((await get(`/api/public/projects/${id}/members/${owner}/photo`)).statusCode).toBe(404);
+    expect((await get("/api/me/project-gallery-consent", owner)).statusCode).toBe(404);
   });
   it("separates editing lock from submission close", async () => {
     await pool.query(

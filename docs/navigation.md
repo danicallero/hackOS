@@ -172,7 +172,8 @@ hidden destinations stay routable:
   [`diary.md`](./diary.md); People and Companies segments only, with no
   directory to browse, opened directly with `?view=companies`; the direct tab is
   `app/(tabs)/diary/`, its own Stack for the native header and search) and
-  **Account** are direct, with **My Projects** (tab key `queue`, H19/H20) always
+  **Account** are direct, with **My Projects** (tab key `queue`, labelled
+  **Projects** in the tab bar so it fits, H19/H20) always
   added: every account in the event-access shell can open it before any queue
   entry, and the live queue status appears inside each project record, so five fit
   directly. Wallet
