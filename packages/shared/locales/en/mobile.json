@@ -949,5 +949,6 @@
   "projectDeclineShort": "Decline",
   "projectAddChallenge": "Add challenge",
   "projectSearchChallenges": "Search challenges",
-  "projectSend": "Send"
+  "projectSend": "Send",
+  "scanReplayExpired": "Not synced within {days} days. Log it manually."
 }

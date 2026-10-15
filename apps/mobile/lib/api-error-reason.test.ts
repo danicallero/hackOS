@@ -13,6 +13,7 @@ jest.mock("./api", () => ({
 }));
 
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
+import { SCAN_REPLAY_EXPIRED } from "@hackos/shared/idempotency";
 import commonGl from "@hackos/shared/locales/gl/common.json";
 import { ApiError } from "./api";
 import { apiErrorText, scanFailureCode, scanFailureText } from "./api-error-reason";
@@ -39,5 +40,6 @@ describe("api error copy", () => {
     expect(scanFailureCode(new Error("offline"))).toBe("network");
     expect(scanFailureText("badge_revoked", tGl as never)).toBe(commonGl.apiError_badge_revoked);
     expect(scanFailureText("Some legacy English row", tGl as never)).toBe("requestError");
+    expect(scanFailureText(SCAN_REPLAY_EXPIRED, tGl as never)).toBe("scanReplayExpired");
   });
 });

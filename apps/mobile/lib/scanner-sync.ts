@@ -1,4 +1,5 @@
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
+import { SCAN_REPLAY_EXPIRED, SCANNER_REPLAY_MAX_AGE_DAYS } from "@hackos/shared/idempotency";
 import { ApiError, apiFetch, CLOCK_SKEW_TOLERANCE_MS, getClockSkewMs } from "./api";
 import { apiErrorReason, scanFailureCode } from "./api-error-reason";
 import { authClient } from "./auth-client";
@@ -113,6 +114,16 @@ async function waitForLocalSnapshotWrite(write: Promise<void>): Promise<Error | 
   return result;
 }
 
+// #994: the server purges idempotency keys after IDEMPOTENCY_RETENTION_DAYS.
+// Replaying an older scan could execute it a second time, so it is failed
+// instead and stays visible for the operator to log manually.
+const SCANNER_REPLAY_MAX_AGE_MS = SCANNER_REPLAY_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+
+function isReplayExpired(scan: PendingScan): boolean {
+  const queuedAt = Date.parse(scan.createdAt);
+  return Number.isFinite(queuedAt) && Date.now() - queuedAt > SCANNER_REPLAY_MAX_AGE_MS;
+}
+
 type ReplayFailure = "retryable" | "terminal";
 
 function classifyReplayFailure(error: unknown): ReplayFailure {
@@ -212,6 +223,10 @@ export async function replayPendingScans(
   sessionCookie = authClient.getCookie(),
 ): Promise<void> {
   for (const scan of await pendingScans(ownerUserId, true)) {
+    if (isReplayExpired(scan)) {
+      await failScan(scan.id, SCAN_REPLAY_EXPIRED, ownerUserId);
+      continue;
+    }
     await markScanAttempt(scan.id, ownerUserId);
     try {
       await replay(scan, sessionCookie);
