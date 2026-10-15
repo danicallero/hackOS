@@ -152,16 +152,16 @@ export function registerProjectFileRoutes(app: FastifyInstance) {
       ...publicRead,
       schema: {
         params: params.extend({ userId: z.coerce.number().int().positive() }),
-        summary: "Read consented gallery photo",
+        summary: "Read a project member's photo",
         description:
-          "Requires current project visibility, active membership and explicit gallery photo consent on every request (#1009).",
+          "Requires current project visibility, active membership and, on every request, a visible public profile that shares its photo (H18, #934).",
       },
     },
     async (q, reply) => {
       if (!(await canViewProject(pool, q.userId, q.params.id)))
         throw new NotFoundError("Photo not found");
       const { rows } = await pool.query(
-        `SELECT u.photo_key FROM users u JOIN submissions s ON s.user_id=u.id AND s.status='active' WHERE s.repo_id=$1 AND u.id=$2 AND u.gallery_show_photo AND u.gallery_consented_at IS NOT NULL AND u.account_state='active' AND u.anonymized_at IS NULL`,
+        `SELECT u.photo_key FROM users u JOIN submissions s ON s.user_id=u.id AND s.status='active' JOIN user_public_profiles p ON p.user_id=u.id AND p.directory_visible AND p.show_photo AND p.consented_at IS NOT NULL WHERE s.repo_id=$1 AND u.id=$2 AND u.account_state='active' AND u.anonymized_at IS NULL`,
         [q.params.id, q.params.userId],
       );
       if (!rows[0]?.photo_key) throw new NotFoundError("Photo not found");

@@ -45,6 +45,13 @@ export async function saveNativeForm(actorId: number, form: ProjectForm) {
       `INSERT INTO project_form_versions(template,sections,created_by) VALUES($1,$2,$3) RETURNING id AS version,template,sections`,
       [JSON.stringify(form.template), JSON.stringify(form.sections), actorId],
     );
+    // H16: a field newly chosen as the description takes over projects that already answered it.
+    const descriptionField = projectDescriptionField(form.template);
+    if (descriptionField)
+      await db.query(
+        `UPDATE repos SET description=btrim(responses->>$1) WHERE jsonb_typeof(responses->$1)='string' AND btrim(responses->>$1)<>'' AND description IS DISTINCT FROM btrim(responses->>$1)`,
+        [descriptionField.key],
+      );
     await audit(db, {
       actorId,
       entityType: "project_form",
@@ -196,7 +203,7 @@ export async function nativeProjects(userId: number | null, ids: number[], staff
       [ids, userId],
     ),
     pool.query(
-      `SELECT s.repo_id,s.user_id AS "userId",u.name,u.surname,s.status,u.gallery_show_name,u.gallery_show_photo,u.gallery_consented_at,u.photo_key FROM submissions s JOIN users u ON u.id=s.user_id WHERE s.repo_id=ANY($1::int[]) AND u.account_state='active' AND u.anonymized_at IS NULL ORDER BY s.created_at`,
+      `SELECT s.repo_id,s.user_id AS "userId",u.name,u.surname,s.status,u.gallery_show_name,COALESCE(p.directory_visible AND p.show_photo AND p.consented_at IS NOT NULL,false) AS "photoShared",u.photo_key FROM submissions s JOIN users u ON u.id=s.user_id LEFT JOIN user_public_profiles p ON p.user_id=u.id WHERE s.repo_id=ANY($1::int[]) AND u.account_state='active' AND u.anonymized_at IS NULL ORDER BY s.created_at`,
       [ids],
     ),
     pool.query(
@@ -250,9 +257,13 @@ export async function nativeProjects(userId: number | null, ids: number[], staff
       currentDescription
         ? { ...answers, [descriptionField.key]: currentDescription }
         : answers;
+    const answer = descriptionField ? responses?.[descriptionField.key] : undefined;
     return {
       ...project,
       ...content,
+      // H16: the description field's answer is the description, even if the
+      // stored column was written before the field existed.
+      ...(typeof answer === "string" && answer.trim() ? { description: answer.trim() } : {}),
       responses,
       formVersion: form?.version ?? null,
       template: form?.template ?? [],
@@ -279,7 +290,8 @@ export async function nativeProjects(userId: number | null, ids: number[], staff
           surname: member ? m.surname : null,
           status: m.status,
           photoUrl:
-            m.gallery_show_photo && m.gallery_consented_at && m.photo_key
+            // H18: a member's photo follows their public profile's photo setting.
+            m.photoShared && m.photo_key
               ? `/api/public/projects/${id}/members/${m.userId}/photo`
               : null,
         })),
