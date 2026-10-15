@@ -145,6 +145,8 @@ const ANDROID_SYMBOL_NAMES = {
   xmark: "close",
   "xmark.circle.fill": "cancel",
   "building.2": "business",
+  "doc.fill": "description",
+  photo: "image",
 } as const satisfies Record<string, string> & Record<ActivityKindSymbolName, string>;
 
 /** Return the Material Symbol alias used by Android/web, when one exists. */

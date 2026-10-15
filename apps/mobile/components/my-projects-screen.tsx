@@ -16,6 +16,7 @@ import {
   type ProjectInvite,
   type ProjectQueueEntry,
   queueBriefFor,
+  settleProjectDrafts,
 } from "@/lib/projects";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -44,6 +45,8 @@ export function MyProjectsScreen() {
   const [canCreate, setCanCreate] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const load = useCallback(async () => {
+    // H20: an editor closed a moment ago may still be saving its draft or name.
+    await settleProjectDrafts();
     const [mine, invitations, entries] = await Promise.allSettled([
       apiFetch<{ projects: NativeProject[]; canCreate: boolean }>("/api/me/projects"),
       apiFetch<{ invites: ProjectInvite[] }>("/api/me/projects/invites"),

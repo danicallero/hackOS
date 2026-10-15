@@ -2059,6 +2059,8 @@
   "fieldKindDate": "Fecha",
   "birthYearPlaceholder": "p. ej., 2001",
   "fieldKindFile": "Subida de archivo",
+  "fieldKindImages": "Fotos",
+  "addPhotos": "Añadir fotos",
   "fieldKindMultiselect": "Opción múltiple",
   "fieldKindNumber": "Número",
   "fieldKindSelect": "Opción única",
@@ -3517,5 +3519,7 @@
   "devpostEmailPlaceholder": "tu@correo-devpost.com",
   "willUseToMatchDevpost": "La usaremos para vincular tus proyectos de Devpost al importarlos.",
   "capabilityDescriptionProjectsRead": "Leer proyectos",
-  "capabilityDescriptionProjectsEdit": "Editar proyectos"
+  "capabilityDescriptionProjectsEdit": "Editar proyectos",
+  "galleryNotOpen": "La galería aún no está abierta",
+  "galleryOpensOn": "La galería abre el {date}"
 }

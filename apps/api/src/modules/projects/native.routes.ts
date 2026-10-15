@@ -11,7 +11,6 @@ import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
-import { ForbiddenError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { repositoryScopeFor, requireRepositoryListAccess } from "./access.js";
 import {
@@ -25,7 +24,7 @@ import {
   saveNativeForm,
   submitNativeProject,
 } from "./native.js";
-import { canViewGallery, projectPhase, projectViewer } from "./policy.js";
+import { assertGalleryVisible, projectPhase, projectViewer } from "./policy.js";
 import { addMyProjectChallenge } from "./service.js";
 
 const params = z.object({ id: z.coerce.number().int().positive() });
@@ -247,13 +246,12 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         querystring: projectGalleryQuerySchema,
         summary: "List project gallery",
         description:
-          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009).",
+          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009). Project staff (PROJECTS_READ) may browse before it opens. A refusal is 403 with `details.reason` `gallery_closed` (with `details.opensAt`, null while unscheduled) or `gallery_audience` (H18).",
       },
     },
     async (q, reply) => {
       reply.header("Cache-Control", "no-store");
-      if (!(await canViewGallery(pool, q.userId)))
-        throw new ForbiddenError("Gallery is closed or unavailable to this audience");
+      await assertGalleryVisible(pool, q.userId);
       const phase = await projectPhase(pool);
       const viewer = await projectViewer(pool, q.userId);
       const { page, pageSize, search, challengeId } = q.query;

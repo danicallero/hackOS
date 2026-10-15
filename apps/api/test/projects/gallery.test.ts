@@ -88,7 +88,18 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
     );
     expect((await get("/api/public/projects", staff)).statusCode).toBe(200);
     await pool.query(`UPDATE event_config SET project_gallery_opens_at=now()+interval '1 hour'`);
-    expect((await get("/api/public/projects", attendee)).statusCode).toBe(403);
+    const early = await get("/api/public/projects", audience === "staff" ? outsider : attendee);
+    expect(early.statusCode).toBe(403);
+    // H18: say why, so clients show "opens on …" rather than a permission error.
+    expect(early.json().error.details.reason).toBe(
+      audience === "staff" ? "gallery_audience" : "gallery_closed",
+    );
+    if (audience !== "staff")
+      expect(early.json().error.details.opensAt).toEqual(expect.any(String));
+    // Project staff review the gallery before it opens.
+    expect((await get("/api/public/projects", staff)).statusCode).toBe(200);
+    await pool.query(`UPDATE event_config SET project_gallery_opens_at=NULL`);
+    expect((await get("/api/public/projects", staff)).statusCode).toBe(200);
   });
   it("keeps last submitted answers and template for public while team sees newer working draft", async () => {
     await app.inject({

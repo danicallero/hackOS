@@ -197,3 +197,54 @@ export function GlassButton({
     </GlassView>
   );
 }
+
+/** Round header button of the sheets (close, confirm, add), as in Photos. */
+export function CircleButton({
+  icon,
+  label,
+  onPress,
+  disabled = false,
+  prominent = false,
+  filled = false,
+  size = 44,
+}: {
+  icon: "xmark" | "checkmark" | "plus";
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  /** The confirm button turns accent blue once it can act, as in Photos. */
+  prominent?: boolean;
+  /** A quiet filled circle (the add button). */
+  filled?: boolean;
+  size?: number;
+}) {
+  const active = prominent && !disabled;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      hitSlop={6}
+      onPress={onPress}
+      style={{
+        alignItems: "center",
+        backgroundColor: active ? colors.accent : filled ? colors.elevatedSurface : undefined,
+        borderRadius: size / 2,
+        height: size,
+        justifyContent: "center",
+        width: size,
+      }}
+    >
+      <SymbolView
+        name={icon}
+        tintColor={
+          active ? colors.primaryActionText : disabled ? colors.tertiaryLabel : colors.label
+        }
+        size={size > 36 ? 19 : 16}
+        weight="semibold"
+        accessible={false}
+      />
+    </Pressable>
+  );
+}

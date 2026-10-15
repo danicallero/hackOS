@@ -282,6 +282,7 @@ export function ProjectEditor({
                           : undefined
                       }
                       uploadPath={`/api/me/projects/${project.id}/uploads?fieldKey=${encodeURIComponent(field.key)}`}
+                      files={project.files}
                     />
                   ))}
                 </section>

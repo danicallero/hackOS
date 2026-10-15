@@ -402,10 +402,10 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         body: inviteProjectMemberBodySchema,
         summary: "Invite a teammate to my project (H19/H20).",
         description:
-          "Only an active member may invite; the invitee must have an account and be an admitted participant, and must not already be an active member of this project. Creates a pending invite (submissions.status='invited') and notifies the invitee; idempotent for a repeat invite to the same person. 403 outside the hacking window.",
+          "Only an active member may invite; the invitee must have an account and be an admitted participant, and must not already be an active member of this project. Send either `email` or `userId`; a `userId` must belong to one of the caller's event-diary contacts (people whose badge they scanned) and otherwise answers 404 like an unknown email. Creates a pending invite (submissions.status='invited') and notifies the invitee; idempotent for a repeat invite to the same person. 403 outside the hacking window.",
       },
     },
-    async (req) => inviteProjectMember(req.userId as number, req.params.id, req.body.email),
+    async (req) => inviteProjectMember(req.userId as number, req.params.id, req.body),
   );
 
   r.post(

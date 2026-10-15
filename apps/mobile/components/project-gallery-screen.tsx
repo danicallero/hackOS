@@ -8,9 +8,25 @@ import { ActionButton, EmptyState, Section, Separator } from "@/components/nativ
 import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ApiError, apiFetch } from "@/lib/api";
+import { formatEventTime } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import { fetchChallengeCatalogue, type GalleryPage, type NativeProject } from "@/lib/projects";
 import { colors } from "@/theme/colors";
+
+/** H18: a gallery that is not open yet is a date, not a permission error. */
+export function galleryClosedNotice(
+  error: Error | null,
+  t: ReturnType<typeof useLocale>["t"],
+  language: ReturnType<typeof useLocale>["language"],
+) {
+  if (!(error instanceof ApiError) || error.status !== 403) return null;
+  const details = error.details as { reason?: string; opensAt?: string | null } | undefined;
+  if (!details?.reason?.startsWith("gallery_")) return null;
+  if (details.reason !== "gallery_closed" || !details.opensAt) return t("galleryNotOpen");
+  return t("galleryOpensOn", {
+    date: formatEventTime(details.opensAt, language, { dateStyle: "long", timeStyle: "short" }),
+  });
+}
 
 /** H18: audience and publication policy remain entirely server-owned; no persistent gallery cache. */
 export function ProjectGalleryScreen() {
@@ -142,6 +158,7 @@ export function ProjectGalleryScreen() {
       };
     }, [load]),
   );
+  const closed = galleryClosedNotice(error, t, language);
   return (
     <>
       {glassAvailable && challenges.length > 0 ? (
@@ -171,7 +188,9 @@ export function ProjectGalleryScreen() {
             }}
           />
         ) : null}
-        {error ? (
+        {closed ? (
+          <EmptyState icon="clock" title={closed} />
+        ) : error ? (
           <RequestFeedback
             error={error}
             onRetry={

@@ -1,35 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "./api";
-import { type NativeProject, ProjectDraftWriter, projectMutation } from "./projects";
+import { discardProjectDraft, type NativeProject, projectDraftWriter } from "./projects";
 
-/** H20: drafts remain in memory on failure; conflicts require explicit reload. */
+type DraftState = "saved" | "dirty" | "saving" | "error" | "conflict";
+
+/**
+ * H20: drafts remain in memory on failure; conflicts require explicit reload.
+ * The writer belongs to the project, not the screen, so answers given just
+ * before leaving (or arriving from an upload after leaving) are still saved.
+ */
 export function useProjectDraft(project: NativeProject) {
-  const [responses, setResponses] = useState(project.responses);
-  const responsesRef = useRef(project.responses);
-  const [state, setState] = useState<"saved" | "dirty" | "saving" | "error" | "conflict">("saved");
+  const [writer] = useState(() => projectDraftWriter(project));
+  const [responses, setResponses] = useState(writer.current);
+  // Answers this editor could not save last time are resumed, not dropped.
+  const [state, setState] = useState<DraftState>(writer.dirty ? "dirty" : "saved");
   const [error, setError] = useState<Error | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const active = useRef(true);
-  const [writer] = useState(
-    () =>
-      new ProjectDraftWriter(project.revision, project.responses, (answers, revision) =>
-        projectMutation(`/api/me/projects/${project.id}/draft`, "PUT", {
-          responses: answers,
-          revision,
-        }),
-      ),
-  );
   useEffect(() => {
     active.current = true;
-    writer.resume();
     return () => {
       active.current = false;
-      writer.dispose();
     };
-  }, [writer]);
+  }, []);
   const flush = useCallback(async () => {
-    if (state === "conflict") throw error;
-    if (!writer.dirty) return;
-    setState("saving");
+    if (stateRef.current === "conflict") throw error;
+    if (!writer.dirty && !writer.saving) return;
+    if (active.current) setState("saving");
     try {
       await writer.flush();
       if (active.current) {
@@ -38,27 +36,42 @@ export function useProjectDraft(project: NativeProject) {
       }
     } catch (cause) {
       const failure = cause instanceof Error ? cause : new Error(String(cause));
+      const conflict = cause instanceof ApiError && cause.status === 409;
+      if (conflict) discardProjectDraft(project.id);
       if (active.current) {
         setError(failure);
-        setState(cause instanceof ApiError && cause.status === 409 ? "conflict" : "error");
+        setState(conflict ? "conflict" : "error");
       }
       throw failure;
     }
-  }, [error, state, writer]);
+  }, [error, writer, project.id]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each edit restarts the debounce
   useEffect(() => {
-    if (state !== "dirty" || !responses) return;
+    if (state !== "dirty") return;
     const timer = setTimeout(() => {
       void flush().catch(() => {});
     }, 600);
     return () => clearTimeout(timer);
   }, [responses, state, flush]);
-  function change(key: string, value: unknown) {
-    if (state === "conflict") return;
-    const next = { ...responsesRef.current, [key]: value };
-    responsesRef.current = next;
-    writer.change(next);
-    setResponses(next);
-    setState("dirty");
-  }
+  /** `value` may derive from the newest answer, e.g. appending to a photo list. */
+  const change = useCallback(
+    (key: string, value: unknown | ((current: unknown) => unknown)) => {
+      if (stateRef.current === "conflict") return;
+      const previous = writer.current;
+      const next = {
+        ...previous,
+        [key]: typeof value === "function" ? value(previous[key]) : value,
+      };
+      writer.change(next);
+      if (active.current) {
+        setResponses(next);
+        setState("dirty");
+      } else {
+        // The editor closed (e.g. an upload finished afterwards): save now.
+        void writer.flush().catch(() => {});
+      }
+    },
+    [writer],
+  );
   return { responses, state, error, change, flush };
 }

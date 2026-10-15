@@ -14,7 +14,14 @@ export const FIELD_KINDS = [
   "university",
   "degree",
   "city",
+  "images",
 ] as const;
+
+/**
+ * H16: an `images` answer is an ordered list of uploaded photo keys. Project
+ * forms only; the mobile app opens the system photo picker for it.
+ */
+export const MAX_IMAGES_PER_FIELD = 10;
 
 /**
  * Retention is an extensible field policy, not a collection of booleans.  A

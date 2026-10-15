@@ -945,6 +945,20 @@
   "projectDeclineShort": "Rexeitar",
   "projectAddChallenge": "Engadir reto",
   "projectSearchChallenges": "Buscar retos",
+  "projectAddPhotos": "Engadir fotos",
+  "projectRemovePhoto": "Quitar foto",
+  "projectUploading": "Subindo…",
+  "projectFileError": "Non se puido abrir o ficheiro.",
+  "projectFileMissing": "Ficheiro non dispoñible",
+  "projectShareFile": "Compartir",
+  "projectContacts": "Contactos",
+  "challengeCriteria": "Criterios de avaliación",
+  "challengePrizes": "Premios",
+  "challengeCompany": "Empresa",
+  "challengeProjects": "Proxectos",
+  "challengeNotFound": "Reto non dispoñible",
   "projectSend": "Enviar",
-  "scanReplayExpired": "Non se sincronizou en {days} días. Rexístrao manualmente."
+  "scanReplayExpired": "Non se sincronizou en {days} días. Rexístrao manualmente.",
+  "galleryNotOpen": "A galería aínda non está aberta",
+  "galleryOpensOn": "A galería abre o {date}"
 }

@@ -35,6 +35,7 @@ import { DotsThreeVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsThreeV
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { GraduationCapIcon } from "@phosphor-icons/react/dist/csr/GraduationCap";
 import { HashIcon } from "@phosphor-icons/react/dist/csr/Hash";
+import { ImagesIcon } from "@phosphor-icons/react/dist/csr/Images";
 import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { PaperclipIcon } from "@phosphor-icons/react/dist/csr/Paperclip";
@@ -93,6 +94,7 @@ import {
   type FieldValidation,
   type FormSection,
   OPTION_KINDS,
+  PROJECT_BUILDER_FIELD_KINDS,
   type TemplateField,
 } from "../lib";
 import { generatedFieldKey } from "../workflow";
@@ -626,7 +628,7 @@ export function QuestionsCard({
             <PlusIcon aria-hidden="true" />
             {t("addSection")}
           </Button>
-          <AddFieldMenu onSelect={add} size="sm" />
+          <AddFieldMenu projectMode={Boolean(saveDefinition)} onSelect={add} size="sm" />
           <FormPreviewModal
             open={preview}
             onOpenChange={setPreview}
@@ -686,7 +688,7 @@ export function QuestionsCard({
           icon={ListChecksIcon}
           title={t("noQuestionsYet")}
           description={t("noQuestionsYetDesc")}
-          action={<AddFieldMenu onSelect={add} size="sm" />}
+          action={<AddFieldMenu projectMode={Boolean(saveDefinition)} onSelect={add} size="sm" />}
         />
       ) : (
         <DndContext
@@ -760,6 +762,7 @@ export function QuestionsCard({
                               {(blockFields.length === 0 || dragging) && <EmptyBlockHint />}
                             </DroppableBlock>
                             <AddFieldMenu
+                              projectMode={Boolean(saveDefinition)}
                               onSelect={(kind) => addToSection(section.key, kind)}
                               size="sm"
                               variant="ghost"
@@ -792,7 +795,11 @@ export function QuestionsCard({
               )}
 
               <div className="flex flex-wrap gap-2">
-                <AddFieldMenu onSelect={add} className="flex-1" />
+                <AddFieldMenu
+                  projectMode={Boolean(saveDefinition)}
+                  onSelect={add}
+                  className="flex-1"
+                />
                 <Button type="button" variant="outline" onClick={addSection} className="flex-1">
                   <PlusIcon aria-hidden="true" />
                   {t("addSection")}
@@ -847,6 +854,7 @@ export function fieldKindLabel(kind: FieldKind, t: Translate): string {
     university: t("fieldKindUniversity"),
     degree: t("fieldKindDegree"),
     city: t("fieldKindCity"),
+    images: t("fieldKindImages"),
   };
   return map[kind];
 }
@@ -861,6 +869,7 @@ const FIELD_KIND_ICON: Record<FieldKind, PhosphorIcon> = {
   date: CalendarIcon,
   number: HashIcon,
   file: PaperclipIcon,
+  images: ImagesIcon,
   university: GraduationCapIcon,
   degree: GraduationCapIcon,
   city: MapPinIcon,
@@ -920,11 +929,14 @@ function FieldKindIcon({ kind, className }: { kind: FieldKind; className?: strin
 /** Choosing the answer format before creating the field avoids a blank,
  * generic question card and makes the next configuration step self-evident. */
 function AddFieldMenu({
+  projectMode = false,
   onSelect,
   size = "default",
   variant = "default",
   className,
 }: {
+  /** The project form also offers photo lists (H16). */
+  projectMode?: boolean;
   onSelect: (kind: FieldKind) => void;
   size?: "sm" | "default";
   variant?: "default" | "outline" | "ghost";
@@ -941,7 +953,7 @@ function AddFieldMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {BUILDER_FIELD_KINDS.map((kind) => (
+        {(projectMode ? PROJECT_BUILDER_FIELD_KINDS : BUILDER_FIELD_KINDS).map((kind) => (
           <DropdownMenuItem key={kind} onSelect={() => onSelect(kind)}>
             <FieldKindIcon kind={kind} className="text-muted-foreground size-4" />
             {fieldKindLabel(kind, t)}
@@ -1142,7 +1154,7 @@ export function FieldEditor({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {FIELD_KINDS.map((k) => (
+              {FIELD_KINDS.filter((k) => projectMode || k !== "images").map((k) => (
                 <SelectItem key={k} value={k}>
                   <span className="flex items-center gap-2">
                     <FieldKindIcon kind={k} className="text-muted-foreground size-4 shrink-0" />
