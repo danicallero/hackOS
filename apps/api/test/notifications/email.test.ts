@@ -4,7 +4,12 @@ import { pool } from "../../src/db/pool.js";
 import { drainOutboxOnce } from "../../src/modules/notifications/dispatcher.js";
 import { notify } from "../../src/modules/notifications/service.js";
 import { createUser } from "../helpers.js";
-import { clearMailpit, getMailpitMessage, listMailpitMessages } from "./mailpit-helpers.js";
+import {
+  clearMailpit,
+  getMailpitMessage,
+  listMailpitMessages,
+  MAILPIT_BASE,
+} from "./mailpit-helpers.js";
 import {
   enqueueOutbox,
   getOutboxRow,
@@ -260,9 +265,7 @@ describe("event reminder email (H28,H45,H52)", () => {
     expect(message.HTML).toContain('src="cid:event-ticket@hackos"');
     expect(message.HTML).toContain("apple-wallet-badge-es.png");
     expect(message.HTML).toContain("google-wallet-button-es.png");
-    const raw = await (
-      await fetch(`http://localhost:8025/api/v1/message/${firstMessage.ID}/raw`)
-    ).text();
+    const raw = await (await fetch(`${MAILPIT_BASE}/api/v1/message/${firstMessage.ID}/raw`)).text();
     expect(raw).toContain("Content-ID: <event-ticket@hackos>");
     expect(raw).toContain("Content-Type: image/png");
   });
