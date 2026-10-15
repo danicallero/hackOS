@@ -62,6 +62,45 @@ describe("Winner publication H60", () => {
     expect(privateRead.statusCode).toBe(200);
     expect(privateRead.json().winners).toHaveLength(1);
   });
+  it("filters only published winners before pagination and combines search/challenge filters", async () => {
+    const other = (await createRepoWithTeam()).repoId;
+    const url = "/api/public/projects?winnersOnly=true&pageSize=1";
+    const hidden = await app.inject({ method: "GET", url });
+    expect(hidden.statusCode).toBe(200);
+    expect(hidden.json()).toMatchObject({ items: [], total: 0 });
+    await pool.query(
+      `UPDATE challenges SET winners_published_at=now()-interval '1 second' WHERE id=$1`,
+      [challengeId],
+    );
+    const visible = await app.inject({ method: "GET", url });
+    expect(visible.json().items.map((item: { id: number }) => item.id)).toEqual([repoId]);
+    expect(visible.json().total).toBe(1);
+    expect(visible.json().items[0].id).not.toBe(other);
+    const matched = await app.inject({ method: "GET", url: `${url}&challengeId=${challengeId}` });
+    expect(matched.json().total).toBe(1);
+    const search = await app.inject({ method: "GET", url: `${url}&search=no-such-project` });
+    expect(search.json().total).toBe(0);
+    const otherChallenge = await createChallenge();
+    await pool.query(`INSERT INTO project_challenges(repo_id,challenge_id) VALUES($1,$2)`, [
+      repoId,
+      otherChallenge,
+    ]);
+    const unmatched = await app.inject({
+      method: "GET",
+      url: `${url}&challengeId=${otherChallenge}`,
+    });
+    expect(unmatched.json().total).toBe(0);
+    await pool.query(`UPDATE challenges SET visibility='hidden' WHERE id=$1`, [challengeId]);
+    expect((await app.inject({ method: "GET", url })).json().total).toBe(0);
+    expect(
+      (await app.inject({ method: "GET", url: "/api/public/projects?winnersOnly=false" })).json()
+        .total,
+    ).toBe(2);
+    expect(
+      (await app.inject({ method: "GET", url: "/api/public/projects?winnersOnly=invalid" }))
+        .statusCode,
+    ).toBe(400);
+  });
   it("publishes due schedules once across concurrent publisher ticks with atomic audit", async () => {
     await pool.query(
       `UPDATE challenges SET winners_publish_at=now()-interval '1 second' WHERE id=$1`,
