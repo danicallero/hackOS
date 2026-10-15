@@ -3494,8 +3494,6 @@
   "liveActivityAudienceLabel": "Show Live Activity to audience",
   "liveActivityNoRolesHint": "Nobody receives it until a role is selected.",
   "liveActivityAllRoles": "All roles",
-  "networkingInvite": "Participants and company representatives who scan your badge at the event will see this profile, and you'll be added to each other's contacts.",
-  "networkingInviteAction": "Complete profile",
   "projectDraftsOpenAtLabel": "Project creation opens",
   "projectSubmissionsCloseAtLabel": "Submissions close",
   "projectEditsLockAtLabel": "Editing closes",
@@ -3522,5 +3520,11 @@
   "capabilityDescriptionProjectsEdit": "Edit projects",
   "galleryNotOpen": "The gallery isn't open yet",
   "galleryOpensOn": "The gallery opens {date}",
-  "projectDescriptionFieldLabel": "Project description"
+  "projectDescriptionFieldLabel": "Project description",
+  "networkingOnboardingTitle": "Build your networking profile",
+  "networkingOnboardingDescription": "Use your personal profile to connect with participants and company representatives during the event. You can change your sharing choices later in My profile.",
+  "networkingOnboardingLater": "Remind me next login",
+  "networkingOnboardingSave": "Save profile and continue",
+  "networkingOnboardingHidden": "Keep my profile hidden",
+  "networkingOnboardingCreate": "Create profile"
 }

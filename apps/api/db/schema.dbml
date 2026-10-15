@@ -1176,6 +1176,7 @@ Table user_public_profiles {
   directory_visible boolean [not null, default: `false`]
   headline text
   location_note text
+  onboarding_completed_at "timestamp with time zone"
   share_cv boolean [not null, default: `false`, note: '#935: readers may download cv_key only while this and directory_visible are true.']
   show_photo boolean [not null, default: `false`]
   show_project boolean [not null, default: `true`]

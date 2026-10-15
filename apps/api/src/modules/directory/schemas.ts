@@ -80,6 +80,10 @@ export const publicProfileBody = z.object({
   socials: socials.optional(),
   shareCv: z.boolean().optional(),
 });
+export const ownPublicProfileBody = publicProfileBody.extend({
+  completeOnboarding: z.boolean().optional(),
+});
+
 export type PublicProfileInput = z.infer<typeof publicProfileBody>;
 
 export const userParams = z.object({ userId: z.coerce.number().int().positive() });

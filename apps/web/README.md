@@ -633,6 +633,13 @@ switcher or the form language selector updates both and saves that language
 as the new account preference. Dietary restrictions are submitted as dictionary
 IDs, so changing language preserves the selection and other entered data.
 
+The next step after an invited account is created (automatic sign-in), or a spot
+is confirmed (H15), is the networking profile. `NetworkingOnboarding` runs at the
+authenticated boundary once event access exists, before other pending profile
+tasks. It reuses `PublicProfileCard` and the photo editor. The server records
+completion separately from visibility; deferral lasts until the next sign-in.
+Public email confirmation only shows the editor for the token owner's session.
+
 ## Personal profile layout (H6/H7/H8)
 
 The profile uses the content canvas with two equal columns from the `xl`

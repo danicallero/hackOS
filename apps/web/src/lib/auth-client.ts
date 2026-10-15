@@ -1,6 +1,7 @@
 import { inferAdditionalFields } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { API_URL } from "./env";
+import { resetNetworkingOnboardingDeferrals } from "./networking-onboarding";
 import { notifySignOut } from "./sign-out-events";
 
 /**
@@ -37,6 +38,9 @@ export const { signIn, signUp } = authClient;
  */
 export async function signOut(...args: Parameters<typeof authClient.signOut>) {
   const result = await authClient.signOut(...args);
-  if (!result.error) notifySignOut();
+  if (!result.error) {
+    resetNetworkingOnboardingDeferrals();
+    notifySignOut();
+  }
   return result;
 }

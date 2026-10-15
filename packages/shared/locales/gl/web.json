@@ -3494,8 +3494,6 @@
   "liveActivityAudienceLabel": "Amosar actividade en directo ao seu público",
   "liveActivityNoRolesHint": "Ninguén a recibe ata que selecciones un rol.",
   "liveActivityAllRoles": "Todos os roles",
-  "networkingInvite": "Os participantes e representantes de empresas que escaneen a túa acreditación no evento verán este perfil, e engadirédesvos mutuamente a contactos.",
-  "networkingInviteAction": "Completar perfil",
   "projectDraftsOpenAtLabel": "Apertura de proxectos",
   "projectSubmissionsCloseAtLabel": "Peche de entregas",
   "projectEditsLockAtLabel": "Peche de edición",
@@ -3522,5 +3520,11 @@
   "capabilityDescriptionProjectsEdit": "Editar proxectos",
   "galleryNotOpen": "A galería aínda non está aberta",
   "galleryOpensOn": "A galería abre o {date}",
-  "projectDescriptionFieldLabel": "Descrición do proxecto"
+  "projectDescriptionFieldLabel": "Descrición do proxecto",
+  "networkingOnboardingTitle": "Crea o teu perfil para conectar",
+  "networkingOnboardingDescription": "Usa o teu perfil persoal para conectar con participantes e representantes de empresas durante o evento. Podes cambiar o que compartes despois en O meu perfil.",
+  "networkingOnboardingLater": "Lembrarmo ao iniciar sesión",
+  "networkingOnboardingSave": "Gardar perfil e continuar",
+  "networkingOnboardingHidden": "Manter o meu perfil oculto",
+  "networkingOnboardingCreate": "Crear perfil"
 }

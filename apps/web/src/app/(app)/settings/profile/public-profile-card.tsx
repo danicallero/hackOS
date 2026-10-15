@@ -108,7 +108,11 @@ export function previewEntry(
  * attendee's write (docs/directory.md). The CV file saves on its own; the
  * switch that shares it is part of the form.
  */
-export function PublicProfileCard() {
+export function PublicProfileCard({
+  onboarding,
+}: {
+  onboarding?: { onFinished: () => void; onLater: () => void };
+} = {}) {
   const { me } = useSessionContext();
   const { t } = useLocale();
   // Bumped by every successful save; a GET that started earlier is stale.
@@ -184,6 +188,7 @@ export function PublicProfileCard() {
       const next = await api.put<PublicProfile>(
         "/api/me/public-profile",
         {
+          ...(onboarding ? { completeOnboarding: true } : {}),
           directoryVisible: body.directoryVisible,
           showSurname: body.showSurname,
           showPhoto: body.showPhoto,
@@ -199,7 +204,8 @@ export function PublicProfileCard() {
       idempotencyKey.current = null;
       commit(next);
       setEdits(null);
-      toast.success(t("publicProfileSaved"), { compactTitle: t("toastSavePublicProfile") });
+      if (onboarding) onboarding.onFinished();
+      else toast.success(t("publicProfileSaved"), { compactTitle: t("toastSavePublicProfile") });
     } catch (err) {
       setSaveError(apiErrorText(err, t, t("couldNotSavePublicProfile")));
       showErrorToast(
@@ -216,14 +222,43 @@ export function PublicProfileCard() {
     <form className="min-w-0" onSubmit={onSubmit}>
       <SectionCard
         footerClassName="justify-start"
-        icon={AddressBookIcon}
-        title={t("publicProfileTitle")}
+        icon={onboarding ? undefined : AddressBookIcon}
+        title={onboarding ? undefined : t("publicProfileTitle")}
+        variant={onboarding ? "plain" : "surface"}
         footer={
-          <FormActions
-            pending={pending}
-            disabled={!dirty}
-            state={saveError ? "error" : dirty ? "unsaved" : "saved"}
-          />
+          onboarding ? (
+            <div className="flex w-full flex-wrap justify-end gap-2">
+              <Button type="button" variant="ghost" disabled={pending} onClick={onboarding.onLater}>
+                {t("networkingOnboardingLater")}
+              </Button>
+              <Button
+                type="submit"
+                variant={settings.directoryVisible ? "default" : "outline"}
+                loading={pending}
+              >
+                {t(
+                  settings.directoryVisible
+                    ? "networkingOnboardingSave"
+                    : "networkingOnboardingHidden",
+                )}
+              </Button>
+              {!settings.directoryVisible && (
+                <Button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => update({ directoryVisible: true })}
+                >
+                  {t("networkingOnboardingCreate")}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <FormActions
+              pending={pending}
+              disabled={!dirty}
+              state={saveError ? "error" : dirty ? "unsaved" : "saved"}
+            />
+          )
         }
       >
         {saveError && <ContextualError message={saveError} />}
