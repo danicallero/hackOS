@@ -76,9 +76,27 @@ records one transition and compacts positions. H30 membership derives solely fro
 active native memberships, retaining ordered advisory locks across teams sharing
 a member. `project_eligibility` evaluates submitted status, explicit exclusion
 and configured team-size limits even when event settings have no singleton yet.
-Migration `0705_native_projects.sql` is the single migration that introduces the
-native model; earlier applied migrations are immutable and still mention retired
-integration vocabulary.
+Migration `0705_native_projects.sql` introduces the native model. Applied files
+in `apps/api/db/migrations/` are checksum-enforced and immutable, including the
+retirement migration itself; `apps/api/db/migration-history/` preserves retired
+development history and is never applied. Both directories may mention retired
+integration vocabulary and must not be rewritten to erase that history (#1005).
+
+The existing `pnpm check:retired-auth` lint guard also rejects retired project
+integration names in API source/scripts/tests, web source, mobile source/tests,
+shared source/locales and root scripts. It checks vocabulary case-insensitively
+and includes a regression suite that introduces forbidden tokens. SQL history,
+documentation retirement notes, generated output and the guard's own definition
+and tests are outside this runtime check. Ordinary scanner or Live Activity
+reconciliation remains supported.
+
+Until #1016 removes secondary email, only the exact existing `en`, `es` and `gl`
+values at `web.json:devpostEmailPlaceholder`, `web.json:willUseToMatchDevpost`
+and `email.json:mail.auth.verifySecondaryEmail.body` are temporarily exempt.
+The guard pins each path/key/value digest, so another key, file or edited value
+cannot reuse the exception. Remove these nine exceptions and their dedicated
+test when #1016 lands; no project import capability or compatibility export
+remains.
 
 ## Teams, invitations and challenge intent
 

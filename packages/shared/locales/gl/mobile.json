@@ -276,7 +276,6 @@
   "teamDetailRemoveMemberConfirm": "Queres eliminar a {name} deste equipo?",
   "teamDetailMemberUpdateError": "Non se puido actualizar o membro do equipo. Téntao de novo.",
   "teamDetailMemberAddedByStaff": "Engadido polo persoal",
-  "teamDetailLinkHint": "Busca a conta hackOS para ligar este correo importado. Recibirán un correo de verificación.",
   "teamDetailLinks": "Ligazóns",
   "teamDetailGithub": "GitHub",
   "teamDetailDemo": "Demo",

@@ -18,7 +18,7 @@ import { toast } from "@/lib/toast";
 const SERVER_CONFIRMATION_PHRASE = "WIPE_Q_DATA";
 type ResetStage = 0 | 1 | 2 | 3;
 
-/** H16-H40/H53: the event-wide project/import/queue/judging recovery control. */
+/** H16-H40/H53: the event-wide project/queue/judging recovery control. */
 export function ResetJudgingDataTab({ icon: Icon }: { icon: PhosphorIcon }) {
   const { t } = useLocale();
   const [stage, setStage] = useState<ResetStage>(0);

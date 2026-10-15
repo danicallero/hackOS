@@ -175,7 +175,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         }),
         summary: "Search project member candidates",
         description:
-          "Returns minimal searchable account identity fields for project editors and native import operators resolving unmatched people (H17, H21).",
+          "Returns minimal searchable account identity fields for project editors adding native team members (H21).",
         response: {
           200: z.object({
             users: z.array(

@@ -7,7 +7,6 @@ export async function createChallenge(
   overrides: Partial<{
     title: string;
     judgingPanelCriteria: unknown;
-    devpostTags: string[];
   }> = {},
 ): Promise<number> {
   const ownerId = await createUser();

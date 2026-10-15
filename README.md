@@ -186,7 +186,7 @@ pnpm dev:web                          # web only
 pnpm build                            # build every workspace with a build script
 pnpm typecheck                        # API, web and mobile TypeScript checks
 
-pnpm lint                             # Biome, copy/i18n and page-size checks
+pnpm lint                             # Biome, copy/i18n, size and retired-runtime guards
 pnpm --filter @hackos/api test        # API integration tests
 pnpm --filter @hackos/web typecheck   # web TypeScript check
 pnpm --filter @hackos/web test        # web unit tests

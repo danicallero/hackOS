@@ -9,7 +9,7 @@ import { resetJudgingData } from "./reset.js";
 import { judgingDataResetBody } from "./schemas.js";
 import { clearTvMode } from "./tv.js";
 
-/** Super-admin-only panic reset for the project/import/queue/judging slice. */
+/** Super-admin-only panic reset for the project/queue/judging slice. */
 export function registerQueueResetRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
