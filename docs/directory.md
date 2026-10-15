@@ -79,6 +79,10 @@ The step explains networking during the event and badge-scan visibility, reuses
 the profile editor (photo, sharing choices, bio, links, CV and preview), and offers
 Create profile, Keep my profile hidden, or Remind me next login. Creating opens
 the editor; Save profile and continue persists the chosen sharing settings.
+Onboarding never offers a CV upload, replacement or removal. If a submitted
+application supplies a CV (for a participant or any other applicant), it appears
+read-only with the optional Share CV switch. Without an application CV, that
+section is omitted.
 Sharing starts off. Saving either visibility choice sends `completeOnboarding`
 and persists `onboarding_completed_at` independently of sharing consent. A hidden
 choice does not set `consented_at`. Deferring leaves the server state untouched

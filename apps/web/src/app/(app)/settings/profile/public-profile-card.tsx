@@ -306,21 +306,23 @@ export function PublicProfileCard({
               </div>
               <BioField value={settings.bio} onChange={(bio) => update({ bio })} />
               <LinksEditor links={settings.socials} onChange={(socials) => update({ socials })} />
-              <CvField
-                cv={profile.cv}
-                ownerName={displayName(me, true)}
-                shareCv={settings.shareCv}
-                onShareChange={(shareCv) => update({ shareCv })}
-                onSaved={(next) => {
-                  commit(next);
-                  // A removed CV is no longer shared; drop a pending share too.
-                  if (!next.cv) {
-                    setEdits((current) =>
-                      current?.shareCv ? { ...current, shareCv: false } : current,
-                    );
-                  }
-                }}
-              />
+              {(!onboarding || profile.cv?.source === "application") && (
+                <CvField
+                  cv={profile.cv}
+                  ownerName={displayName(me, true)}
+                  shareCv={settings.shareCv}
+                  onShareChange={(shareCv) => update({ shareCv })}
+                  onSaved={(next) => {
+                    commit(next);
+                    // A removed CV is no longer shared; drop a pending share too.
+                    if (!next.cv) {
+                      setEdits((current) =>
+                        current?.shareCv ? { ...current, shareCv: false } : current,
+                      );
+                    }
+                  }}
+                />
+              )}
               <section className="space-y-2 border-t border-border/60 pt-4">
                 <h3 className="type-label text-muted-foreground">{t("publicProfilePreview")}</h3>
                 <DirectoryCard

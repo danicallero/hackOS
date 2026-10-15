@@ -378,6 +378,46 @@ describe("PublicProfileCard", () => {
     expect(submit()?.disabled).toBe(true);
   });
 
+  it("offers no CV upload during onboarding without an application CV", async () => {
+    vi.mocked(api.get).mockResolvedValue(profile({ directoryVisible: true }));
+    await render(<PublicProfileCard onboarding={{ onFinished: vi.fn(), onLater: vi.fn() }} />);
+    expect(container.textContent).not.toContain("uploadCv");
+    expect(container.textContent).not.toContain("publicProfileCv");
+    expect(container.querySelector("input[type=file]")).toBeNull();
+  });
+
+  it("uses the application CV read-only during onboarding, with sharing still optional", async () => {
+    vi.mocked(api.get).mockResolvedValue(
+      profile({
+        directoryVisible: true,
+        cv: {
+          filename: "application-cv.pdf",
+          uploadedAt: "2026-10-10T10:00:00.000Z",
+          source: "application",
+        },
+      }),
+    );
+    const onFinished = vi.fn();
+    await render(<PublicProfileCard onboarding={{ onFinished, onLater: vi.fn() }} />);
+    expect(container.textContent).toContain("application-cv.pdf");
+    expect(container.textContent).toContain("cvFromApplication");
+    expect(container.querySelector("input[type=file]")).toBeNull();
+    const labels = [...container.querySelectorAll("button")].map((button) => button.textContent);
+    expect(labels).not.toContain("uploadCv");
+    expect(labels).not.toContain("replaceCv");
+    expect(labels).not.toContain("removeCv");
+    expect(byLabel("publicProfileShareCv")).not.toBeNull();
+    vi.mocked(api.put).mockResolvedValue(profile({ directoryVisible: true, shareCv: true }));
+    await act(async () => (byLabel("publicProfileShareCv") as HTMLButtonElement).click());
+    await save();
+    expect(api.put).toHaveBeenCalledWith(
+      "/api/me/public-profile",
+      expect.objectContaining({ shareCv: true, completeOnboarding: true }),
+      expect.anything(),
+    );
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
   it("shows a CV from the application without upload controls", async () => {
     vi.mocked(api.get).mockResolvedValue(
       profile({

@@ -100,6 +100,8 @@ test("profile sharing is explicit and lets attendees build their profile (H7)", 
   await page.goto("/inbox");
   await page.getByRole("button", { name: "Create profile", exact: true }).click();
   expect(saved).toBeUndefined();
+  await expect(page.getByRole("button", { name: "Upload CV", exact: true })).toHaveCount(0);
+  await expect(page.locator('input[type="file"][accept="application/pdf"]')).toHaveCount(0);
   await page.getByLabel("Headline", { exact: true }).fill("Building useful things");
   await page
     .getByLabel("Bio", { exact: true })
@@ -211,4 +213,47 @@ test("account invitation continues straight into profile creation (H10)", async 
   await page.locator('input[autocomplete="new-password"]').nth(1).fill("Secret123!");
   await page.getByRole("button", { name: "Create an account", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Build your networking profile" })).toBeVisible();
+});
+
+test("application CV is inherited read-only during onboarding (H7/H10/H15)", async ({
+  page,
+}, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("hackos-language", "en");
+    localStorage.setItem("hackos.cookie-notice.dismissed", "true");
+  });
+  await page.route("**/api/me", (route) =>
+    route.fulfill({ json: { ...shellUser, pendingProfileTasks: [] } }),
+  );
+  await page.route("**/api/me/public-profile", (route) =>
+    route.fulfill({
+      json: {
+        ...emptyProfile,
+        cv: {
+          filename: "application-cv.pdf",
+          uploadedAt: "2026-10-10T10:00:00.000Z",
+          source: "application",
+        },
+      },
+    }),
+  );
+  await page.goto("/inbox");
+  await page.getByRole("button", { name: "Create profile", exact: true }).click();
+  await expect(page.getByRole("button", { name: "application-cv.pdf", exact: true })).toBeVisible();
+  await expect(
+    page.getByText("From your application. It can't be changed here.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Share CV", exact: true })).toBeVisible();
+  for (const name of ["Upload CV", "Replace CV", "Remove CV"]) {
+    await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+  }
+  await expect(page.locator('input[type="file"][accept="application/pdf"]')).toHaveCount(0);
+  await page.mouse.move(0, 0);
+  await expect(
+    page.getByRole("button", { name: "Save profile and continue", exact: true }),
+  ).toHaveCSS("background-color", "rgb(3, 8, 70)");
+  await page.screenshot({
+    path: testInfo.outputPath("application-cv-readonly.png"),
+    fullPage: true,
+  });
 });
