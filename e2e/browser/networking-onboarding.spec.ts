@@ -62,7 +62,7 @@ test("profile step saves an explicit hidden choice after confirmation (H7/H15)",
   });
   await page.goto("/applications/confirm?token=profile-test");
   await expect(page.getByRole("heading", { name: "Build your networking profile" })).toBeVisible();
-  await expect(page.getByText("2 of 2", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^(?:[12] of 2|[12]\/2)$/)).toHaveCount(0);
   await expect(page.getByRole("switch", { name: "Share my profile", exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("profile-hidden.png"), fullPage: true });
   await page.getByRole("button", { name: "Keep my profile hidden", exact: true }).click();

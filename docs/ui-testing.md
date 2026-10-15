@@ -55,6 +55,11 @@ E2E_WEB_URL=https://web.example.test pnpm test:ui:browser
 The current smoke flow deliberately exercises client-side validation, so it
 does not require a seeded account or a live API. Authenticated flows should
 use a dedicated test account and API fixture rather than production data.
+The shared browser fixture models completed networking onboarding. Catch-all
+`**/api/**` mocks must delegate `/api/me/public-profile` with `route.fallback()`
+so they do not replace that state with an empty response and accidentally open
+the onboarding screen. Onboarding scenarios explicitly override the profile
+route to exercise incomplete, hidden, shared and deferred states.
 
 The Chromium project is the required pull-request smoke subset. It includes
 the judging-room transition scenario, whose API read model and SSE connection

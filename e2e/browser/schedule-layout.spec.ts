@@ -6,6 +6,9 @@ test("schedule columns remain readable and resize inside the horizontal scroller
   page,
 }) => {
   await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     let body: unknown = { items: [] };
     if (path === "/api/me") body = { ...shellUser, capabilities: [CAPABILITIES.SCHEDULE_MANAGE] };

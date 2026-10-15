@@ -25,6 +25,9 @@ test("response status filters combine selections and reset independently of sear
     reviews: [],
   }));
   await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     const data =
       path === "/api/me"

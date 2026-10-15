@@ -101,9 +101,6 @@ function OnboardingStep({
       )}
       <Content className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8 sm:px-6">
         <div className="space-y-2">
-          <p className="text-muted-foreground text-sm">
-            {t("stepOfTotal", { current: 2, total: 2 })}
-          </p>
           <h1 className="type-page-title">{t("networkingOnboardingTitle")}</h1>
           <p className="text-muted-foreground text-pretty">
             {t("networkingOnboardingDescription")}

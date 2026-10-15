@@ -9,6 +9,9 @@ test("organizer schedules private challenge winners", async ({ page }, info) => 
     localStorage.setItem("hackos.cookie-notice.dismissed", "true");
   });
   await page.route("**/api/**", (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/me")
       return route.fulfill({ json: { ...shellUser, capabilities: [CAPABILITIES.QUEUE_ADMIN] } });
