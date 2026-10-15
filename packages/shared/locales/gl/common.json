@@ -72,7 +72,6 @@
   "apiError_meal_plan_locked": "Os cambios desta comida están pechados.",
   "apiError_removal_pin_expired": "Ese PIN de seguridade caducou. Solicita un novo.",
   "apiError_panel_locked": "O panel de xurado está bloqueado: xa se avaliou un equipo.",
-  "apiError_project_locked": "O proxecto está enviado e bloqueado. Solicita edicións para cambialo.",
   "apiError_email_not_verified": "Verifica o teu correo antes de facer isto.",
   "apiError_stand_codes_empty": "Ningún stand escaneable ten aínda un código para exportar.",
   "apiError_stand_tag_in_use": "Esta etiqueta xa está en uso.",

@@ -1,13 +1,15 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { Alert } from "react-native";
 
 let mockParams: Record<string, string> = { id: "5" };
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+const mockReplace = jest.fn();
 const mockSetOptions = jest.fn();
 jest.mock("@/theme/colors", () => ({ colors: new Proxy({}, { get: () => "#171717" }) }));
 jest.mock("expo-router", () => ({
   useScrollToTop: jest.fn(),
-  useRouter: () => ({ push: mockPush, back: mockBack }),
+  useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
   useFocusEffect: (callback: () => undefined | (() => void)) => {
     const { useEffect } = jest.requireActual("react");
     useEffect(callback, [callback]);
@@ -38,6 +40,19 @@ jest.mock("@/components/glass-view", () => ({
   GlassView: ({ children }: { children?: unknown }) => children ?? null,
 }));
 jest.mock("expo-document-picker", () => ({ getDocumentAsync: jest.fn() }));
+const mockFileBytes = jest.fn(async () => new Uint8Array([1, 2, 3]));
+jest.mock("expo-file-system", () => ({
+  File: class extends Blob {
+    uri: string;
+    name = "a.png";
+    type = "image/png";
+    bytes = mockFileBytes;
+    constructor(uri: string) {
+      super(["png"], { type: "image/png" });
+      this.uri = uri;
+    }
+  },
+}));
 jest.mock("@/lib/i18n", () => ({ useLocale: () => ({ language: "en", t: (key: string) => key }) }));
 jest.mock("@/lib/env", () => ({ API_URL: "https://api.test" }));
 
@@ -72,6 +87,7 @@ beforeEach(() => {
   mockApi.mockReset();
   mockPush.mockReset();
   mockBack.mockReset();
+  mockReplace.mockReset();
   mockSetOptions.mockReset();
 });
 it("hides creation when server policy denies it and links to the invitation inbox (H19)", async () => {
@@ -175,8 +191,9 @@ it("creates a project from the sheet: Create stays disabled until the name is va
     "/api/me/projects",
     expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Rover" }) }),
   );
-  expect(mockBack).toHaveBeenCalled();
-  expect(mockPush).toHaveBeenCalledWith("/projects/12");
+  expect(mockReplace).toHaveBeenCalledWith("/projects/12");
+  expect(mockBack).not.toHaveBeenCalled();
+  expect(mockPush).not.toHaveBeenCalled();
 });
 
 it("keeps the sheet open and shows the reason when creation fails (H19)", async () => {
@@ -334,7 +351,8 @@ it("keeps projects visible when only the invitation read fails (H19)", async () 
   expect(screen.getByText("apiErrorServer")).toBeTruthy();
 });
 
-it("explains an oversized upload rejected by the server (H16)", async () => {
+it("uploads an Expo File part and explains a server size rejection (H16)", async () => {
+  const append = jest.spyOn(FormData.prototype, "append");
   (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
     canceled: false,
     assets: [{ uri: "file:///a.png", name: "a.png", mimeType: "image/png", size: 10 }],
@@ -358,6 +376,12 @@ it("explains an oversized upload rejected by the server (H16)", async () => {
   );
   await fireEvent.press(await screen.findByRole("button", { name: "projectUpload" }));
   expect(await screen.findByText("projectTooLarge")).toBeTruthy();
+  expect(append).toHaveBeenCalledWith(
+    "file",
+    expect.objectContaining({ uri: "file:///a.png", bytes: mockFileBytes }),
+    "a.png",
+  );
+  append.mockRestore();
 });
 
 it("opens the challenge picker from the editor and disables it when closed (H17/H21)", async () => {
@@ -613,4 +637,23 @@ it("keeps only the refused recipient and shows why (H19)", async () => {
   expect(screen.queryByText("ok@example.com")).toBeNull();
   expect(screen.getByText("requestError")).toBeTruthy();
   expect(mockBack).not.toHaveBeenCalled();
+});
+
+it("leaves a team with the API DELETE contract after confirmation (H19)", async () => {
+  mockApi.mockResolvedValue({});
+  const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+  await renderMobile(<ProjectEditor project={project} reload={async () => {}} />);
+  await fireEvent.press(screen.getByRole("button", { name: "projectLeave" }));
+  const buttons = alert.mock.calls.at(-1)?.[2];
+  await act(async () => {
+    buttons?.[1].onPress?.();
+  });
+  await waitFor(() =>
+    expect(mockApi).toHaveBeenCalledWith(
+      "/api/me/projects/5/leave",
+      expect.objectContaining({ method: "DELETE" }),
+    ),
+  );
+  expect(mockBack).toHaveBeenCalled();
+  alert.mockRestore();
 });

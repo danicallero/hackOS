@@ -32,7 +32,7 @@ describe("mandatory challenge participation (issue #851)", () => {
     const server = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const manager = await createUserWithCapabilities([CAPABILITIES.CHALLENGES_MANAGE]);
-    const challengeId = await createChallenge("Required", []);
+    const challengeId = await createChallenge("Required");
     const repos = await pool.query(
       `INSERT INTO repos (name) VALUES ('Existing A'), ('Existing B') RETURNING id`,
     );
@@ -81,7 +81,7 @@ describe("mandatory challenge participation (issue #851)", () => {
       CAPABILITIES.CHALLENGES_MANAGE,
       CAPABILITIES.PROJECTS_EDIT,
     ]);
-    const challengeId = await createChallenge("Required", []);
+    const challengeId = await createChallenge("Required");
     const { rows } = await pool.query(
       `INSERT INTO repos(name,submission_status) VALUES('Draft','draft') RETURNING id`,
     );

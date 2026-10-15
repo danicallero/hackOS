@@ -471,7 +471,7 @@ export async function inviteProjectMember(actorId: number, id: number, email: st
 export async function myPendingInvites(userId: number) {
   return (
     await pool.query(
-      `SELECT r.id,r.id AS "projectId",r.name,s.invited_by AS "invitedBy" FROM submissions s JOIN repos r ON r.id=s.repo_id WHERE s.user_id=$1 AND s.status='invited' ORDER BY s.created_at DESC`,
+      `SELECT r.id,r.id AS "projectId",r.name,NULLIF(trim(concat_ws(' ',inviter.name,inviter.surname)), '') AS "invitedBy" FROM submissions s JOIN repos r ON r.id=s.repo_id LEFT JOIN users inviter ON inviter.id=s.invited_by AND inviter.account_state='active' AND inviter.anonymized_at IS NULL WHERE s.user_id=$1 AND s.status='invited' ORDER BY s.created_at DESC`,
       [userId],
     )
   ).rows;

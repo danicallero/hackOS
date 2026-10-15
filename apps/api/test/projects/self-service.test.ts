@@ -183,8 +183,22 @@ describe("POST /api/me/projects/:id/invites (H19/H20)", () => {
       headers: asUser(invitee),
     });
     expect(pending.json().invites).toEqual([
-      expect.objectContaining({ projectId: repoId, name: "Team" }),
+      expect.objectContaining({ projectId: repoId, name: "Team", invitedBy: "Test User" }),
     ]);
+    await pool.query(`UPDATE users SET surname='Organizer' WHERE id=$1`, [owner]);
+    const named = await server.inject({
+      method: "GET",
+      url: "/api/me/projects/invites",
+      headers: asUser(invitee),
+    });
+    expect(named.json().invites[0].invitedBy).toBe("Test User Organizer");
+    await pool.query(`UPDATE users SET anonymized_at=now() WHERE id=$1`, [owner]);
+    const removed = await server.inject({
+      method: "GET",
+      url: "/api/me/projects/invites",
+      headers: asUser(invitee),
+    });
+    expect(removed.json().invites[0].invitedBy).toBeNull();
   });
 
   it("403s when the inviter isn't an active member", async () => {
@@ -485,7 +499,7 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     const server = await getApp();
     const owner = await createUser();
     const repoId = await seedRepo("Solo in queue", [owner]);
-    const challengeId = await createChallenge("Queue challenge", []);
+    const challengeId = await createChallenge("Queue challenge");
     const { rows: groupRows } = await pool.query(
       `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
       [challengeId],
@@ -539,7 +553,7 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     const server = await getApp();
     const owner = await createUser();
     const repoId = await seedRepo("Mixed marker project", [owner]);
-    const challengeId = await createChallenge("Synthetic queue challenge", []);
+    const challengeId = await createChallenge("Synthetic queue challenge");
     await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [challengeId]);
     const { rows: entryRows } = await pool.query(
       `INSERT INTO queue_entries (challenge_id, repo_id, status, position)

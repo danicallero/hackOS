@@ -250,7 +250,7 @@ export async function nativeProjects(userId: number | null, ids: number[], staff
         .filter((m) => m.repo_id === id && (member || m.status === "active"))
         .map((m) => ({
           userId: m.userId,
-          name: m.name,
+          name: member || m.gallery_show_name ? m.name : null,
           surname: member ? m.surname : null,
           status: m.status,
           photoUrl:

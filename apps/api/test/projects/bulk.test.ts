@@ -37,7 +37,7 @@ async function createRepo(name: string): Promise<number> {
 describe("POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove (H21)", () => {
   it("enrolls every repo, skipping ones already actively queued, idempotently", async () => {
     const server = await getApp();
-    const challengeId = await createChallenge("Bulk Challenge", []);
+    const challengeId = await createChallenge("Bulk Challenge");
     const repoA = await createRepo("Repo A");
     const repoB = await createRepo("Repo B");
     const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_EDIT]);
@@ -93,7 +93,7 @@ describe("POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove (H21)", (
 
   it("bulk-removes every active entry, disqualifying in-progress ones instead of just cancelling", async () => {
     const server = await getApp();
-    const challengeId = await createChallenge("Bulk Challenge", []);
+    const challengeId = await createChallenge("Bulk Challenge");
     const repoA = await createRepo("Repo A");
     const repoB = await createRepo("Repo B");
     const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_EDIT]);
@@ -138,7 +138,7 @@ describe("POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove (H21)", (
 
   it("requires PROJECTS_EDIT", async () => {
     const server = await getApp();
-    const challengeId = await createChallenge("Bulk Challenge", []);
+    const challengeId = await createChallenge("Bulk Challenge");
     const bystander = await createUserWithCapabilities([]);
     const res = await server.inject({
       method: "POST",

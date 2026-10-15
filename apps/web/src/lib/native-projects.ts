@@ -29,7 +29,7 @@ export interface NativeProject {
   winners?: { challengeId: number; rank: number; challengeTitle: string }[];
   members: {
     userId: number;
-    name: string;
+    name: string | null;
     status: "active" | "invited" | "declined";
     photoUrl: string | null;
   }[];

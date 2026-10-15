@@ -247,10 +247,11 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         querystring: projectGalleryQuerySchema,
         summary: "List project gallery",
         description:
-          "Paginated project gallery honoring SQL-clock opening, audience and draft visibility on every read (#1008,#1009).",
+          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009).",
       },
     },
-    async (q) => {
+    async (q, reply) => {
+      reply.header("Cache-Control", "no-store");
       if (!(await canViewGallery(pool, q.userId)))
         throw new ForbiddenError("Gallery is closed or unavailable to this audience");
       const phase = await projectPhase(pool);
@@ -286,9 +287,12 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         params,
         summary: "Read gallery project",
         description:
-          "Returns project content and consented member display through the same phase policy as the gallery (#1008,#1009).",
+          "Returns no-store project content and current consented member display through the gallery phase policy; nonmembers receive null names when sharing is disabled (#1008,#1009).",
       },
     },
-    (q) => nativeProject(q.userId, q.params.id),
+    (q, reply) => {
+      reply.header("Cache-Control", "no-store");
+      return nativeProject(q.userId, q.params.id);
+    },
   );
 }

@@ -275,7 +275,6 @@
   "teamDetailRemoveMemberConfirm": "Remove {name} from this team?",
   "teamDetailMemberUpdateError": "The team member couldn’t be updated. Try again.",
   "teamDetailMemberAddedByStaff": "Added by staff",
-  "teamDetailLinkHint": "Search for the hackOS account to link this imported email to. They'll receive a verification email.",
   "teamDetailLinks": "Links",
   "teamDetailGithub": "GitHub",
   "teamDetailDemo": "Demo",

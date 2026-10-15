@@ -72,7 +72,6 @@
   "apiError_meal_plan_locked": "Los cambios de esta comida están cerrados.",
   "apiError_removal_pin_expired": "Ese PIN de seguridad ha caducado. Solicita uno nuevo.",
   "apiError_panel_locked": "El panel de jurado está bloqueado: ya se ha evaluado un equipo.",
-  "apiError_project_locked": "El proyecto está enviado y bloqueado. Solicita ediciones para cambiarlo.",
   "apiError_email_not_verified": "Verifica tu correo antes de hacer esto.",
   "apiError_stand_codes_empty": "Ningún stand escaneable tiene todavía un código para exportar.",
   "apiError_stand_tag_in_use": "Esta etiqueta ya está en uso.",

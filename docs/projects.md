@@ -38,6 +38,11 @@ compares boundaries to `now()`; API host time does not authorize operations.
 retain their team view; public/nonmember content obeys draft visibility and
 gallery audience. Public responses and authorized file streams use no-store
 so a time or consent change cannot retain a privileged cached projection.
+The web gallery refreshes its server projection on public invalidations and
+every 15 seconds for SQL-clock phase boundaries. Consent changes emit only a
+payload-free public invalidation. The configured web origin may make credentialed
+public reads for attendee-only galleries and winners; external catalogue origins
+retain anonymous wildcard CORS.
 
 ## Gallery and files
 
@@ -48,8 +53,10 @@ Batch projections use a fixed number of queries across a page.
 
 Gallery consent is independent of badge-directory consent:
 `GET/PUT /api/me/project-gallery-consent` carries `{showName,showPhoto}`.
-Names default to visible; photos default to hidden. Opt-in explicitly covers
-potential public indexing. Team reads retain private member names and invitation
+Names default to visible; photos default to hidden. Nonmember list and detail
+projections return a null name when its owner disables name sharing, including
+after submission; active teammates retain their private roster names. Opt-in
+explicitly covers potential public indexing. Team reads retain private member names and invitation
 statuses; nonmembers receive only active, consented display information.
 Photo reads recheck current consent and project visibility on each request.
 
@@ -69,9 +76,27 @@ records one transition and compacts positions. H30 membership derives solely fro
 active native memberships, retaining ordered advisory locks across teams sharing
 a member. `project_eligibility` evaluates submitted status, explicit exclusion
 and configured team-size limits even when event settings have no singleton yet.
-Migration `0705_native_projects.sql` is the single migration that introduces the
-native model; earlier applied migrations are immutable and still mention retired
-integration vocabulary.
+Migration `0705_native_projects.sql` introduces the native model. Applied files
+in `apps/api/db/migrations/` are checksum-enforced and immutable, including the
+retirement migration itself; `apps/api/db/migration-history/` preserves retired
+development history and is never applied. Both directories may mention retired
+integration vocabulary and must not be rewritten to erase that history (#1005).
+
+The existing `pnpm check:retired-auth` lint guard also rejects retired project
+integration names in API source/scripts/tests, web source, mobile source/tests,
+shared source/locales and root scripts. It checks vocabulary case-insensitively
+and includes a regression suite that introduces forbidden tokens. SQL history,
+documentation retirement notes, generated output and the guard's own definition
+and tests are outside this runtime check. Ordinary scanner or Live Activity
+reconciliation remains supported.
+
+Until #1016 removes secondary email, only the exact existing `en`, `es` and `gl`
+values at `web.json:devpostEmailPlaceholder`, `web.json:willUseToMatchDevpost`
+and `email.json:mail.auth.verifySecondaryEmail.body` are temporarily exempt.
+The guard pins each path/key/value digest, so another key, file or edited value
+cannot reuse the exception. Remove these nine exceptions and their dedicated
+test when #1016 lands; no project import capability or compatibility export
+remains.
 
 ## Teams, invitations and challenge intent
 
@@ -79,7 +104,8 @@ integration vocabulary.
 open) and `GET /api/me/projects` returns `{projects,canCreate}`. Members invite
 by email with `POST /api/me/projects/:id/invites`; the invitee answers with
 `POST /api/me/projects/:id/invites/accept|decline` and sees pending invitations
-at `GET /api/me/projects/invites`. Accepting locks the project and enforces
+at `GET /api/me/projects/invites`; `invitedBy` is the active inviter’s display
+name (or null), never an internal user ID. Accepting locks the project and enforces
 `projectMaxTeamSize`. `PUT|DELETE /api/me/projects/:id/challenges/:challengeId`
 edit intended challenges; mandatory challenges are added automatically and
 cannot be withdrawn (H17). `GET /api/projects/estimates` gives staff and

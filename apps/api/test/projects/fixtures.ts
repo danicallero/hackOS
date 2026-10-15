@@ -2,7 +2,7 @@ import { pool } from "../../src/db/pool.js";
 import { ensureApplicationFormVersion, grantAttendeeRole } from "../helpers.js";
 
 /** challenges.author needs a sponsor -> enterprise chain. */
-export async function createChallenge(title: string, _devpostTags: string[]): Promise<number> {
+export async function createChallenge(title: string): Promise<number> {
   const suffix = crypto.randomUUID();
   const owner = await pool.query(
     `INSERT INTO users (email, email_verified) VALUES ($1, true) RETURNING id`,

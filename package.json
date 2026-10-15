@@ -26,7 +26,7 @@
     "check:copy": "node scripts/check-copy.mjs",
     "check:story-ids": "node scripts/check-story-ids.mjs",
     "check:pages": "node scripts/check-page-size.mjs",
-    "check:retired-auth": "node scripts/check-retired-auth.mjs",
+    "check:retired-auth": "node --test scripts/check-retired-auth.test.mjs && node scripts/check-retired-auth.mjs",
     "check:api-error-messages": "node scripts/check-api-error-messages.mjs",
     "migrate": "pnpm --filter @hackos/api migrate",
     "schema:dump": "pnpm --filter @hackos/api schema:dump",

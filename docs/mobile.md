@@ -408,7 +408,8 @@ The existing personal `queue` tab and overflow route now open **My Projects**,
 a native stack (`app/(tabs)/queue/`): the list with a native large title, **New
 project** (`/queue/new`, a modal sheet with Cancel / Create in the header, the
 name field focused, Create disabled until valid or when the server's
-`canCreate` is false) and the **Invitations** inbox (`/queue/invites`: inviter
+`canCreate` is false; successful creation atomically replaces the sheet with
+the project editor, avoiding a native dismissal/push race) and the **Invitations** inbox (`/queue/invites`: inviter
 and project per row, Decline / Accept glass buttons, the row leaves at once and
 returns with the server's reason on failure). The list shows every project as a
 grouped row with its draft/submitted state and a queue brief per challenge
@@ -418,12 +419,14 @@ view is retained at `/projects/queue`, with its tutorial, pre-call
 notifications, SSE updates and polling. `/projects/:id` is the submission
 screen: status and deadline (when the server provides `submissionsCloseAt`),
 grouped form sections, challenge rows, team and invite, queue context, and a
-floating Submit / Resubmit glass button. No planning-record conversion or
+floating Submit / Resubmit glass button. Leaving a team uses the authenticated
+`DELETE /api/me/projects/:id/leave` route after confirmation. No planning-record conversion or
 external submission path remains in the native client.
 
 The reusable `DynamicForm` consumes `TemplateField` and `FormSection` from
 `@hackos/shared/forms`, the application/project schema. File and image fields
-use the system document picker and project-scoped multipart uploads. Required
+use the system document picker and project-scoped multipart uploads with Expo
+`File` parts (Expo fetch does not serialize legacy React Native URI-only parts). Required
 answers are validated by the server on submission, without blocking drafts.
 `ProjectDraftWriter` serializes autosaves with optimistic revisions; newer
 edits survive an older save completing. A failed save retains answers for retry,

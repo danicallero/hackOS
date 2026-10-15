@@ -7,6 +7,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { ApiError } from "@/lib/api";
 import { SITE_URL, SOCIAL_IMAGE_PATH } from "@/lib/metadata";
 import { galleryProject, projectAssetUrl } from "../data";
+import { GalleryRefresh } from "../gallery-refresh";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata({
@@ -48,6 +49,7 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
   const { project, copy, language } = data;
   return (
     <PageLayout className="px-4 py-6 sm:px-6">
+      <GalleryRefresh />
       <PageHeader title={project.name} context={<Link href="/gallery">{copy.projects}</Link>} />
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <SectionCard title={copy.projectDetailsTitle}>

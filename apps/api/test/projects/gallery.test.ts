@@ -121,6 +121,39 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
     expect(own.responses.description).toBe("Working");
     expect(own.template[0].key).toBe("new");
   });
+  it("applies current name consent to public list and detail while retaining team names", async () => {
+    await app.inject({
+      method: "POST",
+      url: `/api/me/projects/${id}/submit`,
+      headers: asUser(owner),
+    });
+    await pool.query(
+      `UPDATE event_config SET project_gallery_opens_at=now()-interval '1 second',project_gallery_audience='public'`,
+    );
+    for (const showName of [false, true, false]) {
+      const consent = await app.inject({
+        method: "PUT",
+        url: "/api/me/project-gallery-consent",
+        headers: asUser(owner),
+        payload: { showName, showPhoto: false },
+      });
+      expect(consent.statusCode, consent.body).toBe(200);
+      for (const viewer of [undefined, attendee, outsider]) {
+        const detailResponse = await get(`/api/public/projects/${id}`, viewer);
+        const listResponse = await get("/api/public/projects", viewer);
+        expect(detailResponse.headers["cache-control"]).toBe("no-store");
+        expect(listResponse.headers["cache-control"]).toBe("no-store");
+        const detail = detailResponse.json();
+        const list = listResponse.json();
+        for (const project of [detail, list.items[0]]) {
+          expect(project.members[0].name).toBe(showName ? "Test User" : null);
+          expect(project.members[0].surname).toBeNull();
+        }
+      }
+      const own = (await get(`/api/me/projects/${id}`, owner)).json();
+      expect(own.members[0].name).toBe("Test User");
+    }
+  });
   it("never projects photos without gallery consent, independent of directory switches", async () => {
     await pool.query(`UPDATE event_config SET project_draft_visibility='public'`);
     await pool.query(
