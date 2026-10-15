@@ -378,6 +378,44 @@ describe("PublicProfileCard", () => {
     expect(submit()?.disabled).toBe(true);
   });
 
+  it("Create profile chooses sharing without a manual toggle or an early write", async () => {
+    vi.mocked(api.get).mockResolvedValue(profile());
+    const onFinished = vi.fn();
+    await render(<PublicProfileCard onboarding={{ onFinished, onLater: vi.fn() }} />);
+    expect(byLabel("publicProfileVisible")).toBeNull();
+    expect(container.textContent).toContain("publicProfileAudience");
+    const create = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "networkingOnboardingCreate",
+    );
+    await act(async () => create?.click());
+    expect(api.put).not.toHaveBeenCalled();
+    expect(byLabel("publicProfileVisible")).toBeNull();
+    expect(byLabel("publicProfileHeadline")).not.toBeNull();
+    vi.mocked(api.put).mockResolvedValue(profile({ directoryVisible: true }));
+    await save();
+    expect(api.put).toHaveBeenCalledWith(
+      "/api/me/public-profile",
+      expect.objectContaining({ directoryVisible: true, completeOnboarding: true }),
+      expect.anything(),
+    );
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("the hidden-profile choice records no sharing without a manual toggle", async () => {
+    vi.mocked(api.get).mockResolvedValue(profile());
+    const onFinished = vi.fn();
+    await render(<PublicProfileCard onboarding={{ onFinished, onLater: vi.fn() }} />);
+    expect(byLabel("publicProfileVisible")).toBeNull();
+    vi.mocked(api.put).mockResolvedValue(profile());
+    await save();
+    expect(api.put).toHaveBeenCalledWith(
+      "/api/me/public-profile",
+      expect.objectContaining({ directoryVisible: false, completeOnboarding: true }),
+      expect.anything(),
+    );
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
   it("offers no CV upload during onboarding without an application CV", async () => {
     vi.mocked(api.get).mockResolvedValue(profile({ directoryVisible: true }));
     await render(<PublicProfileCard onboarding={{ onFinished: vi.fn(), onLater: vi.fn() }} />);

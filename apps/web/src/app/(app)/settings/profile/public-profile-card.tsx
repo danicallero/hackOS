@@ -264,12 +264,16 @@ export function PublicProfileCard({
         {saveError && <ContextualError message={saveError} />}
         {/* Locked while saving, so no edit is lost when the response lands. */}
         <fieldset disabled={pending} className="min-w-0 space-y-(--space-within-section)">
-          <SwitchRow
-            checked={settings.directoryVisible}
-            onChange={(directoryVisible) => update({ directoryVisible })}
-            label={t("publicProfileVisible")}
-            hint={t("publicProfileAudience")}
-          />
+          {onboarding ? (
+            <p className="text-muted-foreground text-sm">{t("publicProfileAudience")}</p>
+          ) : (
+            <SwitchRow
+              checked={settings.directoryVisible}
+              onChange={(directoryVisible) => update({ directoryVisible })}
+              label={t("publicProfileVisible")}
+              hint={t("publicProfileAudience")}
+            />
+          )}
           {settings.directoryVisible && (
             <>
               <div className="grid gap-x-6 gap-y-3 border-t border-border/60 pt-4 sm:grid-cols-3">

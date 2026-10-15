@@ -63,6 +63,7 @@ test("profile step saves an explicit hidden choice after confirmation (H7/H15)",
   await page.goto("/applications/confirm?token=profile-test");
   await expect(page.getByRole("heading", { name: "Build your networking profile" })).toBeVisible();
   await expect(page.getByText("2 of 2", { exact: true })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Share my profile", exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("profile-hidden.png"), fullPage: true });
   await page.getByRole("button", { name: "Keep my profile hidden", exact: true }).click();
   await expect(
@@ -100,6 +101,7 @@ test("profile sharing is explicit and lets attendees build their profile (H7)", 
   await page.goto("/inbox");
   await page.getByRole("button", { name: "Create profile", exact: true }).click();
   expect(saved).toBeUndefined();
+  await expect(page.getByRole("switch", { name: "Share my profile", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Upload CV", exact: true })).toHaveCount(0);
   await expect(page.locator('input[type="file"][accept="application/pdf"]')).toHaveCount(0);
   await page.getByLabel("Headline", { exact: true }).fill("Building useful things");
@@ -164,6 +166,7 @@ test("reminder survives reload and returns after the next login (H4/H7)", async 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
   expect(writes).toBe(0);
+  await expect(page.getByRole("switch", { name: "Share my profile", exact: true })).toHaveCount(0);
   signedIn = false;
   await page.goto("/login?next=/inbox");
   await page.getByLabel("Email", { exact: true }).fill("operator@example.com");
