@@ -210,18 +210,19 @@ Track targets are stored on `challenges.target_seconds_per_team`, not per room.
 The migration backfills the strictest historical serving-room goal into each track.
 All rooms serving a challenge use one target; admins and assigned judges edit it
 before or during judging via `/api/queue/challenges/:challengeId/timing`.
-The legacy room target column remains for old clients, but is not the owner of
-new track pacing. A compatibility room-target PATCH updates the served tracks,
-so all of their rooms share the change rather than retaining independent goals. `preparation_seconds` is the initial setup allowance. Actual
+Rooms have no pace setting of their own (#997). `preparation_seconds` is the initial setup allowance. Actual
 setup is Start presentation minus bring-in, falling back to call time for legacy
 entries. Bring-in stamps `queue_entries.room_entered_at`; reset transitions clear
 it. Completed presentation duration and setup averages are pooled across the
 shared queue's rooms, with at most 20 recent clean samples and a five-team prior.
 Merged challenges use the strictest target and largest setup allowance.
 
-`queue_group_timing()` owns the learned cycle estimate consumed by project,
-participant queue, pump notification and operator ETA paths. Active parallel
-rooms divide throughput. A shortened advisory judge goal due to closing-time
+`queue_group_timing()` owns the learned cycle estimate. `queue_group_pace()`
+wraps it and is the only minutes-per-slot formula: the cycle divided by the
+group's active (unpaused) serving rooms. Project status, participant queue
+status, operator room pace and the pre-call pump all read it. With no active
+room, one slot takes the full cycle — a track with no target and no samples
+estimates 10 minutes (8-minute target plus 2-minute setup). A shortened advisory judge goal due to closing-time
 pressure does not shorten this estimate. The judge sees the actual estimated
 finish, scheduled judging close and an overrun warning. Nothing automatically
 ends a presentation when its target expires. No new worker or cadence is added.

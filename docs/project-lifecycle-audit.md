@@ -30,9 +30,9 @@ The user added and clarified these requirements during implementation:
 
 ### Timing implementation audit
 
-`room_queue_state.desired_minutes_per_team` currently owns the desired pace:
-that is per room, so rooms serving one challenge can disagree. This is an
-audited defect in the old design, not the required final behavior. The state PATCH
+Before this change a per-room target owned the desired pace, so rooms serving
+one challenge could disagree. This was an audited defect in the old design, not
+the required final behavior; the room target was retired in #997. The state PATCH
 route is gated by `QUEUE_ADMIN`; it does not provide an assigned judge with a
 track-specific target control. `challenges.max_presentation_seconds` is a
 separate presentation ceiling, not an adaptive cycle estimate. It is editable
@@ -52,7 +52,8 @@ by ETA calculations. There are several independently implemented ETA paths:
 project detail's `attachMembersAndPrizes`, and the queue pump's notification ETA.
 They predominantly average room targets and divide by active room count.
 These paths need one shared cycle-estimate formula so participant project,
-queue, notification and operator views do not disagree.
+queue, notification and operator views do not disagree. Resolved in #997: all
+of them read `queue_group_pace()`.
 
 The state machine explicitly separates called → in_room → presenting. This is
 useful existing structure. Use bring-in time for preparation where available,

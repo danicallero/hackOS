@@ -226,7 +226,7 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     ).toBe("called");
   });
 
-  it("updates room fields and per-room queue settings (max_in_waiting_area, desired_minutes_per_team)", async () => {
+  it("updates room fields and the room waiting quota; pace is not a room setting (#997)", async () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/queue/rooms",
@@ -252,7 +252,12 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     });
     expect(state.statusCode).toBe(200);
     expect(state.json().max_in_waiting_area).toBe(3);
-    expect(state.json().desired_minutes_per_team).toBe(15);
+    expect(state.json()).not.toHaveProperty("desired_minutes_per_team");
+    const { pool } = await import("../../src/db/pool.js");
+    expect(
+      (await pool.query(`SELECT count(*)::int n FROM audit_log WHERE action='judging_timing'`))
+        .rows[0].n,
+    ).toBe(0);
   });
 
   it("assigning a room to an enterprise auto-serves its one queue, unassigning clears both", async () => {

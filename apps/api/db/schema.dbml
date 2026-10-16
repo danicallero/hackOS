@@ -944,7 +944,6 @@ Table room_queue_groups {
 }
 
 Table room_queue_state {
-  desired_minutes_per_team integer [not null, default: `8`]
   is_paused boolean [not null, default: `true`]
   max_in_waiting_area integer [not null, default: `2`]
   room_id integer [pk, not null]

@@ -69,7 +69,6 @@ export async function createRoom(
     status: string;
     isPaused: boolean;
     maxInWaitingArea: number;
-    desiredMinutesPerTeam: number;
   }> = {},
 ): Promise<number> {
   const name = overrides.name ?? `Room ${crypto.randomUUID().slice(0, 8)}`;
@@ -79,14 +78,9 @@ export async function createRoom(
   );
   const roomId = rows[0].id;
   await pool.query(
-    `INSERT INTO room_queue_state (room_id, is_paused, max_in_waiting_area, desired_minutes_per_team)
-     VALUES ($1, $2, $3, $4)`,
-    [
-      roomId,
-      overrides.isPaused ?? false,
-      overrides.maxInWaitingArea ?? 2,
-      overrides.desiredMinutesPerTeam ?? 8,
-    ],
+    `INSERT INTO room_queue_state (room_id, is_paused, max_in_waiting_area)
+     VALUES ($1, $2, $3)`,
+    [roomId, overrides.isPaused ?? false, overrides.maxInWaitingArea ?? 2],
   );
   return roomId;
 }

@@ -587,9 +587,9 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       schema: {
         params: roomIdParam,
         body: roomQueueStateBody,
-        summary: "Update room waiting quota or shared track target",
+        summary: "Update room waiting quota",
         description:
-          "Compatibility API: desiredMinutesPerTeam updates the target of every track served by this room, shared across all of their rooms. New clients set the track target directly (H29/H39/H53).",
+          "Sets how many called teams this room holds in its waiting area. Judging pace is the track target, set on the track (H29/H53).",
       },
     },
     async (req) => {
@@ -608,38 +608,11 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
         if (!existing) throw new NotFoundError("Room not found");
         const { rows } = await client.query(
           `UPDATE room_queue_state
-              SET max_in_waiting_area = $1,
-                  desired_minutes_per_team = $2
-            WHERE room_id = $3
+              SET max_in_waiting_area = $1
+            WHERE room_id = $2
             RETURNING *`,
-          [
-            req.body.maxInWaitingArea ?? existing.max_in_waiting_area,
-            req.body.desiredMinutesPerTeam ?? existing.desired_minutes_per_team,
-            req.params.roomId,
-          ],
+          [req.body.maxInWaitingArea ?? existing.max_in_waiting_area, req.params.roomId],
         );
-        if (req.body.desiredMinutesPerTeam !== undefined) {
-          const tracks = await client.query(
-            `SELECT c.id,c.target_seconds_per_team FROM room_queue_groups rqg JOIN queue_group_challenges qgc ON qgc.queue_group_id=rqg.queue_group_id JOIN challenges c ON c.id=qgc.challenge_id WHERE rqg.room_id=$1 ORDER BY c.id FOR UPDATE OF c`,
-            [req.params.roomId],
-          );
-          for (const track of tracks.rows) {
-            const targetSeconds = req.body.desiredMinutesPerTeam * 60;
-            await client.query(`UPDATE challenges SET target_seconds_per_team=$2 WHERE id=$1`, [
-              track.id,
-              targetSeconds,
-            ]);
-            await audit(client, {
-              actorId: userId,
-              entityType: "challenge",
-              entityId: track.id,
-              action: "judging_timing",
-              before: { targetSeconds: track.target_seconds_per_team },
-              after: { targetSeconds },
-              source: "admin",
-            });
-          }
-        }
         await audit(client, {
           actorId: userId,
           entityType: "room",
