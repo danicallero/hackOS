@@ -1,16 +1,14 @@
 // Rebuilds src/lib/data/cities.json, the offline city index behind CityPicker.
 // Source: GeoNames cities15000 + admin1CodesASCII (CC BY 4.0, geonames.org).
 // Run: node scripts/build-city-data.mjs
-// Kept: every city in ES/PT/FR/IT/DE/GB/AD (most likely attendee origins) and
-// the rest of the world above 150k inhabitants. Larger indexes only slow the
-// first keystroke; anything missing falls back to the live geocoders.
+// Kept: Spanish cities only (attendees are overwhelmingly Spanish). Anywhere
+// else, and any town missing here, is found through the live geocoders.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const NEAR = new Set(["ES", "PT", "FR", "IT", "DE", "GB", "AD"]);
-const WORLD_MIN_POPULATION = 150_000;
+const COUNTRY = "ES";
 const base = "https://download.geonames.org/export/dump";
 const dir = mkdtempSync(join(tmpdir(), "cities-"));
 
@@ -42,10 +40,15 @@ for (const line of readFileSync(join(dir, "cities15000.txt"), "utf8").split("\n"
   if (!line) continue;
   const f = line.split("\t");
   const [, name, ascii, , , , , , cc, , a1, , , , population] = f;
-  const pop = Number(population);
-  if (!NEAR.has(cc) && pop < WORLD_MIN_POPULATION) continue;
+  if (cc !== COUNTRY) continue;
   const region = admin1.get(`${cc}.${a1}`) ?? "";
-  rows.push([name, ascii === name ? 0 : ascii, index(regions, region), index(countries, cc), pop]);
+  rows.push([
+    name,
+    ascii === name ? 0 : ascii,
+    index(regions, region),
+    index(countries, cc),
+    Number(population),
+  ]);
 }
 rows.sort((a, b) => b[4] - a[4]);
 writeFileSync(
