@@ -20,21 +20,13 @@ import { type NativeProject, nativeProjects } from "@/lib/native-projects";
 import { useSessionContext } from "@/lib/session";
 
 type Invite = { id: number; projectId: number; name: string; invitedBy: string | null };
-export function MyProjectsView({
-  initialProjects,
-  initialInvites,
-  initialCanCreate,
-}: {
-  initialProjects: NativeProject[];
-  initialInvites: Invite[];
-  initialCanCreate: boolean;
-}) {
+export function MyProjectsView() {
   const { t } = useLocale();
   const router = useRouter();
   const { isPureApplicant } = useSessionContext();
-  const [projects, setProjects] = useState<NativeProject[] | null>(initialProjects);
-  const [invites, setInvites] = useState<Invite[]>(initialInvites);
-  const [canCreate, setCanCreate] = useState(initialCanCreate);
+  const [projects, setProjects] = useState<NativeProject[] | null>(null);
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [canCreate, setCanCreate] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -64,8 +56,8 @@ export function MyProjectsView({
     }
   }, [isPureApplicant, router, t]);
   useEffect(() => {
-    if (isPureApplicant) router.replace("/gallery");
-  }, [isPureApplicant, router]);
+    void load();
+  }, [load]);
   async function create(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
