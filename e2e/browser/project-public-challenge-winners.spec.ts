@@ -13,6 +13,8 @@ test("public challenge page shows published winners only after reveal", async ({
       return route.fallback();
     }
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/me")
+      return route.fulfill({ status: 401, json: { error: { code: "unauthenticated" } } });
     if (path === "/api/public/challenges/1/winners")
       return route.fulfill({
         json: revealed
@@ -59,7 +61,8 @@ test("public challenge page shows published winners only after reveal", async ({
   await expect(page.getByText("Neural Beans")).toHaveCount(0);
   revealed = true;
   await page.reload();
-  const winner = page.getByRole("link", { name: "1 · Neural Beans" });
+  await expect(page.getByText("Neural Beans")).toBeVisible();
+  const winner = page.getByRole("link", { name: "Open project" });
   await expect(winner).toBeVisible();
   await expect(winner).toHaveAttribute("href", "/gallery/10");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(

@@ -7,10 +7,10 @@ import {
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool, withTransaction } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
+import { pool } from "../../db/pool.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { visibleWinnerRows } from "../challenges/winner-publication.js";
 import { repositoryScopeFor, requireRepositoryListAccess } from "./access.js";
 import {
   decideNativeEdits,
@@ -199,7 +199,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         querystring: projectGalleryQuerySchema,
         summary: "List project gallery",
         description:
-          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009). Project staff (PROJECTS_READ) may browse before it opens. A refusal is 403 with `details.reason` `gallery_closed` (with `details.opensAt`, null while unscheduled, and the event `details.timeZone`) or `gallery_audience` (H18).",
+          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009). Optional winnersOnly=true filters published winners before pagination; with challengeId it matches winners of that challenge (H60). Project staff (PROJECTS_READ) may browse before it opens. A refusal is 403 with `details.reason` `gallery_closed` (with `details.opensAt`, null while unscheduled, and the event `details.timeZone`) or `gallery_audience` (H18).",
       },
     },
     async (q, reply) => {
@@ -207,9 +207,14 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
       await assertGalleryVisible(pool, q.userId);
       const phase = await projectPhase(pool);
       const viewer = await projectViewer(pool, q.userId);
-      const { page, pageSize, search, challengeId } = q.query;
+      const { page, pageSize, search, challengeId, winnersOnly } = q.query;
+      const winnerIds = winnersOnly
+        ? (await visibleWinnerRows(pool, q.userId))
+            .filter((winner) => !challengeId || winner.challengeId === challengeId)
+            .map((winner) => winner.repoId)
+        : null;
       const { rows } = await pool.query(
-        `SELECT r.id,count(*) OVER()::int AS total FROM repos r WHERE r.is_test_account=false AND (r.submission_status='submitted' OR ($1<>'team_only' AND ($1='public' OR $2))) AND ($3::text IS NULL OR r.name ILIKE '%'||$3||'%') AND ($4::int IS NULL OR EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$4)) ORDER BY r.id LIMIT $5 OFFSET $6`,
+        `SELECT r.id,count(*) OVER()::int AS total FROM repos r WHERE r.is_test_account=false AND (r.submission_status='submitted' OR ($1<>'team_only' AND ($1='public' OR $2))) AND ($3::text IS NULL OR r.name ILIKE '%'||$3||'%') AND ($4::int IS NULL OR EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$4)) AND ($7::int[] IS NULL OR r.id=ANY($7)) ORDER BY r.id LIMIT $5 OFFSET $6`,
         [
           phase.draftVisibility,
           viewer.attendee,
@@ -217,6 +222,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
           challengeId ?? null,
           pageSize,
           (page - 1) * pageSize,
+          winnerIds,
         ],
       );
       return {

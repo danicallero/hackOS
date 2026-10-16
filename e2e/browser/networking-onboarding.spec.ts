@@ -133,7 +133,7 @@ test("profile sharing is explicit and lets attendees build their profile (H7)", 
     headline: "Building useful things",
   });
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
 });
 
 test("reminder survives reload and returns after the next login (H4/H7)", async ({ page }) => {
@@ -169,9 +169,9 @@ test("reminder survives reload and returns after the next login (H4/H7)", async 
   });
   await page.getByLabel("Headline", { exact: true }).fill("Finish this next login");
   await page.getByRole("button", { name: "Remind me on next login", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
   expect(writes).toBe(0);
   await expect(page.getByRole("switch", { name: "Share my profile", exact: true })).toHaveCount(0);
   signedIn = false;

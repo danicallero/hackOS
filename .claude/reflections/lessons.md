@@ -567,6 +567,12 @@ detail page. Shared patterns need representative content and rendered review.
 
 ### Action
 Use the audited Users and application Responses layouts as the dense-list references.
+Applying PageLayout and the app shell alone does not complete a design-system
+migration: audit every clickable item against the shared Button/IconButton
+contract, and include the established Phosphor icons on sections and actions.
+When reusing public landing content inside the app, omit sections already owned
+by sibling routes and exercise their links in both session states; shared data
+does not justify duplicate destinations or sending signed-in users out of the shell.
 Reuse their actual ListToolbar, FilterMenu and DataTable compositions rather
 than reproducing them with loosely aligned buttons and repeated detail blocks. Keep mixed record
 pages wide enough for their table tabs, constrain only text/form groups, and

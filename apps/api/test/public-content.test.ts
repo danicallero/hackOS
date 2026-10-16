@@ -68,7 +68,11 @@ describe("public content catalog (H48, H49)", () => {
     const { config } = await import("../src/config.js");
     const server = await getApp();
     const origin = new URL(config.WEB_URL).origin;
-    for (const path of ["/api/public/projects", "/api/public/challenges/1/winners"]) {
+    for (const path of [
+      "/api/public/projects",
+      "/api/public/challenges/1/winners",
+      "/api/public/activities",
+    ]) {
       const response = await server.inject({ method: "GET", url: path, headers: { origin } });
       expect(response.headers["access-control-allow-origin"]).toBe(origin);
       expect(response.headers["access-control-allow-credentials"]).toBe("true");

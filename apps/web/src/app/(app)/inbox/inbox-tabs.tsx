@@ -64,6 +64,7 @@ function categoryLabelMap(t: Translate): Record<string, string> {
   return {
     queue: t("categoryQueueCalls"),
     announcements: t("announcements"),
+    announcement: t("announcements"),
     application: t("categoryApplicationUpdates"),
     schedule: t("categoryReminderChannels"),
   };
@@ -90,7 +91,7 @@ function channelLabelMap(t: Translate): Record<NotificationChannel, string> {
 /** Channels a fresh schedule-reminder opt-in writes explicitly, matching service.ts DEFAULT_CHANNELS. */
 const REMINDER_DEFAULT_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
 
-function payloadField(payload: unknown, key: "subject" | "body"): string | null {
+function payloadField(payload: unknown, key: "subject" | "title" | "body"): string | null {
   if (!payload || typeof payload !== "object") return null;
   const value = (payload as Record<string, unknown>)[key];
   return typeof value === "string" && value.trim() ? value : null;
@@ -99,6 +100,7 @@ function payloadField(payload: unknown, key: "subject" | "body"): string | null 
 /** Internal to the notify() pipeline (see notifications/templates.ts) — not useful to show a reader. */
 const HIDDEN_PAYLOAD_KEYS = new Set([
   "subject",
+  "title",
   "body",
   "template",
   "vars",
@@ -243,7 +245,10 @@ export function MessagesTab() {
         <ul className="space-y-3">
           {items.map((item) => {
             const unread = !item.read_at;
-            const subject = payloadField(item.payload, "subject") ?? item.category;
+            const subject =
+              payloadField(item.payload, "subject") ??
+              payloadField(item.payload, "title") ??
+              categoryLabel(item.category, [], t);
             const body = payloadField(item.payload, "body");
             const details = payloadDetails(item.payload);
             const isOpen = expanded.has(item.id);

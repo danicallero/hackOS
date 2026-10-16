@@ -27,6 +27,14 @@
   --brand-blue: #a3d5ff;
   --brand-cream: #fafafa;
   --brand-yellow: #f5dc8f;
+  /* H47: category identity, independent of operational success/warning/error states. */
+  --schedule-activity: #53627c;
+  --schedule-meal: #28745c;
+  --schedule-workshop: #7753a0;
+  --schedule-talk: #3568aa;
+  --schedule-ceremony: #8b6a20;
+  --schedule-deadline: #a65229;
+  --schedule-other: #687079;
   --brand-sans: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
   --brand-display: "Rockwell", Georgia, "Times New Roman", serif;
   --brand-mono: var(--font-geist-mono), ui-monospace, monospace;
@@ -119,6 +127,13 @@
 }
 
 .dark {
+  --schedule-activity: #aabbd5;
+  --schedule-meal: #7ec8a6;
+  --schedule-workshop: #c2a3e5;
+  --schedule-talk: #91b9ed;
+  --schedule-ceremony: #dec27b;
+  --schedule-deadline: #e8aa86;
+  --schedule-other: #b3bac2;
   /* Near-black blue-tinted surfaces keep saturated blue for interactive accents. */
   --background: #0b0d14;
   --foreground: var(--brand-cream);

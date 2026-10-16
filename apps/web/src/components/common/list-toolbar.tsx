@@ -12,11 +12,14 @@ export function ListToolbar({
   search,
   filters,
   actions,
+  actionsBeforeFilters = false,
   feedback,
 }: {
   search: SearchFieldProps;
   filters?: readonly FilterDefinition[];
   actions?: React.ReactNode;
+  /** Puts the actions right after the search field, e.g. the button that submits it. */
+  actionsBeforeFilters?: boolean;
   feedback?: React.ReactNode;
 }) {
   const { t } = useLocale();
@@ -36,6 +39,7 @@ export function ListToolbar({
         )}
       >
         <SearchField {...search} />
+        {actionsBeforeFilters && actions}
         {hasFilters && (
           <FilterMenu
             filters={filters!}
@@ -44,7 +48,7 @@ export function ListToolbar({
             chipsClassName="col-span-full row-start-2 flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain pb-1"
           />
         )}
-        {actions}
+        {!actionsBeforeFilters && actions}
       </PageToolbar>
       {feedback}
     </div>

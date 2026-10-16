@@ -463,3 +463,6 @@ and non-identifying account-removal progress parsing are also shared; browser
 storage and native SecureStore remain platform adapters.
 
 Run `pnpm --filter @hackos/shared test` for these framework-free model tests.
+
+Inbox headers use the rendered subject, falling back to the payload title and then
+the localized category. Subject/title/body are not repeated as technical detail rows.

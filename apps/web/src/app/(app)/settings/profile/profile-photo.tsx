@@ -29,7 +29,7 @@ const BADGE = cn(
  * the public profile's photo switch is on. A camera button on the avatar
  * opens the file picker, or a change/remove menu once a photo exists.
  */
-export function ProfilePhoto() {
+export function ProfilePhoto({ size = "md" }: { size?: "md" | "lg" } = {}) {
   const { me, refresh } = useSessionContext();
   const { t } = useLocale();
   const { input, pick, remove, pending, error } = usePhotoUpload("/api/me/photo", refresh);
@@ -46,8 +46,8 @@ export function ProfilePhoto() {
           showInitials
           name={name}
           image={me.image}
-          className="size-16"
-          fallbackClassName="text-lg"
+          className={size === "lg" ? "size-28" : "size-16"}
+          fallbackClassName={size === "lg" ? "text-3xl" : "text-lg"}
         />
         {me.image ? (
           <DropdownMenu>
