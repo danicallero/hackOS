@@ -372,7 +372,6 @@ elevated `Overlay` — replacing the overloaded generic "card".**
 `Card` remains only as a compatibility wrapper over `Surface`; new domain
 sections use `Section`/`SectionCard` so their responsibility is explicit. In
 `app/(app)` the raw `Card`s that are deliberately *not* page sections are the
-centered confirmation/auth cards (`verify-secondary-email/page.tsx`) and the
 my-queue ticket stub. `schedule/page.tsx` uses the Users `ListToolbar` above its bounded editable
 grid. Search, filters and columns share a control row; active chips have their
 own row and do not push the filter control out of alignment.

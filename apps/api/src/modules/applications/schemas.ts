@@ -14,6 +14,12 @@ import { fieldsReferenceKnownSections, sectionsSchema, templateSchema } from "@h
 
 const timestampCoerce = z.union([z.string(), z.null()]).optional();
 
+/** H16: photo-list fields upload through project storage; applications have no such route. */
+const noImagesFields = (template: { kind: string; project_description?: boolean }[] | undefined) =>
+  !template?.some((field) => field.kind === "images" || field.project_description);
+const NO_IMAGES_MESSAGE =
+  "image and project-description fields are only available in the project form";
+
 export const createApplicationSchema = z
   .object({
     name: z.string().min(1),
@@ -34,7 +40,8 @@ export const createApplicationSchema = z
   .refine((b) => fieldsReferenceKnownSections(b.template, b.sections), {
     message: "every field's section_key or after_section_key must reference a defined section",
     path: ["template"],
-  });
+  })
+  .refine((b) => noImagesFields(b.template), { message: NO_IMAGES_MESSAGE, path: ["template"] });
 
 export const updateApplicationSchema = z
   .object({
@@ -67,7 +74,8 @@ export const updateApplicationSchema = z
       message: "every field's section_key or after_section_key must reference a defined section",
       path: ["template"],
     },
-  );
+  )
+  .refine((b) => noImagesFields(b.template), { message: NO_IMAGES_MESSAGE, path: ["template"] });
 
 export const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
 export const uploadQuerySchema = z.object({

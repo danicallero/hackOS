@@ -5,8 +5,8 @@ import type { Queryable } from "../../db/pool.js";
  * here instead of sent synchronously — the notifications workstream (H50-H52)
  * owns actual delivery via its outbox dispatcher. `category: "auth"` and the
  * template names below match the registry in
- * src/modules/notifications/templates.ts (auth.verify / auth.verifySecondaryEmail
- * / auth.reset / auth.invite) so the dispatcher renders them with per-user i18n
+ * src/modules/notifications/templates.ts (auth.verify / auth.reset / auth.invite)
+ * so the dispatcher renders them with per-user i18n
  * (users.language) without this module knowing anything about email
  * rendering or providers.
  */
@@ -15,10 +15,9 @@ export async function enqueueAuthEmail(
   userId: number,
   template: string,
   vars: Record<string, unknown>,
-  // `recipient` overrides users.email in the email channel adapter — required
-  // whenever the email must go somewhere other than the primary address, e.g.
-  // a secondary-email verification (H6) that must reach the NEW address, never
-  // the primary one. `language` overrides users.language when known.
+  // `recipient` overrides users.email for messages sent before the target
+  // address belongs to a user row, such as invitations. `language` overrides
+  // users.language when known.
   opts: { recipient?: string; language?: string } = {},
 ): Promise<void> {
   const payload: Record<string, unknown> = { template, vars };

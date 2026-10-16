@@ -32,6 +32,9 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
   let rejectSave = false;
   const patches: Array<Record<string, unknown>> = [];
   await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const request = route.request();
     const path = new URL(request.url()).pathname;
     let body: unknown = [];

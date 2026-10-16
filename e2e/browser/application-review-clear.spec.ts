@@ -30,6 +30,9 @@ for (const width of [1920, 393]) {
     let saveCount = 0;
     let responseReads = 0;
     await page.route("**/api/**", async (route) => {
+      if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+        return route.fallback();
+      }
       const request = route.request();
       const path = new URL(request.url()).pathname;
       if (path === "/api/me") {

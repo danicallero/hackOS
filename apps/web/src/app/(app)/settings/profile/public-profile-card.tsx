@@ -108,7 +108,11 @@ export function previewEntry(
  * attendee's write (docs/directory.md). The CV file saves on its own; the
  * switch that shares it is part of the form.
  */
-export function PublicProfileCard() {
+export function PublicProfileCard({
+  onboarding,
+}: {
+  onboarding?: { onFinished: () => void; onLater: () => void };
+} = {}) {
   const { me } = useSessionContext();
   const { t } = useLocale();
   // Bumped by every successful save; a GET that started earlier is stale.
@@ -131,16 +135,18 @@ export function PublicProfileCard() {
   const [saved, setSaved] = useState<Snapshot | null>(null);
   // Unsaved edits; null means the form shows the stored settings.
   const [edits, setEdits] = useState<Settings | null>(null);
-  const [pending, setPending] = useState(false);
+  const [savingChoice, setSavingChoice] = useState<"create" | "hidden" | null>(null);
+  const pending = savingChoice !== null;
   const [saveError, setSaveError] = useState<string | null>(null);
   // One key per pending change set, so a retried save replays instead of re-applying.
-  const idempotencyKey = useRef<string | null>(null);
+  const idempotencyKey = useRef<{ key: string; directoryVisible: boolean } | null>(null);
 
   const latest = data && (!saved || data.generation >= saved.generation) ? data : saved;
   const profile = latest?.profile ?? null;
   const stored = profile ? settingsFrom(profile) : null;
-  const settings = edits ?? stored;
-  const dirty = Boolean(stored && settings && !sameSettings(settings, stored));
+  const initialSettings = onboarding && stored ? { ...stored, directoryVisible: true } : stored;
+  const settings = edits ?? initialSettings;
+  const dirty = Boolean(initialSettings && settings && !sameSettings(settings, initialSettings));
   useUnsavedChangesGuard(dirty);
 
   if (!me) return null;
@@ -160,9 +166,9 @@ export function PublicProfileCard() {
     idempotencyKey.current = null;
     setSaveError(null);
     setEdits((current) => {
-      const next = { ...(current ?? (stored as Settings)), ...patch };
+      const next = { ...(current ?? (initialSettings as Settings)), ...patch };
       // Back to the stored settings (hidden edits are discarded): follow refreshes again.
-      return sameSettings(next, stored as Settings) ? null : next;
+      return sameSettings(next, initialSettings as Settings) ? null : next;
     });
   }
 
@@ -172,18 +178,29 @@ export function PublicProfileCard() {
     setSaved({ generation: generation.current, profile: next });
   }
 
-  async function onSubmit(event: React.FormEvent) {
+  async function onSubmit(event: React.FormEvent, directoryVisible = settings?.directoryVisible) {
     event.preventDefault();
     if (!settings || !stored) return;
     // Turning the opt-in off keeps the stored public fields: nothing hidden is published.
-    const body = settings.directoryVisible ? settings : { ...stored, directoryVisible: false };
-    setPending(true);
+    const body = directoryVisible
+      ? { ...settings, directoryVisible: true }
+      : { ...stored, directoryVisible: false };
+    setSavingChoice(directoryVisible ? "create" : "hidden");
     setSaveError(null);
-    idempotencyKey.current ??= crypto.randomUUID();
+    if (
+      !idempotencyKey.current ||
+      idempotencyKey.current.directoryVisible !== body.directoryVisible
+    ) {
+      idempotencyKey.current = {
+        key: crypto.randomUUID(),
+        directoryVisible: body.directoryVisible,
+      };
+    }
     try {
       const next = await api.put<PublicProfile>(
         "/api/me/public-profile",
         {
+          ...(onboarding ? { completeOnboarding: true } : {}),
           directoryVisible: body.directoryVisible,
           showSurname: body.showSurname,
           showPhoto: body.showPhoto,
@@ -194,12 +211,13 @@ export function PublicProfileCard() {
           socials: savedLinks(body.socials),
           shareCv: body.shareCv,
         },
-        { headers: { "Idempotency-Key": idempotencyKey.current } },
+        { headers: { "Idempotency-Key": idempotencyKey.current.key } },
       );
       idempotencyKey.current = null;
       commit(next);
       setEdits(null);
-      toast.success(t("publicProfileSaved"), { compactTitle: t("toastSavePublicProfile") });
+      if (onboarding) onboarding.onFinished();
+      else toast.success(t("publicProfileSaved"), { compactTitle: t("toastSavePublicProfile") });
     } catch (err) {
       setSaveError(apiErrorText(err, t, t("couldNotSavePublicProfile")));
       showErrorToast(
@@ -207,7 +225,7 @@ export function PublicProfileCard() {
         t("toastSavePublicProfile"),
       );
     } finally {
-      setPending(false);
+      setSavingChoice(null);
     }
   }
 
@@ -216,25 +234,50 @@ export function PublicProfileCard() {
     <form className="min-w-0" onSubmit={onSubmit}>
       <SectionCard
         footerClassName="justify-start"
-        icon={AddressBookIcon}
-        title={t("publicProfileTitle")}
+        icon={onboarding ? undefined : AddressBookIcon}
+        title={onboarding ? undefined : t("publicProfileTitle")}
+        variant={onboarding ? "plain" : "surface"}
         footer={
-          <FormActions
-            pending={pending}
-            disabled={!dirty}
-            state={saveError ? "error" : dirty ? "unsaved" : "saved"}
-          />
+          onboarding ? (
+            <div className="flex w-full flex-wrap justify-end gap-2">
+              <Button type="button" variant="ghost" disabled={pending} onClick={onboarding.onLater}>
+                {t("networkingOnboardingLater")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                loading={savingChoice === "hidden"}
+                onClick={(event) => void onSubmit(event, false)}
+              >
+                {t("networkingOnboardingHidden")}
+              </Button>
+              <Button type="submit" disabled={pending} loading={savingChoice === "create"}>
+                {t("networkingOnboardingCreate")}
+              </Button>
+            </div>
+          ) : (
+            <FormActions
+              pending={pending}
+              disabled={!dirty}
+              state={saveError ? "error" : dirty ? "unsaved" : "saved"}
+            />
+          )
         }
       >
         {saveError && <ContextualError message={saveError} />}
         {/* Locked while saving, so no edit is lost when the response lands. */}
         <fieldset disabled={pending} className="min-w-0 space-y-(--space-within-section)">
-          <SwitchRow
-            checked={settings.directoryVisible}
-            onChange={(directoryVisible) => update({ directoryVisible })}
-            label={t("publicProfileVisible")}
-            hint={t("publicProfileAudience")}
-          />
+          {onboarding ? (
+            <p className="text-muted-foreground text-sm">{t("publicProfileAudience")}</p>
+          ) : (
+            <SwitchRow
+              checked={settings.directoryVisible}
+              onChange={(directoryVisible) => update({ directoryVisible })}
+              label={t("publicProfileVisible")}
+              hint={t("publicProfileAudience")}
+            />
+          )}
           {settings.directoryVisible && (
             <>
               <div className="grid gap-x-6 gap-y-3 border-t border-border/60 pt-4 sm:grid-cols-3">
@@ -271,21 +314,23 @@ export function PublicProfileCard() {
               </div>
               <BioField value={settings.bio} onChange={(bio) => update({ bio })} />
               <LinksEditor links={settings.socials} onChange={(socials) => update({ socials })} />
-              <CvField
-                cv={profile.cv}
-                ownerName={displayName(me, true)}
-                shareCv={settings.shareCv}
-                onShareChange={(shareCv) => update({ shareCv })}
-                onSaved={(next) => {
-                  commit(next);
-                  // A removed CV is no longer shared; drop a pending share too.
-                  if (!next.cv) {
-                    setEdits((current) =>
-                      current?.shareCv ? { ...current, shareCv: false } : current,
-                    );
-                  }
-                }}
-              />
+              {(!onboarding || profile.cv?.source === "application") && (
+                <CvField
+                  cv={profile.cv}
+                  ownerName={displayName(me, true)}
+                  shareCv={settings.shareCv}
+                  onShareChange={(shareCv) => update({ shareCv })}
+                  onSaved={(next) => {
+                    commit(next);
+                    // A removed CV is no longer shared; drop a pending share too.
+                    if (!next.cv) {
+                      setEdits((current) =>
+                        current?.shareCv ? { ...current, shareCv: false } : current,
+                      );
+                    }
+                  }}
+                />
+              )}
               <section className="space-y-2 border-t border-border/60 pt-4">
                 <h3 className="type-label text-muted-foreground">{t("publicProfilePreview")}</h3>
                 <DirectoryCard

@@ -359,8 +359,8 @@ export async function buildApp(): Promise<App> {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
-  // Public catalogue routes are deliberately embeddable: they expose no
-  // session-bound data, so any origin may read them without credentials.
+  // Public catalogues remain anonymously embeddable. Viewer-dependent project
+  // and winner projections also accept credentials from configured app origins.
   // Every other route keeps the configured credentialed-origin boundary.
   const corsOrigins = config.CORS_ORIGINS.split(",")
     .map((o) => o.trim())
@@ -391,9 +391,17 @@ export async function buildApp(): Promise<App> {
       const requestedMethod = req.headers["access-control-request-method"]?.toUpperCase();
       const method = req.method === "OPTIONS" ? requestedMethod : req.method;
       if (path.startsWith("/api/public/") && (method === "GET" || method === "HEAD")) {
+        // H17/H60 public projections may depend on the viewer's gallery audience.
+        const origin = req.headers.origin;
+        const viewerDependent =
+          /^\/api\/public\/projects(?:\/|$)/.test(path) ||
+          /^\/api\/public\/challenges\/[^/]+\/winners$/.test(path);
+        const appOrigin =
+          viewerDependent &&
+          (origin === new URL(config.WEB_URL).origin || corsOrigins.includes(origin ?? ""));
         done(null, {
-          origin: "*",
-          credentials: false,
+          origin: appOrigin ? origin : "*",
+          credentials: appOrigin,
           methods: ["GET", "HEAD", "OPTIONS"],
         });
         return;

@@ -2,7 +2,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import {
   projectDraftSchema,
   projectFormSchema,
-  projectGalleryConsentSchema,
   projectGalleryQuerySchema,
 } from "@hackos/shared/projects";
 import type { FastifyInstance } from "fastify";
@@ -11,7 +10,6 @@ import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
-import { ForbiddenError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { repositoryScopeFor, requireRepositoryListAccess } from "./access.js";
 import {
@@ -25,7 +23,7 @@ import {
   saveNativeForm,
   submitNativeProject,
 } from "./native.js";
-import { canViewGallery, projectPhase, projectViewer } from "./policy.js";
+import { assertGalleryVisible, projectPhase, projectViewer } from "./policy.js";
 import { addMyProjectChallenge } from "./service.js";
 
 const params = z.object({ id: z.coerce.number().int().positive() });
@@ -194,52 +192,6 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
     (q) => nativeProject(q.userId, q.params.id),
   );
   r.get(
-    "/api/me/project-gallery-consent",
-    {
-      ...auth,
-      preHandler: requireAuth,
-      schema: {
-        summary: "Read gallery consent",
-        description:
-          "Returns explicit gallery name/photo choices independently of directory consent (#1009).",
-      },
-    },
-    async (q) => {
-      const { rows } = await pool.query(
-        `SELECT gallery_show_name AS "showName",gallery_show_photo AS "showPhoto" FROM users WHERE id=$1`,
-        [q.userId],
-      );
-      return rows[0];
-    },
-  );
-  r.put(
-    "/api/me/project-gallery-consent",
-    {
-      ...auth,
-      schema: {
-        body: projectGalleryConsentSchema,
-        summary: "Set gallery consent",
-        description:
-          "Records explicit consent for a potentially public and indexable project gallery; photos default to hidden (#1009,H53).",
-      },
-    },
-    (q) =>
-      withTransaction(async (db) => {
-        await db.query(
-          `UPDATE users SET gallery_show_name=$2,gallery_show_photo=$3,gallery_consented_at=now() WHERE id=$1`,
-          [q.userId, q.body.showName, q.body.showPhoto],
-        );
-        await audit(db, {
-          actorId: q.userId,
-          entityType: "user",
-          entityId: q.userId as number,
-          action: "gallery_consent",
-          after: q.body,
-        });
-        return q.body;
-      }),
-  );
-  r.get(
     "/api/public/projects",
     {
       ...publicRead,
@@ -247,12 +199,12 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         querystring: projectGalleryQuerySchema,
         summary: "List project gallery",
         description:
-          "Paginated project gallery honoring SQL-clock opening, audience and draft visibility on every read (#1008,#1009).",
+          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009). Project staff (PROJECTS_READ) may browse before it opens. A refusal is 403 with `details.reason` `gallery_closed` (with `details.opensAt`, null while unscheduled, and the event `details.timeZone`) or `gallery_audience` (H18).",
       },
     },
-    async (q) => {
-      if (!(await canViewGallery(pool, q.userId)))
-        throw new ForbiddenError("Gallery is closed or unavailable to this audience");
+    async (q, reply) => {
+      reply.header("Cache-Control", "no-store");
+      await assertGalleryVisible(pool, q.userId);
       const phase = await projectPhase(pool);
       const viewer = await projectViewer(pool, q.userId);
       const { page, pageSize, search, challengeId } = q.query;
@@ -286,9 +238,12 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         params,
         summary: "Read gallery project",
         description:
-          "Returns project content and consented member display through the same phase policy as the gallery (#1008,#1009).",
+          "Returns no-store project content and current consented member display through the gallery phase policy; nonmembers receive null names when sharing is disabled (#1008,#1009).",
       },
     },
-    (q) => nativeProject(q.userId, q.params.id),
+    (q, reply) => {
+      reply.header("Cache-Control", "no-store");
+      return nativeProject(q.userId, q.params.id);
+    },
   );
 }

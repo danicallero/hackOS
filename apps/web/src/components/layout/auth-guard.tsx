@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Spinner } from "@/components/common/spinner";
 import { PendingRemovalScreen } from "@/components/layout/pending-removal-screen";
+import { NetworkingOnboarding } from "@/components/profile/networking-onboarding";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
@@ -41,5 +42,5 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (me?.accountState === "removal_pending" && me.removal) {
     return <PendingRemovalScreen removal={me.removal} onRefresh={refresh} refreshError={error} />;
   }
-  return <>{children}</>;
+  return <NetworkingOnboarding>{children}</NetworkingOnboarding>;
 }

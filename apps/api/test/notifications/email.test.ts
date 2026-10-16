@@ -4,7 +4,12 @@ import { pool } from "../../src/db/pool.js";
 import { drainOutboxOnce } from "../../src/modules/notifications/dispatcher.js";
 import { notify } from "../../src/modules/notifications/service.js";
 import { createUser } from "../helpers.js";
-import { clearMailpit, getMailpitMessage, listMailpitMessages } from "./mailpit-helpers.js";
+import {
+  clearMailpit,
+  getMailpitMessage,
+  listMailpitMessages,
+  MAILPIT_BASE,
+} from "./mailpit-helpers.js";
 import {
   enqueueOutbox,
   getOutboxRow,
@@ -211,7 +216,7 @@ describe("SMTP via Mailpit (default dev provider)", () => {
 
   it("payload.recipient and payload.language override the user row (H6/H10 flows)", async () => {
     // user row says English + their primary address; payload overrides both,
-    // e.g. verifying a secondary email (H6) in the user's chosen language.
+    // for invitations sent before the recipient has selected a language.
     const userId = await createUser({ email: "primary@test.local" });
     await setUserLanguage(userId, "en");
     await enqueueOutbox(
@@ -260,9 +265,7 @@ describe("event reminder email (H28,H45,H52)", () => {
     expect(message.HTML).toContain('src="cid:event-ticket@hackos"');
     expect(message.HTML).toContain("apple-wallet-badge-es.png");
     expect(message.HTML).toContain("google-wallet-button-es.png");
-    const raw = await (
-      await fetch(`http://localhost:8025/api/v1/message/${firstMessage.ID}/raw`)
-    ).text();
+    const raw = await (await fetch(`${MAILPIT_BASE}/api/v1/message/${firstMessage.ID}/raw`)).text();
     expect(raw).toContain("Content-ID: <event-ticket@hackos>");
     expect(raw).toContain("Content-Type: image/png");
   });

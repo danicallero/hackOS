@@ -39,9 +39,3 @@ export const projectGalleryQuerySchema = z.object({
   challengeId: z.coerce.number().int().positive().optional(),
   search: z.string().trim().max(200).optional(),
 });
-export const projectGalleryConsentSchema = z
-  .object({
-    showName: z.boolean(),
-    showPhoto: z.boolean(),
-  })
-  .strict();

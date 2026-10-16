@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -9,6 +8,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
+import { ProjectListRow } from "@/components/projects/project-list-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -115,19 +115,13 @@ export default function MyProjectsPage() {
       {projects?.length === 0 && (
         <p className="text-muted-foreground">{t("myProjectsEmptyTitle")}</p>
       )}
-      <div className="space-y-6">
-        {projects?.map((project) => (
-          <SectionCard
-            key={project.id}
-            title={<Link href={`/my-project/${project.id}`}>{project.name}</Link>}
-            state={t(
-              project.submissionStatus === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft",
-            )}
-          >
-            <p className="text-sm">{project.description}</p>
-          </SectionCard>
-        ))}
-      </div>
+      {projects && projects.length > 0 && (
+        <div className="space-y-2">
+          {projects.map((project) => (
+            <ProjectListRow key={project.id} project={project} href={`/my-project/${project.id}`} />
+          ))}
+        </div>
+      )}
       <SidePanelEditor
         open={open}
         onOpenChange={(value) => !busy && setOpen(value)}

@@ -186,7 +186,7 @@ pnpm dev:web                          # web only
 pnpm build                            # build every workspace with a build script
 pnpm typecheck                        # API, web and mobile TypeScript checks
 
-pnpm lint                             # Biome, copy/i18n and page-size checks
+pnpm lint                             # Biome, copy/i18n, size and retired-runtime guards
 pnpm --filter @hackos/api test        # API integration tests
 pnpm --filter @hackos/web typecheck   # web TypeScript check
 pnpm --filter @hackos/web test        # web unit tests
@@ -218,8 +218,16 @@ fail this check; add them to `apps/api/scripts/test-integration.mjs`. Root-level
 suites belong to the fourth shard. Each shard resets and migrates its own
 `hackos_test_shard_N` database and runs files serially, then drops its database.
 Use `pnpm --filter @hackos/api test:serial test/<file>.test.ts` for focused runs.
+For isolated local services, set `TEST_DATABASE_URL`, both `TEST_VALKEY_URL` and
+`VALKEY_URL`, the `S3_*` variables, and `SMTP_HOST`/`SMTP_PORT`. Set
+`TEST_MAILPIT_URL` to that SMTP server's Mailpit HTTP origin (default
+`http://localhost:8025`): email tests clear that inbox, so never point it at a
+shared instance. Keep unrelated dev-server variables such as `WEB_URL` unset
+when running tests that assert the default local origins.
 Valkey test database indices must stay within its default 0–15 range. The
-rate-limit TTL regression uses DB 4, separate from identity's DB 11, so other
+project suites use DB 3 so concurrent root-level tests cannot erase their SSE
+counters or capability cache. The rate-limit TTL regression uses DB 4, separate
+from identity's DB 11, so other
 suites' `FLUSHDB` calls cannot remove its counter mid-window (#1035).
 
 Open every pull request as a draft. Feature PRs may target protected `staging`

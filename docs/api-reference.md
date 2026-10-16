@@ -69,8 +69,8 @@ other module's exported function instead), and, if it does background work, a
 Better Auth session lifecycle (`/api/auth/*`, pass-through, exempt from the
 route-policy ledger by design), the caller's own profile (`GET/PATCH
 /api/me`), authenticated password change (`POST /api/auth/change-password`),
-staff user management, secondary-email verification (H6),
-invitations including reusable enterprise and account links (H9/H10/H43).
+staff user management, and invitations including reusable enterprise and
+account links (H9/H10/H43).
 Changing a password verifies the current credential in Better Auth, then revokes
 all existing sessions and creates a replacement for the browser making the
 request; the password and its hash are never included in audit data. Email
@@ -214,8 +214,8 @@ A "project" is a `repos` row; "team" is the set of `submissions (repo_id,
 user_id)` rows (`invited`/`active`/`declined`) — there is no `teams` table.
 Challenge intent is stored in `project_challenges`; submitted answers are
 immutable snapshots tied to a `project_form_versions` row. Public gallery,
-consent, uploads and winner publication are under `/api/public/projects`,
-`/api/me/project-gallery-consent` and `/api/challenges/:id/winners/*`. Full
+uploads and winner publication are under `/api/public/projects` and
+`/api/challenges/:id/winners/*`. Full
 detail: [`projects.md`](./projects.md).
 
 ### diary (#935)

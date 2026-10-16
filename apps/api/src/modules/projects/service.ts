@@ -428,13 +428,25 @@ export interface UpdateRepoPatch {
 export async function updateMyProject(userId: number, id: number, patch: UpdateRepoPatch) {
   return updateRepo(userId, id, patch, true);
 }
-export async function inviteProjectMember(actorId: number, id: number, email: string) {
+export async function inviteProjectMember(
+  actorId: number,
+  id: number,
+  invitee: { email?: string; userId?: number },
+) {
   return withTransaction(async (db) => {
     await nativeEditable(db, actorId, id);
-    const { rows } = await db.query(
-      `SELECT id FROM users WHERE lower(email)=lower($1) AND account_state='active' AND anonymized_at IS NULL`,
-      [email],
-    );
+    // H19: a user id is only accepted for the inviter's own diary contacts, so
+    // ids cannot be used to reach people the inviter never met.
+    const { rows } =
+      invitee.userId !== undefined
+        ? await db.query(
+            `SELECT u.id FROM users u JOIN diary_entries d ON d.target_user_id=u.id AND d.owner_id=$2 WHERE u.id=$1 AND u.account_state='active' AND u.anonymized_at IS NULL`,
+            [invitee.userId, actorId],
+          )
+        : await db.query(
+            `SELECT id FROM users WHERE lower(email)=lower($1) AND account_state='active' AND anonymized_at IS NULL`,
+            [invitee.email],
+          );
     if (!rows[0]) throw new NotFoundError("Account not found");
     const userId = rows[0].id;
     await assertFixtureSubjectScope(db, actorId, userId);
@@ -471,7 +483,7 @@ export async function inviteProjectMember(actorId: number, id: number, email: st
 export async function myPendingInvites(userId: number) {
   return (
     await pool.query(
-      `SELECT r.id,r.id AS "projectId",r.name,s.invited_by AS "invitedBy" FROM submissions s JOIN repos r ON r.id=s.repo_id WHERE s.user_id=$1 AND s.status='invited' ORDER BY s.created_at DESC`,
+      `SELECT r.id,r.id AS "projectId",r.name,NULLIF(trim(concat_ws(' ',inviter.name,inviter.surname)), '') AS "invitedBy" FROM submissions s JOIN repos r ON r.id=s.repo_id LEFT JOIN users inviter ON inviter.id=s.invited_by AND inviter.account_state='active' AND inviter.anonymized_at IS NULL WHERE s.user_id=$1 AND s.status='invited' ORDER BY s.created_at DESC`,
       [userId],
     )
   ).rows;

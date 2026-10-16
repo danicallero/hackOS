@@ -1,3 +1,4 @@
+import { projectDescriptionField } from "@hackos/shared/forms";
 import type { ProjectForm } from "@hackos/shared/projects";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -8,6 +9,11 @@ import { visibleWinnerRows } from "../challenges/winner-publication.js";
 import { hasEventAccess } from "../identity/role.js";
 import { assertProjectWindow, canViewProject, projectPhase } from "./policy.js";
 
+/** File answers are one key; photo-list answers (H16) are several. */
+function responseFileKeys(value: unknown): string[] {
+  if (typeof value === "string") return value ? [value] : [];
+  return Array.isArray(value) ? value.filter((key) => typeof key === "string") : [];
+}
 export async function nativeMember(db: Queryable, userId: number, id: number) {
   const result = await db.query(
     `SELECT 1 FROM submissions s JOIN users u ON u.id=s.user_id JOIN repos r ON r.id=s.repo_id AND r.is_test_account=u.is_test_account WHERE repo_id=$1 AND user_id=$2 AND status='active' AND u.account_state='active' AND u.anonymized_at IS NULL`,
@@ -39,6 +45,13 @@ export async function saveNativeForm(actorId: number, form: ProjectForm) {
       `INSERT INTO project_form_versions(template,sections,created_by) VALUES($1,$2,$3) RETURNING id AS version,template,sections`,
       [JSON.stringify(form.template), JSON.stringify(form.sections), actorId],
     );
+    // H16: a field newly chosen as the description takes over projects that already answered it.
+    const descriptionField = projectDescriptionField(form.template);
+    if (descriptionField)
+      await db.query(
+        `UPDATE repos SET description=btrim(responses->>$1) WHERE jsonb_typeof(responses->$1)='string' AND btrim(responses->>$1)<>'' AND description IS DISTINCT FROM btrim(responses->>$1)`,
+        [descriptionField.key],
+      );
     await audit(db, {
       actorId,
       entityType: "project_form",
@@ -64,9 +77,12 @@ export async function saveNativeDraft(
     if (!before) throw new NotFoundError("Project not found");
     if (before.draft_revision !== revision)
       throw new ConflictError("A newer project draft exists", { revision: before.draft_revision });
+    // H16: the description field's answer is the project's description everywhere.
+    const descriptionField = projectDescriptionField((await nativeForm(db))?.template ?? []);
+    const description = descriptionField ? responses[descriptionField.key] : undefined;
     const { rows } = await db.query(
-      `UPDATE repos SET responses=$2,draft_revision=draft_revision+1 WHERE id=$1 RETURNING responses,draft_revision AS revision`,
-      [id, JSON.stringify(responses)],
+      `UPDATE repos SET responses=$2,draft_revision=draft_revision+1,description=COALESCE($3,description) WHERE id=$1 RETURNING responses,draft_revision AS revision`,
+      [id, JSON.stringify(responses), typeof description === "string" ? description.trim() : null],
     );
     await audit(db, {
       actorId: userId,
@@ -142,14 +158,17 @@ export async function submitNativeProject(userId: number, id: number) {
     );
     if (rows[0].maximum && rows[0].count > rows[0].maximum && !project.team_size_exception)
       throw new BadRequestError("Project exceeds maximum team size");
-    for (const field of form.template)
-      if (field.kind === "file" && project.responses[field.key]) {
-        const owned = await db.query(
-          `SELECT 1 FROM project_files WHERE repo_id=$1 AND object_key=$2 AND field_key=$3`,
-          [id, project.responses[field.key], field.key],
-        );
-        if (!owned.rowCount) throw new BadRequestError("File does not belong to this project");
-      }
+    for (const field of form.template) {
+      if (field.kind !== "file" && field.kind !== "images") continue;
+      const keys = responseFileKeys(project.responses[field.key]);
+      if (!keys.length) continue;
+      const owned = await db.query(
+        `SELECT count(DISTINCT object_key)::int AS count FROM project_files WHERE repo_id=$1 AND object_key=ANY($2::text[]) AND field_key=$3`,
+        [id, keys, field.key],
+      );
+      if (owned.rows[0].count !== new Set(keys).size)
+        throw new BadRequestError("File does not belong to this project");
+    }
     await db.query(
       `UPDATE repos SET submission_status='submitted',submitted_at=now(),submitted_via='native',locked_at=now(),lock_reason='native_submission' WHERE id=$1`,
       [id],
@@ -184,7 +203,7 @@ export async function nativeProjects(userId: number | null, ids: number[], staff
       [ids, userId],
     ),
     pool.query(
-      `SELECT s.repo_id,s.user_id AS "userId",u.name,u.surname,s.status,u.gallery_show_name,u.gallery_show_photo,u.gallery_consented_at,u.photo_key FROM submissions s JOIN users u ON u.id=s.user_id WHERE s.repo_id=ANY($1::int[]) AND u.account_state='active' AND u.anonymized_at IS NULL ORDER BY s.created_at`,
+      `SELECT s.repo_id,s.user_id AS "userId",u.name,u.surname,s.status,u.gallery_show_name,COALESCE(p.directory_visible AND p.show_photo AND p.consented_at IS NOT NULL,false) AS "photoShared",u.photo_key FROM submissions s JOIN users u ON u.id=s.user_id LEFT JOIN user_public_profiles p ON p.user_id=u.id WHERE s.repo_id=ANY($1::int[]) AND u.account_state='active' AND u.anonymized_at IS NULL ORDER BY s.created_at`,
       [ids],
     ),
     pool.query(
@@ -225,10 +244,27 @@ export async function nativeProjects(userId: number | null, ids: number[], staff
       submitted && snapshotTemplate
         ? { version: snapshotFormVersion, template: snapshotTemplate, sections: snapshotSections }
         : currentForm;
-    const responses = content.responses ?? project.responses;
+    const answers = content.responses ?? project.responses;
+    // H16: projects described before the field existed (or imported) show that
+    // text in their description field instead of an empty answer.
+    const descriptionField = projectDescriptionField(form?.template ?? []);
+    const currentDescription = content.description ?? project.description;
+    const responses =
+      descriptionField &&
+      !(
+        typeof answers?.[descriptionField.key] === "string" && answers[descriptionField.key].trim()
+      ) &&
+      currentDescription
+        ? { ...answers, [descriptionField.key]: currentDescription }
+        : answers;
+    const answer = descriptionField ? responses?.[descriptionField.key] : undefined;
     return {
       ...project,
       ...content,
+      // H16: the description field's answer is the description, even if the
+      // stored column was written before the field existed.
+      ...(typeof answer === "string" && answer.trim() ? { description: answer.trim() } : {}),
+      responses,
       formVersion: form?.version ?? null,
       template: form?.template ?? [],
       sections: form?.sections ?? [],
@@ -250,11 +286,12 @@ export async function nativeProjects(userId: number | null, ids: number[], staff
         .filter((m) => m.repo_id === id && (member || m.status === "active"))
         .map((m) => ({
           userId: m.userId,
-          name: m.name,
+          name: member || m.gallery_show_name ? m.name : null,
           surname: member ? m.surname : null,
           status: m.status,
           photoUrl:
-            m.gallery_show_photo && m.gallery_consented_at && m.photo_key
+            // H18: a member's photo follows their public profile's photo setting.
+            m.photoShared && m.photo_key
               ? `/api/public/projects/${id}/members/${m.userId}/photo`
               : null,
         })),
@@ -266,7 +303,11 @@ export async function nativeProjects(userId: number | null, ids: number[], staff
         }),
       presentations: challenges.rows.filter((c) => c.repo_id === id && c.status !== null),
       files: files.rows
-        .filter((f) => f.repo_id === id && Object.values(responses).includes(f.object_key))
+        .filter(
+          (f) =>
+            f.repo_id === id &&
+            Object.values(responses).flatMap(responseFileKeys).includes(f.object_key),
+        )
         .map((f) => ({
           objectKey: f.object_key,
           fieldKey: f.field_key,

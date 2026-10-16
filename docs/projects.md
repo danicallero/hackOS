@@ -11,8 +11,16 @@ challenge selections and immutable form version.
 
 Applications and projects share `packages/shared/src/forms.ts`: trilingual
 `TemplateField` definitions, sections and validation. URL questions are text
-fields with `validation.text_condition="url"`. Images are file fields with
-image MIME types. `GET/PUT /api/projects/form` reads or versions the definition;
+fields with `validation.text_condition="url"`. A single image is a file field
+with image MIME types; a photo list is an `images` field (project form only,
+up to `MAX_IMAGES_PER_FIELD` keys). One text field is the project description
+(`project_description: true`, else a text field keyed `description`; see
+`projectDescriptionField`): saving a draft copies its answer into
+`repos.description`, and a project whose answer is empty shows its existing
+description in that field, so lists, the gallery and cards all read one value.
+Imported descriptions with flattened `## Heading` sections are normalized for
+display and summarized as plain clamped text in lists
+(`apps/web/src/lib/project-text.ts`). `GET/PUT /api/projects/form` reads or versions the definition;
 writes require project editing and record a transactional audit.
 
 `PUT /api/me/projects/:id/draft` accepts `{responses,revision}`. The project row
@@ -38,6 +46,11 @@ compares boundaries to `now()`; API host time does not authorize operations.
 retain their team view; public/nonmember content obeys draft visibility and
 gallery audience. Public responses and authorized file streams use no-store
 so a time or consent change cannot retain a privileged cached projection.
+The web gallery refreshes its server projection on public invalidations and
+every 15 seconds for SQL-clock phase boundaries. Consent changes emit only a
+payload-free public invalidation. The configured web origin may make credentialed
+public reads for attendee-only galleries and winners; external catalogue origins
+retain anonymous wildcard CORS.
 
 ## Gallery and files
 
@@ -46,12 +59,15 @@ returns `{items,total,page,pageSize}`. Detail is `/api/public/projects/:id`.
 The same paths accept optional authenticated sessions for attendee galleries.
 Batch projections use a fixed number of queries across a page.
 
-Gallery consent is independent of badge-directory consent:
-`GET/PUT /api/me/project-gallery-consent` carries `{showName,showPhoto}`.
-Names default to visible; photos default to hidden. Opt-in explicitly covers
-potential public indexing. Team reads retain private member names and invitation
-statuses; nonmembers receive only active, consented display information.
-Photo reads recheck current consent and project visibility on each request.
+A member's photo on project data follows their public profile (#934): it is
+shown exactly when the profile is visible (`directory_visible` with consent)
+and shares its photo (`show_photo`); there is no separate gallery photo
+consent. Names default to visible (`users.gallery_show_name`); nonmember list
+and detail projections return a null name when it is off, including after
+submission; active teammates retain their private roster names. Team reads
+retain private member names and invitation statuses; nonmembers receive only
+active display information. Photo reads recheck the public profile and project
+visibility on each request.
 
 Multipart `POST /api/me/projects/:id/uploads?fieldKey=...` sniffs PNG/JPEG/WebP
 or PDF bytes, enforces field type/size limits and writes an idempotent project
@@ -69,9 +85,27 @@ records one transition and compacts positions. H30 membership derives solely fro
 active native memberships, retaining ordered advisory locks across teams sharing
 a member. `project_eligibility` evaluates submitted status, explicit exclusion
 and configured team-size limits even when event settings have no singleton yet.
-Migration `0705_native_projects.sql` is the single migration that introduces the
-native model; earlier applied migrations are immutable and still mention retired
-integration vocabulary.
+Migration `0705_native_projects.sql` introduces the native model. Applied files
+in `apps/api/db/migrations/` are checksum-enforced and immutable, including the
+retirement migration itself; `apps/api/db/migration-history/` preserves retired
+development history and is never applied. Both directories may mention retired
+integration vocabulary and must not be rewritten to erase that history (#1005).
+
+The existing `pnpm check:retired-auth` lint guard also rejects retired project
+integration names in API source/scripts/tests, web source, mobile source/tests,
+shared source/locales and root scripts. It checks vocabulary case-insensitively
+and includes a regression suite that introduces forbidden tokens. SQL history,
+documentation retirement notes, generated output and the guard's own definition
+and tests are outside this runtime check. Ordinary scanner or Live Activity
+reconciliation remains supported.
+
+Until #1016 removes secondary email, only the exact existing `en`, `es` and `gl`
+values at `web.json:devpostEmailPlaceholder`, `web.json:willUseToMatchDevpost`
+and `email.json:mail.auth.verifySecondaryEmail.body` are temporarily exempt.
+The guard pins each path/key/value digest, so another key, file or edited value
+cannot reuse the exception. Remove these nine exceptions and their dedicated
+test when #1016 lands; no project import capability or compatibility export
+remains.
 
 ## Teams, invitations and challenge intent
 
@@ -79,7 +113,8 @@ integration vocabulary.
 open) and `GET /api/me/projects` returns `{projects,canCreate}`. Members invite
 by email with `POST /api/me/projects/:id/invites`; the invitee answers with
 `POST /api/me/projects/:id/invites/accept|decline` and sees pending invitations
-at `GET /api/me/projects/invites`. Accepting locks the project and enforces
+at `GET /api/me/projects/invites`; `invitedBy` is the active inviter’s display
+name (or null), never an internal user ID. Accepting locks the project and enforces
 `projectMaxTeamSize`. `PUT|DELETE /api/me/projects/:id/challenges/:challengeId`
 edit intended challenges; mandatory challenges are added automatically and
 cannot be withdrawn (H17). `GET /api/projects/estimates` gives staff and

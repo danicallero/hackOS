@@ -78,7 +78,6 @@ const CAPABILITY_DESCRIPTION_KEYS: Partial<Record<string, MessageKey>> = {
   "applications:edit-response": "capabilityDescriptionApplicationsEditResponse",
   "statistics:manage": "capabilityDescriptionStatisticsManage",
   "projects:read": "capabilityDescriptionProjectsRead",
-  "projects:import": "capabilityDescriptionProjectsImport",
   "projects:edit": "capabilityDescriptionProjectsEdit",
   "accredit:scan": "capabilityDescriptionAccreditScan",
   "presence:scan": "capabilityDescriptionPresenceScan",

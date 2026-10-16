@@ -29,8 +29,6 @@ export const CAPABILITIES = {
 
   // native projects (H16-H17, H21)
   PROJECTS_READ: "projects:read",
-  // Retired (no API route uses it); kept only for staging web/mobile source until #1037/#1038 merge.
-  PROJECTS_IMPORT: "projects:import",
   PROJECTS_EDIT: "projects:edit",
 
   // accreditation & logistics (H22-H26)
@@ -112,7 +110,6 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "applications:edit-response": "Edit any applicant's form responses",
   "statistics:manage": "Configure who can view each statistics panel",
   "projects:read": "Read native projects",
-  "projects:import": "Retired; no longer grants anything",
   "projects:edit": "Edit native projects",
   "accredit:scan": "Check participants in and assign or rotate badges",
   "presence:scan": "Scan door entry and exit",

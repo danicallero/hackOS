@@ -175,7 +175,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         }),
         summary: "Search project member candidates",
         description:
-          "Returns minimal searchable account identity fields for project editors and native import operators resolving unmatched people (H17, H21).",
+          "Returns minimal searchable account identity fields for project editors adding native team members (H21).",
         response: {
           200: z.object({
             users: z.array(
@@ -402,10 +402,10 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         body: inviteProjectMemberBodySchema,
         summary: "Invite a teammate to my project (H19/H20).",
         description:
-          "Only an active member may invite; the invitee must have an account and be an admitted participant, and must not already be an active member of this project. Creates a pending invite (submissions.status='invited') and notifies the invitee; idempotent for a repeat invite to the same person. 403 outside the hacking window.",
+          "Only an active member may invite; the invitee must have an account and be an admitted participant, and must not already be an active member of this project. Send either `email` or `userId`; a `userId` must belong to one of the caller's event-diary contacts (people whose badge they scanned) and otherwise answers 404 like an unknown email. Creates a pending invite (submissions.status='invited') and notifies the invitee; idempotent for a repeat invite to the same person. 403 outside the hacking window.",
       },
     },
-    async (req) => inviteProjectMember(req.userId as number, req.params.id, req.body.email),
+    async (req) => inviteProjectMember(req.userId as number, req.params.id, req.body),
   );
 
   r.post(
@@ -432,7 +432,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: {
         summary: "My pending project invites (H19/H20).",
         description:
-          "Lists project invites addressed to the caller that haven't been accepted or declined yet, newest first.",
+          "Lists pending project invites addressed to the caller, newest first, with invitedBy as the active inviter's display name or null rather than an internal user ID (H19).",
       },
     },
     async (req) => ({ invites: await myPendingInvites(req.userId as number) }),

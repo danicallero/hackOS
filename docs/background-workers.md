@@ -92,7 +92,8 @@ enqueueAuthEmail()/notify()                 dispatchOutboxOnce():
 ```
 
 `payload.recipient` overrides `users.email` in the email adapter
-(`channels/email.ts`) — this is the mechanism M5's secondary-email fix relies on.
+(`channels/email.ts`), which lets invitation messages reach an address before
+it belongs to a user row.
 
 ## Queue structure, retries, concurrency & the dead-letter model
 
@@ -154,7 +155,6 @@ The table below maps module events to their execution path:
 | **M1 name-lock check** | **Synchronous** in `PATCH /api/me` | A read-guard, no job |
 | **M5 primary-email change** | **Synchronous** in the request | One audited transaction |
 | **H54 account anonymize / delete** | **Two-phase request + retry worker** | Commits `removal_pending` and revokes access first; provider/object cleanup is retried, then the final user deletion or anonymous-subject migration is one transaction. Pending-exit rows are finalized by a valid current exit, the event-end automatic exit, or expired H24 certainty state. Failed jobs expire from the queue after 24 hours and remain operator-retriable from the pending row. |
-| **M5 secondary-email verification email** | **Async** | Enqueued to `notification_outbox`; delivered by the `notifications-outbox` dispatcher |
 | **Decision / invite / reset emails** | **Async** | Same outbox → dispatcher path |
 | **Spot-confirmation expiry** (H15) | **Async** | `applications-expirer` tick every 60 s |
 | **Scheduled announcement reveals** | **Async** | `announcements-publisher` tick every 15 s |

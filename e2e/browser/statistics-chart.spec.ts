@@ -5,6 +5,9 @@ import { expect, shellUser, test } from "./fixtures";
 test("statistics legends show counts and follow the active theme", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     const json =
       path === "/api/me"

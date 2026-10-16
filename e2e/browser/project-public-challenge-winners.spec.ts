@@ -9,6 +9,9 @@ test("public challenge page shows published winners only after reveal", async ({
     localStorage.setItem("hackos.cookie-notice.dismissed", "true");
   });
   await page.route("**/api/**", (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/public/challenges/1/winners")
       return route.fulfill({

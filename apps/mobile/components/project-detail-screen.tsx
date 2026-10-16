@@ -1,7 +1,10 @@
-import type { TemplateField } from "@hackos/shared/forms";
+import { MAX_IMAGES_PER_FIELD, type TemplateField } from "@hackos/shared/forms";
 import * as DocumentPicker from "expo-document-picker";
+import { File } from "expo-file-system";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DynamicForm } from "@/components/dynamic-form";
@@ -13,7 +16,14 @@ import { SymbolView } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
 import { formatEventTime } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
-import { type NativeProject, projectMutation } from "@/lib/projects";
+import { createIdempotencyKey } from "@/lib/idempotency-key";
+import {
+  type NativeProject,
+  type ProjectFile,
+  projectMutation,
+  settleProjectDrafts,
+  trackProjectTask,
+} from "@/lib/projects";
 import { useProjectDraft } from "@/lib/use-project-draft";
 import { colors } from "@/theme/colors";
 
@@ -36,6 +46,8 @@ export function ProjectDetailScreen() {
     setProject(null);
     setError(null);
     try {
+      // H20: saves and uploads from a previous visit land before the reload.
+      if (!gallery) await settleProjectDrafts(Number(id));
       setProject(
         await apiFetch<NativeProject>(
           `${gallery ? "/api/public/projects" : "/api/me/projects"}/${id}`,
@@ -61,7 +73,15 @@ export function ProjectDetailScreen() {
   if (error) {
     // 403/404 are final for this audience; retrying cannot change the answer.
     const final = error instanceof ApiError && (error.status === 403 || error.status === 404);
-    return <RequestFeedback error={error} onRetry={final ? undefined : () => void load()} />;
+    // Inside a ScrollView so the native header's inset keeps it below the bar.
+    return (
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{ padding: 16 }}
+      >
+        <RequestFeedback error={error} onRetry={final ? undefined : () => void load()} />
+      </ScrollView>
+    );
   }
   if (!project) return <RequestFeedback loading />;
   return gallery ? (
@@ -114,7 +134,7 @@ export function ProjectReadView({ project }: { project: NativeProject }) {
                 title={challenge.title}
                 onPress={() =>
                   router.push({
-                    pathname: "/projects/gallery",
+                    pathname: "/projects/challenge",
                     params: { challengeId: String(challenge.id) },
                   })
                 }
@@ -158,6 +178,75 @@ function ProjectMembers({ project }: { project: NativeProject }) {
   );
 }
 
+/** Inset-group action row with a leading plus, as Contacts' "add phone". */
+function AddRow({
+  label,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        backgroundColor: pressed ? colors.elevatedSurface : "transparent",
+        flexDirection: "row",
+        gap: 12,
+        minHeight: 50,
+        opacity: disabled ? 0.5 : 1,
+        paddingHorizontal: 16,
+      })}
+    >
+      <SymbolView name="plus.circle.fill" tintColor={colors.accent} size={22} accessible={false} />
+      <Text style={{ color: colors.accent, flex: 1, fontSize: 17 }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const PHOTO_EDGE = 2048;
+
+/** H16: system photo picker; every photo leaves the device as a bounded JPEG. */
+async function pickPhotos(limit: number) {
+  const picked = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ["images"],
+    allowsMultipleSelection: limit > 1,
+    selectionLimit: limit,
+    orderedSelection: true,
+    quality: 1,
+  });
+  if (picked.canceled) return [];
+  const parts: { uri: string; name: string }[] = [];
+  for (const [index, asset] of picked.assets.slice(0, limit).entries()) {
+    let context = ImageManipulator.manipulate(asset.uri);
+    if (Math.max(asset.width, asset.height) > PHOTO_EDGE)
+      context = context.resize(
+        asset.width >= asset.height ? { width: PHOTO_EDGE } : { height: PHOTO_EDGE },
+      );
+    const image = await context.renderAsync();
+    const saved = await image.saveAsync({ compress: 0.8, format: SaveFormat.JPEG });
+    const base = (asset.fileName ?? `photo-${index + 1}`).replace(/\.[^.]+$/, "");
+    parts.push({ uri: saved.uri, name: `${base}.jpg` });
+  }
+  return parts;
+}
+
+async function pickDocument(field: TemplateField) {
+  const picked = await DocumentPicker.getDocumentAsync({
+    type: field.allowed_file_types?.length ? field.allowed_file_types : "*/*",
+    copyToCacheDirectory: true,
+  });
+  if (picked.canceled || !picked.assets[0]) return [];
+  return [{ uri: picked.assets[0].uri, name: picked.assets[0].name }];
+}
+
 export function ProjectEditor({
   project,
   reload,
@@ -171,32 +260,41 @@ export function ProjectEditor({
   const draft = useProjectDraft(project);
   const navigation = useNavigation();
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  const [_email, _setEmail] = useState("");
   const [name, setName] = useState(project.name);
+  const savedName = useRef(project.name);
   const [files, setFiles] = useState(project.files ?? []);
+  const saveName = useCallback(
+    async (next: string) => {
+      const trimmed = next.trim();
+      if (!trimmed || trimmed === savedName.current) return;
+      await projectMutation(`/api/me/projects/${project.id}`, "PATCH", { name: trimmed });
+      savedName.current = trimmed;
+    },
+    [project.id],
+  );
+  // H20: leaving never waits or blocks; saves and uploads finish in the
+  // background and the next open of this project waits for them.
+  const latest = useRef({ draft, name, saveName });
+  latest.current = { draft, name, saveName };
   useEffect(
     () =>
-      navigation.addListener("beforeRemove", (event) => {
-        if (draft.state === "saved" && name === project.name) return;
-        event.preventDefault();
-        void Promise.all([
-          draft.flush(),
-          name.trim() && name !== project.name
-            ? projectMutation(`/api/me/projects/${project.id}`, "PATCH", { name: name.trim() })
-            : Promise.resolve(),
-        ])
-          .then(() => navigation.dispatch(event.data.action))
-          .catch((cause) => setError(cause as Error));
+      navigation.addListener("beforeRemove", () => {
+        const current = latest.current;
+        void trackProjectTask(
+          project.id,
+          Promise.allSettled([current.draft.flush(), current.saveName(current.name)]),
+        );
       }),
-    [navigation, draft, name, project],
+    [navigation, project.id],
   );
   const [chosen, setChosen] = useState(project.challenges);
   const [members, setMembers] = useState(project.members);
   const canEdit = project.canEdit === true;
   const blocked = busy || !canEdit || draft.state === "conflict";
   const submitted = project.submissionStatus === "submitted";
-  // The picker is a separate screen: refresh the chosen challenges when returning to it.
+  // The challenge and invite sheets change the project: refresh when returning.
   const refreshTeam = useCallback(() => {
     void apiFetch<NativeProject>(`/api/me/projects/${project.id}`)
       .then((fresh) => {
@@ -211,8 +309,7 @@ export function ProjectEditor({
     setError(null);
     try {
       await draft.flush();
-      if (name.trim() && name !== project.name)
-        await projectMutation(`/api/me/projects/${project.id}`, "PATCH", { name: name.trim() });
+      await saveName(name);
       await action();
       if (refresh) await reload();
     } catch (cause) {
@@ -222,36 +319,53 @@ export function ProjectEditor({
     }
   }
   async function upload(field: TemplateField) {
-    await run(async () => {
-      const picked = await DocumentPicker.getDocumentAsync({
-        type: field.allowed_file_types?.length ? field.allowed_file_types : "*/*",
-        copyToCacheDirectory: true,
-      });
-      if (picked.canceled) return;
-      const file = picked.assets[0];
-      if (!file) return;
-      if (file.size && field.max_file_size_mb && file.size > field.max_file_size_mb * 1024 * 1024)
-        throw new Error(t("projectTooLarge"));
-      const body = new FormData();
-      body.append("file", {
-        uri: file.uri,
-        name: file.name,
-        type: file.mimeType ?? "application/octet-stream",
-      } as unknown as Blob);
-      let result: NonNullable<NativeProject["files"]>[number];
-      try {
-        result = await apiFetch<NonNullable<NativeProject["files"]>[number]>(
-          `/api/me/projects/${project.id}/uploads?fieldKey=${encodeURIComponent(field.key)}`,
-          { method: "POST", body },
-        );
-      } catch (cause) {
-        if (cause instanceof ApiError && cause.status === 413)
-          throw new Error(t("projectTooLarge"));
-        throw cause;
-      }
-      setFiles((current) => [...current, result]);
-      draft.change(field.key, result.objectKey);
-    }, false);
+    setError(null);
+    try {
+      const current = draft.responses[field.key];
+      const parts =
+        field.kind === "images"
+          ? await pickPhotos(MAX_IMAGES_PER_FIELD - (Array.isArray(current) ? current.length : 0))
+          : await pickDocument(field);
+      if (!parts.length) return;
+      setUploading(field.key);
+      const limit = (field.max_file_size_mb ?? 5) * 1024 * 1024;
+      await trackProjectTask(
+        project.id,
+        (async () => {
+          for (const part of parts) {
+            const file = new File(part.uri);
+            if (file.size && file.size > limit) throw new Error(t("projectTooLarge"));
+            const body = new FormData();
+            // H16/H20: Expo fetch serializes File bytes; legacy React Native uri parts are unsupported.
+            body.append("file", file, part.name);
+            let result: ProjectFile;
+            try {
+              result = await apiFetch<ProjectFile>(
+                `/api/me/projects/${project.id}/uploads?fieldKey=${encodeURIComponent(field.key)}`,
+                // One key per file: several photos share the same path and empty body signature.
+                { method: "POST", body, headers: { "Idempotency-Key": createIdempotencyKey() } },
+              );
+            } catch (cause) {
+              if (cause instanceof ApiError && cause.status === 413)
+                throw new Error(t("projectTooLarge"));
+              throw cause;
+            }
+            setFiles((existing) => [...existing, result]);
+            // Saved even if the editor has closed meanwhile (see useProjectDraft).
+            draft.change(
+              field.key,
+              field.kind === "images"
+                ? (answer: unknown) => [...(Array.isArray(answer) ? answer : []), result.objectKey]
+                : result.objectKey,
+            );
+          }
+        })(),
+      );
+    } catch (cause) {
+      setError(cause as Error);
+    } finally {
+      setUploading(null);
+    }
   }
   const deadline = project.submissionsCloseAt
     ? formatEventTime(project.submissionsCloseAt, language, {
@@ -259,13 +373,15 @@ export function ProjectEditor({
         timeStyle: "short",
       })
     : null;
-  const saveCaption = t(
-    draft.state === "saved"
-      ? "projectSaved"
-      : draft.state === "saving"
-        ? "projectSaving"
-        : "projectUnsaved",
-  );
+  const saveCaption = !canEdit
+    ? t("projectLocked")
+    : t(
+        draft.state === "saved"
+          ? "projectSaved"
+          : draft.state === "saving"
+            ? "projectSaving"
+            : "projectUnsaved",
+      );
   return (
     <>
       <ScrollView
@@ -275,25 +391,15 @@ export function ProjectEditor({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 96 + insets.bottom }}
       >
-        <Section footer={!canEdit ? t("projectLocked") : saveCaption}>
-          <InfoRow
-            icon={submitted ? "checkmark.circle.fill" : "pencil.circle"}
-            label={t("projectStatus")}
-            value={t(submitted ? "projectSubmitted" : "projectDraft")}
-          />
-          {deadline ? (
-            <>
-              <Separator />
-              <InfoRow icon="clock" label={t("projectDeadline")} value={deadline} />
-            </>
-          ) : null}
-        </Section>
-        <Section>
+        <Section
+          footer={deadline ? `${saveCaption} · ${t("projectDeadline")}: ${deadline}` : saveCaption}
+        >
           <FieldRow label={t("projectName")}>
             <TextInput
               accessibilityLabel={t("projectName")}
               value={name}
               onChangeText={setName}
+              onEndEditing={() => void saveName(name).catch((cause) => setError(cause as Error))}
               editable={!blocked}
               returnKeyType="done"
               style={{ color: colors.label, fontSize: 17, minHeight: 28, padding: 0 }}
@@ -304,8 +410,9 @@ export function ProjectEditor({
           template={project.template}
           sections={project.sections}
           responses={draft.responses}
-          disabled={blocked}
+          disabled={blocked || uploading !== null}
           files={files}
+          uploading={uploading}
           onChange={draft.change}
           onUpload={(field) => void upload(field)}
         />
@@ -317,7 +424,7 @@ export function ProjectEditor({
                 value={challenge.mandatory ? t("projectRequired") : undefined}
                 onPress={() =>
                   router.push({
-                    pathname: "/projects/gallery",
+                    pathname: "/projects/challenge",
                     params: { challengeId: String(challenge.id) },
                   })
                 }
@@ -325,78 +432,25 @@ export function ProjectEditor({
               <Separator />
             </View>
           ))}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("projectAddChallenge")}
+          <AddRow
+            label={t("projectAddChallenge")}
             disabled={!canEdit}
             onPress={() =>
               router.push({ pathname: "/projects/challenges", params: { id: String(project.id) } })
             }
-            style={{
-              alignItems: "center",
-              flexDirection: "row",
-              gap: 12,
-              minHeight: 50,
-              opacity: canEdit ? 1 : 0.5,
-              paddingHorizontal: 16,
-            }}
-          >
-            <SymbolView
-              name="plus.circle.fill"
-              tintColor={colors.accent}
-              size={22}
-              accessible={false}
-            />
-            <Text style={{ color: colors.accent, flex: 1, fontSize: 17 }}>
-              {t("projectAddChallenge")}
-            </Text>
-          </Pressable>
+          />
         </Section>
         <Section title={t("projectTeam")}>
           <ProjectMembers project={{ ...project, members }} />
           <Separator />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("projectInvite")}
+          <AddRow
+            label={t("projectInvite")}
             disabled={!canEdit || project.canInvite === false}
             onPress={() =>
               router.push({ pathname: "/projects/invite", params: { id: String(project.id) } })
             }
-            style={{
-              justifyContent: "center",
-              minHeight: 50,
-              opacity: canEdit && project.canInvite !== false ? 1 : 0.5,
-              paddingHorizontal: 16,
-            }}
-          >
-            <Text style={{ color: colors.accent, fontSize: 17 }}>{t("projectInvite")}</Text>
-          </Pressable>
+          />
         </Section>
-        {project.presentations.length ? (
-          <Section title={t("projectQueue")}>
-            {project.presentations.map((entry, index) => (
-              <View key={entry.id}>
-                {index > 0 ? <Separator /> : null}
-                <InfoRow
-                  label={entry.title}
-                  value={t(
-                    entry.status === "waiting"
-                      ? "queueStatusWaiting"
-                      : entry.status === "called"
-                        ? "queueStatusCalled"
-                        : entry.status === "in_room"
-                          ? "queueStatusInRoom"
-                          : entry.status === "presenting"
-                            ? "queueStatusPresenting"
-                            : entry.status === "completed"
-                              ? "queueStatusCompleted"
-                              : "queueStatusDisqualified",
-                  )}
-                />
-              </View>
-            ))}
-          </Section>
-        ) : null}
         {draft.state === "conflict" ? (
           <Section footer={t("projectConflict")}>
             <ActionButton label={t("projectReload")} onPress={() => void reload()} />
@@ -423,7 +477,7 @@ export function ProjectEditor({
                   style: "destructive",
                   onPress: () =>
                     void run(async () => {
-                      await projectMutation(`/api/me/projects/${project.id}/leave`, "POST");
+                      await projectMutation(`/api/me/projects/${project.id}/leave`, "DELETE");
                       router.back();
                     }, false),
                 },
@@ -444,7 +498,7 @@ export function ProjectEditor({
         <GlassButton
           label={t(submitted ? "projectResubmit" : "projectSubmit")}
           prominent
-          disabled={blocked || !name.trim() || project.canSubmit === false}
+          disabled={blocked || uploading !== null || !name.trim() || project.canSubmit === false}
           busy={busy}
           onPress={() =>
             void run(() => projectMutation(`/api/me/projects/${project.id}/submit`, "POST"))

@@ -6,6 +6,9 @@ for (const width of [1536, 1920]) {
   test(`the application file viewer previews docking at ${width}px`, async ({ page }, info) => {
     test.skip(!["chromium", "webkit"].includes(info.project.name), "Desktop docking regression");
     await page.route("**/api/**", async (route) => {
+      if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+        return route.fallback();
+      }
       const path = new URL(route.request().url()).pathname;
       const data =
         path === "/api/me"
@@ -143,6 +146,11 @@ for (const width of [1536, 1920]) {
     await viewer.getByRole("button", { name: "Move the file viewer to the left" }).focus();
     await page.keyboard.press("Space");
     await expect(viewer).toHaveAttribute("data-file-viewer-dragging", "true");
+    // H12: wait until the keyboard sensor has measured its initial destination.
+    await expect(page.locator('div[data-file-viewer-dropzone="right"]')).toHaveAttribute(
+      "data-drop-active",
+      "true",
+    );
     await page.keyboard.press("ArrowLeft");
     await expect(slot).toHaveAttribute("data-file-viewer-preview-slot", "left");
     await expect(slot).toHaveCount(1);
@@ -159,6 +167,10 @@ for (const width of [1536, 1920]) {
     await viewer.getByRole("button", { name: "Move the file viewer to the right" }).focus();
     await page.keyboard.press("Space");
     await expect(viewer).toHaveAttribute("data-file-viewer-dragging", "true");
+    await expect(page.locator('div[data-file-viewer-dropzone="left"]')).toHaveAttribute(
+      "data-drop-active",
+      "true",
+    );
     await page.keyboard.press("ArrowRight");
     await expect(page.locator('div[data-file-viewer-dropzone="right"]')).toHaveAttribute(
       "data-drop-active",

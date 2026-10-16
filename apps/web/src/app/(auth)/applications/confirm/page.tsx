@@ -9,12 +9,13 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { QrCode } from "@/components/common/qr-code";
 import { Spinner } from "@/components/common/spinner";
 import { WalletButtons } from "@/components/common/wallet-buttons";
-import { NetworkingProfileInvite } from "@/components/profile/networking-profile-invite";
+import { NetworkingOnboarding } from "@/components/profile/networking-onboarding";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
+import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 import { isConfirmExpiredError, useTokenAction } from "../lib";
 
@@ -99,7 +100,7 @@ function ConfirmInner() {
         if (response.error) throw new Error(response.error.message);
         await refresh();
       }
-      router.push("/login");
+      router.push(withReturnPath("/login", "/schedule"));
     } catch {
       setSessionError(true);
     } finally {
@@ -172,7 +173,7 @@ function ConfirmInner() {
 
   const alreadyDone = result?.already_confirmed;
   const holderName = result?.holder_name || result?.masked_email;
-  return (
+  const confirmation = (
     <Card>
       <CardHeader className="gap-4">
         <div className="flex items-center gap-3">
@@ -234,10 +235,6 @@ function ConfirmInner() {
             />
           </div>
         )}
-        {/* The token is not a session: only the holder's own session may read the profile. */}
-        {sessionStatus === "authenticated" && me?.id === result?.user_id && (
-          <NetworkingProfileInvite />
-        )}
         <div className="flex justify-start">
           <Button
             type="button"
@@ -249,6 +246,11 @@ function ConfirmInner() {
         </div>
       </CardContent>
     </Card>
+  );
+  return sessionStatus === "authenticated" && me?.id === result?.user_id ? (
+    <NetworkingOnboarding embedded>{confirmation}</NetworkingOnboarding>
+  ) : (
+    confirmation
   );
 }
 

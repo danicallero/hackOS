@@ -32,6 +32,7 @@ export const FIELD_KINDS = [
   "university",
   "degree",
   "city",
+  "images",
 ] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
 
@@ -49,6 +50,12 @@ export const BUILDER_FIELD_KINDS = [
   "university",
   "degree",
   "city",
+] as const satisfies FieldKind[];
+
+/** H16: the project form adds photo lists, which only project storage accepts. */
+export const PROJECT_BUILDER_FIELD_KINDS = [
+  ...BUILDER_FIELD_KINDS,
+  "images",
 ] as const satisfies FieldKind[];
 
 /** Kinds that require a non-empty options array (server refine). */
@@ -85,6 +92,8 @@ export interface TemplateField {
   shareable_with_sponsors?: boolean;
   /** #935: this file is the applicant's public-profile CV; at most one per form. */
   profile_cv?: boolean;
+  /** Project form only (H16): this answer is the project's description. */
+  project_description?: boolean;
   /** Groups this field under a `FormSection.key` (H11 form builder sections). */
   section_key?: string;
   /** Ungrouped question placed after this section (H11). */

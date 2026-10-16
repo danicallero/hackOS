@@ -38,7 +38,8 @@ export function registerProjectFileRoutes(app: FastifyInstance) {
     async (q) => {
       const form = await nativeForm();
       const field = form.template.find((f: { key: string }) => f.key === q.query.fieldKey);
-      if (field?.kind !== "file") throw new BadRequestError("Not a project file field");
+      if (field?.kind !== "file" && field?.kind !== "images")
+        throw new BadRequestError("Not a project file field");
       const file = await q.file();
       if (!file) throw new BadRequestError("No file uploaded");
       const maximum = Math.min(field.max_file_size_mb ?? 5, 20) * 1024 * 1024;
@@ -48,6 +49,8 @@ export function registerProjectFileRoutes(app: FastifyInstance) {
       const photo = sniffPhoto(bytes);
       const mime = photo?.contentType ?? (isPdf(bytes) ? "application/pdf" : null);
       if (!mime) throw new BadRequestError("Unsupported file contents");
+      // H16: a photo field takes photos only, whatever its allowed types say.
+      if (field.kind === "images" && !photo) throw new BadRequestError("File type is not allowed");
       const extension = photo?.ext ?? "pdf";
       const allowed = field.allowed_file_types as string[] | undefined;
       if (
@@ -149,16 +152,16 @@ export function registerProjectFileRoutes(app: FastifyInstance) {
       ...publicRead,
       schema: {
         params: params.extend({ userId: z.coerce.number().int().positive() }),
-        summary: "Read consented gallery photo",
+        summary: "Read a project member's photo",
         description:
-          "Requires current project visibility, active membership and explicit gallery photo consent on every request (#1009).",
+          "Requires current project visibility, active membership and, on every request, a visible public profile that shares its photo (H18, #934).",
       },
     },
     async (q, reply) => {
       if (!(await canViewProject(pool, q.userId, q.params.id)))
         throw new NotFoundError("Photo not found");
       const { rows } = await pool.query(
-        `SELECT u.photo_key FROM users u JOIN submissions s ON s.user_id=u.id AND s.status='active' WHERE s.repo_id=$1 AND u.id=$2 AND u.gallery_show_photo AND u.gallery_consented_at IS NOT NULL AND u.account_state='active' AND u.anonymized_at IS NULL`,
+        `SELECT u.photo_key FROM users u JOIN submissions s ON s.user_id=u.id AND s.status='active' JOIN user_public_profiles p ON p.user_id=u.id AND p.directory_visible AND p.show_photo AND p.consented_at IS NOT NULL WHERE s.repo_id=$1 AND u.id=$2 AND u.account_state='active' AND u.anonymized_at IS NULL`,
         [q.params.id, q.params.userId],
       );
       if (!rows[0]?.photo_key) throw new NotFoundError("Photo not found");

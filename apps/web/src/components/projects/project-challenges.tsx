@@ -17,7 +17,16 @@ type Challenge = NativeProject["challenges"][number] & {
   etaMinutes?: number | null;
   assignedRoomName?: string | null;
 };
-export function ProjectChallenges({ project, staff }: { project: NativeProject; staff: boolean }) {
+export function ProjectChallenges({
+  project,
+  staff,
+  children,
+}: {
+  project: NativeProject;
+  staff: boolean;
+  /** Further challenge-related settings shown in the same section (presentation time). */
+  children?: React.ReactNode;
+}) {
   const { t, language } = useLocale();
   const [challenges, setChallenges] = useState(project.challenges);
   const [catalogue, setCatalogue] = useState<Challenge[]>([]);
@@ -72,6 +81,9 @@ export function ProjectChallenges({ project, staff }: { project: NativeProject; 
           <li className="space-y-2 py-3" key={challenge.id}>
             <div className="flex items-center justify-between gap-3">
               <span>{title(challenge)}</span>
+              {challenge.mandatory && (
+                <span className="text-muted-foreground px-3 text-sm">{t("required")}</span>
+              )}
               {editable && !challenge.mandatory && (
                 <Button
                   variant="ghost"
@@ -93,7 +105,7 @@ export function ProjectChallenges({ project, staff }: { project: NativeProject; 
         ))}
       </ul>
       {editable && (
-        <div className="mt-4 space-y-2">
+        <div className="space-y-2">
           <Label htmlFor="project-challenge">{t("addChallenge")}</Label>
           <EntityCombobox
             id="project-challenge"
@@ -101,20 +113,18 @@ export function ProjectChallenges({ project, staff }: { project: NativeProject; 
               (challenge) => !challenges.some((current) => current.id === challenge.id),
             )}
             value={selected}
-            onChange={setSelected}
+            onChange={(id) => {
+              // Choosing a challenge is the action; no separate confirm button.
+              setSelected(id);
+              if (id) void change(Number(id), false);
+            }}
             getId={(challenge) => challenge.id}
             getLabel={title}
             disabled={busy}
           />
-          <Button
-            variant="outline"
-            disabled={busy || !selected}
-            onClick={() => void change(Number(selected), false)}
-          >
-            {t("addChallenge")}
-          </Button>
         </div>
       )}
+      {children}
     </SectionCard>
   );
 }

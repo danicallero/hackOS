@@ -17,7 +17,13 @@ import {
 } from "../../lib/profile-files.js";
 import { putObject } from "../../lib/storage.js";
 import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
-import { moderationBody, moderationParams, publicProfileBody, userParams } from "./schemas.js";
+import {
+  moderationBody,
+  moderationParams,
+  ownPublicProfileBody,
+  publicProfileBody,
+  userParams,
+} from "./schemas.js";
 import {
   getDirectoryCv,
   getDirectoryEntry,
@@ -70,7 +76,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my public profile",
         description:
-          "Public profile opt-in settings shown on My profile for an event attendee, including bio, social links, `shareCv` and the CV (`cv.source`: `application` when the person's latest submitted application has a PDF in the file question marked as the profile CV or, failing that, in a file question named CV/curriculum/resume, which then wins over any upload and is read-only here; otherwise `upload`), the switches `showSurname`, `showPhoto`, `showProject` and `shareCv` that decide what scanners receive (hidden data is omitted from the response, not just from the UI), with `preview`: the card exactly as people who scan the owner would see it if visible (its `cvUrl` points at the owner's own CV route). Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown, no CV shared) (#934, #935).",
+          "Public profile opt-in settings shown on My profile for an event attendee, including bio, social links, `shareCv` and the CV (`cv.source`: `application` when the person's latest submitted application has a PDF in the file question marked as the profile CV or, failing that, in a file question named CV/curriculum/resume, which then wins over any upload and is read-only here; otherwise `upload`), the switches `showSurname`, `showPhoto`, `showProject` and `shareCv` that decide what scanners receive (hidden data is omitted from the response, not just from the UI), with `preview`: the card exactly as people who scan the owner would see it if visible (its `cvUrl` points at the owner's own CV route). `onboardingCompletedAt` records completion or an explicit opt-out independently of visibility. Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown, no CV shared) (#934, #935).",
       },
     },
     async (req) => getMyPublicProfile(req.userId as number),
@@ -81,10 +87,10 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       config: authenticated,
       preHandler: [requireAuth, idempotencyGuard],
       schema: {
-        body: publicProfileBody,
+        body: ownPublicProfileBody,
         summary: "Update my public profile",
         description:
-          "Replaces the caller's public profile settings. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded or application CV (400 otherwise). `bio`, `socials`, and `shareCv` may be omitted to keep their stored values. consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
+          "Replaces the caller's public profile settings. `completeOnboarding: true` records completion, including an explicit hidden-profile choice, without implying consent to sharing. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded or application CV (400 otherwise). `bio`, `socials`, and `shareCv` may be omitted to keep their stored values. consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
       },
     },
     async (req) => {

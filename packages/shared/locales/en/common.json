@@ -72,7 +72,6 @@
   "apiError_meal_plan_locked": "Changes to this meal are closed.",
   "apiError_removal_pin_expired": "That security PIN has expired. Request a new one.",
   "apiError_panel_locked": "The judging panel is locked: a team has already been evaluated.",
-  "apiError_project_locked": "The project is submitted and locked. Request edits to change it.",
   "apiError_email_not_verified": "Verify your email before doing this.",
   "apiError_stand_codes_empty": "No scannable stand has a code to export yet.",
   "apiError_stand_tag_in_use": "This tag is already in use.",

@@ -724,7 +724,7 @@ If `gh --version` is older than 2.101, report that blocker.
 Status: active
 Scope: module:web
 Source: user-correction
-Date: 2026-10-08
+Date: 2026-10-15
 
 ### Trigger
 Designing a card that offers a main workflow plus an optional alternative
@@ -739,6 +739,11 @@ Order and grouping should show which path is primary and which is the optional
 side route. Explain consequences only where they apply, with no restating text.
 
 ### Action
+When choices are submission outcomes for a form, show the form immediately and
+place those choices in its footer. Do not insert a preliminary chooser that
+makes the primary action open the form instead of submitting it. Keep deferral
+and opt-out available alongside the actual editor.
+
 Lead with the primary path's content, then a quiet "or" divider, then the
 alternative's action beside its consequence. Keep the header for post-state
 actions (such as Request edits). After any reorder, update specs that index

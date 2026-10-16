@@ -4,7 +4,7 @@ import { audit } from "../../lib/audit.js";
 
 /**
  * The destructive reset keeps event identity and challenge definitions, but
- * removes every project/import, queue, and judging artifact so the event can
+ * removes every project, queue, and judging artifact so the event can
  * start the Q flow again (H16-H40, H53).
  */
 export interface JudgingDataResetResult {

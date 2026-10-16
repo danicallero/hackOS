@@ -64,7 +64,6 @@ interface ApplicationExportRow {
   name: string | null;
   surname: string | null;
   email: string;
-  secondary_email: string | null;
   dni: string | null;
   shirt_size: string | null;
   food_intolerances: string | null;
@@ -114,10 +113,6 @@ const PROFILE_FIELDS: StaticFieldDefinition[] = [
   { key: "name", label: { en: "Name", es: "Nombre", gl: "Nome" } },
   { key: "surname", label: { en: "Surname", es: "Apellidos", gl: "Apelidos" } },
   { key: "email", label: { en: "Email", es: "Correo electrónico", gl: "Correo electrónico" } },
-  {
-    key: "secondary_email",
-    label: { en: "Secondary email", es: "Correo secundario", gl: "Correo secundario" },
-  },
   { key: "dni", label: { en: "DNI", es: "DNI", gl: "DNI" } },
   {
     key: "shirt_size",
@@ -234,8 +229,6 @@ function fieldValueForProfile(row: ApplicationExportRow, key: string): unknown {
       return row.surname;
     case "email":
       return row.email;
-    case "secondary_email":
-      return row.secondary_email;
     case "dni":
       return row.dni;
     case "shirt_size":
@@ -520,7 +513,6 @@ async function loadApplicationRows(
             u.name,
             u.surname,
             u.email,
-            u.secondary_email,
             u.dni,
             u.shirt_size,
             COALESCE((SELECT string_agg(

@@ -7,11 +7,33 @@ import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import type { NativeProject } from "@/lib/native-projects";
+import { projectSummary } from "@/lib/project-text";
 import { galleryContext, projectAssetUrl } from "./data";
+import { GalleryRefresh } from "./gallery-refresh";
 
 interface GalleryChallenge {
   id: number;
   title: Record<string, string>;
+}
+
+/** H18: a gallery that is not open yet is a date, not a permission error. */
+function galleryClosedNotice(
+  error: ApiError,
+  copy: { galleryNotOpen: string; galleryOpensOn: string },
+  language: string,
+) {
+  const details = error.details as
+    | { reason?: string; opensAt?: string | null; timeZone?: string }
+    | undefined;
+  if (error.status !== 403 || !details?.reason?.startsWith("gallery_")) return null;
+  if (details.reason !== "gallery_closed" || !details.opensAt) return copy.galleryNotOpen;
+  const date = new Intl.DateTimeFormat(language, {
+    dateStyle: "long",
+    timeStyle: "short",
+    // Server component: the client-side event-time store is unavailable here.
+    timeZone: details.timeZone || "UTC",
+  }).format(new Date(details.opensAt));
+  return copy.galleryOpensOn.replace("{date}", date);
 }
 
 export const dynamic = "force-dynamic";
@@ -39,15 +61,22 @@ export default async function GalleryPage({
     ]);
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;
+    const closed = galleryClosedNotice(error, copy, language);
     return (
       <PageLayout className="px-4 py-6 sm:px-6">
+        <GalleryRefresh />
         <PageHeader title={copy.projectGallery} />
-        <p role="alert">{apiErrorText(error, t, t("apiErrorServer"))}</p>
+        {closed ? (
+          <p className="text-muted-foreground">{closed}</p>
+        ) : (
+          <p role="alert">{apiErrorText(error, t, t("apiErrorServer"))}</p>
+        )}
       </PageLayout>
     );
   }
   return (
     <PageLayout className="px-4 py-6 sm:px-6">
+      <GalleryRefresh />
       <PageHeader title={copy.projectGallery} />
       <form className="flex flex-wrap gap-2" action="/gallery">
         <label className="sr-only" htmlFor="gallery-search">
@@ -94,7 +123,11 @@ export default async function GalleryPage({
                 {winner.challengeTitle} · {winner.rank}
               </p>
             ))}
-            {project.description && <p className="text-sm text-pretty">{project.description}</p>}
+            {project.description && (
+              <p className="text-muted-foreground line-clamp-3 text-sm text-pretty">
+                {projectSummary(project.description, project.name)}
+              </p>
+            )}
             <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
               {project.challenges.map((challenge) => (
                 <li key={challenge.id}>

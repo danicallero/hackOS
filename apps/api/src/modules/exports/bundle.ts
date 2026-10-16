@@ -225,8 +225,6 @@ export async function buildExportBundle(
       universityId: user.university_id,
       shirtSize: user.shirt_size,
       language: user.language,
-      secondaryEmail: user.secondary_email,
-      secondaryEmailVerified: user.secondary_email_verified_at !== null,
       notes: user.notes,
       createdAt: user.created_at,
     },

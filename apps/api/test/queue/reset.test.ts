@@ -92,7 +92,7 @@ describe("POST /api/queue/admin/reset", () => {
     await assignChallengeToRoom(roomId, challengeOneId);
     await addChallengeJudge(challengeOneId, judge);
 
-    const { repoId } = await createRepoWithTeam([member], "Imported project");
+    const { repoId } = await createRepoWithTeam([member], "Native project");
     await pool.query(`INSERT INTO project_challenges(repo_id,challenge_id) VALUES($1,$2)`, [
       repoId,
       challengeOneId,

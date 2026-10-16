@@ -1,13 +1,15 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { Alert, View } from "react-native";
 
 let mockParams: Record<string, string> = { id: "5" };
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+const mockReplace = jest.fn();
 const mockSetOptions = jest.fn();
 jest.mock("@/theme/colors", () => ({ colors: new Proxy({}, { get: () => "#171717" }) }));
 jest.mock("expo-router", () => ({
   useScrollToTop: jest.fn(),
-  useRouter: () => ({ push: mockPush, back: mockBack }),
+  useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
   useFocusEffect: (callback: () => undefined | (() => void)) => {
     const { useEffect } = jest.requireActual("react");
     useEffect(callback, [callback]);
@@ -17,11 +19,14 @@ jest.mock("expo-router", () => ({
 }));
 jest.mock("@/lib/api", () => ({
   apiFetch: jest.fn(),
+  getCurrentSessionCookie: () => "session=1",
   ApiError: class ApiError extends Error {
     status: number;
-    constructor(message: string, status: number) {
+    details?: unknown;
+    constructor(message: string, status: number, _code?: string, details?: unknown) {
       super(message);
       this.status = status;
+      this.details = details;
     }
   },
 }));
@@ -38,10 +43,37 @@ jest.mock("@/components/glass-view", () => ({
   GlassView: ({ children }: { children?: unknown }) => children ?? null,
 }));
 jest.mock("expo-document-picker", () => ({ getDocumentAsync: jest.fn() }));
+jest.mock("expo-image-picker", () => ({ launchImageLibraryAsync: jest.fn() }));
+jest.mock("expo-image-manipulator", () => ({
+  SaveFormat: { JPEG: "jpeg" },
+  ImageManipulator: {
+    manipulate: (uri: string) => ({
+      resize: jest.fn(),
+      renderAsync: async () => ({
+        saveAsync: async () => ({ uri: uri.replace(/\.\w+$/, ".jpg") }),
+      }),
+    }),
+  },
+}));
+const mockFileBytes = jest.fn(async () => new Uint8Array([1, 2, 3]));
+jest.mock("expo-file-system", () => ({
+  File: class extends Blob {
+    uri: string;
+    name = "a.png";
+    type = "image/png";
+    bytes = mockFileBytes;
+    constructor(uri: string) {
+      super(["png"], { type: "image/png" });
+      this.uri = uri;
+    }
+  },
+}));
 jest.mock("@/lib/i18n", () => ({ useLocale: () => ({ language: "en", t: (key: string) => key }) }));
 jest.mock("@/lib/env", () => ({ API_URL: "https://api.test" }));
 
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
+import { ChallengeDetailScreen } from "@/components/challenge-detail";
 import { DynamicForm } from "@/components/dynamic-form";
 import { InviteTeammatesScreen } from "@/components/invite-teammates-screen";
 import { MyProjectsScreen } from "@/components/my-projects-screen";
@@ -72,6 +104,7 @@ beforeEach(() => {
   mockApi.mockReset();
   mockPush.mockReset();
   mockBack.mockReset();
+  mockReplace.mockReset();
   mockSetOptions.mockReset();
 });
 it("hides creation when server policy denies it and links to the invitation inbox (H19)", async () => {
@@ -175,8 +208,9 @@ it("creates a project from the sheet: Create stays disabled until the name is va
     "/api/me/projects",
     expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Rover" }) }),
   );
-  expect(mockBack).toHaveBeenCalled();
-  expect(mockPush).toHaveBeenCalledWith("/projects/12");
+  expect(mockReplace).toHaveBeenCalledWith("/projects/12");
+  expect(mockBack).not.toHaveBeenCalled();
+  expect(mockPush).not.toHaveBeenCalled();
 });
 
 it("keeps the sheet open and shows the reason when creation fails (H19)", async () => {
@@ -300,7 +334,7 @@ it("labels a submitted project's action Resubmit and shows the server deadline (
     />,
   );
   expect(await screen.findByRole("button", { name: "projectResubmit" })).toBeTruthy();
-  expect(screen.getByText("projectDeadline")).toBeTruthy();
+  expect(screen.getByText(/projectSaved · projectDeadline: /)).toBeTruthy();
 });
 
 const settle = (overrides: Record<string, unknown>) =>
@@ -334,7 +368,8 @@ it("keeps projects visible when only the invitation read fails (H19)", async () 
   expect(screen.getByText("apiErrorServer")).toBeTruthy();
 });
 
-it("explains an oversized upload rejected by the server (H16)", async () => {
+it("uploads an Expo File part and explains a server size rejection (H16)", async () => {
+  const append = jest.spyOn(FormData.prototype, "append");
   (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
     canceled: false,
     assets: [{ uri: "file:///a.png", name: "a.png", mimeType: "image/png", size: 10 }],
@@ -358,6 +393,12 @@ it("explains an oversized upload rejected by the server (H16)", async () => {
   );
   await fireEvent.press(await screen.findByRole("button", { name: "projectUpload" }));
   expect(await screen.findByText("projectTooLarge")).toBeTruthy();
+  expect(append).toHaveBeenCalledWith(
+    "file",
+    expect.objectContaining({ uri: "file:///a.png", bytes: mockFileBytes }),
+    "a.png",
+  );
+  append.mockRestore();
 });
 
 it("opens the challenge picker from the editor and disables it when closed (H17/H21)", async () => {
@@ -470,6 +511,18 @@ it("hides gallery retry when the audience is denied (H18)", async () => {
   expect(await screen.findByText("apiErrorForbidden")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
   expect(screen.queryByText("projectNoGallery")).toBeNull();
+});
+
+it("shows when the gallery opens instead of a permission error (H18)", async () => {
+  settle({
+    "/api/public/projects?page=1&pageSize=20&search=": new ApiError("closed", 403, "forbidden", {
+      reason: "gallery_closed",
+      opensAt: "2026-10-18T16:00:00Z",
+    }),
+  });
+  await renderMobile(<ProjectGalleryScreen />);
+  expect(await screen.findByText("galleryOpensOn")).toBeTruthy();
+  expect(screen.queryByText("apiErrorForbidden")).toBeNull();
 });
 
 it("opens the gallery filtered to the linked challenge and sends every chosen challenge (H18)", async () => {
@@ -613,4 +666,166 @@ it("keeps only the refused recipient and shows why (H19)", async () => {
   expect(screen.queryByText("ok@example.com")).toBeNull();
   expect(screen.getByText("requestError")).toBeTruthy();
   expect(mockBack).not.toHaveBeenCalled();
+});
+
+it("leaves a team with the API DELETE contract after confirmation (H19)", async () => {
+  mockApi.mockResolvedValue({});
+  const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+  await renderMobile(<ProjectEditor project={project} reload={async () => {}} />);
+  await fireEvent.press(screen.getByRole("button", { name: "projectLeave" }));
+  const buttons = alert.mock.calls.at(-1)?.[2];
+  await act(async () => {
+    buttons?.[1].onPress?.();
+  });
+  await waitFor(() =>
+    expect(mockApi).toHaveBeenCalledWith(
+      "/api/me/projects/5/leave",
+      expect.objectContaining({ method: "DELETE" }),
+    ),
+  );
+  expect(mockBack).toHaveBeenCalled();
+  alert.mockRestore();
+});
+
+it("shows photo answers as a carousel that opens full screen (H16)", async () => {
+  await renderMobile(
+    <DynamicForm
+      readOnly
+      template={
+        [
+          { key: "photos", kind: "images", label: { en: "Photos", es: "Fotos", gl: "Fotos" } },
+        ] as NativeProject["template"]
+      }
+      sections={[]}
+      responses={{ photos: ["a", "b"] }}
+      files={["a", "b"].map((key) => ({
+        objectKey: key,
+        url: `/f/${key}`,
+        fileName: `${key}.jpg`,
+        mimeType: "image/jpeg",
+      }))}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "projectAddPhotos" })).toBeNull();
+  await fireEvent.press(await screen.findByRole("imagebutton", { name: "Photos, b.jpg" }));
+  expect(await screen.findByTestId("photo-carousel")).toBeTruthy();
+  expect(screen.getByText("2 / 2")).toBeTruthy();
+});
+
+it("suggests diary contacts and invites them by account (H19)", async () => {
+  mockApi.mockImplementation((path: string) => {
+    if (path === "/api/me/diary")
+      return Promise.resolve({
+        items: [
+          { id: 1, kind: "person", person: { userId: 7, displayName: "Ana", photoUrl: null } },
+          { id: 2, kind: "person", person: { userId: 8, displayName: "Leo", photoUrl: null } },
+          { id: 3, kind: "sponsor", person: null },
+        ],
+      });
+    if (path === "/api/me/projects/5") return Promise.resolve(project);
+    return Promise.resolve({});
+  });
+  await renderMobile(<InviteTeammatesScreen />);
+  // Ana is already on the team; only Leo is suggested.
+  expect(await screen.findByText("Leo")).toBeTruthy();
+  expect(screen.queryByText("Ana")).toBeNull();
+  await fireEvent.press(screen.getByRole("button", { name: "Leo" }));
+  await act(async () => {
+    mockSetOptions.mock.calls.at(-1)?.[0].headerRight().props.onPress();
+  });
+  expect(mockApi).toHaveBeenCalledWith(
+    "/api/me/projects/5/invites",
+    expect.objectContaining({ method: "POST", body: JSON.stringify({ userId: 8 }) }),
+  );
+});
+
+it("opens a challenge's public brief instead of the gallery (H45)", async () => {
+  mockParams = { challengeId: "4" };
+  mockApi.mockImplementation((path: string) => {
+    if (path === "/api/public/challenges")
+      return Promise.resolve({
+        items: [
+          {
+            id: 4,
+            title: { en: "Open data" },
+            description: { en: "Build with open data." },
+            criteria: { en: "Impact and craft." },
+            prizes: [{ name: "Drone" }],
+            enterprise: { id: 1, name: "Gradiant", logoUrl: null, website: null },
+          },
+        ],
+      });
+    return Promise.reject(new ApiError("closed", 403));
+  });
+  await renderMobile(<ChallengeDetailScreen />);
+  expect(await screen.findByText("Build with open data.")).toBeTruthy();
+  expect(screen.getByText("Impact and craft.")).toBeTruthy();
+  expect(screen.getByText("Gradiant")).toBeTruthy();
+  expect(screen.getByText("Drone")).toBeTruthy();
+  // The gallery is closed (403): no dead-end row to it.
+  expect(screen.queryByText("challengeProjects")).toBeNull();
+});
+
+// Last on purpose: the upload it leaves running after the editor closes
+// outlives the test and would starve later renders of this file.
+it("uploads picked photos one by one and saves them after the editor closes (H16/H20)", async () => {
+  (ImagePicker.launchImageLibraryAsync as jest.Mock).mockResolvedValue({
+    canceled: false,
+    assets: [
+      { uri: "file:///one.heic", fileName: "one.heic", width: 100, height: 80 },
+      { uri: "file:///two.heic", fileName: "two.heic", width: 100, height: 80 },
+    ],
+  });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let uploads = 0;
+  mockApi.mockImplementation(async (path: string) => {
+    if (path.startsWith("/api/me/projects/9/uploads")) {
+      uploads += 1;
+      if (uploads === 2) await gate;
+      return {
+        objectKey: `k${uploads}`,
+        url: `/f/${uploads}`,
+        fileName: `p${uploads}.jpg`,
+        mimeType: "image/jpeg",
+      };
+    }
+    if (path === "/api/me/projects/9/draft") return { revision: 1 };
+    return { ...project, id: 9 };
+  });
+  const { rerender } = await renderMobile(
+    <ProjectEditor
+      reload={async () => {}}
+      project={{
+        ...project,
+        id: 9,
+        canEdit: true,
+        template: [
+          { key: "photos", kind: "images", label: { en: "Photos", es: "Fotos", gl: "Fotos" } },
+        ] as NativeProject["template"],
+      }}
+    />,
+  );
+  await fireEvent.press(await screen.findByRole("button", { name: "projectAddPhotos" }));
+  await waitFor(() => expect(uploads).toBe(2));
+  // Leave while the second photo is still uploading.
+  rerender(<View />);
+  await act(async () => {
+    release();
+  });
+  await waitFor(() =>
+    expect(mockApi).toHaveBeenCalledWith(
+      "/api/me/projects/9/draft",
+      expect.objectContaining({
+        method: "PUT",
+        body: expect.stringContaining('"photos":["k1","k2"]'),
+      }),
+    ),
+  );
+  const keys = mockApi.mock.calls
+    .filter(([path]) => String(path).startsWith("/api/me/projects/9/uploads"))
+    .map(([, init]) => init.headers["Idempotency-Key"]);
+  expect(new Set(keys).size).toBe(2);
 });

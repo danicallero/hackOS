@@ -47,7 +47,6 @@ Enum queue_status {
 
 Enum token_type {
   primary_email
-  secondary_email
   account_claim
   password_reset
   sponsor_invite
@@ -1176,6 +1175,7 @@ Table user_public_profiles {
   directory_visible boolean [not null, default: `false`]
   headline text
   location_note text
+  onboarding_completed_at "timestamp with time zone"
   share_cv boolean [not null, default: `false`, note: '#935: readers may download cv_key only while this and directory_visible are true.']
   show_photo boolean [not null, default: `false`]
   show_project boolean [not null, default: `true`]
@@ -1230,8 +1230,6 @@ Table users {
   removal_idempotency_key text [note: 'H54 transient self-service replay key; it is deleted with the user and is not an identity map.']
   removal_requires_exit boolean [not null, default: `false`, note: 'H54 pending-exit gate: only a valid current-badge or event-end exit may be recorded.']
   removal_started_at "timestamp with time zone"
-  secondary_email text
-  secondary_email_verified_at "timestamp with time zone"
   shirt_size text
   surname text
   ui_prefs jsonb [not null, default: `'{}'::jsonb`]
