@@ -1,107 +1,34 @@
 "use client";
 
 import { activityKindLabelKey, toActivityKind } from "@hackos/shared/activity-kinds";
+import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
-import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
+import { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
-import { Modal } from "@/components/common/modal";
+import { IconButton } from "@/components/common/icon-button";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
+import { TabBar } from "@/components/common/tab-bar";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import { cn } from "@/lib/utils";
+import { SCHEDULE_CATEGORY_STYLES } from "./schedule-category-styles";
 
-const HOUR_HEIGHT = 72;
-// Keep enough vertical room for a wrapped title and location at narrow lanes.
-// The card remains expandable so long values are never hidden by an ellipsis.
-const MIN_ITEM_HEIGHT = 76;
-const LANE_GAP = 8;
-// A hackathon schedule is a handful of sparse milestones, not back-to-back
-// meetings: a literal HOUR_HEIGHT-per-hour axis makes one long event (a
-// multi-hour "general preparations" block) or a long dead stretch between two
-// items render as hundreds of near-empty pixels, reading as broken rather than
-// "long". Any stretch of the day with no internal item boundary — a real gap,
-// or the uninterrupted middle of one long item — is capped at this height;
-// stretches under the cap (including genuine overlaps between concurrent
-// items, which need full fidelity to show simultaneity) render at the literal
-// scale, unchanged.
-const MAX_SEGMENT_HEIGHT = 160;
-
+const HOUR_HEIGHT = 96;
+const LANE_GAP = 4;
 interface PositionedItem {
   item: PublicScheduleItem;
   top: number;
   height: number;
   lane: number;
   laneCount: number;
+  laneSpan: number;
 }
-
-interface TimeScale {
-  /** Pixel offset for an arbitrary instant, relative to the day's rangeStart. */
-  toY: (t: number) => number;
-  /** Total rendered height of the day's timeline. */
-  totalHeight: number;
-}
-
-/**
- * Builds a piecewise time→pixel mapping for one day: the axis runs at the
- * literal HOUR_HEIGHT scale within any stretch that actually contains (part
- * of) an item or a boundary between items, and compresses down to
- * MAX_SEGMENT_HEIGHT any stretch — busy or empty — that has no internal
- * boundary and would otherwise exceed it. The mapping stays monotonic and
- * continuous, so hour ticks and the "now" indicator can share it unchanged.
- */
-export function buildTimeScale(
-  items: PublicScheduleItem[],
-  rangeStart: number,
-  rangeEnd: number,
-): TimeScale {
-  const boundarySet = new Set<number>([rangeStart, rangeEnd]);
-  for (const item of items) {
-    boundarySet.add(Date.parse(item.startsAt));
-    boundarySet.add(Date.parse(item.endsAt));
-  }
-  const boundaries = [...boundarySet]
-    .filter((t) => t >= rangeStart && t <= rangeEnd)
-    .sort((a, b) => a - b);
-
-  // Cumulative rendered offset at each boundary, and the rendered height of
-  // the segment ending at that boundary (index i pairs with segment
-  // [boundaries[i-1], boundaries[i]]).
-  const offsets: number[] = [0];
-  const renderedHeights: number[] = [];
-  for (let i = 1; i < boundaries.length; i++) {
-    const realHeight = ((boundaries[i] - boundaries[i - 1]) / 3_600_000) * HOUR_HEIGHT;
-    let rendered = Math.min(realHeight, MAX_SEGMENT_HEIGHT);
-    // H47: reserve readable space within each actual interval so adjacent
-    // activities share a column without their minimum-height cards colliding.
-    for (const item of items) {
-      if (Date.parse(item.endsAt) !== boundaries[i]) continue;
-      const startIndex = boundaries.indexOf(Date.parse(item.startsAt));
-      if (startIndex >= 0 && startIndex < i) {
-        rendered = Math.max(rendered, offsets[startIndex] + MIN_ITEM_HEIGHT + 4 - offsets[i - 1]);
-      }
-    }
-    renderedHeights.push(rendered);
-    offsets.push(offsets[i - 1] + rendered);
-  }
-
-  function toY(t: number): number {
-    const clamped = Math.min(Math.max(t, rangeStart), rangeEnd);
-    let i = 0;
-    while (i < boundaries.length - 2 && boundaries[i + 1] < clamped) i++;
-    const segStart = boundaries[i];
-    const segEnd = boundaries[i + 1];
-    const frac = segEnd > segStart ? (clamped - segStart) / (segEnd - segStart) : 0;
-    return offsets[i] + frac * renderedHeights[i];
-  }
-
-  return { toY, totalHeight: offsets[offsets.length - 1] };
-}
-
-/**
- * H47: half-open time intervals share a lane when one ends as the next
- * starts. buildTimeScale reserves minimum card space within those intervals.
- */
 export function positionDayItems(
   items: PublicScheduleItem[],
   toY: (t: number) => number,
@@ -114,7 +41,7 @@ export function positionDayItems(
       return {
         item,
         top,
-        height: Math.max(MIN_ITEM_HEIGHT, toY(ends) - top - 4),
+        height: Math.max(24, toY(ends) - top - 4),
         starts,
         ends,
       };
@@ -135,7 +62,22 @@ export function positionDayItems(
       return { ...entry, lane };
     });
     const laneCount = laneEnds.length;
-    result.push(...placed.map((entry) => ({ ...entry, laneCount })));
+    result.push(
+      ...placed.map((entry) => {
+        let laneSpan = 1;
+        for (let candidate = entry.lane + 1; candidate < laneCount; candidate++) {
+          if (
+            placed.some(
+              (other) =>
+                other.lane === candidate && other.starts < entry.ends && other.ends > entry.starts,
+            )
+          )
+            break;
+          laneSpan++;
+        }
+        return { ...entry, laneCount, laneSpan };
+      }),
+    );
   };
 
   for (const entry of positioned) {
@@ -151,82 +93,73 @@ export function positionDayItems(
   return result;
 }
 
-function startOfHour(value: number) {
-  const date = new Date(value);
-  date.setMinutes(0, 0, 0);
-  return date.getTime();
-}
+const nextDate = (key: string) =>
+  new Date(Date.parse(`${key}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 
-function endOfHour(value: number) {
-  return startOfHour(value) + 60 * 60_000;
-}
-
-function dayKey(value: string, timezone: string) {
-  return new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    timeZone: timezone,
-  }).format(new Date(value));
-}
-
+/** H47: a shared hour grid with bounded scrolling, day/week views and visible activity metadata. */
 export function ScheduleTimeline({
   items,
+  rangeItems,
   timezone,
   className,
   showResponsible = false,
   emptyTitle,
+  renderToolbar,
 }: {
   items: PublicScheduleItem[];
+  rangeItems?: PublicScheduleItem[];
   timezone: string;
   className?: string;
-  /** Reveal each item's responsible person(s)/contact note in its detail modal (H59) — for the sponsor-only view, never the public one. */
   showResponsible?: boolean;
-  /** Overrides the empty-state title — e.g. when `items` is empty because the viewer's own audience filter matched nothing (H59 follow-up), rather than because the schedule itself is empty. */
   emptyTitle?: string;
+  renderToolbar?: (controls: React.ReactNode) => React.ReactNode;
 }) {
   const { language, t } = useLocale();
-  // Track now as state to avoid impure Date.now() during render; updates every second to keep timeline current.
   const [now, setNow] = useState(() => Date.now());
-  const focusRef = useRef<HTMLElement | null>(null);
-  const agendaFocusRef = useRef<HTMLElement | null>(null);
+  const [view, setView] = useState<"day" | "week">("day");
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<PublicScheduleItem | null>(null);
-  const ordered = useMemo(
-    () => [...items].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt)),
-    [items],
-  );
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  const today = instantToWallClock(new Date(now).toISOString(), timezone).slice(0, 10);
+  const source = rangeItems ?? items;
+  const visibleIds = new Set(items.map((item) => item.id));
   const days = useMemo(() => {
     const grouped = new Map<string, PublicScheduleItem[]>();
-    for (const item of ordered) {
-      const key = dayKey(item.startsAt, timezone);
-      grouped.set(key, [...(grouped.get(key) ?? []), item]);
+    for (const item of [...source].sort(
+      (a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt),
+    )) {
+      const first = instantToWallClock(item.startsAt, timezone).slice(0, 10);
+      const last = instantToWallClock(item.endsAt, timezone).slice(0, 10);
+      for (let day = first; day <= last; day = nextDate(day)) {
+        const start = wallClockToInstant(`${day}T00:00`, timezone)!;
+        const end = wallClockToInstant(`${nextDate(day)}T00:00`, timezone)!;
+        const startsAt = new Date(
+          Math.max(Date.parse(item.startsAt), Date.parse(start)),
+        ).toISOString();
+        const endsAt = new Date(Math.min(Date.parse(item.endsAt), Date.parse(end))).toISOString();
+        if (startsAt < endsAt)
+          grouped.set(day, [...(grouped.get(day) ?? []), { ...item, startsAt, endsAt }]);
+      }
     }
-    return [...grouped.entries()];
-  }, [ordered, timezone]);
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    // Both views are rendered and one is hidden by a media query, so scroll
-    // the one that actually has a layout — offsetParent is null under
-    // `display: none`.
-    const target = [agendaFocusRef.current, focusRef.current].find(
-      (node) => node && node.offsetParent !== null,
-    );
-    target?.scrollIntoView({ block: "center" });
-  }, []);
-
-  if (!ordered.length) {
-    return <EmptyState icon={CalendarDotsIcon} title={emptyTitle ?? t("schedulePending")} />;
-  }
-
+    return [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [source, timezone]);
+  const activeDay =
+    days.find(([key]) => key === selectedDay) ?? days.find(([key]) => key === today) ?? days[0];
+  const visible = view === "day" ? (activeDay ? [activeDay] : []) : days.slice(0, 7);
   const dateFormatter = new Intl.DateTimeFormat(LOCALE_CODES[language], {
     weekday: "long",
     day: "numeric",
     month: "long",
+    timeZone: timezone,
+  });
+  const shortDate = new Intl.DateTimeFormat(LOCALE_CODES[language], {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
     timeZone: timezone,
   });
   const timeFormatter = new Intl.DateTimeFormat(LOCALE_CODES[language], {
@@ -234,199 +167,300 @@ export function ScheduleTimeline({
     minute: "2-digit",
     timeZone: timezone,
   });
-  const currentDay = dayKey(new Date(now).toISOString(), timezone);
-  const firstFutureId = ordered.find((item) => Date.parse(item.endsAt) >= now)?.id;
-
+  const hour = (instant: string) => {
+    const wall = instantToWallClock(instant, timezone);
+    return Number(wall.slice(11, 13)) + Number(wall.slice(14, 16)) / 60;
+  };
+  const startHour = 0;
+  const endHour = 24;
+  const height = 24 * HOUR_HEIGHT;
+  const nowHour = hour(new Date(now).toISOString());
+  const showNow = visible.some(([key]) => key === today);
+  const openItem = (item: PublicScheduleItem) =>
+    setSelectedItem(items.find((original) => original.id === item.id) ?? item);
+  function goToNow() {
+    setSelectedDay(today);
+    if (scroller.current)
+      scroller.current.scrollTop = Math.max(
+        0,
+        (hour(new Date(now).toISOString()) - startHour) * HOUR_HEIGHT - 80,
+      );
+  }
+  const activeKey = activeDay?.[0];
+  const firstMatch = visible
+    .flatMap(([, entries]) => entries)
+    .find((item) => visibleIds.has(item.id));
+  const focusHour = firstMatch ? hour(firstMatch.startsAt) : 8;
+  useEffect(() => {
+    if (scroller.current && activeKey && view) {
+      // H47: position the calendar's own viewport at daytime without moving the page.
+      scroller.current.scrollTop = Math.max(
+        0,
+        window.matchMedia("(max-width: 639px)").matches && view === "day"
+          ? 0
+          : (Math.min(
+              Math.max(focusHour >= 6 ? Math.floor(focusHour) : 8, startHour),
+              endHour - 2,
+            ) -
+              startHour) *
+              HOUR_HEIGHT,
+      );
+    }
+  }, [activeKey, view, focusHour]);
+  const hours = Array.from({ length: endHour - startHour }, (_, index) => startHour + index);
+  const halfHours = Array.from(
+    { length: (endHour - startHour) * 2 },
+    (_, index) => startHour * 2 + index,
+  );
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element || !activeKey) return;
+    const resize = () => {
+      element.style.height = `${Math.max(320, window.innerHeight - element.getBoundingClientRect().top - 16)}px`;
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    if (element.parentElement) observer.observe(element.parentElement);
+    window.addEventListener("resize", resize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", resize);
+    };
+  }, [activeKey]);
+  if (!activeDay || items.length === 0)
+    return (
+      <div className="space-y-3">
+        {renderToolbar?.(null)}
+        <EmptyState icon={CalendarDotsIcon} title={emptyTitle ?? t("schedulePending")} />
+      </div>
+    );
+  const dayHeader = (
+    <div className="flex h-11 items-center justify-between gap-2 px-1">
+      <IconButton
+        label={t("previous")}
+        variant="ghost"
+        size="icon-sm"
+        disabled={days.findIndex(([key]) => key === activeDay[0]) === 0}
+        onClick={() => {
+          const index = days.findIndex(([key]) => key === activeDay[0]);
+          setSelectedDay(days[index - 1][0]);
+        }}
+      >
+        <CaretLeftIcon aria-hidden="true" />
+      </IconButton>
+      <span className="min-w-0 text-center text-sm font-medium">
+        {dateFormatter.format(new Date(activeDay[1][0].startsAt))}
+      </span>
+      <IconButton
+        label={t("next")}
+        variant="ghost"
+        size="icon-sm"
+        disabled={days.findIndex(([key]) => key === activeDay[0]) === days.length - 1}
+        onClick={() => {
+          const index = days.findIndex(([key]) => key === activeDay[0]);
+          setSelectedDay(days[index + 1][0]);
+        }}
+      >
+        <CaretRightIcon aria-hidden="true" />
+      </IconButton>
+    </div>
+  );
+  const controls = (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button variant="outline" size="sm" onClick={goToNow}>
+        {t("today")}
+      </Button>
+      <TabBar width="content" aria-label={t("schedule")}>
+        <TabsTrigger value="day">{t("calendarDay")}</TabsTrigger>
+        <TabsTrigger value="week">{t("calendarWeek")}</TabsTrigger>
+      </TabBar>
+    </div>
+  );
   return (
-    <div className={cn("space-y-10", className)}>
-      {days.map(([key, dayItems]) => {
-        const first = Math.min(...dayItems.map((item) => Date.parse(item.startsAt)));
-        const last = Math.max(...dayItems.map((item) => Date.parse(item.endsAt)));
-        const rangeStart = startOfHour(first);
-        const rangeEnd = endOfHour(last);
-        const scale = buildTimeScale(dayItems, rangeStart, rangeEnd);
-        const height = scale.totalHeight;
-        const isToday = key === currentDay;
-        const showNow = isToday && now >= rangeStart && now <= rangeEnd;
-        const hours = Array.from(
-          { length: Math.ceil((rangeEnd - rangeStart) / 3_600_000) + 1 },
-          (_, index) => rangeStart + index * 3_600_000,
-        );
-        const positionedItems = positionDayItems(dayItems, scale.toY);
-
-        return (
-          <section key={key} aria-labelledby={`schedule-day-${key}`}>
-            <div className="mb-4 flex items-center gap-2">
-              <h2
-                id={`schedule-day-${key}`}
-                className="text-balance text-xl font-semibold capitalize"
-              >
-                {dateFormatter.format(new Date(first))}
-              </h2>
-              {isToday && (
-                <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-medium">
-                  {t("today")}
-                </span>
-              )}
-            </div>
-            <div className="relative ml-1 hidden sm:block" style={{ height }}>
-              {hours.map((hour) => (
-                <div
-                  key={hour}
-                  className="border-border/70 absolute right-0 left-16 border-t"
-                  style={{ top: scale.toY(hour) }}
-                >
-                  <time className="text-muted-foreground absolute -top-2.5 -left-16 w-14 bg-shell pr-2 text-right text-xs tabular-nums">
-                    {timeFormatter.format(new Date(hour))}
-                  </time>
-                </div>
-              ))}
-
-              <ol className="absolute inset-0 left-16">
-                {positionedItems.map(({ item, top, height: itemHeight, lane, laneCount }) => {
-                  const starts = Date.parse(item.startsAt);
-                  const ends = Date.parse(item.endsAt);
-                  const active = starts <= now && ends > now;
-                  const passed = ends <= now;
-                  const shouldFocus = active || (!showNow && item.id === firstFutureId);
-                  const width = `calc(${100 / laneCount}% - ${(LANE_GAP * (laneCount - 1)) / laneCount}px)`;
-                  const left = `calc(${(lane * 100) / laneCount}% + ${(lane * LANE_GAP) / laneCount}px)`;
-                  return (
-                    <li
-                      key={item.id}
-                      ref={
-                        shouldFocus
-                          ? (node) => {
-                              focusRef.current = node;
-                            }
-                          : undefined
-                      }
-                      className={cn(
-                        "absolute overflow-visible rounded-lg border bg-card shadow-sm",
-                        active && "border-primary bg-primary/5",
-                        passed && "opacity-60",
-                      )}
-                      style={{ top, height: itemHeight, left, width }}
+    <Tabs
+      value={view}
+      onValueChange={(value) => setView(value as "day" | "week")}
+      className={cn("gap-0 space-y-3", className)}
+    >
+      {renderToolbar ? renderToolbar(controls) : controls}
+      <TabsContent value={view}>
+        <div
+          ref={scroller}
+          className="h-[calc(100dvh-19rem)] min-h-96 overflow-auto rounded-surface border bg-background"
+        >
+          {view === "day" && (
+            <div className="divide-y divide-border/60 sm:hidden">
+              <div className="sticky top-0 z-10 bg-background">{dayHeader}</div>
+              {activeDay[1]
+                .filter((item) => visibleIds.has(item.id))
+                .map((item) => (
+                  <div key={item.id} className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2 p-3">
+                    <time
+                      dateTime={item.startsAt}
+                      className="pt-2 text-xs text-muted-foreground tabular-nums"
                     >
-                      <button
-                        type="button"
-                        className="button-interaction min-h-full w-full cursor-pointer px-3 py-2 text-left"
-                        onClick={() => setSelectedItem(item)}
-                      >
-                        <div className="flex min-w-0 items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <h3 className="wrap-break-word text-pretty text-sm font-medium">
-                              {item.title}
-                            </h3>
-                            <p className="text-muted-foreground mt-0.5 flex flex-wrap gap-x-3 text-xs tabular-nums">
-                              <span className="inline-flex items-center gap-1">
-                                <ClockIcon className="size-3" aria-hidden="true" />
-                                {timeFormatter.format(new Date(starts))}–
-                                {timeFormatter.format(new Date(ends))}
-                              </span>
-                              {item.location && (
-                                <span className="inline-flex min-w-0 items-start gap-1 wrap-break-word text-pretty">
-                                  <MapPinIcon className="size-3 shrink-0" aria-hidden="true" />
-                                  {item.location}
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                          {active && (
-                            <span className="text-primary shrink-0 text-xs font-medium">
-                              {t("happeningNow")}
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-
-              {showNow && (
-                <div
-                  ref={(node) => {
-                    focusRef.current = node;
-                  }}
-                  className="pointer-events-none absolute right-0 left-14 z-10 flex items-center"
-                  style={{ top: scale.toY(now) }}
-                  role="status"
-                  aria-label={t("currentTime")}
-                >
-                  <span className="bg-destructive size-2.5 rounded-full" />
-                  <span className="bg-destructive h-0.5 flex-1" />
-                  <span className="bg-destructive text-destructive-foreground rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
-                    {timeFormatter.format(new Date(now))}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/*
-              Phones get a plain agenda instead of the lane grid: four
-              overlapping talks share a ~70px lane on a 390px screen, which
-              breaks titles mid-word and stacks cards on top of each other.
-              A list keeps every item legible and still reads chronologically
-              (H47) — the grid returns from `sm` up, where lanes have room.
-            */}
-            <ol className="divide-border divide-y border-border rounded-lg border sm:hidden">
-              {dayItems.map((item) => {
-                const starts = Date.parse(item.startsAt);
-                const ends = Date.parse(item.endsAt);
-                const active = starts <= now && ends > now;
-                const passed = ends <= now;
-                const shouldFocus = active || (!showNow && item.id === firstFutureId);
-                return (
-                  <li
-                    key={item.id}
-                    ref={
-                      shouldFocus
-                        ? (node) => {
-                            agendaFocusRef.current = node;
-                          }
-                        : undefined
-                    }
-                    className={cn(
-                      "first:rounded-t-lg last:rounded-b-lg",
-                      active && "bg-primary/5",
-                      passed && "opacity-60",
-                    )}
-                  >
+                      {timeFormatter.format(new Date(item.startsAt))}
+                    </time>
                     <button
                       type="button"
-                      className="button-interaction flex w-full items-start gap-3 px-3 py-3 text-left"
-                      onClick={() => setSelectedItem(item)}
+                      onClick={() => openItem(item)}
+                      className={cn(
+                        "button-interaction min-w-0 rounded-sm border-l-[3px] px-3 py-2 text-left",
+                        SCHEDULE_CATEGORY_STYLES[toActivityKind(item.type) ?? "activity"],
+                      )}
                     >
-                      <span className="text-muted-foreground w-14 shrink-0 text-xs tabular-nums">
-                        <span className="text-foreground block font-medium">
-                          {timeFormatter.format(new Date(starts))}
-                        </span>
-                        {timeFormatter.format(new Date(ends))}
+                      <span className="block text-sm font-semibold">{item.title}</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        {t(activityKindLabelKey(toActivityKind(item.type) ?? "activity"))} ·{" "}
+                        {timeFormatter.format(new Date(item.startsAt))}–
+                        {timeFormatter.format(new Date(item.endsAt))}
                       </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-pretty text-sm font-medium">{item.title}</span>
-                        {item.location && (
-                          <span className="text-muted-foreground mt-0.5 flex items-start gap-1 text-pretty text-xs">
-                            <MapPinIcon className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
-                            {item.location}
-                          </span>
-                        )}
-                      </span>
-                      {active && (
-                        <span className="text-primary shrink-0 text-xs font-medium">
-                          {t("happeningNow")}
+                      {item.location && (
+                        <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                          <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
+                          {item.location}
                         </span>
                       )}
                     </button>
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-        );
-      })}
-      <Modal
+                  </div>
+                ))}
+            </div>
+          )}
+          <div
+            className={cn("grid", view === "day" && "hidden sm:grid")}
+            style={{
+              gridTemplateColumns: `3.5rem repeat(${visible.length}, minmax(10rem, 1fr))`,
+              minWidth: 56 + visible.length * 220,
+            }}
+          >
+            <div className="sticky top-0 left-0 z-30 border-r border-b bg-background" />
+            {visible.map(([key, entries]) => (
+              <div
+                key={`header-${key}`}
+                className="sticky top-0 z-20 border-r border-b bg-background"
+              >
+                {view === "day" ? (
+                  dayHeader
+                ) : (
+                  <div className="flex h-11 items-center justify-center gap-2 text-sm font-medium capitalize">
+                    <span>{shortDate.format(new Date(entries[0].startsAt))}</span>
+                    {key === today && (
+                      <span
+                        className="size-2 rounded-full bg-primary"
+                        role="img"
+                        aria-label={t("today")}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+            <div className="sticky left-0 z-10 border-r bg-background" style={{ height }}>
+              {hours.map((tick) => (
+                <span
+                  key={tick}
+                  className="absolute right-2 text-xs text-muted-foreground tabular-nums"
+                  style={{ top: (tick - startHour) * HOUR_HEIGHT + 4 }}
+                >
+                  {String(tick).padStart(2, "0")}:00
+                </span>
+              ))}
+              {showNow && (
+                <time
+                  role="img"
+                  dateTime={new Date(now).toISOString()}
+                  aria-label={`${t("currentTime")}: ${timeFormatter.format(new Date(now))}`}
+                  className="pointer-events-none absolute right-1 z-30 -translate-y-1/2 rounded-full bg-destructive px-1 py-0.5 text-xs font-semibold leading-none text-destructive-foreground tabular-nums"
+                  style={{ top: nowHour * HOUR_HEIGHT }}
+                >
+                  {timeFormatter.format(new Date(now))}
+                </time>
+              )}
+            </div>
+            {visible.map(([key, entries]) => {
+              const toY = (instant: number) => {
+                const iso = new Date(instant).toISOString();
+                const wall = instantToWallClock(iso, timezone);
+                return ((wall.slice(0, 10) > key ? 24 : hour(iso)) - startHour) * HOUR_HEIGHT;
+              };
+              const positioned = positionDayItems(
+                entries.filter((item) => visibleIds.has(item.id)),
+                toY,
+              );
+              return (
+                <div key={key} className="relative border-r" style={{ height }}>
+                  {halfHours.map((tick) => (
+                    <div
+                      key={tick}
+                      className={cn(
+                        "pointer-events-none absolute inset-x-0 border-t",
+                        tick % 2 ? "border-border/30" : "border-border/70",
+                      )}
+                      style={{ top: ((tick - startHour * 2) * HOUR_HEIGHT) / 2 }}
+                    />
+                  ))}
+                  {positioned.map(
+                    ({ item, top, height: itemHeight, lane, laneCount, laneSpan }) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => openItem(item)}
+                        className={cn(
+                          "button-interaction absolute flex flex-col items-start justify-start overflow-hidden rounded-sm border border-l-[3px] px-2 text-left",
+                          itemHeight < 42 ? "py-0.5" : itemHeight < 60 ? "py-1" : "py-2",
+                          SCHEDULE_CATEGORY_STYLES[toActivityKind(item.type) ?? "activity"],
+                        )}
+                        style={{
+                          top,
+                          height: itemHeight,
+                          width: `calc(${(100 * laneSpan) / laneCount}% - ${LANE_GAP}px)`,
+                          left: `calc(${(lane * 100) / laneCount}% + 2px)`,
+                        }}
+                      >
+                        <span
+                          className={cn(
+                            "block max-w-full truncate font-semibold",
+                            itemHeight < 60 ? "text-xs leading-4" : "text-sm",
+                          )}
+                        >
+                          {item.title}
+                        </span>
+                        {itemHeight >= 42 && (
+                          <span className="block max-w-full truncate text-xs opacity-80">
+                            {t(activityKindLabelKey(toActivityKind(item.type) ?? "activity"))}
+                            {` · ${timeFormatter.format(new Date(item.startsAt))}–${timeFormatter.format(new Date(item.endsAt))}`}
+                          </span>
+                        )}
+                        {itemHeight >= 88 && item.location && (
+                          <span className="mt-1 flex items-center gap-1 text-xs opacity-80">
+                            <MapPinIcon aria-hidden="true" className="size-3 shrink-0" />
+                            <span className="truncate">{item.location}</span>
+                          </span>
+                        )}
+                      </button>
+                    ),
+                  )}
+                  {showNow && (
+                    <div
+                      aria-hidden="true"
+                      className={cn(
+                        "pointer-events-none absolute inset-x-0 z-10 border-t",
+                        key === today ? "border-t-2 border-destructive" : "border-destructive/20",
+                      )}
+                      style={{ top: nowHour * HOUR_HEIGHT }}
+                    >
+                      {key === today && (
+                        <span className="absolute -top-1.5 -left-1 size-2.5 rounded-full bg-destructive" />
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </TabsContent>
+      <SidePanelEditor
         open={selectedItem !== null}
         onOpenChange={(open) => {
           if (!open) setSelectedItem(null);
@@ -487,7 +521,7 @@ export function ScheduleTimeline({
             )}
           </div>
         )}
-      </Modal>
-    </div>
+      </SidePanelEditor>
+    </Tabs>
   );
 }

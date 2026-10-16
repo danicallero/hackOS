@@ -103,7 +103,9 @@ for (const width of [1536, 1920]) {
     expect(await viewer.evaluate((element) => getComputedStyle(element).opacity)).toBe("0");
     const slot = page.locator("[data-file-viewer-preview-slot]");
     await expect(slot).toHaveCount(1);
-    const rightX = width - sourceBounds!.x - sourceBounds!.width;
+    // The docks sit 13.5rem either side of the viewport centre, so the right slot starts a
+    // fixed 27rem after the left viewer's start plus its width, whatever the scrollbar gutter.
+    const rightX = sourceBounds!.x + sourceBounds!.width + 27 * 16;
     const pointerY = box!.y + box!.height / 2;
     await page.mouse.move(width * 0.6, pointerY, { steps: 10 });
     await expect(slot).toHaveAttribute("data-file-viewer-preview-slot", "right");

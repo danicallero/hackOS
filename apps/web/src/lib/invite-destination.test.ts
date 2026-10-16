@@ -11,6 +11,6 @@ describe("destinationForKind (H9/H10 invitation onboarding branch)", () => {
   });
 
   it("routes staff to the event schedule", () => {
-    expect(destinationForKind("staff")).toBe("/timetable");
+    expect(destinationForKind("staff")).toBe("/event");
   });
 });

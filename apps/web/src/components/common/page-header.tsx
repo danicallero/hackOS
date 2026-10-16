@@ -51,7 +51,7 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "flex flex-col gap-(--space-within-section) md:flex-row md:items-start md:justify-between",
+        "flex min-h-(--control-height-default) flex-col gap-(--space-within-section) md:flex-row md:items-start md:justify-between",
         className,
       )}
     >

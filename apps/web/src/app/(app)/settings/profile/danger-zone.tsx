@@ -30,7 +30,7 @@ import {
 import { useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
 
-export function DangerZoneCard() {
+export function DangerZoneCard({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useLocale();
   const me = useMe();
   const [loading, setLoading] = useState(true);
@@ -233,7 +233,12 @@ export function DangerZoneCard() {
   const canConfirm = eligibility !== null;
 
   return (
-    <SectionCard footerClassName="justify-start" icon={WarningIcon} title={t("dangerZone")}>
+    <SectionCard
+      variant={embedded ? "plain" : "surface"}
+      footerClassName="justify-start"
+      icon={embedded ? undefined : WarningIcon}
+      title={embedded ? undefined : t("dangerZone")}
+    >
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">

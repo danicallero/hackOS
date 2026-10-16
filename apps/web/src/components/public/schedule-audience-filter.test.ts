@@ -41,6 +41,12 @@ describe("deriveViewerScheduleSegments", () => {
     expect(deriveViewerScheduleSegments(items)).toEqual(["participant"]);
   });
 
+  it("keeps the Staff filter available for a staff projection even without staff-only items", () => {
+    expect(
+      deriveViewerScheduleSegments([item({ audiences: ["participant"], visibility: "shown" })]),
+    ).toEqual(["staff", "participant"]);
+  });
+
   it("a staff caller's feed yields staff + participant segments", () => {
     const items = [
       item({ id: 1, audiences: [] }), // staff-only item, only ever sent to staff

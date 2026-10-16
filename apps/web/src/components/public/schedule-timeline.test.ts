@@ -1,122 +1,49 @@
 import { describe, expect, it } from "vitest";
 import type { PublicScheduleItem } from "@/lib/logistics";
-import { buildTimeScale, positionDayItems } from "./schedule-timeline";
+import { positionDayItems } from "./schedule-timeline";
 
-const HOUR = 3_600_000;
-const DAY_START = Date.parse("2026-07-22T00:00:00.000Z");
-
-function item(overrides: Partial<PublicScheduleItem> = {}): PublicScheduleItem {
-  return {
-    id: 1,
-    title: "Item",
-    description: null,
-    location: null,
-    type: null,
-    startsAt: new Date(DAY_START).toISOString(),
-    endsAt: new Date(DAY_START + HOUR).toISOString(),
-    publishAt: null,
-    audiences: ["participant"],
-    primaryLanguage: "es",
-    titleI18n: {},
-    descriptionI18n: {},
-    ...overrides,
-  };
-}
-
-describe("buildTimeScale", () => {
-  it("renders a single long event's uninterrupted middle at a capped height, not its literal duration", () => {
-    const start = DAY_START + 15.5 * HOUR;
-    const end = DAY_START + 21 * HOUR;
-    const items = [
-      item({ startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString() }),
-    ];
-    const rangeStart = DAY_START + 15 * HOUR;
-    const rangeEnd = DAY_START + 22 * HOUR;
-    const scale = buildTimeScale(items, rangeStart, rangeEnd);
-
-    // Literal scale (72px/h) would be 7h * 72 = 504px; compression must shrink it well below that.
-    expect(scale.totalHeight).toBeLessThan(300);
-    // The mapping stays monotonic and exact at the item's own boundaries.
-    expect(scale.toY(start)).toBeGreaterThan(scale.toY(rangeStart));
-    expect(scale.toY(end)).toBeGreaterThan(scale.toY(start));
-    expect(scale.toY(rangeEnd)).toBe(scale.totalHeight);
-  });
-
-  it("compresses a long empty gap between two short events but leaves the events themselves at full scale", () => {
-    const items = [
-      item({
-        startsAt: new Date(DAY_START + 9 * HOUR).toISOString(),
-        endsAt: new Date(DAY_START + 9.5 * HOUR).toISOString(),
-      }),
-      item({
-        id: 2,
-        startsAt: new Date(DAY_START + 18 * HOUR).toISOString(),
-        endsAt: new Date(DAY_START + 18.5 * HOUR).toISOString(),
-      }),
-    ];
-    const rangeStart = DAY_START + 9 * HOUR;
-    const rangeEnd = DAY_START + 19 * HOUR;
-    const scale = buildTimeScale(items, rangeStart, rangeEnd);
-
-    // A 10h span compressed to well under its literal 720px.
-    expect(scale.totalHeight).toBeLessThan(400);
-    const positioned = positionDayItems(items, scale.toY);
-    const first = positioned.find((p) => p.item.id === 1);
-    const second = positioned.find((p) => p.item.id === 2);
-    expect(first).toBeDefined();
-    expect(second).toBeDefined();
-    // Each 30-minute item still renders near its literal half-hour height (36px), not compressed.
-    expect(first?.height).toBeGreaterThanOrEqual(36 - 4);
-    expect(first?.height).toBeLessThan(80);
-    expect(second?.height).toBeGreaterThanOrEqual(36 - 4);
-    // The gap between them dominates far less of the total than its real 8.5h share would.
-    expect(second ? second.top - first!.top : 0).toBeLessThan(300);
-  });
-
-  it("keeps overlapping concurrent events at full literal fidelity", () => {
-    const items = [
-      item({
-        startsAt: new Date(DAY_START + 10 * HOUR).toISOString(),
-        endsAt: new Date(DAY_START + 11.5 * HOUR).toISOString(),
-      }),
-      item({
-        id: 2,
-        startsAt: new Date(DAY_START + 10.5 * HOUR).toISOString(),
-        endsAt: new Date(DAY_START + 12 * HOUR).toISOString(),
-      }),
-    ];
-    const rangeStart = DAY_START + 10 * HOUR;
-    const rangeEnd = DAY_START + 12 * HOUR;
-    const scale = buildTimeScale(items, rangeStart, rangeEnd);
-
-    // The whole 2h overlapping window is under the compression cap, so it must render at
-    // the literal 72px/h scale: 2h * 72 = 144px exactly.
-    expect(scale.totalHeight).toBeCloseTo(144, 5);
-    const positioned = positionDayItems(items, scale.toY);
-    const first = positioned.find((p) => p.item.id === 1)!;
-    const second = positioned.find((p) => p.item.id === 2)!;
-    // Genuinely overlapping in time, so they must land in different lanes.
-    expect(first.lane).not.toBe(second.lane);
-    expect(first.laneCount).toBeGreaterThanOrEqual(2);
-  });
-});
-
-describe("adjacent activities", () => {
-  it("shares one lane and reserves readable space for back-to-back short activities", () => {
-    const items = [
-      item({ endsAt: new Date(DAY_START + HOUR / 6).toISOString() }),
-      item({
-        id: 2,
-        startsAt: new Date(DAY_START + HOUR / 6).toISOString(),
-        endsAt: new Date(DAY_START + HOUR / 3).toISOString(),
-      }),
-    ];
-    const scale = buildTimeScale(items, DAY_START, DAY_START + HOUR);
-    const placed = positionDayItems(items, scale.toY);
-    expect(placed.map(({ lane, laneCount }) => [lane, laneCount])).toEqual([
-      [0, 1],
-      [0, 1],
+const start = Date.parse("2026-10-16T08:00:00Z");
+const project = (id: number, from: number, to: number) =>
+  ({
+    id,
+    title: "Activity",
+    startsAt: new Date(start + from * 60000).toISOString(),
+    endsAt: new Date(start + to * 60000).toISOString(),
+  }) as PublicScheduleItem;
+const toY = (instant: number) => (instant - start) / 60000;
+describe("calendar activity lanes (H47)", () => {
+  it("gives concurrent activities separate lanes and reuses a lane at an exact handoff", () => {
+    const entries = positionDayItems(
+      [project(1, 0, 60), project(2, 0, 30), project(3, 30, 60)],
+      toY,
+    );
+    expect(entries.map(({ lane, laneCount }) => [lane, laneCount])).toEqual([
+      [0, 2],
+      [1, 2],
+      [1, 2],
     ]);
-    expect(placed[0].top + placed[0].height).toBeLessThan(placed[1].top);
+  });
+  it("does not narrow later activities because an earlier group had more overlap", () => {
+    const entries = positionDayItems(
+      [project(1, 0, 30), project(2, 0, 30), project(3, 60, 90)],
+      toY,
+    );
+    expect(entries.at(-1)).toMatchObject({ lane: 0, laneCount: 1, top: 60 });
+  });
+  it("expands into free lanes alongside a long session without covering simultaneous items", () => {
+    const entries = positionDayItems(
+      [project(1, 0, 600), project(2, 0, 60), project(3, 0, 60), project(4, 120, 180)],
+      toY,
+    );
+    expect(entries.find((entry) => entry.item.id === 4)).toMatchObject({
+      lane: 1,
+      laneCount: 3,
+      laneSpan: 2,
+    });
+    expect(entries.find((entry) => entry.item.id === 2)).toMatchObject({ laneSpan: 1 });
+  });
+  it("keeps a short activity inside its actual interval instead of expanding it over the following item", () => {
+    const entries = positionDayItems([project(1, 0, 30), project(2, 30, 60)], toY);
+    expect(entries[0].top + entries[0].height).toBeLessThanOrEqual(entries[1].top);
   });
 });

@@ -343,6 +343,10 @@ surfaces — never from stacking rounded rectangles around every region.
   12px top inset so the title line starts beside the button. Vertical
   separation is earned below the component, not by an arbitrary offset above
   it.
+- **Sibling views keep their geometry.** Grouped Home and Projects views share
+  their content width and parent header/navigation tracks. Route-specific titles
+  and controls sit below them. The app reserves its scrollbar gutter so a long
+  list does not shift the shared header horizontally.
 - **Curvature follows ownership.** Fields use the 6 px control radius and
   buttons use the pill radius; inline `Surface`/`SectionCard` groupings use 8 px; the floating sidebar uses
   12 px; overlays use their token-backed 8 px radius. A rounded edge signals a
@@ -508,10 +512,13 @@ shared implementations. Geometry lives in `styles/surfaces.css`.
 Application management and user/enterprise detail use the same 1280 px content
 canvas as Users. A full route page does not mean unlimited
 width: user detail needs its own route, header and tabs, not a stretched canvas
-or a side editor. Libraries use the 896 px reading canvas. Profile, project details and event
-settings use the 1280 px content canvas: desktop columns group personal details
-and account utilities, project content and challenges, or category navigation
-and settings. Keep individual form fields and descriptions readable within
+or a side editor. Libraries use the 896 px reading canvas. Profile and account (`/settings/profile`),
+project details and event settings use the 1280 px content canvas. Profile and account
+is two columns: bordered cards for editing on the left (personal details, public profile,
+account and security, roles, danger zone, one shared Save) and a sticky identity panel on the
+right (photo, name, verified email, visible role and the live public-card preview).
+Project details and event settings group project content and challenges, or category
+navigation and settings. Keep individual form fields and descriptions readable within
 that canvas. These contexts use bounded SectionCard surfaces with plain rows
 inside; avoid nested cards around each person, link or challenge. Neither route name nor settings category chooses width.
 Activities and Accreditation/Presence share this 1280 px canvas, including
@@ -1375,3 +1382,18 @@ shared tokens/surfaces/hierarchy (#185), accessible data and error states
 sponsor/programme/statistics/settings workspaces (#192–#195), and the
 copy/localization sweep (#196). The audit narrative and per-issue sequencing
 live in those GitHub issues; the durable rules all live here.
+
+Schedule categories use dedicated `--schedule-*` tokens, never operational status
+colors: activity slate, meals green, workshops purple, talks blue, ceremonies gold,
+deadlines orange and other neutral gray. Category identity is stable across dates,
+filters, grid/agenda, light/dark themes, and never depends on audience or list order.
+Event metadata retains the category label; filter options repeat its color marker.
+
+Authenticated personal sections use labelled rounded navigation buttons for sibling
+routes (Home and Projects). Within a destination, use the existing rectangular
+TabBar for local views such as Inbox Messages/Preferences. Do not duplicate primary
+actions below this navigation: they belong beside the page title in PageHeader.
+
+The schedule current-time marker uses red as a temporal locator (time badge, dot
+and line), following the calendar convention; event categories retain their own
+colors and are never recolored because they overlap the current time.

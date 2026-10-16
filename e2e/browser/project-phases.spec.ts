@@ -3,6 +3,7 @@ import { CAPABILITIES } from "../../packages/shared/src/capabilities";
 import { expect, shellUser, test } from "./fixtures";
 
 test("project phases share the event category save and event timezone", async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem("hackos.cookie-notice.dismissed", "true"));
   let saved: Record<string, unknown> | null = null;
   const config = {
     name: "HackUDC",

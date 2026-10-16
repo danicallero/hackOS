@@ -391,9 +391,10 @@ export async function buildApp(): Promise<App> {
       const requestedMethod = req.headers["access-control-request-method"]?.toUpperCase();
       const method = req.method === "OPTIONS" ? requestedMethod : req.method;
       if (path.startsWith("/api/public/") && (method === "GET" || method === "HEAD")) {
-        // H17/H60 public projections may depend on the viewer's gallery audience.
+        // H17/H59/H60 public projections may depend on the viewer's audience.
         const origin = req.headers.origin;
         const viewerDependent =
+          path === "/api/public/activities" ||
           /^\/api\/public\/projects(?:\/|$)/.test(path) ||
           /^\/api\/public\/challenges\/[^/]+\/winners$/.test(path);
         const appOrigin =

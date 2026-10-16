@@ -54,10 +54,25 @@ retain anonymous wildcard CORS.
 
 ## Gallery and files
 
-`GET /api/public/projects` accepts page/pageSize, challengeId and search and
-returns `{items,total,page,pageSize}`. Detail is `/api/public/projects/:id`.
+`GET /api/public/projects` accepts page/pageSize, challengeId, search and winnersOnly=true and
+returns `{items,total,page,pageSize}`. The winner filter applies before pagination
+and includes only published, visible winners; combined with challengeId it
+selects winners of that challenge. Unpublished selections never affect its count. Detail is `/api/public/projects/:id`.
 The same paths accept optional authenticated sessions for attendee galleries.
 Batch projections use a fixed number of queries across a page.
+
+The public landing page includes a gallery section. `/gallery` and its project
+records retain the shared application shell and navigation when signed in;
+anonymous visitors get the public brand, language/theme controls and sign-in
+entry. Both contexts use the same server projection and audience rules. The
+listing uses the shared list toolbar with search and challenge filters, resetting
+pagination when either changes. Published winners show a trophy and localized
+rank on both the list and record. Cards share equal grid tracks, show consent-aware
+team avatar groups at the foot, and preview two challenge names with a popover
+for the complete challenge list without expanding the grid. Records include challenges, all authorized
+files for each field, choice labels and the visible team. Gallery navigation,
+challenge links and external files/demos use shared Button variants with
+Phosphor icons; record sections use the open SectionCard layout.
 
 A member's photo on project data follows their public profile (#934): it is
 shown exactly when the profile is visible (`directory_visible` with consent)

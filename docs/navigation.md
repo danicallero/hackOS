@@ -44,16 +44,20 @@ nav gated on `role` instead. The mobile My Projects tab needs only event access 
 
 ### Stable personal area (`PERSONAL_NAV`)
 
-Visible to any authenticated account, no capability required: Schedule, My
-applications, My projects, Project gallery, Wallet, Inbox, My profile — except for a
-**pure applicant**: an account with no role-derived event access (`GET
-/api/me`'s `hasEventAccess`, `apps/api/src/modules/identity/role.ts#hasEventAccess`),
-no operational capability, and no room-judge/sponsor-rep association
-(`isPureApplicant` in `apps/web/src/lib/session.tsx`). That account has
-nothing to do yet on My projects, Wallet, or Inbox, so those three
-hide (`NavItem.hideForPureApplicant` in `nav.ts`) — Schedule, My applications,
-and My profile stay, since applying (or checking an application's status) is
-exactly what they still need.
+The personal sidebar exposes **Home**, **My applications**, **Projects**,
+**Wallet**, **Contacts** and **My profile**. Home opens Event (`/event`) and groups Schedule (`/timetable`)
+and Inbox (`/inbox`) in a shared internal navigation row.
+Projects groups My projects (`/my-project`) and Gallery (`/gallery`). The sidebar
+keeps the parent selected on every grouped route, including records, and Home
+retains the unread indicator. Existing URLs and bookmarks remain valid. Sibling views share the same
+PageLayout content width and parent header/navigation tracks, including loading
+states. Record titles and route-specific controls sit below those tracks.
+
+A **pure applicant** has no role-derived event access, operational capability,
+or room-judge/sponsor-rep association (`isPureApplicant` in `session.tsx`). Wallet
+and Contacts hide; Home omits Inbox and Projects opens the gallery instead of
+requesting a private team list. API audience and capability checks still govern
+every destination.
 
 **Agenda** (es "Agenda", gl "Axenda", en "Contacts"; `/people`, #935,
 address-book icon) is the attendee's event diary:
@@ -63,11 +67,10 @@ like Wallet and Inbox, and no capability. It sits just above My profile,
 where each person decides whether to share a public profile with the people
 who scan their badge. See [`diary.md`](./diary.md).
 
-There is deliberately no dashboard/home page: `/timetable` (Schedule) is the
-landing destination after sign-in and email verification
-(`apps/web/src/lib/invite-destination.ts`, `apps/web/src/lib/return-path.ts`),
-and every other destination a dashboard would have surfaced (applications,
-project, wallet) already has its own stable nav entry above.
+`/event` is the default landing destination after sign-in and verification.
+It leads with the current event-phase countdown, then public announcements,
+challenges and sponsors. Schedule remains in `/timetable` without repeating
+its contents in the overview. Explicit return paths still win.
 
 My projects stays visible to every admitted participant. Projects have one
 draft-to-submitted lifecycle and one team roster (H19/H20). Live queue status appears
@@ -75,7 +78,13 @@ inside the relevant project record, rather than as a separate destination.
 `/my-queue` remains a compatibility redirect for saved links. Participant project
 details use `/my-project/:id` for drafts, submitted content, the team and queues.
 The server-rendered `/gallery` and `/gallery/:id` use the API’s event phase and
-audience policy; navigation does not grant gallery access.
+audience policy; navigation does not grant gallery access. Both gallery routes
+retain the application shell when signed in and public navigation otherwise.
+The public landing also exposes a gallery section. The Home `/event` view
+shows event information, public announcements, challenges and sponsors without
+repeating Schedule, Applications or Gallery. Challenge records retain the same
+Home navigation for signed-in viewers and return to `/event`; anonymous visitors
+return to the public landing.
 
 ### Work workspaces (`WORKSPACES`)
 
@@ -134,15 +143,14 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
 - `/timetable` and the public `/horario` (both rendered by
   `PublicScheduleView`) get a client-side audience filter (H59 follow-up,
   `components/public/schedule-audience-filter.tsx`) whenever the caller's own
-  feed from `/api/public/activities` actually spans more than one segment —
+  feed from `/api/public/activities` contains audience tags —
   the API projects each item's tags to that caller's accessible segments, and
   its options are derived from those distinct `audiences` tags (plus a
-  `staff` pseudo-segment for empty-audience items), never a separate role or
+  `staff` pseudo-segment for empty-audience items, kept available when the API returns staff-only projection metadata), never a separate role or
   capability lookup, so it can only ever offer segments the viewer already has
-  access to. A pure participant (whose feed is 100% `participant`-tagged) gets
-  no filter at all. A second,
+  access to. A pure participant sees only the participant option. A second,
   independent filter by activity kind (`components/public/schedule-kind-filter.tsx`)
-  appears alongside it whenever the feed spans more than one `ACTIVITY_KINDS`
+  is grouped in the same FilterMenu whenever the feed spans more than one `ACTIVITY_KINDS`
   value, mirroring the mobile app's kind filter (open to everyone there too —
   `docs/mobile.md`'s Schedule/Horario section). The Manage Schedule table
   (`app/(app)/schedule/schedule-dialogs.tsx`'s `useScheduleFilters`) offers the
@@ -371,3 +379,25 @@ Judging hours are in Event settings (`/settings/event?tab=judging`) and retain
 the `queue:admin` gate. `/queue/settings` preserves saved links by directing
 them there. `/queue/rooms` remains available as the room configuration page;
 it is embedded in Queue operations' Room configuration tab and has no sidebar entry of its own.
+
+The Home overview keeps the active countdown without a separate milestones list.
+Public and authenticated event views share a sponsor logo grid, sorted by ascending
+enterprise priority (1 first); sponsor websites open in a new tab. Home sibling
+pages keep a consistent content width. Schedule search and categorical filters share
+the standard ListToolbar/FilterMenu; long activities remain in the hourly grid,
+with category metadata and an internal daytime scroll position.
+
+The programme requests the audience-aware feed with session credentials from the
+configured app origin; CORS reflects only trusted app origins for this endpoint.
+Anonymous public/TV consumers keep the credential-free feed. Project creation is
+the primary action of the Projects page header.
+
+Gallery and challenge records share the persistent app route layout with the personal
+pages. That layout chooses public chrome only for anonymous record visitors, so
+switching My projects/Gallery preserves the sidebar instance. The page header reserves
+the default control height even while an asynchronous primary action is loading.
+
+Gallery navigation streams six skeleton cards while the API read is pending. Cards
+reserve two summary lines and group challenge previews with their disclosure count;
+team avatars and the project action share the footer. My projects receives its initial
+private list on the server, avoiding an empty client refetch on each sibling navigation.

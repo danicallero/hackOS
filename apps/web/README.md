@@ -222,7 +222,7 @@ src/
       claim-account, applications (public application form)
     (app)/             authenticated shell — sidebar + workspace bar, AuthGuard
       personal area (my-applications, my-project, my-queue, wallet, inbox,
-      schedule, settings/profile — no dashboard/home page, schedule is the
+      schedule, settings/profile — Home is the event overview and sign-in
       landing destination) · staff workspaces (applications, projects,
       challenges, enterprises, queue, judging, logistics, announcements,
       timetable, tv, users, permissions, audit, settings/event) — one
@@ -231,7 +231,7 @@ src/
       Picture-in-Picture out of the app shell (review-popup) — AuthGuard, but
       no sidebar/top bar; the window itself is the whole surface
     layout.tsx         root: fonts + <Providers>
-    page.tsx           routes to /timetable or /login by session
+    page.tsx           public landing; signed-in app entry opens /event
   components/
     ui/                shadcn primitives — generated structure + shared tokens
     common/            reusable app widgets (the shared library, below)
@@ -656,3 +656,54 @@ math, role/category labels, timezone-store behavior and account-removal progress
 parsing live in `packages/shared` (#1001). Keep web rendering, storage and
 `datetime-local` conversion here. See [shared client models](../../docs/notifications.md#shared-client-models-1001)
 for drift decisions and fallback orders.
+
+Home opens `/event`, leading with the active hacking/judging countdown, and
+groups the schedule and inbox; Projects groups `/my-project`
+and `/gallery`. These retain their stable URLs with shared internal navigation.
+The `/event` page reuses the public landing content inside the shared
+application shell, limited to event information, announcements, challenges and
+sponsors; schedule, applications and gallery remain in their own destinations.
+Challenge records also retain the authenticated Home shell and navigation. `/gallery` and its records choose the same shell for signed-in viewers
+and public chrome for anonymous visitors.
+
+Home sponsors use the shared `SponsorGrid`: ascending enterprise priority, theme-aware
+logos and external website links in new tabs. The calendar toolbar combines search,
+categorical FilterMenu, previous/next date arrows and day/week controls in one desktop
+row. Its internal viewport fills the remaining window height; all timed activities
+(including long sessions) retain their real duration and category metadata.
+
+At narrow widths the Day view presents a chronological agenda with readable event
+metadata; desktop Day and Week keep the hour grid. Overlapping grid events expand
+into available lanes. Audience filtering offers only caller-visible audience tags,
+even when the feed currently contains a single audience.
+
+Gallery has a route-level loading boundary with skeleton cards. Gallery/challenge
+URLs live in the same app route group as My projects; the shared shell persists across
+sibling navigation while still exposing anonymous record views. My projects loads
+initial records on the server and keeps client reads for invitation mutation refreshes.
+The web audience filter mirrors mobile: empty audiences mean staff-only, and a staff
+projection keeps that filter available even before staff-only activities are scheduled.
+
+Schedule filters retain the unfiltered day/hour grid and only remove event blocks.
+Short blocks use compact padding and line heights so title, category and time fit
+inside their actual duration; filtering does not collapse the calendar to a single hour.
+
+The calendar retains a full 00:00–24:00 axis. The current event-local time appears
+as a red time label in the gutter, a dot and line across today, and a quiet guide
+across other visible dates. It updates every 30 seconds; Today scrolls to it.
+
+Calendar Day/Week reuses the standard content-width TabBar; Today is a secondary
+outlined action beside date navigation, rather than a third view toggle.
+
+Day navigation arrows sit at the left/right ends of the calendar day header, including
+the narrow agenda; its full date is centered. The top toolbar keeps search, filters,
+Today and the Day/Week view selector without repeating that date.
+
+Gallery records give the project name page-title emphasis with a contextual back-to-
+gallery action. The sidebar leads with team avatars, then challenge links as aligned
+rows; external project fields use their human label rather than a raw URL as the CTA.
+
+Challenge records put the challenge title and sponsor identity before all content,
+with a header back action. Description/criteria occupy the main column; published
+winners and prizes occupy the supporting column. Winners use ranked status and the
+shared project action, never a raw list above the challenge identity.

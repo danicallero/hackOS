@@ -37,5 +37,9 @@ export const projectGalleryQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
   challengeId: z.coerce.number().int().positive().optional(),
+  winnersOnly: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
   search: z.string().trim().max(200).optional(),
 });

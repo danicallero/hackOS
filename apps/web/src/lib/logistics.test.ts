@@ -40,6 +40,23 @@ describe("logisticsApi.publicSchedule", () => {
   });
 });
 
+describe("logisticsApi.viewerSchedule (H59)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("sends the session so the API can return the viewer's allowed audiences", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      text: async () => JSON.stringify({ items: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await logisticsApi.viewerSchedule();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+});
+
 describe("resolveScheduleText", () => {
   it("resolves translated descriptions independently from titles", () => {
     expect(
