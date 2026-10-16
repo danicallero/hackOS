@@ -99,7 +99,6 @@ test("propagates an external judging transition without a page reload", async ({
               room_id: 7,
               is_paused: false,
               max_in_waiting_area: 3,
-              desired_minutes_per_team: 5,
             },
             challenge: {
               id: 41,

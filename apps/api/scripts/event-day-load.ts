@@ -473,8 +473,8 @@ async function prepareFixture(options: Options): Promise<Fixture> {
       ]!;
     });
     await client.query(
-      `INSERT INTO room_queue_state (room_id, is_paused, max_in_waiting_area, desired_minutes_per_team)
-       SELECT unnest($1::int[]), false, 1000, 8`,
+      `INSERT INTO room_queue_state (room_id, is_paused, max_in_waiting_area)
+       SELECT unnest($1::int[]), false, 1000`,
       [rooms],
     );
     await client.query(

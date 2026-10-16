@@ -136,16 +136,16 @@ describe("1:1 group parity", () => {
   });
 
   it("excludes paused rooms from ETA throughput", async () => {
-    const { challengeEtaMinutesPerSlot, roomPace } = await import(
+    const { minutesPerSlotByChallenge, roomPace } = await import(
       "../../src/modules/queue/reads.js"
     );
     const challengeId = await createChallenge();
-    const activeRoom = await createRoom({ desiredMinutesPerTeam: 8 });
-    const pausedRoom = await createRoom({ isPaused: true, desiredMinutesPerTeam: 2 });
+    const activeRoom = await createRoom();
+    const pausedRoom = await createRoom({ isPaused: true });
     await assignChallengeToRoom(activeRoom, challengeId);
     await assignChallengeToRoom(pausedRoom, challengeId);
 
-    expect(await challengeEtaMinutesPerSlot(challengeId)).toBe(10);
+    expect((await minutesPerSlotByChallenge([challengeId])).get(challengeId)).toBe(10);
     expect((await roomPace(activeRoom)).roomCount).toBe(1);
   });
 
@@ -180,7 +180,7 @@ describe("merged N>1 group", () => {
     const first = challengeIds[0]!;
     const second = challengeIds[1]!;
     const groupId = await mergeChallengesIntoOneGroup(challengeIds);
-    const roomId = await createRoom({ desiredMinutesPerTeam: 8 });
+    const roomId = await createRoom();
     await assignQueueGroupToRoom(roomId, groupId);
     const userId = await createUser();
     const mine = await createRepoWithTeam([userId]);

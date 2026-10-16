@@ -2,13 +2,7 @@ import { pool, type Queryable } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { queueFixtureMarker } from "./broadcast.js";
 import { assertQueueChallengeReadScope, assertQueueEntryScope } from "./fixture-scope.js";
-import {
-  CHALLENGE_ROOM_IDS_FOR_MARKER_SQL,
-  CHALLENGE_ROOM_IDS_SQL,
-  QUEUE_GROUP_LABEL_JOIN,
-  QUEUE_GROUP_LABEL_SQL,
-  roomChallengeIds,
-} from "./groups.js";
+import { QUEUE_GROUP_LABEL_JOIN, QUEUE_GROUP_LABEL_SQL, roomChallengeIds } from "./groups.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
 const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_description,
@@ -583,49 +577,38 @@ export async function publicRoomViews() {
   }));
 }
 
-export async function challengeEtaMinutesPerSlot(
-  challengeId: number,
-  fixtureMarker = false,
-): Promise<number> {
-  const servingRoomsSql = fixtureMarker
-    ? CHALLENGE_ROOM_IDS_FOR_MARKER_SQL
-    : CHALLENGE_ROOM_IDS_SQL;
-  const { rows } = await pool.query(
-    // Every room working this challenge's queue_group shares its pace.
-    `SELECT COALESCE(AVG(rqs.desired_minutes_per_team), 8) AS avg, COUNT(*)::int AS rooms
-       FROM (${servingRoomsSql}) serving
-       JOIN room_queue_state rqs
-         ON rqs.room_id = serving.room_id
-        AND rqs.is_paused = false`,
-    fixtureMarker ? [challengeId, fixtureMarker] : [challengeId],
+/**
+ * #997/H38: minutes per queue slot for each challenge, from queue_group_pace().
+ * Every requested id gets a value; a challenge outside any group gets the
+ * function's defaults.
+ */
+export async function minutesPerSlotByChallenge(
+  challengeIds: number[],
+  db: Queryable = pool,
+): Promise<Map<number, number>> {
+  if (challengeIds.length === 0) return new Map();
+  const { rows } = await db.query(
+    `SELECT ids.challenge_id, p.minutes_per_slot
+       FROM unnest($1::int[]) AS ids(challenge_id)
+       LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = ids.challenge_id
+       CROSS JOIN LATERAL queue_group_pace(qgc.queue_group_id) p`,
+    [challengeIds],
   );
-  const avg = Number(rows[0].avg);
-  const roomCount = Math.max(1, Number(rows[0].rooms));
-  const timing = await pool.query(
-    `SELECT t.estimated_cycle_minutes FROM queue_group_challenges qgc CROSS JOIN LATERAL queue_group_timing(qgc.queue_group_id) t WHERE qgc.challenge_id=$1`,
-    [challengeId],
-  );
-  return Number(timing.rows[0]?.estimated_cycle_minutes ?? avg) / roomCount;
+  return new Map(rows.map((row) => [Number(row.challenge_id), Number(row.minutes_per_slot)]));
 }
 
-/** Same ETA formula as myQueueStatus (H38), applied to an arbitrary set of waiting entries. */
+/** H38 ETA for an arbitrary set of waiting entries (queue_group_pace). */
 async function withEtaMinutes<T extends { challenge_id: number; position: number | null }>(
   entries: T[],
 ): Promise<(T & { eta_minutes: number | null })[]> {
-  const perSlotByChallengeId = new Map<number, number>();
-  for (const entry of entries) {
-    if (!perSlotByChallengeId.has(entry.challenge_id)) {
-      perSlotByChallengeId.set(
-        entry.challenge_id,
-        await challengeEtaMinutesPerSlot(entry.challenge_id),
-      );
-    }
-  }
+  const perSlotByChallengeId = await minutesPerSlotByChallenge([
+    ...new Set(entries.map((entry) => entry.challenge_id)),
+  ]);
   return entries.map((entry) => ({
     ...entry,
     eta_minutes:
       entry.position != null
-        ? Math.round(entry.position * (perSlotByChallengeId.get(entry.challenge_id) ?? 8))
+        ? Math.round(entry.position * perSlotByChallengeId.get(entry.challenge_id)!)
         : null,
   }));
 }
@@ -833,19 +816,10 @@ export async function myQueueStatus(userId: number) {
               END::int AS queue_rank
          FROM waiting_order
      ), queue_pace AS (
-       SELECT qgc.challenge_id,
-              (SELECT t.estimated_cycle_minutes FROM queue_group_challenges timing_group CROSS JOIN LATERAL queue_group_timing(timing_group.queue_group_id) t WHERE timing_group.challenge_id=qgc.challenge_id) /
-                GREATEST(1, COUNT(rqs.room_id) FILTER (WHERE NOT rqs.is_paused)) AS minutes_per_slot
-         FROM queue_group_challenges qgc
-         JOIN visible_queue_groups vq ON vq.queue_group_id = qgc.queue_group_id
-         JOIN (SELECT DISTINCT challenge_id FROM my_entries) mine
-           ON mine.challenge_id = qgc.challenge_id
-         LEFT JOIN room_queue_groups rqg ON rqg.queue_group_id = qgc.queue_group_id
-         JOIN visible_rooms vr ON vr.room_id = rqg.room_id
-         LEFT JOIN room_queue_state rqs
-           ON rqs.room_id = rqg.room_id
-          AND rqs.is_paused = false
-        GROUP BY qgc.challenge_id
+       SELECT mine.challenge_id, pace.minutes_per_slot
+         FROM (SELECT DISTINCT challenge_id FROM my_entries) mine
+         LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = mine.challenge_id
+         CROSS JOIN LATERAL queue_group_pace(qgc.queue_group_id) pace
      )
      SELECT qe.*, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title, r.name AS repo_name,
             ar.id AS called_room_id, ar.name AS called_room_name, ar.location AS called_room_location,
@@ -876,7 +850,7 @@ export async function myQueueStatus(userId: number) {
                  AND orp.is_test_account = v.is_test_account
                  AND oc.is_test_account = v.is_test_account
             ) END::int AS called_ahead,
-            COALESCE(qp.minutes_per_slot, 8) AS minutes_per_slot,
+            qp.minutes_per_slot,
             COALESCE(
               (SELECT jsonb_agg(
                         jsonb_build_object('id', rm.id, 'name', rm.name, 'location', rm.location)
@@ -983,9 +957,10 @@ export async function roomPace(
   fixtureMarker = false,
   startingEntryId?: number,
 ) {
-  const state = (await db.query(`SELECT * FROM room_queue_state WHERE room_id = $1`, [roomId]))
-    .rows[0];
-  if (!state) throw new NotFoundError("Room not found", { roomId });
+  const { rowCount } = await db.query(`SELECT 1 FROM room_queue_state WHERE room_id = $1`, [
+    roomId,
+  ]);
+  if (!rowCount) throw new NotFoundError("Room not found", { roomId });
   const settings = (await db.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0];
 
   // H29/H46: the presentation-length ceiling comes from the room's queue_group.
@@ -1030,38 +1005,24 @@ export async function roomPace(
       ).rows[0].n
     : 0;
 
-  // Every room (across the whole event) working the same queue_group splits
-  // the pending teams between them — more rooms means more time/team fits
-  // in the same remaining window.
-  const roomCount = primaryChallenge
-    ? Math.max(
-        1,
-        (
-          await db.query(
-            `SELECT COUNT(DISTINCT serving.room_id)::int AS n
-               FROM (${CHALLENGE_ROOM_IDS_FOR_MARKER_SQL}) serving
-               JOIN room_queue_state rqs
-                 ON rqs.room_id = serving.room_id
-                AND rqs.is_paused = false`,
-            [primaryChallenge.id, fixtureMarker],
-          )
-        ).rows[0].n,
-      )
-    : 1;
-
-  const timing = primaryChallenge
-    ? (
-        await db.query(
-          `SELECT t.* FROM queue_group_challenges qgc CROSS JOIN LATERAL queue_group_timing(qgc.queue_group_id) t WHERE qgc.challenge_id=$1`,
-          [primaryChallenge.id],
-        )
-      ).rows[0]
-    : null;
-  const targetMinutes = Number(timing?.target_minutes ?? state.desired_minutes_per_team);
-  const estimatedCycleMinutes = Number(timing?.estimated_cycle_minutes ?? targetMinutes + 2);
-  const samples = Number(timing?.sample_count ?? 0);
+  // #997/H38: queue_group_pace() is the one pace source. Every active room
+  // working the same queue_group splits the pending teams between them —
+  // more rooms means more time/team fits in the same remaining window. A
+  // room that serves no queue reads the function's defaults (NULL group).
+  const timing = (
+    await db.query(
+      `SELECT p.* FROM (SELECT $1::int AS challenge_id) anchor
+         LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = anchor.challenge_id
+         CROSS JOIN LATERAL queue_group_pace(qgc.queue_group_id) p`,
+      [primaryChallenge?.id ?? null],
+    )
+  ).rows[0];
+  const roomCount = Math.max(1, Number(timing.active_rooms));
+  const targetMinutes = Number(timing.target_minutes);
+  const estimatedCycleMinutes = Number(timing.estimated_cycle_minutes);
+  const samples = Number(timing.sample_count);
   const estimatedPresentationMinutes =
-    (5 * targetMinutes + samples * Number(timing?.observed_presentation_minutes ?? targetMinutes)) /
+    (5 * targetMinutes + samples * Number(timing.observed_presentation_minutes ?? targetMinutes)) /
     (5 + samples);
   const preparationMinutes = estimatedCycleMinutes - estimatedPresentationMinutes;
   const activeEntries = challengeIds.length
@@ -1142,13 +1103,13 @@ export async function roomPace(
     exceedsJudgingClose: insufficientTime,
     estimatedCycleMinutes,
     preparationMinutes,
-    timingSampleCount: Number(timing?.sample_count ?? 0),
+    timingSampleCount: samples,
     observedPresentationMinutes:
-      timing?.observed_presentation_minutes == null
+      timing.observed_presentation_minutes == null
         ? null
         : Number(timing.observed_presentation_minutes),
     observedPreparationMinutes:
-      timing?.observed_preparation_minutes == null
+      timing.observed_preparation_minutes == null
         ? null
         : Number(timing.observed_preparation_minutes),
     challengeMaxMinutes,
@@ -1222,11 +1183,13 @@ export async function repoChallenges(repoId: number) {
             busy.room_id AS busy_room_id, busy.room_name AS busy_room_name,
             busy.status AS busy_status,
             -- H30/H38: an ineligible project is never called (#931).
-            COALESCE(prs.eligible, true) AS eligible
+            COALESCE(prs.eligible, true) AS eligible,
+            pace.minutes_per_slot
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
        JOIN repos repo ON repo.id = qe.repo_id AND repo.is_test_account = false
        LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+       CROSS JOIN LATERAL queue_group_pace(qgc.queue_group_id) pace
        LEFT JOIN queue_groups qg ON qg.id = qgc.queue_group_id
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
        LEFT JOIN project_eligibility prs ON prs.repo_id = qe.repo_id
@@ -1251,24 +1214,26 @@ export async function repoChallenges(repoId: number) {
       ORDER BY qg.display_name ASC NULLS LAST, c.title ASC`,
     [repoId],
   );
-  return Promise.all(
-    rows.map(
-      async (row: {
-        entry_id: number;
-        repo_id: number;
-        id: number;
-        title: string;
-        status: string;
-        position: number | null;
-        called_at: string | null;
-      }) => ({
-        ...row,
-        eta_minutes:
-          row.status === "waiting" && row.position != null
-            ? Math.round(Number(row.position) * (await challengeEtaMinutesPerSlot(Number(row.id))))
-            : null,
-      }),
-    ),
+  return rows.map(
+    ({
+      minutes_per_slot,
+      ...row
+    }: {
+      entry_id: number;
+      repo_id: number;
+      id: number;
+      title: string;
+      status: string;
+      position: number | null;
+      called_at: string | null;
+      minutes_per_slot: string;
+    }) => ({
+      ...row,
+      eta_minutes:
+        row.status === "waiting" && row.position != null
+          ? Math.round(Number(row.position) * Number(minutes_per_slot))
+          : null,
+    }),
   );
 }
 

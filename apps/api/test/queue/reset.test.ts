@@ -88,7 +88,6 @@ describe("POST /api/queue/admin/reset", () => {
       status: "active",
       isPaused: false,
       maxInWaitingArea: 5,
-      desiredMinutesPerTeam: 15,
     });
     await assignChallengeToRoom(roomId, challengeOneId);
     await addChallengeJudge(challengeOneId, judge);
@@ -246,7 +245,6 @@ describe("POST /api/queue/admin/reset", () => {
     expect(roomState).toMatchObject({
       is_paused: true,
       max_in_waiting_area: 2,
-      desired_minutes_per_team: 8,
       started_at: null,
     });
     const settings = (await pool.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0];

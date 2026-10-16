@@ -223,7 +223,6 @@ export async function resetJudgingData(
       UPDATE room_queue_state
          SET is_paused = true,
              max_in_waiting_area = 2,
-             desired_minutes_per_team = 8,
              started_at = NULL
     `);
     await client.query(`

@@ -321,7 +321,7 @@ describe("participant view (H38)", () => {
   it("shows status, position and ETA for each challenge of my repos", async () => {
     const me = await createUser();
     const challengeId = await createChallenge();
-    const roomId = await createRoom({ desiredMinutesPerTeam: 10 });
+    const roomId = await createRoom();
     await assignChallengeToRoom(roomId, challengeId);
 
     const { repoId: ahead } = await createRepoWithTeam();
@@ -587,7 +587,7 @@ describe("participant view (H38)", () => {
 describe("pace (H39)", () => {
   it("flags insufficient time when desired pace does not fit the remaining schedule", async () => {
     const challengeId = await createChallenge();
-    const roomId = await createRoom({ desiredMinutesPerTeam: 10 });
+    const roomId = await createRoom();
     await assignChallengeToRoom(roomId, challengeId);
     for (let i = 1; i <= 6; i++) {
       const { repoId } = await createRepoWithTeam();
@@ -627,7 +627,7 @@ describe("pace (H39)", () => {
 describe("called-too-long threshold (H34, #203)", () => {
   it("exposes a configurable threshold via queue settings and room pace, not a hardcoded fallback", async () => {
     const challengeId = await createChallenge();
-    const roomId = await createRoom({ desiredMinutesPerTeam: 10 });
+    const roomId = await createRoom();
     await assignChallengeToRoom(roomId, challengeId);
 
     const defaultPace = await app.inject({

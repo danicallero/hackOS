@@ -42,7 +42,7 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
       body = {
         room,
         challenge,
-        state: { room_id: 7, is_paused: false, desired_minutes_per_team: 8 },
+        state: { room_id: 7, is_paused: false },
         active: entry,
         called: [],
         next: [],

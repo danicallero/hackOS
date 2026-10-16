@@ -38,11 +38,15 @@ afterAll(async () => {
 async function setup() {
   const { enterpriseId, challengeIds } = await createEnterpriseChallenges(1);
   const challenge = challengeIds[0] as number;
-  const a = await createRoom({ desiredMinutesPerTeam: 3 }),
-    b = await createRoom({ desiredMinutesPerTeam: 20 });
+  const a = await createRoom(),
+    b = await createRoom();
   await assignChallengeToRoom(a, challenge);
   await assignChallengeToRoom(b, challenge);
   return { enterpriseId, challenge, a, b };
+}
+async function minutesPerSlot(challengeId: number) {
+  const { minutesPerSlotByChallenge } = await import("../../src/modules/queue/reads.js");
+  return (await minutesPerSlotByChallenge([challengeId])).get(challengeId);
 }
 async function timing(id: number) {
   return (
@@ -138,10 +142,8 @@ describe("track targets and learned cycles (H32,H38,H39)", () => {
       const { repoId } = await createRepoWithTeam();
       await enqueueRepo(s.challenge, repoId, i + 1);
     }
-    const { roomPace, challengeEtaMinutesPerSlot } = await import(
-      "../../src/modules/queue/reads.js"
-    );
-    const before = await challengeEtaMinutesPerSlot(s.challenge);
+    const { roomPace } = await import("../../src/modules/queue/reads.js");
+    const before = await minutesPerSlot(s.challenge);
     await pool.query(
       `UPDATE queue_settings SET schedule_end_at=now()+interval '5 minutes' WHERE id=1`,
     );
@@ -152,7 +154,7 @@ describe("track targets and learned cycles (H32,H38,H39)", () => {
     expect(new Date(pace.estimatedFinishAt as string).getTime()).toBeGreaterThan(
       new Date(pace.judgingClosesAt).getTime(),
     );
-    expect(await challengeEtaMinutesPerSlot(s.challenge)).toBe(before);
+    expect(await minutesPerSlot(s.challenge)).toBe(before);
     expect(pace.estimatedCycleMinutes).toBeGreaterThan(10);
   });
   it("includes teams already presenting in the estimated finish, even when none are waiting", async () => {
@@ -175,13 +177,22 @@ describe("track targets and learned cycles (H32,H38,H39)", () => {
     expect(pace.estimatedFinishAt).not.toBeNull();
     expect(pace.exceedsJudgingClose).toBe(true);
   });
+  it("gives one ETA slot the full cycle when no room is active (#997)", async () => {
+    const s = await setup();
+    await target(s.challenge, admin, 300);
+    await pool.query(`UPDATE room_queue_state SET is_paused=true`);
+    expect(await minutesPerSlot(s.challenge)).toBe(7);
+    const { roomPace } = await import("../../src/modules/queue/reads.js");
+    const pace = await roomPace(s.a);
+    expect(pace.roomCount).toBe(1);
+    expect(pace.estimatedCycleMinutes).toBe(7);
+  });
   it("uses active parallel rooms for throughput and keeps shared-participant collisions hard", async () => {
     const s = await setup();
     await target(s.challenge, admin, 480);
-    const { challengeEtaMinutesPerSlot } = await import("../../src/modules/queue/reads.js");
-    expect(await challengeEtaMinutesPerSlot(s.challenge)).toBe(5);
+    expect(await minutesPerSlot(s.challenge)).toBe(5);
     await pool.query(`UPDATE room_queue_state SET is_paused=true WHERE room_id=$1`, [s.b]);
-    expect(await challengeEtaMinutesPerSlot(s.challenge)).toBe(10);
+    expect(await minutesPerSlot(s.challenge)).toBe(10);
     const one = await createRepoWithTeam();
     const two = await createRepoWithTeam(one.memberIds);
     await enqueueRepo(s.challenge, one.repoId, 1);
