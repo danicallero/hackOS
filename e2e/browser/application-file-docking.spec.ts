@@ -103,19 +103,15 @@ for (const width of [1536, 1920]) {
     expect(await viewer.evaluate((element) => getComputedStyle(element).opacity)).toBe("0");
     const slot = page.locator("[data-file-viewer-preview-slot]");
     await expect(slot).toHaveCount(1);
-    // A stable scrollbar gutter narrows the layout viewport on platforms with classic scrollbars.
-    const layoutWidth = await page.evaluate(() => document.documentElement.clientWidth);
-    const rightX = layoutWidth - sourceBounds!.x - sourceBounds!.width;
+    // The docks sit 13.5rem either side of the viewport centre, so the right slot starts a
+    // fixed 27rem after the left viewer's start plus its width, whatever the scrollbar gutter.
+    const rightX = sourceBounds!.x + sourceBounds!.width + 27 * 16;
     const pointerY = box!.y + box!.height / 2;
     await page.mouse.move(width * 0.6, pointerY, { steps: 10 });
     await expect(slot).toHaveAttribute("data-file-viewer-preview-slot", "right");
     await expect
-      .poll(async () => {
-        const slotBox = (await slot.boundingBox())!;
-        const inner = await page.evaluate(() => [innerWidth, document.documentElement.clientWidth]);
-        return `${Math.abs(slotBox.x - rightX)}|slot=${slotBox.x}|rightX=${rightX}|inner=${inner}|src=${sourceBounds!.x}+${sourceBounds!.width}`;
-      })
-      .toMatch(/^[01](\.\d+)?\|/);
+      .poll(async () => Math.abs((await slot.boundingBox())!.x - rightX))
+      .toBeLessThanOrEqual(1);
     await expect
       .poll(async () => (await dialog.boundingBox())!.x)
       .toBeLessThan(dialogBounds!.x - 400);
