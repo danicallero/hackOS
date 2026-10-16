@@ -43,6 +43,7 @@ vi.mock("./event-config-context", () => ({
   }) => <div data-provider-refresh={refreshKey}>{children}</div>,
 }));
 vi.mock("./event-tab", () => ({ EventTab: () => <div data-testid="event-form" /> }));
+vi.mock("../../projects/form/project-form-section", () => ({ ProjectFormSection: () => null }));
 vi.mock("./venue-tab", () => ({
   VenueTab: ({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) => (
     <button type="button" data-testid="venue-form" onClick={() => onDirtyChange(true)} />
@@ -98,9 +99,11 @@ describe("EventSettingsPage", () => {
     await render();
     expect(links()).toEqual([
       "/settings/event?tab=event",
+      "/settings/event?tab=schedule",
+      "/settings/event?tab=projects",
       "/settings/event?tab=wallet",
-      "/settings/event?tab=liveActivities",
       "/settings/event?tab=notifications",
+      "/settings/event?tab=liveActivities",
     ]);
     expect(container.querySelector("[data-testid]")).toBeNull();
   });
@@ -130,7 +133,7 @@ describe("EventSettingsPage", () => {
     search = "tab=venue";
     await render();
     expect(container.querySelector("[data-testid=venue-form]")).toBeNull();
-    expect(links()).toHaveLength(4);
+    expect(links()).toHaveLength(6);
     expect(replace).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });

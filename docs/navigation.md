@@ -100,7 +100,7 @@ workspace never over-grants access.
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | `schedule:read` (view-only schedule), `schedule:manage`, `tv:control`, or `announcements:manage` |
 | Sponsors | Enterprises, Challenges, Company tags (`/company-tags`), Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Company tags: `sponsors:manage` only — reps see their company's tags on its Tags tab, #935; Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
-| Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours) (each tab within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
+| Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours), `projects:edit` (project form) (each section within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
 | Access and audit | Users, Permissions, Audit log | `users:read`, `permissions:manage`, `audit:read` |
 
 The web navigation uses Phosphor concept icons: `Package` for the Logistics
@@ -364,7 +364,9 @@ despite a working API.
   `sponsors:manage` and only their own enterprises' for a sponsor rep.
 
 Event settings (`/settings/event`) is a list of the sections the caller's
-capabilities allow, never a second sidebar (#932): `?tab=event|venue|wallet|presence|invites|judging|liveActivities|danger`
+capabilities allow, grouped as General (event, venue), Dates and deadlines
+(event and hacking dates, project deadlines and visibility, judging window,
+presence), Forms (project form), Access (invites, wallet) and Notifications, never a second sidebar (#932): `?tab=event|venue|schedule|projects|judging|presence|projectForm|invites|wallet|notifications|liveActivities|danger`
 opens one section with a back link (page header context slot) to the list. A
 lone visible section opens directly only when no `?tab=` is requested; a
 `?tab=` the caller cannot manage shows the list. The URL is the only state, so

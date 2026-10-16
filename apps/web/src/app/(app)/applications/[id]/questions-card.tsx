@@ -40,6 +40,7 @@ import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { PaperclipIcon } from "@phosphor-icons/react/dist/csr/Paperclip";
 import { PencilSimpleIcon } from "@phosphor-icons/react/dist/csr/PencilSimple";
+import { PhoneIcon } from "@phosphor-icons/react/dist/csr/Phone";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { RadioButtonIcon } from "@phosphor-icons/react/dist/csr/RadioButton";
 import { TextAlignLeftIcon } from "@phosphor-icons/react/dist/csr/TextAlignLeft";
@@ -855,6 +856,7 @@ export function fieldKindLabel(kind: FieldKind, t: Translate): string {
     birth_year: t("fieldKindBirthYear"),
     date: t("fieldKindDate"),
     number: t("fieldKindNumber"),
+    phone: t("fieldKindPhone"),
     file: t("fieldKindFile"),
     university: t("fieldKindUniversity"),
     degree: t("fieldKindDegree"),
@@ -873,6 +875,7 @@ const FIELD_KIND_ICON: Record<FieldKind, PhosphorIcon> = {
   birth_year: CalendarIcon,
   date: CalendarIcon,
   number: HashIcon,
+  phone: PhoneIcon,
   file: PaperclipIcon,
   images: ImagesIcon,
   university: GraduationCapIcon,
@@ -927,7 +930,7 @@ export function serializeApplicationField(field: TemplateField): TemplateField {
 
 /** Kinds where the applicant types free text, so a custom placeholder is
  *  meaningful (choice/date/file/university kinds have their own UI instead). */
-const TYPED_KINDS = new Set<FieldKind>(["text", "textarea", "number"]);
+const TYPED_KINDS = new Set<FieldKind>(["text", "textarea", "number", "phone"]);
 
 function FieldKindIcon({ kind, className }: { kind: FieldKind; className?: string }) {
   const Icon = FIELD_KIND_ICON[kind];

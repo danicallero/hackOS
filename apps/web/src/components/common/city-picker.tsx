@@ -1,12 +1,20 @@
 "use client";
 
-// Photon is a public OpenStreetMap geocoder. We only request suggestions after
-// two characters and persist its display label, never a third-party identifier.
+// Suggestions come from `lib/city-search` (bundled index, then Photon, then
+// Open-Meteo). Text typed here is never thrown away: leaving the field resolves
+// a pending search and, when nothing matches, keeps what was typed in the
+// manual city/province/country fields.
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  type CityValue,
+  formatCityValue,
+  normalizeCityText,
+  searchCities,
+} from "@/lib/city-search";
 import { useLocale } from "@/lib/i18n";
 
 type Props = {
@@ -20,17 +28,15 @@ type Props = {
   "aria-invalid"?: React.AriaAttributes["aria-invalid"];
   "aria-required"?: React.AriaAttributes["aria-required"];
 };
-export interface CityValue {
-  city: string;
-  province: string;
-  country: string;
-}
-interface Feature {
-  properties?: { name?: string; city?: string; county?: string; country?: string; state?: string };
-}
 
-function formatLocation({ city, province, country }: CityValue) {
-  return [city, province, country].filter(Boolean).join(", ");
+export type { CityValue };
+
+const formatLocation = formatCityValue;
+
+/** "Vigo, Galicia, España" typed by hand → its parts; one segment is a city. */
+function parseTyped(text: string): CityValue {
+  const [city = "", province = "", ...country] = text.split(",").map((part) => part.trim());
+  return { city, province, country: country.join(", ") };
 }
 
 export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: Props) {
@@ -42,72 +48,62 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
   const [status, setStatus] = useState<"idle" | "loading" | "empty" | "error">("idle");
   const [activeIndex, setActiveIndex] = useState(-1);
   const [query, setQuery] = useState(() => formatLocation(value));
+  // Set when the field is left with unresolved text; cleared once settled.
+  const [settling, setSettling] = useState(false);
+  const label = formatLocation(value);
 
   // A draft may update outside this picker (for example after autosave
-  // completes). Keep its single-line label in sync without replacing a search
-  // the participant is actively typing.
+  // completes). Follow it, but only when the stored value itself changes, so
+  // neither typing nor leaving the field replaces what the participant wrote.
   useEffect(() => {
-    if (!open) setQuery(formatLocation(value));
-  }, [value, open]);
+    setQuery(label);
+  }, [label]);
+
+  const search = query.trim();
+  const dirty = normalizeCityText(query) !== normalizeCityText(label);
 
   useEffect(() => {
-    const search = query.trim();
     setOptions([]);
     setActiveIndex(-1);
-    if (!open || manual || search.length < 2) {
+    if (manual || !dirty || search.length < 2) {
       setStatus("idle");
       return;
     }
     setStatus("loading");
-    let active = true;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
-      // Abort after 8 seconds manually to avoid `AbortSignal.any` compatibility issues in older browsers (e.g. Safari < 17.4).
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-      try {
-        const response = await fetch(
-          `https://photon.komoot.io/api/?limit=6&lang=${language === "en" ? "en" : "default"}&q=${encodeURIComponent(search)}`,
-          { signal: controller.signal },
-        );
-        clearTimeout(timeoutId);
-        if (!response.ok) throw new Error(`Photon: ${response.status}`);
-        const body = (await response.json()) as { features?: Feature[] };
-        if (active) {
-          const suggestions = (body.features ?? [])
-            .map((feature): CityValue => {
-              const p = feature.properties ?? {};
-              return {
-                city: p.city ?? p.name ?? "",
-                province: p.state ?? p.county ?? p.city ?? p.name ?? "",
-                country: p.country ?? "",
-              };
-            })
-            // Suggestions must be complete location records: the selected
-            // object is persisted as city/province/country, not flattened
-            // into an ambiguous display string.
-            .filter(
-              (city) =>
-                city.city.trim().length > 0 &&
-                city.province.trim().length > 0 &&
-                city.country.trim().length > 0,
-            );
-          setOptions(suggestions);
-          setStatus(suggestions.length ? "idle" : "empty");
-        }
-      } catch {
-        clearTimeout(timeoutId);
-        if (active) {
-          setOptions([]);
-          setStatus("error");
-        }
-      }
-    }, 250);
+      const result = await searchCities(search, language, controller.signal);
+      if (controller.signal.aborted) return;
+      setOptions(result.cities);
+      setStatus(result.cities.length ? "idle" : result.failed ? "error" : "empty");
+    }, 150);
     return () => {
-      active = false;
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, language, open, manual]);
+  }, [search, language, manual, dirty]);
+
+  // Leaving the field mid-search waits for the answer, then either picks the
+  // city typed (exact name match) or keeps the text in the manual fields.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: settles once per result, not on callback identity
+  useEffect(() => {
+    if (!settling || status === "loading") return;
+    setSettling(false);
+    const typed = parseTyped(search);
+    const exact = options.find(
+      (city) =>
+        normalizeCityText(city.city) === normalizeCityText(typed.city) &&
+        (!typed.province ||
+          normalizeCityText(formatLocation(city)).includes(normalizeCityText(typed.province))),
+    );
+    if (exact) {
+      selectCity(exact);
+      return;
+    }
+    onChange(typed);
+    setManual(true);
+    onBlur?.();
+  }, [settling, status, options]);
   function selectCity(city: CityValue) {
     onChange(city);
     setQuery(formatLocation(city));
@@ -167,13 +163,15 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
           }}
           onFocus={(event) => {
             event.currentTarget.select();
+            setSettling(false);
             setOpen(true);
           }}
           onBlur={() => {
+            // Delay so a click on a suggestion lands before the list closes.
             window.setTimeout(() => {
               setOpen(false);
-              setQuery(formatLocation(value));
-              onBlur?.();
+              if (dirty && search.length > 0) setSettling(true);
+              else onBlur?.();
             }, 150);
           }}
           onKeyDown={(event) => {

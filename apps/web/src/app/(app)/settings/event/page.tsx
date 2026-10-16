@@ -11,10 +11,13 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { BellIcon } from "@phosphor-icons/react/dist/csr/Bell";
+import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { DeviceMobileIcon } from "@phosphor-icons/react/dist/csr/DeviceMobile";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
+import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
+import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
 import { UserCheckIcon } from "@phosphor-icons/react/dist/csr/UserCheck";
@@ -31,6 +34,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
+import { ProjectFormSection } from "../../projects/form/project-form-section";
 import { JudgingWindowTab } from "../../queue/rooms/judging-window-tab";
 import { EventConfigProvider } from "./event-config-context";
 import { EventTab } from "./event-tab";
@@ -42,21 +46,32 @@ import { ResetJudgingDataTab } from "./reset-judging-data-tab";
 import { VenueTab } from "./venue-tab";
 import { WalletTab } from "./wallet-tab";
 
-const CATEGORIES = [
-  "event",
-  "venue",
-  "wallet",
-  "presence",
-  "invites",
-  "judging",
-  "liveActivities",
-  "notifications",
-  "danger",
+// Grouped by what an organizer is trying to change, not by the module that
+// stores it: every date and deadline sits under "dates".
+const GROUPS = [
+  { id: "general", label: "settingsGroupGeneral", categories: ["event", "venue"] },
+  {
+    id: "dates",
+    label: "settingsGroupDates",
+    categories: ["schedule", "projects", "judging", "presence"],
+  },
+  { id: "forms", label: "settingsGroupForms", categories: ["projectForm"] },
+  { id: "access", label: "settingsGroupAccess", categories: ["invites", "wallet"] },
+  {
+    id: "messaging",
+    label: "settingsGroupMessaging",
+    categories: ["notifications", "liveActivities"],
+  },
+  { id: "danger", label: "dangerZone", categories: ["danger"] },
 ] as const;
-type Category = (typeof CATEGORIES)[number];
+type Category = (typeof GROUPS)[number]["categories"][number];
+const CATEGORIES = GROUPS.flatMap((g) => g.categories) as Category[];
 
 const CATEGORY_ICONS = {
   event: TagIcon,
+  schedule: CalendarDotsIcon,
+  projects: FolderSimpleIcon,
+  projectForm: FileTextIcon,
   venue: MapPinIcon,
   wallet: WalletIcon,
   presence: UserCheckIcon,
@@ -69,7 +84,10 @@ const CATEGORY_ICONS = {
 
 // One renderer per category: the section body, wired to the shared dirty report.
 const SECTIONS: Record<Category, (onDirtyChange: (dirty: boolean) => void) => ReactNode> = {
-  event: (onDirtyChange) => <EventTab onDirtyChange={onDirtyChange} />,
+  event: (onDirtyChange) => <EventTab view="general" onDirtyChange={onDirtyChange} />,
+  schedule: (onDirtyChange) => <EventTab view="schedule" onDirtyChange={onDirtyChange} />,
+  projects: (onDirtyChange) => <EventTab view="participants" onDirtyChange={onDirtyChange} />,
+  projectForm: (onDirtyChange) => <ProjectFormSection onDirtyChange={onDirtyChange} />,
   venue: (onDirtyChange) => <VenueTab onDirtyChange={onDirtyChange} />,
   wallet: (onDirtyChange) => <WalletTab onDirtyChange={onDirtyChange} />,
   presence: (onDirtyChange) => <PresenceTab onDirtyChange={onDirtyChange} />,
@@ -91,6 +109,7 @@ export default function EventSettingsPage() {
   const canPresence = useCan(CAPABILITIES.PRESENCE_MANAGE);
   const canInvites = useCan(CAPABILITIES.INVITES_MANAGE);
   const canJudging = useCan(CAPABILITIES.QUEUE_ADMIN);
+  const canProjectForm = useCan(CAPABILITIES.PROJECTS_EDIT);
   const canDanger = useCan(CAPABILITIES.ADMIN_ALL);
   const canReadEventConfig = canEvent || canVenue || canWallet || canPresence || canInvites;
   const liveRefresh = useAutoRefresh(canReadEventConfig ? "/api/events/stream?topic=content" : "", [
@@ -98,6 +117,9 @@ export default function EventSettingsPage() {
   ]);
   const canByCategory: Record<Category, boolean> = {
     event: canEvent,
+    schedule: canEvent,
+    projects: canEvent,
+    projectForm: canProjectForm,
     venue: canVenue,
     wallet: canWallet,
     presence: canPresence,
@@ -108,8 +130,15 @@ export default function EventSettingsPage() {
     danger: canDanger,
   };
   const visibleCategories = CATEGORIES.filter((c) => canByCategory[c]);
+  const visibleGroups = GROUPS.map((g) => ({
+    ...g,
+    categories: g.categories.filter((c): c is Category => canByCategory[c]),
+  })).filter((g) => g.categories.length > 0);
   const labels: Record<Category, string> = {
     event: t("eventTitle"),
+    schedule: t("eventDatesTitle"),
+    projects: t("projectDeadlinesTitle"),
+    projectForm: t("projectFormTitle"),
     venue: t("venueSectionTitle"),
     wallet: t("walletPassSectionTitle"),
     presence: t("presencePolicyTitle"),
@@ -181,23 +210,38 @@ export default function EventSettingsPage() {
         />
 
         {active === null ? (
-          <ul className="divide-y rounded-lg border bg-card">
-            {visibleCategories.map((category) => {
-              const Icon = CATEGORY_ICONS[category];
-              return (
-                <li key={category}>
-                  <Link
-                    href={`/settings/event?tab=${category}`}
-                    className="flex min-h-(--control-height-lg,3rem) items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-                  >
-                    <Icon aria-hidden="true" className="size-5 text-muted-foreground" />
-                    <span className="min-w-0 flex-1 truncate">{labels[category]}</span>
-                    <CaretRightIcon aria-hidden="true" className="size-4 text-muted-foreground" />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="space-y-(--space-between-sections,2rem)">
+            {visibleGroups.map((group) => (
+              <section key={group.id} aria-labelledby={`settings-group-${group.id}`}>
+                <h2
+                  id={`settings-group-${group.id}`}
+                  className="mb-2 text-sm font-semibold text-muted-foreground"
+                >
+                  {t(group.label)}
+                </h2>
+                <ul className="divide-y rounded-lg border bg-card">
+                  {group.categories.map((category) => {
+                    const Icon = CATEGORY_ICONS[category];
+                    return (
+                      <li key={category}>
+                        <Link
+                          href={`/settings/event?tab=${category}`}
+                          className="flex min-h-(--control-height-lg,3rem) items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                        >
+                          <Icon aria-hidden="true" className="size-5 text-muted-foreground" />
+                          <span className="min-w-0 flex-1 truncate">{labels[category]}</span>
+                          <CaretRightIcon
+                            aria-hidden="true"
+                            className="size-4 text-muted-foreground"
+                          />
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
         ) : (
           <section className={SECTION_CLASS}>{SECTIONS[active](onDirtyChange)}</section>
         )}

@@ -4,6 +4,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CityPicker, type CityValue } from "./city-picker";
 
+// A tiny stand-in for the bundled index: "Vigo" is known locally, "Madird" is not.
+vi.mock("@/lib/data/cities.json", () => ({
+  default: {
+    countries: ["ES"],
+    regions: ["Galicia"],
+    rows: [["Vigo", 0, 0, 0]],
+  },
+}));
+
 let language = "en";
 vi.mock("@/lib/i18n", () => ({
   useLocale: () => ({ language, t: (key: string) => key }),
@@ -62,10 +71,16 @@ describe("CityPicker (H12)", () => {
   async function search(query = "Madird") {
     const user = await mount();
     await user.type(container.querySelector("input") as HTMLInputElement, query);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(250);
-    });
+    await settle();
     return user;
+  }
+  // The bundled index is a lazy chunk: let its import resolve, then the debounce.
+  async function settle(ms = 250) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+      await vi.dynamicImportSettled();
+      await vi.advanceTimersByTimeAsync(ms);
+    });
   }
 
   it.each([
@@ -133,7 +148,7 @@ describe("CityPicker (H12)", () => {
     );
     await search();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(8000);
+      await vi.advanceTimersByTimeAsync(11000);
     });
     expect(container.textContent).toContain("searchFailed");
     expect(container.textContent).toContain("cityEnterManually");
@@ -150,9 +165,7 @@ describe("CityPicker (H12)", () => {
     const firstSignal = fetchMock.mock.calls[0][1].signal as AbortSignal;
     await user.type(container.querySelector("input") as HTMLInputElement, "d");
     expect(firstSignal.aborted).toBe(true);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(250);
-    });
+    await settle();
     await act(async () =>
       resolveFirst({
         ok: true,
@@ -165,5 +178,70 @@ describe("CityPicker (H12)", () => {
     );
     expect(container.textContent).toContain("Madrid");
     expect(container.textContent).not.toContain("Wrong city");
+  });
+
+  it("answers from the bundled index without calling any service", async () => {
+    const user = await search("Vig");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Vigo, Galicia, Spain");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(onChange).toHaveBeenLastCalledWith({
+      city: "Vigo",
+      province: "Galicia",
+      country: "Spain",
+    });
+  });
+
+  it("falls back to Open-Meteo when Photon is down", async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes("photon")
+        ? { ok: false, status: 503 }
+        : {
+            ok: true,
+            json: async () => ({
+              results: [{ name: "Madird", admin1: "Somewhere", country: "Nowhere" }],
+            }),
+          },
+    );
+    await search();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toContain("geocoding-api.open-meteo.com");
+    expect(container.textContent).toContain("Madird, Somewhere, Nowhere");
+  });
+
+  it("keeps what was typed when leaving the field before the answer arrives", async () => {
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    const user = await search("Aldea Perdida");
+    await user.tab();
+    await settle(200);
+    // Still waiting on the services: nothing is discarded or committed yet.
+    expect(onChange).not.toHaveBeenCalled();
+    expect((container.querySelector("input") as HTMLInputElement).value).toBe("Aldea Perdida");
+  });
+
+  it("keeps unmatched text as the city in the manual fields after leaving the field", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ features: [], results: [] }) });
+    const user = await search("Aldea Perdida");
+    await user.tab();
+    await settle(200);
+    expect(onChange).toHaveBeenLastCalledWith({
+      city: "Aldea Perdida",
+      province: "",
+      country: "",
+    });
+    expect((container.querySelector("input") as HTMLInputElement).value).toBe("Aldea Perdida");
+  });
+
+  it("selects the exact city typed when the answer arrives after leaving the field", async () => {
+    const user = await mount();
+    const input = container.querySelector("input") as HTMLInputElement;
+    await user.type(input, "Vigo");
+    await user.tab();
+    await settle(200);
+    expect(onChange).toHaveBeenLastCalledWith({
+      city: "Vigo",
+      province: "Galicia",
+      country: "Spain",
+    });
   });
 });

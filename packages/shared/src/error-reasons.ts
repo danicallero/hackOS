@@ -39,6 +39,7 @@ export const FIELD_ERROR_REASONS = {
   INVALID_OPTION: "invalid_option",
   MUST_BE_NUMBER: "must_be_number",
   MUST_BE_BIRTH_YEAR: "must_be_birth_year",
+  MUST_BE_PHONE: "must_be_phone",
   MUST_BE_BOOLEAN: "must_be_boolean",
   MUST_BE_ARRAY: "must_be_array",
   MUST_BE_STRING: "must_be_string",

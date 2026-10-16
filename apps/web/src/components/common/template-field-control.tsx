@@ -22,6 +22,7 @@ import { UniversityPicker } from "@/components/common/university-picker";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/ui/phone-input";
 import {
   Select,
   SelectContent,
@@ -280,6 +281,23 @@ export function TemplateFieldControl({
           name={field.key}
           value={typeof value === "string" ? value.slice(0, 10) : ""}
           onChange={(v) => onChange(v)}
+          onBlur={onBlur}
+          disabled={disabled}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          aria-required={field.required || undefined}
+        />
+      );
+      break;
+    case "phone":
+      control = (
+        <PhoneInput
+          id={id}
+          name={field.key}
+          placeholder={customPlaceholder || undefined}
+          value={typeof value === "string" ? value : ""}
+          onChange={onChange}
           onBlur={onBlur}
           disabled={disabled}
           aria-labelledby={labelId}

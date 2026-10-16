@@ -1,4 +1,5 @@
 import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
+import { normalizePhone } from "@hackos/shared/phone";
 import { ApiError } from "@/lib/api";
 import { type I18nText, type MessageKey, pickText, type Translate } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
@@ -40,6 +41,9 @@ export function validateFieldOnBlur(
     ) {
       return t("fieldMustBeBirthYear");
     }
+  }
+  if (field.kind === "phone" && (typeof value !== "string" || normalizePhone(value) === null)) {
+    return t("fieldMustBePhone");
   }
   const rule = field.validation;
   let code: string | null = null;
@@ -103,6 +107,7 @@ const FIELD_SHAPE_KEYS: Record<string, MessageKey> = {
   [FIELD_ERROR_REASONS.INVALID_OPTION]: "fieldInvalidOption",
   [FIELD_ERROR_REASONS.MUST_BE_NUMBER]: "fieldMustBeNumber",
   [FIELD_ERROR_REASONS.MUST_BE_BIRTH_YEAR]: "fieldMustBeBirthYear",
+  [FIELD_ERROR_REASONS.MUST_BE_PHONE]: "fieldMustBePhone",
   [FIELD_ERROR_REASONS.MUST_BE_BOOLEAN]: "fieldMustBeBoolean",
   [FIELD_ERROR_REASONS.MUST_BE_ARRAY]: "fieldMustBeArray",
   [FIELD_ERROR_REASONS.MUST_BE_STRING]: "fieldMustBeString",
