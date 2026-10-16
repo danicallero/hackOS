@@ -1,5 +1,5 @@
 // City suggestions for CityPicker, fastest source first:
-//   1. a bundled index of ~8k cities (data/cities.json, built by
+//   1. a bundled index of ~1.2k Spanish places (data/cities.json, built by
 //      scripts/build-city-data.mjs) that answers instantly and offline;
 //   2. Photon (OpenStreetMap) when the index has no match;
 //   3. Open-Meteo geocoding when Photon fails or has nothing.

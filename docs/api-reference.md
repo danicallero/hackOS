@@ -193,7 +193,7 @@ field definitions. No database migration is needed for this layout metadata.
 
 The form catalogue also supports curated university-degree IDs and city
 suggestions. The city picker (`apps/web/src/lib/city-search.ts`) answers from a
-bundled offline index of Spanish cities first (~750, GeoNames, CC BY 4.0; rebuild with
+bundled offline index of Spanish cities first (~1,200, GeoNames, CC BY 4.0; rebuild with
 `apps/web/scripts/build-city-data.mjs`), and only when that has no match asks
 Photon/OpenStreetMap (`en` for English, `default` for Spanish/Galician, since
 the public server rejects `es`/`gl`), then Open-Meteo geocoding if Photon fails
