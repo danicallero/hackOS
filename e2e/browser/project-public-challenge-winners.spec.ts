@@ -61,7 +61,8 @@ test("public challenge page shows published winners only after reveal", async ({
   await expect(page.getByText("Neural Beans")).toHaveCount(0);
   revealed = true;
   await page.reload();
-  const winner = page.getByRole("link", { name: "1 · Neural Beans" });
+  await expect(page.getByText("Neural Beans")).toBeVisible();
+  const winner = page.getByRole("link", { name: "Open project" });
   await expect(winner).toBeVisible();
   await expect(winner).toHaveAttribute("href", "/gallery/10");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
