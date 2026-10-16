@@ -3258,8 +3258,6 @@
   "allRoomsOverview": "Vista de todas as salas",
   "tableResultCount_one": "{count} resultado",
   "tableResultCount_other": "{count} resultados",
-  "eventGeneralTab": "Xeral",
-  "eventParticipantsTab": "Participantes",
   "createChallenge": "Crear reto",
   "enterpriseDetailsTab": "Datos",
   "chartFullscreen": "Ver «{title}» a pantalla completa",
@@ -3536,5 +3534,15 @@
   "networkingOnboardingDescription": "Usa o teu perfil persoal para conectar con participantes e representantes de empresas durante o evento. Podes cambiar o que compartes despois en O meu perfil.",
   "networkingOnboardingLater": "Lembrarmo ao iniciar sesión",
   "networkingOnboardingHidden": "Non crear un perfil público",
-  "networkingOnboardingCreate": "Crear perfil"
+  "networkingOnboardingCreate": "Crear perfil",
+  "eventDatesTitle": "Datas do evento e do hacking",
+  "projectDeadlinesTitle": "Prazos e visibilidade de proxectos",
+  "projectFormTitle": "Formulario de proxectos",
+  "settingsGroupGeneral": "Xeral",
+  "settingsGroupDates": "Datas e prazos",
+  "settingsGroupForms": "Formularios",
+  "settingsGroupAccess": "Acceso",
+  "settingsGroupMessaging": "Notificacións",
+  "fieldKindPhone": "Teléfono",
+  "fieldMustBePhone": "Introduce un número de teléfono válido."
 }

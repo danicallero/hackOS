@@ -10,6 +10,7 @@ export const FIELD_KINDS = [
   "birth_year",
   "date",
   "number",
+  "phone",
   "file",
   "university",
   "degree",

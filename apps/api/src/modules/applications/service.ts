@@ -3,6 +3,7 @@ import { sponsorShareKey } from "@hackos/shared/applications";
 import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { MAX_IMAGES_PER_FIELD } from "@hackos/shared/forms";
+import { normalizePhone } from "@hackos/shared/phone";
 import type pg from "pg";
 import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
@@ -211,6 +212,7 @@ const FIELD_ERROR_REASON_BY_MESSAGE: Record<string, string> = {
   "invalid option": FIELD_ERROR_REASONS.INVALID_OPTION,
   "must be a number": FIELD_ERROR_REASONS.MUST_BE_NUMBER,
   "must be a birth year": FIELD_ERROR_REASONS.MUST_BE_BIRTH_YEAR,
+  "must be a phone number": FIELD_ERROR_REASONS.MUST_BE_PHONE,
   "must be a boolean": FIELD_ERROR_REASONS.MUST_BE_BOOLEAN,
   "must be an array": FIELD_ERROR_REASONS.MUST_BE_ARRAY,
   "must be a string": FIELD_ERROR_REASONS.MUST_BE_STRING,
@@ -276,6 +278,11 @@ export function validateResponses(
     switch (field.kind) {
       case "number":
         if (typeof value !== "number") errors[field.key] = "must be a number";
+        break;
+      case "phone":
+        if (typeof value !== "string" || normalizePhone(value) === null) {
+          errors[field.key] = "must be a phone number";
+        }
         break;
       case "birth_year":
         if (

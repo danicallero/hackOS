@@ -191,13 +191,17 @@ update validate the complete resulting template against the sections, and the
 anchor is preserved in the immutable form-version JSON alongside the other
 field definitions. No database migration is needed for this layout metadata.
 
-The form catalogue also supports curated university-degree IDs and public city
-suggestions (Photon/OpenStreetMap). The city picker uses `en` for English and
-`default` for Spanish/Galician, since the public server rejects `es`/`gl`.
-It exposes loading, empty and failure states, limits searches to eight seconds,
-cancels stale requests, supports
-keyboard selection, and allows manual city/province/country entry when suggestions
-are unavailable or incomplete (H12). City labels are stored as text while degree
+The form catalogue also supports curated university-degree IDs and city
+suggestions. The city picker (`apps/web/src/lib/city-search.ts`) answers from a
+bundled offline index of Spanish cities first (~1,200, GeoNames, CC BY 4.0; rebuild with
+`apps/web/scripts/build-city-data.mjs`), and only when that has no match asks
+Photon/OpenStreetMap (`en` for English, `default` for Spanish/Galician, since
+the public server rejects `es`/`gl`), then Open-Meteo geocoding if Photon fails
+or is empty. Each live service gets five seconds; stale requests are cancelled.
+It exposes loading, empty and failure states and supports keyboard selection.
+Leaving the field never discards the text: a pending search is awaited, an
+exact city match is selected, and otherwise the text is kept in the manual
+city/province/country fields (H12). City labels are stored as text while degree
 answers retain the catalogue ID. The degree catalogue follows the university
 catalogue's authenticated-proposal and staff-curation boundary.
 Universities linked to user profiles cannot be deleted: the route returns 409

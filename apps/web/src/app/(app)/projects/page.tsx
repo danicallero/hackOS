@@ -96,13 +96,6 @@ export default function ProjectsPage() {
         primaryAction={
           canEdit && <Button onClick={() => setCreateOpen(true)}>{t("createMyProjectCta")}</Button>
         }
-        secondaryActions={
-          canEdit && (
-            <Button asChild variant="outline">
-              <Link href="/projects/form">{t("formFields")}</Link>
-            </Button>
-          )
-        }
       />
       <ListToolbar
         search={{

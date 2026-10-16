@@ -159,7 +159,9 @@ export function AnswerPreviewControl({
           ? "number"
           : f.kind === "date"
             ? "date"
-            : "text"
+            : f.kind === "phone"
+              ? "tel"
+              : "text"
       }
       placeholder={
         customPlaceholder ||

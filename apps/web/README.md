@@ -608,7 +608,7 @@ never overwrite newer edits; conflicts retain local answers and stop autosave.
 Required fields block submission, not draft persistence. Submitted projects
 remain editable until the server closes editing; resubmission snapshots answers.
 
-`/projects/form` reuses the applications `QuestionsCard`, `TemplateField` and
+The project form editor (`/settings/event?tab=projectForm`; `/projects/form` redirects there) reuses the applications `QuestionsCard`, `TemplateField` and
 section model. `saveDefinition` supplies the project persistence endpoint and
 skips application-specific reserved-key nudges. `TemplateFieldControl` and
 `FileUploadField` accept the project-scoped upload path. Staff and participants

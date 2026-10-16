@@ -33,7 +33,7 @@ test("project form reuses section builder and saves without application reserved
     }
     return route.fulfill({ json: { items: [], total: 0, intolerances: [], sizes: [] } });
   });
-  await page.goto("/projects/form");
+  await page.goto("/settings/event?tab=projectForm");
   await expect(
     page.getByRole("heading", { name: "Form fields", exact: true }).first(),
   ).toBeVisible();

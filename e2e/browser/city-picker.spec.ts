@@ -1,6 +1,6 @@
 import { expect, shellUser, test } from "./fixtures";
 
-// H12: a slow public geocoder must not block a complete enrollment answer.
+// H12: unavailable public geocoders must not block a complete enrollment answer.
 test("can select a city and complete the location while Photon is unavailable", async ({
   page,
 }) => {
@@ -81,7 +81,11 @@ test("can select a city and complete the location while Photon is unavailable", 
   await page.route("https://photon.komoot.io/**", (route) =>
     route.fulfill({ status: 503, body: "Unavailable" }),
   );
-  await city.fill("Coruña");
+  await page.route("https://geocoding-api.open-meteo.com/**", (route) =>
+    route.fulfill({ status: 503, body: "Unavailable" }),
+  );
+  // Not in the bundled index, so both live geocoders are asked and both fail.
+  await city.fill("Aldea Perdida");
   await expect(page.getByRole("status").filter({ hasText: "Search failed." })).toBeVisible();
   await page.screenshot({ path: "artifacts/city-search-error.png" });
   await page.getByRole("button", { name: "Enter location manually" }).click();

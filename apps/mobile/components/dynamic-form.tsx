@@ -217,7 +217,13 @@ export function DynamicForm({
           multiline={item.kind === "textarea"}
           scrollEnabled={false}
           keyboardType={
-            numeric ? "numeric" : item.validation?.text_condition === "url" ? "url" : "default"
+            numeric
+              ? "numeric"
+              : item.kind === "phone"
+                ? "phone-pad"
+                : item.validation?.text_condition === "url"
+                  ? "url"
+                  : "default"
           }
           autoCapitalize={item.validation?.text_condition ? "none" : "sentences"}
           maxLength={item.validation?.max_length}

@@ -203,12 +203,6 @@ export const WORKSPACES: Workspace[] = [
         sponsorVisible: true,
         judgeVisible: true,
       },
-      {
-        title: "formFields",
-        href: "/projects/form",
-        icon: FileTextIcon,
-        capability: CAPABILITIES.PROJECTS_EDIT,
-      },
     ],
   },
   {
@@ -358,6 +352,7 @@ export const WORKSPACES: Workspace[] = [
           CAPABILITIES.PRESENCE_MANAGE,
           CAPABILITIES.INVITES_MANAGE,
           CAPABILITIES.QUEUE_ADMIN,
+          CAPABILITIES.PROJECTS_EDIT,
         ],
       },
       {

@@ -3258,8 +3258,6 @@
   "allRoomsOverview": "All rooms overview",
   "tableResultCount_one": "{count} result",
   "tableResultCount_other": "{count} results",
-  "eventGeneralTab": "General",
-  "eventParticipantsTab": "Participants",
   "createChallenge": "Create challenge",
   "enterpriseDetailsTab": "Details",
   "chartFullscreen": "View “{title}” full screen",
@@ -3536,5 +3534,15 @@
   "networkingOnboardingDescription": "Use your personal profile to connect with participants and company representatives during the event. You can change your sharing choices later in My profile.",
   "networkingOnboardingLater": "Remind me on next login",
   "networkingOnboardingHidden": "Do not create a public profile",
-  "networkingOnboardingCreate": "Create profile"
+  "networkingOnboardingCreate": "Create profile",
+  "eventDatesTitle": "Event and hacking dates",
+  "projectDeadlinesTitle": "Project deadlines and visibility",
+  "projectFormTitle": "Project form",
+  "settingsGroupGeneral": "General",
+  "settingsGroupDates": "Dates and deadlines",
+  "settingsGroupForms": "Forms",
+  "settingsGroupAccess": "Access",
+  "settingsGroupMessaging": "Notifications",
+  "fieldKindPhone": "Phone",
+  "fieldMustBePhone": "Enter a valid phone number."
 }

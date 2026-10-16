@@ -13,13 +13,12 @@
 
 import { isValidTimeZone, wallClockToInstant } from "@hackos/shared/event-time";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
-import { TabBar } from "@/components/common/tab-bar";
 import { TimezonePicker } from "@/components/common/timezone-picker";
 import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
 import {
@@ -40,7 +39,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
@@ -167,10 +165,17 @@ function CountdownPreview({
   );
 }
 
-export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
+export type EventTabView = "general" | "schedule" | "participants";
+
+export function EventTab({
+  view,
+  onDirtyChange,
+}: {
+  view: EventTabView;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
   const { t } = useLocale();
   const reminderLabelId = useId();
-  const [view, setView] = useState("general");
   const { config, status, applyConfig } = useEventConfig();
   const form = useForm<Values>({
     resolver: zodResolver(createSchema(t)),
@@ -242,14 +247,6 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
     }
   }
 
-  // A validation error on a hidden tab would otherwise block Save silently.
-  function revealInvalidTab(errors: Record<string, unknown>) {
-    const names = Object.keys(errors);
-    if (names.some((n) => ["name", "tagline", "timezone"].includes(n))) setView("general");
-    else if (names.some((n) => n.startsWith("project"))) setView("participants");
-    else if (names.length > 0) setView("schedule");
-  }
-
   if (!config || status === "error") {
     return <EventConfigLoadState />;
   }
@@ -259,25 +256,15 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit, revealInvalidTab)}>
-        <Tabs value={view} onValueChange={setView}>
-          <TabBar className="[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] sm:[mask-image:none] flex-row! h-(--control-height-default)! [&_[data-slot=tabs-trigger]]:w-auto! [&_[data-slot=tabs-trigger]]:justify-center!">
-            <TabsTrigger value="general">{t("eventGeneralTab")}</TabsTrigger>
-            <TabsTrigger value="schedule">{t("scheduleSectionTitle")}</TabsTrigger>
-            <TabsTrigger value="participants">{t("eventParticipantsTab")}</TabsTrigger>
-          </TabBar>
-          <SectionCard
-            variant="plain"
-            footerClassName="justify-start"
-            stickyFooter
-            footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
-          >
-            <TabsContent
-              value="general"
-              forceMount
-              hidden={view !== "general"}
-              className="space-y-(--space-within-section)"
-            >
+      <form onSubmit={form.handleSubmit(onSubmit)}>
+        <SectionCard
+          variant="plain"
+          footerClassName="justify-start"
+          stickyFooter
+          footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
+        >
+          {view === "general" && (
+            <div className="space-y-(--space-within-section)">
               <div className="grid items-start gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
@@ -319,13 +306,10 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
                   )}
                 />
               </div>
-            </TabsContent>
-            <TabsContent
-              value="schedule"
-              forceMount
-              hidden={view !== "schedule"}
-              className="space-y-(--space-within-section)"
-            >
+            </div>
+          )}
+          {view === "schedule" && (
+            <div className="space-y-(--space-within-section)">
               <div className="grid items-start gap-4 sm:grid-cols-2">
                 {(
                   [
@@ -452,13 +436,10 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
                   <p className="text-sm">{t("eventReminderExpired")}</p>
                 )}
               </div>
-            </TabsContent>
-            <TabsContent
-              value="participants"
-              forceMount
-              hidden={view !== "participants"}
-              className="space-y-(--space-within-section)"
-            >
+            </div>
+          )}
+          {view === "participants" && (
+            <div className="space-y-(--space-within-section)">
               <div className="grid items-start gap-4 sm:grid-cols-2">
                 {(
                   [
@@ -545,9 +526,9 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
                   )}
                 />
               </div>
-            </TabsContent>
-          </SectionCard>
-        </Tabs>
+            </div>
+          )}
+        </SectionCard>
       </form>
     </Form>
   );
