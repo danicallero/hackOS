@@ -399,5 +399,6 @@ the default control height even while an asynchronous primary action is loading.
 
 Gallery navigation streams six skeleton cards while the API read is pending. Cards
 reserve two summary lines and group challenge previews with their disclosure count;
-team avatars and the project action share the footer. My projects receives its initial
-private list on the server, avoiding an empty client refetch on each sibling navigation.
+team avatars and the project action share the footer. My projects loads its private list in
+the browser: the session cookie belongs to the API origin, so a Next server render cannot
+authenticate it and would bounce signed-in people through `/login` in a loop.
