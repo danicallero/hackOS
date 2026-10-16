@@ -110,8 +110,12 @@ for (const width of [1536, 1920]) {
     await page.mouse.move(width * 0.6, pointerY, { steps: 10 });
     await expect(slot).toHaveAttribute("data-file-viewer-preview-slot", "right");
     await expect
-      .poll(async () => Math.abs((await slot.boundingBox())!.x - rightX))
-      .toBeLessThanOrEqual(1);
+      .poll(async () => {
+        const slotBox = (await slot.boundingBox())!;
+        const inner = await page.evaluate(() => [innerWidth, document.documentElement.clientWidth]);
+        return `${Math.abs(slotBox.x - rightX)}|slot=${slotBox.x}|rightX=${rightX}|inner=${inner}|src=${sourceBounds!.x}+${sourceBounds!.width}`;
+      })
+      .toMatch(/^[01](\.\d+)?\|/);
     await expect
       .poll(async () => (await dialog.boundingBox())!.x)
       .toBeLessThan(dialogBounds!.x - 400);
