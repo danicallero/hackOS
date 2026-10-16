@@ -242,6 +242,8 @@ export default function EventSettingsPage() {
               </section>
             ))}
           </div>
+        ) : active === "projectForm" ? (
+          SECTIONS[active](onDirtyChange)
         ) : (
           <section className={SECTION_CLASS}>{SECTIONS[active](onDirtyChange)}</section>
         )}

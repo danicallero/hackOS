@@ -37,10 +37,9 @@ test("project phases share the event category save and event timezone", async ({
     }
     return route.fulfill({ json: { items: [], total: 0 } });
   });
-  await page.goto("/settings/event?tab=event");
+  await page.goto("/settings/event?tab=projects");
   const notice = page.locator('aside[aria-labelledby="cookie-notice-title"]');
   if (await notice.isVisible()) await notice.locator("button").first().click();
-  await page.getByRole("tab", { name: "Participants", exact: true }).click();
   await page.getByLabel("Project creation opens").fill("2027-03-05");
   await page
     .getByLabel("Project creation opens")

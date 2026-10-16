@@ -159,7 +159,15 @@ test("event settings fit the viewport", async ({ page }) => {
 });
 
 // H19/H24/H28/H42: every settings category, including the expanded Wallet editor.
-for (const tab of ["venue", "wallet", "presence", "invites", "danger"] as const) {
+for (const tab of [
+  "schedule",
+  "projects",
+  "venue",
+  "wallet",
+  "presence",
+  "invites",
+  "danger",
+] as const) {
   test(`event settings ${tab} fits the viewport`, async ({ page }) => {
     await page.goto(`/settings/event?tab=${tab}`);
     const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
