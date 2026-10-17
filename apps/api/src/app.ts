@@ -142,7 +142,9 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
     )
   )
     return "applications";
-  if (["/api/projects", "/api/repos"].some((prefix) => routeMatchesPrefix(url, prefix)))
+  if (
+    ["/api/projects", "/api/repos", "/api/github"].some((prefix) => routeMatchesPrefix(url, prefix))
+  )
     return "projects";
   if (routeMatchesPrefix(url, "/api/challenges")) return "challenges";
   if (
