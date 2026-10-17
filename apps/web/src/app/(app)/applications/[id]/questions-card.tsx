@@ -1015,6 +1015,7 @@ export function serializeApplicationField(field: TemplateField): TemplateField {
       ? { project_description: true }
       : {}),
     ...(field.project_video && field.kind === "text" ? { project_video: true } : {}),
+    ...(field.judging_link && field.kind === "text" ? { judging_link: true } : {}),
     ...(field.section_key ? { section_key: field.section_key } : {}),
     ...(field.after_section_key ? { after_section_key: field.after_section_key } : {}),
     ...(hasI18nText(field.help_text) ? { help_text: field.help_text } : {}),
@@ -1225,6 +1226,7 @@ export function FieldEditor({
             <span>{t("projectDescriptionFieldLabel")}</span>
           )}
           {projectMode && field.project_video && <span>{t("projectVideoField")}</span>}
+          {projectMode && field.judging_link && <span>{t("projectJudgingLinkField")}</span>}
         </p>
       </Surface>
     );
@@ -1714,6 +1716,14 @@ export function FieldEditor({
                 onCheckedChange={(checked) => onChange({ project_video: checked })}
               >
                 {t("projectVideoField")}
+              </DropdownMenuCheckboxItem>
+            )}
+            {projectMode && field.kind === "text" && (
+              <DropdownMenuCheckboxItem
+                checked={field.judging_link ?? false}
+                onCheckedChange={(checked) => onChange({ judging_link: checked })}
+              >
+                {t("projectJudgingLinkField")}
               </DropdownMenuCheckboxItem>
             )}
             {projectMode && (field.kind === "text" || field.kind === "textarea") && (

@@ -107,8 +107,10 @@ export function QuestionField({
           {lockedMessage}
         </p>
       )}
-      {question.kind === "scale" && question.min === 0 && question.max === 10 ? (
+      {question.kind === "scale" && question.max - question.min <= 10 ? (
         <ScaleButtons
+          min={question.min}
+          max={question.max}
           value={typeof value === "number" ? value : null}
           onChange={(v) => onChange(v ?? "")}
           disabled={disabled}

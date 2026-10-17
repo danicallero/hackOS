@@ -34,6 +34,7 @@ export interface NativeProject {
   members: {
     userId: number;
     name: string | null;
+    surname?: string | null;
     status: "active" | "invited" | "declined";
     photoUrl: string | null;
   }[];

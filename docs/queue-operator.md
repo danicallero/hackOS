@@ -164,3 +164,22 @@ the request also accepts an `Idempotency-Key` so a retried browser request
 cannot repeat the reset. The reset transaction opts out of the normal
 statement timeout so large deletes can finish, but it still needs an available
 database connection and should be run during a quiet operational window.
+
+## Judging panel layout and evaluation
+
+The right column of `/judging` is the team in the room: project summary and
+links (repository, demo and any project question marked **Judging panel link**),
+preparation time as `elapsed / scheduled`, and pinned Start and Re-queue
+actions. The project body scrolls inside its own container.
+
+By default the right column stacks the project (top) and the evaluation form
+(bottom), each scrolling inside its own container, with the queue and room
+statistics on the left. **Expanded judging** is a standing preference
+(remembered per browser): while a team is in the room, the queue hides, the
+sidebar collapses, the project (with its Start and Re-queue controls) fills the
+left and the evaluation form sits on the right; when the team leaves, for
+example after the evaluation is submitted, the queue view returns with a short
+transition, and expanded judging comes back with the next team. A project link
+that leaves for another tab opens the evaluation in its own small window
+(`/judging-popup/:entryId`, Document Picture-in-Picture where available) and
+closes it when you return.

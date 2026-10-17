@@ -145,7 +145,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List judging rooms",
         description:
-          "Lists the rooms visible to the caller, including their operational status and the enterprise room pool they belong to when assigned.",
+          "Lists the rooms visible to the caller, including their operational status, the queue (group) they serve and the enterprise room pool they belong to when assigned.",
       },
     },
     async (req) => {
@@ -153,6 +153,9 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       if (roomIds === null) {
         const { rows } = await pool.query(
           `SELECT rooms.*, re.enterprise_id, e.name AS enterprise_name,
+                  (SELECT string_agg(qg.display_name, ', ' ORDER BY qg.display_name)
+                     FROM room_queue_groups rqg JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+                    WHERE rqg.room_id = rooms.id) AS queue_name,
                   CASE WHEN rqs.is_paused THEN 'paused' ELSE 'active' END AS status
              FROM rooms
              LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
@@ -165,6 +168,9 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
 
       const { rows } = await pool.query(
         `SELECT rooms.*, re.enterprise_id, e.name AS enterprise_name,
+                (SELECT string_agg(qg.display_name, ', ' ORDER BY qg.display_name)
+                   FROM room_queue_groups rqg JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+                  WHERE rqg.room_id = rooms.id) AS queue_name,
                 CASE WHEN rqs.is_paused THEN 'paused' ELSE 'active' END AS status
            FROM rooms
            LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id

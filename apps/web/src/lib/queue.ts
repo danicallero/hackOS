@@ -59,6 +59,8 @@ export interface Room {
   /** Present on the room list projection; omitted by room-scoped reads. */
   enterprise_id?: number | null;
   enterprise_name?: string | null;
+  /** Queue (group) the room serves, shown beside the room name. */
+  queue_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -143,6 +145,10 @@ export interface ChallengeProgress {
 /** GET /api/queue/rooms/:id/pace (H39). */
 export interface RoomPace {
   estimatedCycleMinutes?: number;
+  /** Track's configured preparation allowance (H32). */
+  configuredPreparationSeconds?: number;
+  /** Longest a presentation may run for this track; null when unconfigured. */
+  configuredPresentationSeconds?: number | null;
   judgingClosesAt?: string | null;
   estimatedFinishAt?: string | null;
   exceedsJudgingClose?: boolean;

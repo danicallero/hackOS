@@ -15,7 +15,7 @@ export function ProjectVideo({ value, title }: { value: unknown; title: string }
   if (!src) return null;
   const id = src.split("/").at(-1);
   return (
-    <div className="w-full min-w-0 space-y-2">
+    <div className="w-full max-w-2xl min-w-0 space-y-2">
       <div className="aspect-video overflow-hidden rounded-frame border border-border/60 bg-muted">
         {loaded ? (
           <iframe

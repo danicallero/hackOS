@@ -6,14 +6,14 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
+import { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSimple";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
-import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
@@ -61,12 +61,14 @@ import { invalidateServerState } from "@/lib/server-state";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { confirmDiscardUnsavedChanges } from "@/lib/use-unsaved-changes-guard";
+import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 
-import { challengeName, errorMessage, exportHref, queueErrorToastContent } from "./helpers";
+import { errorMessage, exportHref, queueErrorToastContent } from "./helpers";
 import { PresentationPanel } from "./presentation-panel";
 import { QueuePanel } from "./queue-panel";
 import { ReviewForm } from "./review-form";
+import { useExpandedTransition, useFocusPreference, useReviewWindow } from "./use-judging-layout";
 
 function showQueueError(t: Translate, err: unknown, fallbackTitle: string) {
   const copy = queueErrorToastContent(
@@ -107,6 +109,7 @@ export default function QueuePage() {
   // only reports edits it cannot save (failed save, conflict, offline), and
   // switching away from those asks first.
   const [reviewEditsAtRisk, setReviewEditsAtRisk] = useState(false);
+  const { focusMode, changeFocusMode } = useFocusPreference();
   const selectReviewEntry = (entry: QueueEntry | null) => {
     if (!confirmDiscardUnsavedChanges(reviewEditsAtRisk, t)) return false;
     setSelectedReviewEntry(entry);
@@ -119,7 +122,13 @@ export default function QueuePage() {
   const roomView = useLiveQuery<RoomView>(
     (signal) => (activeRoomId ? getRoomView(activeRoomId, signal) : Promise.resolve(null as never)),
     REALTIME_SCOPES.QUEUE,
-    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED, EVENTS.QUEUE_NOTIFY_ENTER],
+    // Pump top-ups (e.g. after resume) call teams with QUEUE_TEAM_CALLED only.
+    [
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      EVENTS.QUEUE_ROOM_CHANGED,
+      EVENTS.QUEUE_NOTIFY_ENTER,
+      EVENTS.QUEUE_TEAM_CALLED,
+    ],
     {
       enabled: canUse && activeRoomId != null,
       queryKey: [activeRoomId],
@@ -144,7 +153,7 @@ export default function QueuePage() {
         ? getRoomPace(activeRoomId, signal, effectiveChallengeId)
         : Promise.resolve(null as never),
     REALTIME_SCOPES.QUEUE,
-    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
+    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED, EVENTS.QUEUE_TEAM_CALLED],
     {
       enabled: canUse && activeRoomId != null,
       queryKey: [activeRoomId, effectiveChallengeId],
@@ -281,6 +290,31 @@ export default function QueuePage() {
     };
   }, [effectiveChallengeId, roomView.data, search, t]);
 
+  const reviewTarget = selectedReviewEntry ?? roomView.data?.active ?? null;
+  const reviewTargetId = reviewTarget?.id ?? null;
+  const reviewable =
+    canJudge &&
+    activeRoomId != null &&
+    reviewTarget != null &&
+    (reviewTarget.status === "in_room" ||
+      reviewTarget.status === "presenting" ||
+      selectedReviewEntry != null);
+
+  const { windowOpen, moveReviewToWindow } = useReviewWindow(
+    reviewable,
+    reviewTargetId,
+    activeRoomId,
+    t,
+  );
+
+  // Expanded judging is a standing preference: the layout appears whenever a team
+  // is in the room (or a past evaluation is open) and gives way to the queue when
+  // nobody is, then comes back with the next team.
+  const focusing = focusMode && canJudge && reviewTarget != null && !windowOpen;
+  const lastReviewEntryRef = useRef<QueueEntry | null>(null);
+  if (reviewTarget && !windowOpen) lastReviewEntryRef.current = reviewTarget;
+  const formMounted = useExpandedTransition(focusing);
+
   if (!canUse) {
     return <AccessDenied ask={t("judgingAccessDeniedDesc")} />;
   }
@@ -289,8 +323,48 @@ export default function QueuePage() {
   const active = view?.active ?? null;
   const state = view?.state ?? null;
   const isPaused = state?.is_paused ?? view?.room.status === "paused";
-  const challengeLabel =
-    view?.challenge?.title ?? (activeChallenge ? challengeName(t, activeChallenge) : "—");
+
+  const reviewEntry = reviewTarget;
+  const showForm = reviewEntry != null && !windowOpen;
+  const closeReview = () => {
+    if (confirmDiscardUnsavedChanges(reviewEditsAtRisk, t)) setSelectedReviewEntry(null);
+  };
+  const projectPanel = (
+    <PresentationPanel
+      entry={active}
+      challenge={activeChallenge}
+      waitingRoomCount={view?.called.length ?? 0}
+      firstCalledEntry={view?.called[0] ?? null}
+      canJudge={canJudge}
+      canOperate={canOperate}
+      busy={busy}
+      preparationSeconds={pace.data?.configuredPreparationSeconds ?? null}
+      presentationSeconds={pace.data?.configuredPresentationSeconds ?? null}
+      detailsOpen={focusing}
+      onExternalOpen={() => void moveReviewToWindow()}
+      onEntryAction={(entry, action, body, label) =>
+        mutate(`${action}-${entry.id}`, () => entryAction(entry.id, action, body), label)
+      }
+    />
+  );
+  const renderForm = (entry: QueueEntry) => (
+    <ReviewForm
+      key={entry.id}
+      entry={entry}
+      challenge={activeChallenge}
+      panel={view?.challenge?.judging_panel_criteria ?? null}
+      roomId={activeRoomId}
+      canJudge={
+        canJudge &&
+        (active?.status === "in_room" ||
+          active?.status === "presenting" ||
+          selectedReviewEntry != null)
+      }
+      onClose={selectedReviewEntry ? closeReview : undefined}
+      onUnsavedEditsAtRisk={setReviewEditsAtRisk}
+    />
+  );
+  const formEntry = reviewEntry ?? lastReviewEntryRef.current;
 
   return (
     // App-like layout: the room selector pins to the top, the queue panel stays
@@ -311,7 +385,7 @@ export default function QueuePage() {
             WMs, tablet/mobile) instead of overflowing the card. No fixed track
             widths — flex-basis + min-width + flex-wrap handle the reflow. */}
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-44 flex-1 space-y-2">
+          <div className="w-full min-w-36 space-y-2 sm:w-80">
             <Label htmlFor="queue-room">{t("roomLabel")}</Label>
             <Select
               value={activeRoomId ? String(activeRoomId) : ""}
@@ -326,24 +400,24 @@ export default function QueuePage() {
               <SelectContent>
                 {rooms.map((room) => (
                   <SelectItem key={room.id} value={String(room.id)}>
-                    {room.name}
+                    {room.queue_name ? `${room.name} - ${room.queue_name}` : room.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* A room judges exactly one challenge — informational, read-only.
-              Change it from the room admin surface, not here. */}
-          <div className="min-w-44 flex-[1.2] space-y-2">
-            <p className="text-sm font-medium">{t("challengeLabel")}</p>
-            <div className="border-input bg-muted/40 text-muted-foreground flex h-[var(--control-height-default)] w-full min-w-0 items-center gap-2 rounded-control border px-3 text-sm">
-              <LockIcon aria-hidden="true" className="size-3.5 shrink-0" />
-              <span className="text-foreground truncate font-medium">{challengeLabel}</span>
-            </div>
-          </div>
-
-          <div className="flex flex-1 flex-wrap items-end gap-2 sm:justify-end">
+          <div className="flex shrink-0 flex-wrap items-end gap-2 sm:ml-auto sm:justify-end">
+            {canJudge && (
+              <Button
+                variant={focusMode ? "default" : "outline"}
+                aria-pressed={focusMode}
+                onClick={() => changeFocusMode(!focusMode)}
+              >
+                <ArrowsOutSimpleIcon aria-hidden="true" className="size-4" />
+                {t("judgingExpanded")}
+              </Button>
+            )}
             {isPaused ? (
               <Button
                 disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
@@ -440,115 +514,137 @@ export default function QueuePage() {
       ) : (
         // Two-column region fills the remaining height. Left column is a fixed
         // container whose internal queue list scrolls; right column is the scroll area.
-        <div className="grid min-h-0 gap-5 xl:h-0 xl:flex-1 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <div className="xl:h-full xl:min-h-0">
-            <QueuePanel
-              timingAction={
-                effectiveChallengeId && (
-                  <TrackTiming
-                    challengeId={effectiveChallengeId}
-                    onSaved={() => void refreshLive()}
-                  />
-                )
-              }
-              view={view}
-              progress={progress.data}
-              pace={pace.data}
-              canOperate={canOperate}
-              canJudge={canJudge}
-              canAdmin={canAdmin}
-              busy={busy}
-              query={search}
-              results={searchResults}
-              searching={searching}
-              searchDisabled={!effectiveChallengeId}
-              onQuery={setSearch}
-              onManualCall={handleManualCall}
-              onEntryAction={(entry, action, body, label) =>
-                mutate(`${action}-${entry.id}`, () => entryAction(entry.id, action, body), label)
-              }
-              onMoveToPosition={(entry, position) =>
-                mutate(
-                  `move-position-${entry.id}`,
-                  () =>
-                    moveQueueEntryToPosition(
-                      entry.id,
-                      position,
-                      "Judging panel: moved team to position",
-                    ),
-                  t("queueTeamMoved"),
-                )
-              }
-              onAddTop={(entry) =>
-                mutate(
-                  `move-top-${entry.id}`,
-                  () =>
-                    entryAction(entry.id, "move-top", { reason: "Search: moved to top of queue" }),
-                  t("teamMovedTop"),
-                )
-              }
-              onAddWaiting={(entry) =>
-                activeRoomId &&
-                mutate(
-                  `add-waiting-${entry.id}`,
-                  () =>
-                    entryAction(entry.id, "manual-call", {
-                      targetStatus: "called",
-                      roomId: activeRoomId,
-                      reason: "Search: to waiting room",
-                    }),
-                  t("teamAddedWaiting"),
-                )
-              }
-              onReEnter={(entry, position) =>
-                mutate(
-                  `re-enter-${entry.id}-${position}`,
-                  () =>
-                    entryAction(entry.id, "re-enter", {
-                      position,
-                      reason: "Recovered from manual search",
-                    }),
-                  t("teamReentered"),
-                )
-              }
-              onOpenReview={selectReviewEntry}
-            />
-          </div>
-
-          {/* Main column: presentation stays visible above the evaluation; the
-              scoring card owns the remaining height and scrolls its body. */}
-          <div className="flex min-h-0 flex-col gap-5 overflow-hidden xl:h-full">
-            <div className="shrink-0">
-              <PresentationPanel
-                entry={active}
-                challenge={activeChallenge}
-                waitingRoomCount={view.called.length}
-                firstCalledEntry={view.called[0] ?? null}
-                canJudge={canJudge}
+        <div
+          className={cn(
+            "grid min-h-0 gap-y-5 xl:h-0 xl:flex-1 xl:gap-y-0",
+            "xl:grid-cols-[var(--queue-col)_minmax(0,1fr)_var(--form-col)]",
+            "xl:transition-[grid-template-columns] xl:duration-500 xl:ease-in-out motion-reduce:transition-none",
+          )}
+          style={
+            {
+              "--queue-col": focusing ? "0px" : "380px",
+              "--form-col": focusing ? "34rem" : "0px",
+            } as React.CSSProperties
+          }
+        >
+          <div
+            className={cn(
+              "min-w-0 xl:h-full xl:min-h-0 xl:overflow-hidden",
+              focusing && "max-xl:hidden",
+            )}
+          >
+            <div
+              className={cn(
+                "h-full xl:w-[360px] transition-opacity duration-300 motion-reduce:transition-none",
+                focusing && "pointer-events-none opacity-0",
+              )}
+            >
+              <QueuePanel
+                timingAction={
+                  effectiveChallengeId && (
+                    <TrackTiming
+                      challengeId={effectiveChallengeId}
+                      onSaved={() => void refreshLive()}
+                    />
+                  )
+                }
+                view={view}
+                progress={progress.data}
+                pace={pace.data}
                 canOperate={canOperate}
+                canJudge={canJudge}
+                canAdmin={canAdmin}
                 busy={busy}
+                query={search}
+                results={searchResults}
+                searching={searching}
+                searchDisabled={!effectiveChallengeId}
+                onQuery={setSearch}
+                onManualCall={handleManualCall}
                 onEntryAction={(entry, action, body, label) =>
                   mutate(`${action}-${entry.id}`, () => entryAction(entry.id, action, body), label)
                 }
+                onMoveToPosition={(entry, position) =>
+                  mutate(
+                    `move-position-${entry.id}`,
+                    () =>
+                      moveQueueEntryToPosition(
+                        entry.id,
+                        position,
+                        "Judging panel: moved team to position",
+                      ),
+                    t("queueTeamMoved"),
+                  )
+                }
+                onAddTop={(entry) =>
+                  mutate(
+                    `move-top-${entry.id}`,
+                    () =>
+                      entryAction(entry.id, "move-top", {
+                        reason: "Search: moved to top of queue",
+                      }),
+                    t("teamMovedTop"),
+                  )
+                }
+                onAddWaiting={(entry) =>
+                  activeRoomId &&
+                  mutate(
+                    `add-waiting-${entry.id}`,
+                    () =>
+                      entryAction(entry.id, "manual-call", {
+                        targetStatus: "called",
+                        roomId: activeRoomId,
+                        reason: "Search: to waiting room",
+                      }),
+                    t("teamAddedWaiting"),
+                  )
+                }
+                onReEnter={(entry, position) =>
+                  mutate(
+                    `re-enter-${entry.id}-${position}`,
+                    () =>
+                      entryAction(entry.id, "re-enter", {
+                        position,
+                        reason: "Recovered from manual search",
+                      }),
+                    t("teamReentered"),
+                  )
+                }
+                onOpenReview={selectReviewEntry}
               />
             </div>
-
-            <ReviewForm
-              key={(selectedReviewEntry ?? active)?.id ?? "none"}
-              entry={selectedReviewEntry ?? active}
-              challenge={activeChallenge}
-              panel={view.challenge?.judging_panel_criteria ?? null}
-              roomId={activeRoomId}
-              canJudge={
-                canJudge &&
-                (active?.status === "in_room" ||
-                  active?.status === "presenting" ||
-                  selectedReviewEntry != null)
-              }
-              onCloseExisting={selectedReviewEntry ? () => selectReviewEntry(null) : undefined}
-              onUnsavedEditsAtRisk={setReviewEditsAtRisk}
-            />
           </div>
+
+          {/* Project column: the project panel and the evaluation form each scroll
+              inside their own container, so every project detail is reachable and
+              every judging question can be answered. */}
+          <div className="min-w-0 xl:h-full xl:min-h-0">
+            {focusMode || !showForm || !formEntry ? (
+              <div className="h-full min-h-0">{projectPanel}</div>
+            ) : (
+              <div className="grid min-h-0 gap-5 xl:h-full xl:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
+                <div className="min-h-0">{projectPanel}</div>
+                <div className="min-h-96 xl:min-h-0">{renderForm(formEntry)}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Expanded judging: the form slides in beside the project while a team is
+              in the room and out again once nobody is. */}
+          {focusMode && (
+            <div className="min-w-0 xl:h-full xl:min-h-0 xl:overflow-hidden">
+              {formMounted && formEntry && (
+                <div
+                  className={cn(
+                    "transition-opacity duration-300 max-xl:mt-5 xl:h-full xl:w-[34rem] xl:pl-5 motion-reduce:transition-none",
+                    focusing ? "opacity-100" : "opacity-0",
+                  )}
+                >
+                  <div className="min-h-96 xl:h-full xl:min-h-0">{renderForm(formEntry)}</div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

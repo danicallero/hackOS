@@ -53,6 +53,7 @@ function buildModes(
     { value: "schedule", label: t("schedule"), detail: t("modeScheduleDetail") },
     { value: "sponsors", label: t("sponsors"), detail: t("modeSponsorsDetail") },
     { value: "wifi", label: t("modeWifi"), detail: t("modeWifiDetail") },
+    { value: "github", label: t("modeGithub"), detail: t("modeGithubDetail") },
   ];
 }
 

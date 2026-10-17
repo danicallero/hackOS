@@ -66,13 +66,15 @@ export function ProjectOverview({
                   <li key={member.userId} className="flex items-center gap-3 py-3">
                     {member.photoUrl && (
                       <UserAvatar
-                        name={member.name ?? ""}
+                        name={`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
                         image={assetUrl(member.photoUrl)}
                         className="size-10"
                         decorative
                       />
                     )}
-                    <span className="min-w-0 flex-1 wrap-anywhere">{member.name}</span>
+                    <span className="min-w-0 flex-1 wrap-anywhere">
+                      {`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
+                    </span>
                     {member.status === "invited" && (
                       <span className="text-sm text-muted-foreground">{labels.pending}</span>
                     )}
