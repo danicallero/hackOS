@@ -35,7 +35,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSidebar } from "@/components/ui/sidebar";
 import { Surface } from "@/components/ui/surface";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
@@ -67,12 +66,10 @@ import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 
 import { challengeName, errorMessage, exportHref, queueErrorToastContent } from "./helpers";
-import { openReviewWindow } from "./open-review-window";
 import { PresentationPanel } from "./presentation-panel";
 import { QueuePanel } from "./queue-panel";
 import { ReviewForm } from "./review-form";
-
-const FOCUS_MODE_KEY = "hackos.judging.focus-layout";
+import { useExpandedTransition, useFocusPreference, useReviewWindow } from "./use-judging-layout";
 
 function showQueueError(t: Translate, err: unknown, fallbackTitle: string) {
   const copy = queueErrorToastContent(
@@ -113,28 +110,7 @@ export default function QueuePage() {
   // only reports edits it cannot save (failed save, conflict, offline), and
   // switching away from those asks first.
   const [reviewEditsAtRisk, setReviewEditsAtRisk] = useState(false);
-  // Focus layout (per viewer): while scoring, the queue hides, the sidebar
-  // collapses and the project sits beside the form. Off keeps the project and the form stacked.
-  const [focusMode, setFocusMode] = useState(false);
-  useEffect(() => {
-    try {
-      if (window.localStorage.getItem(FOCUS_MODE_KEY) === "on") setFocusMode(true);
-    } catch {
-      // Storage can be unavailable; the default applies.
-    }
-  }, []);
-  const changeFocusMode = (next: boolean) => {
-    setFocusMode(next);
-    try {
-      window.localStorage.setItem(FOCUS_MODE_KEY, next ? "on" : "off");
-    } catch {
-      // Not persisted this time.
-    }
-  };
-  const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
-  const collapsedForFocusRef = useRef(false);
-  const reviewWindowRef = useRef<Window | null>(null);
-  const [windowOpen, setWindowOpen] = useState(false);
+  const { focusMode, changeFocusMode } = useFocusPreference();
   const selectReviewEntry = (entry: QueueEntry | null) => {
     if (!confirmDiscardUnsavedChanges(reviewEditsAtRisk, t)) return false;
     setSelectedReviewEntry(entry);
@@ -325,45 +301,12 @@ export default function QueuePage() {
       reviewTarget.status === "presenting" ||
       selectedReviewEntry != null);
 
-  const closeReviewWindow = useCallback(() => {
-    const existing = reviewWindowRef.current;
-    reviewWindowRef.current = null;
-    setWindowOpen(false);
-    if (existing && !existing.closed) existing.close();
-  }, []);
-
-  // A project link is about to open another tab: the evaluation follows in its
-  // own small window instead of staying behind this one.
-  const moveReviewToWindow = useCallback(async () => {
-    if (!reviewable || reviewTargetId == null || !window.matchMedia("(min-width: 1024px)").matches)
-      return;
-    if (reviewWindowRef.current && !reviewWindowRef.current.closed) return;
-    const url = new URL(
-      `/judging-popup/${reviewTargetId}?roomId=${activeRoomId}`,
-      window.location.origin,
-    ).toString();
-    const opened = await openReviewWindow(url, t("scoring"));
-    if (!opened) {
-      toast.error(t("reviewWindowBlocked"), { compactTitle: t("toastOpenReview") });
-      return;
-    }
-    reviewWindowRef.current = opened;
-    setWindowOpen(true);
-    opened.addEventListener("pagehide", closeReviewWindow);
-  }, [reviewable, reviewTargetId, activeRoomId, closeReviewWindow, t]);
-
-  // Coming back to this tab means the window is no longer needed.
-  useEffect(() => {
-    const onReturn = () => {
-      if (document.visibilityState === "visible") closeReviewWindow();
-    };
-    window.addEventListener("focus", onReturn);
-    document.addEventListener("visibilitychange", onReturn);
-    return () => {
-      window.removeEventListener("focus", onReturn);
-      document.removeEventListener("visibilitychange", onReturn);
-    };
-  }, [closeReviewWindow]);
+  const { windowOpen, moveReviewToWindow } = useReviewWindow(
+    reviewable,
+    reviewTargetId,
+    activeRoomId,
+    t,
+  );
 
   // Expanded judging is a standing preference: the layout appears whenever a team
   // is in the room (or a past evaluation is open) and gives way to the queue when
@@ -371,25 +314,7 @@ export default function QueuePage() {
   const focusing = focusMode && canJudge && reviewTarget != null && !windowOpen;
   const lastReviewEntryRef = useRef<QueueEntry | null>(null);
   if (reviewTarget && !windowOpen) lastReviewEntryRef.current = reviewTarget;
-  // Keep the form mounted while the column slides out.
-  const [formMounted, setFormMounted] = useState(false);
-  useEffect(() => {
-    if (focusing) {
-      setFormMounted(true);
-      return;
-    }
-    const timer = window.setTimeout(() => setFormMounted(false), 500);
-    return () => window.clearTimeout(timer);
-  }, [focusing]);
-  useEffect(() => {
-    if (focusing && sidebarOpen) {
-      collapsedForFocusRef.current = true;
-      setSidebarOpen(false);
-    } else if (!focusing && collapsedForFocusRef.current) {
-      collapsedForFocusRef.current = false;
-      setSidebarOpen(true);
-    }
-  }, [focusing, sidebarOpen, setSidebarOpen]);
+  const formMounted = useExpandedTransition(focusing);
 
   if (!canUse) {
     return <AccessDenied ask={t("judgingAccessDeniedDesc")} />;
