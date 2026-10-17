@@ -15,6 +15,7 @@ export function LibraryPicker({
   libraryId,
   value,
   onChange,
+  onBlur,
   disabled,
   id,
   inDialog = false,
@@ -23,6 +24,7 @@ export function LibraryPicker({
   libraryId?: string;
   value: string[];
   onChange: (value: string[]) => void;
+  onBlur?: () => void;
   disabled?: boolean;
   id?: string;
   inDialog?: boolean;
@@ -66,6 +68,7 @@ export function LibraryPicker({
         options={names.map((name) => ({ value: name, label: name }))}
         value={value}
         onChange={onChange}
+        onBlur={onBlur}
         disabled={disabled || busy || !libraryId}
         inDialog={inDialog}
         searchQuery={query}

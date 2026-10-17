@@ -8,6 +8,7 @@ import type { Language } from "@/lib/types";
 export interface ValidationField {
   key: string;
   project_video?: boolean;
+  options?: { value: string }[];
   label: I18nText;
   validation?: {
     min_length?: number;
@@ -31,8 +32,45 @@ export function validateFieldOnBlur(
   t: Translate,
   lang: Language,
 ): string | null {
-  const empty = value == null || value === "" || (Array.isArray(value) && value.length === 0);
+  const empty =
+    value == null ||
+    (typeof value === "string" && value.trim() === "") ||
+    (Array.isArray(value) && value.length === 0);
   if (empty) return field.required ? t("fieldRequired") : null;
+  if (field.kind === "checkbox") {
+    if (typeof value !== "boolean") return t("fieldMustBeBoolean");
+    if (field.required && !value) return t("fieldRequired");
+  }
+  if (field.kind === "number" && (typeof value !== "number" || !Number.isFinite(value)))
+    return t("fieldMustBeNumber");
+  if (field.kind === "select" || field.kind === "multiselect") {
+    const allowed = new Set(field.options?.map((option) => option.value) ?? []);
+    if (field.kind === "multiselect" && !Array.isArray(value)) return t("fieldMustBeArray");
+    const choices = Array.isArray(value) ? value : [value];
+    if (choices.some((choice) => typeof choice !== "string" || !allowed.has(choice)))
+      return t("fieldInvalidOption");
+  }
+  if (field.kind === "library" || field.kind === "images") {
+    if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !item.trim()))
+      return t("fieldMustBeArray");
+  }
+  if (field.kind === "university" || field.kind === "degree") {
+    if (typeof value !== "number" && !(typeof value === "string" && /^\d+$/.test(value)))
+      return t(field.kind === "university" ? "fieldMustBeUniversity" : "fieldMustBeDegree");
+  }
+  if (field.kind === "city") {
+    const location = value as Record<string, unknown>;
+    if (
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      ["city", "province", "country"].some(
+        (key) => typeof location[key] !== "string" || !String(location[key]).trim(),
+      )
+    )
+      return t("fieldMustBeCity");
+  }
+  if (["text", "textarea", "date", "file"].includes(field.kind ?? "") && typeof value !== "string")
+    return t("fieldMustBeString");
   if (field.project_video && !youtubeEmbedUrl(value)) return t("invalidUrl");
   if (field.kind === "birth_year") {
     const currentYear = new Date().getFullYear();
@@ -59,16 +97,25 @@ export function validateFieldOnBlur(
       code = FIELD_ERROR_REASONS.INVALID_EMAIL;
     else if (rule.text_condition === "url" && !SIMPLE_URL_RE.test(value))
       code = FIELD_ERROR_REASONS.INVALID_URL;
-    else if (rule.pattern) {
+    else if (
+      rule.text_condition === "contains" &&
+      rule.text_value &&
+      !value.includes(rule.text_value)
+    )
+      code = FIELD_ERROR_REASONS.MUST_CONTAIN_TEXT;
+    else if (
+      rule.text_condition === "not_contains" &&
+      rule.text_value &&
+      value.includes(rule.text_value)
+    )
+      code = FIELD_ERROR_REASONS.MUST_NOT_CONTAIN_TEXT;
+    if (!code && rule.pattern) {
       try {
         if (!new RegExp(rule.pattern).test(value)) code = FIELD_ERROR_REASONS.INVALID_FORMAT;
       } catch {
         code = FIELD_ERROR_REASONS.INVALID_FORMAT;
       }
-    } else if (rule.text_condition === "contains" && !value.includes(rule.text_value ?? ""))
-      code = FIELD_ERROR_REASONS.MUST_CONTAIN_TEXT;
-    else if (rule.text_condition === "not_contains" && value.includes(rule.text_value ?? ""))
-      code = FIELD_ERROR_REASONS.MUST_NOT_CONTAIN_TEXT;
+    }
   } else if (field.kind === "number" && typeof value === "number" && rule) {
     if (rule.min != null && value < rule.min) code = FIELD_ERROR_REASONS.TOO_SMALL;
     else if (rule.max != null && value > rule.max) code = FIELD_ERROR_REASONS.TOO_LARGE;

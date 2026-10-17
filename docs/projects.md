@@ -196,3 +196,8 @@ visible with retry rather than silently replacing the project with empty content
 `library` questions use [question-owned catalogues](./form-libraries.md): proposal
 and curation belong to the field, not to event-level Libraries. Their answers and
 CSV exports are arrays of human-readable names, with no count limit.
+
+Project editor fields validate on blur, including phone normalization, required
+consent and configured text/number/selection constraints. Inline errors use the
+same validator as applications and staff response editing. Submission repeats
+validation and focuses the first invalid field; incomplete drafts still autosave.

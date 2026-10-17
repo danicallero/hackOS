@@ -43,6 +43,8 @@ export function PasswordRow() {
   const [open, setOpen] = useState(false);
   const schema = useMemo(() => passwordSchema(t), [t]);
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" },
   });

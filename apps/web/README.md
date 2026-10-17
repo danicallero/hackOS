@@ -714,3 +714,10 @@ the question editor, never the general Libraries settings. See
 [question-owned libraries](../../docs/form-libraries.md). Project reading,
 editing and judging reuse `ProjectAnswers`; new drafts begin editing and existing
 participant records provide an explicit read/edit action in the same workspace.
+
+Form validation runs on blur: React Hook Form uses `mode: "onBlur"` and
+`reValidateMode: "onBlur"`; `FormControl` also validates custom controls when
+focus leaves their boundary. Dynamic application/project fields use
+`validateFieldOnBlur`, including phones, required consent, choices and configured
+rules. Compound pickers validate on close or departure, using the latest changed
+value. Submit retains full validation and first-error focus as a safeguard.

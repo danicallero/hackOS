@@ -7,6 +7,7 @@
 // city/province/country object for city, string[] for
 // multiselect, boolean for checkbox.
 
+import { useRef } from "react";
 import { CityPicker } from "@/components/common/city-picker";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { DegreePicker } from "@/components/common/degree-picker";
@@ -84,7 +85,7 @@ export function templateFieldId(fieldKey: string, applicationId?: number): strin
 export function TemplateFieldControl({
   field,
   value,
-  onChange = () => {},
+  onChange: onValueChange = () => {},
   disabled,
   lang,
   error,
@@ -96,7 +97,7 @@ export function TemplateFieldControl({
   sharedWithSponsors,
   onSharedWithSponsorsChange,
   onExternalLinkClick,
-  onBlur,
+  onBlur: onFieldBlur,
   files = [],
 }: {
   field: TemplateFieldLike;
@@ -124,8 +125,15 @@ export function TemplateFieldControl({
   files?: ProjectImageFile[];
   /** Called when a read-only URL answer is opened in a new tab. */
   onExternalLinkClick?: () => void;
-  onBlur?: () => void;
+  onBlur?: (value: FieldValue) => void;
 }) {
+  const latestValue = useRef(value);
+  latestValue.current = value;
+  const onChange = (next: FieldValue) => {
+    latestValue.current = next;
+    onValueChange(next);
+  };
+  const onBlur = () => onFieldBlur?.(latestValue.current);
   const { t } = useLocale();
   const label = pickText(field.label, lang);
   const options = (field.options ?? []).map((o) => ({
@@ -154,6 +162,7 @@ export function TemplateFieldControl({
     case "library":
       control = (
         <LibraryPicker
+          onBlur={onBlur}
           libraryId={field.library_id}
           value={Array.isArray(value) ? value : []}
           onChange={onChange}
@@ -204,6 +213,9 @@ export function TemplateFieldControl({
           disabled={disabled}
         >
           <SelectTrigger
+            onBlur={(event) => {
+              if (event.currentTarget.getAttribute("aria-expanded") !== "true") onBlur();
+            }}
             id={id}
             className="w-full"
             aria-labelledby={labelId}
@@ -467,6 +479,7 @@ export function TemplateFieldControl({
       // in string ids — convert on the way in and out.
       control = (
         <UniversityPicker
+          onBlur={onBlur}
           value={value != null && value !== "" ? String(value) : ""}
           onChange={(v) => onChange(v ? Number(v) : null)}
           disabled={disabled}

@@ -13,7 +13,11 @@ import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { ProjectsSectionHeader } from "@/components/common/section-navigation";
 import { StatusBadge } from "@/components/common/status-badge";
-import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
+import {
+  type FieldValue,
+  TemplateFieldControl,
+  templateFieldId,
+} from "@/components/common/template-field-control";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
@@ -79,7 +83,7 @@ export function ProjectEditor({
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length) {
-      document.getElementById(`template-field-staff-${Object.keys(errors)[0]}`)?.focus();
+      document.getElementById(templateFieldId(Object.keys(errors)[0]))?.focus();
       return;
     }
     setBusy(true);
@@ -318,6 +322,15 @@ export function ProjectEditor({
                             setFieldErrors((previous) => {
                               const next = { ...previous };
                               delete next[field.key];
+                              return next;
+                            });
+                          }}
+                          onBlur={(value) => {
+                            const message = validateFieldOnBlur(field, value, t, language);
+                            setFieldErrors((previous) => {
+                              const next = { ...previous };
+                              if (message) next[field.key] = message;
+                              else delete next[field.key];
                               return next;
                             });
                           }}

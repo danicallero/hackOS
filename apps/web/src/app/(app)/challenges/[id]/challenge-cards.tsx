@@ -120,6 +120,8 @@ export function EditCard({
     asI18n(challenge.criteria_i18n ?? challenge.criteria, textForDisplay(challenge.criteria)),
   );
   const form = useForm<EditValues>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(editSchema),
     defaultValues: toFormValues(challenge),
   });

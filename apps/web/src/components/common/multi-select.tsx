@@ -205,6 +205,9 @@ export function MultiSelect({
               name={name}
               type="button"
               disabled={disabled}
+              onBlur={() => {
+                if (!open) onBlur?.();
+              }}
               role="combobox"
               aria-controls={listboxId}
               aria-expanded={open}

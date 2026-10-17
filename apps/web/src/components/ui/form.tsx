@@ -105,10 +105,16 @@ function FormLabel({
 }
 
 function FormControl({ ...props }: React.ComponentProps<typeof Slot.Root>) {
-  const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
+  const { error, name, formItemId, formDescriptionId, formMessageId } = useFormField()
+  const { trigger } = useFormContext()
 
   return (
     <Slot.Root
+      onBlur={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+        if (event.currentTarget.getAttribute("aria-expanded") === "true") return
+        void trigger(name)
+      }}
       data-slot="form-control"
       id={formItemId}
       aria-describedby={
@@ -147,6 +153,7 @@ function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
     <p
       data-slot="form-message"
       id={formMessageId}
+      role="alert"
       className={cn("text-sm text-destructive", className)}
       {...props}
     >

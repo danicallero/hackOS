@@ -163,6 +163,8 @@ export function GrantRulesPanel({
 
   const schema = ruleSchema;
   const form = useForm<RuleValues>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: emptyValues(scopedRole?.id),
   });

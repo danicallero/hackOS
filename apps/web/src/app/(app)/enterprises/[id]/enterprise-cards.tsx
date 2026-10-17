@@ -449,6 +449,8 @@ export function EditCard({
 }) {
   const { t } = useLocale();
   const form = useForm<EditValues>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(editSchema),
     defaultValues: toFormValues(enterprise),
   });
