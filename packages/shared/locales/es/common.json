@@ -65,6 +65,8 @@
   "apiError_badge_unknown": "Acreditación no reconocida.",
   "apiError_badge_scan_before_assignment": "Este escaneo es anterior a la asignación actual de la acreditación.",
   "apiError_team_member_busy": "Un miembro del equipo ya está activo en otra sala.",
+  "apiError_github_repo_already_linked": "Este repositorio ya está enlazado a otro proyecto.",
+  "apiError_github_repo_not_available": "Este repositorio no está compartido con la app de GitHub.",
   "apiError_schedule_ends_before_starts": "El final debe ser posterior al inicio.",
   "apiError_schedule_scan_needs_participants": "Solo los elementos visibles para participantes pueden requerir escaneo.",
   "apiError_schedule_item_not_found": "Este elemento del programa ya no existe.",
