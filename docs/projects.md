@@ -37,8 +37,8 @@ contract, audited independently of participant windows (H21/H53).
 
 Event settings use the existing `GET/PUT /api/event` transaction and save scope.
 Fields are `projectDraftsOpenAt`, `projectSubmissionsCloseAt`,
-`projectDraftVisibility`, `projectGalleryOpensAt`, `projectGalleryAudience`,
-`projectEditsLockAt` and `projectMaxTeamSize`. Missing draft/submission bounds
+`projectDraftVisibility`, `projectGalleryOpensAt`, `projectGalleryAudience`
+and `projectMaxTeamSize`. Editing and submission close together at `projectSubmissionsCloseAt`. Missing draft/submission bounds
 inherit the hacking window. A missing gallery opening means closed. PostgreSQL
 compares boundaries to `now()`; API host time does not authorize operations.
 

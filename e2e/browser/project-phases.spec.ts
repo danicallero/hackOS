@@ -20,7 +20,6 @@ test("project phases share the event category save and event timezone", async ({
     projectDraftVisibility: "team_only",
     projectGalleryOpensAt: null,
     projectGalleryAudience: "staff",
-    projectEditsLockAt: null,
     projectMaxTeamSize: null,
   };
   await page.addInitScript(() => localStorage.setItem("hackos-language", "en"));

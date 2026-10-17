@@ -61,7 +61,6 @@ const createSchema = (t: Translate) =>
       projectDraftVisibility: z.enum(["team_only", "attendees", "public"]),
       projectGalleryOpensAt: z.string(),
       projectGalleryAudience: z.enum(["staff", "attendees", "public"]),
-      projectEditsLockAt: z.string(),
       projectMaxTeamSize: z
         .string()
         .refine(
@@ -108,6 +107,11 @@ const EQUAL_SPLIT = "pr-9";
 
 type Values = z.infer<ReturnType<typeof createSchema>>;
 
+/** A stored value outside the select's options would render blank and mark the form dirty on load. */
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
 function fromConfig(cfg: EventConfig): Values {
   const zone = cfg.timezone || "Europe/Madrid";
   return {
@@ -120,10 +124,17 @@ function fromConfig(cfg: EventConfig): Values {
     timezone: cfg.timezone || "Europe/Madrid",
     projectDraftsOpenAt: toLocalInputValue(cfg.projectDraftsOpenAt, zone),
     projectSubmissionsCloseAt: toLocalInputValue(cfg.projectSubmissionsCloseAt, zone),
-    projectDraftVisibility: cfg.projectDraftVisibility ?? "team_only",
+    projectDraftVisibility: oneOf(
+      cfg.projectDraftVisibility,
+      ["team_only", "attendees", "public"],
+      "team_only",
+    ),
     projectGalleryOpensAt: toLocalInputValue(cfg.projectGalleryOpensAt, zone),
-    projectGalleryAudience: cfg.projectGalleryAudience ?? "staff",
-    projectEditsLockAt: toLocalInputValue(cfg.projectEditsLockAt, zone),
+    projectGalleryAudience: oneOf(
+      cfg.projectGalleryAudience,
+      ["staff", "attendees", "public"],
+      "staff",
+    ),
     projectMaxTeamSize: cfg.projectMaxTeamSize == null ? "" : String(cfg.projectMaxTeamSize),
     eventStartsAt: toLocalInputValue(cfg.eventStartsAt, zone),
     eventEndsAt: toLocalInputValue(cfg.eventEndsAt, zone),
@@ -189,7 +200,6 @@ export function EventTab({
       projectDraftVisibility: "team_only",
       projectGalleryOpensAt: "",
       projectGalleryAudience: "staff",
-      projectEditsLockAt: "",
       projectMaxTeamSize: "",
       eventStartsAt: "",
       eventEndsAt: "",
@@ -229,7 +239,6 @@ export function EventTab({
         projectDraftVisibility: values.projectDraftVisibility,
         projectGalleryOpensAt: fromLocalInputValue(values.projectGalleryOpensAt, zone),
         projectGalleryAudience: values.projectGalleryAudience,
-        projectEditsLockAt: fromLocalInputValue(values.projectEditsLockAt, zone),
         projectMaxTeamSize: values.projectMaxTeamSize ? Number(values.projectMaxTeamSize) : null,
         eventStartsAt: fromLocalInputValue(values.eventStartsAt, zone),
         eventEndsAt: fromLocalInputValue(values.eventEndsAt, zone),
@@ -445,7 +454,6 @@ export function EventTab({
                   [
                     ["projectDraftsOpenAt", "projectDraftsOpenAtLabel"],
                     ["projectSubmissionsCloseAt", "projectSubmissionsCloseAtLabel"],
-                    ["projectEditsLockAt", "projectEditsLockAtLabel"],
                     ["projectGalleryOpensAt", "projectGalleryOpensAtLabel"],
                   ] as const
                 ).map(([name, label]) => (

@@ -23,6 +23,7 @@ import {
   type RouteAccessPolicy,
   routeAccessOption as routeAccess,
 } from "../../lib/route-policy.js";
+import { sharedCache } from "../../lib/shared-cache.js";
 import { requestLiveActivitySync } from "../live-activities/kick.js";
 import {
   bumpAllAppleWalletUpdateTags,
@@ -53,7 +54,6 @@ const EVENT_SETTINGS_CAPABILITIES: Record<string, Capability> = {
   projectDraftVisibility: CAPABILITIES.EVENT_MANAGE,
   projectGalleryOpensAt: CAPABILITIES.EVENT_MANAGE,
   projectGalleryAudience: CAPABILITIES.EVENT_MANAGE,
-  projectEditsLockAt: CAPABILITIES.EVENT_MANAGE,
   projectMaxTeamSize: CAPABILITIES.EVENT_MANAGE,
 
   eventReminderScheduledAt: CAPABILITIES.EVENT_MANAGE,
@@ -145,7 +145,6 @@ const eventConfigBody = z
     projectDraftVisibility: z.enum(["team_only", "attendees", "public"]).optional(),
     projectGalleryOpensAt: z.coerce.date().nullable().optional(),
     projectGalleryAudience: z.enum(["staff", "attendees", "public"]).optional(),
-    projectEditsLockAt: z.coerce.date().nullable().optional(),
     projectMaxTeamSize: z.number().int().positive().max(100).nullable().optional(),
 
     presenceAutoEntryAt: z.coerce.date().nullable().optional(),
@@ -211,7 +210,6 @@ const DEFAULTS = {
   project_draft_visibility: "team_only",
   project_gallery_opens_at: null,
   project_gallery_audience: "staff",
-  project_edits_lock_at: null,
   project_max_team_size: null,
 } as const;
 
@@ -221,7 +219,6 @@ interface EventConfigRow {
   project_draft_visibility: string;
   project_gallery_opens_at: string | null;
   project_gallery_audience: string;
-  project_edits_lock_at: string | null;
   project_max_team_size: number | null;
 
   name: string | null;
@@ -262,7 +259,7 @@ async function readConfig(db: Queryable = pool): Promise<EventConfigRow> {
             pass_back_fields, pass_field_labels, pass_field_visibility,
             require_sponsor_shirt_size, require_sponsor_dietary,
             require_staff_shirt_size, require_staff_dietary, shirt_sizes,
-            meal_plan_cutoff_hours, project_drafts_open_at,project_submissions_close_at,project_draft_visibility,project_gallery_opens_at,project_gallery_audience,project_edits_lock_at,project_max_team_size
+            meal_plan_cutoff_hours, project_drafts_open_at,project_submissions_close_at,project_draft_visibility,project_gallery_opens_at,project_gallery_audience,project_max_team_size
        FROM event_config WHERE id = 1`,
   );
   return rows[0] ?? DEFAULTS;
@@ -306,7 +303,6 @@ function toPublic(
     projectDraftVisibility: row.project_draft_visibility,
     projectGalleryOpensAt: row.project_gallery_opens_at,
     projectGalleryAudience: row.project_gallery_audience,
-    projectEditsLockAt: row.project_edits_lock_at,
     projectMaxTeamSize: row.project_max_team_size,
 
     presenceAutoEntryAt: row.presence_auto_entry_at,
@@ -380,7 +376,10 @@ export function registerEventRoutes(app: FastifyInstance): void {
           "Anonymous event identity, public countdown windows and venue projection for website and TV consumers. It never includes venue Wi-Fi credentials.",
       },
     },
-    async () => toPublic(await readConfig(), await readJudgingWindow()),
+    () =>
+      sharedCache("content", "event-public", 15, async () =>
+        toPublic(await readConfig(), await readJudgingWindow()),
+      ),
   );
 
   r.get(
@@ -602,10 +601,6 @@ export function registerEventRoutes(app: FastifyInstance): void {
         if (b.projectGalleryAudience !== undefined)
           await client.query("UPDATE event_config SET project_gallery_audience=$1 WHERE id=1", [
             b.projectGalleryAudience,
-          ]);
-        if (b.projectEditsLockAt !== undefined)
-          await client.query("UPDATE event_config SET project_edits_lock_at=$1 WHERE id=1", [
-            b.projectEditsLockAt,
           ]);
         if (b.projectMaxTeamSize !== undefined)
           await client.query("UPDATE event_config SET project_max_team_size=$1 WHERE id=1", [
