@@ -133,15 +133,23 @@ export async function installationsOf(userId: number): Promise<number[]> {
 
 export async function selectableRepos(userId: number) {
   const out: { installationId: number; id: number; fullName: string; isPrivate: boolean }[] = [];
-  for (const installationId of await installationsOf(userId)) {
-    for (const repo of await listInstallationRepos(installationId).catch(() => []))
-      out.push({
-        installationId,
-        id: repo.id,
-        fullName: repo.full_name,
-        isPrivate: repo.private,
-      });
+  let failure: unknown = null;
+  const installations = await installationsOf(userId);
+  for (const installationId of installations) {
+    try {
+      for (const repo of await listInstallationRepos(installationId))
+        out.push({
+          installationId,
+          id: repo.id,
+          fullName: repo.full_name,
+          isPrivate: repo.private,
+        });
+    } catch (err) {
+      failure = err;
+    }
   }
+  // Every installation failing is an error to show, not an empty list.
+  if (failure && installations.length > 0 && out.length === 0) throw failure;
   return out;
 }
 
