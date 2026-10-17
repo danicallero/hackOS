@@ -10,6 +10,7 @@ import type { NativeProject } from "@/lib/native-projects";
 import type { Language } from "@/lib/types";
 import { PresentationStatus } from "./presentation-status";
 import { ProjectAnswers } from "./project-answers";
+import { ProjectDescriptionLinks } from "./project-description-links";
 
 /** H18/H20/H21: one reading presentation for gallery, team and staff inspection. */
 export function ProjectOverview({
@@ -82,6 +83,11 @@ export function ProjectOverview({
                 ))}
             </ul>
           </SectionCard>
+        )}
+        {(project.githubUrl || project.demoUrl) && (
+          <ProjectDescriptionLinks
+            links={{ githubUrl: project.githubUrl, demoUrl: project.demoUrl }}
+          />
         )}
         <SectionCard title={labels.challenges} icon={TrophyIcon} variant="plain">
           {project.challenges.length === 0 && (
