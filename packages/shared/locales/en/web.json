@@ -3502,7 +3502,7 @@
   "projectAudienceTeam": "Team only",
   "projectAudienceAttendees": "Attendees",
   "projectAudiencePublic": "Everyone",
-  "projectAudienceStaff": "Staff and sponsors",
+  "projectAudienceStaff": "Project staff",
   "projectSubmitCta": "Submit project",
   "projectGalleryPhotoNotice": "The gallery may be public. Your team name remains visible without a photo.",
   "projectDraftConflict": "A teammate saved changes. Copy your unsaved answers before reloading this project.",
@@ -3570,5 +3570,12 @@
   "judgingProjectDetails": "Project details",
   "projectDemoLink": "Demo",
   "saveLibraryBeforeForm": "Save library values before saving the form.",
-  "discardLibraryChanges": "Discard changes"
+  "discardLibraryChanges": "Discard changes",
+  "staffCreateProject": "Create project",
+  "staffCreateProjectNotice": "Create a submitted project on behalf of a team. Selected challenges add it to their queues.",
+  "projectTeamRequired": "Choose at least one team member.",
+  "projectFilesAfterCreation": "Add files and images after creating the project.",
+  "projectReviewTitle": "Submission review",
+  "projectResubmitCta": "Update submission",
+  "projectUnsubmittedChanges": "You have changes that are not in the submitted version. Submit again to update it."
 }

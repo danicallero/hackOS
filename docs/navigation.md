@@ -47,7 +47,7 @@ nav gated on `role` instead. The mobile My Projects tab needs only event access 
 The personal sidebar exposes **Home**, **My applications**, **Projects**,
 **Wallet**, **Contacts** and **My profile**. Home opens Event (`/event`) and groups Schedule (`/timetable`)
 and Inbox (`/inbox`) in a shared internal navigation row.
-Projects groups My projects (`/my-project`) and Gallery (`/gallery`). The sidebar
+Projects groups My projects (`/my-project`), Gallery (`/gallery`) and, for authorized staff, Manage projects (`/projects`). All record routes share the reading presentation and expose editing explicitly. The sidebar
 keeps the parent selected on every grouped route, including records, and Home
 retains the unread indicator. Existing URLs and bookmarks remain valid. Sibling views share the same
 PageLayout content width and parent header/navigation tracks, including loading
@@ -95,7 +95,7 @@ workspace never over-grants access.
 | Workspace | Items | Visible when |
 | --- | --- | --- |
 | Applications | Applications | `applications:review`, `applications:decide`, or `applications:manage` |
-| Projects | Projects, Project form | Projects: `projects:read`, `judge:panel`, or an assigned-judge/sponsor-rep association; Project form: `projects:edit` |
+| Projects | Projects, Project form | Projects: `projects:read`, `projects:edit`, or an assigned-judge/sponsor-rep association; Project form: `projects:edit` |
 | Live judging | Queue operations (tabs: All rooms overview · Judging queues · Room configuration), Judging, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); The Room configuration tab is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from room administration |
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | `schedule:read` (view-only schedule), `schedule:manage`, `tv:control`, or `announcements:manage` |

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import type { Translate } from "@/lib/i18n";
-import { type NativeProject, nativeProjects } from "@/lib/native-projects";
+import { invalidateProjectReads, type NativeProject, nativeProjects } from "@/lib/native-projects";
 import type { SaveState } from "@/lib/save-state";
 
 /** H20/#844: serialize writes and never replace newer local answers with a stale response. */
@@ -51,6 +51,7 @@ export function useProjectDraft(
               { responses: answers, revision: revision.current },
             )
           : await nativeProjects.saveDraft(project.id, answers, revision.current);
+        invalidateProjectReads(project.id);
         revision.current = saved.revision;
         if (!mounted.current) return false;
         if (ownedSequence !== sequence.current) {

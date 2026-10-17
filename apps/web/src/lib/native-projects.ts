@@ -1,10 +1,14 @@
 import type { FormSection, TemplateField } from "@/app/(app)/applications/lib";
 import { api } from "./api";
+import { invalidateServerState } from "./server-state";
 
 /** H16–H21: one native project and the applications form contract. */
 export interface NativeProject {
   id: number;
   canEdit: boolean;
+  isMember?: boolean;
+  canInspect?: boolean;
+  hasUnsubmittedChanges?: boolean;
   canSubmit?: boolean;
   canInvite?: boolean;
   name: string;
@@ -70,7 +74,20 @@ export const nativeProjects = {
   removeChallenge: (id: number, challengeId: number) =>
     api.delete(`/api/me/projects/${id}/challenges/${challengeId}`),
   definition: () => api.get<ProjectDefinition>("/api/projects/form"),
-  saveDefinition: (
+  saveDefinition: async (
     body: Pick<ProjectDefinition, "template" | "sections"> & { library_deletions?: string[] },
-  ) => api.put<ProjectDefinition>("/api/projects/form", body),
+  ) => {
+    const saved = await api.put<ProjectDefinition>("/api/projects/form", body);
+    invalidateServerState(["project-form"]);
+    return saved;
+  },
 };
+
+/** H20/H21: returning to a saved project must not resurrect a cached revision. */
+export function invalidateProjectReads(id: number): void {
+  invalidateServerState(["projects", "management"]);
+  invalidateServerState(["project-challenges"]);
+  invalidateServerState(["project-challenges", "staff"]);
+  invalidateServerState(["project", String(id), "staff"]);
+  invalidateServerState(["project", String(id), "member"]);
+}

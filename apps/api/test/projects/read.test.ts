@@ -146,3 +146,32 @@ describe("Native project read and scope (H18,H20,H46)", () => {
     ).not.toContain(added);
   });
 });
+
+it("project editors can inspect outside participant windows without a separate read grant", async () => {
+  const editor = await createUserWithCapabilities([CAPABILITIES.PROJECTS_EDIT]);
+  await setHackingWindow(false);
+  const detail = await get(`/api/repos/${id}`, editor);
+  expect(detail.statusCode, detail.body).toBe(200);
+  expect(detail.json()).toMatchObject({ canInspect: true, canEdit: true, canSubmit: false });
+  const readOnly = await createUserWithCapabilities([CAPABILITIES.PROJECTS_READ]);
+  expect((await get(`/api/repos/${id}`, readOnly)).json().canEdit).toBe(false);
+});
+
+it("sponsor inspection and file policy include intended challenges before queue generation, never another enterprise", async () => {
+  const own = await createEnterpriseChallenges(1);
+  const foreign = await createEnterpriseChallenges(1);
+  await pool.query(`DELETE FROM project_challenges WHERE repo_id=$1`, [id]);
+  await pool.query(`INSERT INTO project_challenges(repo_id,challenge_id) VALUES($1,$2)`, [
+    id,
+    own.challengeIds[0],
+  ]);
+  await pool.query(
+    `UPDATE event_config SET project_gallery_opens_at=NULL,project_draft_visibility='team_only'`,
+  );
+  const { canViewProject } = await import("../../src/modules/projects/policy.js");
+  expect(await canViewProject(pool, own.repId, id)).toBe(true);
+  expect(await canViewProject(pool, foreign.repId, id)).toBe(false);
+  expect((await get(`/api/repos/${id}`, own.repId)).statusCode).toBe(200);
+  expect((await get(`/api/repos/${id}`, foreign.repId)).statusCode).toBe(403);
+  expect((await get("/api/public/projects", own.repId)).statusCode).toBe(403);
+});

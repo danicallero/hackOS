@@ -56,7 +56,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
       schema: {
         summary: "Read project challenge estimates",
         description:
-          "Counts each native project once, active members only, with sponsor enterprise scope and no planning/submitted double count (H21).",
+          "Counts each native project once, active members only, with sponsor enterprise scope and no planning/submitted double count (H21). Includes challenge mandatory flags for the authorized project enrollment chooser.",
       },
     },
     (q) => {
@@ -190,7 +190,8 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
       schema: {
         params,
         summary: "Read my project",
-        description: "Reads one project through the centralized team and phase policy (#1008).",
+        description:
+          "Reads the authorized working copy, with member/edit/submit/inspection flags, organizer locks, approved reopening and unsubmitted-change status through the centralized team and phase policy (H20,H21).",
       },
     },
     (q) => nativeProject(q.userId, q.params.id),
@@ -247,7 +248,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
           );
           const ids = rows.map((row) => row.id as number);
           return {
-            items: await nativeProjects(null, ids, false, true),
+            items: await nativeProjects(null, ids, { gallery: true, galleryChecked: true }),
             total: (rows[0]?.total ?? 0) as number,
           };
         },
@@ -262,7 +263,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
                 [q.userId, shared.items.map((item) => item.id)],
               )
             ).rows.map((row) => row.repo_id);
-      const ownProjects = own.length ? await nativeProjects(q.userId, own) : [];
+      const ownProjects = own.length ? await nativeProjects(q.userId, own, { gallery: true }) : [];
       return {
         items: shared.items.map((item) => ownProjects.find((mine) => mine.id === item.id) ?? item),
         total: shared.total,
@@ -279,12 +280,12 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         params,
         summary: "Read gallery project",
         description:
-          "Returns no-store project content and current consented member display through the gallery phase policy; nonmembers receive null names when sharing is disabled (#1008,#1009).",
+          "Returns no-store gallery content from the last submitted snapshot, including for the project’s own team, and current consented active member display through the gallery phase policy; names are null when sharing is disabled (#1008,#1009).",
       },
     },
     (q, reply) => {
       reply.header("Cache-Control", "no-store");
-      return nativeProject(q.userId, q.params.id);
+      return nativeProject(q.userId, q.params.id, { gallery: true });
     },
   );
 }

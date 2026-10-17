@@ -29,8 +29,8 @@ is locked and revision must match before saving. A stale save receives 409 and
 never replaces a newer draft. Submission validates required fields and verifies
 that uploaded file keys belong to this project and field. Required fields are
 not enforced during autosave. Members may continue editing after submission
-while editing is open (H20); submission history remains immutable. Nonmember
-submitted projections use the last submitted snapshot and its form version.
+while editing is open (H20); submission history remains immutable. Gallery projections always use the last submitted snapshot and its form version,
+including for team members; their personal workspace retains the working copy.
 Staff answer corrections use `PUT /api/repos/:id/draft` with the same revision
 contract, audited independently of participant windows (H21/H53).
 
@@ -201,3 +201,60 @@ Project editor fields validate on blur, including phone normalization, required
 consent and configured text/number/selection constraints. Inline errors use the
 same validator as applications and staff response editing. Submission repeats
 validation and focuses the first invalid field; incomplete drafts still autosave.
+
+The management list (`/projects`) presents CSV export as a secondary header
+action beside project creation. Export remains gated by `exports:run`,
+independently of the ability to create projects.
+
+## Unified inspection and administration (H18–H21)
+
+Gallery, a participant's own record and staff inspection use `ProjectOverview`
+for authored answers, team, challenges and queue state. A record title is the page
+heading; the shared navigation links My projects, Gallery and Manage projects
+according to access. Staff records open in reading mode, including drafts; editing
+is an explicit action. A new empty participant draft still starts in the editor.
+Returning to reading waits for answer persistence. An incomplete staff record
+shows its missing/invalid questions alongside the normal overview.
+
+Participant read/edit flags honor organizer locks and approved reopening after
+the normal deadline. A submitted team's working changes remain private until
+resubmission; the workspace says when changes are not yet submitted and offers
+Update submission. Staff corrections instead append a new authoritative admin
+version. Previous participant and administrative snapshots are never rewritten.
+
+Create project in management creates on behalf of selected people, never adds
+the operator implicitly, and collects challenge choices and dynamic answers.
+The interface requires at least one selected member and links their existing
+projects so staff can inspect one before creating another; multiple projects
+per person remain supported. Staff may leave questions
+incomplete for later correction; uploads are added after the project exists.
+The API validates provided answers and library values transactionally with the
+roster, description, challenge enrollment and submission snapshot.
+
+An explicit staff challenge enrollment appends even a draft to an existing queue,
+including after participant editing closes. A draft remains ineligible to be
+called until submitted. Repeat enrollment does not duplicate an active entry;
+withdrawal still records history and compacts the queue.
+
+### Access boundaries
+
+| Viewer | Gallery list | Project inspection | Editing |
+| --- | --- | --- | --- |
+| Anonymous visitor | Opening time, public audience, configured draft visibility | Publicly visible records and submitted snapshot | Never |
+| Admitted attendee | Opening time and attendee/public audience | Own team always; other records follow visibility | Active team within window, unlocked or explicitly reopened |
+| Project reader | May preview gallery before opening | All records in their fixture boundary | Never without edit capability |
+| Project editor | Same preview access | All records, independently of participant windows | Audited staff corrections |
+| Assigned judge / sponsor | Normal gallery audience rules | Only projects entered in their enterprise's challenges, before or after queue generation | Never without edit capability |
+
+`canInspect` is computed from the exact server-side project scope, so a public
+record never links a judge to an unrelated enterprise's management record.
+Scoped readers see the last submitted answers, not a teammate's unpublished
+working changes. File authorization uses the same scope, including before the
+public gallery opens. A judge-panel capability alone grants no global project
+read access. Test fixtures remain isolated from real records.
+
+Gallery records omit hidden challenges even for a team preview; personal and
+authorized management inspection retain their intended challenge lineup. Public
+readers see consented active members only. Team file access accepts both their
+working-copy and submitted-gallery attachments, while nonmembers remain limited
+to the submitted projection.

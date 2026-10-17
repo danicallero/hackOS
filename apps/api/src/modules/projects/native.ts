@@ -1,4 +1,5 @@
 import { projectDescriptionField } from "@hackos/shared/forms";
+import { projectSubmissionKey } from "@hackos/shared/project-submission";
 import type { ProjectForm } from "@hackos/shared/projects";
 import { youtubeEmbedUrl } from "@hackos/shared/youtube";
 import type { Queryable } from "../../db/pool.js";
@@ -9,6 +10,8 @@ import { validateResponses } from "../applications/service.js";
 import { visibleWinnerRows } from "../challenges/winner-publication.js";
 import { syncFieldLibraries, validateLibraryAnswers } from "../form-libraries/service.js";
 import { hasEventAccess } from "../identity/role.js";
+import { assertQueueRepoScope } from "../queue/fixture-scope.js";
+import { repositoryAccessForUser, repositoryIdsForScope } from "./access.js";
 import { assertProjectWindow, canViewProject, projectPhase } from "./policy.js";
 
 /** File answers are one key; photo-list answers (H16) are several. */
@@ -39,6 +42,20 @@ export async function nativeForm(db: Queryable = pool) {
     `SELECT id AS version,template,sections FROM project_form_versions ORDER BY id DESC LIMIT 1`,
   );
   return rows[0];
+}
+/** H20/H21: corrections append a new authoritative version; historical submissions stay immutable. */
+export async function snapshotProjectSubmission(
+  db: Queryable,
+  actorId: number,
+  id: number,
+  formVersion: number | null,
+  source: "native" | "admin",
+) {
+  await db.query(
+    `INSERT INTO project_submission_versions(repo_id,actor_id,source,form_version_id,snapshot)
+     SELECT id,$2,$3,$4,jsonb_build_object('project',to_jsonb(r),'members',(SELECT jsonb_agg(to_jsonb(s)) FROM submissions s WHERE s.repo_id=r.id AND s.status='active'),'challenges',(SELECT jsonb_agg(challenge_id) FROM project_challenges c WHERE c.repo_id=r.id)) FROM repos r WHERE id=$1`,
+    [id, actorId, source, formVersion],
+  );
 }
 export async function saveNativeForm(actorId: number, form: ProjectForm) {
   return withTransaction(async (db) => {
@@ -79,10 +96,12 @@ export async function saveNativeDraft(
       ? (await db.query(`SELECT * FROM repos WHERE id=$1 FOR UPDATE`, [id])).rows[0]
       : await nativeEditable(db, userId, id);
     if (!before) throw new NotFoundError("Project not found");
+    if (staff) await assertQueueRepoScope(db, userId, id);
     if (before.draft_revision !== revision)
       throw new ConflictError("A newer project draft exists", { revision: before.draft_revision });
     // H16: the description field's answer is the project's description everywhere.
-    const draftTemplate = (await nativeForm(db))?.template ?? [];
+    const form = await nativeForm(db);
+    const draftTemplate = form?.template ?? [];
     await validateLibraryAnswers(db, draftTemplate, responses, userId);
     const descriptionField = projectDescriptionField(draftTemplate);
     const description = descriptionField ? responses[descriptionField.key] : undefined;
@@ -90,12 +109,14 @@ export async function saveNativeDraft(
       `UPDATE repos SET responses=$2,draft_revision=draft_revision+1,description=COALESCE($3,description) WHERE id=$1 RETURNING responses,draft_revision AS revision`,
       [id, JSON.stringify(responses), typeof description === "string" ? description.trim() : null],
     );
+    if (staff && before.submission_status === "submitted")
+      await snapshotProjectSubmission(db, userId, id, form?.version ?? null, "admin");
     await audit(db, {
       actorId: userId,
       entityType: "project",
       entityId: id,
       action: "save_draft",
-      source: "participant",
+      source: staff ? "admin" : "participant",
       before: { revision },
       after: { revision: rows[0].revision },
     });
@@ -188,10 +209,7 @@ export async function submitNativeProject(userId: number, id: number) {
       `UPDATE repos SET submission_status='submitted',submitted_at=now(),submitted_via='native',locked_at=now(),lock_reason='native_submission' WHERE id=$1`,
       [id],
     );
-    await db.query(
-      `INSERT INTO project_submission_versions(repo_id,actor_id,source,form_version_id,snapshot) SELECT id,$2,'native',$3,jsonb_build_object('project',to_jsonb(r),'members',(SELECT jsonb_agg(to_jsonb(s)) FROM submissions s WHERE s.repo_id=r.id AND s.status='active'),'challenges',(SELECT jsonb_agg(challenge_id) FROM project_challenges c WHERE c.repo_id=r.id)) FROM repos r WHERE id=$1`,
-      [id, userId, form.version],
-    );
+    await snapshotProjectSubmission(db, userId, id, form.version, "native");
     await audit(db, {
       actorId: userId,
       entityType: "project",
@@ -203,22 +221,39 @@ export async function submitNativeProject(userId: number, id: number) {
     return { id, submissionStatus: "submitted" };
   });
 }
-export async function nativeProject(userId: number | null, id: number) {
+export async function nativeProject(
+  userId: number | null,
+  id: number,
+  options: { gallery?: boolean } = {},
+) {
   if (!(await canViewProject(pool, userId, id))) throw new NotFoundError("Project not found");
-  return (await nativeProjects(userId, [id]))[0];
+  return (await nativeProjects(userId, [id], options))[0];
 }
 /** Bounded batch projection: list size never multiplies SQL queries (#1009). */
 export async function nativeProjects(
   userId: number | null,
   ids: number[],
-  staff = false,
-  /** Gallery access was already verified for every viewer of this projection (shared cache, H18). */
-  galleryChecked = false,
+  {
+    staff = false,
+    gallery = false,
+    /** Gallery access was already verified for every viewer of this projection (shared cache, H18). */
+    galleryChecked = false,
+  }: { staff?: boolean; gallery?: boolean; galleryChecked?: boolean } = {},
 ) {
   if (!ids.length) return [];
+  let inspectable = new Set<number>();
+  if (userId !== null) {
+    try {
+      const scope = await repositoryAccessForUser(userId);
+      inspectable = new Set(scope.fullAccess ? ids : await repositoryIdsForScope(scope));
+      if (scope.fullAccess && !gallery) staff = true;
+    } catch (error) {
+      if (!(error instanceof ForbiddenError)) throw error;
+    }
+  }
   const [projects, members, challenges, files, phase, currentForm, winnerRows] = await Promise.all([
     pool.query(
-      `SELECT r.id,r.name,r.description,r.github_url AS "githubUrl",r.demo_url AS "demoUrl",r.submission_status AS "submissionStatus",r.presentation_timing_preference AS "presentationTimingPreference",r.responses,r.draft_revision AS revision,v.snapshot,v.form_version_id AS "snapshotFormVersion",f.template AS "snapshotTemplate",f.sections AS "snapshotSections",
+      `SELECT r.id,r.name,r.description,r.github_url AS "githubUrl",r.demo_url AS "demoUrl",r.submission_status AS "submissionStatus",r.presentation_timing_preference AS "presentationTimingPreference",r.responses,r.lock_reason AS "lockReason",r.submitted_at AS "submittedAt",r.draft_revision AS revision,v.snapshot,v.form_version_id AS "snapshotFormVersion",f.template AS "snapshotTemplate",f.sections AS "snapshotSections",
  EXISTS(SELECT 1 FROM submissions s WHERE s.repo_id=r.id AND s.user_id=$2 AND s.status='active') AS member
  FROM repos r LEFT JOIN LATERAL(SELECT * FROM project_submission_versions v WHERE v.repo_id=r.id ORDER BY v.id DESC LIMIT 1) v ON true LEFT JOIN project_form_versions f ON f.id=v.form_version_id WHERE r.id=ANY($1::int[])`,
       [ids, userId],
@@ -228,7 +263,7 @@ export async function nativeProjects(
       [ids],
     ),
     pool.query(
-      `SELECT pc.repo_id,c.id,c.title,c.mandatory,qe.status,qe.position,qe.assigned_room_id AS "assignedRoomId",room.name AS "assignedRoomName" FROM project_challenges pc JOIN challenges c ON c.id=pc.challenge_id LEFT JOIN queue_entries qe ON qe.repo_id=pc.repo_id AND qe.challenge_id=c.id LEFT JOIN rooms room ON room.id=qe.assigned_room_id WHERE pc.repo_id=ANY($1::int[]) ORDER BY c.id`,
+      `SELECT pc.repo_id,c.id,c.title,c.mandatory,c.visibility,qe.status,qe.position,qe.assigned_room_id AS "assignedRoomId",room.name AS "assignedRoomName" FROM project_challenges pc JOIN challenges c ON c.id=pc.challenge_id LEFT JOIN queue_entries qe ON qe.repo_id=pc.repo_id AND qe.challenge_id=c.id LEFT JOIN rooms room ON room.id=qe.assigned_room_id WHERE pc.repo_id=ANY($1::int[]) ORDER BY c.id`,
       [ids],
     ),
     pool.query(
@@ -251,7 +286,12 @@ export async function nativeProjects(
       ...project
     } = row;
     const member = ownMember || staff;
-    const submitted = !member && project.submissionStatus === "submitted" && snapshot?.project;
+    const privateView = member && !gallery;
+    const reopened = Boolean(project.submittedAt && project.submissionStatus === "draft");
+    const participantCanEdit =
+      project.lockReason !== "organizer_lock" && (phase.editing || reopened);
+    const submitted =
+      (gallery || !member) && project.submissionStatus === "submitted" && snapshot?.project;
     const content = submitted
       ? {
           name: snapshot.project.name,
@@ -281,6 +321,8 @@ export async function nativeProjects(
     const answer = descriptionField ? responses?.[descriptionField.key] : undefined;
     return {
       ...project,
+      isMember: ownMember,
+      canInspect: inspectable.has(id),
       ...content,
       // H16: the description field's answer is the description, even if the
       // stored column was written before the field existed.
@@ -289,9 +331,17 @@ export async function nativeProjects(
       formVersion: form?.version ?? null,
       template: form?.template ?? [],
       sections: form?.sections ?? [],
-      canEdit: member && phase.editing,
-      canSubmit: member && phase.submitting,
-      canInvite: member && phase.editing,
+      canEdit: ownMember && participantCanEdit,
+      canSubmit:
+        ownMember && project.lockReason !== "organizer_lock" && (phase.submitting || reopened),
+      canInvite: ownMember && participantCanEdit,
+      hasUnsubmittedChanges: Boolean(
+        privateView &&
+          snapshot?.project &&
+          project.submissionStatus === "submitted" &&
+          projectSubmissionKey(project.name, project.responses) !==
+            projectSubmissionKey(snapshot.project.name, snapshot.project.responses ?? {}),
+      ),
       ...(winnerRows.some((w) => w.repoId === id)
         ? {
             winners: winnerRows
@@ -304,11 +354,11 @@ export async function nativeProjects(
           }
         : {}),
       members: members.rows
-        .filter((m) => m.repo_id === id && (member || m.status === "active"))
+        .filter((m) => m.repo_id === id && (privateView || m.status === "active"))
         .map((m) => ({
           userId: m.userId,
-          name: member || m.gallery_show_name ? m.name : null,
-          surname: member ? m.surname : null,
+          name: privateView || m.gallery_show_name ? m.name : null,
+          surname: privateView ? m.surname : null,
           status: m.status,
           photoUrl:
             // H18: a member's photo follows their public profile's photo setting.
@@ -317,12 +367,19 @@ export async function nativeProjects(
               : null,
         })),
       challenges: challenges.rows
-        .filter((c) => c.repo_id === id)
-        .map(({ repo_id, ...challenge }) => {
+        .filter(
+          (c) =>
+            c.repo_id === id &&
+            (privateView || (!gallery && inspectable.has(id)) || c.visibility === "visible"),
+        )
+        .map(({ repo_id, visibility, ...challenge }) => {
           void repo_id;
+          void visibility;
           return challenge;
         }),
-      presentations: challenges.rows.filter((c) => c.repo_id === id && c.status !== null),
+      presentations: challenges.rows.filter(
+        (c) => c.repo_id === id && c.status !== null && (member || inspectable.has(id)),
+      ),
       files: files.rows
         .filter(
           (f) =>
@@ -395,7 +452,7 @@ export async function decideNativeEdits(
 
 export async function projectEstimates(challengeIds: number[] | "all", fixtureMarker = false) {
   const { rows } = await pool.query(
-    `SELECT c.id AS "challengeId",c.title,
+    `SELECT c.id AS "challengeId",c.title,c.mandatory,
  (SELECT count(DISTINCT r.id)::int FROM repos r JOIN project_challenges pc ON pc.repo_id=r.id WHERE pc.challenge_id=c.id AND r.is_test_account=$2) AS "expectedCount",
  (SELECT count(DISTINCT r.id)::int FROM repos r JOIN project_challenges pc ON pc.repo_id=r.id WHERE pc.challenge_id=c.id AND r.submission_status='submitted' AND r.is_test_account=$2) AS "projectCount",
  (SELECT count(DISTINCT s.user_id)::int FROM project_challenges pc JOIN submissions s ON s.repo_id=pc.repo_id AND s.status='active' JOIN repos r ON r.id=pc.repo_id WHERE pc.challenge_id=c.id AND r.is_test_account=$2) AS "memberCount"
