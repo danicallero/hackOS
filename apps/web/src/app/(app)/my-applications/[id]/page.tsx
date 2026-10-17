@@ -190,7 +190,9 @@ export default function MyApplicationDetailPage() {
       setValues(seeded);
       setSaveState("saved");
     }
-    setFieldErrors({});
+    // Background reloads (session refresh, live updates) must not wipe the
+    // highlights of fields the applicant still has to fix.
+    if (!hasLoadedRef.current) setFieldErrors({});
     hasLoadedRef.current =
       hasLoadedRef.current ||
       formRes.status === "fulfilled" ||
