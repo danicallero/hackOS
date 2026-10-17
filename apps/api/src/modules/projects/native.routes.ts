@@ -10,6 +10,7 @@ import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { sharedCache } from "../../lib/shared-cache.js";
 import { visibleWinnerRows } from "../challenges/winner-publication.js";
 import { repositoryScopeFor, requireRepositoryListAccess } from "./access.js";
 import {
@@ -25,6 +26,9 @@ import {
 } from "./native.js";
 import { assertGalleryVisible, projectPhase, projectViewer } from "./policy.js";
 import { addMyProjectChallenge } from "./service.js";
+
+/** Backstop for clock boundaries (winner reveal) that emit no event; events invalidate sooner (H18). */
+const GALLERY_CACHE_TTL_SECONDS = 30;
 
 const params = z.object({ id: z.coerce.number().int().positive() });
 const auth = {
@@ -199,7 +203,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         querystring: projectGalleryQuerySchema,
         summary: "List project gallery",
         description:
-          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009). Optional winnersOnly=true filters published winners before pagination; with challengeId it matches winners of that challenge (H60). Project staff (PROJECTS_READ) may browse before it opens. A refusal is 403 with `details.reason` `gallery_closed` (with `details.opensAt`, null while unscheduled, and the event `details.timeZone`) or `gallery_audience` (H18).",
+          "Paginated no-store project gallery honoring SQL-clock opening, audience, draft visibility and current name/photo consent on every read (#1008,#1009). Optional winnersOnly=true filters published winners before pagination; with challengeId it matches winners of that challenge (H60). Project staff (PROJECTS_READ) may browse before it opens. The audience-independent projection is computed once and shared through Valkey (30 s TTL, invalidated by project, public-content and directory changes); the viewer's own projects are always read live. A refusal is 403 with `details.reason` `gallery_closed` (with `details.opensAt`, null while unscheduled, and the event `details.timeZone`) or `gallery_audience` (H18).",
       },
     },
     async (q, reply) => {
@@ -208,29 +212,60 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
       const phase = await projectPhase(pool);
       const viewer = await projectViewer(pool, q.userId);
       const { page, pageSize, search, challengeId, winnersOnly } = q.query;
-      const winnerIds = winnersOnly
-        ? (await visibleWinnerRows(pool, q.userId))
-            .filter((winner) => !challengeId || winner.challengeId === challengeId)
-            .map((winner) => winner.repoId)
-        : null;
-      const { rows } = await pool.query(
-        `SELECT r.id,count(*) OVER()::int AS total FROM repos r WHERE r.is_test_account=false AND (r.submission_status='submitted' OR ($1<>'team_only' AND ($1='public' OR $2))) AND ($3::text IS NULL OR r.name ILIKE '%'||$3||'%') AND ($4::int IS NULL OR EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$4)) AND ($7::int[] IS NULL OR r.id=ANY($7)) ORDER BY r.id LIMIT $5 OFFSET $6`,
-        [
+      // One request computes the viewer-independent projection; every other
+      // phone in the same audience reads it from the shared cache (H18).
+      const shared = await sharedCache(
+        "gallery",
+        JSON.stringify([
           phase.draftVisibility,
-          viewer.attendee,
+          // Attendance only changes the list while drafts are for attendees.
+          phase.draftVisibility === "attendees" ? viewer.attendee : null,
           search ?? null,
           challengeId ?? null,
+          winnersOnly ?? false,
+          page,
           pageSize,
-          (page - 1) * pageSize,
-          winnerIds,
-        ],
+        ]),
+        GALLERY_CACHE_TTL_SECONDS,
+        async () => {
+          const winnerIds = winnersOnly
+            ? (await visibleWinnerRows(pool, null, undefined, true))
+                .filter((winner) => !challengeId || winner.challengeId === challengeId)
+                .map((winner) => winner.repoId)
+            : null;
+          const { rows } = await pool.query(
+            `SELECT r.id,count(*) OVER()::int AS total FROM repos r WHERE r.is_test_account=false AND (r.submission_status='submitted' OR ($1<>'team_only' AND ($1='public' OR $2))) AND ($3::text IS NULL OR r.name ILIKE '%'||$3||'%') AND ($4::int IS NULL OR EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$4)) AND ($7::int[] IS NULL OR r.id=ANY($7)) ORDER BY r.id LIMIT $5 OFFSET $6`,
+            [
+              phase.draftVisibility,
+              viewer.attendee,
+              search ?? null,
+              challengeId ?? null,
+              pageSize,
+              (page - 1) * pageSize,
+              winnerIds,
+            ],
+          );
+          const ids = rows.map((row) => row.id as number);
+          return {
+            items: await nativeProjects(null, ids, false, true),
+            total: (rows[0]?.total ?? 0) as number,
+          };
+        },
       );
+      // Only the viewer's own projects differ (team content), so just those are read live.
+      const own =
+        q.userId === null || !shared.items.length
+          ? []
+          : (
+              await pool.query<{ repo_id: number }>(
+                `SELECT repo_id FROM submissions WHERE user_id=$1 AND status='active' AND repo_id=ANY($2::int[])`,
+                [q.userId, shared.items.map((item) => item.id)],
+              )
+            ).rows.map((row) => row.repo_id);
+      const ownProjects = own.length ? await nativeProjects(q.userId, own) : [];
       return {
-        items: await nativeProjects(
-          q.userId,
-          rows.map((row) => row.id),
-        ),
-        total: rows[0]?.total ?? 0,
+        items: shared.items.map((item) => ownProjects.find((mine) => mine.id === item.id) ?? item),
+        total: shared.total,
         page,
         pageSize,
       };

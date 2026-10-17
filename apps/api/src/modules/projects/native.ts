@@ -193,7 +193,13 @@ export async function nativeProject(userId: number | null, id: number) {
   return (await nativeProjects(userId, [id]))[0];
 }
 /** Bounded batch projection: list size never multiplies SQL queries (#1009). */
-export async function nativeProjects(userId: number | null, ids: number[], staff = false) {
+export async function nativeProjects(
+  userId: number | null,
+  ids: number[],
+  staff = false,
+  /** Gallery access was already verified for every viewer of this projection (shared cache, H18). */
+  galleryChecked = false,
+) {
   if (!ids.length) return [];
   const [projects, members, challenges, files, phase, currentForm, winnerRows] = await Promise.all([
     pool.query(
@@ -216,7 +222,7 @@ export async function nativeProjects(userId: number | null, ids: number[], staff
     ),
     projectPhase(pool),
     nativeForm(),
-    visibleWinnerRows(pool, userId, ids),
+    visibleWinnerRows(pool, userId, ids, galleryChecked),
   ]);
   return ids.map((id) => {
     const row = projects.rows.find((project) => project.id === id);

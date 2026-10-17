@@ -36,6 +36,7 @@ import {
 import { canManageSchedule, canReadFullSchedule } from "@/lib/tabs";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
+import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors } from "@/theme/colors";
 
 const CONTENT_PADDING = 20;
@@ -64,12 +65,16 @@ export default function ScheduleDetailScreen() {
   const canManage = canManageSchedule(me?.capabilities ?? []);
   const canReadFull = canReadFullSchedule(me?.capabilities ?? []);
   const focusedRef = useRef(false);
-  const whileFocused = useCallback(() => focusedRef.current, []);
+  const streamDownRef = useRef<() => boolean>(() => true);
+  const whileFocused = useCallback(() => focusedRef.current && streamDownRef.current(), []);
   const { data, loading, error, staleSince, load, setData } = useCachedApi(
     "schedule",
     fetchPublicSchedule,
     { pollMs: SCHEDULE_POLL_MS, pollWhen: whileFocused },
   );
+  // Schedule edits arrive over the payload-free stream; the poll is only a
+  // backup while that stream is disconnected.
+  streamDownRef.current = useStreamRefresh(() => void load(), { publicContent: true });
   const notifications = useScheduleNotifications(data ?? []);
   const [editing, setEditing] = useState(false);
   const [adminItem, setAdminItem] = useState<AdminScheduleItem | null>(null);

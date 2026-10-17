@@ -250,3 +250,18 @@ export async function fetchChallengeCatalogue(language: Lang) {
 export async function fetchChallengeDetail(language: Lang, id: number) {
   return (await fetchChallengeCatalogue(language)).find((item) => item.id === id) ?? null;
 }
+
+/**
+ * Reuses every unchanged project object, so a refresh only touches rows that
+ * were added, changed or removed and returns the same array when nothing did.
+ */
+export function mergeProjects(current: NativeProject[], next: NativeProject[]): NativeProject[] {
+  const byId = new Map(current.map((project) => [project.id, project]));
+  const merged = next.map((project) => {
+    const existing = byId.get(project.id);
+    return existing && JSON.stringify(existing) === JSON.stringify(project) ? existing : project;
+  });
+  return merged.length === current.length && merged.every((project, i) => project === current[i])
+    ? current
+    : merged;
+}

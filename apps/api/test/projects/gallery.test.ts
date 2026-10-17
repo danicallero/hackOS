@@ -3,6 +3,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
+import { invalidateSharedCache } from "../../src/lib/shared-cache.js";
 import {
   asUser,
   buildTestApp,
@@ -20,6 +21,7 @@ let staff: number;
 let id: number;
 beforeEach(async () => {
   await truncateAll();
+  await invalidateSharedCache("gallery");
   app ??= await buildTestApp();
   owner = await createUser();
   attendee = await createUser();
@@ -144,6 +146,7 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
     );
     for (const showName of [false, true, false]) {
       await pool.query(`UPDATE users SET gallery_show_name=$2 WHERE id=$1`, [owner, showName]);
+      await invalidateSharedCache("gallery");
       for (const viewer of [undefined, attendee, outsider]) {
         const detailResponse = await get(`/api/public/projects/${id}`, viewer);
         const listResponse = await get("/api/public/projects", viewer);
@@ -185,12 +188,12 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
     expect((await get(`/api/public/projects/${id}/members/${owner}/photo`)).statusCode).toBe(404);
     expect((await get("/api/me/project-gallery-consent", owner)).statusCode).toBe(404);
   });
-  it("separates editing lock from submission close", async () => {
+  it("closes editing and submission together at the submission close", async () => {
     await pool.query(
-      `UPDATE event_config SET project_submissions_close_at=now()-interval '1 second',project_edits_lock_at=now()+interval '1 hour'`,
+      `UPDATE event_config SET project_submissions_close_at=now()-interval '1 second'`,
     );
     const own = (await get(`/api/me/projects/${id}`, owner)).json();
-    expect(own.canEdit).toBe(true);
+    expect(own.canEdit).toBe(false);
     expect(own.canSubmit).toBe(false);
     expect(
       (
@@ -222,5 +225,57 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
       second.items.map((p: { id: number }) => p.id),
     );
     expect((await get("/api/public/projects?pageSize=10000")).statusCode).toBe(400);
+  });
+});
+
+describe("Shared gallery cache (H18)", () => {
+  const openGallery = () =>
+    pool.query(
+      `UPDATE event_config SET project_gallery_opens_at=now()-interval '1 second',project_gallery_audience='public',project_draft_visibility='public'`,
+    );
+  const listQueries = async (run: () => Promise<unknown>) => {
+    let count = 0;
+    const original = pool.query.bind(pool);
+    (pool as { query: unknown }).query = (...args: unknown[]) => {
+      if (typeof args[0] === "string" && args[0].includes("count(*) OVER()")) count++;
+      return (original as (...a: unknown[]) => unknown)(...args);
+    };
+    try {
+      await run();
+    } finally {
+      (pool as { query: unknown }).query = original;
+    }
+    return count;
+  };
+
+  it("computes the list once for many concurrent phones and again after invalidation", async () => {
+    await openGallery();
+    await invalidateSharedCache("gallery");
+    const queries = await listQueries(async () => {
+      const responses = await Promise.all(
+        [attendee, outsider, undefined, attendee, outsider].map((viewer) =>
+          get("/api/public/projects", viewer),
+        ),
+      );
+      for (const response of responses) expect(response.json().items).toHaveLength(1);
+      await get("/api/public/projects", attendee);
+    });
+    expect(queries).toBe(1);
+    await app.inject({
+      method: "POST",
+      url: "/api/me/projects",
+      headers: asUser(owner),
+      payload: { name: "Second" },
+    });
+    expect((await get("/api/public/projects", attendee)).json().items).toHaveLength(2);
+  });
+
+  it("serves the viewer's own project live without leaking it to others", async () => {
+    await openGallery();
+    await get("/api/public/projects", attendee);
+    const ownerList = (await get("/api/public/projects", owner)).json();
+    expect(ownerList.items[0].canEdit).toBe(true);
+    const otherList = (await get("/api/public/projects", attendee)).json();
+    expect(otherList.items[0].canEdit).toBe(false);
   });
 });

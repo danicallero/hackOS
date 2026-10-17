@@ -6,6 +6,7 @@ import { config } from "../config.js";
 import { TooManyRequestsError } from "./errors.js";
 import { register } from "./metrics.js";
 import { laneForSseTopic, metricTopicForSse, type RequestLane } from "./request-lanes.js";
+import { invalidateSharedCache } from "./shared-cache.js";
 import { valkey, valkeySub } from "./valkey.js";
 
 /**
@@ -21,6 +22,21 @@ import { valkey, valkeySub } from "./valkey.js";
 
 const CHANNEL_PREFIX = `sse:${config.SSE_NAMESPACE}:`;
 const SEQUENCE_RETENTION_SECONDS = 7 * 24 * 60 * 60;
+/**
+ * Shared read caches (`sharedCache` namespaces) that each topic's changes
+ * invalidate. Public and gallery projections are identical for every viewer,
+ * so one query serves all clients that refetch after the same event.
+ */
+const CACHE_NAMESPACES_BY_TOPIC: Readonly<Record<string, readonly string[]>> = {
+  [SSE_TOPICS.PROJECTS]: ["gallery"],
+  [SSE_TOPICS.DIRECTORY]: ["gallery"],
+  [SSE_TOPICS.PUBLIC_CONTENT]: ["gallery", "public-content"],
+  [SSE_TOPICS.SPONSORS]: ["public-content"],
+  [SSE_TOPICS.CONTENT]: ["content", "tv"],
+  [SSE_TOPICS.QUEUE]: ["tv"],
+  [SSE_TOPICS.TV]: ["tv"],
+  [SSE_TOPICS.PUBLIC_TV]: ["tv", "public-content"],
+};
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const localSubscribers = new Map<string, Set<FastifyReply>>();
 const subscriberLanes = new Map<FastifyReply, RequestLane>();
@@ -311,6 +327,9 @@ export async function broadcast<T>(
   data: T,
 ): Promise<SseEnvelope<T> | null> {
   assertPayloadFreePublicInvalidation(topic, type, data);
+  await Promise.all(
+    (CACHE_NAMESPACES_BY_TOPIC[topic] ?? []).map((namespace) => invalidateSharedCache(namespace)),
+  );
   try {
     const sequenceKey = `sse:seq:${topic}`;
     const seq = await valkey.incr(sequenceKey);

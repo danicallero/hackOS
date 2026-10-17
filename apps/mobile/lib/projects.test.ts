@@ -93,3 +93,23 @@ it("reuses a project's unsaved writer for the next editor and waits for its uplo
   // Once saved, the next editor starts from the server copy.
   expect(projectDraftWriter({ ...project, revision: 4 })).not.toBe(first);
 });
+
+describe("mergeProjects (H18)", () => {
+  const project = (id: number, name = `p${id}`) =>
+    ({ id, name, challenges: [], winners: [] }) as unknown as import("./projects").NativeProject;
+
+  it("returns the same array when nothing changed", () => {
+    const { mergeProjects } = require("./projects");
+    const current = [project(1), project(2)];
+    expect(mergeProjects(current, [project(1), project(2)])).toBe(current);
+  });
+
+  it("keeps unchanged rows, updates edited ones and adds new ones", () => {
+    const { mergeProjects } = require("./projects");
+    const current = [project(1), project(2)];
+    const merged = mergeProjects(current, [project(3), project(1), project(2, "renamed")]);
+    expect(merged.map((item: { id: number }) => item.id)).toEqual([3, 1, 2]);
+    expect(merged[1]).toBe(current[0]);
+    expect(merged[2]).not.toBe(current[1]);
+  });
+});
