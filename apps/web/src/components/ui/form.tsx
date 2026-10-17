@@ -111,8 +111,10 @@ function FormControl({ ...props }: React.ComponentProps<typeof Slot.Root>) {
   return (
     <Slot.Root
       onBlur={(event) => {
-        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
-        if (event.currentTarget.getAttribute("aria-expanded") === "true") return
+        if (event?.currentTarget) {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+          if (event.currentTarget.getAttribute("aria-expanded") === "true") return
+        }
         void trigger(name)
       }}
       data-slot="form-control"
