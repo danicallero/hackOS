@@ -2,6 +2,22 @@ import { describe, expect, it } from "vitest";
 import { newField, serializeApplicationField } from "./questions-card";
 
 describe("application question serialization", () => {
+  it("keeps video presentation on arbitrary project text questions only", () => {
+    const field = {
+      key: "our_film",
+      label: { en: "Film", es: "Vídeo", gl: "Vídeo" },
+      kind: "text" as const,
+      required: false,
+      project_video: true,
+    };
+    expect(serializeApplicationField(field)).toMatchObject({
+      key: "our_film",
+      project_video: true,
+    });
+    expect(serializeApplicationField({ ...field, kind: "textarea" })).not.toHaveProperty(
+      "project_video",
+    );
+  });
   it("creates the selected choice field ready for its first option", () => {
     expect(newField(2, "select")).toMatchObject({
       key: "field_3",

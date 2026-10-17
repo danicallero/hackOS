@@ -1,11 +1,13 @@
 import { projectDescriptionField } from "@hackos/shared/forms";
 import type { ProjectForm } from "@hackos/shared/projects";
+import { youtubeEmbedUrl } from "@hackos/shared/youtube";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { validateResponses } from "../applications/service.js";
 import { visibleWinnerRows } from "../challenges/winner-publication.js";
+import { syncFieldLibraries, validateLibraryAnswers } from "../form-libraries/service.js";
 import { hasEventAccess } from "../identity/role.js";
 import { assertProjectWindow, canViewProject, projectPhase } from "./policy.js";
 
@@ -40,13 +42,15 @@ export async function nativeForm(db: Queryable = pool) {
 }
 export async function saveNativeForm(actorId: number, form: ProjectForm) {
   return withTransaction(async (db) => {
+    await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('project-form',0))`);
     const before = await nativeForm(db);
+    const template = await syncFieldLibraries(db, null, form.template, form.library_deletions);
     const { rows } = await db.query(
       `INSERT INTO project_form_versions(template,sections,created_by) VALUES($1,$2,$3) RETURNING id AS version,template,sections`,
-      [JSON.stringify(form.template), JSON.stringify(form.sections), actorId],
+      [JSON.stringify(template), JSON.stringify(form.sections), actorId],
     );
     // H16: a field newly chosen as the description takes over projects that already answered it.
-    const descriptionField = projectDescriptionField(form.template);
+    const descriptionField = projectDescriptionField(template);
     if (descriptionField)
       await db.query(
         `UPDATE repos SET description=btrim(responses->>$1) WHERE jsonb_typeof(responses->$1)='string' AND btrim(responses->>$1)<>'' AND description IS DISTINCT FROM btrim(responses->>$1)`,
@@ -78,7 +82,9 @@ export async function saveNativeDraft(
     if (before.draft_revision !== revision)
       throw new ConflictError("A newer project draft exists", { revision: before.draft_revision });
     // H16: the description field's answer is the project's description everywhere.
-    const descriptionField = projectDescriptionField((await nativeForm(db))?.template ?? []);
+    const draftTemplate = (await nativeForm(db))?.template ?? [];
+    await validateLibraryAnswers(db, draftTemplate, responses, userId);
+    const descriptionField = projectDescriptionField(draftTemplate);
     const description = descriptionField ? responses[descriptionField.key] : undefined;
     const { rows } = await db.query(
       `UPDATE repos SET responses=$2,draft_revision=draft_revision+1,description=COALESCE($3,description) WHERE id=$1 RETURNING responses,draft_revision AS revision`,
@@ -152,6 +158,15 @@ export async function submitNativeProject(userId: number, id: number) {
       throw new ForbiddenError("Project submissions are closed");
     const form = await nativeForm(db);
     validateResponses(form.template, project.responses);
+    await validateLibraryAnswers(db, form.template, project.responses, userId);
+    for (const field of form.template) {
+      if (
+        field.project_video &&
+        project.responses[field.key] &&
+        !youtubeEmbedUrl(project.responses[field.key])
+      )
+        throw new BadRequestError("Invalid YouTube video URL");
+    }
     const { rows } = await db.query(
       `SELECT count(*)::int AS count,(SELECT project_max_team_size FROM event_config WHERE id=1) AS maximum FROM submissions WHERE repo_id=$1 AND status='active'`,
       [id],

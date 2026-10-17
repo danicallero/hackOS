@@ -1,7 +1,4 @@
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
-import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
-import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
-import { FolderSimpleIcon } from "@phosphor-icons/react/dist/ssr/FolderSimple";
 import { TrophyIcon } from "@phosphor-icons/react/dist/ssr/Trophy";
 import { UsersIcon } from "@phosphor-icons/react/dist/ssr/Users";
 import type { Metadata } from "next";
@@ -12,6 +9,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { ProjectsSectionHeader } from "@/components/common/section-navigation";
 import { StatusBadge } from "@/components/common/status-badge";
 import { UserAvatar } from "@/components/common/user-avatar";
+import { ProjectAnswers } from "@/components/projects/project-answers";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import { SITE_URL, SOCIAL_IMAGE_PATH } from "@/lib/metadata";
@@ -59,9 +57,18 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
   return (
     <PageLayout>
       <GalleryRefresh />
-      <ProjectsSectionHeader recordName={project.name} />
+      <ProjectsSectionHeader
+        recordName={project.name}
+        recordAction={
+          project.canEdit ? (
+            <Button asChild>
+              <Link href={`/my-project/${project.id}?edit=1`}>{copy.editProjectDetails}</Link>
+            </Button>
+          ) : undefined
+        }
+      />
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(16rem,2fr)]">
-        <SectionCard title={copy.projectDetailsTitle} icon={FolderSimpleIcon} variant="plain">
+        <div className="min-w-0 space-y-6">
           {project.winners?.map((winner) => (
             <StatusBadge
               tone="success"
@@ -75,79 +82,27 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
               </span>
             </StatusBadge>
           ))}
-          <dl className="space-y-5">
-            {project.template.map((field) => {
-              const value = project.responses[field.key];
-              const files = project.files?.filter((file) => file.fieldKey === field.key) ?? [];
-              const label = field.label[language] || field.label.en;
-              const text = Array.isArray(value)
-                ? value
-                    .map(
-                      (item) =>
-                        field.options?.find((option) => option.value === item)?.label[language] ??
-                        String(item),
-                    )
-                    .join(", ")
-                : (field.options?.find((option) => option.value === value)?.label[language] ??
-                  String(value ?? ""));
-              const url =
-                field.validation?.text_condition === "url" && text
-                  ? /^https?:\/\//i.test(text)
-                    ? text
-                    : `https://${text}`
-                  : null;
-              return (
-                <div key={field.key}>
-                  <dt className="mb-1 font-medium">{label}</dt>
-                  <dd className="flex flex-col items-start gap-2 wrap-anywhere whitespace-pre-wrap text-sm text-pretty">
-                    {files.length > 0 ? (
-                      files.map((file) =>
-                        file.mimeType.startsWith("image/") ? (
-                          // biome-ignore lint/performance/noImgElement: policy checked images must avoid shared optimizer caches.
-                          <img
-                            key={file.objectKey}
-                            src={projectAssetUrl(file.url)}
-                            alt={label}
-                            className="w-full rounded-md object-contain"
-                          />
-                        ) : (
-                          <Button key={file.objectKey} asChild variant="outline" size="sm">
-                            <a href={projectAssetUrl(file.url)} target="_blank" rel="noreferrer">
-                              <FileIcon aria-hidden="true" />
-                              {file.fileName}
-                              <ArrowSquareOutIcon aria-hidden="true" />
-                            </a>
-                          </Button>
-                        ),
-                      )
-                    ) : url ? (
-                      <Button asChild variant="outline" size="sm">
-                        <a href={url} target="_blank" rel="noreferrer">
-                          {label}
-                          <ArrowSquareOutIcon aria-hidden="true" />
-                        </a>
-                      </Button>
-                    ) : (
-                      text
-                    )}
-                  </dd>
-                </div>
-              );
-            })}
-          </dl>
-        </SectionCard>
-        <div className="space-y-6">
+          <ProjectAnswers
+            project={project}
+            language={language}
+            fallbackTitle={copy.projectDetailsTitle}
+            assetUrl={projectAssetUrl}
+          />
+        </div>
+        <div className="min-w-0 space-y-6 lg:sticky lg:top-6">
           <SectionCard title={copy.surfaceTeam} icon={UsersIcon} variant="plain">
             <ul className="divide-y divide-border/60">
               {project.members.map((member) => (
                 <li className="flex items-center gap-3 py-3" key={member.userId}>
-                  <UserAvatar
-                    name={member.name ?? copy.surfaceTeam}
-                    image={member.photoUrl ? projectAssetUrl(member.photoUrl) : null}
-                    className="size-10"
-                    fallbackClassName="bg-secondary"
-                    decorative
-                  />
+                  {member.photoUrl && (
+                    <UserAvatar
+                      name={member.name ?? copy.surfaceTeam}
+                      image={member.photoUrl ? projectAssetUrl(member.photoUrl) : null}
+                      className="size-10"
+                      fallbackClassName="bg-secondary"
+                      decorative
+                    />
+                  )}
                   <span>{member.name}</span>
                 </li>
               ))}

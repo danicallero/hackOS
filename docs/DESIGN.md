@@ -905,6 +905,7 @@ Tables and lists:
 Forms:
 
 - Labels stay visible; placeholders hold examples, never instructions.
+- Validate fields on blur, including telephone numbers and compound pickers. Do not wait for Submit or interrupt the initial typing. Revalidate on blur after correction; submission still validates the full form and focuses the first invalid control.
 - Errors appear next to the field and are announced.
 - Uncommon or technical settings go behind progressive disclosure ("More
   options"); internal keys are generated from the primary label, never asked

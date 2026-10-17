@@ -61,6 +61,8 @@ function LoginInner() {
   const { t } = useLocale();
   const [removalProgress, setRemovalProgress] = useState<AccountRemovalProgress | null>(null);
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(
       z.object({
         email: z.string().email(t("validEmail")),

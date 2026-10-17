@@ -149,6 +149,8 @@ function PermissionsPageContent() {
 
   const schema = createSchema(t);
   const form = useForm<CreateValues>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: {
       name: "",

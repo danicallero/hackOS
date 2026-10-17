@@ -163,6 +163,8 @@ export function StaffEditForm({
   );
 
   const form = useForm<EditValues>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(localizedEditSchema),
     defaultValues: {
       name: user.name ?? "",

@@ -75,6 +75,8 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
   const [loadingData, setLoadingData] = useState(true);
   const [retryNonce, setRetryNonce] = useState(0);
   const form = useForm<CreateValues>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(createSchema),
     defaultValues: {
       enterpriseId: "",

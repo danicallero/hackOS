@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { externalUrlHref } from "./template-field-control";
+import { externalUrlHref } from "./external-url";
 
 describe("externalUrlHref", () => {
   it("adds HTTPS to submitted hostnames so browsers do not treat them as app routes", () => {

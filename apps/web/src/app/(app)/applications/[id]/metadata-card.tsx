@@ -115,6 +115,8 @@ export function MetadataCard({
     [t],
   );
   const rhf = useForm<MetaValues>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(localizedMetaSchema),
     defaultValues: {
       name: form.name,

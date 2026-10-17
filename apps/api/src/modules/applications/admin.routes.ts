@@ -8,6 +8,7 @@ import { audit } from "../../lib/audit.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
+import { syncFieldLibraries } from "../form-libraries/service.js";
 import {
   lockRoleGraph,
   type RoleGraphClient,
@@ -258,7 +259,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const b = req.body;
       const row = await withTransaction(async (client) => {
-        const template = normalizeTemplateForStorage(b.template);
+        let template = normalizeTemplateForStorage(b.template);
         const roleIds = b.grants_role_ids ?? [];
         if (roleIds.length > 0) {
           await lockRoleGraph(client);
@@ -285,6 +286,11 @@ export function registerAdminRoutes(app: FastifyInstance): void {
           ],
         );
         const applicationId = rows[0].id as number;
+        template = await syncFieldLibraries(client, applicationId, template);
+        await client.query(`UPDATE applications SET template=$2::jsonb WHERE id=$1`, [
+          applicationId,
+          JSON.stringify(template),
+        ]);
         await client.query(
           `INSERT INTO application_form_versions
              (application_id, version, template, sections, created_by)
@@ -323,7 +329,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update an application form",
         description:
-          "Partial update of a form's template, named sections grouping template fields, ungrouped fields positioned after a section with `after_section_key` (mutually exclusive with `section_key`; references are validated against the merged template and sections even for partial updates), window, capacity, shirt-size/dietary-restriction toggles (H11, H12), or the roles granted on confirmation (`grants_role_ids`, H8). When a template field key changes, `field_renames` can explicitly map the old key to the new key; existing response values and file-sharing consent are copied to the new key only when the field kind is unchanged, while the old keys remain available to historical form versions. Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
+          "Partial update of a form's template (library fields receive owned catalogue IDs; removing one requires its UUID in library_deletions and cascades its values), named sections grouping template fields, ungrouped fields positioned after a section with `after_section_key` (mutually exclusive with `section_key`; references are validated against the merged template and sections even for partial updates), window, capacity, shirt-size/dietary-restriction toggles (H11, H12), or the roles granted on confirmation (`grants_role_ids`, H8). When a template field key changes, `field_renames` can explicitly map the old key to the new key; existing response values and file-sharing consent are copied to the new key only when the field kind is unchanged, while the old keys remain available to historical form versions. Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
         params: idParamSchema,
         body: updateApplicationSchema,
       },
@@ -342,9 +348,16 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         if (!schemaChanged && b.field_renames?.length) {
           throw new ConflictError("Field renames require a template update");
         }
-        const nextTemplate = schemaChanged
+        let nextTemplate = schemaChanged
           ? normalizeTemplateForStorage(b.template ?? current.template)
           : current.template;
+        if (schemaChanged)
+          nextTemplate = await syncFieldLibraries(
+            client,
+            req.params.id,
+            nextTemplate,
+            b.library_deletions,
+          );
         const nextSections = b.sections ?? current.sections ?? [];
         if (schemaChanged && !fieldsReferenceKnownSections(nextTemplate, nextSections)) {
           throw new BadRequestError(

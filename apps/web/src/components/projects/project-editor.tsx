@@ -1,18 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useProjectDraft } from "@/app/(app)/my-project/[id]/use-project-draft";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
+import { LinkifiedText } from "@/components/common/linkified-text";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { ProjectsSectionHeader } from "@/components/common/section-navigation";
 import { StatusBadge } from "@/components/common/status-badge";
-import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
+import {
+  type FieldValue,
+  TemplateFieldControl,
+  templateFieldId,
+} from "@/components/common/template-field-control";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
@@ -33,7 +38,9 @@ import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { type NativeProject, nativeProjects } from "@/lib/native-projects";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
+import { ProjectAnswers } from "./project-answers";
 import { ProjectChallenges } from "./project-challenges";
+import { ProjectVideo } from "./project-video";
 
 export function ProjectEditor({
   project,
@@ -44,6 +51,15 @@ export function ProjectEditor({
 }) {
   const { t, language } = useLocale();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [editing, setEditing] = useState(
+    staff ||
+      searchParams.get("edit") === "1" ||
+      (project.canEdit &&
+        Object.values(project.responses).every(
+          (value) => value == null || value === "" || (Array.isArray(value) && value.length === 0),
+        )),
+  );
   const [selectedUser, setSelectedUser] = useState("");
   const [removeUser, setRemoveUser] = useState<number | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
@@ -67,7 +83,7 @@ export function ProjectEditor({
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length) {
-      document.getElementById(`template-field-staff-${Object.keys(errors)[0]}`)?.focus();
+      document.getElementById(templateFieldId(Object.keys(errors)[0]))?.focus();
       return;
     }
     setBusy(true);
@@ -163,6 +179,18 @@ export function ProjectEditor({
       setBusy(false);
     }
   }
+  const editAction = project.canEdit ? (
+    <Button
+      variant={editing ? "outline" : "default"}
+      disabled={busy || draft.state === "saving"}
+      onClick={async () => {
+        if (editing && !(await draft.save())) return;
+        setEditing((value) => !value);
+      }}
+    >
+      {t(editing ? "viewProject" : "editProjectDetails")}
+    </Button>
+  ) : undefined;
   return (
     <PageLayout>
       <AlertModal
@@ -195,10 +223,12 @@ export function ProjectEditor({
             </Link>
           }
           state={t(status === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft")}
+          primaryAction={editAction}
         />
       ) : (
         <ProjectsSectionHeader
           recordName={name || project.name}
+          recordAction={editAction}
           recordState={
             <StatusBadge tone={status === "submitted" ? "success" : "neutral"} dot={false}>
               {t(status === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft")}
@@ -208,104 +238,143 @@ export function ProjectEditor({
       )}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-6">
-          <SectionCard
-            title={t("projectDetailsTitle")}
-            stickyFooter
-            footer={
-              <>
-                <SaveStatus
-                  state={draft.state}
-                  showIcon={draft.state !== "saving"}
-                  className="mr-auto"
-                />
-                <Button
-                  variant="outline"
-                  disabled={!project.canEdit || busy || draft.state === "saving"}
-                  onClick={() => void draft.save()}
-                >
-                  {t("saveDraft")}
-                </Button>
-                {!staff && (
-                  <Button
-                    loading={busy}
-                    disabled={
-                      !(project.canSubmit ?? project.canEdit) || busy || draft.state === "saving"
-                    }
-                    onClick={() => void submit()}
-                  >
-                    {t("projectSubmitCta")}
-                  </Button>
-                )}
-              </>
-            }
-          >
-            {draft.error && (
-              <ContextualError message={draft.error} onRetry={() => void draft.save()} />
-            )}
-            {error && <ContextualError message={error} />}
-            <div className="space-y-6">
-              {project.canEdit && (
-                <div className="space-y-2">
-                  <Label htmlFor="project-edit-name">{t("projectNameLabel")}</Label>
-                  <Input
-                    id="project-edit-name"
-                    value={name}
-                    disabled={busy}
-                    aria-invalid={nameError ? true : undefined}
-                    onChange={(event) => {
-                      setName(event.target.value);
-                      setNameError(null);
-                    }}
-                    onBlur={() => void saveName()}
+          {editing ? (
+            <SectionCard
+              title={project.sections.length ? undefined : t("projectDetailsTitle")}
+              stickyFooter
+              footer={
+                <>
+                  <SaveStatus
+                    state={draft.state}
+                    showIcon={draft.state !== "saving"}
+                    className="mr-auto"
                   />
-                  {nameError && (
-                    <ContextualError message={nameError} onRetry={() => void saveName()} />
-                  )}
-                </div>
-              )}
-              {groupApplicationFields(project.template, project.sections).map((group, index) => (
-                <section className="space-y-4" key={group.section?.key ?? index}>
-                  {group.section && (
-                    <h3 className="font-medium text-balance">
-                      {pickText(group.section.title, language)}
-                    </h3>
-                  )}
-                  {group.fields.map((field) => (
-                    <TemplateFieldControl
-                      key={field.key}
-                      field={field}
-                      value={draft.values[field.key] as FieldValue}
-                      onChange={(value) => {
-                        draft.change(field.key, value);
-                        setFieldErrors((previous) => {
-                          const next = { ...previous };
-                          delete next[field.key];
-                          return next;
-                        });
-                      }}
-                      disabled={!project.canEdit}
-                      lang={language}
-                      error={fieldErrors[field.key]}
-                      downloadUrl={
-                        project.files?.find((file) => file.fieldKey === field.key)?.url
-                          ? new URL(
-                              project.files.find((file) => file.fieldKey === field.key)!.url,
-                              API_URL,
-                            ).toString()
-                          : undefined
+                  <Button
+                    variant="outline"
+                    disabled={!project.canEdit || busy || draft.state === "saving"}
+                    onClick={() => void draft.save()}
+                  >
+                    {t("saveDraft")}
+                  </Button>
+                  {!staff && (
+                    <Button
+                      loading={busy}
+                      disabled={
+                        !(project.canSubmit ?? project.canEdit) || busy || draft.state === "saving"
                       }
-                      uploadPath={`/api/me/projects/${project.id}/uploads?fieldKey=${encodeURIComponent(field.key)}`}
-                      files={project.files}
+                      onClick={() => void submit()}
+                    >
+                      {t("projectSubmitCta")}
+                    </Button>
+                  )}
+                </>
+              }
+            >
+              {draft.error && (
+                <ContextualError message={draft.error} onRetry={() => void draft.save()} />
+              )}
+              {error && <ContextualError message={error} />}
+              <div className="space-y-8">
+                {project.canEdit && (
+                  <div className="space-y-2">
+                    <Label htmlFor="project-edit-name">{t("projectNameLabel")}</Label>
+                    <Input
+                      id="project-edit-name"
+                      value={name}
+                      disabled={busy}
+                      aria-invalid={nameError ? true : undefined}
+                      onChange={(event) => {
+                        setName(event.target.value);
+                        setNameError(null);
+                      }}
+                      onBlur={() => void saveName()}
                     />
-                  ))}
-                </section>
-              ))}
-            </div>
-          </SectionCard>
+                    {nameError && (
+                      <ContextualError message={nameError} onRetry={() => void saveName()} />
+                    )}
+                  </div>
+                )}
+                {groupApplicationFields(project.template, project.sections).map((group, index) => (
+                  <section
+                    className="space-y-5 border-t border-border/60 pt-6 first:border-0 first:pt-0"
+                    key={group.section?.key ?? index}
+                  >
+                    {group.section && (
+                      <h2 className="type-section-title text-balance">
+                        {pickText(group.section.title, language)}
+                      </h2>
+                    )}
+                    {group.section?.description &&
+                      pickText(group.section.description, language) && (
+                        <LinkifiedText
+                          text={pickText(group.section.description, language)}
+                          className="block text-sm text-muted-foreground"
+                        />
+                      )}
+                    {group.fields.map((field) => (
+                      <div key={field.key} className="space-y-3">
+                        <TemplateFieldControl
+                          key={field.key}
+                          field={field}
+                          value={draft.values[field.key] as FieldValue}
+                          onChange={(value) => {
+                            draft.change(field.key, value);
+                            setFieldErrors((previous) => {
+                              const next = { ...previous };
+                              delete next[field.key];
+                              return next;
+                            });
+                          }}
+                          onBlur={(value) => {
+                            const message = validateFieldOnBlur(field, value, t, language);
+                            setFieldErrors((previous) => {
+                              const next = { ...previous };
+                              if (message) next[field.key] = message;
+                              else delete next[field.key];
+                              return next;
+                            });
+                          }}
+                          disabled={!project.canEdit || busy}
+                          lang={language}
+                          error={fieldErrors[field.key]}
+                          downloadUrl={
+                            project.files?.find((file) => file.fieldKey === field.key)?.url
+                              ? new URL(
+                                  project.files.find((file) => file.fieldKey === field.key)!.url,
+                                  API_URL,
+                                ).toString()
+                              : undefined
+                          }
+                          uploadPath={`/api/me/projects/${project.id}/uploads?fieldKey=${encodeURIComponent(field.key)}`}
+                          files={project.files}
+                        />
+                        {field.project_video && (
+                          <ProjectVideo
+                            value={draft.values[field.key]}
+                            title={pickText(field.label, language)}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </section>
+                ))}
+              </div>
+            </SectionCard>
+          ) : (
+            <ProjectAnswers
+              project={{ ...project, name, submissionStatus: status, responses: draft.values }}
+              language={language}
+              fallbackTitle={t("projectDetailsTitle")}
+              assetUrl={(path) => new URL(path, API_URL).toString()}
+            />
+          )}
+        </div>
+        <div className="min-w-0 space-y-6">
           <SectionCard
             title={t("surfaceTeam")}
             action={
-              !staff && (
+              !staff &&
+              editing && (
                 <Button variant="outline" disabled={busy} onClick={() => setLeaveOpen(true)}>
                   {t("leaveProjectCta")}
                 </Button>
@@ -326,7 +395,7 @@ export function ProjectEditor({
                       />
                     )}
                     <span className="mr-auto">{member.name}</span>
-                    {staff && project.canEdit && (
+                    {staff && project.canEdit && editing && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -344,7 +413,7 @@ export function ProjectEditor({
                   </li>
                 ))}
             </ul>
-            {staff && project.canEdit && (
+            {staff && project.canEdit && editing && (
               <div className="mt-4 space-y-2">
                 <Label htmlFor="staff-project-member">{t("addMemberLabel")}</Label>
                 <UserPicker
@@ -370,13 +439,13 @@ export function ProjectEditor({
                 </Button>
               </div>
             )}
-            {!staff && (project.canInvite ?? project.canEdit) && (
+            {!staff && editing && (project.canInvite ?? project.canEdit) && (
               <form className="mt-4 space-y-2" onSubmit={invite}>
                 <Label htmlFor="invite-email">{t("email")}</Label>
                 <div className="flex flex-wrap gap-2">
                   <Input
                     id="invite-email"
-                    className="flex-1"
+                    className="min-w-0 flex-1 basis-40"
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
@@ -390,29 +459,32 @@ export function ProjectEditor({
               </form>
             )}
           </SectionCard>
-        </div>
-        <div className="space-y-6">
-          <ProjectChallenges project={project} staff={staff}>
-            <div className="space-y-2">
-              <Label htmlFor="project-timing">{t("workGroupTiming")}</Label>
-              <Select
-                value={timing}
-                onValueChange={(value) =>
-                  void saveTiming(value as NativeProject["presentationTimingPreference"])
-                }
-                disabled={busy || !project.canEdit}
-              >
-                <SelectTrigger id="project-timing" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="no_preference">{t("workGroupTimingNone")}</SelectItem>
-                  <SelectItem value="early">{t("workGroupTimingEarly")}</SelectItem>
-                  <SelectItem value="middle">{t("workGroupTimingMiddle")}</SelectItem>
-                  <SelectItem value="late">{t("workGroupTimingLate")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <ProjectChallenges
+            project={{ ...project, canEdit: project.canEdit && editing }}
+            staff={staff}
+          >
+            {editing && (
+              <div className="space-y-2">
+                <Label htmlFor="project-timing">{t("workGroupTiming")}</Label>
+                <Select
+                  value={timing}
+                  onValueChange={(value) =>
+                    void saveTiming(value as NativeProject["presentationTimingPreference"])
+                  }
+                  disabled={busy || !project.canEdit}
+                >
+                  <SelectTrigger id="project-timing" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="no_preference">{t("workGroupTimingNone")}</SelectItem>
+                    <SelectItem value="early">{t("workGroupTimingEarly")}</SelectItem>
+                    <SelectItem value="middle">{t("workGroupTimingMiddle")}</SelectItem>
+                    <SelectItem value="late">{t("workGroupTimingLate")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </ProjectChallenges>
         </div>
       </div>

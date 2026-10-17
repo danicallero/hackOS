@@ -189,6 +189,8 @@ export function EventTab({
   const reminderLabelId = useId();
   const { config, status, applyConfig } = useEventConfig();
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(createSchema(t)),
     defaultValues: {
       eventReminderScheduledAt: "",

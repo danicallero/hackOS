@@ -961,5 +961,8 @@
   "scanReplayExpired": "Non se sincronizou en {days} días. Rexístrao manualmente.",
   "galleryNotOpen": "A galería aínda non está aberta",
   "localReminderBody": "Comeza ás {time}",
-  "galleryOpensOn": "A galería abre o {date}"
+  "galleryOpensOn": "A galería abre o {date}",
+  "fieldLibrarySearch": "Buscar valores",
+  "fieldLibraryAdd": "Engadir «{name}»",
+  "fieldLibraryRetry": "Non se puido cargar a biblioteca. Reintentar"
 }

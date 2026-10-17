@@ -18,8 +18,18 @@ test.describe("server-rendered gallery", () => {
     name: "Neural Beans",
     description: "Coffee roasting with machine learning.",
     submissionStatus: "submitted",
-    responses: { summary: "Coffee roasting with machine learning.", approach: "edge" },
+    responses: {
+      summary: "Coffee roasting with machine learning.",
+      approach: "edge",
+      video_demo: "https://youtu.be/abcdefghijk",
+    },
     template: [
+      {
+        key: "video_demo",
+        kind: "text",
+        project_video: true,
+        label: { en: "Video demo", es: "Vídeo de demostración", gl: "Vídeo de demostración" },
+      },
       {
         key: "summary",
         kind: "textarea",
@@ -198,6 +208,15 @@ test.describe("server-rendered gallery", () => {
     ).toBe(true);
     const screenshots = "artifacts/gallery";
     await mkdir(screenshots, { recursive: true });
+    await page.screenshot({
+      path: `${screenshots}/video-${info.project.name}.png`,
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "Reproducir vídeo: Vídeo de demostración" }).click();
+    await expect(page.locator('iframe[title="Vídeo de demostración"]')).toHaveAttribute(
+      "src",
+      "https://www.youtube-nocookie.com/embed/abcdefghijk",
+    );
     revealed = false;
     await page.goto("/gallery");
     await expect(page.getByRole("heading", { name: "Neural Beans" })).toBeVisible();

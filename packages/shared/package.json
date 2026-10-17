@@ -33,7 +33,8 @@
     "./forms": "./src/forms.ts",
     "./phone": "./src/phone.ts",
     "./idempotency": "./src/idempotency.ts",
-    "./projects": "./src/projects.ts"
+    "./projects": "./src/projects.ts",
+    "./youtube": "./src/youtube.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

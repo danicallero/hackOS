@@ -54,6 +54,8 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   auth: "Better Auth session lifecycle (sign up/in/out, verification, password reset).",
   identity: "Users, invites, permissions and the caller's own profile (H1–H10).",
   applications: "Application forms, review, decisions and confirmations (H11–H15).",
+  "form-libraries":
+    "Question-owned catalogues, participant proposals and organizer curation (H11, H16).",
   projects:
     "Native project drafts, submissions, gallery and queue-facing project records (H16–H21, H44–H46).",
   challenges: "Challenge details, visibility and judging configuration (H44–H46, H49).",
@@ -88,6 +90,7 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
   if (routeMatchesPrefix(url, "/api/realtime")) return "foundation";
   if (routeMatchesPrefix(url, "/api/public")) return "public";
   if (routeMatchesPrefix(url, "/api/auth")) return "auth";
+  if (routeMatchesPrefix(url, "/api/form-libraries")) return "form-libraries";
 
   if (routeMatchesPrefix(url, "/api/me/diary")) return "diary";
   if (routeMatchesPrefix(url, "/api/me/live-activities")) return "live-activities";

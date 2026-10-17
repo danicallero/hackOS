@@ -33,8 +33,8 @@ export function ProjectFormSection({ onDirtyChange }: { onDirtyChange: (dirty: b
       form={{ id: 1, name: t("projects"), ...definition }}
       onSaved={load}
       onDirtyChange={onDirtyChange}
-      saveDefinition={({ template, sections }) =>
-        nativeProjects.saveDefinition({ template, sections })
+      saveDefinition={({ template, sections, library_deletions }) =>
+        nativeProjects.saveDefinition({ template, sections, library_deletions })
       }
     />
   );

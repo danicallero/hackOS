@@ -707,3 +707,19 @@ Challenge records put the challenge title and sponsor identity before all conten
 with a header back action. Description/criteria occupy the main column; published
 winners and prizes occupy the supporting column. Winners use ranked status and the
 shared project action, never a raw list above the challenge identity.
+
+Question-owned catalogue controls (`LibraryPicker` and `LibraryManager`) reuse the
+shared MultiSelect and destructive AlertModal. Catalogue management is embedded in
+the question editor, never the general Libraries settings. See
+[question-owned libraries](../../docs/form-libraries.md). Project reading,
+editing and judging reuse `ProjectAnswers`; new drafts begin editing and existing
+participant records provide an explicit read/edit action in the same workspace.
+
+Form validation runs on blur: React Hook Form uses `mode: "onBlur"` and
+`reValidateMode: "onBlur"`; `FormControl` also validates custom controls when
+focus leaves their boundary. Compound controls may report completion with an
+eventless blur callback; the shared control handles both that callback and DOM
+focus events. Dynamic application/project fields use
+`validateFieldOnBlur`, including phones, required consent, choices and configured
+rules. Compound pickers validate on close or departure, using the latest changed
+value. Submit retains full validation and first-error focus as a safeguard.

@@ -2379,3 +2379,11 @@ progress parsing are shared too. Native rendering, ISO date inputs and
 SecureStore access stay in this app. See
 [shared client models](./notifications.md#shared-client-models-1001) for the
 trimming/null decisions and the unchanged announcement fallback policy.
+
+### Question-owned library fields
+
+Dynamic forms render `library` fields with a searchable native checklist and an
+inline proposal action. Selections and new proposals have no count limit. The
+catalogue belongs to its question; curation remains in the web form editor.
+Read-only projects display the saved names, including historical answers after
+catalogue deletion. See [question-owned libraries](./form-libraries.md).

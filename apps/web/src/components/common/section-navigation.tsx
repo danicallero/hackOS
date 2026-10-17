@@ -103,10 +103,12 @@ export function HomeSectionHeader() {
 }
 
 export function ProjectsSectionHeader({
+  recordAction,
   recordName,
   recordState,
   primaryAction,
 }: {
+  recordAction?: React.ReactNode;
   recordName?: string;
   recordState?: React.ReactNode;
   primaryAction?: React.ReactNode;
@@ -139,12 +141,15 @@ export function ProjectsSectionHeader({
             <h2 className="type-page-title text-balance wrap-anywhere">{recordName}</h2>
             {recordState}
           </div>
-          <Button asChild variant="outline" size="sm">
-            <Link href={galleryRecord ? "/gallery" : "/my-project?view=all"}>
-              <ArrowLeftIcon aria-hidden="true" />
-              {t(galleryRecord ? "projectGallery" : "myProjects")}
-            </Link>
-          </Button>
+          <ActionGroup>
+            {recordAction}
+            <Button asChild variant="outline" size="sm">
+              <Link href={galleryRecord ? "/gallery" : "/my-project?view=all"}>
+                <ArrowLeftIcon aria-hidden="true" />
+                {t(galleryRecord ? "projectGallery" : "myProjects")}
+              </Link>
+            </Button>
+          </ActionGroup>
         </ActionGroup>
       )}
     </div>

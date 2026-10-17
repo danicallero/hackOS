@@ -507,6 +507,21 @@ Table food_intolerances {
   proposed_by integer
 }
 
+Table form_libraries {
+  application_id integer
+  field_key text [not null]
+  id uuid [pk, not null]
+  project boolean [not null, default: `false`]
+}
+
+Table form_library_values {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  id integer [pk, increment, not null]
+  is_test_account boolean [not null, default: `false`]
+  library_id uuid [not null]
+  name text [not null]
+}
+
 Table idempotency_keys {
   completed_at "timestamp with time zone"
   created_at "timestamp with time zone" [not null, default: `now()`]
@@ -1393,6 +1408,8 @@ Ref: enterprise_judges.user_id > users.id
 Ref: enterprises.director_id > users.id
 Ref: event_email_reminders.created_by > users.id
 Ref: food_intolerances.proposed_by > users.id
+Ref: form_libraries.application_id > applications.id
+Ref: form_library_values.library_id > form_libraries.id
 Ref: judging_field_leases.judge_id > users.id
 Ref: judging_field_leases.queue_entry_id > queue_entries.id
 Ref: judging_session.judge_id > users.id

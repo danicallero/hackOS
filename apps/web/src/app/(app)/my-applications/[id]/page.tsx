@@ -120,7 +120,7 @@ export default function MyApplicationDetailPage() {
           shirtSizes,
         )
       : []);
-  const { checkRequired, fieldErrors, setFieldErrors, validateOnBlur } =
+  const { validateFields, fieldErrors, setFieldErrors, validateOnBlur } =
     useApplicationFieldValidation({
       applicationId: id,
       template,
@@ -268,7 +268,7 @@ export default function MyApplicationDetailPage() {
   });
 
   async function handleSubmit() {
-    if (!checkRequired()) {
+    if (!validateFields()) {
       toast.warning(t("fillRequiredFields"), { compactTitle: t("submitApplication") });
       return;
     }
@@ -609,7 +609,7 @@ export default function MyApplicationDetailPage() {
                     applicationId={id}
                     value={values[field.key] as FieldValue}
                     onChange={(v) => setValue(field.key, v)}
-                    onBlur={() => validateOnBlur(field)}
+                    onBlur={(value) => validateOnBlur(field, value)}
                     disabled={!editable}
                     lang={lang}
                     error={fieldErrors[field.key]}
