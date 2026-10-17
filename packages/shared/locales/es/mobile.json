@@ -960,5 +960,8 @@
   "projectSend": "Enviar",
   "scanReplayExpired": "No se sincronizó en {days} días. Regístralo manualmente.",
   "galleryNotOpen": "La galería aún no está abierta",
-  "galleryOpensOn": "La galería abre el {date}"
+  "galleryOpensOn": "La galería abre el {date}",
+  "fieldLibrarySearch": "Buscar valores",
+  "fieldLibraryAdd": "Añadir «{name}»",
+  "fieldLibraryRetry": "No se pudo cargar la biblioteca. Reintentar"
 }

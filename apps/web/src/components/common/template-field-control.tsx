@@ -12,6 +12,7 @@ import { DateTimeInput } from "@/components/common/datetime-input";
 import { DegreePicker } from "@/components/common/degree-picker";
 import { FileLink } from "@/components/common/file-link";
 import { FileUploadField } from "@/components/common/file-upload-field";
+import { LibraryPicker } from "@/components/common/library-picker";
 import { LinkifiedText } from "@/components/common/linkified-text";
 import { MultiSelect } from "@/components/common/multi-select";
 import {
@@ -31,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { externalUrlHref } from "@/lib/external-url";
 import type { I18nText } from "@/lib/i18n";
 import { pickText, useLocale } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
@@ -50,6 +52,7 @@ export interface TemplateFieldLike {
   label: I18nText;
   kind: string;
   required: boolean;
+  library_id?: string;
   options?: { value: string; label: I18nText }[];
   allowed_file_types?: string[];
   max_file_size_mb?: number;
@@ -70,21 +73,6 @@ export interface TemplateFieldLike {
 
 const NONE = "__none__";
 const MAXIMUM_BIRTH_AGE = 120;
-
-/**
- * Template URL validation accepts a hostname without a protocol. Browsers,
- * however, interpret that form as an internal relative path, so add HTTPS
- * before rendering a submitted answer as a link.
- */
-export function externalUrlHref(value: string): string | null {
-  const candidate = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`;
-  try {
-    const url = new URL(candidate);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
-  } catch {
-    return null;
-  }
-}
 
 /** Stable ids let labels, validation messages, and focus recovery share one contract. */
 export function templateFieldId(fieldKey: string, applicationId?: number): string {
@@ -163,6 +151,21 @@ export function TemplateFieldControl({
 
   let control: React.ReactNode;
   switch (field.kind) {
+    case "library":
+      control = (
+        <LibraryPicker
+          libraryId={field.library_id}
+          value={Array.isArray(value) ? value : []}
+          onChange={onChange}
+          disabled={disabled}
+          id={id}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          inDialog={inDialog}
+        />
+      );
+      break;
     case "textarea":
       control = isReadOnlyUrl ? (
         <a

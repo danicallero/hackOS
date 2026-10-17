@@ -885,3 +885,34 @@ No crash report during the sweep; the fixture still answers afterwards.
 
 ### Exceptions
 None.
+
+## [R027] Keep form requirements in the dynamic form definition
+
+Status: active
+Scope: module:projects
+Source: user-correction
+Date: 2026-10-17
+
+### Trigger
+Adding event or reporting requirements to the configurable project form.
+
+### Mistake
+Saving a form reinserted hardcoded questions, overriding the organizer's choices.
+
+### Lesson
+The saved form definition owns questions, types, order and required flags.
+Exports must derive columns from that definition; presentation behavior must
+be configured independently of question labels and keys.
+
+### Action
+Preserve arbitrary questions and deletions. Export the configured questions
+and answers directly. Use field metadata only for presentation features such as
+video. Do not introduce a preset or special reporting mappings without a request.
+Never silently inject event-specific questions on save or in a migration.
+
+### Validation
+Save empty/custom forms unchanged, rename and delete questions, and verify
+CSV columns follow the current and historical form definitions.
+
+### Exceptions
+Explicit user authorization to populate a particular event's form is allowed.

@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { FieldLibraryPicker } from "@/components/field-library-picker";
 import { FileViewer } from "@/components/file-viewer";
 import { Section, Separator, ToggleRow } from "@/components/native-ui";
 import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
@@ -207,6 +208,21 @@ export function DynamicForm({
         </FieldRow>
       );
     }
+    if (item.kind === "library")
+      return (
+        <FieldRow key={item.key} label={label} required={requiredLabel(item)} hint={hint(item)}>
+          <FieldLibraryPicker
+            libraryId={item.library_id}
+            value={
+              Array.isArray(value)
+                ? value.filter((value): value is string => typeof value === "string")
+                : []
+            }
+            onChange={(values) => onChange?.(item.key, values)}
+            disabled={disabled}
+          />
+        </FieldRow>
+      );
     const numeric = item.kind === "number" || item.kind === "birth_year";
     return (
       <FieldRow key={item.key} label={label} required={requiredLabel(item)} hint={hint(item)}>

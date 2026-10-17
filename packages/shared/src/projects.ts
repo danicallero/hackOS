@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { fieldsReferenceKnownSections, sectionsSchema, templateSchema } from "./forms.js";
+import {
+  fieldsReferenceKnownSections,
+  libraryDeletionsSchema,
+  sectionsSchema,
+  templateSchema,
+} from "./forms.js";
 
 /** Native project lifecycle and configuration (#1006–#1009). */
 export const PROJECT_STATUSES = ["draft", "submitted"] as const;
@@ -20,6 +25,7 @@ export type ProjectSettings = z.infer<typeof projectSettingsSchema>;
 export const projectFormSchema = z
   .object({
     template: templateSchema,
+    library_deletions: libraryDeletionsSchema.optional(),
     sections: sectionsSchema.default([]),
   })
   .strict()

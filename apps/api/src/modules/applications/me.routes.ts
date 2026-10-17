@@ -4,6 +4,7 @@ import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
+import { activeLibraryFields } from "../form-libraries/service.js";
 import { idParamSchema, saveDraftSchema, submitSchema } from "./schemas.js";
 import {
   enrichTemplate,
@@ -46,7 +47,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get my response for one form",
         description:
-          "Returns the caller's own answers and the immutable form snapshot they answered, including for a closed form. Internal accepted/rejected status is masked as 'review' until the decision is sent (H12, H14).",
+          "Returns the caller's own answers and the immutable form snapshot they answered, including for a closed form. Retired library questions are hidden in editable drafts so deleting a required catalogue cannot strand an application. Submitted definitions remain unchanged. Internal accepted/rejected status is masked as 'review' until the decision is sent (H12, H14).",
         params: idParamSchema,
       },
     },
@@ -68,7 +69,10 @@ export function registerMeRoutes(app: FastifyInstance): void {
       );
       if (!rows[0]) throw new NotFoundError("No response yet for this application");
       const { template, sections, ask_shirt_size, ask_food_intolerances, ...row } = rows[0];
-      const enriched = await enrichTemplate({ ask_shirt_size, ask_food_intolerances }, template);
+      const enriched = await enrichTemplate(
+        { ask_shirt_size, ask_food_intolerances },
+        row.status === "draft" ? await activeLibraryFields(pool, template) : template,
+      );
       const { rows: userRows } = await pool.query(
         `SELECT shirt_size, food_intolerances, food_intolerance_notes, dietary_data_state
          FROM users

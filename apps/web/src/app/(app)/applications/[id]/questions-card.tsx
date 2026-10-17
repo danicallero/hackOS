@@ -53,6 +53,7 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { dragOverlayDropAnimation, useReducedDragMotion } from "@/components/common/drag-handle";
 import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
+import { LibraryManager } from "@/components/common/library-manager";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -211,6 +212,7 @@ export function QuestionsCard({
     template: TemplateField[];
     sections: FormSection[];
     field_renames: { from: string; to: string }[];
+    library_deletions: string[];
   }) => Promise<unknown>;
   onSaved: () => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
@@ -231,6 +233,18 @@ export function QuestionsCard({
   );
   const dragging = dragActive !== null;
   const [saving, setSaving] = useState(false);
+  const [libraryDirty, setLibraryDirty] = useState(false);
+  const [discardLibraryEdits, setDiscardLibraryEdits] = useState<(() => void) | null>(null);
+  const requestLibraryAction = (action: () => void) => {
+    if (libraryDirty) setDiscardLibraryEdits(() => action);
+    else action();
+  };
+  const requestFieldChange = (next: string | null) =>
+    requestLibraryAction(() => setActiveFieldId(next));
+  const [libraryDeletions, setLibraryDeletions] = useState<string[]>([]);
+  const [libraryRemoval, setLibraryRemoval] = useState<{ id: string; kind?: FieldKind } | null>(
+    null,
+  );
   const [preview, setPreview] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [missingReservedKeys, setMissingReservedKeys] = useState<string[] | null>(null);
@@ -254,8 +268,8 @@ export function QuestionsCard({
   }, [form.template, form.sections, saveState]);
 
   useEffect(() => {
-    onDirtyChange?.(saveState !== "saved");
-  }, [saveState, onDirtyChange]);
+    onDirtyChange?.(saveState !== "saved" || libraryDirty);
+  }, [saveState, onDirtyChange, libraryDirty]);
 
   // What the applicant actually sees: custom questions plus whatever
   // shirt-size/dietary fields Form settings' logistics toggles add at submit
@@ -320,12 +334,20 @@ export function QuestionsCard({
       return next;
     });
 
-  const remove = (id: string) => {
+  const applyRemove = (id: string) => {
     setSaveState("unsaved");
     setFields((prev) => prev.filter((f) => f._id !== id));
     setActiveFieldId((prev) => (prev === id ? null : prev));
   };
 
+  const remove = (id: string) => {
+    const field = fields.find((item) => item._id === id);
+    if (field?.library_id) {
+      setLibraryRemoval({ id });
+      return;
+    }
+    applyRemove(id);
+  };
   const add = (kind: FieldKind = "text") => {
     setSaveState("unsaved");
     const field = newField(fields.length, kind);
@@ -348,6 +370,7 @@ export function QuestionsCard({
       const original = prev[i];
       const copy: EditableField = {
         ...original,
+        library_id: undefined,
         _id: mkId(),
         retention_mode: "none",
         anonymous_audit_dimension: undefined,
@@ -555,6 +578,7 @@ export function QuestionsCard({
       // keys, option kinds, every field.section_key resolves to a section).
       const definition = {
         template: fields.map(serializeApplicationField),
+        library_deletions: libraryDeletions,
         field_renames: fields.flatMap((field) => {
           const previous = originalFieldsRef.current.get(field._id);
           return previous && previous.key !== field.key && previous.kind === field.kind
@@ -571,6 +595,7 @@ export function QuestionsCard({
       else await api.patch<ApplicationForm>(`/api/applications/${form.id}`, definition);
       await onSaved();
       setSaveState("saved");
+      setLibraryDeletions([]);
       toast.success(t("questionsSaved"), { compactTitle: t("saveQuestions") });
     } catch (e) {
       setSaveState("error");
@@ -590,6 +615,7 @@ export function QuestionsCard({
           <SortableField key={field._id} id={field._id}>
             {(drag) => (
               <FieldEditor
+                fieldId={field._id}
                 field={field}
                 availableSections={sections}
                 index={i}
@@ -598,13 +624,21 @@ export function QuestionsCard({
                 existingKeys={fields.filter((f) => f._id !== field._id).map((f) => f.key)}
                 dragHandle={<DragHandle {...drag} label={t("dragToReorder")} />}
                 projectMode={Boolean(saveDefinition)}
+                formId={form.id}
+                onLibraryDirtyChange={setLibraryDirty}
                 active={activeFieldId === field._id}
-                onActivate={() => setActiveFieldId(field._id)}
-                onDeactivate={() => setActiveFieldId(null)}
+                onActivate={() => requestFieldChange(field._id)}
+                onDeactivate={() => requestFieldChange(null)}
                 onChange={(patch) => updateUnsaved(field._id, patch)}
-                onKind={(k) => setKind(field._id, k)}
+                onKind={(k) => {
+                  if (field.library_id && k !== "library") {
+                    setLibraryRemoval({ id: field._id, kind: k });
+                    return;
+                  }
+                  setKind(field._id, k);
+                }}
                 onMove={(dir) => moveWithinBlock(field._id, dir)}
-                onDuplicate={() => duplicateField(field._id)}
+                onDuplicate={() => requestLibraryAction(() => duplicateField(field._id))}
                 onRemove={() => remove(field._id)}
               />
             )}
@@ -617,6 +651,7 @@ export function QuestionsCard({
   return (
     <SectionCard
       variant="plain"
+      stickyFooter
       title={t("formFields")}
       action={
         <div className="flex flex-wrap gap-2">
@@ -630,11 +665,20 @@ export function QuestionsCard({
             <EyeIcon aria-hidden="true" />
             {t("preview")}
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={addSection}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => requestLibraryAction(addSection)}
+          >
             <PlusIcon aria-hidden="true" />
             {t("addSection")}
           </Button>
-          <AddFieldMenu projectMode={Boolean(saveDefinition)} onSelect={add} size="sm" />
+          <AddFieldMenu
+            projectMode={Boolean(saveDefinition)}
+            onSelect={(kind) => requestLibraryAction(() => add(kind))}
+            size="sm"
+          />
           <FormPreviewModal
             open={preview}
             onOpenChange={setPreview}
@@ -651,12 +695,50 @@ export function QuestionsCard({
             showIcon={!saving}
             className="mr-auto"
           />
-          <SubmitButton type="button" pending={saving} onClick={save}>
+          {libraryDirty && (
+            <span className="text-sm text-muted-foreground">{t("saveLibraryBeforeForm")}</span>
+          )}
+          <SubmitButton type="button" pending={saving} disabled={libraryDirty} onClick={save}>
             {t("saveQuestions")}
           </SubmitButton>
         </>
       }
     >
+      <AlertModal
+        open={discardLibraryEdits !== null}
+        onOpenChange={(open) => !open && setDiscardLibraryEdits(null)}
+        title={t("unsavedChanges")}
+        description={t("unsavedChangesConfirm")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("discardLibraryChanges")}
+        destructive
+        onConfirm={() => {
+          const element = document.querySelector(`[data-field-id="${activeFieldId}"]`);
+          const top = element?.getBoundingClientRect().top;
+          flushSync(() => discardLibraryEdits?.());
+          if (top !== undefined && element?.isConnected)
+            window.scrollBy({ top: element.getBoundingClientRect().top - top });
+          setDiscardLibraryEdits(null);
+        }}
+      />
+      <AlertModal
+        open={libraryRemoval !== null}
+        onOpenChange={(open) => !open && setLibraryRemoval(null)}
+        title={t("deleteFieldLibraryTitle")}
+        description={t("deleteFieldLibraryDescription")}
+        confirmLabel={t("remove")}
+        cancelLabel={t("cancel")}
+        destructive
+        onConfirm={() => {
+          if (!libraryRemoval) return;
+          const field = fields.find((item) => item._id === libraryRemoval.id);
+          if (field?.library_id)
+            setLibraryDeletions((ids) => [...new Set([...ids, field.library_id!])]);
+          if (libraryRemoval.kind) setKind(libraryRemoval.id, libraryRemoval.kind);
+          else applyRemove(libraryRemoval.id);
+          setLibraryRemoval(null);
+        }}
+      />
       {!saveDefinition && (
         <Collapsible>
           <CollapsibleTrigger asChild>
@@ -694,7 +776,13 @@ export function QuestionsCard({
           icon={ListChecksIcon}
           title={t("noQuestionsYet")}
           description={t("noQuestionsYetDesc")}
-          action={<AddFieldMenu projectMode={Boolean(saveDefinition)} onSelect={add} size="sm" />}
+          action={
+            <AddFieldMenu
+              projectMode={Boolean(saveDefinition)}
+              onSelect={(kind) => requestLibraryAction(() => add(kind))}
+              size="sm"
+            />
+          }
         />
       ) : (
         <DndContext
@@ -710,25 +798,25 @@ export function QuestionsCard({
             <div
               className="@container space-y-4"
               onClick={(e) => {
-                if (e.target === e.currentTarget) setActiveFieldId(null);
+                if (e.target === e.currentTarget) requestFieldChange(null);
               }}
             >
-              <div className="space-y-4">
-                {sections.length > 0 && (
-                  <p className="text-muted-foreground text-xs font-medium uppercase">
-                    {t("noSection")}
-                  </p>
-                )}
-                {renderFields(ungroupedBlock)}
-                <DroppableBlock
-                  id="ungrouped"
-                  className={dragging ? "min-h-6 rounded-lg" : undefined}
-                >
-                  {((sections.length > 0 && ungroupedBlock.fields.length === 0) || dragging) && (
-                    <EmptyBlockHint />
+              {(ungroupedBlock.fields.length > 0 || dragging) && (
+                <div className="space-y-4">
+                  {sections.length > 0 && ungroupedBlock.fields.length > 0 && (
+                    <p className="text-muted-foreground text-xs font-medium uppercase">
+                      {t("noSection")}
+                    </p>
                   )}
-                </DroppableBlock>
-              </div>
+                  {renderFields(ungroupedBlock)}
+                  <DroppableBlock
+                    id="ungrouped"
+                    className={dragging ? "min-h-6 rounded-lg" : undefined}
+                  >
+                    {dragging && <EmptyBlockHint />}
+                  </DroppableBlock>
+                </div>
+              )}
 
               <SortableContext
                 items={sections.map((s) => s._id)}
@@ -743,7 +831,10 @@ export function QuestionsCard({
                         <div className="space-y-4">
                           <section
                             aria-label={section.title[language] || section.key}
-                            className="space-y-4 rounded-lg border border-dashed bg-muted/20 p-3 sm:p-4"
+                            className={cn(
+                              "space-y-4",
+                              sectionIdx > 0 && "border-t border-border/60 pt-6",
+                            )}
                           >
                             <SectionEditor
                               section={section}
@@ -769,7 +860,9 @@ export function QuestionsCard({
                             </DroppableBlock>
                             <AddFieldMenu
                               projectMode={Boolean(saveDefinition)}
-                              onSelect={(kind) => addToSection(section.key, kind)}
+                              onSelect={(kind) =>
+                                requestLibraryAction(() => addToSection(section.key, kind))
+                              }
                               size="sm"
                               variant="ghost"
                               className="text-muted-foreground"
@@ -803,10 +896,15 @@ export function QuestionsCard({
               <div className="flex flex-wrap gap-2">
                 <AddFieldMenu
                   projectMode={Boolean(saveDefinition)}
-                  onSelect={add}
+                  onSelect={(kind) => requestLibraryAction(() => add(kind))}
                   className="flex-1"
                 />
-                <Button type="button" variant="outline" onClick={addSection} className="flex-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => requestLibraryAction(addSection)}
+                  className="flex-1"
+                >
                   <PlusIcon aria-hidden="true" />
                   {t("addSection")}
                 </Button>
@@ -848,6 +946,7 @@ export function QuestionsCard({
 
 export function fieldKindLabel(kind: FieldKind, t: Translate): string {
   const map: Record<FieldKind, string> = {
+    library: t("fieldKindLibrary"),
     text: t("fieldKindText"),
     textarea: t("fieldKindTextarea"),
     select: t("fieldKindSelect"),
@@ -867,6 +966,7 @@ export function fieldKindLabel(kind: FieldKind, t: Translate): string {
 }
 
 const FIELD_KIND_ICON: Record<FieldKind, PhosphorIcon> = {
+  library: ListChecksIcon,
   text: TextTIcon,
   textarea: TextAlignLeftIcon,
   select: RadioButtonIcon,
@@ -896,6 +996,7 @@ function hasI18nText(v: I18nText | undefined): v is I18nText {
 export function serializeApplicationField(field: TemplateField): TemplateField {
   return {
     key: field.key.trim(),
+    ...(field.kind === "library" && field.library_id ? { library_id: field.library_id } : {}),
     label: field.label,
     kind: field.kind,
     required: field.required,
@@ -913,6 +1014,7 @@ export function serializeApplicationField(field: TemplateField): TemplateField {
     ...(field.project_description && (field.kind === "text" || field.kind === "textarea")
       ? { project_description: true }
       : {}),
+    ...(field.project_video && field.kind === "text" ? { project_video: true } : {}),
     ...(field.section_key ? { section_key: field.section_key } : {}),
     ...(field.after_section_key ? { after_section_key: field.after_section_key } : {}),
     ...(hasI18nText(field.help_text) ? { help_text: field.help_text } : {}),
@@ -976,6 +1078,9 @@ function AddFieldMenu({
 }
 
 export function FieldEditor({
+  fieldId,
+  formId,
+  onLibraryDirtyChange,
   field,
   availableSections = [],
   index,
@@ -993,10 +1098,13 @@ export function FieldEditor({
   onDuplicate,
   onRemove,
 }: {
+  fieldId?: string;
   field: TemplateField;
   availableSections?: FormSection[];
   index: number;
   count: number;
+  formId?: number;
+  onLibraryDirtyChange?: (dirty: boolean) => void;
   primaryLocale: Language;
   existingKeys: string[];
   dragHandle?: React.ReactNode;
@@ -1029,8 +1137,8 @@ export function FieldEditor({
     <div
       ref={active ? expandedHeaderRef : undefined}
       className={cn(
-        "bg-muted/30 flex items-center gap-1 rounded-control border px-1 py-1",
-        active && "bg-card sticky top-2 z-10",
+        "flex items-center gap-1 rounded-control py-1",
+        active && "bg-card sticky top-2 z-10 border-b border-border/60",
       )}
     >
       {dragHandle}
@@ -1096,8 +1204,9 @@ export function FieldEditor({
     return (
       <Surface
         ref={cardRef}
+        data-field-id={fieldId}
         padding="compact"
-        className="hover:border-primary/40 cursor-pointer space-y-3"
+        className="hover:border-primary/40 cursor-pointer space-y-1"
         onClick={(event) => {
           if (
             (event.target as HTMLElement).closest(
@@ -1115,6 +1224,7 @@ export function FieldEditor({
           {projectMode && field.project_description && (
             <span>{t("projectDescriptionFieldLabel")}</span>
           )}
+          {projectMode && field.project_video && <span>{t("projectVideoField")}</span>}
         </p>
       </Surface>
     );
@@ -1144,18 +1254,21 @@ export function FieldEditor({
   return (
     <Surface
       ref={cardRef}
+      data-field-id={fieldId}
       padding="compact"
       onClick={(e) => e.stopPropagation()}
       className="border-l-primary scroll-mt-20 space-y-4 border-l-4"
     >
       {topRow}
 
-      <div className="grid gap-3 @lg:grid-cols-[minmax(0,1fr)_12rem_9rem]">
+      <div className="grid items-start gap-3 @lg:grid-cols-[minmax(0,1fr)_12rem_9rem]">
         <div className="space-y-1.5">
-          <Label htmlFor={`field-label-${uid}`}>{t("primaryApplicantLabel")}</Label>
+          <Label htmlFor={`field-label-${uid}`}>
+            {t(projectMode ? "projectQuestionLabel" : "primaryApplicantLabel")}
+          </Label>
           <Input
             id={`field-label-${uid}`}
-            placeholder={t("primaryApplicantLabel")}
+            placeholder={t(projectMode ? "projectQuestionLabel" : "primaryApplicantLabel")}
             value={field.label[primaryLocale]}
             onChange={(e) => setLabel(primaryLocale, e.target.value)}
             className="text-base font-medium"
@@ -1244,6 +1357,17 @@ export function FieldEditor({
         />
       )}
 
+      {field.kind === "library" && (
+        <LibraryManager
+          libraryId={field.library_id}
+          onDirtyChange={onLibraryDirtyChange}
+          managePath={
+            projectMode
+              ? `/api/projects/form/libraries/${field.library_id}/manage`
+              : `/api/applications/${formId}/libraries/${field.library_id}/manage`
+          }
+        />
+      )}
       {field.help_text !== undefined && (
         <Input
           aria-label={t("descriptionLabel")}
@@ -1271,7 +1395,8 @@ export function FieldEditor({
             {LOCALES.filter((loc) => loc !== primaryLocale).map((loc) => (
               <div key={loc} className="space-y-1.5">
                 <Label htmlFor={`question-${uid}-${loc}`}>
-                  {t("primaryApplicantLabel")} ({loc.toUpperCase()})
+                  {t(projectMode ? "projectQuestionLabel" : "primaryApplicantLabel")} (
+                  {loc.toUpperCase()})
                 </Label>
                 <Input
                   id={`question-${uid}-${loc}`}
@@ -1581,6 +1706,14 @@ export function FieldEditor({
                 onCheckedChange={(checked) => onChange({ validation: checked ? {} : undefined })}
               >
                 {t("responseValidation")}
+              </DropdownMenuCheckboxItem>
+            )}
+            {projectMode && field.kind === "text" && (
+              <DropdownMenuCheckboxItem
+                checked={field.project_video ?? false}
+                onCheckedChange={(checked) => onChange({ project_video: checked })}
+              >
+                {t("projectVideoField")}
               </DropdownMenuCheckboxItem>
             )}
             {projectMode && (field.kind === "text" || field.kind === "textarea") && (

@@ -5,6 +5,7 @@
 
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
@@ -12,24 +13,28 @@ import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
+import { ContextualError } from "@/components/common/contextual-error";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { StatusBadge } from "@/components/common/status-badge";
+import { ProjectAnswers } from "@/components/projects/project-answers";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
+import { useServerResource } from "@/hooks/use-server-resource";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
+import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import {
   canTransition,
   preparationElapsedSeconds,
   presentationTimerState,
 } from "@/lib/judging-workspace";
-import {
-  collapseRepoQueueMemberships,
-  getRepoChallenges,
-  type QueueEntry,
-  type RepoChallenge,
-} from "@/lib/queue";
+import type { NativeProject } from "@/lib/native-projects";
+import { projectSummary } from "@/lib/project-text";
+import { collapseRepoQueueMemberships, getRepoChallenges, type QueueEntry } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 import { challengeName, entryLabel, secondsLabel } from "./helpers";
@@ -82,10 +87,7 @@ export function PresentationPanel({
     timerAction === "resume-timer" ? "resumePresentationTimer" : "pausePresentationTimer";
 
   return (
-    <Surface
-      padding="none"
-      className={cn("overflow-hidden", entry && "border-primary/30 bg-primary/5")}
-    >
+    <Surface padding="none" className={cn("overflow-hidden", entry && "border-primary/30")}>
       <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4">
         <div className="min-w-0">
           <h2 className="truncate text-xl font-semibold text-balance">
@@ -247,32 +249,45 @@ export function ProjectInfo({
   entry: QueueEntry;
   challenge: Challenge | null;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const members = entry.repo_members ?? [];
-  // GitHub first — it's the artifact judges actually need to open.
+  const resource = useServerResource(
+    ["judging-project", entry.repo_id],
+    async (signal) => {
+      const [project, challenges] = await Promise.all([
+        api.get<NativeProject>(`/api/repos/${entry.repo_id}`, { signal }),
+        getRepoChallenges(entry.repo_id),
+      ]);
+      return { project, challenges };
+    },
+    { enabled: Boolean(entry.repo_id) },
+  );
+  const repoChallenges = resource.data?.challenges ?? [];
+  const project = resource.data?.project;
+  const libraryField = project?.template.find(
+    (field) =>
+      field.kind === "library" &&
+      Array.isArray(project.responses[field.key]) &&
+      (project.responses[field.key] as unknown[]).length > 0,
+  );
   const links = [
-    { label: "GitHub", href: entry.repo_github_url },
-    { label: "Demo", href: entry.repo_demo_url },
+    { label: "GitHub", href: project?.githubUrl ?? entry.repo_github_url },
+    { label: t("projectDemoLink"), href: project?.demoUrl ?? entry.repo_demo_url },
   ].filter((link): link is { label: string; href: string } => Boolean(link.href));
-
-  const [repoChallenges, setRepoChallenges] = useState<RepoChallenge[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    getRepoChallenges(entry.repo_id)
-      .then((rows) => {
-        if (!cancelled) setRepoChallenges(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setRepoChallenges([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [entry.repo_id]);
-
   return (
-    <div className="space-y-2">
-      <div className="grid gap-x-4 gap-y-2 rounded-md border bg-background p-3 sm:grid-cols-2">
+    <div className="space-y-4">
+      {Boolean(resource.error) && (
+        <ContextualError
+          message={apiErrorText(resource.error, t, t("couldNotLoadProject"))}
+          onRetry={resource.reload}
+        />
+      )}
+      {project?.description && (
+        <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+          {projectSummary(project.description, project.name)}
+        </p>
+      )}
+      <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
         <div className="flex min-w-0 items-start gap-2">
           <UsersIcon aria-hidden="true" className="text-muted-foreground mt-0.5 size-4 shrink-0" />
           <div className="min-w-0">
@@ -289,14 +304,20 @@ export function ProjectInfo({
             </p>
           </div>
         </div>
-        <div className="min-w-0">
-          <p className="mb-1 text-xs font-semibold uppercase">{t("projectLabel")}</p>
-          <p className="truncate text-sm font-medium">{entryLabel(entry, t)}</p>
-        </div>
+        {libraryField && (
+          <div className="min-w-0">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">
+              {libraryField.label[language ?? "en"] || libraryField.label.en}
+            </p>
+            <p className="text-sm text-pretty">
+              {(project!.responses[libraryField.key] as string[]).join(" · ")}
+            </p>
+          </div>
+        )}
       </div>
 
       {links.length > 0 && (
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="flex flex-wrap gap-2">
           {links.map((link, i) => (
             <Button key={link.label} variant={i === 0 ? "default" : "outline"} size="sm" asChild>
               <a href={link.href} target="_blank" rel="noreferrer">
@@ -308,10 +329,27 @@ export function ProjectInfo({
         </div>
       )}
 
+      {project && (
+        <Collapsible className="border-y border-border/60 py-3">
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="w-full justify-between">
+              {t("judgingProjectDetails")}
+              <CaretDownIcon aria-hidden="true" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-4">
+            <ProjectAnswers
+              project={project}
+              language={language ?? "en"}
+              assetUrl={(path) => new URL(path, API_URL).toString()}
+            />
+          </CollapsibleContent>
+        </Collapsible>
+      )}
       {/* A project can be in more than one queue. Shared queue siblings collapse
           to one row and are named by the queue group. */}
       {(repoChallenges.length > 0 || challenge) && (
-        <div className="rounded-md border bg-background p-3">
+        <div className="border-t border-border/60 pt-4">
           <p className="mb-1 text-xs font-semibold uppercase">{t("queueName")}</p>
           <ul className="space-y-1.5">
             {(repoChallenges.length > 0

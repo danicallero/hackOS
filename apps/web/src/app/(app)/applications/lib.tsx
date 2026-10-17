@@ -34,6 +34,7 @@ export const FIELD_KINDS = [
   "degree",
   "city",
   "images",
+  "library",
 ] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
 
@@ -52,6 +53,7 @@ export const BUILDER_FIELD_KINDS = [
   "university",
   "degree",
   "city",
+  "library",
 ] as const satisfies FieldKind[];
 
 /** H16: the project form adds photo lists, which only project storage accepts. */
@@ -96,6 +98,8 @@ export interface TemplateField {
   profile_cv?: boolean;
   /** Project form only (H16): this answer is the project's description. */
   project_description?: boolean;
+  project_video?: boolean;
+  library_id?: string;
   /** Groups this field under a `FormSection.key` (H11 form builder sections). */
   section_key?: string;
   /** Ungrouped question placed after this section (H11). */

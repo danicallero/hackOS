@@ -1,11 +1,13 @@
 import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { normalizePhone } from "@hackos/shared/phone";
+import { youtubeEmbedUrl } from "@hackos/shared/youtube";
 import { ApiError } from "@/lib/api";
 import { type I18nText, type MessageKey, pickText, type Translate } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
 
 export interface ValidationField {
   key: string;
+  project_video?: boolean;
   label: I18nText;
   validation?: {
     min_length?: number;
@@ -31,6 +33,7 @@ export function validateFieldOnBlur(
 ): string | null {
   const empty = value == null || value === "" || (Array.isArray(value) && value.length === 0);
   if (empty) return field.required ? t("fieldRequired") : null;
+  if (field.project_video && !youtubeEmbedUrl(value)) return t("invalidUrl");
   if (field.kind === "birth_year") {
     const currentYear = new Date().getFullYear();
     if (

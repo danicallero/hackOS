@@ -811,7 +811,7 @@ it("uploads picked photos one by one and saves them after the editor closes (H16
   await fireEvent.press(await screen.findByRole("button", { name: "projectAddPhotos" }));
   await waitFor(() => expect(uploads).toBe(2));
   // Leave while the second photo is still uploading.
-  rerender(<View />);
+  await rerender(<View />);
   await act(async () => {
     release();
   });
@@ -828,4 +828,43 @@ it("uploads picked photos one by one and saves them after the editor closes (H16
     .filter(([path]) => String(path).startsWith("/api/me/projects/9/uploads"))
     .map(([, init]) => init.headers["Idempotency-Key"]);
   expect(new Set(keys).size).toBe(2);
+});
+
+it("selects catalogue values and proposes several values as arrays (H16)", async () => {
+  const changed = jest.fn();
+  mockApi.mockImplementation(async (path: string, init?: RequestInit) =>
+    path.endsWith("/proposals")
+      ? { id: 3, name: JSON.parse(String(init?.body)).name }
+      : {
+          items: [
+            { id: 1, name: "React" },
+            { id: 2, name: "TypeScript" },
+          ],
+        },
+  );
+  await renderMobile(
+    <DynamicForm
+      template={[
+        {
+          key: "tech",
+          kind: "library",
+          library_id: "11111111-1111-4111-8111-111111111111",
+          label: { en: "Technologies", es: "Tecnologías", gl: "Tecnoloxías" },
+          required: false,
+        },
+      ]}
+      sections={[]}
+      responses={{ tech: ["React"] }}
+      onChange={changed}
+    />,
+  );
+  await waitFor(() => expect(screen.getByText("TypeScript")).toBeTruthy());
+  await fireEvent.press(screen.getByRole("checkbox", { name: "TypeScript" }));
+  expect(changed).toHaveBeenLastCalledWith("tech", ["React", "TypeScript"]);
+  await fireEvent.changeText(screen.getByLabelText("fieldLibrarySearch"), "Rust");
+  await fireEvent.press(screen.getByRole("button", { name: "fieldLibraryAdd" }));
+  await waitFor(() => expect(changed).toHaveBeenLastCalledWith("tech", ["React", "Rust"]));
+  await fireEvent.changeText(screen.getByLabelText("fieldLibrarySearch"), "Go");
+  await fireEvent.press(screen.getByRole("button", { name: "fieldLibraryAdd" }));
+  await waitFor(() => expect(changed).toHaveBeenLastCalledWith("tech", ["React", "Go"]));
 });

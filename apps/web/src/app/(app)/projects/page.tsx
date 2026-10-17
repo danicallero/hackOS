@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import type { NativeProject } from "@/lib/native-projects";
 import { useSessionContext } from "@/lib/session";
@@ -93,6 +94,13 @@ export default function ProjectsPage() {
     <PageLayout>
       <PageHeader
         title={t("projects")}
+        actions={
+          can(CAPABILITIES.EXPORTS_RUN) ? (
+            <Button asChild variant="outline">
+              <a href={`${API_URL}/api/exports/projects.csv`}>{t("exportCsv")}</a>
+            </Button>
+          ) : undefined
+        }
         primaryAction={
           canEdit && <Button onClick={() => setCreateOpen(true)}>{t("createMyProjectCta")}</Button>
         }

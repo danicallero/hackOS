@@ -39,6 +39,25 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
     const path = new URL(request.url()).pathname;
     let body: unknown = [];
     if (path === "/api/me") body = { ...shellUser, capabilities: ["judge:panel"] };
+    if (path === "/api/repos/91")
+      body = {
+        id: 91,
+        name: "Deterministic Team",
+        description: "A project with real-time collaboration.",
+        template: [
+          {
+            key: "stack",
+            kind: "library",
+            label: { en: "Technologies", es: "Tecnologías", gl: "Tecnoloxías" },
+            required: false,
+          },
+        ],
+        sections: [],
+        responses: { stack: ["TypeScript", "PostgreSQL"] },
+        members: [],
+        challenges: [],
+        files: [],
+      };
     if (path === "/api/challenges") body = { challenges: [challenge] };
     if (path === "/api/queue/rooms") body = [room];
     if (path.endsWith("/view"))
@@ -115,6 +134,10 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
   });
   await page.addInitScript(() => localStorage.setItem("hackos.cookie-notice.dismissed", "true"));
   await page.goto("/judging");
+  await page.getByRole("button", { name: "Project details", exact: true }).click();
+  await expect(page.getByText("TypeScript, PostgreSQL", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "artifacts/judging-project-details.png", fullPage: true });
+  await page.getByRole("button", { name: "Project details", exact: true }).click();
   await page.getByRole("button", { name: "6", exact: true }).click();
   await expect.poll(() => patches.length).toBe(1);
   expect(patches[0]).toEqual({ scores: { score: 6 }, submit: false });

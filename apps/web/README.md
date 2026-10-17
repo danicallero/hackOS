@@ -707,3 +707,10 @@ Challenge records put the challenge title and sponsor identity before all conten
 with a header back action. Description/criteria occupy the main column; published
 winners and prizes occupy the supporting column. Winners use ranked status and the
 shared project action, never a raw list above the challenge identity.
+
+Question-owned catalogue controls (`LibraryPicker` and `LibraryManager`) reuse the
+shared MultiSelect and destructive AlertModal. Catalogue management is embedded in
+the question editor, never the general Libraries settings. See
+[question-owned libraries](../../docs/form-libraries.md). Project reading,
+editing and judging reuse `ProjectAnswers`; new drafts begin editing and existing
+participant records provide an explicit read/edit action in the same workspace.

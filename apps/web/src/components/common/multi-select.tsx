@@ -37,6 +37,10 @@ export interface MultiSelectOption {
  */
 export function MultiSelect({
   options,
+  searchQuery,
+  onSearchChange,
+  onCreateOption,
+  creating = false,
   value,
   onChange,
   onBlur,
@@ -55,6 +59,10 @@ export function MultiSelect({
   maxVisibleBadges,
 }: {
   options: MultiSelectOption[];
+  searchQuery?: string;
+  onSearchChange?: (value: string) => void;
+  onCreateOption?: (name: string) => void;
+  creating?: boolean;
   /** Selected option values. */
   value: string[];
   onChange: (value: string[]) => void;
@@ -98,9 +106,29 @@ export function MultiSelect({
       className="pointer-events-auto bg-popover text-popover-foreground z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) flex-col rounded-md border shadow-md outline-hidden"
     >
       <Command>
-        <CommandInput placeholder={searchPlaceholder ?? t("genericSearchPlaceholder")} />
+        <CommandInput
+          value={searchQuery}
+          onValueChange={onSearchChange}
+          placeholder={searchPlaceholder ?? t("genericSearchPlaceholder")}
+        />
         <CommandList className="max-h-64 min-h-0 flex-1">
           <CommandEmpty>{emptyText ?? t("noResultsLabel")}</CommandEmpty>
+          {onCreateOption &&
+            searchQuery?.trim() &&
+            !options.some(
+              (option) =>
+                option.label.toLocaleLowerCase() === searchQuery.trim().toLocaleLowerCase(),
+            ) && (
+              <CommandGroup>
+                <CommandItem
+                  disabled={creating}
+                  value={searchQuery}
+                  onSelect={() => onCreateOption(searchQuery.trim())}
+                >
+                  {t("addLibraryValue", { name: searchQuery.trim() })}
+                </CommandItem>
+              </CommandGroup>
+            )}
           <CommandGroup>
             {options.map((opt) => (
               <CommandItem key={opt.value} value={opt.label} onSelect={() => toggle(opt.value)}>
