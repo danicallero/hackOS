@@ -468,7 +468,6 @@ Table event_config {
   presence_certainty_window_minutes integer [not null, default: `720`]
   project_draft_visibility text [not null, default: `'team_only'::text`]
   project_drafts_open_at "timestamp with time zone"
-  project_edits_lock_at "timestamp with time zone"
   project_gallery_audience text [not null, default: `'staff'::text`]
   project_gallery_opens_at "timestamp with time zone"
   project_max_team_size integer
@@ -762,6 +761,9 @@ Table project_submission_versions {
 Table push_tokens {
   created_at "timestamp with time zone" [not null, default: `now()`]
   id integer [pk, increment, not null]
+  local_reminders jsonb [not null, default: `'[]'::jsonb`]
+  local_reminders_lead_minutes integer
+  local_reminders_synced_at "timestamp with time zone"
   platform text
   token text [unique, not null]
   updated_at "timestamp with time zone" [not null, default: `now()`]

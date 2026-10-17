@@ -960,5 +960,6 @@
   "projectSend": "Enviar",
   "scanReplayExpired": "No se sincronizó en {days} días. Regístralo manualmente.",
   "galleryNotOpen": "La galería aún no está abierta",
+  "localReminderBody": "Empieza a las {time}",
   "galleryOpensOn": "La galería abre el {date}"
 }

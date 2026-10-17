@@ -1,5 +1,5 @@
 import { config } from "../../config.js";
-import { withTransaction } from "../../db/pool.js";
+import { type Queryable, withTransaction } from "../../db/pool.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { readNotificationAutomationSettings } from "./automation-settings.js";
 import { DEFAULT_CHANNELS, notify, REMINDER_CHANNEL_CATEGORY, resolveChannels } from "./service.js";
@@ -20,6 +20,40 @@ import { DEFAULT_CHANNELS, notify, REMINDER_CHANNEL_CATEGORY, resolveChannels } 
  */
 
 const QUEUE_NAME = "schedule-reminders";
+
+/** A device report older than this is ignored, so a stale device falls back to the server push. */
+const LOCAL_REMINDER_FRESH_HOURS = 48;
+
+/**
+ * Users whose every registered device reported (recently, with this lead)
+ * scheduling a local reminder for this item at this start. For them the push
+ * channel is skipped; inbox and email still come from the server.
+ */
+async function usersCoveredByLocalReminders(
+  client: Queryable,
+  userIds: number[],
+  itemId: number,
+  startsAtMs: number,
+  leadMinutes: number,
+): Promise<Set<number>> {
+  if (userIds.length === 0) return new Set();
+  const { rows } = await client.query<{ user_id: number }>(
+    `SELECT user_id FROM push_tokens
+      WHERE user_id = ANY($1::int[])
+      GROUP BY user_id
+     HAVING bool_and(
+              local_reminders_synced_at > now() - make_interval(hours => $2)
+              AND local_reminders_lead_minutes = $3
+              AND local_reminders @> $4::jsonb)`,
+    [
+      userIds,
+      LOCAL_REMINDER_FRESH_HOURS,
+      leadMinutes,
+      JSON.stringify([{ id: itemId, startsAtMs }]),
+    ],
+  );
+  return new Set(rows.map((row) => row.user_id));
+}
 
 interface DueScheduleRow {
   id: number;
@@ -103,16 +137,27 @@ export async function runScheduleRemindersOnce(): Promise<{ reminded: number; no
           [category, kindCategory],
         );
 
+        const covered = await usersCoveredByLocalReminders(
+          client,
+          (audienceRows as { user_id: number }[]).map((audience) => audience.user_id),
+          row.id,
+          row.starts_at.getTime(),
+          automation.scheduleReminderLeadMinutes,
+        );
         const startsAtLabel = formatStartsAt(row.starts_at, timezone);
         const locationLine = row.location ? `\n\nLocation: ${row.location}` : "";
         const locationSuffix = row.location ? ` · ${row.location}` : "";
         for (const { user_id: userId } of audienceRows as { user_id: number }[]) {
-          const channels = await resolveChannels(
+          const resolved = await resolveChannels(
             client,
             userId,
             REMINDER_CHANNEL_CATEGORY,
             DEFAULT_CHANNELS,
           );
+          // The phone fires this reminder itself, also offline (H51).
+          const channels = covered.has(userId)
+            ? resolved.filter((channel) => channel !== "push")
+            : resolved;
           if (channels.length === 0) continue;
           await notify(client, {
             userId,

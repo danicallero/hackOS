@@ -421,6 +421,40 @@ pre-call ETA (judging window settings), the meal-plan lock hours and the
 scheduled entrance reminder (Event settings). Live Activity timings are in
 Event settings → Live Activities ([live-activities.md](./live-activities.md)).
 
+### Device-local activity reminders (H51, H59)
+
+Phones schedule the activity reminders themselves, so they fire on time even
+offline and the server does not fan out a push per person. The server push
+stays as the fallback.
+
+- **Phone** (`apps/mobile/lib/local-reminders.ts`, driven by
+  `use-local-reminders.ts` from the root layout): reads the public schedule,
+  the person's opt-ins (`GET /api/me/notification-preferences`; an item row
+  beats its kind row, as in the job) and the event's switch and lead
+  (`GET /api/me/reminder-settings`, readable by any signed-in account), then
+  replaces its pending local notifications (identifier
+  `local-reminder:<id>`, `data.category = schedule:<id>`) with one per
+  subscribed upcoming item at start minus the lead. Only the 50 soonest are
+  kept (iOS holds 64 pending locals); items whose fire time is already past or
+  within seconds are left to the server push. Offline reads change nothing, so
+  existing reminders keep firing. It resyncs on start, foreground, a
+  `public-content` signal (schedule or automation edits), the personal
+  `user.notification_preferences.changed` event (a preference saved on the web
+  or another device) and its own preference changes. Sign-out and a denied
+  permission clear every local reminder.
+- **Report**: after scheduling, `PUT /api/me/local-reminders` stores on the
+  device's `push_tokens` row the covered `{id, startsAtMs}` pairs, the lead and
+  the sync time (migration `0706`).
+- **Server fallback** (`schedule-reminders.ts`): the job drops only the `push`
+  channel for a user whose every registered device has a report younger than
+  48 h with the current lead that contains the item at the same start. A
+  missing, stale, other-lead or other-start report, or any uncovered device,
+  keeps the push. Inbox and email are unchanged.
+- Copy is the device's language (`localReminderBody`); the server push stays in
+  the account language. A schedule change made while the phone is offline keeps
+  the old time until the phone reconnects; the fallback covers a changed start
+  as soon as the job runs.
+
 Deliberately fixed: the outbox dispatcher and its retry backoff, the schedule
 reminder and announcement publisher tick (15 s), and push receipt polling.
 
